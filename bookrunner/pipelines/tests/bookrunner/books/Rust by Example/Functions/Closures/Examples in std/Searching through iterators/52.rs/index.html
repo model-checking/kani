@@ -1,0 +1,2376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>
+    Pipeline tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs
+  </title>
+<style>
+#title{
+  background-color: #ec407a;
+  color: white;
+  padding: 2em;
+}
+h1 {
+  margin-bottom: 0em;
+}
+#subtitle {
+  font-variant: small-caps;
+  text-transform: lowercase;
+  letter-spacing: 0.2em;
+}
+.run-info ul {
+  list-style: none;
+}
+.run-info ul li {
+  display: inline;
+  margin-right: 6em;
+  margin-left: -3em;
+  text-transform: uppercase;
+  font-size: small;
+  color: #ec407a;
+}
+#content {
+  max-width: 800px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-top: 2em;
+  color: #263238;
+  font-family: Helvetica, sans-serif;
+}
+p {
+  margin: 0;
+}
+.command-table {
+  background-color: #eceff1;
+  padding: 0.3em;
+  border-radius: 0.3em;
+  margin-bottom: 4em;
+}
+.command-table .fail-ignored {
+  background-color: #e65100cc;
+  padding: 0.3em;
+  border-radius: 0.3em;
+}
+.command-table .success {
+  background-color: #1a237ecc;
+  padding: 0.3em;
+  border-radius: 0.3em;
+}
+.command-table .in-progress {
+  background-color: black;
+  padding: 0.3em;
+  border-radius: 0.3em;
+}
+.command-table .non-started {
+  background-color: #26323844;
+  padding: 0.3em;
+  border-radius: 0.3em;
+}
+.command-table .fail {
+  background-color: #f44336cc;
+  padding: 0.3em;
+  border-radius: 0.3em;
+}
+.command-content {
+  background-color: #eceff1;
+  padding: 1em;
+}
+.command-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 1em;
+}
+.command-id-link{
+  flex-grow: 0;
+}
+.command-id-link a {
+  font-size: xx-large;
+  text-align: center;
+  font-weight: bold;
+  text-shadow: 1px  1px 0px #000000bb,
+              -1px -1px 0px #ffffffbb;
+  text-decoration: none;
+  margin-left: 0.2em;
+}
+.command-id-link a:link {
+  text-shadow: 1px  1px 0px #000000bb,
+              -1px -1px 0px #ffffffbb;
+}
+.command-id-link a:visited {
+  text-shadow: 1px  1px 0px #000000bb,
+              -1px -1px 0px #ffffffbb;
+}
+.command-id-link a:visited:hover {
+  color: #ec407a;
+  background-color: #00000000;
+  text-shadow: 1px  1px 0px #000000bb,
+              -1px -1px 0px #ffffffbb,
+               0px 0px 10px #fff,
+               0px 0px 5px #ec407a,
+               0px 0px 5px #ec407a;
+}
+.command-id-link a:hover {
+  color: #ec407a;
+  background-color: #00000000;
+  text-shadow: 1px  1px 0px #000000bb,
+              -1px -1px 0px #ffffffbb
+               0px 0px 10px #fff,
+               0px 0px 5px #ec407a,
+               0px 0px 5px #ec407a;
+}
+.command-id-link a:active {
+  color: #ffeb3b;
+  background-color: #00000000;
+  text-shadow: 1px  1px 0px #000000bb,
+              -1px -1px 0px #ffffffbb,
+                 0px 0px 10px #fff,
+                 0px 0px 5px #ffeb3b,
+                 0px 0px 5px #ffeb3b;
+}
+.command-id-link a:visited:active {
+  color: #ffeb3b;
+  background-color: #00000000;
+  text-shadow: 1px  1px 0px #000000bb,
+              -1px -1px 0px #ffffffbb,
+                 0px 0px 10px #fff,
+                 0px 0px 5px #ffeb3b,
+                 0px 0px 5px #ffeb3b;
+}
+.command-description {
+  color: #26323899;
+  font-size: smaller;
+  text-align: center;
+  font-weight: bold;
+  flex-grow: 1;
+}
+
+.command-invocation {
+  padding: 1em;
+  color: #fff;
+  background-color: #005662;
+  font-size: small;
+  font-family: monospace;
+  border-radius: 0.5em;
+  text-shadow: 0 0 2px #ffccbccc;
+}
+.command-stats-table {
+  margin-top: 0.2em;
+  border-radius: 0.5em;
+  padding: 0.2em;
+  padding-top: 0.4em;
+  display: flex;
+  flex-direction: column;
+  background-color: #eae3998a;
+  color: #263238cc;
+  margin-bottom: 0.2em;
+}
+.command-stats-row {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-evenly;
+  margin-top: 0.4em;
+  margin-bottom: 0.4em;
+  font-size: small;
+  text-transform: uppercase;
+}
+.command-stats-row p .value {
+  color: #00251aaa;
+  text-shadow: 0 0 2px #82ada944;
+  font-weight: bold;
+}
+.literal-stdout {
+  margin-top: 0.4em;
+  margin-bottom: 0.2em;
+  padding: 1em;
+  border-radius: 0.5em;
+  overflow-x: auto;
+  overflow-y: auto;
+}
+.output-box {
+  margin-top: 0.4em;
+  margin-bottom: 0.2em;
+  padding: 1em;
+  color: #000a12;
+  background-color: #cfd8dc;
+  font-size: small;
+  font-family: monospace;
+  border-radius: 0.5em;
+  max-height: 20em;
+  overflow-x: auto;
+  overflow-y: auto;
+}
+.output-box xmp{
+  white-space: pre;
+}
+.stage-name p {
+  margin-left: 0.5em;
+  color: #546e7a;
+  text-shadow:  -1px  0px 0px #fff
+               ,-2px  0px 0px #ffffff99
+               ,-1px  1px 0px #ffffff99
+               ;
+  font-size: 48pt;
+  font-variant: small-caps;
+  text-transform: lowercase;
+  font-weight: bold;
+  font-style: italic;
+}
+.stage-name .underline {
+  width: 100%;
+  height: 1.1em;
+  background-color: #546e7a;
+  margin-top: -1.6em;
+}
+.stage-name {
+  margin-top: 6em;
+  margin-bottom: 3em;
+}
+
+.outcome-table-info-box {
+  margin-top: 0.4em;
+  margin-bottom: 0.2em;
+  padding: 1em;
+  color: #000a12;
+  background-color: #ffee58;
+  border-radius: 0.5em;
+}
+.outcome-table-info-box .outcome{
+  font-weight: bold;
+}
+#toc {
+  margin-bottom: 6em;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 1;
+  margin-right: 3em;
+}
+.toc-title {
+  text-align: center;
+  font-variant: small-caps;
+  text-transform: lowercase;
+  margin-bottom: -1em;
+}
+.toc-section{
+  margin-top: 1em;
+  margin-bottom: 0.5em;
+  text-transform: capitalize;
+}
+.toc-row {
+  display: flex;
+  flex-direction: row;
+  justify-content: flex-start;
+  align-items: center;
+}
+.toc-row-icon {
+  padding-right: 8px;
+}
+.status-icon-cross {
+  fill: #f44336;
+    width: 16px;
+    height: 16px;
+}
+.status-icon-tick {
+  fill: #3f51b5;
+  stroke: #ffffff77;
+  stroke-width: 1px;
+  width: 16px;
+  height: 16px;
+}
+
+.status-icon-in-progress {
+  fill: #333;
+  width: 16px;
+  height: 16px;
+}
+
+.status-icon-in-progress circle {
+  stroke: #333;
+  stroke-width: 2px;
+  fill: none
+}
+a:link {
+  color: #1e88e5;
+}
+a:visited {
+  color: #1e88e5;
+}
+a:visited:hover {
+  background-color: #1e88e5;
+  color: #fff;
+  text-decoration: none;
+}
+a:hover {
+  background-color: #1e88e5;
+  color: #fff;
+  text-decoration: none;
+}
+a:active {
+  background-color: #ec407a;
+  color: #fff;
+  text-decoration: none;
+}
+a:visited:active {
+  background-color: #ec407a;
+  color: #fff;
+  text-decoration: none;
+}
+
+#contents-container {
+  margin-top: 6em;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  align-content: flex-start;
+}
+
+#depgraph {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  align-content: flex-start;
+  flex-shrink: 7;
+}
+
+#depgraph-title p {
+  text-align: center;
+  font-variant: small-caps;
+  text-transform: lowercase;
+}
+
+#depgraph-preview img {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+#depgraph-preview {
+  padding: 1em;
+}
+
+.memory-box {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.5em;
+  align-items: center;
+}
+.memory-preview {
+  width: 75%;
+}
+.memory-preview svg {
+  margin-left: -1em;
+  margin-right: -2em;
+}
+.memory-table {
+}
+.memory-title {
+  text-align: center;
+  font-style: bold;
+}
+.memory-subtitle {
+  text-transform: lowercase;
+  font-variant: small-caps;
+  text-align: center;
+  opacity: 0.8;
+}
+.memory-pad {
+  width: 1.5em;
+}
+.memory-value {
+  text-align: center;
+  margin-right: 2em;
+}
+.rss {
+  color: #ab47bc;
+}
+.vsz {
+  color: #4caf50;
+}
+
+
+@media (prefers-color-scheme: dark){
+  a:link {
+    color: #29b6f6;
+  }
+  a:visited {
+    color: #29b6f6;
+  }
+  a:visited:hover {
+    color: #263238;
+    background-color: #29b6f6;
+  }
+  a:hover {
+    color: #263238;
+    background-color: #29b6f6;
+  }
+  a:active {
+    color: #263238;
+    background-color: #ec407a;
+  }
+  a:visited:active {
+    color: #263238;
+    background-color: #ec407a;
+  }
+  .command-id-link a:link {
+    text-shadow: 1px  1px 0px #000000bb,
+                -1px -1px 0px #ffffffbb;
+  }
+  .command-id-link a:visited {
+    text-shadow: 1px  1px 0px #000000bb,
+                -1px -1px 0px #ffffffbb;
+  }
+  .command-id-link a:visited:hover {
+    color: #ec407a;
+    background-color: #00000000;
+    text-shadow: 1px  1px 0px #000000bb,
+                -1px -1px 0px #ffffffbb.
+                 0px 0px 10px #fff,
+                 0px 0px 5px #ec407a,
+                 0px 0px 5px #ec407a;
+  }
+  .command-id-link a:hover {
+    color: #ec407a;
+    background-color: #00000000;
+    text-shadow: 1px  1px 0px #000000bb,
+                -1px -1px 0px #ffffffbb,
+                 0px 0px 10px #fff,
+                 0px 0px 5px #ec407a,
+                 0px 0px 5px #ec407a;
+  }
+  .command-id-link a:active {
+    color: #ffeb3b;
+    background-color: #00000000;
+    text-shadow: 1px  1px 0px #000000bb,
+                -1px -1px 0px #ffffffbb,
+                 0px 0px 10px #fff,
+                 0px 0px 5px #ffeb3b,
+                 0px 0px 5px #ffeb3b;
+  }
+  .command-id-link a:visited:active {
+    color: #ffeb3b;
+    background-color: #00000000;
+    text-shadow: 1px  1px 0px #000000bb,
+                -1px -1px 0px #ffffffbb,
+                 0px 0px 10px #fff,
+                 0px 0px 5px #ffeb3b,
+                 0px 0px 5px #ffeb3b;
+  }
+  body {
+    color: #babdbe;
+    background-color: #263238;
+  }
+  .outcome-table-info-box p{
+    color: #000a12;
+  }
+  p {
+    color: #babdbe;
+  }
+  #subtitle {
+    color: #fff;
+  }
+  .command-table {
+    background-color: #37474f;
+  }
+  .command-content {
+    background-color: #37474f;
+  }
+  .command-invocation p {
+    color: #fff;
+  }
+  .command-stats-table {
+    background-color: #eae399d0;
+    color: #263238;
+  }
+  .command-stats-table p {
+    color: #263238;
+  }
+  .output-box {
+    color: #cfd8dccc;
+    background-color: #102027;
+  }
+  .stage-name p {
+    text-shadow: -1px  0px 0px #263238,
+                 -2px  0px 0px #26323899,
+                 -1px  1px 0px #26323899;
+  }
+  .status-icon-in-progress { fill: #ddd; }
+  .status-icon-in-progress circle { stroke: #ddd; }
+
+  /* SVG graphs */
+  g text {
+    fill: #eceff1;
+    stroke: #fff0;
+  }
+}
+</style>
+</head>
+<body>
+<div id="content">
+
+  <div id="title">
+    <h1>
+      Book Runner pipeline &lsquo;tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs&rsquo;
+    </h1>
+    <p id="subtitle">
+      Litani CI Dashboard
+    </p>
+  </div><!-- id="title" -->
+
+  <div class=run-info>
+    <ul>
+      <li>Pipeline status: success</li>
+      <li>2024-03-28T00:13:57Z</li>
+      <li>90b13448-ebab-45c6-b7f8-c5b9084d258c</li>
+    </ul>
+  </div><!-- class=run-info -->
+
+  <div id="contents-container">
+
+    <div id="toc">
+      <div class="toc-title">
+        <p>Summary of jobs for this pipeline</p>
+      </div><!-- class="toc-title" -->
+
+      
+        <div class="toc-section">
+          <p>check</p>
+        </div><!-- class="toc-section" -->
+        
+          <div class="toc-row">
+
+            <div class="toc-row-icon">
+              
+                <svg height="16px" width="16px" class="status-icon-tick">
+                  <polygon points="1,11 6,15 15,3 13,1 6,12 3,8"></polygon>
+                </svg>
+              
+            </div><!-- class="toc-row-icon" -->
+
+            <div class="toc-row-job-name">
+              <p>
+              <a href="#job-05e0ec94-a5de-4166-b38e-4e3f6a0c6138">
+              
+              Is this valid Rust code?
+              
+              </a>
+              </p>
+            </div><!-- class="toc-row-job-name" -->
+
+          </div><!-- class="toc-row" -->
+
+        
+      
+        <div class="toc-section">
+          <p>codegen</p>
+        </div><!-- class="toc-section" -->
+        
+          <div class="toc-row">
+
+            <div class="toc-row-icon">
+              
+                <svg height="16px" width="16px" class="status-icon-tick">
+                  <polygon points="1,11 6,15 15,3 13,1 6,12 3,8"></polygon>
+                </svg>
+              
+            </div><!-- class="toc-row-icon" -->
+
+            <div class="toc-row-job-name">
+              <p>
+              <a href="#job-e00a26b8-79ac-4287-a2a4-da37f33a747f">
+              
+              Does Kani support all the Rust features used in it?
+              
+              </a>
+              </p>
+            </div><!-- class="toc-row-job-name" -->
+
+          </div><!-- class="toc-row" -->
+
+        
+      
+        <div class="toc-section">
+          <p>verification</p>
+        </div><!-- class="toc-section" -->
+        
+          <div class="toc-row">
+
+            <div class="toc-row-icon">
+              
+                <svg height="16px" width="16px" class="status-icon-tick">
+                  <polygon points="1,11 6,15 15,3 13,1 6,12 3,8"></polygon>
+                </svg>
+              
+            </div><!-- class="toc-row-icon" -->
+
+            <div class="toc-row-job-name">
+              <p>
+              <a href="#job-dd823874-8b60-47af-973a-ec68b4f55984">
+              
+              Can Kani reason about it?
+              
+              </a>
+              </p>
+            </div><!-- class="toc-row-job-name" -->
+
+          </div><!-- class="toc-row" -->
+
+        
+      
+    </div><!-- id="toc" -->
+
+
+    
+
+  </div><!-- id="contents-container" -->
+
+
+  
+  <div class="stage">
+    <div class="stage-name">
+      <p>check</p>
+      <div class="underline"></div>
+    </div><!-- class="stage-name" -->
+
+    
+    <div class="command-table" id="job-05e0ec94-a5de-4166-b38e-4e3f6a0c6138">
+      
+      <div class="success">
+      
+        <div class="command-content">
+          <div class="command-header">
+            <div class="command-id-link">
+              <p>
+                <a href="#job-05e0ec94-a5de-4166-b38e-4e3f6a0c6138">#</a>
+              </p>
+            </div><!-- class="command-id-link" -->
+            <div class="command-description">
+              
+              <p>
+                Is this valid Rust code?
+              </p>
+              
+            </div><!-- class="command-description" -->
+          </div><!-- class="command-header" -->
+          <div class="command-invocation">
+            <p>
+            "kani-compiler" "--edition" "2015" "-Z" "no-codegen" "tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs"
+            </p>
+          </div><!-- class="command-invocation" -->
+
+          
+          <div class="command-stats-table">
+            
+            <div class="command-stats-row">
+              <p>Command return code:
+              <span class="value">
+                0
+              </span></p>
+              <p>OK returns:
+              <span class="value">
+                ['0']
+              </span></p>
+              <p>Ignored returns:
+              <span class="value">
+                None
+              </span></p>
+            </div><!-- class="command-stats-row" -->
+            <div class="command-stats-row">
+              <p>Timeout:
+              <span class="value">
+                5
+              </span></p>
+              <p>Timeout ok:
+              <span class="value">
+                False
+              </span></p>
+              <p>Timeout ignored:
+              <span class="value">
+                False
+              </span></p>
+              <p>Timeout reached:
+              <span class="value">
+                False
+              </span></p>
+            </div><!-- class="command-stats-row" -->
+            <div class="command-stats-row">
+              <p>Start time:
+              <span class="value">
+                2024-03-28T00:22:12Z
+              </span></p>
+              <p>Duration:
+              <span class="value">
+                00s
+              </span></p>
+              <p>End time:
+              <span class="value">
+                2024-03-28T00:22:12Z
+              </span></p>
+            </div><!-- class="command-stats-row" -->
+            <div class="command-stats-row">
+              <p>Command successful:
+              <span class="value">
+              
+              yes
+              
+              </span></p>
+            </div><!-- class="command-stats-row" -->
+             
+          </div><!-- class="command-stats-table" -->
+          
+
+          
+
+
+          
+
+
+          
+
+          
+
+        </div><!-- class="command-content" -->
+      </div><!-- class="fail" -->
+    </div><!-- id="command-table" -->
+    
+
+  </div><!-- class="stage" -->
+  
+  <div class="stage">
+    <div class="stage-name">
+      <p>codegen</p>
+      <div class="underline"></div>
+    </div><!-- class="stage-name" -->
+
+    
+    <div class="command-table" id="job-e00a26b8-79ac-4287-a2a4-da37f33a747f">
+      
+      <div class="success">
+      
+        <div class="command-content">
+          <div class="command-header">
+            <div class="command-id-link">
+              <p>
+                <a href="#job-e00a26b8-79ac-4287-a2a4-da37f33a747f">#</a>
+              </p>
+            </div><!-- class="command-id-link" -->
+            <div class="command-description">
+              
+              <p>
+                Does Kani support all the Rust features used in it?
+              </p>
+              
+            </div><!-- class="command-description" -->
+          </div><!-- class="command-header" -->
+          <div class="command-invocation">
+            <p>
+            "kani-compiler" "--edition" "2015" "--out-dir" "build/tmp" "tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs"
+            </p>
+          </div><!-- class="command-invocation" -->
+
+          
+          <div class="command-stats-table">
+            
+            <div class="command-stats-row">
+              <p>Command return code:
+              <span class="value">
+                0
+              </span></p>
+              <p>OK returns:
+              <span class="value">
+                ['0']
+              </span></p>
+              <p>Ignored returns:
+              <span class="value">
+                None
+              </span></p>
+            </div><!-- class="command-stats-row" -->
+            <div class="command-stats-row">
+              <p>Timeout:
+              <span class="value">
+                10
+              </span></p>
+              <p>Timeout ok:
+              <span class="value">
+                False
+              </span></p>
+              <p>Timeout ignored:
+              <span class="value">
+                False
+              </span></p>
+              <p>Timeout reached:
+              <span class="value">
+                False
+              </span></p>
+            </div><!-- class="command-stats-row" -->
+            <div class="command-stats-row">
+              <p>Start time:
+              <span class="value">
+                2024-03-28T00:22:12Z
+              </span></p>
+              <p>Duration:
+              <span class="value">
+                01s
+              </span></p>
+              <p>End time:
+              <span class="value">
+                2024-03-28T00:22:13Z
+              </span></p>
+            </div><!-- class="command-stats-row" -->
+            <div class="command-stats-row">
+              <p>Command successful:
+              <span class="value">
+              
+              yes
+              
+              </span></p>
+            </div><!-- class="command-stats-row" -->
+             
+          </div><!-- class="command-stats-table" -->
+          
+
+          
+
+
+          
+
+
+          
+
+          
+
+        </div><!-- class="command-content" -->
+      </div><!-- class="fail" -->
+    </div><!-- id="command-table" -->
+    
+
+  </div><!-- class="stage" -->
+  
+  <div class="stage">
+    <div class="stage-name">
+      <p>verification</p>
+      <div class="underline"></div>
+    </div><!-- class="stage-name" -->
+
+    
+    <div class="command-table" id="job-dd823874-8b60-47af-973a-ec68b4f55984">
+      
+      <div class="success">
+      
+        <div class="command-content">
+          <div class="command-header">
+            <div class="command-id-link">
+              <p>
+                <a href="#job-dd823874-8b60-47af-973a-ec68b4f55984">#</a>
+              </p>
+            </div><!-- class="command-id-link" -->
+            <div class="command-description">
+              
+              <p>
+                Can Kani reason about it?
+              </p>
+              
+            </div><!-- class="command-description" -->
+          </div><!-- class="command-header" -->
+          <div class="command-invocation">
+            <p>
+            RUSTFLAGS="--edition 2015" RUSTFLAGS="--edition 2015" "kani" "tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs" "--enable-unstable" "--function" "main" "--enable-unstable" "--cbmc-args" "--unwind" "7"
+            </p>
+          </div><!-- class="command-invocation" -->
+
+          
+          <div class="command-stats-table">
+            
+            <div class="command-stats-row">
+              <p>Command return code:
+              <span class="value">
+                0
+              </span></p>
+              <p>OK returns:
+              <span class="value">
+                ['0']
+              </span></p>
+              <p>Ignored returns:
+              <span class="value">
+                None
+              </span></p>
+            </div><!-- class="command-stats-row" -->
+            <div class="command-stats-row">
+              <p>Timeout:
+              <span class="value">
+                60
+              </span></p>
+              <p>Timeout ok:
+              <span class="value">
+                False
+              </span></p>
+              <p>Timeout ignored:
+              <span class="value">
+                False
+              </span></p>
+              <p>Timeout reached:
+              <span class="value">
+                False
+              </span></p>
+            </div><!-- class="command-stats-row" -->
+            <div class="command-stats-row">
+              <p>Start time:
+              <span class="value">
+                2024-03-28T00:22:13Z
+              </span></p>
+              <p>Duration:
+              <span class="value">
+                04s
+              </span></p>
+              <p>End time:
+              <span class="value">
+                2024-03-28T00:22:17Z
+              </span></p>
+            </div><!-- class="command-stats-row" -->
+            <div class="command-stats-row">
+              <p>Command successful:
+              <span class="value">
+              
+              yes
+              
+              </span></p>
+            </div><!-- class="command-stats-row" -->
+             
+          </div><!-- class="command-stats-table" -->
+          
+
+          
+
+
+          
+
+
+          
+            
+            <div class="output-box"><xmp>stdout:
+              
+Kani Rust Verifier 0.48.0 (standalone)
+Checking harness main...
+CBMC 5.95.1 (cbmc-5.95.1)
+CBMC version 5.95.1 (cbmc-5.95.1) 64-bit x86_64 linux
+Reading GOTO program from file /home/runner/work/kani/kani/tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.out
+Generating GOTO Program
+Adding CPROVER library (x86_64)
+Removal of function pointers and virtual functions
+Generic Property Instrumentation
+Running with 16 object bits, 48 offset bits (user-specified)
+Starting Bounded Model Checking
+Unwinding loop _RINvXs2T_NtNtCsjKsSoiVOCvV_4core5slice4iterINtB7_4IterlENtNtNtNtBb_4iter6traits8iterator8Iterator8positionNCNvCsliVinvpJQ7r_2_524main0EB1K_.0 iteration 1 file /home/runner/.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs line 337 column 17 function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:7:58: 7:61}> thread 0
+Unwinding loop _RINvXs2T_NtNtCsjKsSoiVOCvV_4core5slice4iterINtB7_4IterlENtNtNtNtBb_4iter6traits8iterator8Iterator8positionNCNvCsliVinvpJQ7r_2_524main0EB1K_.0 iteration 2 file /home/runner/.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs line 337 column 17 function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:7:58: 7:61}> thread 0
+Unwinding loop _RINvXs2T_NtNtCsjKsSoiVOCvV_4core5slice4iterINtB7_4IterlENtNtNtNtBb_4iter6traits8iterator8Iterator8positionNCNvCsliVinvpJQ7r_2_524main0EB1K_.0 iteration 3 file /home/runner/.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs line 337 column 17 function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:7:58: 7:61}> thread 0
+Unwinding loop _RINvXs2T_NtNtCsjKsSoiVOCvV_4core5slice4iterINtB7_4IterlENtNtNtNtBb_4iter6traits8iterator8Iterator8positionNCNvCsliVinvpJQ7r_2_524main0EB1K_.0 iteration 4 file /home/runner/.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs line 337 column 17 function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:7:58: 7:61}> thread 0
+Unwinding loop _RINvXs2T_NtNtCsjKsSoiVOCvV_4core5slice4iterINtB7_4IterlENtNtNtNtBb_4iter6traits8iterator8Iterator8positionNCNvCsliVinvpJQ7r_2_524main0EB1K_.0 iteration 5 file /home/runner/.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs line 337 column 17 function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:7:58: 7:61}> thread 0
+Unwinding loop _RINvXs2T_NtNtCsjKsSoiVOCvV_4core5slice4iterINtB7_4IterlENtNtNtNtBb_4iter6traits8iterator8Iterator8positionNCNvCsliVinvpJQ7r_2_524mains_0EB1K_.0 iteration 1 file /home/runner/.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs line 337 column 17 function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:11:62: 11:65}> thread 0
+Unwinding loop _RINvXs2T_NtNtCsjKsSoiVOCvV_4core5slice4iterINtB7_4IterlENtNtNtNtBb_4iter6traits8iterator8Iterator8positionNCNvCsliVinvpJQ7r_2_524mains_0EB1K_.0 iteration 2 file /home/runner/.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs line 337 column 17 function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:11:62: 11:65}> thread 0
+Unwinding loop _RINvXs2T_NtNtCsjKsSoiVOCvV_4core5slice4iterINtB7_4IterlENtNtNtNtBb_4iter6traits8iterator8Iterator8positionNCNvCsliVinvpJQ7r_2_524mains_0EB1K_.0 iteration 3 file /home/runner/.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs line 337 column 17 function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:11:62: 11:65}> thread 0
+Unwinding loop _RINvXs2T_NtNtCsjKsSoiVOCvV_4core5slice4iterINtB7_4IterlENtNtNtNtBb_4iter6traits8iterator8Iterator8positionNCNvCsliVinvpJQ7r_2_524mains_0EB1K_.0 iteration 4 file /home/runner/.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs line 337 column 17 function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:11:62: 11:65}> thread 0
+Unwinding loop _RINvXs2T_NtNtCsjKsSoiVOCvV_4core5slice4iterINtB7_4IterlENtNtNtNtBb_4iter6traits8iterator8Iterator8positionNCNvCsliVinvpJQ7r_2_524mains_0EB1K_.0 iteration 5 file /home/runner/.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs line 337 column 17 function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:11:62: 11:65}> thread 0
+Unwinding loop _RINvXs2T_NtNtCsjKsSoiVOCvV_4core5slice4iterINtB7_4IterlENtNtNtNtBb_4iter6traits8iterator8Iterator8positionNCNvCsliVinvpJQ7r_2_524mains_0EB1K_.0 iteration 6 file /home/runner/.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs line 337 column 17 function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:11:62: 11:65}> thread 0
+Runtime Symex: 0.6334s
+size of program expression: 5871 steps
+slicing removed 3955 assignments
+Generated 1001 VCC(s), 213 remaining after simplification
+Runtime Postprocess Equation: 0.00415706s
+Passing problem to propositional reduction
+converting SSA
+Runtime Convert SSA: 0.0287746s
+Running propositional reduction
+Post-processing
+Runtime Post-process: 0.000103042s
+Solving with CaDiCaL 1.7.2
+20735 variables, 21568 clauses
+SAT checker: instance is SATISFIABLE
+Runtime Solver: 0.00130396s
+Runtime decision procedure: 0.0315855s
+Running propositional reduction
+Solving with CaDiCaL 1.7.2
+20735 variables, 21569 clauses
+SAT checker: instance is UNSATISFIABLE
+Runtime Solver: 0.00153495s
+Runtime decision procedure: 0.00207828s
+
+RESULTS:
+Check 1: main.assertion.1
+- Status: SUCCESS
+- Description: "misaligned pointer dereference: address must be a multiple of its type's alignment"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/macros.rs:54:37 in function main
+
+Check 2: main.assertion.2
+- Status: SUCCESS
+- Description: "assertion failed: index_of_first_even_number == Some(5)"
+- Location: tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:8:5 in function main
+
+Check 3: main.assertion.3
+- Status: SUCCESS
+- Description: "assertion failed: index_of_first_negative_number == None"
+- Location: tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:12:5 in function main
+
+Check 4: malloc.assertion.1
+- Status: SUCCESS
+- Description: "max allocation size exceeded"
+- Location: <builtin-library-malloc>:31 in function malloc
+
+Check 5: malloc.assertion.2
+- Status: SUCCESS
+- Description: "max allocation may fail"
+- Location: <builtin-library-malloc>:36 in function malloc
+
+Check 6: core::panicking::panic_nounwind_fmt::runtime.assertion.1
+- Status: SUCCESS
+- Description: "reached intrinsic::abort"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/panicking.rs:91:13 in function core::panicking::panic_nounwind_fmt::runtime
+
+Check 7: <i32 as std::ops::Rem>::rem.assertion.1
+- Status: SUCCESS
+- Description: "attempt to calculate the remainder with a divisor of zero"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ops/arith.rs:585:45 in function <i32 as std::ops::Rem>::rem
+
+Check 8: <i32 as std::ops::Rem>::rem.assertion.2
+- Status: SUCCESS
+- Description: "attempt to calculate the remainder with overflow"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ops/arith.rs:585:45 in function <i32 as std::ops::Rem>::rem
+
+Check 9: <i32 as std::ops::Rem>::rem.arithmetic_overflow.1
+- Status: SUCCESS
+- Description: "attempt to calculate the remainder with overflow"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ops/arith.rs:585:45 in function <i32 as std::ops::Rem>::rem
+
+Check 10: <i32 as std::ops::Rem>::rem.arithmetic_overflow.2
+- Status: SUCCESS
+- Description: "attempt to calculate the remainder with a divisor of zero"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ops/arith.rs:585:45 in function <i32 as std::ops::Rem>::rem
+
+Check 11: <usize as std::option::SpecOptionPartialEq>::eq.unreachable.1
+- Status: SUCCESS
+- Description: "unreachable code"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/option.rs:2174:5 in function <usize as std::option::SpecOptionPartialEq>::eq
+
+Check 12: std::ptr::mut_ptr::<impl *mut i32>::add.arithmetic_overflow.1
+- Status: SUCCESS
+- Description: "offset: attempt to compute number in bytes which would overflow"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mut_ptr.rs:1045:18 in function std::ptr::mut_ptr::<impl *mut i32>::add
+
+Check 13: std::ptr::mut_ptr::<impl *mut i32>::add.arithmetic_overflow.2
+- Status: SUCCESS
+- Description: "attempt to compute offset which would overflow"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mut_ptr.rs:1045:18 in function std::ptr::mut_ptr::<impl *mut i32>::add
+
+Check 14: __rust_dealloc.assertion.1
+- Status: SUCCESS
+- Description: "Alignment is power of two"
+- Location: library/kani/kani_lib.c:84 in function __rust_dealloc
+
+Check 15: __rust_dealloc.assertion.2
+- Status: SUCCESS
+- Description: "rust_dealloc must be called on an object whose allocated size matches its layout"
+- Location: library/kani/kani_lib.c:86 in function __rust_dealloc
+
+Check 16: <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:11:62: 11:65}>.unreachable.1
+- Status: SUCCESS
+- Description: "unreachable code"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:331:13 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:11:62: 11:65}>
+
+Check 17: <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:11:62: 11:65}>.assertion.1
+- Status: SUCCESS
+- Description: "attempt to add with overflow"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:344:21 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:11:62: 11:65}>
+
+Check 18: core::num::<impl usize>::unchecked_sub.arithmetic_overflow.1
+- Status: SUCCESS
+- Description: "attempt to compute `unchecked_sub` which would overflow"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/num/uint_macros.rs:667:22 in function core::num::<impl usize>::unchecked_sub
+
+Check 19: std::intrinsics::is_valid_allocation_size.assertion.1
+- Status: UNREACHABLE
+- Description: "attempt to divide by zero"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/intrinsics.rs:2823:54 in function std::intrinsics::is_valid_allocation_size
+
+Check 20: std::intrinsics::is_valid_allocation_size.arithmetic_overflow.1
+- Status: SUCCESS
+- Description: "attempt to divide by zero"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/intrinsics.rs:2823:54 in function std::intrinsics::is_valid_allocation_size
+
+Check 21: std::ptr::const_ptr::<impl *const ()>::is_aligned_to.assertion.1
+- Status: SUCCESS
+- Description: "This is a placeholder message; Kani doesn't support message formatted at runtime"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/const_ptr.rs:1625:13 in function std::ptr::const_ptr::<impl *const ()>::is_aligned_to
+
+Check 22: std::ptr::Alignment::as_usize.assume.1
+- Status: SUCCESS
+- Description: "assumption failed"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/alignment.rs:98:9 in function std::ptr::Alignment::as_usize
+
+Check 23: std::panic::Location::<'_>::caller.unsupported_construct.1
+- Status: SUCCESS
+- Description: "caller_location is not currently supported by Kani. Please post your example at https://github.com/model-checking/kani/issues/374"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/panic/location.rs:88:9 in function std::panic::Location::<'_>::caller
+
+Check 24: std::ptr::const_ptr::<impl *const i32>::sub_ptr.arithmetic_overflow.1
+- Status: SUCCESS
+- Description: "attempt to compute offset in bytes which would overflow an `isize`"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/const_ptr.rs:833:18 in function std::ptr::const_ptr::<impl *const i32>::sub_ptr
+
+Check 25: std::ptr::const_ptr::<impl *const i32>::sub_ptr.safety_check.1
+- Status: SUCCESS
+- Description: "attempt to compute unsigned offset with negative distance"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/const_ptr.rs:833:18 in function std::ptr::const_ptr::<impl *const i32>::sub_ptr
+
+Check 26: std::ptr::const_ptr::<impl *const i32>::sub_ptr.assertion.1
+- Status: SUCCESS
+- Description: "assertion failed: 0 < pointee_size && pointee_size <= isize::MAX as usize"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/const_ptr.rs:831:9 in function std::ptr::const_ptr::<impl *const i32>::sub_ptr
+
+Check 27: core::num::<impl usize>::unchecked_mul.arithmetic_overflow.1
+- Status: SUCCESS
+- Description: "attempt to compute `unchecked_mul` which would overflow"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/num/uint_macros.rs:749:22 in function core::num::<impl usize>::unchecked_mul
+
+Check 28: std::ptr::NonNull::<i32>::add.arithmetic_overflow.1
+- Status: SUCCESS
+- Description: "offset: attempt to compute number in bytes which would overflow"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/non_null.rs:626:37 in function std::ptr::NonNull::<i32>::add
+
+Check 29: std::ptr::NonNull::<i32>::add.arithmetic_overflow.2
+- Status: SUCCESS
+- Description: "attempt to compute offset which would overflow"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/non_null.rs:626:37 in function std::ptr::NonNull::<i32>::add
+
+Check 30: std::fmt::Arguments::<'_>::new_const.assertion.1
+- Status: SUCCESS
+- Description: "This is a placeholder message; Kani doesn't support message formatted at runtime"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/fmt/mod.rs:331:13 in function std::fmt::Arguments::<'_>::new_const
+
+Check 31: <alloc::raw_vec::RawVec<i32> as std::ops::Drop>::drop.unreachable.1
+- Status: SUCCESS
+- Description: "unreachable code"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/raw_vec.rs:553:5 in function <alloc::raw_vec::RawVec<i32> as std::ops::Drop>::drop
+
+Check 32: core::panicking::panic_nounwind_fmt::runtime.unsupported_construct.1
+- Status: SUCCESS
+- Description: "call to foreign "Rust" function `rust_begin_unwind` is not currently supported by Kani. Please post your example at https://github.com/model-checking/kani/issues/new/choose"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/panicking.rs:98:13 in function core::panicking::panic_nounwind_fmt::runtime
+
+Check 33: std::ptr::const_ptr::<impl *const T>::is_aligned_to::runtime_impl.assertion.1
+- Status: UNREACHABLE
+- Description: "attempt to subtract with overflow"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/const_ptr.rs:1630:26 in function std::ptr::const_ptr::<impl *const T>::is_aligned_to::runtime_impl
+
+Check 34: <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:7:58: 7:61}>.unreachable.1
+- Status: SUCCESS
+- Description: "unreachable code"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:331:13 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:7:58: 7:61}>
+
+Check 35: <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:7:58: 7:61}>.assertion.1
+- Status: SUCCESS
+- Description: "attempt to add with overflow"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:344:21 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:7:58: 7:61}>
+
+Check 36: std::hint::assert_unchecked.assume.1
+- Status: SUCCESS
+- Description: "assumption failed"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/hint.rs:156:9 in function std::hint::assert_unchecked
+
+Check 37: main.pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/macros.rs:54:37 in function main
+
+Check 38: main.pointer_dereference.2
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/macros.rs:54:37 in function main
+
+Check 39: main.pointer_dereference.3
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/macros.rs:54:37 in function main
+
+Check 40: main.pointer_dereference.4
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/macros.rs:54:37 in function main
+
+Check 41: main.pointer_dereference.5
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/macros.rs:54:37 in function main
+
+Check 42: main.pointer_dereference.6
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/macros.rs:54:37 in function main
+
+Check 43: __rust_dealloc.precondition_instance.1
+- Status: SUCCESS
+- Description: "free argument must be NULL or valid pointer"
+- Location: library/kani/kani_lib.c:88 in function __rust_dealloc
+
+Check 44: __rust_dealloc.precondition_instance.2
+- Status: SUCCESS
+- Description: "free argument must be dynamic object"
+- Location: library/kani/kani_lib.c:88 in function __rust_dealloc
+
+Check 45: __rust_dealloc.precondition_instance.3
+- Status: SUCCESS
+- Description: "free argument has offset zero"
+- Location: library/kani/kani_lib.c:88 in function __rust_dealloc
+
+Check 46: __rust_dealloc.precondition_instance.4
+- Status: SUCCESS
+- Description: "double free"
+- Location: library/kani/kani_lib.c:88 in function __rust_dealloc
+
+Check 47: __rust_dealloc.precondition_instance.5
+- Status: SUCCESS
+- Description: "free called for new[] object"
+- Location: library/kani/kani_lib.c:88 in function __rust_dealloc
+
+Check 48: __rust_dealloc.precondition_instance.6
+- Status: SUCCESS
+- Description: "free called for stack-allocated object"
+- Location: library/kani/kani_lib.c:88 in function __rust_dealloc
+
+Check 49: <std::ptr::NonNull<i32> as std::cmp::PartialEq>::eq.pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/non_null.rs:1798:9 in function <std::ptr::NonNull<i32> as std::cmp::PartialEq>::eq
+
+Check 50: <std::ptr::NonNull<i32> as std::cmp::PartialEq>::eq.pointer_dereference.2
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/non_null.rs:1798:9 in function <std::ptr::NonNull<i32> as std::cmp::PartialEq>::eq
+
+Check 51: <std::ptr::NonNull<i32> as std::cmp::PartialEq>::eq.pointer_dereference.3
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/non_null.rs:1798:9 in function <std::ptr::NonNull<i32> as std::cmp::PartialEq>::eq
+
+Check 52: <std::ptr::NonNull<i32> as std::cmp::PartialEq>::eq.pointer_dereference.4
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/non_null.rs:1798:9 in function <std::ptr::NonNull<i32> as std::cmp::PartialEq>::eq
+
+Check 53: <std::ptr::NonNull<i32> as std::cmp::PartialEq>::eq.pointer_dereference.5
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/non_null.rs:1798:9 in function <std::ptr::NonNull<i32> as std::cmp::PartialEq>::eq
+
+Check 54: <std::ptr::NonNull<i32> as std::cmp::PartialEq>::eq.pointer_dereference.6
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/non_null.rs:1798:9 in function <std::ptr::NonNull<i32> as std::cmp::PartialEq>::eq
+
+Check 55: <std::ptr::NonNull<i32> as std::cmp::PartialEq>::eq.pointer_dereference.7
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/non_null.rs:1798:26 in function <std::ptr::NonNull<i32> as std::cmp::PartialEq>::eq
+
+Check 56: <std::ptr::NonNull<i32> as std::cmp::PartialEq>::eq.pointer_dereference.8
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/non_null.rs:1798:26 in function <std::ptr::NonNull<i32> as std::cmp::PartialEq>::eq
+
+Check 57: <std::ptr::NonNull<i32> as std::cmp::PartialEq>::eq.pointer_dereference.9
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/non_null.rs:1798:26 in function <std::ptr::NonNull<i32> as std::cmp::PartialEq>::eq
+
+Check 58: <std::ptr::NonNull<i32> as std::cmp::PartialEq>::eq.pointer_dereference.10
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/non_null.rs:1798:26 in function <std::ptr::NonNull<i32> as std::cmp::PartialEq>::eq
+
+Check 59: <std::ptr::NonNull<i32> as std::cmp::PartialEq>::eq.pointer_dereference.11
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/non_null.rs:1798:26 in function <std::ptr::NonNull<i32> as std::cmp::PartialEq>::eq
+
+Check 60: <std::ptr::NonNull<i32> as std::cmp::PartialEq>::eq.pointer_dereference.12
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/non_null.rs:1798:26 in function <std::ptr::NonNull<i32> as std::cmp::PartialEq>::eq
+
+Check 61: std::cmp::impls::<impl std::cmp::PartialOrd for i32>::lt.pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1553:52 in function std::cmp::impls::<impl std::cmp::PartialOrd for i32>::lt
+
+Check 62: std::cmp::impls::<impl std::cmp::PartialOrd for i32>::lt.pointer_dereference.2
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1553:52 in function std::cmp::impls::<impl std::cmp::PartialOrd for i32>::lt
+
+Check 63: std::cmp::impls::<impl std::cmp::PartialOrd for i32>::lt.pointer_dereference.3
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1553:52 in function std::cmp::impls::<impl std::cmp::PartialOrd for i32>::lt
+
+Check 64: std::cmp::impls::<impl std::cmp::PartialOrd for i32>::lt.pointer_dereference.4
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1553:52 in function std::cmp::impls::<impl std::cmp::PartialOrd for i32>::lt
+
+Check 65: std::cmp::impls::<impl std::cmp::PartialOrd for i32>::lt.pointer_dereference.5
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1553:52 in function std::cmp::impls::<impl std::cmp::PartialOrd for i32>::lt
+
+Check 66: std::cmp::impls::<impl std::cmp::PartialOrd for i32>::lt.pointer_dereference.6
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1553:52 in function std::cmp::impls::<impl std::cmp::PartialOrd for i32>::lt
+
+Check 67: std::cmp::impls::<impl std::cmp::PartialOrd for i32>::lt.pointer_dereference.7
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1553:62 in function std::cmp::impls::<impl std::cmp::PartialOrd for i32>::lt
+
+Check 68: std::cmp::impls::<impl std::cmp::PartialOrd for i32>::lt.pointer_dereference.8
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1553:62 in function std::cmp::impls::<impl std::cmp::PartialOrd for i32>::lt
+
+Check 69: std::cmp::impls::<impl std::cmp::PartialOrd for i32>::lt.pointer_dereference.9
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1553:62 in function std::cmp::impls::<impl std::cmp::PartialOrd for i32>::lt
+
+Check 70: std::cmp::impls::<impl std::cmp::PartialOrd for i32>::lt.pointer_dereference.10
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1553:62 in function std::cmp::impls::<impl std::cmp::PartialOrd for i32>::lt
+
+Check 71: std::cmp::impls::<impl std::cmp::PartialOrd for i32>::lt.pointer_dereference.11
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1553:62 in function std::cmp::impls::<impl std::cmp::PartialOrd for i32>::lt
+
+Check 72: std::cmp::impls::<impl std::cmp::PartialOrd for i32>::lt.pointer_dereference.12
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1553:62 in function std::cmp::impls::<impl std::cmp::PartialOrd for i32>::lt
+
+Check 73: std::ptr::NonNull::<i32>::as_ref::<'_>.pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/non_null.rs:402:20 in function std::ptr::NonNull::<i32>::as_ref::<'_>
+
+Check 74: std::ptr::NonNull::<i32>::as_ref::<'_>.pointer_dereference.2
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/non_null.rs:402:20 in function std::ptr::NonNull::<i32>::as_ref::<'_>
+
+Check 75: std::ptr::NonNull::<i32>::as_ref::<'_>.pointer_dereference.3
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/non_null.rs:402:20 in function std::ptr::NonNull::<i32>::as_ref::<'_>
+
+Check 76: std::ptr::NonNull::<i32>::as_ref::<'_>.pointer_dereference.4
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/non_null.rs:402:20 in function std::ptr::NonNull::<i32>::as_ref::<'_>
+
+Check 77: std::ptr::NonNull::<i32>::as_ref::<'_>.pointer_dereference.5
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/non_null.rs:402:20 in function std::ptr::NonNull::<i32>::as_ref::<'_>
+
+Check 78: std::ptr::NonNull::<i32>::as_ref::<'_>.pointer_dereference.6
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/non_null.rs:402:20 in function std::ptr::NonNull::<i32>::as_ref::<'_>
+
+Check 79: std::ptr::const_ptr::<impl *const T>::sub_ptr::runtime_ptr_ge::runtime.pointer.1
+- Status: SUCCESS
+- Description: "same object violation"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/const_ptr.rs:811:17 in function std::ptr::const_ptr::<impl *const T>::sub_ptr::runtime_ptr_ge::runtime
+
+Check 80: std::fmt::Arguments::<'_>::new_const.pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/fmt/mod.rs:333:34 in function std::fmt::Arguments::<'_>::new_const
+
+Check 81: <&i32 as std::ops::Rem<i32>>::rem.pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/internal_macros.rs:36:31 in function <&i32 as std::ops::Rem<i32>>::rem
+
+Check 82: <&i32 as std::ops::Rem<i32>>::rem.pointer_dereference.2
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/internal_macros.rs:36:31 in function <&i32 as std::ops::Rem<i32>>::rem
+
+Check 83: <&i32 as std::ops::Rem<i32>>::rem.pointer_dereference.3
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/internal_macros.rs:36:31 in function <&i32 as std::ops::Rem<i32>>::rem
+
+Check 84: <&i32 as std::ops::Rem<i32>>::rem.pointer_dereference.4
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/internal_macros.rs:36:31 in function <&i32 as std::ops::Rem<i32>>::rem
+
+Check 85: <&i32 as std::ops::Rem<i32>>::rem.pointer_dereference.5
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/internal_macros.rs:36:31 in function <&i32 as std::ops::Rem<i32>>::rem
+
+Check 86: <&i32 as std::ops::Rem<i32>>::rem.pointer_dereference.6
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/internal_macros.rs:36:31 in function <&i32 as std::ops::Rem<i32>>::rem
+
+Check 87: pointer.1
+- Status: SUCCESS
+- Description: "same object violation"
+
+Check 88: <i32 as std::ops::Rem>::rem.division-by-zero.1
+- Status: SUCCESS
+- Description: "division by zero"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ops/arith.rs:585:45 in function <i32 as std::ops::Rem>::rem
+
+Check 89: alloc::raw_vec::RawVec::<i32>::current_memory.pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/raw_vec.rs:280:25 in function alloc::raw_vec::RawVec::<i32>::current_memory
+
+Check 90: alloc::raw_vec::RawVec::<i32>::current_memory.pointer_dereference.2
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/raw_vec.rs:280:25 in function alloc::raw_vec::RawVec::<i32>::current_memory
+
+Check 91: alloc::raw_vec::RawVec::<i32>::current_memory.pointer_dereference.3
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/raw_vec.rs:280:25 in function alloc::raw_vec::RawVec::<i32>::current_memory
+
+Check 92: alloc::raw_vec::RawVec::<i32>::current_memory.pointer_dereference.4
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/raw_vec.rs:280:25 in function alloc::raw_vec::RawVec::<i32>::current_memory
+
+Check 93: alloc::raw_vec::RawVec::<i32>::current_memory.pointer_dereference.5
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/raw_vec.rs:280:25 in function alloc::raw_vec::RawVec::<i32>::current_memory
+
+Check 94: alloc::raw_vec::RawVec::<i32>::current_memory.pointer_dereference.6
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/raw_vec.rs:280:25 in function alloc::raw_vec::RawVec::<i32>::current_memory
+
+Check 95: alloc::raw_vec::RawVec::<i32>::current_memory.pointer_dereference.7
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/raw_vec.rs:290:62 in function alloc::raw_vec::RawVec::<i32>::current_memory
+
+Check 96: alloc::raw_vec::RawVec::<i32>::current_memory.pointer_dereference.8
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/raw_vec.rs:290:62 in function alloc::raw_vec::RawVec::<i32>::current_memory
+
+Check 97: alloc::raw_vec::RawVec::<i32>::current_memory.pointer_dereference.9
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/raw_vec.rs:290:62 in function alloc::raw_vec::RawVec::<i32>::current_memory
+
+Check 98: alloc::raw_vec::RawVec::<i32>::current_memory.pointer_dereference.10
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/raw_vec.rs:290:62 in function alloc::raw_vec::RawVec::<i32>::current_memory
+
+Check 99: alloc::raw_vec::RawVec::<i32>::current_memory.pointer_dereference.11
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/raw_vec.rs:290:62 in function alloc::raw_vec::RawVec::<i32>::current_memory
+
+Check 100: alloc::raw_vec::RawVec::<i32>::current_memory.pointer_dereference.12
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/raw_vec.rs:290:62 in function alloc::raw_vec::RawVec::<i32>::current_memory
+
+Check 101: alloc::raw_vec::RawVec::<i32>::current_memory.pointer_dereference.13
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/raw_vec.rs:292:23 in function alloc::raw_vec::RawVec::<i32>::current_memory
+
+Check 102: alloc::raw_vec::RawVec::<i32>::current_memory.pointer_dereference.14
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/raw_vec.rs:292:23 in function alloc::raw_vec::RawVec::<i32>::current_memory
+
+Check 103: alloc::raw_vec::RawVec::<i32>::current_memory.pointer_dereference.15
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/raw_vec.rs:292:23 in function alloc::raw_vec::RawVec::<i32>::current_memory
+
+Check 104: alloc::raw_vec::RawVec::<i32>::current_memory.pointer_dereference.16
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/raw_vec.rs:292:23 in function alloc::raw_vec::RawVec::<i32>::current_memory
+
+Check 105: alloc::raw_vec::RawVec::<i32>::current_memory.pointer_dereference.17
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/raw_vec.rs:292:23 in function alloc::raw_vec::RawVec::<i32>::current_memory
+
+Check 106: alloc::raw_vec::RawVec::<i32>::current_memory.pointer_dereference.18
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/raw_vec.rs:292:23 in function alloc::raw_vec::RawVec::<i32>::current_memory
+
+Check 107: alloc::raw_vec::RawVec::<i32>::current_memory.pointer_dereference.19
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/raw_vec.rs:281:13 in function alloc::raw_vec::RawVec::<i32>::current_memory
+
+Check 108: std::slice::Iter::<'_, i32>::post_inc_start.pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:102:27 in function std::slice::Iter::<'_, i32>::post_inc_start
+
+Check 109: std::slice::Iter::<'_, i32>::post_inc_start.pointer_dereference.2
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:102:27 in function std::slice::Iter::<'_, i32>::post_inc_start
+
+Check 110: std::slice::Iter::<'_, i32>::post_inc_start.pointer_dereference.3
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:102:27 in function std::slice::Iter::<'_, i32>::post_inc_start
+
+Check 111: std::slice::Iter::<'_, i32>::post_inc_start.pointer_dereference.4
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:102:27 in function std::slice::Iter::<'_, i32>::post_inc_start
+
+Check 112: std::slice::Iter::<'_, i32>::post_inc_start.pointer_dereference.5
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:102:27 in function std::slice::Iter::<'_, i32>::post_inc_start
+
+Check 113: std::slice::Iter::<'_, i32>::post_inc_start.pointer_dereference.6
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:102:27 in function std::slice::Iter::<'_, i32>::post_inc_start
+
+Check 114: std::slice::Iter::<'_, i32>::post_inc_start.pointer_dereference.7
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:108:39 in function std::slice::Iter::<'_, i32>::post_inc_start
+
+Check 115: std::slice::Iter::<'_, i32>::post_inc_start.pointer_dereference.8
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:108:39 in function std::slice::Iter::<'_, i32>::post_inc_start
+
+Check 116: std::slice::Iter::<'_, i32>::post_inc_start.pointer_dereference.9
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:108:39 in function std::slice::Iter::<'_, i32>::post_inc_start
+
+Check 117: std::slice::Iter::<'_, i32>::post_inc_start.pointer_dereference.10
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:108:39 in function std::slice::Iter::<'_, i32>::post_inc_start
+
+Check 118: std::slice::Iter::<'_, i32>::post_inc_start.pointer_dereference.11
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:108:39 in function std::slice::Iter::<'_, i32>::post_inc_start
+
+Check 119: std::slice::Iter::<'_, i32>::post_inc_start.pointer_dereference.12
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:108:39 in function std::slice::Iter::<'_, i32>::post_inc_start
+
+Check 120: std::slice::Iter::<'_, i32>::post_inc_start.pointer_dereference.13
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:108:32 in function std::slice::Iter::<'_, i32>::post_inc_start
+
+Check 121: std::slice::Iter::<'_, i32>::post_inc_start.pointer_dereference.14
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:108:32 in function std::slice::Iter::<'_, i32>::post_inc_start
+
+Check 122: std::slice::Iter::<'_, i32>::post_inc_start.pointer_dereference.15
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:108:32 in function std::slice::Iter::<'_, i32>::post_inc_start
+
+Check 123: std::slice::Iter::<'_, i32>::post_inc_start.pointer_dereference.16
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:108:32 in function std::slice::Iter::<'_, i32>::post_inc_start
+
+Check 124: std::slice::Iter::<'_, i32>::post_inc_start.pointer_dereference.17
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:108:32 in function std::slice::Iter::<'_, i32>::post_inc_start
+
+Check 125: std::slice::Iter::<'_, i32>::post_inc_start.pointer_dereference.18
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:108:32 in function std::slice::Iter::<'_, i32>::post_inc_start
+
+Check 126: std::slice::Iter::<'_, i32>::post_inc_start.pointer_dereference.19
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:109:44 in function std::slice::Iter::<'_, i32>::post_inc_start
+
+Check 127: std::slice::Iter::<'_, i32>::post_inc_start.pointer_dereference.20
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:109:44 in function std::slice::Iter::<'_, i32>::post_inc_start
+
+Check 128: std::slice::Iter::<'_, i32>::post_inc_start.pointer_dereference.21
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:109:44 in function std::slice::Iter::<'_, i32>::post_inc_start
+
+Check 129: std::slice::Iter::<'_, i32>::post_inc_start.pointer_dereference.22
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:109:44 in function std::slice::Iter::<'_, i32>::post_inc_start
+
+Check 130: std::slice::Iter::<'_, i32>::post_inc_start.pointer_dereference.23
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:109:44 in function std::slice::Iter::<'_, i32>::post_inc_start
+
+Check 131: std::slice::Iter::<'_, i32>::post_inc_start.pointer_dereference.24
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:109:44 in function std::slice::Iter::<'_, i32>::post_inc_start
+
+Check 132: std::slice::Iter::<'_, i32>::post_inc_start.pointer_dereference.25
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:109:33 in function std::slice::Iter::<'_, i32>::post_inc_start
+
+Check 133: std::slice::Iter::<'_, i32>::post_inc_start.pointer_dereference.26
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:109:33 in function std::slice::Iter::<'_, i32>::post_inc_start
+
+Check 134: std::slice::Iter::<'_, i32>::post_inc_start.pointer_dereference.27
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:109:33 in function std::slice::Iter::<'_, i32>::post_inc_start
+
+Check 135: std::slice::Iter::<'_, i32>::post_inc_start.pointer_dereference.28
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:109:33 in function std::slice::Iter::<'_, i32>::post_inc_start
+
+Check 136: std::slice::Iter::<'_, i32>::post_inc_start.pointer_dereference.29
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:109:33 in function std::slice::Iter::<'_, i32>::post_inc_start
+
+Check 137: std::slice::Iter::<'_, i32>::post_inc_start.pointer_dereference.30
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:109:33 in function std::slice::Iter::<'_, i32>::post_inc_start
+
+Check 138: <std::slice::Iter<'_, i32> as std::iter::Iterator>::next.pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:29:24 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::next
+
+Check 139: <std::slice::Iter<'_, i32> as std::iter::Iterator>::next.pointer_dereference.2
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:29:24 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::next
+
+Check 140: <std::slice::Iter<'_, i32> as std::iter::Iterator>::next.pointer_dereference.3
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:29:24 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::next
+
+Check 141: <std::slice::Iter<'_, i32> as std::iter::Iterator>::next.pointer_dereference.4
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:29:24 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::next
+
+Check 142: <std::slice::Iter<'_, i32> as std::iter::Iterator>::next.pointer_dereference.5
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:29:24 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::next
+
+Check 143: <std::slice::Iter<'_, i32> as std::iter::Iterator>::next.pointer_dereference.6
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:29:24 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::next
+
+Check 144: <std::slice::Iter<'_, i32> as std::iter::Iterator>::next.pointer_dereference.7
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:33:33 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::next
+
+Check 145: <std::slice::Iter<'_, i32> as std::iter::Iterator>::next.pointer_dereference.8
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:33:33 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::next
+
+Check 146: <std::slice::Iter<'_, i32> as std::iter::Iterator>::next.pointer_dereference.9
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:33:33 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::next
+
+Check 147: <std::slice::Iter<'_, i32> as std::iter::Iterator>::next.pointer_dereference.10
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:33:33 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::next
+
+Check 148: <std::slice::Iter<'_, i32> as std::iter::Iterator>::next.pointer_dereference.11
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:33:33 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::next
+
+Check 149: <std::slice::Iter<'_, i32> as std::iter::Iterator>::next.pointer_dereference.12
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:33:33 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::next
+
+Check 150: <std::slice::Iter<'_, i32> as std::iter::Iterator>::next.pointer_dereference.13
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:163:25 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::next
+
+Check 151: std::intrinsics::is_valid_allocation_size.division-by-zero.1
+- Status: SUCCESS
+- Description: "division by zero"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/intrinsics.rs:2823:54 in function std::intrinsics::is_valid_allocation_size
+
+Check 152: <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:7:58: 7:61}>.pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:29:24 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:7:58: 7:61}>
+
+Check 153: <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:7:58: 7:61}>.pointer_dereference.2
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:29:24 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:7:58: 7:61}>
+
+Check 154: <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:7:58: 7:61}>.pointer_dereference.3
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:29:24 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:7:58: 7:61}>
+
+Check 155: <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:7:58: 7:61}>.pointer_dereference.4
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:29:24 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:7:58: 7:61}>
+
+Check 156: <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:7:58: 7:61}>.pointer_dereference.5
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:29:24 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:7:58: 7:61}>
+
+Check 157: <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:7:58: 7:61}>.pointer_dereference.6
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:29:24 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:7:58: 7:61}>
+
+Check 158: <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:7:58: 7:61}>.pointer_dereference.7
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:33:33 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:7:58: 7:61}>
+
+Check 159: <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:7:58: 7:61}>.pointer_dereference.8
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:33:33 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:7:58: 7:61}>
+
+Check 160: <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:7:58: 7:61}>.pointer_dereference.9
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:33:33 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:7:58: 7:61}>
+
+Check 161: <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:7:58: 7:61}>.pointer_dereference.10
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:33:33 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:7:58: 7:61}>
+
+Check 162: <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:7:58: 7:61}>.pointer_dereference.11
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:33:33 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:7:58: 7:61}>
+
+Check 163: <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:7:58: 7:61}>.pointer_dereference.12
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:33:33 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:7:58: 7:61}>
+
+Check 164: <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:7:58: 7:61}>.pointer_dereference.13
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:57:38 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:7:58: 7:61}>
+
+Check 165: <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:7:58: 7:61}>.pointer_dereference.14
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:57:38 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:7:58: 7:61}>
+
+Check 166: <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:7:58: 7:61}>.pointer_dereference.15
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:57:38 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:7:58: 7:61}>
+
+Check 167: <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:7:58: 7:61}>.pointer_dereference.16
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:57:38 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:7:58: 7:61}>
+
+Check 168: <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:7:58: 7:61}>.pointer_dereference.17
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:57:38 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:7:58: 7:61}>
+
+Check 169: <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:7:58: 7:61}>.pointer_dereference.18
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:57:38 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:7:58: 7:61}>
+
+Check 170: <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:7:58: 7:61}>.pointer_dereference.19
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:337:27 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:7:58: 7:61}>
+
+Check 171: <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:11:62: 11:65}>.pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:29:24 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:11:62: 11:65}>
+
+Check 172: <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:11:62: 11:65}>.pointer_dereference.2
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:29:24 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:11:62: 11:65}>
+
+Check 173: <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:11:62: 11:65}>.pointer_dereference.3
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:29:24 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:11:62: 11:65}>
+
+Check 174: <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:11:62: 11:65}>.pointer_dereference.4
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:29:24 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:11:62: 11:65}>
+
+Check 175: <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:11:62: 11:65}>.pointer_dereference.5
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:29:24 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:11:62: 11:65}>
+
+Check 176: <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:11:62: 11:65}>.pointer_dereference.6
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:29:24 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:11:62: 11:65}>
+
+Check 177: <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:11:62: 11:65}>.pointer_dereference.7
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:33:33 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:11:62: 11:65}>
+
+Check 178: <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:11:62: 11:65}>.pointer_dereference.8
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:33:33 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:11:62: 11:65}>
+
+Check 179: <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:11:62: 11:65}>.pointer_dereference.9
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:33:33 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:11:62: 11:65}>
+
+Check 180: <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:11:62: 11:65}>.pointer_dereference.10
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:33:33 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:11:62: 11:65}>
+
+Check 181: <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:11:62: 11:65}>.pointer_dereference.11
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:33:33 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:11:62: 11:65}>
+
+Check 182: <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:11:62: 11:65}>.pointer_dereference.12
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:33:33 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:11:62: 11:65}>
+
+Check 183: <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:11:62: 11:65}>.pointer_dereference.13
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:57:38 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:11:62: 11:65}>
+
+Check 184: <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:11:62: 11:65}>.pointer_dereference.14
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:57:38 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:11:62: 11:65}>
+
+Check 185: <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:11:62: 11:65}>.pointer_dereference.15
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:57:38 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:11:62: 11:65}>
+
+Check 186: <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:11:62: 11:65}>.pointer_dereference.16
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:57:38 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:11:62: 11:65}>
+
+Check 187: <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:11:62: 11:65}>.pointer_dereference.17
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:57:38 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:11:62: 11:65}>
+
+Check 188: <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:11:62: 11:65}>.pointer_dereference.18
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:57:38 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:11:62: 11:65}>
+
+Check 189: <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:11:62: 11:65}>.pointer_dereference.19
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/iter/macros.rs:337:27 in function <std::slice::Iter<'_, i32> as std::iter::Iterator>::position::<{closure@tests/bookrunner/books/Rust by Example/Functions/Closures/Examples in std/Searching through iterators/52.rs:11:62: 11:65}>
+
+Check 190: <std::vec::Vec<i32> as std::ops::Deref>::deref.pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:2763:55 in function <std::vec::Vec<i32> as std::ops::Deref>::deref
+
+Check 191: <std::vec::Vec<i32> as std::ops::Deref>::deref.pointer_dereference.2
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:2763:55 in function <std::vec::Vec<i32> as std::ops::Deref>::deref
+
+Check 192: <std::vec::Vec<i32> as std::ops::Deref>::deref.pointer_dereference.3
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:2763:55 in function <std::vec::Vec<i32> as std::ops::Deref>::deref
+
+Check 193: <std::vec::Vec<i32> as std::ops::Deref>::deref.pointer_dereference.4
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:2763:55 in function <std::vec::Vec<i32> as std::ops::Deref>::deref
+
+Check 194: <std::vec::Vec<i32> as std::ops::Deref>::deref.pointer_dereference.5
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:2763:55 in function <std::vec::Vec<i32> as std::ops::Deref>::deref
+
+Check 195: <std::vec::Vec<i32> as std::ops::Deref>::deref.pointer_dereference.6
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:2763:55 in function <std::vec::Vec<i32> as std::ops::Deref>::deref
+
+Check 196: <usize as std::option::SpecOptionPartialEq>::eq.pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/option.rs:2175:15 in function <usize as std::option::SpecOptionPartialEq>::eq
+
+Check 197: <usize as std::option::SpecOptionPartialEq>::eq.pointer_dereference.2
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/option.rs:2175:15 in function <usize as std::option::SpecOptionPartialEq>::eq
+
+Check 198: <usize as std::option::SpecOptionPartialEq>::eq.pointer_dereference.3
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/option.rs:2175:15 in function <usize as std::option::SpecOptionPartialEq>::eq
+
+Check 199: <usize as std::option::SpecOptionPartialEq>::eq.pointer_dereference.4
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/option.rs:2175:15 in function <usize as std::option::SpecOptionPartialEq>::eq
+
+Check 200: <usize as std::option::SpecOptionPartialEq>::eq.pointer_dereference.5
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/option.rs:2175:15 in function <usize as std::option::SpecOptionPartialEq>::eq
+
+Check 201: <usize as std::option::SpecOptionPartialEq>::eq.pointer_dereference.6
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/option.rs:2175:15 in function <usize as std::option::SpecOptionPartialEq>::eq
+
+Check 202: <usize as std::option::SpecOptionPartialEq>::eq.pointer_dereference.7
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/option.rs:2175:15 in function <usize as std::option::SpecOptionPartialEq>::eq
+
+Check 203: <usize as std::option::SpecOptionPartialEq>::eq.pointer_dereference.8
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/option.rs:2175:15 in function <usize as std::option::SpecOptionPartialEq>::eq
+
+Check 204: <usize as std::option::SpecOptionPartialEq>::eq.pointer_dereference.9
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/option.rs:2175:15 in function <usize as std::option::SpecOptionPartialEq>::eq
+
+Check 205: <usize as std::option::SpecOptionPartialEq>::eq.pointer_dereference.10
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/option.rs:2175:15 in function <usize as std::option::SpecOptionPartialEq>::eq
+
+Check 206: <usize as std::option::SpecOptionPartialEq>::eq.pointer_dereference.11
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/option.rs:2175:15 in function <usize as std::option::SpecOptionPartialEq>::eq
+
+Check 207: <usize as std::option::SpecOptionPartialEq>::eq.pointer_dereference.12
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/option.rs:2175:15 in function <usize as std::option::SpecOptionPartialEq>::eq
+
+Check 208: <usize as std::option::SpecOptionPartialEq>::eq.pointer_dereference.13
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/option.rs:2175:15 in function <usize as std::option::SpecOptionPartialEq>::eq
+
+Check 209: <usize as std::option::SpecOptionPartialEq>::eq.pointer_dereference.14
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/option.rs:2175:15 in function <usize as std::option::SpecOptionPartialEq>::eq
+
+Check 210: <usize as std::option::SpecOptionPartialEq>::eq.pointer_dereference.15
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/option.rs:2175:15 in function <usize as std::option::SpecOptionPartialEq>::eq
+
+Check 211: <usize as std::option::SpecOptionPartialEq>::eq.pointer_dereference.16
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/option.rs:2175:15 in function <usize as std::option::SpecOptionPartialEq>::eq
+
+Check 212: <usize as std::option::SpecOptionPartialEq>::eq.pointer_dereference.17
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/option.rs:2175:15 in function <usize as std::option::SpecOptionPartialEq>::eq
+
+Check 213: <usize as std::option::SpecOptionPartialEq>::eq.pointer_dereference.18
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/option.rs:2175:15 in function <usize as std::option::SpecOptionPartialEq>::eq
+
+Check 214: <alloc::raw_vec::RawVec<i32> as std::ops::Drop>::drop.pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/raw_vec.rs:554:16 in function <alloc::raw_vec::RawVec<i32> as std::ops::Drop>::drop
+
+Check 215: std::alloc::Layout::align.pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:142:9 in function std::alloc::Layout::align
+
+Check 216: std::alloc::Layout::align.pointer_dereference.2
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:142:9 in function std::alloc::Layout::align
+
+Check 217: std::alloc::Layout::align.pointer_dereference.3
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:142:9 in function std::alloc::Layout::align
+
+Check 218: std::alloc::Layout::align.pointer_dereference.4
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:142:9 in function std::alloc::Layout::align
+
+Check 219: std::alloc::Layout::align.pointer_dereference.5
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:142:9 in function std::alloc::Layout::align
+
+Check 220: std::alloc::Layout::align.pointer_dereference.6
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:142:9 in function std::alloc::Layout::align
+
+Check 221: alloc::raw_vec::RawVec::<i32>::ptr.pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/raw_vec.rs:258:9 in function alloc::raw_vec::RawVec::<i32>::ptr
+
+Check 222: alloc::raw_vec::RawVec::<i32>::ptr.pointer_dereference.2
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/raw_vec.rs:258:9 in function alloc::raw_vec::RawVec::<i32>::ptr
+
+Check 223: alloc::raw_vec::RawVec::<i32>::ptr.pointer_dereference.3
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/raw_vec.rs:258:9 in function alloc::raw_vec::RawVec::<i32>::ptr
+
+Check 224: alloc::raw_vec::RawVec::<i32>::ptr.pointer_dereference.4
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/raw_vec.rs:258:9 in function alloc::raw_vec::RawVec::<i32>::ptr
+
+Check 225: alloc::raw_vec::RawVec::<i32>::ptr.pointer_dereference.5
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/raw_vec.rs:258:9 in function alloc::raw_vec::RawVec::<i32>::ptr
+
+Check 226: alloc::raw_vec::RawVec::<i32>::ptr.pointer_dereference.6
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/raw_vec.rs:258:9 in function alloc::raw_vec::RawVec::<i32>::ptr
+
+Check 227: std::boxed::Box::<[i32]>::into_raw_with_allocator.pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:2253:5 in function std::boxed::Box::<[i32]>::into_raw_with_allocator
+
+Check 228: std::boxed::Box::<[i32]>::into_raw_with_allocator.pointer_dereference.2
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:2253:5 in function std::boxed::Box::<[i32]>::into_raw_with_allocator
+
+Check 229: std::boxed::Box::<[i32]>::into_raw_with_allocator.pointer_dereference.3
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:2253:5 in function std::boxed::Box::<[i32]>::into_raw_with_allocator
+
+Check 230: std::boxed::Box::<[i32]>::into_raw_with_allocator.pointer_dereference.4
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:2253:5 in function std::boxed::Box::<[i32]>::into_raw_with_allocator
+
+Check 231: std::boxed::Box::<[i32]>::into_raw_with_allocator.pointer_dereference.5
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:2253:5 in function std::boxed::Box::<[i32]>::into_raw_with_allocator
+
+Check 232: std::boxed::Box::<[i32]>::into_raw_with_allocator.pointer_dereference.6
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:2253:5 in function std::boxed::Box::<[i32]>::into_raw_with_allocator
+
+Check 233: std::cmp::impls::<impl std::cmp::PartialOrd for &i32>::lt.pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1673:28 in function std::cmp::impls::<impl std::cmp::PartialOrd for &i32>::lt
+
+Check 234: std::cmp::impls::<impl std::cmp::PartialOrd for &i32>::lt.pointer_dereference.2
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1673:28 in function std::cmp::impls::<impl std::cmp::PartialOrd for &i32>::lt
+
+Check 235: std::cmp::impls::<impl std::cmp::PartialOrd for &i32>::lt.pointer_dereference.3
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1673:28 in function std::cmp::impls::<impl std::cmp::PartialOrd for &i32>::lt
+
+Check 236: std::cmp::impls::<impl std::cmp::PartialOrd for &i32>::lt.pointer_dereference.4
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1673:28 in function std::cmp::impls::<impl std::cmp::PartialOrd for &i32>::lt
+
+Check 237: std::cmp::impls::<impl std::cmp::PartialOrd for &i32>::lt.pointer_dereference.5
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1673:28 in function std::cmp::impls::<impl std::cmp::PartialOrd for &i32>::lt
+
+Check 238: std::cmp::impls::<impl std::cmp::PartialOrd for &i32>::lt.pointer_dereference.6
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1673:28 in function std::cmp::impls::<impl std::cmp::PartialOrd for &i32>::lt
+
+Check 239: std::cmp::impls::<impl std::cmp::PartialOrd for &i32>::lt.pointer_dereference.7
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1673:35 in function std::cmp::impls::<impl std::cmp::PartialOrd for &i32>::lt
+
+Check 240: std::cmp::impls::<impl std::cmp::PartialOrd for &i32>::lt.pointer_dereference.8
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1673:35 in function std::cmp::impls::<impl std::cmp::PartialOrd for &i32>::lt
+
+Check 241: std::cmp::impls::<impl std::cmp::PartialOrd for &i32>::lt.pointer_dereference.9
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1673:35 in function std::cmp::impls::<impl std::cmp::PartialOrd for &i32>::lt
+
+Check 242: std::cmp::impls::<impl std::cmp::PartialOrd for &i32>::lt.pointer_dereference.10
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1673:35 in function std::cmp::impls::<impl std::cmp::PartialOrd for &i32>::lt
+
+Check 243: std::cmp::impls::<impl std::cmp::PartialOrd for &i32>::lt.pointer_dereference.11
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1673:35 in function std::cmp::impls::<impl std::cmp::PartialOrd for &i32>::lt
+
+Check 244: std::cmp::impls::<impl std::cmp::PartialOrd for &i32>::lt.pointer_dereference.12
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1673:35 in function std::cmp::impls::<impl std::cmp::PartialOrd for &i32>::lt
+
+Check 245: std::cmp::impls::<impl std::cmp::PartialEq for usize>::eq.pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1469:52 in function std::cmp::impls::<impl std::cmp::PartialEq for usize>::eq
+
+Check 246: std::cmp::impls::<impl std::cmp::PartialEq for usize>::eq.pointer_dereference.2
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1469:52 in function std::cmp::impls::<impl std::cmp::PartialEq for usize>::eq
+
+Check 247: std::cmp::impls::<impl std::cmp::PartialEq for usize>::eq.pointer_dereference.3
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1469:52 in function std::cmp::impls::<impl std::cmp::PartialEq for usize>::eq
+
+Check 248: std::cmp::impls::<impl std::cmp::PartialEq for usize>::eq.pointer_dereference.4
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1469:52 in function std::cmp::impls::<impl std::cmp::PartialEq for usize>::eq
+
+Check 249: std::cmp::impls::<impl std::cmp::PartialEq for usize>::eq.pointer_dereference.5
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1469:52 in function std::cmp::impls::<impl std::cmp::PartialEq for usize>::eq
+
+Check 250: std::cmp::impls::<impl std::cmp::PartialEq for usize>::eq.pointer_dereference.6
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1469:52 in function std::cmp::impls::<impl std::cmp::PartialEq for usize>::eq
+
+Check 251: std::cmp::impls::<impl std::cmp::PartialEq for usize>::eq.pointer_dereference.7
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1469:63 in function std::cmp::impls::<impl std::cmp::PartialEq for usize>::eq
+
+Check 252: std::cmp::impls::<impl std::cmp::PartialEq for usize>::eq.pointer_dereference.8
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1469:63 in function std::cmp::impls::<impl std::cmp::PartialEq for usize>::eq
+
+Check 253: std::cmp::impls::<impl std::cmp::PartialEq for usize>::eq.pointer_dereference.9
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1469:63 in function std::cmp::impls::<impl std::cmp::PartialEq for usize>::eq
+
+Check 254: std::cmp::impls::<impl std::cmp::PartialEq for usize>::eq.pointer_dereference.10
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1469:63 in function std::cmp::impls::<impl std::cmp::PartialEq for usize>::eq
+
+Check 255: std::cmp::impls::<impl std::cmp::PartialEq for usize>::eq.pointer_dereference.11
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1469:63 in function std::cmp::impls::<impl std::cmp::PartialEq for usize>::eq
+
+Check 256: std::cmp::impls::<impl std::cmp::PartialEq for usize>::eq.pointer_dereference.12
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:1469:63 in function std::cmp::impls::<impl std::cmp::PartialEq for usize>::eq
+
+Check 257: <std::vec::Vec<i32> as std::ops::Drop>::drop.pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:3204:81 in function <std::vec::Vec<i32> as std::ops::Drop>::drop
+
+Check 258: <std::vec::Vec<i32> as std::ops::Drop>::drop.pointer_dereference.2
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:3204:81 in function <std::vec::Vec<i32> as std::ops::Drop>::drop
+
+Check 259: <std::vec::Vec<i32> as std::ops::Drop>::drop.pointer_dereference.3
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:3204:81 in function <std::vec::Vec<i32> as std::ops::Drop>::drop
+
+Check 260: <std::vec::Vec<i32> as std::ops::Drop>::drop.pointer_dereference.4
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:3204:81 in function <std::vec::Vec<i32> as std::ops::Drop>::drop
+
+Check 261: <std::vec::Vec<i32> as std::ops::Drop>::drop.pointer_dereference.5
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:3204:81 in function <std::vec::Vec<i32> as std::ops::Drop>::drop
+
+Check 262: <std::vec::Vec<i32> as std::ops::Drop>::drop.pointer_dereference.6
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:3204:81 in function <std::vec::Vec<i32> as std::ops::Drop>::drop
+
+Check 263: std::alloc::Layout::size.pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:129:9 in function std::alloc::Layout::size
+
+Check 264: std::alloc::Layout::size.pointer_dereference.2
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:129:9 in function std::alloc::Layout::size
+
+Check 265: std::alloc::Layout::size.pointer_dereference.3
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:129:9 in function std::alloc::Layout::size
+
+Check 266: std::alloc::Layout::size.pointer_dereference.4
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:129:9 in function std::alloc::Layout::size
+
+Check 267: std::alloc::Layout::size.pointer_dereference.5
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:129:9 in function std::alloc::Layout::size
+
+Check 268: std::alloc::Layout::size.pointer_dereference.6
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:129:9 in function std::alloc::Layout::size
+
+
+SUMMARY:
+** 0 of 268 failed (2 unreachable)
+
+VERIFICATION:- SUCCESSFUL
+Verification Time: 2.038664s
+
+Complete - 1 successfully verified harnesses, 0 failures, 1 total.
+              </xmp>
+            </div><!-- class="output-box" -->
+            
+          
+
+          
+          <div class="output-box"><xmp>stderr:
+            
+warning: Found the following unsupported constructs:
+- caller_location (1)
+- foreign function (2)
+
+Verification will fail if one or more of these constructs is reachable.
+See https://model-checking.github.io/kani/rust-feature-support.html for more details.
+
+warning: 1 warning emitted
+
+            </xmp>
+          </div><!-- class="output-box" -->
+          
+
+        </div><!-- class="command-content" -->
+      </div><!-- class="fail" -->
+    </div><!-- id="command-table" -->
+    
+
+  </div><!-- class="stage" -->
+  
+
+
+</div><!-- id="content" -->
+</body>
+</html>

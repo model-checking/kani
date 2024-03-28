@@ -1,0 +1,2648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>
+    Pipeline tests/bookrunner/books/The Rustonomicon/Concurrency/Atomics/198.rs
+  </title>
+<style>
+#title{
+  background-color: #ec407a;
+  color: white;
+  padding: 2em;
+}
+h1 {
+  margin-bottom: 0em;
+}
+#subtitle {
+  font-variant: small-caps;
+  text-transform: lowercase;
+  letter-spacing: 0.2em;
+}
+.run-info ul {
+  list-style: none;
+}
+.run-info ul li {
+  display: inline;
+  margin-right: 6em;
+  margin-left: -3em;
+  text-transform: uppercase;
+  font-size: small;
+  color: #ec407a;
+}
+#content {
+  max-width: 800px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-top: 2em;
+  color: #263238;
+  font-family: Helvetica, sans-serif;
+}
+p {
+  margin: 0;
+}
+.command-table {
+  background-color: #eceff1;
+  padding: 0.3em;
+  border-radius: 0.3em;
+  margin-bottom: 4em;
+}
+.command-table .fail-ignored {
+  background-color: #e65100cc;
+  padding: 0.3em;
+  border-radius: 0.3em;
+}
+.command-table .success {
+  background-color: #1a237ecc;
+  padding: 0.3em;
+  border-radius: 0.3em;
+}
+.command-table .in-progress {
+  background-color: black;
+  padding: 0.3em;
+  border-radius: 0.3em;
+}
+.command-table .non-started {
+  background-color: #26323844;
+  padding: 0.3em;
+  border-radius: 0.3em;
+}
+.command-table .fail {
+  background-color: #f44336cc;
+  padding: 0.3em;
+  border-radius: 0.3em;
+}
+.command-content {
+  background-color: #eceff1;
+  padding: 1em;
+}
+.command-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 1em;
+}
+.command-id-link{
+  flex-grow: 0;
+}
+.command-id-link a {
+  font-size: xx-large;
+  text-align: center;
+  font-weight: bold;
+  text-shadow: 1px  1px 0px #000000bb,
+              -1px -1px 0px #ffffffbb;
+  text-decoration: none;
+  margin-left: 0.2em;
+}
+.command-id-link a:link {
+  text-shadow: 1px  1px 0px #000000bb,
+              -1px -1px 0px #ffffffbb;
+}
+.command-id-link a:visited {
+  text-shadow: 1px  1px 0px #000000bb,
+              -1px -1px 0px #ffffffbb;
+}
+.command-id-link a:visited:hover {
+  color: #ec407a;
+  background-color: #00000000;
+  text-shadow: 1px  1px 0px #000000bb,
+              -1px -1px 0px #ffffffbb,
+               0px 0px 10px #fff,
+               0px 0px 5px #ec407a,
+               0px 0px 5px #ec407a;
+}
+.command-id-link a:hover {
+  color: #ec407a;
+  background-color: #00000000;
+  text-shadow: 1px  1px 0px #000000bb,
+              -1px -1px 0px #ffffffbb
+               0px 0px 10px #fff,
+               0px 0px 5px #ec407a,
+               0px 0px 5px #ec407a;
+}
+.command-id-link a:active {
+  color: #ffeb3b;
+  background-color: #00000000;
+  text-shadow: 1px  1px 0px #000000bb,
+              -1px -1px 0px #ffffffbb,
+                 0px 0px 10px #fff,
+                 0px 0px 5px #ffeb3b,
+                 0px 0px 5px #ffeb3b;
+}
+.command-id-link a:visited:active {
+  color: #ffeb3b;
+  background-color: #00000000;
+  text-shadow: 1px  1px 0px #000000bb,
+              -1px -1px 0px #ffffffbb,
+                 0px 0px 10px #fff,
+                 0px 0px 5px #ffeb3b,
+                 0px 0px 5px #ffeb3b;
+}
+.command-description {
+  color: #26323899;
+  font-size: smaller;
+  text-align: center;
+  font-weight: bold;
+  flex-grow: 1;
+}
+
+.command-invocation {
+  padding: 1em;
+  color: #fff;
+  background-color: #005662;
+  font-size: small;
+  font-family: monospace;
+  border-radius: 0.5em;
+  text-shadow: 0 0 2px #ffccbccc;
+}
+.command-stats-table {
+  margin-top: 0.2em;
+  border-radius: 0.5em;
+  padding: 0.2em;
+  padding-top: 0.4em;
+  display: flex;
+  flex-direction: column;
+  background-color: #eae3998a;
+  color: #263238cc;
+  margin-bottom: 0.2em;
+}
+.command-stats-row {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-evenly;
+  margin-top: 0.4em;
+  margin-bottom: 0.4em;
+  font-size: small;
+  text-transform: uppercase;
+}
+.command-stats-row p .value {
+  color: #00251aaa;
+  text-shadow: 0 0 2px #82ada944;
+  font-weight: bold;
+}
+.literal-stdout {
+  margin-top: 0.4em;
+  margin-bottom: 0.2em;
+  padding: 1em;
+  border-radius: 0.5em;
+  overflow-x: auto;
+  overflow-y: auto;
+}
+.output-box {
+  margin-top: 0.4em;
+  margin-bottom: 0.2em;
+  padding: 1em;
+  color: #000a12;
+  background-color: #cfd8dc;
+  font-size: small;
+  font-family: monospace;
+  border-radius: 0.5em;
+  max-height: 20em;
+  overflow-x: auto;
+  overflow-y: auto;
+}
+.output-box xmp{
+  white-space: pre;
+}
+.stage-name p {
+  margin-left: 0.5em;
+  color: #546e7a;
+  text-shadow:  -1px  0px 0px #fff
+               ,-2px  0px 0px #ffffff99
+               ,-1px  1px 0px #ffffff99
+               ;
+  font-size: 48pt;
+  font-variant: small-caps;
+  text-transform: lowercase;
+  font-weight: bold;
+  font-style: italic;
+}
+.stage-name .underline {
+  width: 100%;
+  height: 1.1em;
+  background-color: #546e7a;
+  margin-top: -1.6em;
+}
+.stage-name {
+  margin-top: 6em;
+  margin-bottom: 3em;
+}
+
+.outcome-table-info-box {
+  margin-top: 0.4em;
+  margin-bottom: 0.2em;
+  padding: 1em;
+  color: #000a12;
+  background-color: #ffee58;
+  border-radius: 0.5em;
+}
+.outcome-table-info-box .outcome{
+  font-weight: bold;
+}
+#toc {
+  margin-bottom: 6em;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 1;
+  margin-right: 3em;
+}
+.toc-title {
+  text-align: center;
+  font-variant: small-caps;
+  text-transform: lowercase;
+  margin-bottom: -1em;
+}
+.toc-section{
+  margin-top: 1em;
+  margin-bottom: 0.5em;
+  text-transform: capitalize;
+}
+.toc-row {
+  display: flex;
+  flex-direction: row;
+  justify-content: flex-start;
+  align-items: center;
+}
+.toc-row-icon {
+  padding-right: 8px;
+}
+.status-icon-cross {
+  fill: #f44336;
+    width: 16px;
+    height: 16px;
+}
+.status-icon-tick {
+  fill: #3f51b5;
+  stroke: #ffffff77;
+  stroke-width: 1px;
+  width: 16px;
+  height: 16px;
+}
+
+.status-icon-in-progress {
+  fill: #333;
+  width: 16px;
+  height: 16px;
+}
+
+.status-icon-in-progress circle {
+  stroke: #333;
+  stroke-width: 2px;
+  fill: none
+}
+a:link {
+  color: #1e88e5;
+}
+a:visited {
+  color: #1e88e5;
+}
+a:visited:hover {
+  background-color: #1e88e5;
+  color: #fff;
+  text-decoration: none;
+}
+a:hover {
+  background-color: #1e88e5;
+  color: #fff;
+  text-decoration: none;
+}
+a:active {
+  background-color: #ec407a;
+  color: #fff;
+  text-decoration: none;
+}
+a:visited:active {
+  background-color: #ec407a;
+  color: #fff;
+  text-decoration: none;
+}
+
+#contents-container {
+  margin-top: 6em;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  align-content: flex-start;
+}
+
+#depgraph {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  align-content: flex-start;
+  flex-shrink: 7;
+}
+
+#depgraph-title p {
+  text-align: center;
+  font-variant: small-caps;
+  text-transform: lowercase;
+}
+
+#depgraph-preview img {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+#depgraph-preview {
+  padding: 1em;
+}
+
+.memory-box {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.5em;
+  align-items: center;
+}
+.memory-preview {
+  width: 75%;
+}
+.memory-preview svg {
+  margin-left: -1em;
+  margin-right: -2em;
+}
+.memory-table {
+}
+.memory-title {
+  text-align: center;
+  font-style: bold;
+}
+.memory-subtitle {
+  text-transform: lowercase;
+  font-variant: small-caps;
+  text-align: center;
+  opacity: 0.8;
+}
+.memory-pad {
+  width: 1.5em;
+}
+.memory-value {
+  text-align: center;
+  margin-right: 2em;
+}
+.rss {
+  color: #ab47bc;
+}
+.vsz {
+  color: #4caf50;
+}
+
+
+@media (prefers-color-scheme: dark){
+  a:link {
+    color: #29b6f6;
+  }
+  a:visited {
+    color: #29b6f6;
+  }
+  a:visited:hover {
+    color: #263238;
+    background-color: #29b6f6;
+  }
+  a:hover {
+    color: #263238;
+    background-color: #29b6f6;
+  }
+  a:active {
+    color: #263238;
+    background-color: #ec407a;
+  }
+  a:visited:active {
+    color: #263238;
+    background-color: #ec407a;
+  }
+  .command-id-link a:link {
+    text-shadow: 1px  1px 0px #000000bb,
+                -1px -1px 0px #ffffffbb;
+  }
+  .command-id-link a:visited {
+    text-shadow: 1px  1px 0px #000000bb,
+                -1px -1px 0px #ffffffbb;
+  }
+  .command-id-link a:visited:hover {
+    color: #ec407a;
+    background-color: #00000000;
+    text-shadow: 1px  1px 0px #000000bb,
+                -1px -1px 0px #ffffffbb.
+                 0px 0px 10px #fff,
+                 0px 0px 5px #ec407a,
+                 0px 0px 5px #ec407a;
+  }
+  .command-id-link a:hover {
+    color: #ec407a;
+    background-color: #00000000;
+    text-shadow: 1px  1px 0px #000000bb,
+                -1px -1px 0px #ffffffbb,
+                 0px 0px 10px #fff,
+                 0px 0px 5px #ec407a,
+                 0px 0px 5px #ec407a;
+  }
+  .command-id-link a:active {
+    color: #ffeb3b;
+    background-color: #00000000;
+    text-shadow: 1px  1px 0px #000000bb,
+                -1px -1px 0px #ffffffbb,
+                 0px 0px 10px #fff,
+                 0px 0px 5px #ffeb3b,
+                 0px 0px 5px #ffeb3b;
+  }
+  .command-id-link a:visited:active {
+    color: #ffeb3b;
+    background-color: #00000000;
+    text-shadow: 1px  1px 0px #000000bb,
+                -1px -1px 0px #ffffffbb,
+                 0px 0px 10px #fff,
+                 0px 0px 5px #ffeb3b,
+                 0px 0px 5px #ffeb3b;
+  }
+  body {
+    color: #babdbe;
+    background-color: #263238;
+  }
+  .outcome-table-info-box p{
+    color: #000a12;
+  }
+  p {
+    color: #babdbe;
+  }
+  #subtitle {
+    color: #fff;
+  }
+  .command-table {
+    background-color: #37474f;
+  }
+  .command-content {
+    background-color: #37474f;
+  }
+  .command-invocation p {
+    color: #fff;
+  }
+  .command-stats-table {
+    background-color: #eae399d0;
+    color: #263238;
+  }
+  .command-stats-table p {
+    color: #263238;
+  }
+  .output-box {
+    color: #cfd8dccc;
+    background-color: #102027;
+  }
+  .stage-name p {
+    text-shadow: -1px  0px 0px #263238,
+                 -2px  0px 0px #26323899,
+                 -1px  1px 0px #26323899;
+  }
+  .status-icon-in-progress { fill: #ddd; }
+  .status-icon-in-progress circle { stroke: #ddd; }
+
+  /* SVG graphs */
+  g text {
+    fill: #eceff1;
+    stroke: #fff0;
+  }
+}
+</style>
+</head>
+<body>
+<div id="content">
+
+  <div id="title">
+    <h1>
+      Book Runner pipeline &lsquo;tests/bookrunner/books/The Rustonomicon/Concurrency/Atomics/198.rs&rsquo;
+    </h1>
+    <p id="subtitle">
+      Litani CI Dashboard
+    </p>
+  </div><!-- id="title" -->
+
+  <div class=run-info>
+    <ul>
+      <li>Pipeline status: success</li>
+      <li>2024-03-28T00:13:57Z</li>
+      <li>90b13448-ebab-45c6-b7f8-c5b9084d258c</li>
+    </ul>
+  </div><!-- class=run-info -->
+
+  <div id="contents-container">
+
+    <div id="toc">
+      <div class="toc-title">
+        <p>Summary of jobs for this pipeline</p>
+      </div><!-- class="toc-title" -->
+
+      
+        <div class="toc-section">
+          <p>check</p>
+        </div><!-- class="toc-section" -->
+        
+          <div class="toc-row">
+
+            <div class="toc-row-icon">
+              
+                <svg height="16px" width="16px" class="status-icon-tick">
+                  <polygon points="1,11 6,15 15,3 13,1 6,12 3,8"></polygon>
+                </svg>
+              
+            </div><!-- class="toc-row-icon" -->
+
+            <div class="toc-row-job-name">
+              <p>
+              <a href="#job-97b64498-645b-4826-b278-0b98a08e6768">
+              
+              Is this valid Rust code?
+              
+              </a>
+              </p>
+            </div><!-- class="toc-row-job-name" -->
+
+          </div><!-- class="toc-row" -->
+
+        
+      
+        <div class="toc-section">
+          <p>codegen</p>
+        </div><!-- class="toc-section" -->
+        
+          <div class="toc-row">
+
+            <div class="toc-row-icon">
+              
+                <svg height="16px" width="16px" class="status-icon-tick">
+                  <polygon points="1,11 6,15 15,3 13,1 6,12 3,8"></polygon>
+                </svg>
+              
+            </div><!-- class="toc-row-icon" -->
+
+            <div class="toc-row-job-name">
+              <p>
+              <a href="#job-116c3556-c21b-422e-a786-47af603c40fd">
+              
+              Does Kani support all the Rust features used in it?
+              
+              </a>
+              </p>
+            </div><!-- class="toc-row-job-name" -->
+
+          </div><!-- class="toc-row" -->
+
+        
+      
+        <div class="toc-section">
+          <p>verification</p>
+        </div><!-- class="toc-section" -->
+        
+          <div class="toc-row">
+
+            <div class="toc-row-icon">
+              
+                <svg height="16px" width="16px" class="status-icon-tick">
+                  <polygon points="1,11 6,15 15,3 13,1 6,12 3,8"></polygon>
+                </svg>
+              
+            </div><!-- class="toc-row-icon" -->
+
+            <div class="toc-row-job-name">
+              <p>
+              <a href="#job-cc389fa6-2fcb-4985-acc0-6266b43ee585">
+              
+              Can Kani reason about it?
+              
+              </a>
+              </p>
+            </div><!-- class="toc-row-job-name" -->
+
+          </div><!-- class="toc-row" -->
+
+        
+      
+    </div><!-- id="toc" -->
+
+
+    
+
+  </div><!-- id="contents-container" -->
+
+
+  
+  <div class="stage">
+    <div class="stage-name">
+      <p>check</p>
+      <div class="underline"></div>
+    </div><!-- class="stage-name" -->
+
+    
+    <div class="command-table" id="job-97b64498-645b-4826-b278-0b98a08e6768">
+      
+      <div class="success">
+      
+        <div class="command-content">
+          <div class="command-header">
+            <div class="command-id-link">
+              <p>
+                <a href="#job-97b64498-645b-4826-b278-0b98a08e6768">#</a>
+              </p>
+            </div><!-- class="command-id-link" -->
+            <div class="command-description">
+              
+              <p>
+                Is this valid Rust code?
+              </p>
+              
+            </div><!-- class="command-description" -->
+          </div><!-- class="command-header" -->
+          <div class="command-invocation">
+            <p>
+            "kani-compiler" "--edition" "2018" "-Z" "no-codegen" "tests/bookrunner/books/The Rustonomicon/Concurrency/Atomics/198.rs"
+            </p>
+          </div><!-- class="command-invocation" -->
+
+          
+          <div class="command-stats-table">
+            
+            <div class="command-stats-row">
+              <p>Command return code:
+              <span class="value">
+                0
+              </span></p>
+              <p>OK returns:
+              <span class="value">
+                ['0']
+              </span></p>
+              <p>Ignored returns:
+              <span class="value">
+                None
+              </span></p>
+            </div><!-- class="command-stats-row" -->
+            <div class="command-stats-row">
+              <p>Timeout:
+              <span class="value">
+                5
+              </span></p>
+              <p>Timeout ok:
+              <span class="value">
+                False
+              </span></p>
+              <p>Timeout ignored:
+              <span class="value">
+                False
+              </span></p>
+              <p>Timeout reached:
+              <span class="value">
+                False
+              </span></p>
+            </div><!-- class="command-stats-row" -->
+            <div class="command-stats-row">
+              <p>Start time:
+              <span class="value">
+                2024-03-28T00:19:09Z
+              </span></p>
+              <p>Duration:
+              <span class="value">
+                00s
+              </span></p>
+              <p>End time:
+              <span class="value">
+                2024-03-28T00:19:09Z
+              </span></p>
+            </div><!-- class="command-stats-row" -->
+            <div class="command-stats-row">
+              <p>Command successful:
+              <span class="value">
+              
+              yes
+              
+              </span></p>
+            </div><!-- class="command-stats-row" -->
+             
+          </div><!-- class="command-stats-table" -->
+          
+
+          
+
+
+          
+
+
+          
+
+          
+          <div class="output-box"><xmp>stderr:
+            
+warning: use of deprecated method `std::sync::atomic::AtomicBool::compare_and_swap`: Use `compare_exchange` or `compare_exchange_weak` instead
+--> tests/bookrunner/books/The Rustonomicon/Concurrency/Atomics/198.rs:14:16
+|
+14 |     while lock.compare_and_swap(false, true, Ordering::Acquire) { }
+|                ^^^^^^^^^^^^^^^^
+|
+= note: `#[warn(deprecated)]` on by default
+
+warning: 1 warning emitted
+
+            </xmp>
+          </div><!-- class="output-box" -->
+          
+
+        </div><!-- class="command-content" -->
+      </div><!-- class="fail" -->
+    </div><!-- id="command-table" -->
+    
+
+  </div><!-- class="stage" -->
+  
+  <div class="stage">
+    <div class="stage-name">
+      <p>codegen</p>
+      <div class="underline"></div>
+    </div><!-- class="stage-name" -->
+
+    
+    <div class="command-table" id="job-116c3556-c21b-422e-a786-47af603c40fd">
+      
+      <div class="success">
+      
+        <div class="command-content">
+          <div class="command-header">
+            <div class="command-id-link">
+              <p>
+                <a href="#job-116c3556-c21b-422e-a786-47af603c40fd">#</a>
+              </p>
+            </div><!-- class="command-id-link" -->
+            <div class="command-description">
+              
+              <p>
+                Does Kani support all the Rust features used in it?
+              </p>
+              
+            </div><!-- class="command-description" -->
+          </div><!-- class="command-header" -->
+          <div class="command-invocation">
+            <p>
+            "kani-compiler" "--edition" "2018" "--out-dir" "build/tmp" "tests/bookrunner/books/The Rustonomicon/Concurrency/Atomics/198.rs"
+            </p>
+          </div><!-- class="command-invocation" -->
+
+          
+          <div class="command-stats-table">
+            
+            <div class="command-stats-row">
+              <p>Command return code:
+              <span class="value">
+                0
+              </span></p>
+              <p>OK returns:
+              <span class="value">
+                ['0']
+              </span></p>
+              <p>Ignored returns:
+              <span class="value">
+                None
+              </span></p>
+            </div><!-- class="command-stats-row" -->
+            <div class="command-stats-row">
+              <p>Timeout:
+              <span class="value">
+                10
+              </span></p>
+              <p>Timeout ok:
+              <span class="value">
+                False
+              </span></p>
+              <p>Timeout ignored:
+              <span class="value">
+                False
+              </span></p>
+              <p>Timeout reached:
+              <span class="value">
+                False
+              </span></p>
+            </div><!-- class="command-stats-row" -->
+            <div class="command-stats-row">
+              <p>Start time:
+              <span class="value">
+                2024-03-28T00:23:51Z
+              </span></p>
+              <p>Duration:
+              <span class="value">
+                01s
+              </span></p>
+              <p>End time:
+              <span class="value">
+                2024-03-28T00:23:52Z
+              </span></p>
+            </div><!-- class="command-stats-row" -->
+            <div class="command-stats-row">
+              <p>Command successful:
+              <span class="value">
+              
+              yes
+              
+              </span></p>
+            </div><!-- class="command-stats-row" -->
+             
+          </div><!-- class="command-stats-table" -->
+          
+
+          
+
+
+          
+
+
+          
+
+          
+          <div class="output-box"><xmp>stderr:
+            
+warning: use of deprecated method `std::sync::atomic::AtomicBool::compare_and_swap`: Use `compare_exchange` or `compare_exchange_weak` instead
+--> tests/bookrunner/books/The Rustonomicon/Concurrency/Atomics/198.rs:14:16
+|
+14 |     while lock.compare_and_swap(false, true, Ordering::Acquire) { }
+|                ^^^^^^^^^^^^^^^^
+|
+= note: `#[warn(deprecated)]` on by default
+
+warning: 1 warning emitted
+
+            </xmp>
+          </div><!-- class="output-box" -->
+          
+
+        </div><!-- class="command-content" -->
+      </div><!-- class="fail" -->
+    </div><!-- id="command-table" -->
+    
+
+  </div><!-- class="stage" -->
+  
+  <div class="stage">
+    <div class="stage-name">
+      <p>verification</p>
+      <div class="underline"></div>
+    </div><!-- class="stage-name" -->
+
+    
+    <div class="command-table" id="job-cc389fa6-2fcb-4985-acc0-6266b43ee585">
+      
+      <div class="success">
+      
+        <div class="command-content">
+          <div class="command-header">
+            <div class="command-id-link">
+              <p>
+                <a href="#job-cc389fa6-2fcb-4985-acc0-6266b43ee585">#</a>
+              </p>
+            </div><!-- class="command-id-link" -->
+            <div class="command-description">
+              
+              <p>
+                Can Kani reason about it?
+              </p>
+              
+            </div><!-- class="command-description" -->
+          </div><!-- class="command-header" -->
+          <div class="command-invocation">
+            <p>
+            RUSTFLAGS="--edition 2018" RUSTFLAGS="--edition 2018" "kani" "tests/bookrunner/books/The Rustonomicon/Concurrency/Atomics/198.rs" "--enable-unstable" "--function" "main" "--enable-unstable" "--cbmc-args" "--unwind" "0"
+            </p>
+          </div><!-- class="command-invocation" -->
+
+          
+          <div class="command-stats-table">
+            
+            <div class="command-stats-row">
+              <p>Command return code:
+              <span class="value">
+                0
+              </span></p>
+              <p>OK returns:
+              <span class="value">
+                ['0']
+              </span></p>
+              <p>Ignored returns:
+              <span class="value">
+                None
+              </span></p>
+            </div><!-- class="command-stats-row" -->
+            <div class="command-stats-row">
+              <p>Timeout:
+              <span class="value">
+                60
+              </span></p>
+              <p>Timeout ok:
+              <span class="value">
+                False
+              </span></p>
+              <p>Timeout ignored:
+              <span class="value">
+                False
+              </span></p>
+              <p>Timeout reached:
+              <span class="value">
+                False
+              </span></p>
+            </div><!-- class="command-stats-row" -->
+            <div class="command-stats-row">
+              <p>Start time:
+              <span class="value">
+                2024-03-28T00:23:52Z
+              </span></p>
+              <p>Duration:
+              <span class="value">
+                03s
+              </span></p>
+              <p>End time:
+              <span class="value">
+                2024-03-28T00:23:55Z
+              </span></p>
+            </div><!-- class="command-stats-row" -->
+            <div class="command-stats-row">
+              <p>Command successful:
+              <span class="value">
+              
+              yes
+              
+              </span></p>
+            </div><!-- class="command-stats-row" -->
+             
+          </div><!-- class="command-stats-table" -->
+          
+
+          
+
+
+          
+
+
+          
+            
+            <div class="output-box"><xmp>stdout:
+              
+Kani Rust Verifier 0.48.0 (standalone)
+Checking harness main...
+CBMC 5.95.1 (cbmc-5.95.1)
+CBMC version 5.95.1 (cbmc-5.95.1) 64-bit x86_64 linux
+Reading GOTO program from file /home/runner/work/kani/kani/tests/bookrunner/books/The Rustonomicon/Concurrency/Atomics/198.out
+Generating GOTO Program
+Adding CPROVER library (x86_64)
+Removal of function pointers and virtual functions
+Generic Property Instrumentation
+Running with 16 object bits, 48 offset bits (user-specified)
+Starting Bounded Model Checking
+aborting path on assume(false) at file /home/runner/.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/sync.rs line 3036 column 5 function <std::sync::Weak<std::sync::atomic::AtomicBool, &std::alloc::Global> as std::ops::Drop>::drop thread 0
+Runtime Symex: 0.204949s
+size of program expression: 3635 steps
+slicing removed 2368 assignments
+Generated 121 VCC(s), 28 remaining after simplification
+Runtime Postprocess Equation: 0.00187493s
+Passing problem to propositional reduction
+converting SSA
+Runtime Convert SSA: 0.00786175s
+Running propositional reduction
+Post-processing
+Runtime Post-process: 0.000434902s
+Solving with CaDiCaL 1.7.2
+5679 variables, 6159 clauses
+SAT checker: instance is UNSATISFIABLE
+Runtime Solver: 0.000870042s
+Runtime decision procedure: 0.0124198s
+
+RESULTS:
+Check 1: malloc.assertion.1
+- Status: SUCCESS
+- Description: "max allocation size exceeded"
+- Location: <builtin-library-malloc>:31 in function malloc
+
+Check 2: malloc.assertion.2
+- Status: SUCCESS
+- Description: "max allocation may fail"
+- Location: <builtin-library-malloc>:36 in function malloc
+
+Check 3: __rust_dealloc.assertion.1
+- Status: SUCCESS
+- Description: "Alignment is power of two"
+- Location: library/kani/kani_lib.c:84 in function __rust_dealloc
+
+Check 4: __rust_dealloc.assertion.2
+- Status: SUCCESS
+- Description: "rust_dealloc must be called on an object whose allocated size matches its layout"
+- Location: library/kani/kani_lib.c:86 in function __rust_dealloc
+
+Check 5: std::sync::atomic::atomic_store::<u8>.unreachable.1
+- Status: SUCCESS
+- Description: "unreachable code"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3291:15 in function std::sync::atomic::atomic_store::<u8>
+
+Check 6: std::sync::atomic::atomic_store::<u8>.assertion.1
+- Status: SUCCESS
+- Description: "This is a placeholder message; Kani doesn't support message formatted at runtime"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3296:23 in function std::sync::atomic::atomic_store::<u8>
+
+Check 7: std::sync::atomic::atomic_store::<u8>.assertion.2
+- Status: SUCCESS
+- Description: "This is a placeholder message; Kani doesn't support message formatted at runtime"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3295:24 in function std::sync::atomic::atomic_store::<u8>
+
+Check 8: <std::sync::Weak<std::sync::atomic::AtomicBool, &std::alloc::Global> as std::ops::Drop>::drop.unreachable.1
+- Status: SUCCESS
+- Description: "unreachable code"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/sync.rs:3036:5 in function <std::sync::Weak<std::sync::atomic::AtomicBool, &std::alloc::Global> as std::ops::Drop>::drop
+
+Check 9: std::sync::atomic::fence.unreachable.1
+- Status: SUCCESS
+- Description: "unreachable code"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3649:15 in function std::sync::atomic::fence
+
+Check 10: std::sync::atomic::fence.assertion.1
+- Status: SUCCESS
+- Description: "This is a placeholder message; Kani doesn't support message formatted at runtime"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3654:24 in function std::sync::atomic::fence
+
+Check 11: std::sync::atomic::atomic_compare_exchange::<u8>.unreachable.1
+- Status: SUCCESS
+- Description: "unreachable code"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3378:15 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 12: std::sync::atomic::atomic_compare_exchange::<u8>.assertion.1
+- Status: SUCCESS
+- Description: "This is a placeholder message; Kani doesn't support message formatted at runtime"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3394:28 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 13: std::sync::atomic::atomic_compare_exchange::<u8>.assertion.2
+- Status: SUCCESS
+- Description: "This is a placeholder message; Kani doesn't support message formatted at runtime"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3395:29 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 14: std::fmt::Arguments::<'_>::new_const.assertion.1
+- Status: SUCCESS
+- Description: "This is a placeholder message; Kani doesn't support message formatted at runtime"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/fmt/mod.rs:331:13 in function std::fmt::Arguments::<'_>::new_const
+
+Check 15: std::sync::atomic::atomic_swap::<u8>.unreachable.1
+- Status: SUCCESS
+- Description: "unreachable code"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3322:15 in function std::sync::atomic::atomic_swap::<u8>
+
+Check 16: std::sync::atomic::AtomicBool::compare_exchange.assertion.1
+- Status: SUCCESS
+- Description: "This is a placeholder message; Kani doesn't support message formatted at runtime"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:792:21 in function std::sync::atomic::AtomicBool::compare_exchange
+
+Check 17: std::sync::atomic::AtomicBool::compare_exchange.assertion.2
+- Status: SUCCESS
+- Description: "This is a placeholder message; Kani doesn't support message formatted at runtime"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:798:33 in function std::sync::atomic::AtomicBool::compare_exchange
+
+Check 18: std::sync::atomic::AtomicBool::compare_exchange.unreachable.1
+- Status: SUCCESS
+- Description: "unreachable code"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:787:31 in function std::sync::atomic::AtomicBool::compare_exchange
+
+Check 19: std::sync::atomic::AtomicBool::compare_and_swap.unreachable.1
+- Status: SUCCESS
+- Description: "unreachable code"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:731:15 in function std::sync::atomic::AtomicBool::compare_and_swap
+
+Check 20: std::sync::atomic::atomic_or::<u8>.unreachable.1
+- Status: SUCCESS
+- Description: "unreachable code"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3474:15 in function std::sync::atomic::atomic_or::<u8>
+
+Check 21: std::ptr::Alignment::as_usize.assume.1
+- Status: SUCCESS
+- Description: "assumption failed"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/alignment.rs:98:9 in function std::ptr::Alignment::as_usize
+
+Check 22: std::sync::atomic::atomic_sub::<usize>.unreachable.1
+- Status: SUCCESS
+- Description: "unreachable code"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3356:15 in function std::sync::atomic::atomic_sub::<usize>
+
+Check 23: std::sync::atomic::strongest_failure_ordering.unreachable.1
+- Status: SUCCESS
+- Description: "unreachable code"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3277:11 in function std::sync::atomic::strongest_failure_ordering
+
+Check 24: std::sync::atomic::atomic_and::<u8>.unreachable.1
+- Status: SUCCESS
+- Description: "unreachable code"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3442:15 in function std::sync::atomic::atomic_and::<u8>
+
+Check 25: __rust_dealloc.precondition_instance.1
+- Status: SUCCESS
+- Description: "free argument must be NULL or valid pointer"
+- Location: library/kani/kani_lib.c:88 in function __rust_dealloc
+
+Check 26: __rust_dealloc.precondition_instance.2
+- Status: SUCCESS
+- Description: "free argument must be dynamic object"
+- Location: library/kani/kani_lib.c:88 in function __rust_dealloc
+
+Check 27: __rust_dealloc.precondition_instance.3
+- Status: SUCCESS
+- Description: "free argument has offset zero"
+- Location: library/kani/kani_lib.c:88 in function __rust_dealloc
+
+Check 28: __rust_dealloc.precondition_instance.4
+- Status: SUCCESS
+- Description: "double free"
+- Location: library/kani/kani_lib.c:88 in function __rust_dealloc
+
+Check 29: __rust_dealloc.precondition_instance.5
+- Status: SUCCESS
+- Description: "free called for new[] object"
+- Location: library/kani/kani_lib.c:88 in function __rust_dealloc
+
+Check 30: __rust_dealloc.precondition_instance.6
+- Status: SUCCESS
+- Description: "free called for stack-allocated object"
+- Location: library/kani/kani_lib.c:88 in function __rust_dealloc
+
+Check 31: pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+
+Check 32: pointer_dereference.2
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+
+Check 33: pointer_dereference.3
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+
+Check 34: pointer_dereference.4
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+
+Check 35: pointer_dereference.5
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+
+Check 36: pointer_dereference.6
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+
+Check 37: pointer_dereference.7
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+
+Check 38: pointer_dereference.8
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+
+Check 39: pointer_dereference.9
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+
+Check 40: pointer_dereference.10
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+
+Check 41: pointer_dereference.11
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+
+Check 42: pointer_dereference.12
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+
+Check 43: pointer_dereference.13
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+
+Check 44: pointer_dereference.14
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+
+Check 45: pointer_dereference.15
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+
+Check 46: pointer_dereference.16
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+
+Check 47: pointer_dereference.17
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+
+Check 48: pointer_dereference.18
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+
+Check 49: pointer_dereference.19
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+
+Check 50: pointer_dereference.20
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+
+Check 51: pointer_dereference.21
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+
+Check 52: pointer_dereference.22
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+
+Check 53: pointer_dereference.23
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+
+Check 54: pointer_dereference.24
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+
+Check 55: pointer_dereference.25
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+
+Check 56: pointer_dereference.26
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+
+Check 57: pointer_dereference.27
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+
+Check 58: pointer_dereference.28
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+
+Check 59: pointer_dereference.29
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+
+Check 60: pointer_dereference.30
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+
+Check 61: std::boxed::Box::<alloc::sync::ArcInner<std::sync::atomic::AtomicBool>>::into_raw_with_allocator.pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:2253:5 in function std::boxed::Box::<alloc::sync::ArcInner<std::sync::atomic::AtomicBool>>::into_raw_with_allocator
+
+Check 62: std::boxed::Box::<alloc::sync::ArcInner<std::sync::atomic::AtomicBool>>::into_raw_with_allocator.pointer_dereference.2
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:2253:5 in function std::boxed::Box::<alloc::sync::ArcInner<std::sync::atomic::AtomicBool>>::into_raw_with_allocator
+
+Check 63: std::boxed::Box::<alloc::sync::ArcInner<std::sync::atomic::AtomicBool>>::into_raw_with_allocator.pointer_dereference.3
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:2253:5 in function std::boxed::Box::<alloc::sync::ArcInner<std::sync::atomic::AtomicBool>>::into_raw_with_allocator
+
+Check 64: std::boxed::Box::<alloc::sync::ArcInner<std::sync::atomic::AtomicBool>>::into_raw_with_allocator.pointer_dereference.4
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:2253:5 in function std::boxed::Box::<alloc::sync::ArcInner<std::sync::atomic::AtomicBool>>::into_raw_with_allocator
+
+Check 65: std::boxed::Box::<alloc::sync::ArcInner<std::sync::atomic::AtomicBool>>::into_raw_with_allocator.pointer_dereference.5
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:2253:5 in function std::boxed::Box::<alloc::sync::ArcInner<std::sync::atomic::AtomicBool>>::into_raw_with_allocator
+
+Check 66: std::boxed::Box::<alloc::sync::ArcInner<std::sync::atomic::AtomicBool>>::into_raw_with_allocator.pointer_dereference.6
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:2253:5 in function std::boxed::Box::<alloc::sync::ArcInner<std::sync::atomic::AtomicBool>>::into_raw_with_allocator
+
+Check 67: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3393:33 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 68: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.2
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3393:33 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 69: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.3
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3393:33 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 70: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.4
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3393:33 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 71: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.5
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3393:33 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 72: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.6
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3393:33 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 73: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.7
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3392:34 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 74: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.8
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3392:34 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 75: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.9
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3392:34 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 76: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.10
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3392:34 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 77: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.11
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3392:34 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 78: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.12
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3392:34 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 79: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.13
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3391:34 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 80: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.14
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3391:34 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 81: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.15
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3391:34 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 82: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.16
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3391:34 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 83: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.17
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3391:34 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 84: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.18
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3391:34 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 85: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.19
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3390:33 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 86: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.20
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3390:33 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 87: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.21
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3390:33 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 88: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.22
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3390:33 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 89: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.23
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3390:33 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 90: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.24
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3390:33 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 91: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.25
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3389:34 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 92: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.26
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3389:34 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 93: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.27
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3389:34 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 94: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.28
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3389:34 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 95: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.29
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3389:34 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 96: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.30
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3389:34 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 97: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.31
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3388:34 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 98: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.32
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3388:34 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 99: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.33
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3388:34 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 100: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.34
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3388:34 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 101: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.35
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3388:34 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 102: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.36
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3388:34 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 103: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.37
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3384:34 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 104: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.38
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3384:34 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 105: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.39
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3384:34 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 106: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.40
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3384:34 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 107: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.41
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3384:34 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 108: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.42
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3384:34 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 109: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.43
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3383:35 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 110: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.44
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3383:35 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 111: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.45
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3383:35 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 112: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.46
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3383:35 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 113: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.47
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3383:35 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 114: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.48
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3383:35 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 115: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.49
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3382:35 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 116: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.50
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3382:35 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 117: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.51
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3382:35 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 118: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.52
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3382:35 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 119: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.53
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3382:35 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 120: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.54
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3382:35 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 121: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.55
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3387:34 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 122: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.56
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3387:34 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 123: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.57
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3387:34 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 124: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.58
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3387:34 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 125: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.59
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3387:34 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 126: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.60
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3387:34 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 127: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.61
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3386:35 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 128: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.62
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3386:35 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 129: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.63
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3386:35 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 130: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.64
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3386:35 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 131: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.65
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3386:35 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 132: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.66
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3386:35 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 133: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.67
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3385:35 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 134: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.68
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3385:35 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 135: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.69
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3385:35 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 136: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.70
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3385:35 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 137: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.71
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3385:35 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 138: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.72
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3385:35 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 139: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.73
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3381:34 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 140: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.74
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3381:34 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 141: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.75
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3381:34 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 142: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.76
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3381:34 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 143: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.77
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3381:34 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 144: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.78
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3381:34 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 145: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.79
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3380:35 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 146: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.80
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3380:35 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 147: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.81
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3380:35 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 148: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.82
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3380:35 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 149: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.83
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3380:35 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 150: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.84
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3380:35 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 151: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.85
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3379:35 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 152: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.86
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3379:35 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 153: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.87
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3379:35 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 154: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.88
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3379:35 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 155: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.89
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3379:35 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 156: std::sync::atomic::atomic_compare_exchange::<u8>.pointer_dereference.90
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3379:35 in function std::sync::atomic::atomic_compare_exchange::<u8>
+
+Check 157: <std::sync::Weak<std::sync::atomic::AtomicBool, &std::alloc::Global> as std::ops::Drop>::drop.pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/sync.rs:3045:28 in function <std::sync::Weak<std::sync::atomic::AtomicBool, &std::alloc::Global> as std::ops::Drop>::drop
+
+Check 158: <std::sync::Weak<std::sync::atomic::AtomicBool, &std::alloc::Global> as std::ops::Drop>::drop.pointer_dereference.2
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/sync.rs:3050:39 in function <std::sync::Weak<std::sync::atomic::AtomicBool, &std::alloc::Global> as std::ops::Drop>::drop
+
+Check 159: <std::sync::Weak<std::sync::atomic::AtomicBool, &std::alloc::Global> as std::ops::Drop>::drop.pointer_dereference.3
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/sync.rs:3050:39 in function <std::sync::Weak<std::sync::atomic::AtomicBool, &std::alloc::Global> as std::ops::Drop>::drop
+
+Check 160: <std::sync::Weak<std::sync::atomic::AtomicBool, &std::alloc::Global> as std::ops::Drop>::drop.pointer_dereference.4
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/sync.rs:3050:39 in function <std::sync::Weak<std::sync::atomic::AtomicBool, &std::alloc::Global> as std::ops::Drop>::drop
+
+Check 161: <std::sync::Weak<std::sync::atomic::AtomicBool, &std::alloc::Global> as std::ops::Drop>::drop.pointer_dereference.5
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/sync.rs:3050:39 in function <std::sync::Weak<std::sync::atomic::AtomicBool, &std::alloc::Global> as std::ops::Drop>::drop
+
+Check 162: <std::sync::Weak<std::sync::atomic::AtomicBool, &std::alloc::Global> as std::ops::Drop>::drop.pointer_dereference.6
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/sync.rs:3050:39 in function <std::sync::Weak<std::sync::atomic::AtomicBool, &std::alloc::Global> as std::ops::Drop>::drop
+
+Check 163: <std::sync::Weak<std::sync::atomic::AtomicBool, &std::alloc::Global> as std::ops::Drop>::drop.pointer_dereference.7
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/sync.rs:3050:39 in function <std::sync::Weak<std::sync::atomic::AtomicBool, &std::alloc::Global> as std::ops::Drop>::drop
+
+Check 164: <std::sync::Weak<std::sync::atomic::AtomicBool, &std::alloc::Global> as std::ops::Drop>::drop.pointer_dereference.8
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/sync.rs:3050:78 in function <std::sync::Weak<std::sync::atomic::AtomicBool, &std::alloc::Global> as std::ops::Drop>::drop
+
+Check 165: <std::sync::Weak<std::sync::atomic::AtomicBool, &std::alloc::Global> as std::ops::Drop>::drop.pointer_dereference.9
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/sync.rs:3050:78 in function <std::sync::Weak<std::sync::atomic::AtomicBool, &std::alloc::Global> as std::ops::Drop>::drop
+
+Check 166: <std::sync::Weak<std::sync::atomic::AtomicBool, &std::alloc::Global> as std::ops::Drop>::drop.pointer_dereference.10
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/sync.rs:3050:78 in function <std::sync::Weak<std::sync::atomic::AtomicBool, &std::alloc::Global> as std::ops::Drop>::drop
+
+Check 167: <std::sync::Weak<std::sync::atomic::AtomicBool, &std::alloc::Global> as std::ops::Drop>::drop.pointer_dereference.11
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/sync.rs:3050:78 in function <std::sync::Weak<std::sync::atomic::AtomicBool, &std::alloc::Global> as std::ops::Drop>::drop
+
+Check 168: <std::sync::Weak<std::sync::atomic::AtomicBool, &std::alloc::Global> as std::ops::Drop>::drop.pointer_dereference.12
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/sync.rs:3050:78 in function <std::sync::Weak<std::sync::atomic::AtomicBool, &std::alloc::Global> as std::ops::Drop>::drop
+
+Check 169: <std::sync::Weak<std::sync::atomic::AtomicBool, &std::alloc::Global> as std::ops::Drop>::drop.pointer_dereference.13
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/sync.rs:3050:78 in function <std::sync::Weak<std::sync::atomic::AtomicBool, &std::alloc::Global> as std::ops::Drop>::drop
+
+Check 170: <&std::alloc::Global as std::alloc::Allocator>::deallocate.pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/mod.rs:392:18 in function <&std::alloc::Global as std::alloc::Allocator>::deallocate
+
+Check 171: <&std::alloc::Global as std::alloc::Allocator>::deallocate.pointer_dereference.2
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/mod.rs:392:18 in function <&std::alloc::Global as std::alloc::Allocator>::deallocate
+
+Check 172: <&std::alloc::Global as std::alloc::Allocator>::deallocate.pointer_dereference.3
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/mod.rs:392:18 in function <&std::alloc::Global as std::alloc::Allocator>::deallocate
+
+Check 173: <&std::alloc::Global as std::alloc::Allocator>::deallocate.pointer_dereference.4
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/mod.rs:392:18 in function <&std::alloc::Global as std::alloc::Allocator>::deallocate
+
+Check 174: <&std::alloc::Global as std::alloc::Allocator>::deallocate.pointer_dereference.5
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/mod.rs:392:18 in function <&std::alloc::Global as std::alloc::Allocator>::deallocate
+
+Check 175: <&std::alloc::Global as std::alloc::Allocator>::deallocate.pointer_dereference.6
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/mod.rs:392:18 in function <&std::alloc::Global as std::alloc::Allocator>::deallocate
+
+Check 176: std::fmt::Arguments::<'_>::new_const.pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/fmt/mod.rs:333:34 in function std::fmt::Arguments::<'_>::new_const
+
+Check 177: std::alloc::Layout::size.pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:129:9 in function std::alloc::Layout::size
+
+Check 178: std::alloc::Layout::size.pointer_dereference.2
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:129:9 in function std::alloc::Layout::size
+
+Check 179: std::alloc::Layout::size.pointer_dereference.3
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:129:9 in function std::alloc::Layout::size
+
+Check 180: std::alloc::Layout::size.pointer_dereference.4
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:129:9 in function std::alloc::Layout::size
+
+Check 181: std::alloc::Layout::size.pointer_dereference.5
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:129:9 in function std::alloc::Layout::size
+
+Check 182: std::alloc::Layout::size.pointer_dereference.6
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:129:9 in function std::alloc::Layout::size
+
+Check 183: std::sync::atomic::atomic_swap::<u8>.pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3327:23 in function std::sync::atomic::atomic_swap::<u8>
+
+Check 184: std::sync::atomic::atomic_swap::<u8>.pointer_dereference.2
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3327:23 in function std::sync::atomic::atomic_swap::<u8>
+
+Check 185: std::sync::atomic::atomic_swap::<u8>.pointer_dereference.3
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3327:23 in function std::sync::atomic::atomic_swap::<u8>
+
+Check 186: std::sync::atomic::atomic_swap::<u8>.pointer_dereference.4
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3327:23 in function std::sync::atomic::atomic_swap::<u8>
+
+Check 187: std::sync::atomic::atomic_swap::<u8>.pointer_dereference.5
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3327:23 in function std::sync::atomic::atomic_swap::<u8>
+
+Check 188: std::sync::atomic::atomic_swap::<u8>.pointer_dereference.6
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3327:23 in function std::sync::atomic::atomic_swap::<u8>
+
+Check 189: std::sync::atomic::atomic_swap::<u8>.pointer_dereference.7
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3326:23 in function std::sync::atomic::atomic_swap::<u8>
+
+Check 190: std::sync::atomic::atomic_swap::<u8>.pointer_dereference.8
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3326:23 in function std::sync::atomic::atomic_swap::<u8>
+
+Check 191: std::sync::atomic::atomic_swap::<u8>.pointer_dereference.9
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3326:23 in function std::sync::atomic::atomic_swap::<u8>
+
+Check 192: std::sync::atomic::atomic_swap::<u8>.pointer_dereference.10
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3326:23 in function std::sync::atomic::atomic_swap::<u8>
+
+Check 193: std::sync::atomic::atomic_swap::<u8>.pointer_dereference.11
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3326:23 in function std::sync::atomic::atomic_swap::<u8>
+
+Check 194: std::sync::atomic::atomic_swap::<u8>.pointer_dereference.12
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3326:23 in function std::sync::atomic::atomic_swap::<u8>
+
+Check 195: std::sync::atomic::atomic_swap::<u8>.pointer_dereference.13
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3324:24 in function std::sync::atomic::atomic_swap::<u8>
+
+Check 196: std::sync::atomic::atomic_swap::<u8>.pointer_dereference.14
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3324:24 in function std::sync::atomic::atomic_swap::<u8>
+
+Check 197: std::sync::atomic::atomic_swap::<u8>.pointer_dereference.15
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3324:24 in function std::sync::atomic::atomic_swap::<u8>
+
+Check 198: std::sync::atomic::atomic_swap::<u8>.pointer_dereference.16
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3324:24 in function std::sync::atomic::atomic_swap::<u8>
+
+Check 199: std::sync::atomic::atomic_swap::<u8>.pointer_dereference.17
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3324:24 in function std::sync::atomic::atomic_swap::<u8>
+
+Check 200: std::sync::atomic::atomic_swap::<u8>.pointer_dereference.18
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3324:24 in function std::sync::atomic::atomic_swap::<u8>
+
+Check 201: std::sync::atomic::atomic_swap::<u8>.pointer_dereference.19
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3325:24 in function std::sync::atomic::atomic_swap::<u8>
+
+Check 202: std::sync::atomic::atomic_swap::<u8>.pointer_dereference.20
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3325:24 in function std::sync::atomic::atomic_swap::<u8>
+
+Check 203: std::sync::atomic::atomic_swap::<u8>.pointer_dereference.21
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3325:24 in function std::sync::atomic::atomic_swap::<u8>
+
+Check 204: std::sync::atomic::atomic_swap::<u8>.pointer_dereference.22
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3325:24 in function std::sync::atomic::atomic_swap::<u8>
+
+Check 205: std::sync::atomic::atomic_swap::<u8>.pointer_dereference.23
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3325:24 in function std::sync::atomic::atomic_swap::<u8>
+
+Check 206: std::sync::atomic::atomic_swap::<u8>.pointer_dereference.24
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3325:24 in function std::sync::atomic::atomic_swap::<u8>
+
+Check 207: std::sync::atomic::atomic_swap::<u8>.pointer_dereference.25
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3323:24 in function std::sync::atomic::atomic_swap::<u8>
+
+Check 208: std::sync::atomic::atomic_swap::<u8>.pointer_dereference.26
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3323:24 in function std::sync::atomic::atomic_swap::<u8>
+
+Check 209: std::sync::atomic::atomic_swap::<u8>.pointer_dereference.27
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3323:24 in function std::sync::atomic::atomic_swap::<u8>
+
+Check 210: std::sync::atomic::atomic_swap::<u8>.pointer_dereference.28
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3323:24 in function std::sync::atomic::atomic_swap::<u8>
+
+Check 211: std::sync::atomic::atomic_swap::<u8>.pointer_dereference.29
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3323:24 in function std::sync::atomic::atomic_swap::<u8>
+
+Check 212: std::sync::atomic::atomic_swap::<u8>.pointer_dereference.30
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3323:24 in function std::sync::atomic::atomic_swap::<u8>
+
+Check 213: std::ptr::NonNull::<alloc::sync::ArcInner<std::sync::atomic::AtomicBool>>::as_ref::<'_>.pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/non_null.rs:402:20 in function std::ptr::NonNull::<alloc::sync::ArcInner<std::sync::atomic::AtomicBool>>::as_ref::<'_>
+
+Check 214: std::ptr::NonNull::<alloc::sync::ArcInner<std::sync::atomic::AtomicBool>>::as_ref::<'_>.pointer_dereference.2
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/non_null.rs:402:20 in function std::ptr::NonNull::<alloc::sync::ArcInner<std::sync::atomic::AtomicBool>>::as_ref::<'_>
+
+Check 215: std::ptr::NonNull::<alloc::sync::ArcInner<std::sync::atomic::AtomicBool>>::as_ref::<'_>.pointer_dereference.3
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/non_null.rs:402:20 in function std::ptr::NonNull::<alloc::sync::ArcInner<std::sync::atomic::AtomicBool>>::as_ref::<'_>
+
+Check 216: std::ptr::NonNull::<alloc::sync::ArcInner<std::sync::atomic::AtomicBool>>::as_ref::<'_>.pointer_dereference.4
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/non_null.rs:402:20 in function std::ptr::NonNull::<alloc::sync::ArcInner<std::sync::atomic::AtomicBool>>::as_ref::<'_>
+
+Check 217: std::ptr::NonNull::<alloc::sync::ArcInner<std::sync::atomic::AtomicBool>>::as_ref::<'_>.pointer_dereference.5
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/non_null.rs:402:20 in function std::ptr::NonNull::<alloc::sync::ArcInner<std::sync::atomic::AtomicBool>>::as_ref::<'_>
+
+Check 218: std::ptr::NonNull::<alloc::sync::ArcInner<std::sync::atomic::AtomicBool>>::as_ref::<'_>.pointer_dereference.6
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/non_null.rs:402:20 in function std::ptr::NonNull::<alloc::sync::ArcInner<std::sync::atomic::AtomicBool>>::as_ref::<'_>
+
+Check 219: std::sync::atomic::atomic_store::<u8>.pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3294:23 in function std::sync::atomic::atomic_store::<u8>
+
+Check 220: std::sync::atomic::atomic_store::<u8>.pointer_dereference.2
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3294:23 in function std::sync::atomic::atomic_store::<u8>
+
+Check 221: std::sync::atomic::atomic_store::<u8>.pointer_dereference.3
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3294:23 in function std::sync::atomic::atomic_store::<u8>
+
+Check 222: std::sync::atomic::atomic_store::<u8>.pointer_dereference.4
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3294:23 in function std::sync::atomic::atomic_store::<u8>
+
+Check 223: std::sync::atomic::atomic_store::<u8>.pointer_dereference.5
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3294:23 in function std::sync::atomic::atomic_store::<u8>
+
+Check 224: std::sync::atomic::atomic_store::<u8>.pointer_dereference.6
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3294:23 in function std::sync::atomic::atomic_store::<u8>
+
+Check 225: std::sync::atomic::atomic_store::<u8>.pointer_dereference.7
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3293:24 in function std::sync::atomic::atomic_store::<u8>
+
+Check 226: std::sync::atomic::atomic_store::<u8>.pointer_dereference.8
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3293:24 in function std::sync::atomic::atomic_store::<u8>
+
+Check 227: std::sync::atomic::atomic_store::<u8>.pointer_dereference.9
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3293:24 in function std::sync::atomic::atomic_store::<u8>
+
+Check 228: std::sync::atomic::atomic_store::<u8>.pointer_dereference.10
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3293:24 in function std::sync::atomic::atomic_store::<u8>
+
+Check 229: std::sync::atomic::atomic_store::<u8>.pointer_dereference.11
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3293:24 in function std::sync::atomic::atomic_store::<u8>
+
+Check 230: std::sync::atomic::atomic_store::<u8>.pointer_dereference.12
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3293:24 in function std::sync::atomic::atomic_store::<u8>
+
+Check 231: std::sync::atomic::atomic_store::<u8>.pointer_dereference.13
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3292:24 in function std::sync::atomic::atomic_store::<u8>
+
+Check 232: std::sync::atomic::atomic_store::<u8>.pointer_dereference.14
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3292:24 in function std::sync::atomic::atomic_store::<u8>
+
+Check 233: std::sync::atomic::atomic_store::<u8>.pointer_dereference.15
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3292:24 in function std::sync::atomic::atomic_store::<u8>
+
+Check 234: std::sync::atomic::atomic_store::<u8>.pointer_dereference.16
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3292:24 in function std::sync::atomic::atomic_store::<u8>
+
+Check 235: std::sync::atomic::atomic_store::<u8>.pointer_dereference.17
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3292:24 in function std::sync::atomic::atomic_store::<u8>
+
+Check 236: std::sync::atomic::atomic_store::<u8>.pointer_dereference.18
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/sync/atomic.rs:3292:24 in function std::sync::atomic::atomic_store::<u8>
+
+Check 237: pointer_dereference.31
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+
+Check 238: pointer_dereference.32
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+
+Check 239: pointer_dereference.33
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+
+Check 240: pointer_dereference.34
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+
+Check 241: pointer_dereference.35
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+
+Check 242: pointer_dereference.36
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+
+Check 243: pointer_dereference.37
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+
+Check 244: pointer_dereference.38
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+
+Check 245: pointer_dereference.39
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+
+Check 246: pointer_dereference.40
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+
+Check 247: pointer_dereference.41
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+
+Check 248: pointer_dereference.42
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+
+Check 249: pointer_dereference.43
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+
+Check 250: pointer_dereference.44
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+
+Check 251: pointer_dereference.45
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+
+Check 252: pointer_dereference.46
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+
+Check 253: pointer_dereference.47
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+
+Check 254: pointer_dereference.48
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+
+Check 255: pointer_dereference.49
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+
+Check 256: pointer_dereference.50
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+
+Check 257: pointer_dereference.51
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+
+Check 258: pointer_dereference.52
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+
+Check 259: pointer_dereference.53
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+
+Check 260: pointer_dereference.54
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+
+Check 261: pointer_dereference.55
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+
+Check 262: pointer_dereference.56
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+
+Check 263: pointer_dereference.57
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+
+Check 264: pointer_dereference.58
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+
+Check 265: pointer_dereference.59
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+
+Check 266: pointer_dereference.60
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+
+Check 267: std::sync::Arc::<std::sync::atomic::AtomicBool>::get_mut_unchecked.pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/sync.rs:2360:25 in function std::sync::Arc::<std::sync::atomic::AtomicBool>::get_mut_unchecked
+
+Check 268: std::sync::Arc::<std::sync::atomic::AtomicBool>::get_mut_unchecked.pointer_dereference.2
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/sync.rs:2360:25 in function std::sync::Arc::<std::sync::atomic::AtomicBool>::get_mut_unchecked
+
+Check 269: std::sync::Arc::<std::sync::atomic::AtomicBool>::get_mut_unchecked.pointer_dereference.3
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/sync.rs:2360:25 in function std::sync::Arc::<std::sync::atomic::AtomicBool>::get_mut_unchecked
+
+Check 270: std::sync::Arc::<std::sync::atomic::AtomicBool>::get_mut_unchecked.pointer_dereference.4
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/sync.rs:2360:25 in function std::sync::Arc::<std::sync::atomic::AtomicBool>::get_mut_unchecked
+
+Check 271: std::sync::Arc::<std::sync::atomic::AtomicBool>::get_mut_unchecked.pointer_dereference.5
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/sync.rs:2360:25 in function std::sync::Arc::<std::sync::atomic::AtomicBool>::get_mut_unchecked
+
+Check 272: std::sync::Arc::<std::sync::atomic::AtomicBool>::get_mut_unchecked.pointer_dereference.6
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/sync.rs:2360:25 in function std::sync::Arc::<std::sync::atomic::AtomicBool>::get_mut_unchecked
+
+Check 273: std::boxed::Box::<alloc::sync::ArcInner<std::sync::atomic::AtomicBool>>::new.pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/boxed.rs:218:18 in function std::boxed::Box::<alloc::sync::ArcInner<std::sync::atomic::AtomicBool>>::new
+
+Check 274: std::boxed::Box::<alloc::sync::ArcInner<std::sync::atomic::AtomicBool>>::new.pointer_dereference.2
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/boxed.rs:218:18 in function std::boxed::Box::<alloc::sync::ArcInner<std::sync::atomic::AtomicBool>>::new
+
+Check 275: std::boxed::Box::<alloc::sync::ArcInner<std::sync::atomic::AtomicBool>>::new.pointer_dereference.3
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/boxed.rs:218:18 in function std::boxed::Box::<alloc::sync::ArcInner<std::sync::atomic::AtomicBool>>::new
+
+Check 276: std::boxed::Box::<alloc::sync::ArcInner<std::sync::atomic::AtomicBool>>::new.pointer_dereference.4
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/boxed.rs:218:18 in function std::boxed::Box::<alloc::sync::ArcInner<std::sync::atomic::AtomicBool>>::new
+
+Check 277: std::boxed::Box::<alloc::sync::ArcInner<std::sync::atomic::AtomicBool>>::new.pointer_dereference.5
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/boxed.rs:218:18 in function std::boxed::Box::<alloc::sync::ArcInner<std::sync::atomic::AtomicBool>>::new
+
+Check 278: std::boxed::Box::<alloc::sync::ArcInner<std::sync::atomic::AtomicBool>>::new.pointer_dereference.6
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/boxed.rs:218:18 in function std::boxed::Box::<alloc::sync::ArcInner<std::sync::atomic::AtomicBool>>::new
+
+Check 279: std::alloc::Layout::align.pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:142:9 in function std::alloc::Layout::align
+
+Check 280: std::alloc::Layout::align.pointer_dereference.2
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:142:9 in function std::alloc::Layout::align
+
+Check 281: std::alloc::Layout::align.pointer_dereference.3
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:142:9 in function std::alloc::Layout::align
+
+Check 282: std::alloc::Layout::align.pointer_dereference.4
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:142:9 in function std::alloc::Layout::align
+
+Check 283: std::alloc::Layout::align.pointer_dereference.5
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:142:9 in function std::alloc::Layout::align
+
+Check 284: std::alloc::Layout::align.pointer_dereference.6
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:142:9 in function std::alloc::Layout::align
+
+Check 285: std::sync::Arc::<std::sync::atomic::AtomicBool>::drop_slow.pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/sync.rs:1810:26 in function std::sync::Arc::<std::sync::atomic::AtomicBool>::drop_slow
+
+Check 286: std::sync::Arc::<std::sync::atomic::AtomicBool>::drop_slow.pointer_dereference.2
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/sync.rs:1810:26 in function std::sync::Arc::<std::sync::atomic::AtomicBool>::drop_slow
+
+Check 287: std::sync::Arc::<std::sync::atomic::AtomicBool>::drop_slow.pointer_dereference.3
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/sync.rs:1810:26 in function std::sync::Arc::<std::sync::atomic::AtomicBool>::drop_slow
+
+Check 288: std::sync::Arc::<std::sync::atomic::AtomicBool>::drop_slow.pointer_dereference.4
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/sync.rs:1810:26 in function std::sync::Arc::<std::sync::atomic::AtomicBool>::drop_slow
+
+Check 289: std::sync::Arc::<std::sync::atomic::AtomicBool>::drop_slow.pointer_dereference.5
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/sync.rs:1810:26 in function std::sync::Arc::<std::sync::atomic::AtomicBool>::drop_slow
+
+Check 290: std::sync::Arc::<std::sync::atomic::AtomicBool>::drop_slow.pointer_dereference.6
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/sync.rs:1810:26 in function std::sync::Arc::<std::sync::atomic::AtomicBool>::drop_slow
+
+Check 291: pointer_dereference.61
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+
+Check 292: pointer_dereference.62
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+
+Check 293: pointer_dereference.63
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+
+Check 294: pointer_dereference.64
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+
+Check 295: pointer_dereference.65
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+
+Check 296: pointer_dereference.66
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+
+Check 297: pointer_dereference.67
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+
+Check 298: pointer_dereference.68
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+
+Check 299: pointer_dereference.69
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+
+Check 300: pointer_dereference.70
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+
+Check 301: pointer_dereference.71
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+
+Check 302: pointer_dereference.72
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+
+Check 303: pointer_dereference.73
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+
+Check 304: pointer_dereference.74
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+
+Check 305: pointer_dereference.75
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+
+Check 306: pointer_dereference.76
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+
+Check 307: pointer_dereference.77
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+
+Check 308: pointer_dereference.78
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+
+Check 309: pointer_dereference.79
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+
+Check 310: pointer_dereference.80
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+
+Check 311: pointer_dereference.81
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+
+Check 312: pointer_dereference.82
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+
+Check 313: pointer_dereference.83
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+
+Check 314: pointer_dereference.84
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+
+Check 315: pointer_dereference.85
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+
+Check 316: pointer_dereference.86
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+
+Check 317: pointer_dereference.87
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+
+Check 318: pointer_dereference.88
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+
+Check 319: pointer_dereference.89
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+
+Check 320: pointer_dereference.90
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+
+Check 321: std::sync::Weak::<std::sync::atomic::AtomicBool, &std::alloc::Global>::inner.pointer_dereference.1
+- Status: SUCCESS
+- Description: "dereference failure: pointer NULL"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/sync.rs:2897:19 in function std::sync::Weak::<std::sync::atomic::AtomicBool, &std::alloc::Global>::inner
+
+Check 322: std::sync::Weak::<std::sync::atomic::AtomicBool, &std::alloc::Global>::inner.pointer_dereference.2
+- Status: SUCCESS
+- Description: "dereference failure: pointer invalid"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/sync.rs:2897:19 in function std::sync::Weak::<std::sync::atomic::AtomicBool, &std::alloc::Global>::inner
+
+Check 323: std::sync::Weak::<std::sync::atomic::AtomicBool, &std::alloc::Global>::inner.pointer_dereference.3
+- Status: SUCCESS
+- Description: "dereference failure: deallocated dynamic object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/sync.rs:2897:19 in function std::sync::Weak::<std::sync::atomic::AtomicBool, &std::alloc::Global>::inner
+
+Check 324: std::sync::Weak::<std::sync::atomic::AtomicBool, &std::alloc::Global>::inner.pointer_dereference.4
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/sync.rs:2897:19 in function std::sync::Weak::<std::sync::atomic::AtomicBool, &std::alloc::Global>::inner
+
+Check 325: std::sync::Weak::<std::sync::atomic::AtomicBool, &std::alloc::Global>::inner.pointer_dereference.5
+- Status: SUCCESS
+- Description: "dereference failure: pointer outside object bounds"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/sync.rs:2897:19 in function std::sync::Weak::<std::sync::atomic::AtomicBool, &std::alloc::Global>::inner
+
+Check 326: std::sync::Weak::<std::sync::atomic::AtomicBool, &std::alloc::Global>::inner.pointer_dereference.6
+- Status: SUCCESS
+- Description: "dereference failure: invalid integer address"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/sync.rs:2897:19 in function std::sync::Weak::<std::sync::atomic::AtomicBool, &std::alloc::Global>::inner
+
+Check 327: std::sync::Weak::<std::sync::atomic::AtomicBool, &std::alloc::Global>::inner.pointer_dereference.7
+- Status: SUCCESS
+- Description: "dereference failure: dead object"
+- Location: ../../../.rustup/toolchains/nightly-2024-03-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/sync.rs:2899:13 in function std::sync::Weak::<std::sync::atomic::AtomicBool, &std::alloc::Global>::inner
+
+
+SUMMARY:
+** 0 of 327 failed
+
+VERIFICATION:- SUCCESSFUL
+Verification Time: 1.3585416s
+
+Complete - 1 successfully verified harnesses, 0 failures, 1 total.
+              </xmp>
+            </div><!-- class="output-box" -->
+            
+          
+
+          
+          <div class="output-box"><xmp>stderr:
+            
+warning: use of deprecated method `std::sync::atomic::AtomicBool::compare_and_swap`: Use `compare_exchange` or `compare_exchange_weak` instead
+--> tests/bookrunner/books/The Rustonomicon/Concurrency/Atomics/198.rs:14:16
+|
+14 |     while lock.compare_and_swap(false, true, Ordering::Acquire) { }
+|                ^^^^^^^^^^^^^^^^
+|
+= note: `#[warn(deprecated)]` on by default
+
+warning: Found the following unsupported constructs:
+- caller_location (1)
+- foreign function (2)
+
+Verification will fail if one or more of these constructs is reachable.
+See https://model-checking.github.io/kani/rust-feature-support.html for more details.
+
+warning: Kani currently does not support concurrency. The following constructs will be treated as sequential operations:
+- atomic_xsub_seqcst (1)
+- atomic_cxchg_seqcst_relaxed (1)
+- atomic_and_acquire (1)
+- atomic_fence_acquire (1)
+- atomic_xchg_relaxed (1)
+- atomic_or_release (1)
+- atomic_xchg_acqrel (1)
+- atomic_or_seqcst (1)
+- atomic_xsub_acquire (1)
+- atomic_cxchg_seqcst_acquire (1)
+- atomic_cxchg_seqcst_seqcst (1)
+- atomic_store_relaxed (1)
+- atomic_store_release (1)
+- atomic_and_acqrel (1)
+- atomic_and_relaxed (1)
+- atomic_cxchg_release_relaxed (1)
+- atomic_fence_release (1)
+- atomic_cxchg_release_seqcst (1)
+- atomic_fence_seqcst (1)
+- atomic_store_seqcst (1)
+- atomic_cxchg_acquire_acquire (1)
+- atomic_cxchg_acquire_seqcst (1)
+- atomic_cxchg_acquire_relaxed (1)
+- atomic_cxchg_acqrel_relaxed (1)
+- atomic_cxchg_acqrel_acquire (1)
+- atomic_cxchg_acqrel_seqcst (1)
+- atomic_or_acquire (1)
+- atomic_cxchg_release_acquire (1)
+- atomic_xsub_acqrel (1)
+- atomic_xsub_relaxed (1)
+- atomic_and_release (1)
+- atomic_xchg_seqcst (1)
+- atomic_and_seqcst (1)
+- atomic_xchg_release (1)
+- atomic_fence_acqrel (1)
+- atomic_or_relaxed (1)
+- atomic_xchg_acquire (1)
+- atomic_or_acqrel (1)
+- atomic_cxchg_relaxed_relaxed (1)
+- atomic_cxchg_relaxed_acquire (1)
+- atomic_xsub_release (1)
+- atomic_cxchg_relaxed_seqcst (1)
+
+warning: 3 warnings emitted
+
+            </xmp>
+          </div><!-- class="output-box" -->
+          
+
+        </div><!-- class="command-content" -->
+      </div><!-- class="fail" -->
+    </div><!-- id="command-table" -->
+    
+
+  </div><!-- class="stage" -->
+  
+
+
+</div><!-- id="content" -->
+</body>
+</html>
