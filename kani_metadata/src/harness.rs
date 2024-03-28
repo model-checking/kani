@@ -50,6 +50,8 @@ pub struct HarnessAttributes {
     pub unwind_value: Option<u32>,
     /// The stubs used in this harness.
     pub stubs: Vec<Stub>,
+    /// Whether the harness should be annotated for induction or not.
+    pub induction: bool,
 }
 
 /// The stubbing type.

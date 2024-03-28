@@ -440,6 +440,24 @@ impl<'a, 'tcx> MirVisitor for MonoItemsFnCollector<'a, 'tcx> {
                                         callee,
                                     ),
                                 );
+                            } else if caller == "kani::any" {
+                                let receiver_ty = args.0[0].expect_ty();
+                                let sep = callee.rfind("::").unwrap();
+                                let trait_ = &callee[..sep];
+                                self.tcx.dcx().span_err(
+                                    rustc_internal::internal(self.tcx, terminator.span),
+                                    format!(
+                                        "`{}` doesn't implement \
+                                        `{}`. Callee: `{}`\nPlease, check whether the type of all \
+                                        objects in the modifies clause (including return types) \
+                                        implement `{}`.\nThis is a strict condition to use \
+                                        function contracts as verified stubs.",
+                                        pretty_ty(receiver_ty.kind()),
+                                        trait_,
+                                        callee,
+                                        trait_,
+                                    ),
+                                );
                             } else {
                                 panic!("unable to resolve call to `{callee}` in `{caller}`")
                             }

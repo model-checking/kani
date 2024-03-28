@@ -8,11 +8,7 @@ use proc_macro2::Span;
 use quote::quote;
 use syn::ItemFn;
 
-use super::{
-    helpers::*,
-    shared::{attach_require_kani_any, identifier_for_generated_function},
-    ContractConditionsHandler,
-};
+use super::{helpers::*, shared::identifier_for_generated_function, ContractConditionsHandler};
 
 impl<'a> ContractConditionsHandler<'a> {
     /// The complex case. We are the first time a contract is handled on this function, so
@@ -74,7 +70,6 @@ impl<'a> ContractConditionsHandler<'a> {
         ));
 
         let mut wrapper_sig = sig.clone();
-        attach_require_kani_any(&mut wrapper_sig);
         wrapper_sig.ident = recursion_wrapper_name;
 
         let args = pats_to_idents(&mut wrapper_sig.inputs).collect::<Vec<_>>();

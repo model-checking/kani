@@ -156,9 +156,27 @@ pub const fn cover(_cond: bool, _msg: &'static str) {}
 /// Note: This is a safe construct and can only be used with types that implement the `Arbitrary`
 /// trait. The Arbitrary trait is used to build a symbolic value that represents all possible
 /// valid values for type `T`.
+#[rustc_diagnostic_item = "KaniAny"]
 #[inline(always)]
 pub fn any<T: Arbitrary>() -> T {
     T::any()
+}
+
+/// This function is only used for function contract instrumentation.
+/// It behaves exaclty like `kani::any<T>()`, except it will check for the trait bounds
+/// at compilation time. It allows us to avoid type checking errors while using function
+/// contracts only for verification.
+#[rustc_diagnostic_item = "KaniAnyModifies"]
+#[inline(never)]
+#[allow(dead_code)]
+pub fn any_modifies<T>() -> T {
+    // while we could use `unreachable!()` or `panic!()` as the body of this
+    // function, both cause Kani to produce a warning on any program that uses
+    // `kani::any()` (see https://github.com/model-checking/kani/issues/2010).
+    // This function is handled via a hook anyway, so we just need to put a body
+    // that rustc does not complain about. An infinite loop works out nicely.
+    #[allow(clippy::empty_loop)]
+    loop {}
 }
 
 /// This creates a symbolic *valid* value of type `T`.
