@@ -170,7 +170,13 @@ def _get_args_dict():
                 },
                 "filter": {
                     "help": "transform a result by piping it through a program",
-                    "args": [],
+                    "args": [{
+                        "flags": ["--result-file"],
+                        "metavar": "F",
+                        "default": pathlib.Path("result.yaml"),
+                        "type": pathlib.Path,
+                        "help": "read result from F instead of %(default)s."
+                    }],
                 },
                 "visualize": {
                     "help": "render a result in various formats",
@@ -180,7 +186,7 @@ def _get_args_dict():
                         "default": pathlib.Path("result.yaml"),
                         "type": pathlib.Path,
                         "help":
-                            "read result from F instead of %(default)s. "
+                            "read result from F instead of %(default)s."
                     }, {
                         "flags": ["--only"],
                         "nargs": "+",
@@ -234,6 +240,11 @@ def get():
 
     subparsers = ad["subparsers"].pop("parsers")
     subs = parser.add_subparsers(**ad["subparsers"])
+
+    # Add all subcommand-specific flags to the top-level argument parser,
+    # but only add them once.
+    flag_set = set()
+
     for subcommand, info in subparsers.items():
         args = info.pop("args")
         subparser = subs.add_parser(name=subcommand, **info)
@@ -246,7 +257,9 @@ def get():
         for arg in args:
             flags = arg.pop("flags")
             subparser.add_argument(*flags, **arg)
-            if arg not in global_args:
+            long_flag = flags[-1]
+            if arg not in global_args and long_flag not in flag_set:
+                flag_set.add(long_flag)
                 parser.add_argument(*flags, **arg)
 
     return parser.parse_args()

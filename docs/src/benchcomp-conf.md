@@ -24,6 +24,25 @@ variants:
 ```
 
 
+## Filters
+
+After benchcomp has finished parsing the results, it writes the results to `results.yaml` by default.
+Before visualizing the results (see below), benchcomp can *filter* the results by piping them into an external program.
+
+To filter results before visualizing them, add `filters` to the configuration file.
+
+```yaml
+filters:
+    - command_line: ./scripts/remove-redundant-results.py
+    - command_line: cat
+```
+
+The value of `filters` is a list of dicts.
+Currently the only legal key for each of the dicts is `command_line`.
+Benchcomp invokes each `command_line` in order, passing the results as a JSON file on stdin, and interprets the stdout as a YAML-formatted modified set of results.
+Filter scripts can emit either YAML (which might be more readable while developing the script), or JSON (which benchcomp will parse as a subset of YAML).
+
+
 ## Built-in visualizations
 
 The following visualizations are available; these can be added to the `visualize` list of `benchcomp.yaml`.

@@ -826,7 +826,7 @@ fn ty_validity_per_offset(
             Ok(result)
         }
         FieldsShape::Arbitrary { ref offsets } => {
-            match ty.kind().rigid().unwrap() {
+            match ty.kind().rigid().expect(&format!("unexpected type: {ty:?}")) {
                 RigidTy::Adt(def, args) => {
                     match def.kind() {
                         AdtKind::Enum => {
