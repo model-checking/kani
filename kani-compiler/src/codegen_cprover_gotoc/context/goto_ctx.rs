@@ -39,6 +39,7 @@ use stable_mir::mir::mono::Instance;
 use stable_mir::mir::Body;
 use stable_mir::ty::Allocation;
 
+#[allow(dead_code)]
 pub struct GotocCtx<'tcx> {
     /// the typing context
     pub tcx: TyCtxt<'tcx>,

@@ -227,6 +227,7 @@ impl MutableBody {
 }
 
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 pub enum CheckType {
     /// This is used by default when the `kani` crate is available.
     Assert(Instance),

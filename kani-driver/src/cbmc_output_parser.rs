@@ -286,6 +286,7 @@ fn filepath(file: String) -> String {
 /// documented anywhere. So we ignore the rest for now.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
 pub struct TraceItem {
     pub thread: u32,
     pub step_type: String,
@@ -300,6 +301,7 @@ pub struct TraceItem {
 /// Note: this struct can have a lot of different fields depending on the value type.
 /// The fields included right now are relevant to primitive types.
 #[derive(Clone, Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct TraceValue {
     pub name: String,
     pub binary: Option<String>,

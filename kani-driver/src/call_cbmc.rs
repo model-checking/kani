@@ -40,6 +40,7 @@ pub enum FailedProperties {
 
 /// Our (kani-driver) notions of CBMC results.
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct VerificationResult {
     /// Whether verification should be considered to have succeeded, or have failed.
     pub status: VerificationStatus,
