@@ -23,7 +23,6 @@ use crate::kani_queries::QueryDb;
 use cbmc::goto_program::{DatatypeComponent, Expr, Location, Stmt, Symbol, SymbolTable, Type};
 use cbmc::utils::aggr_tag;
 use cbmc::{InternedString, MachineModel};
-use kani_metadata::HarnessMetadata;
 use rustc_data_structures::fx::FxHashMap;
 use rustc_middle::span_bug;
 use rustc_middle::ty::layout::{
@@ -39,7 +38,6 @@ use stable_mir::mir::mono::Instance;
 use stable_mir::mir::Body;
 use stable_mir::ty::Allocation;
 
-#[allow(dead_code)]
 pub struct GotocCtx<'tcx> {
     /// the typing context
     pub tcx: TyCtxt<'tcx>,
@@ -62,8 +60,6 @@ pub struct GotocCtx<'tcx> {
     /// map from symbol identifier to string literal
     /// TODO: consider making the map from Expr to String instead
     pub str_literals: FxHashMap<InternedString, String>,
-    pub proof_harnesses: Vec<HarnessMetadata>,
-    pub test_harnesses: Vec<HarnessMetadata>,
     /// a global counter for generating unique IDs for checks
     pub global_checks_count: u64,
     /// A map of unsupported constructs that were found while codegen
@@ -99,8 +95,6 @@ impl<'tcx> GotocCtx<'tcx> {
             current_fn: None,
             type_map: FxHashMap::default(),
             str_literals: FxHashMap::default(),
-            proof_harnesses: vec![],
-            test_harnesses: vec![],
             global_checks_count: 0,
             unsupported_constructs: FxHashMap::default(),
             concurrent_constructs: FxHashMap::default(),

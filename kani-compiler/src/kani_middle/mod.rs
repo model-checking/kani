@@ -223,13 +223,10 @@ pub fn dump_mir_items(tcx: TyCtxt, items: &[MonoItem], output: &Path) {
 /// Structure that represents the source location of a definition.
 /// TODO: Use `InternedString` once we move it out of the cprover_bindings.
 /// <https://github.com/model-checking/kani/issues/2435>
-#[allow(dead_code)]
 pub struct SourceLocation {
     pub filename: String,
     pub start_line: usize,
-    pub start_col: usize,
     pub end_line: usize,
-    pub end_col: usize,
 }
 
 impl SourceLocation {
@@ -237,10 +234,8 @@ impl SourceLocation {
         let loc = span.get_lines();
         let filename = span.get_filename().to_string();
         let start_line = loc.start_line;
-        let start_col = loc.start_col;
         let end_line = loc.end_line;
-        let end_col = loc.end_col;
-        SourceLocation { filename, start_line, start_col, end_line, end_col }
+        SourceLocation { filename, start_line, end_line }
     }
 }
 

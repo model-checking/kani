@@ -227,12 +227,11 @@ impl MutableBody {
 }
 
 #[derive(Clone, Debug)]
-#[allow(dead_code)]
 pub enum CheckType {
     /// This is used by default when the `kani` crate is available.
     Assert(Instance),
     /// When the `kani` crate is not available, we have to model the check as an `if { panic!() }`.
-    Panic(Instance),
+    Panic(),
     /// When building non-core crate, such as `rustc-std-workspace-core`, we cannot
     /// instrument code, but we can still compile them.
     NoCore,
@@ -247,8 +246,8 @@ impl CheckType {
     pub fn new(tcx: TyCtxt) -> CheckType {
         if let Some(instance) = find_instance(tcx, "KaniAssert") {
             CheckType::Assert(instance)
-        } else if let Some(instance) = find_instance(tcx, "panic_str") {
-            CheckType::Panic(instance)
+        } else if let Some(_) = find_instance(tcx, "panic_str") {
+            CheckType::Panic()
         } else {
             CheckType::NoCore
         }
