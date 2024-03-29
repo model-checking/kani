@@ -25,7 +25,6 @@ use rustc_middle::ty::{TyCtxt, VtblEntry};
 use rustc_smir::rustc_internal;
 use stable_mir::mir::alloc::{AllocId, GlobalAlloc};
 use stable_mir::mir::mono::{Instance, InstanceKind, MonoItem, StaticDef};
-use stable_mir::mir::pretty::pretty_ty;
 use stable_mir::mir::{
     visit::Location, Body, CastKind, Constant, MirVisitor, PointerCoercion, Rvalue, Terminator,
     TerminatorKind,
@@ -433,7 +432,7 @@ impl<'a, 'tcx> MirVisitor for MonoItemsFnCollector<'a, 'tcx> {
                                         `{}`. The function `{}` \
                                         cannot be stubbed by `{}` due to \
                                         generic bounds not being met. Callee: {}",
-                                        pretty_ty(receiver_ty.kind()),
+                                        receiver_ty,
                                         trait_,
                                         caller,
                                         self.tcx.def_path_str(stub),

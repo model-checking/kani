@@ -22,7 +22,6 @@ use rustc_span::Span;
 use rustc_target::abi::call::FnAbi;
 use rustc_target::abi::{HasDataLayout, TargetDataLayout};
 use stable_mir::mir::mono::{Instance, InstanceKind, MonoItem};
-use stable_mir::mir::pretty::pretty_ty;
 use stable_mir::ty::{BoundVariableKind, FnDef, RigidTy, Span as SpanStable, Ty, TyKind};
 use stable_mir::visitor::{Visitable, Visitor as TypeVisitor};
 use stable_mir::{CrateDef, DefId};
@@ -48,7 +47,7 @@ pub mod transform;
 /// error was found.
 pub fn check_crate_items(tcx: TyCtxt, ignore_asm: bool) {
     let krate = tcx.crate_name(LOCAL_CRATE);
-    for item in tcx.hir_crate_items(()).items() {
+    for item in tcx.hir().items() {
         let def_id = item.owner_id.def_id.to_def_id();
         KaniAttributes::for_item(tcx, def_id).check_attributes();
         if tcx.def_kind(def_id) == DefKind::GlobalAsm {
@@ -129,7 +128,7 @@ fn check_is_contract_safe(tcx: TyCtxt, instance: Instance) {
                 self.tcx.dcx().err(format!(
                     "{} contains a {}pointer ({}). This is prohibited for functions with contracts, \
                     as they cannot yet reason about the pointer behavior.", self.r#where, self.what,
-                    pretty_ty(ty.kind())));
+                    ty));
             }
 
             // Rust's type visitor only recurses into type arguments, (e.g.
@@ -224,6 +223,7 @@ pub fn dump_mir_items(tcx: TyCtxt, items: &[MonoItem], output: &Path) {
 /// Structure that represents the source location of a definition.
 /// TODO: Use `InternedString` once we move it out of the cprover_bindings.
 /// <https://github.com/model-checking/kani/issues/2435>
+#[allow(dead_code)]
 pub struct SourceLocation {
     pub filename: String,
     pub start_line: usize,
