@@ -170,13 +170,11 @@ pub fn any<T: Arbitrary>() -> T {
 #[inline(never)]
 #[doc(hidden)]
 pub fn any_modifies<T>() -> T {
-    // while we could use `unreachable!()` or `panic!()` as the body of this
-    // function, both cause Kani to produce a warning on any program that uses
-    // `kani::any()` (see https://github.com/model-checking/kani/issues/2010).
-    // This function is handled via a hook anyway, so we just need to put a body
-    // that rustc does not complain about. An infinite loop works out nicely.
-    #[allow(clippy::empty_loop)]
-    loop {}
+    // This function should not be reacheable.
+    // Users must include `#[kani::recursion]` in any function contracts for recursive functions;
+    // otherwise, this might not be properly instantiate. We mark this as unreachable to make
+    // sure Kani doesn't report any false positives.
+    unreachable!()
 }
 
 /// This creates a symbolic *valid* value of type `T`.
