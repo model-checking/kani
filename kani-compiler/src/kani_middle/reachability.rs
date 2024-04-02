@@ -34,6 +34,7 @@ use stable_mir::ty::{Allocation, ClosureKind, ConstantKind, RigidTy, Ty, TyKind}
 use stable_mir::CrateItem;
 use stable_mir::{CrateDef, ItemKind};
 
+use crate::kani_middle::attributes::matches_diagnostic as matches_function;
 use crate::kani_middle::coercion;
 use crate::kani_middle::coercion::CoercionBase;
 use crate::kani_middle::stubbing::{get_stub, validate_instance};
@@ -440,7 +441,7 @@ impl<'a, 'tcx> MirVisitor for MonoItemsFnCollector<'a, 'tcx> {
                                         callee,
                                     ),
                                 );
-                            } else if caller == "kani::any" {
+                            } else if matches_function(self.tcx, self.instance.def, "KaniAny") {
                                 let receiver_ty = args.0[0].expect_ty();
                                 let sep = callee.rfind("::").unwrap();
                                 let trait_ = &callee[..sep];
