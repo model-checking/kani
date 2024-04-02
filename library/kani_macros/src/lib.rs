@@ -52,6 +52,16 @@ pub fn should_panic(attr: TokenStream, item: TokenStream) -> TokenStream {
     attr_impl::should_panic(attr, item)
 }
 
+/// Specifies that a function contains recursion for contract instrumentation.**
+///
+/// This attribute is only used for function-contract instrumentation. Kani uses
+/// this annotation to identify recursive functions and properly instantiate
+/// `kani::any_modifies` to check such functions using induction.
+#[proc_macro_attribute]
+pub fn recursion(attr: TokenStream, item: TokenStream) -> TokenStream {
+    attr_impl::recursion(attr, item)
+}
+
 /// Set Loop unwind limit for proof harnesses
 /// The attribute `#[kani::unwind(arg)]` can only be called alongside `#[kani::proof]`.
 /// arg - Takes in a integer value (u32) that represents the unwind value for the harness.
@@ -331,6 +341,7 @@ mod sysroot {
     }
 
     kani_attribute!(should_panic, no_args);
+    kani_attribute!(recursion, no_args);
     kani_attribute!(solver);
     kani_attribute!(stub);
     kani_attribute!(unstable);
@@ -363,6 +374,7 @@ mod regular {
     }
 
     no_op!(should_panic);
+    no_op!(recursion);
     no_op!(solver);
     no_op!(stub);
     no_op!(unstable);
