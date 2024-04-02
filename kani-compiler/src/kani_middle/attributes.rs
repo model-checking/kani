@@ -70,6 +70,9 @@ enum KaniAttributeKind {
     /// expanded with additional pointer arguments that are not used in the function
     /// but referenced by the `modifies` annotation.
     InnerCheck,
+    /// Attribute used to mark contracts for functions with recursion.
+    /// We use this attribute to properly instantiate `kani::any_modifies` in
+    /// cases when recursion is present given our contracts instrumentation.
     Recursion,
 }
 

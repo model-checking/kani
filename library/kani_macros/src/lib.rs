@@ -52,6 +52,11 @@ pub fn should_panic(attr: TokenStream, item: TokenStream) -> TokenStream {
     attr_impl::should_panic(attr, item)
 }
 
+/// Specifies that a function contains recursion for contract instrumentation.**
+///
+/// This attribute is only used for function-contract instrumentation. Kani uses
+/// this annotation to identify recursive functions and properly instantiate
+/// `kani::any_modifies` to check such functions using induction.
 #[proc_macro_attribute]
 pub fn recursion(attr: TokenStream, item: TokenStream) -> TokenStream {
     attr_impl::recursion(attr, item)
