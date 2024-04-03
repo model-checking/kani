@@ -3,19 +3,24 @@
 
 use anyhow::{bail, Result};
 use kani_metadata::{CbmcSolver, HarnessMetadata};
+use regex::Regex;
+use rustc_demangle::demangle;
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::path::Path;
 use std::process::Command;
+use std::sync::OnceLock;
 use std::time::{Duration, Instant};
+use std::collections::BTreeMap;
 
 use crate::args::{OutputFormat, VerificationArgs};
 use crate::cbmc_output_parser::{
     extract_results, process_cbmc_output, CheckStatus, Property, VerificationOutput,
 };
 use crate::cbmc_property_renderer::{format_coverage, format_result, kani_cbmc_output_filter};
-use crate::coverage::cov_results::{CoverageCheck, CoverageResults};
+use crate::coverage::cov_results::{self, CoverageCheck, CoverageResults};
 use crate::session::KaniSession;
+use crate::coverage::cov_results::{CoverageRegion, CoverageTerm};
 
 /// We will use Cadical by default since it performed better than MiniSAT in our analysis.
 /// Note: Kissat was marginally better, but it is an external solver which could be more unstable.
@@ -259,13 +264,14 @@ impl VerificationResult {
         if let Some(results) = results {
             let (status, failed_properties) =
                 verification_outcome_from_properties(&results, should_panic);
+            let coverage_results = coverage_results_from_properties(&results);
             VerificationResult {
                 status,
                 failed_properties,
                 results: Ok(results),
                 runtime,
                 generated_concrete_test: false,
-                coverage_results: None,
+                coverage_results,
             }
         } else {
             // We never got results from CBMC - something went wrong (e.g. crash) so it's failure
@@ -317,8 +323,8 @@ impl VerificationResult {
                 let failed_properties = self.failed_properties;
                 let show_checks = matches!(output_format, OutputFormat::Regular);
 
-                let mut result = if coverage_mode {
-                    format_coverage(results, status, should_panic, failed_properties, show_checks)
+                let mut result = if let Some(cov_results) = &self.coverage_results {
+                    format_coverage(results, cov_results, status, should_panic, failed_properties, show_checks)
                 } else {
                     format_result(results, status, should_panic, failed_properties, show_checks)
                 };
@@ -394,6 +400,77 @@ fn determine_failed_properties(properties: &[Property]) -> FailedProperties {
     }
 }
 
+fn coverage_results_from_properties(properties: &[Property]) -> Option<CoverageResults> {
+    let cov_properties: Vec<&Property> = properties.iter().filter(|p| p.is_code_coverage_property()).collect();
+
+    if cov_properties.is_empty() {
+        return None;
+    }
+
+    let re = {
+        static RE: OnceLock<Regex> = OnceLock::new();
+        RE.get_or_init(|| {
+            Regex::new(
+                r#"^Coverage \{ kind: CounterIncrement\((?<counter_num>[0-9]+)\) \} (?<func_name>[_\d\w]+) - (?<span>.+)"#,
+            )
+            .unwrap()
+        })
+    };
+
+    let re2 = {
+        static RE: OnceLock<Regex> = OnceLock::new();
+        RE.get_or_init(|| {
+            Regex::new(
+                r#"^Coverage \{ kind: ExpressionUsed\((?<expr_num>[0-9]+)\) \} (?<func_name>[_\d\w]+) - (?<span>.+)"#,
+            )
+            .unwrap()
+        })
+    };
+    let mut coverage_results: BTreeMap<String, Vec<CoverageCheck>> = BTreeMap::default();
+
+    for prop in cov_properties {
+        if let Some(captures) = re.captures(&prop.description) {
+            let function = demangle(&captures["func_name"]).to_string();
+            let counter_num = &captures["counter_num"];
+            let status = prop.status;
+            let span = captures["span"].to_string();
+
+            let term = CoverageTerm::Counter(counter_num.parse().unwrap());
+            let region = CoverageRegion::from_str(span);
+            
+            let cov_check = CoverageCheck::new(function, term, region, status);
+            let file = cov_check.region.file.clone();
+
+            if coverage_results.contains_key(&file) {
+                coverage_results.entry(file).and_modify(|checks| checks.push(cov_check));
+            } else {
+                coverage_results.insert(file, vec![cov_check]);
+            }
+        }
+
+        if let Some(captures) = re2.captures(&prop.description) {
+            let function = demangle(&captures["func_name"]).to_string();
+            let expr_num = &captures["expr_num"];
+            let status = prop.status;
+            let span = captures["span"].to_string();
+
+            let term = CoverageTerm::Expression(expr_num.parse().unwrap());
+            let region = CoverageRegion::from_str(span);
+
+            let cov_check = CoverageCheck::new(function, term, region, status);
+            let file = cov_check.region.file.clone();
+
+            if coverage_results.contains_key(&file) {
+                coverage_results.entry(file).and_modify(|checks| checks.push(cov_check));
+            } else {
+                coverage_results.insert(file, vec![cov_check]);
+            }
+        }
+    }
+
+    Some(CoverageResults::new(coverage_results))
+
+}
 /// Solve Unwind Value from conflicting inputs of unwind values. (--default-unwind, annotation-unwind, --unwind)
 pub fn resolve_unwind_value(
     args: &VerificationArgs,

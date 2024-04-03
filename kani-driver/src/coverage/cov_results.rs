@@ -2,12 +2,21 @@ use crate::cbmc_output_parser::CheckStatus;
 use std::{collections::BTreeMap, fmt::Display};
 use std::fmt::{self, Write};
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
 
-pub type CoverageResults = BTreeMap<String, Vec<CoverageCheck>>;
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CoverageResults {
+    pub data: BTreeMap<String, Vec<CoverageCheck>>,
+}
 
+impl CoverageResults {
+    pub fn new(data: BTreeMap<String, Vec<CoverageCheck>>) -> Self {
+        Self { data }
+    }
+}
 pub fn fmt_coverage_results(coverage_results: &CoverageResults) -> Result<String> {
     let mut fmt_string = String::new();
-    for (file, checks) in coverage_results.iter() {
+    for (file, checks) in coverage_results.data.iter() {
         let mut checks_by_function: BTreeMap<String, Vec<CoverageCheck>> = BTreeMap::new();
 
         // // Group checks by function
@@ -32,7 +41,7 @@ pub fn fmt_coverage_results(coverage_results: &CoverageResults) -> Result<String
     Ok(fmt_string)
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CoverageCheck {
     pub function: String,
     term: CoverageTerm,
@@ -46,7 +55,7 @@ impl CoverageCheck {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct CoverageRegion {
     pub file: String,
     pub start: (u32, u32),
@@ -70,7 +79,7 @@ impl CoverageRegion {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum CoverageTerm {
     Counter(u32),
     Expression(u32),

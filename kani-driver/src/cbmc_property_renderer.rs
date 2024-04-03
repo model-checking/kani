@@ -4,7 +4,7 @@
 use crate::args::OutputFormat;
 use crate::call_cbmc::{FailedProperties, VerificationStatus};
 use crate::cbmc_output_parser::{CheckStatus, ParserItem, Property, TraceItem};
-use crate::coverage::cov_results::{CoverageCheck, CoverageRegion, CoverageResults, CoverageTerm, fmt_coverage_results};
+use crate::coverage::cov_results::{self, fmt_coverage_results, CoverageCheck, CoverageRegion, CoverageResults, CoverageTerm};
 use console::style;
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -431,87 +431,28 @@ pub fn format_result(
 /// results
 pub fn format_coverage(
     properties: &[Property],
+    cov_results: &CoverageResults,
     status: VerificationStatus,
     should_panic: bool,
     failed_properties: FailedProperties,
     show_checks: bool,
 ) -> String {
-    let (coverage_checks, non_coverage_checks): (Vec<Property>, Vec<Property>) =
+    let (_coverage_checks, non_coverage_checks): (Vec<Property>, Vec<Property>) =
         properties.iter().cloned().partition(|x| x.property_class() == "code_coverage");
 
     let verification_output =
         format_result(&non_coverage_checks, status, should_panic, failed_properties, show_checks);
-    let new_coverage_output = format_result_new_coverage(&coverage_checks);
+    let new_coverage_output = format_result_new_coverage(cov_results);
     let result = format!("{}\n{}", verification_output, new_coverage_output);
 
     result
 }
 
-fn format_result_new_coverage(properties: &[Property]) -> String {
+fn format_result_new_coverage(cov_results: &CoverageResults) -> String {
     let mut formatted_output = String::new();
     formatted_output.push_str("\nCoverage Results (NEW):\n");
 
-    let mut coverage_results: CoverageResults = BTreeMap::default();
-
-    let re = {
-        static RE: OnceLock<Regex> = OnceLock::new();
-        RE.get_or_init(|| {
-            Regex::new(
-                r#"^Coverage \{ kind: CounterIncrement\((?<counter_num>[0-9]+)\) \} (?<func_name>[_\d\w]+) - (?<span>.+)"#,
-            )
-            .unwrap()
-        })
-    };
-
-    let re2 = {
-        static RE: OnceLock<Regex> = OnceLock::new();
-        RE.get_or_init(|| {
-            Regex::new(
-                r#"^Coverage \{ kind: ExpressionUsed\((?<expr_num>[0-9]+)\) \} (?<func_name>[_\d\w]+) - (?<span>.+)"#,
-            )
-            .unwrap()
-        })
-    };
-    for prop in properties {
-        if let Some(captures) = re.captures(&prop.description) {
-            let function = demangle(&captures["func_name"]).to_string();
-            let counter_num = &captures["counter_num"];
-            let status = prop.status;
-            let span = captures["span"].to_string();
-
-            let term = CoverageTerm::Counter(counter_num.parse().unwrap());
-            let region = CoverageRegion::from_str(span);
-            
-            let cov_check = CoverageCheck::new(function, term, region, status);
-            let file = cov_check.region.file.clone();
-
-            if coverage_results.contains_key(&file) {
-                coverage_results.entry(file).and_modify(|checks| checks.push(cov_check));
-            } else {
-                coverage_results.insert(file, vec![cov_check]);
-            }
-        }
-
-        if let Some(captures) = re2.captures(&prop.description) {
-            let function = demangle(&captures["func_name"]).to_string();
-            let expr_num = &captures["expr_num"];
-            let status = prop.status;
-            let span = captures["span"].to_string();
-
-            let term = CoverageTerm::Expression(expr_num.parse().unwrap());
-            let region = CoverageRegion::from_str(span);
-
-            let cov_check = CoverageCheck::new(function, term, region, status);
-            let file = cov_check.region.file.clone();
-
-            if coverage_results.contains_key(&file) {
-                coverage_results.entry(file).and_modify(|checks| checks.push(cov_check));
-            } else {
-                coverage_results.insert(file, vec![cov_check]);
-            }
-        }
-    }
-    fmt_coverage_results(&coverage_results).expect("error: couldn't format coverage results")
+    fmt_coverage_results(&cov_results).expect("error: couldn't format coverage results")
 }
 
 
