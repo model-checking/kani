@@ -60,6 +60,7 @@ impl KaniSession {
             cov_file.write_all(serialized_data.as_bytes())?;
         }
 
+        println!("[info] Coverage results saved to {}", &outdir.display());
         Ok(())
     }
 }
