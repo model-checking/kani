@@ -452,10 +452,7 @@ impl<'a, 'tcx> MirVisitor for MonoItemsFnCollector<'a, 'tcx> {
                                         objects in the modifies clause (including return types) \
                                         implement `{}`.\nThis is a strict condition to use \
                                         function contracts as verified stubs.",
-                                        pretty_ty(receiver_ty.kind()),
-                                        trait_,
-                                        callee,
-                                        trait_,
+                                        receiver_ty, trait_, callee, trait_,
                                     ),
                                 );
                             } else {
