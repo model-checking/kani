@@ -76,9 +76,19 @@ impl<'tcx> GotocCtx<'tcx> {
                 self.codegen_set_discriminant(dest_ty, dest_expr, *variant_index, location)
             }
             StatementKind::StorageLive(var_id) => {
-                Stmt::decl(self.codegen_local(*var_id), None, location)
+                if self.queries.args().ignore_storage_markers {
+                    Stmt::skip(location)
+                } else {
+                    Stmt::decl(self.codegen_local(*var_id), None, location)
+                }
             }
-            StatementKind::StorageDead(var_id) => Stmt::dead(self.codegen_local(*var_id), location),
+            StatementKind::StorageDead(var_id) => {
+                if self.queries.args().ignore_storage_markers {
+                    Stmt::skip(location)
+                } else {
+                    Stmt::dead(self.codegen_local(*var_id), location)
+                }
+            }
             StatementKind::Intrinsic(NonDivergingIntrinsic::CopyNonOverlapping(
                 CopyNonOverlapping { src, dst, count },
             )) => {
