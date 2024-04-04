@@ -246,7 +246,7 @@ impl CheckType {
     pub fn new(tcx: TyCtxt) -> CheckType {
         if let Some(instance) = find_instance(tcx, "KaniAssert") {
             CheckType::Assert(instance)
-        } else if let Some(_) = find_instance(tcx, "panic_str") {
+        } else if find_instance(tcx, "panic_str").is_some() {
             CheckType::Panic
         } else {
             CheckType::NoCore
