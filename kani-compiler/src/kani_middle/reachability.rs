@@ -33,6 +33,7 @@ use stable_mir::ty::{Allocation, ClosureKind, ConstantKind, RigidTy, Ty, TyKind}
 use stable_mir::CrateItem;
 use stable_mir::{CrateDef, ItemKind};
 
+use crate::kani_middle::attributes::matches_diagnostic as matches_function;
 use crate::kani_middle::coercion;
 use crate::kani_middle::coercion::CoercionBase;
 use crate::kani_middle::stubbing::{get_stub, validate_instance};
@@ -437,6 +438,24 @@ impl<'a, 'tcx> MirVisitor for MonoItemsFnCollector<'a, 'tcx> {
                                         caller,
                                         self.tcx.def_path_str(stub),
                                         callee,
+                                    ),
+                                );
+                            } else if matches_function(self.tcx, self.instance.def, "KaniAny") {
+                                let receiver_ty = args.0[0].expect_ty();
+                                let sep = callee.rfind("::").unwrap();
+                                let trait_ = &callee[..sep];
+                                self.tcx.dcx().span_err(
+                                    rustc_internal::internal(self.tcx, terminator.span),
+                                    format!(
+                                        "`{}` doesn't implement \
+                                        `{}`. Callee: `{}`\nPlease, check whether the type of all \
+                                        objects in the modifies clause (including return types) \
+                                        implement `{}`.\nThis is a strict condition to use \
+                                        function contracts as verified stubs.",
+                                        pretty_ty(receiver_ty.kind()),
+                                        trait_,
+                                        callee,
+                                        trait_,
                                     ),
                                 );
                             } else {
