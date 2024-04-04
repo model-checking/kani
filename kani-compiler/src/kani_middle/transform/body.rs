@@ -231,7 +231,7 @@ pub enum CheckType {
     /// This is used by default when the `kani` crate is available.
     Assert(Instance),
     /// When the `kani` crate is not available, we have to model the check as an `if { panic!() }`.
-    Panic(),
+    Panic,
     /// When building non-core crate, such as `rustc-std-workspace-core`, we cannot
     /// instrument code, but we can still compile them.
     NoCore,
