@@ -5,7 +5,6 @@
 //! The test is from <https://github.com/model-checking/kani/issues/2022>
 //! With CBMC's default solver (minisat), it takes ~517 seconds
 //! With Kissat 3.0.0, it takes ~22 seconds
-//! It started failing after <https://github.com/model-checking/kani/pull/3080>
 
 use std::collections::BTreeSet;
 
