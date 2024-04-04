@@ -16,6 +16,7 @@ use std::process::{Child, Command};
 /// attributes in such files, but it may require you to
 /// extend it if advanced features are used (e.g., pools)
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct LitaniRun {
     pub aux: Option<HashMap<String, String>>,
     pub project: String,
@@ -39,6 +40,7 @@ impl LitaniRun {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct LitaniParalellism {
     pub trace: Vec<LitaniTrace>,
     pub max_paralellism: Option<u32>,
@@ -46,6 +48,7 @@ pub struct LitaniParalellism {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct LitaniTrace {
     pub running: u32,
     pub finished: u32,
@@ -54,6 +57,7 @@ pub struct LitaniTrace {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct LitaniPipeline {
     pub name: String,
     pub ci_stages: Vec<LitaniStage>,
@@ -76,6 +80,7 @@ impl LitaniPipeline {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct LitaniStage {
     pub jobs: Vec<LitaniJob>,
     pub progress: u32,
@@ -88,6 +93,7 @@ pub struct LitaniStage {
 // Some attributes in litani's `jobs` are not always included
 // or they are null, so we use `Option<...>` to deserialize them
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct LitaniJob {
     pub wrapper_arguments: LitaniWrapperArguments,
     pub complete: bool,
@@ -108,6 +114,7 @@ pub struct LitaniJob {
 // Some attributes in litani's `wrapper_arguments` are not always included
 // or they are null, so we use `Option<...>` to deserialize them
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct LitaniWrapperArguments {
     pub subcommand: String,
     pub verbose: bool,
