@@ -27,9 +27,6 @@ jobs:
         with:
           os: ${{ matrix.os }}
 
-      - name: Build Kani
-        run: cargo build-dev
-
       - name: Execute Kani regression
         run: ./scripts/kani-regression.sh
 
