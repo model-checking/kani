@@ -173,7 +173,7 @@ impl MutableBody {
                 let terminator = Terminator { kind, span };
                 self.split_bb(source, terminator);
             }
-            CheckType::Panic(..) | CheckType::NoCore => {
+            CheckType::Panic | CheckType::NoCore => {
                 tcx.sess
                     .dcx()
                     .struct_err("Failed to instrument the code. Cannot find `kani::assert`")
@@ -247,7 +247,7 @@ impl CheckType {
         if let Some(instance) = find_instance(tcx, "KaniAssert") {
             CheckType::Assert(instance)
         } else if let Some(_) = find_instance(tcx, "panic_str") {
-            CheckType::Panic()
+            CheckType::Panic
         } else {
             CheckType::NoCore
         }
