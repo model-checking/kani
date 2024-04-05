@@ -27,9 +27,6 @@ jobs:
         with:
           os: ${{ matrix.os }}
 
-      - name: Build Kani
-        run: cargo build-dev
-
       - name: Execute Kani regression
         run: ./scripts/kani-regression.sh
 
@@ -87,9 +84,6 @@ jobs:
         uses: ./.github/actions/setup
         with:
           os: ubuntu-20.04
-
-      - name: Build Kani using release mode
-        run: cargo build-dev -- --release
 
       - name: Execute Kani performance tests
         run: ./scripts/kani-perf.sh
