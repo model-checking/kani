@@ -15,6 +15,5 @@ two very good reasons to do it:
 
 We recommend reading our section on [Regression
 Testing](./regression-testing.md) if you're interested in Kani
-development. At present, we obtain metrics based on the [book
-runner](./bookrunner.md). To run kani on a large number of remotely
+development. To run kani on a large number of remotely
 hosted crates, please see [Repository Crawl](./repo-crawl.md).
