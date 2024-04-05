@@ -74,6 +74,9 @@ pub struct Arguments {
     /// Enable specific checks.
     #[clap(long)]
     pub ub_check: Vec<ExtraChecks>,
+    /// Ignore storage markers.
+    #[clap(long)]
+    pub ignore_storage_markers: bool,
 }
 
 #[derive(Debug, Clone, Copy, AsRefStr, EnumString, VariantNames, PartialEq, Eq)]
