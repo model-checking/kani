@@ -127,7 +127,11 @@ pub fn dump_mir_items(tcx: TyCtxt, items: &[MonoItem], output: &Path) {
 pub struct SourceLocation {
     pub filename: String,
     pub start_line: usize,
+    #[allow(dead_code)]
+    pub start_col: usize, // set, but not currently used in Goto output
     pub end_line: usize,
+    #[allow(dead_code)]
+    pub end_col: usize, // set, but not currently used in Goto output
 }
 
 impl SourceLocation {
@@ -135,8 +139,10 @@ impl SourceLocation {
         let loc = span.get_lines();
         let filename = span.get_filename().to_string();
         let start_line = loc.start_line;
+        let start_col = loc.start_col;
         let end_line = loc.end_line;
-        SourceLocation { filename, start_line, end_line }
+        let end_col = loc.end_col;
+        SourceLocation { filename, start_line, start_col, end_line, end_col }
     }
 }
 
