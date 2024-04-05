@@ -72,7 +72,6 @@ pub use futures::{block_on, block_on_with_spawn, spawn, yield_now, RoundRobin};
 #[cfg(not(feature = "concrete_playback"))]
 pub fn assume(cond: bool) {
     let _ = cond;
-    unreachable!("test");
 }
 
 #[inline(never)]

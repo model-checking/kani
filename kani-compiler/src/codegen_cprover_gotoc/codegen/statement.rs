@@ -115,7 +115,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 
                 let fun = self.current_fn().readable_name();
                 let instance = self.current_fn().instance_stable();
-                let cov_info = format!("{cov:?} {fun}");
+                let cov_info = format!("{cov:?} ({fun})");
                 // NOTE: This helps see the coverage info we're processing
                 println!("COVERAGE: {:?} {:?} {:?}", cov, fun, stmt.span);
                 let cov_span = coverage_opaque_span(self.tcx, cov.clone(), instance);

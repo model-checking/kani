@@ -13,9 +13,6 @@ use crate::harness_runner::HarnessResult;
 use anyhow::Result;
 use tracing::debug;
 
-
-use super::cov_results;
-
 pub fn coverage_cargo(mut session: KaniSession, _args: CargoCoverageArgs) -> Result<()> {
     session.args.coverage = true;
     let project = project::cargo_project(&session, false)?;
