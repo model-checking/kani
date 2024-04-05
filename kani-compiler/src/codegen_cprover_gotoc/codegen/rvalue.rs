@@ -376,7 +376,7 @@ impl<'tcx> GotocCtx<'tcx> {
             BinOp::BitXor | BinOp::BitAnd | BinOp::BitOr => {
                 self.codegen_unchecked_scalar_binop(op, e1, e2)
             }
-            BinOp::Eq | BinOp::Lt | BinOp::Le | BinOp::Ne | BinOp::Ge | BinOp::Gt => {
+            BinOp::Eq | BinOp::Lt | BinOp::Le | BinOp::Ne | BinOp::Ge | BinOp::Gt | BinOp::Cmp => {
                 let op_ty = self.operand_ty_stable(e1);
                 if self.is_fat_pointer_stable(op_ty) {
                     self.codegen_comparison_fat_ptr(op, e1, e2, loc)
@@ -1465,6 +1465,14 @@ fn comparison_expr(op: &BinOp, left: Expr, right: Expr, is_float: bool) -> Expr 
         }
         BinOp::Ge => left.ge(right),
         BinOp::Gt => left.gt(right),
+        BinOp::Cmp => {
+            // Implement https://doc.rust-lang.org/core/cmp/trait.Ord.html as done in cranelift,
+            // i.e., (left > right) - (left < right)
+            left.clone()
+                .gt(right.clone())
+                .cast_to(Type::c_int())
+                .sub(left.lt(right).cast_to(Type::c_int()))
+        }
         _ => unreachable!(),
     }
 }
