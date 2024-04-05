@@ -27,9 +27,6 @@ jobs:
         with:
           os: ${{ matrix.os }}
 
-      - name: Build Kani
-        run: cargo build-dev
-
       - name: Execute Kani regression
         run: ./scripts/kani-regression.sh
 
@@ -88,46 +85,18 @@ jobs:
         with:
           os: ubuntu-20.04
 
-      - name: Build Kani using release mode
-        run: cargo build-dev -- --release
-
       - name: Execute Kani performance tests
         run: ./scripts/kani-perf.sh
         env:
           RUST_TEST_THREADS: 1
 
-  bookrunner:
+  documentation:
     runs-on: ubuntu-20.04
     permissions:
       contents: write
     steps:
       - name: Checkout Kani
         uses: actions/checkout@v4
-
-      - name: Setup Kani Dependencies
-        uses: ./.github/actions/setup
-        with:
-          os: ubuntu-20.04
-
-      - name: Build Kani
-        run: cargo build-dev
-
-      - name: Install book runner dependencies
-        run: ./scripts/setup/install_bookrunner_deps.sh
-
-      - name: Generate book runner report
-        run: cargo run -p bookrunner
-        env:
-          DOC_RUST_LANG_ORG_CHANNEL: nightly
-
-      - name: Print book runner text results
-        run: cat build/output/latest/html/bookrunner.txt
-
-      - name: Print book runner failures grouped by stage
-        run: python3 scripts/ci/bookrunner_failures_by_stage.py build/output/latest/html/index.html
-
-      - name: Detect unexpected book runner failures
-        run: ./scripts/ci/detect_bookrunner_failures.sh build/output/latest/html/bookrunner.txt
 
       - name: Install book dependencies
         run: ./scripts/setup/ubuntu/install_doc_deps.sh

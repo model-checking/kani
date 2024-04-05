@@ -55,12 +55,6 @@ jobs:
           os: ubuntu-20.04
           kani_dir: new
 
-      - name: Build Kani (new variant)
-        run: pushd new && cargo build-dev
-
-      - name: Build Kani (old variant)
-        run: pushd old && cargo build-dev
-
       - name: Copy benchmarks from new to old
         run: rm -rf ./old/tests/perf ; cp -r ./new/tests/perf ./old/tests/
 
