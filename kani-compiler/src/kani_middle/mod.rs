@@ -21,10 +21,8 @@ use rustc_span::source_map::respan;
 use rustc_span::Span;
 use rustc_target::abi::call::FnAbi;
 use rustc_target::abi::{HasDataLayout, TargetDataLayout};
-use stable_mir::mir::mono::{Instance, InstanceKind, MonoItem};
-use stable_mir::mir::pretty::pretty_ty;
-use stable_mir::ty::{BoundVariableKind, FnDef, RigidTy, Span as SpanStable, Ty, TyKind};
-use stable_mir::visitor::{Visitable, Visitor as TypeVisitor};
+use stable_mir::mir::mono::{InstanceKind, MonoItem};
+use stable_mir::ty::{FnDef, RigidTy, Span as SpanStable, TyKind};
 use stable_mir::{CrateDef, DefId};
 use std::fs::File;
 use std::io::BufWriter;
@@ -48,7 +46,7 @@ pub mod transform;
 /// error was found.
 pub fn check_crate_items(tcx: TyCtxt, ignore_asm: bool) {
     let krate = tcx.crate_name(LOCAL_CRATE);
-    for item in tcx.hir_crate_items(()).items() {
+    for item in tcx.hir().items() {
         let def_id = item.owner_id.def_id.to_def_id();
         KaniAttributes::for_item(tcx, def_id).check_attributes();
         if tcx.def_kind(def_id) == DefKind::GlobalAsm {
@@ -89,106 +87,8 @@ pub fn check_reachable_items(tcx: TyCtxt, queries: &QueryDb, items: &[MonoItem])
                 .check_unstable_features(&queries.args().unstable_features);
             def_ids.insert(def_id);
         }
-
-        // We don't short circuit here since this is a type check and can shake
-        // out differently depending on generic parameters.
-        if let MonoItem::Fn(instance) = item {
-            if attributes::is_function_contract_generated(
-                tcx,
-                rustc_internal::internal(tcx, def_id),
-            ) {
-                check_is_contract_safe(tcx, *instance);
-            }
-        }
     }
     tcx.dcx().abort_if_errors();
-}
-
-/// A basic check that ensures a function with a contract does not receive
-/// mutable pointers in its input and does not return raw pointers of any kind.
-///
-/// This is a temporary safety measure because contracts cannot yet reason
-/// about the heap.
-fn check_is_contract_safe(tcx: TyCtxt, instance: Instance) {
-    struct NoMutPtr<'tcx> {
-        tcx: TyCtxt<'tcx>,
-        is_prohibited: fn(Ty) -> bool,
-        /// Where (top level) did the type we're analyzing come from. Used for
-        /// composing error messages.
-        r#where: &'static str,
-        /// Adjective to describe the kind of pointer we're prohibiting.
-        /// Essentially `is_prohibited` but in English.
-        what: &'static str,
-    }
-
-    impl<'tcx> TypeVisitor for NoMutPtr<'tcx> {
-        type Break = ();
-        fn visit_ty(&mut self, ty: &Ty) -> std::ops::ControlFlow<Self::Break> {
-            if (self.is_prohibited)(*ty) {
-                // TODO make this more user friendly
-                self.tcx.dcx().err(format!(
-                    "{} contains a {}pointer ({}). This is prohibited for functions with contracts, \
-                    as they cannot yet reason about the pointer behavior.", self.r#where, self.what,
-                    pretty_ty(ty.kind())));
-            }
-
-            // Rust's type visitor only recurses into type arguments, (e.g.
-            // `generics` in this match). This is enough for many types, but it
-            // won't look at the field types of structs or enums. So we override
-            // it here and do that ourselves.
-            //
-            // Since the field types also must contain in some form all the type
-            // arguments the visitor will see them as it inspects the fields and
-            // we don't need to call back to `super`.
-            if let TyKind::RigidTy(RigidTy::Adt(adt_def, generics)) = ty.kind() {
-                for variant in adt_def.variants() {
-                    for field in &variant.fields() {
-                        self.visit_ty(&field.ty_with_args(&generics))?;
-                    }
-                }
-                std::ops::ControlFlow::Continue(())
-            } else {
-                // For every other type.
-                ty.super_visit(self)
-            }
-        }
-    }
-
-    fn is_raw_mutable_ptr(ty: Ty) -> bool {
-        let kind = ty.kind();
-        kind.is_raw_ptr() && kind.is_mutable_ptr()
-    }
-
-    fn is_raw_ptr(ty: Ty) -> bool {
-        let kind = ty.kind();
-        kind.is_raw_ptr()
-    }
-
-    // TODO: Replace this with fn_abi.
-    // https://github.com/model-checking/kani/issues/1365
-    let bound_fn_sig = instance.ty().kind().fn_sig().unwrap();
-
-    for var in &bound_fn_sig.bound_vars {
-        if let BoundVariableKind::Ty(t) = var {
-            tcx.dcx().span_err(
-                rustc_internal::internal(tcx, instance.def.span()),
-                format!("Found a bound type variable {t:?} after monomorphization"),
-            );
-        }
-    }
-
-    let fn_typ = bound_fn_sig.skip_binder();
-
-    for (input_ty, (is_prohibited, r#where, what)) in fn_typ
-        .inputs()
-        .iter()
-        .copied()
-        .zip(std::iter::repeat((is_raw_mutable_ptr as fn(_) -> _, "This argument", "mutable ")))
-        .chain([(fn_typ.output(), (is_raw_ptr as fn(_) -> _, "The return", ""))])
-    {
-        let mut v = NoMutPtr { tcx, is_prohibited, r#where, what };
-        v.visit_ty(&input_ty);
-    }
 }
 
 /// Print MIR for the reachable items if the `--emit mir` option was provided to rustc.
@@ -227,9 +127,11 @@ pub fn dump_mir_items(tcx: TyCtxt, items: &[MonoItem], output: &Path) {
 pub struct SourceLocation {
     pub filename: String,
     pub start_line: usize,
-    pub start_col: usize,
+    #[allow(dead_code)]
+    pub start_col: usize, // set, but not currently used in Goto output
     pub end_line: usize,
-    pub end_col: usize,
+    #[allow(dead_code)]
+    pub end_col: usize, // set, but not currently used in Goto output
 }
 
 impl SourceLocation {
