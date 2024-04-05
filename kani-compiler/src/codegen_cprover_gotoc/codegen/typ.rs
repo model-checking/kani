@@ -570,7 +570,7 @@ impl<'tcx> GotocCtx<'tcx> {
             // Note: This is not valid C but CBMC seems to be ok with it.
             ty::Slice(e) => self.codegen_ty(*e).flexible_array_of(),
             ty::Str => Type::unsigned_int(8).flexible_array_of(),
-            ty::Ref(_, t, _) | ty::RawPtr(ty::TypeAndMut { ty: t, .. }) => self.codegen_ty_ref(*t),
+            ty::Ref(_, t, _) | ty::RawPtr(t, _) => self.codegen_ty_ref(*t),
             ty::FnDef(def_id, args) => {
                 let instance =
                     Instance::resolve(self.tcx, ty::ParamEnv::reveal_all(), *def_id, args)
@@ -993,7 +993,7 @@ impl<'tcx> GotocCtx<'tcx> {
             | ty::Foreign(_)
             | ty::Coroutine(..)
             | ty::Int(_)
-            | ty::RawPtr(_)
+            | ty::RawPtr(_, _)
             | ty::Ref(..)
             | ty::Tuple(_)
             | ty::Uint(_) => self.codegen_ty(pointee_type).to_pointer(),
@@ -1352,10 +1352,7 @@ impl<'tcx> GotocCtx<'tcx> {
             // `F16` and `F128` are not yet handled.
             // Tracked here: <https://github.com/model-checking/kani/issues/3069>
             Primitive::F16 | Primitive::F128 => unimplemented!(),
-            Primitive::Pointer(_) => Ty::new_ptr(
-                self.tcx,
-                ty::TypeAndMut { ty: self.tcx.types.u8, mutbl: Mutability::Not },
-            ),
+            Primitive::Pointer(_) => Ty::new_ptr(self.tcx, self.tcx.types.u8, Mutability::Not),
         }
     }
 
@@ -1659,7 +1656,7 @@ fn common_vtable_fields(drop_in_place: Type) -> Vec<DatatypeComponent> {
 pub fn pointee_type(mir_type: Ty) -> Option<Ty> {
     match mir_type.kind() {
         ty::Ref(_, pointee_type, _) => Some(*pointee_type),
-        ty::RawPtr(ty::TypeAndMut { ty: pointee_type, .. }) => Some(*pointee_type),
+        ty::RawPtr(pointee_type, _) => Some(*pointee_type),
         _ => None,
     }
 }
