@@ -580,7 +580,7 @@ impl<'tcx> GotocCtx<'tcx> {
             "truncf64" => codegen_simple_intrinsic!(Trunc),
             "type_id" => codegen_intrinsic_const!(),
             "type_name" => codegen_intrinsic_const!(),
-            "typed_swap" => self.codegen_swap(fargs, loc),
+            "typed_swap" => self.codegen_swap(fargs, farg_types, loc),
             "unaligned_volatile_load" => {
                 unstable_codegen!(
                     self.codegen_expr_to_place_stable(place, fargs.remove(0).dereference())
@@ -1951,7 +1951,12 @@ impl<'tcx> GotocCtx<'tcx> {
     /// The standard library API requires that `x` and `y` are readable and writable as their
     /// (common) type (which auto-generated checks for dereferencing will take care of), and the
     /// memory regions pointed to must be non-overlapping.
-    pub fn codegen_swap(&mut self, mut fargs: Vec<Expr>, loc: Location) -> Stmt {
+    pub fn codegen_swap(&mut self, mut fargs: Vec<Expr>, farg_types: &[Ty], loc: Location) -> Stmt {
+        // two parameters, and both must be raw pointers with the same base type
+        assert!(fargs.len() == 2);
+        assert!(farg_types[0].kind().is_raw_ptr());
+        assert!(farg_types[0] == farg_types[1]);
+
         let x = fargs.remove(0);
         let y = fargs.remove(0);
 
@@ -1960,28 +1965,22 @@ impl<'tcx> GotocCtx<'tcx> {
         //   assume(x + 1 <= y || y + 1 <= x);
         // }
         let one = Expr::int_constant(1, Type::c_int());
-        let non_overlapping = x.clone().plus(one.clone())
-            .le(y.clone())
-            .or(y.clone().plus(one.clone()).le(x.clone()));
+        let non_overlapping =
+            x.clone().plus(one.clone()).le(y.clone()).or(y.clone().plus(one.clone()).le(x.clone()));
         let non_overlapping_check = self.codegen_assert_assume(
             non_overlapping,
             PropertyClass::SafetyCheck,
             "memory regions pointed to by `x` and `y` must not overlap",
             loc,
         );
-        let non_overlapping_stmt = Stmt::if_then_else(
-            x.clone().same_object(y.clone()),
-            non_overlapping_check,
-            None,
-            loc,
-        );
+        let non_overlapping_stmt =
+            Stmt::if_then_else(x.clone().same_object(y.clone()), non_overlapping_check, None, loc);
 
         // T t = *y; *y = *x; *x = t;
         let deref_y = y.clone().dereference();
         let (temp_var, assign_to_t) =
             self.decl_temp_variable(deref_y.typ().clone(), Some(deref_y), loc);
-        let assign_to_y =
-            y.dereference().assign(x.clone().dereference(), loc);
+        let assign_to_y = y.dereference().assign(x.clone().dereference(), loc);
         let assign_to_x = x.dereference().assign(temp_var, loc);
 
         Stmt::block(vec![non_overlapping_stmt, assign_to_t, assign_to_y, assign_to_x], loc)
