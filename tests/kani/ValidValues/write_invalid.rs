@@ -6,9 +6,6 @@
 //! Writing invalid bytes is not UB as long as the incorrect value is not read.
 //! However, we over-approximate for sake of simplicity and performance.
 
-// Note: We're getting an unexpected compilation error because the type returned
-// from StableMIR is `Alias`: https://github.com/model-checking/kani/issues/3113
-
 use std::num::NonZeroU8;
 
 #[kani::proof]
