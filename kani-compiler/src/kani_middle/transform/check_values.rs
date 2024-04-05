@@ -440,7 +440,13 @@ impl<'a> MirVisitor for CheckValueVisitor<'a> {
                                 // The write bytes intrinsic may trigger UB in safe code.
                                 // pub unsafe fn write_bytes<T>(dst: *mut T, val: u8, count: usize)
                                 // <https://doc.rust-lang.org/stable/core/intrinsics/fn.write_bytes.html>
-                                // We don't support this operation yet.
+                                // This is an over-approximation since writing an invalid value is
+                                // not UB, only reading it will be.
+                                assert_eq!(
+                                    args.len(),
+                                    3,
+                                    "Unexpected number of arguments for `write_bytes`"
+                                );
                                 let TyKind::RigidTy(RigidTy::RawPtr(target_ty, Mutability::Mut)) =
                                     args[0].ty(self.locals).unwrap().kind()
                                 else {
@@ -449,6 +455,19 @@ impl<'a> MirVisitor for CheckValueVisitor<'a> {
                                 let validity = ty_validity_per_offset(&self.machine, target_ty, 0);
                                 match validity {
                                     Ok(ranges) if ranges.is_empty() => {}
+                                    Ok(ranges) => {
+                                        let sz = Const::try_from_uint(
+                                            target_ty.layout().unwrap().shape().size.bytes()
+                                                as u128,
+                                            UintTy::Usize,
+                                        )
+                                        .unwrap();
+                                        self.push_target(SourceOp::BytesValidity {
+                                            target_ty,
+                                            rvalue: Rvalue::Repeat(args[1].clone(), sz),
+                                            ranges,
+                                        })
+                                    }
                                     _ => self.push_target(SourceOp::UnsupportedCheck {
                                         check: "write_bytes".to_string(),
                                         ty: target_ty,
