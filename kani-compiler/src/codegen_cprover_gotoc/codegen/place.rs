@@ -11,7 +11,7 @@ use crate::codegen_cprover_gotoc::codegen::typ::std_pointee_type;
 use crate::codegen_cprover_gotoc::utils::{dynamic_fat_ptr, slice_fat_ptr};
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::unwrap_or_return_codegen_unimplemented;
-use cbmc::goto_program::{Expr, Location, Type};
+use cbmc::goto_program::{Expr, ExprValue, Location, Type};
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_smir::rustc_internal;
 use rustc_target::abi::{TagEncoding, Variants};
@@ -642,8 +642,33 @@ impl<'tcx> GotocCtx<'tcx> {
         let projection =
             unwrap_or_return_codegen_unimplemented!(self, self.codegen_place_stable(place));
         if self.use_thin_pointer_stable(place_ty) {
-            // Just return the address of the place dereferenced.
-            projection.goto_expr.address_of()
+            // For non-parameter objects with ZST rustc does not necessarily generate
+            // individual objects.
+            let need_not_be_unique = match projection.goto_expr.value() {
+                ExprValue::Symbol { identifier } => {
+                    !self.symbol_table.lookup(*identifier).unwrap().is_parameter
+                }
+                _ => false,
+            };
+            let address_of = projection.goto_expr.address_of();
+            if need_not_be_unique && self.is_zst_stable(place_ty) {
+                let global_zst_name = "__kani_zst_object";
+                let zst_typ = self.codegen_ty_stable(place_ty);
+                let global_zst_object = self.ensure_global_var(
+                    global_zst_name,
+                    false,
+                    zst_typ,
+                    Location::none(),
+                    |_, _| None, // zero-sized, so no initialization necessary
+                );
+                Type::bool().nondet().ternary(
+                    address_of.clone(),
+                    global_zst_object.address_of().cast_to(address_of.typ().clone()),
+                )
+            } else {
+                // Just return the address of the place dereferenced.
+                address_of
+            }
         } else if place_ty == pointee_type(self.local_ty_stable(place.local)).unwrap() {
             // Just return the fat pointer if this is a simple &(*local).
             projection.fat_ptr_goto_expr.unwrap()
