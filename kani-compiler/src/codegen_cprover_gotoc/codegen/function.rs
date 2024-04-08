@@ -246,6 +246,7 @@ pub mod rustc_smir {
         // println!("COVERAGE: {:?}", &cov_info.mappings);
         for mapping in &cov_info.mappings {
             if mapping.kind.terms().next().unwrap() == coverage {
+                println!("COVERAGE: {:?}", mapping.code_region.clone());
                 return Some(mapping.code_region.clone());
             }
         }

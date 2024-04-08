@@ -117,7 +117,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 let instance = self.current_fn().instance_stable();
                 let cov_info = format!("{cov:?} ({fun})");
                 // NOTE: This helps see the coverage info we're processing
-                println!("COVERAGE: {:?} {:?} {:?}", cov, fun, stmt.span);
+                // println!("COVERAGE: {:?} {:?} {:?}", cov, fun, stmt.span);
                 let cov_span = coverage_opaque_span(self.tcx, cov.clone(), instance);
                 if let Some(code_region) = cov_span {
                     let coverage_stmt = self.codegen_coverage(&cov_info, stmt.span, code_region);

@@ -70,11 +70,15 @@ impl Display for CoverageRegion {
 
 impl CoverageRegion {
     pub fn from_str(str: String) -> Self {
-        let str_splits: Vec<&str> = str.split([':', '-']).map(|s| s.trim()).collect();
-        assert_eq!(str_splits.len(), 5, "{str:?}");
-        let file = str_splits[0].to_string();
-        let start = (str_splits[1].parse().unwrap(), str_splits[2].parse().unwrap());
-        let end = (str_splits[3].parse().unwrap(), str_splits[4].parse().unwrap());
+        let blank_splits: Vec<&str> = str.split_whitespace().map(|s| s.trim()).collect();
+        assert!(blank_splits[1] == "-");
+        let str_splits1: Vec<&str> = blank_splits[0].split([':']).collect();
+        let str_splits2: Vec<&str> = blank_splits[2].split([':']).collect();
+        assert_eq!(str_splits1.len(), 3, "{str:?}");
+        assert_eq!(str_splits2.len(), 2, "{str:?}");
+        let file = str_splits1[0].to_string();
+        let start = (str_splits1[1].parse().unwrap(), str_splits1[2].parse().unwrap());
+        let end = (str_splits2[0].parse().unwrap(), str_splits2[1].parse().unwrap());
         Self { file, start, end }
     }
 }
