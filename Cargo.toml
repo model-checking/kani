@@ -41,7 +41,7 @@ members = [
   "tools/bookrunner",
   "tools/compiletest",
   "tools/build-kani",
-  "tools/kanicov",
+  "tools/kani-cov",
   "kani-driver",
   "kani-compiler",
   "kani_metadata",

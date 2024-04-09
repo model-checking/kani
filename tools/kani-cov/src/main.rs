@@ -4,9 +4,12 @@ use std::io::Read;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 
+use atty::Stream;
+
 use crate::coverage::CoverageResults;
 use anyhow::{Context, Result};
 use coverage::CoverageCheck;
+
 
 fn main() -> Result<()> {
     let args = std::env::args().collect::<Vec<_>>();
@@ -110,4 +113,12 @@ fn insert_escapes(str: &String, markers: Vec<(usize, bool)>) -> String {
         offset = offset + b.bytes().len();
     }
     new_str
+}
+
+fn open_marker() -> String {
+    if atty::is(Stream::Stdout) {
+        "\x1b[42m".to_string()
+    } else {
+        "```".to_string()
+    }
 }

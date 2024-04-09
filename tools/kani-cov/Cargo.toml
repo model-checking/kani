@@ -1,5 +1,5 @@
 [package]
-name = "visualize_coverage"
+name = "kani-cov"
 version = "0.1.0"
 edition = "2021"
 
@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.81"
+atty = "0.2.14"
 console = "0.15.8"
 serde = "1.0.197"
 serde_derive = "1.0.197"
