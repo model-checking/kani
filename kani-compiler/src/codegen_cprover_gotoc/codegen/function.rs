@@ -34,10 +34,11 @@ impl<'tcx> GotocCtx<'tcx> {
             let var_type = self.codegen_ty_stable(ldata.ty);
             let loc = self.codegen_span_stable(ldata.span);
             // Indices [1, N] represent the function parameters where N is the number of parameters.
+            // Except that ZST fields are not included as parameters.
             let sym =
                 Symbol::variable(name, base_name, var_type, self.codegen_span_stable(ldata.span))
                     .with_is_hidden(!self.is_user_variable(&lc))
-                    .with_is_parameter(lc > 0 && lc <= num_args);
+                    .with_is_parameter((lc > 0 && lc <= num_args) && !self.is_zst_stable(ldata.ty));
             let sym_e = sym.to_expr();
             self.symbol_table.insert(sym);
 
@@ -175,7 +176,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 let (name, base_name) = self.codegen_spread_arg_name(&lc);
                 let sym = Symbol::variable(name, base_name, self.codegen_ty_stable(*arg_t), loc)
                     .with_is_hidden(false)
-                    .with_is_parameter(true);
+                    .with_is_parameter(!self.is_zst_stable(*arg_t));
                 // The spread arguments are additional function paramaters that are patched in
                 // They are to the function signature added in the `fn_typ` function.
                 // But they were never added to the symbol table, which we currently do here.

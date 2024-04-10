@@ -17,7 +17,8 @@ fn check_zst_param() {
     let input = kani::any();
     let closure = |a: Void, out: usize, b: Void| {
         kani::cover!();
-        assert!(&a as *const Void != &b as *const Void, "Should succeed");
+        assert!(&a as *const Void != std::ptr::null(), "Should succeed");
+        assert!(&b as *const Void != std::ptr::null(), "Should succeed");
         out
     };
     let output = invoke(input, closure);

@@ -642,16 +642,15 @@ impl<'tcx> GotocCtx<'tcx> {
         let projection =
             unwrap_or_return_codegen_unimplemented!(self, self.codegen_place_stable(place));
         if self.use_thin_pointer_stable(place_ty) {
-            // For non-parameter objects with ZST rustc does not necessarily generate
-            // individual objects.
+            // For ZST objects rustc does not necessarily generate individual objects.
             let need_not_be_unique = match projection.goto_expr.value() {
-                ExprValue::Symbol { identifier } => {
-                    !self.symbol_table.lookup(*identifier).unwrap().is_parameter
+                ExprValue::Symbol { .. } => {
+                    self.is_zst_stable(place_ty)
                 }
                 _ => false,
             };
             let address_of = projection.goto_expr.address_of();
-            if need_not_be_unique && self.is_zst_stable(place_ty) {
+            if need_not_be_unique {
                 let global_zst_name = "__kani_zst_object";
                 let zst_typ = self.codegen_ty_stable(place_ty);
                 let global_zst_object = self.ensure_global_var(
