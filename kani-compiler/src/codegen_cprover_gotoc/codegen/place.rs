@@ -644,9 +644,7 @@ impl<'tcx> GotocCtx<'tcx> {
         if self.use_thin_pointer_stable(place_ty) {
             // For ZST objects rustc does not necessarily generate individual objects.
             let need_not_be_unique = match projection.goto_expr.value() {
-                ExprValue::Symbol { .. } => {
-                    self.is_zst_stable(place_ty)
-                }
+                ExprValue::Symbol { .. } => self.is_zst_stable(place_ty),
                 _ => false,
             };
             let address_of = projection.goto_expr.address_of();
