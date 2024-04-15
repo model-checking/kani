@@ -681,7 +681,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 | CastKind::FnPtrToPtr
                 | CastKind::PtrToPtr
                 | CastKind::PointerExposeAddress
-                | CastKind::PointerFromExposedAddress,
+                | CastKind::PointerWithExposedProvenance,
                 e,
                 t,
             ) => self.codegen_misc_cast(e, *t),
