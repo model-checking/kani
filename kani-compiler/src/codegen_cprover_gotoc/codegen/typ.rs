@@ -595,6 +595,13 @@ impl<'tcx> GotocCtx<'tcx> {
                     )
                 }
             }
+            // This object has the same layout as base. For now, translate this into `(base)`.
+            // The only difference is the niche.
+            ty::Pat(base_ty, ..) => {
+                self.ensure_struct(self.ty_mangled_name(ty), self.ty_pretty_name(ty), |tcx, _| {
+                    tcx.codegen_ty_tuple_like(ty, vec![*base_ty])
+                })
+            }
             ty::Alias(..) => {
                 unreachable!("Type should've been normalized already")
             }
@@ -995,6 +1002,7 @@ impl<'tcx> GotocCtx<'tcx> {
             | ty::Int(_)
             | ty::RawPtr(_, _)
             | ty::Ref(..)
+            | ty::Pat(..)
             | ty::Tuple(_)
             | ty::Uint(_) => self.codegen_ty(pointee_type).to_pointer(),
 
