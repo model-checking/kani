@@ -612,7 +612,7 @@ impl<'a> MirVisitor for CheckValueVisitor<'a> {
                     ty: (rvalue.ty(self.locals).unwrap()),
                 }),
                 CastKind::PointerExposeAddress
-                | CastKind::PointerFromExposedAddress
+                | CastKind::PointerWithExposedProvenance
                 | CastKind::PointerCoercion(_)
                 | CastKind::IntToInt
                 | CastKind::FloatToInt
@@ -878,6 +878,12 @@ fn ty_validity_per_offset(
                             Ok(struct_validity)
                         }
                     }
+                }
+                RigidTy::Pat(base_ty, ..) => {
+                    // This is similar to a structure with one field and with niche defined.
+                    let mut pat_validity = ty_req();
+                    pat_validity.append(&mut ty_validity_per_offset(machine_info, *base_ty, 0)?);
+                    Ok(pat_validity)
                 }
                 RigidTy::Tuple(tys) => {
                     let mut tuple_validity = vec![];
