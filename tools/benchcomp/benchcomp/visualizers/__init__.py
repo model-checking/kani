@@ -358,7 +358,20 @@ class dump_markdown_results_table:
             for bench, variants in benches.items():
                 tmp_variants = dict(variants)
                 for column in columns:
-                    variants[column["column_name"]] = column["text"](tmp_variants)
+                    if "column_name" not in column:
+                        logging.error(
+                            "A column specification for metric %s did not "
+                            "contain a column_name field. Each column should "
+                            "have a column name and column text", metric)
+                        sys.exit(1)
+                    try:
+                        variants[column["column_name"]] = column["text"](tmp_variants)
+                    except BaseException:
+                        # This may be reached when evaluating the column text
+                        # throws an exception. The column text is written in a
+                        # YAML file and is typically a simple lambda so can't
+                        # contain sophisticated error handling.
+                        variants[column["column_name"]] = "**<ERROR>**"
 
 
     @staticmethod
