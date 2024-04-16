@@ -79,7 +79,7 @@ jobs:
           token: ${{ github.token }}
           title: 'CBMC upgrade to ${{ env.CBMC_LATEST }} failed'
           body: >
-            Updating CBMC from ${{ evn.CBMC_VERSION }} to ${{ env.CBMC_LATEST }} failed.
+            Updating CBMC from ${{ env.CBMC_VERSION }} to ${{ env.CBMC_LATEST }} failed.
 
             The failed automated run
             [can be found here.](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
