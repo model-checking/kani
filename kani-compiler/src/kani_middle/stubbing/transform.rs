@@ -234,7 +234,7 @@ fn deserialize_mapping(tcx: TyCtxt, val: &str) -> HashMap<DefId, DefId> {
     type Item = (u64, u64);
     let item_to_def_id = |item: Item| -> DefId {
         let hash = DefPathHash(Fingerprint::new(item.0, item.1));
-        tcx.def_path_hash_to_def_id(hash, &mut || panic!())
+        tcx.def_path_hash_to_def_id(hash, &())
     };
     let pairs: Vec<(Item, Item)> = serde_json::from_str(val).unwrap();
     let mut m = HashMap::default();

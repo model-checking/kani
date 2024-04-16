@@ -292,6 +292,11 @@ impl<'tcx> GotocCtx<'tcx> {
                             "element of {parent_ty:?} is not accessed via field projection"
                         )
                     }
+                    TyKind::RigidTy(RigidTy::Pat(..)) => {
+                        // See https://github.com/rust-lang/types-team/issues/126
+                        // for what is currently supported.
+                        unreachable!("projection inside a pattern is not supported, only transmute")
+                    }
                 }
             }
             // if we fall here, then we are handling an enum
