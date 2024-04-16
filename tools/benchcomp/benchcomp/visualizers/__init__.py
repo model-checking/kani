@@ -371,7 +371,7 @@ class dump_markdown_results_table:
                         # throws an exception. The column text is written in a
                         # YAML file and is typically a simple lambda so can't
                         # contain sophisticated error handling.
-                        variants[column["column_name"]] = "**<ERROR>**"
+                        variants[column["column_name"]] = "**ERROR**"
 
 
     @staticmethod
