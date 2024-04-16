@@ -389,6 +389,7 @@ impl Expr {
             source.is_integer() || source.is_pointer() || source.is_bool()
         } else if target.is_integer() {
             source.is_c_bool()
+                || source.is_bool()
                 || source.is_integer()
                 || source.is_floating_point()
                 || source.is_pointer()
