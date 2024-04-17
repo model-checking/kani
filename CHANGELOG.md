@@ -4,6 +4,20 @@ This file contains notable changes (e.g. breaking changes, major changes, etc.) 
 
 This file was introduced starting Kani 0.23.0, so it only contains changes from version 0.23.0 onwards.
 
+## [0.50.0]
+
+### Major Changes
+* Fix compilation issue with proc_macro2  (v1.0.80+) and Kani v0.49.0
+(https://github.com/model-checking/kani/issues/3138).
+
+### What's Changed
+* Implement valid value check for `write_bytes` by @celinval in
+https://github.com/model-checking/kani/pull/3108
+* Rust toolchain upgraded to 2024-04-15 by @tautschnig @celinval
+
+**Full Changelog**:
+https://github.com/model-checking/kani/compare/kani-0.49.0...kani-0.50.0
+
 ## [0.49.0]
 
 ### What's Changed
