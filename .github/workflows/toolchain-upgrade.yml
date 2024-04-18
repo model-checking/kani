@@ -31,6 +31,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           source scripts/toolchain_update.sh
+
+      - name: Clean untracked files
+        run: git clean -f
+
       - name: Create Pull Request
         if: ${{ env.next_step == 'create_pr' }}
         uses: peter-evans/create-pull-request@v6
