@@ -6,10 +6,10 @@ use std::fs::File;
 use std::io::Write;
 
 use crate::args::coverage_args::CargoCoverageArgs;
-use crate::KaniSession;
-use crate::project;
 use crate::harness_runner;
 use crate::harness_runner::HarnessResult;
+use crate::project;
+use crate::KaniSession;
 use anyhow::Result;
 use tracing::debug;
 
@@ -34,15 +34,15 @@ impl KaniSession {
         let build_target = env!("TARGET");
         let metadata = self.cargo_metadata(build_target)?;
         let target_dir = self
-        .args
-        .target_dir
-        .as_ref()
-        .unwrap_or(&metadata.target_directory.clone().into())
-        .clone()
-        .join("kani");
-    
+            .args
+            .target_dir
+            .as_ref()
+            .unwrap_or(&metadata.target_directory.clone().into())
+            .clone()
+            .join("kani");
+
         let outdir = target_dir.join(build_target).join("cov");
-    
+
         if !outdir.exists() {
             fs::create_dir(&outdir)?;
         }

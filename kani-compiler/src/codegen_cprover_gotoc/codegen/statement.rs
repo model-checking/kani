@@ -3,6 +3,7 @@
 use super::typ::TypeExt;
 use super::typ::FN_RETURN_VOID_VAR_NAME;
 use super::{bb_label, PropertyClass};
+use crate::codegen_cprover_gotoc::codegen::function::rustc_smir::coverage_opaque_span;
 use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
 use cbmc::goto_program::{Expr, Location, Stmt, Type};
@@ -17,7 +18,6 @@ use stable_mir::mir::{
     Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind, RETURN_LOCAL,
 };
 use stable_mir::ty::{Abi, RigidTy, Span, Ty, TyKind, VariantIdx};
-use crate::codegen_cprover_gotoc::codegen::function::rustc_smir::coverage_opaque_span;
 use tracing::{debug, debug_span, trace};
 
 impl<'tcx> GotocCtx<'tcx> {
@@ -112,7 +112,7 @@ impl<'tcx> GotocCtx<'tcx> {
             StatementKind::Coverage(cov) => {
                 // debug!(?opaque, "StatementKind::Coverage Opaque");
                 // self.codegen_coverage(stmt.span)
-                
+
                 let fun = self.current_fn().readable_name();
                 let instance = self.current_fn().instance_stable();
                 let cov_info = format!("{cov:?} ({fun})");

@@ -218,12 +218,12 @@ impl<'tcx> GotocCtx<'tcx> {
 }
 
 pub mod rustc_smir {
+    use crate::stable_mir::CrateDef;
+    use rustc_middle::mir::coverage::CodeRegion;
     use rustc_middle::mir::coverage::CovTerm;
     use rustc_middle::ty::TyCtxt;
     use stable_mir::mir::mono::Instance;
     use stable_mir::Opaque;
-    use crate::stable_mir::CrateDef;
-    use rustc_middle::mir::coverage::CodeRegion;
 
     type CoverageOpaque = stable_mir::Opaque;
 
@@ -238,7 +238,11 @@ pub mod rustc_smir {
     }
 
     /// Function that should be the internal implementation of opaque
-    pub fn coverage_span<'tcx>(tcx: TyCtxt<'tcx>, coverage: CovTerm, instance: Instance) -> Option<CodeRegion> {
+    pub fn coverage_span<'tcx>(
+        tcx: TyCtxt<'tcx>,
+        coverage: CovTerm,
+        instance: Instance,
+    ) -> Option<CodeRegion> {
         let instance_def = rustc_smir::rustc_internal::internal(tcx, instance.def.def_id());
         let body = tcx.instance_mir(rustc_middle::ty::InstanceDef::Item(instance_def));
         let cov_info = &body.function_coverage_info.clone().unwrap();
@@ -264,12 +268,14 @@ pub mod rustc_smir {
             return Some(CovTerm::Zero);
         } else if let Some(rest) = coverage_str.strip_prefix("CounterIncrement(") {
             let (num_str, _rest) = rest.split_once(")").unwrap();
-                let num = num_str.parse::<u32>().unwrap();
-                Some(CovTerm::Counter(num.into()))
+            let num = num_str.parse::<u32>().unwrap();
+            Some(CovTerm::Counter(num.into()))
         } else if let Some(rest) = coverage_str.strip_prefix("ExpressionUsed(") {
             let (num_str, _rest) = rest.split_once(")").unwrap();
             let num = num_str.parse::<u32>().unwrap();
             Some(CovTerm::Expression(num.into()))
-        } else { None }
+        } else {
+            None
+        }
     }
 }

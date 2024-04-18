@@ -11,7 +11,7 @@ use args_toml::join_args;
 
 use crate::args::StandaloneSubcommand;
 use crate::concrete_playback::playback::{playback_cargo, playback_standalone};
-use crate::coverage::coverage::{coverage_cargo};
+use crate::coverage::coverage::coverage_cargo;
 use crate::project::Project;
 use crate::session::KaniSession;
 use crate::version::print_kani_version;

@@ -126,7 +126,8 @@ impl KaniSession {
         if self.args.coverage {
             flags.extend_from_slice(
                 // &["-C", "instrument-coverage", "-Z", "no-profiler-runtime", "--emit=mir"].map(OsString::from),
-                &["-C", "instrument-coverage", "-Z", "no-profiler-runtime", "-C", "opt-level=0"].map(OsString::from),
+                &["-C", "instrument-coverage", "-Z", "no-profiler-runtime", "-C", "opt-level=0"]
+                    .map(OsString::from),
             );
         }
         flags.extend_from_slice(

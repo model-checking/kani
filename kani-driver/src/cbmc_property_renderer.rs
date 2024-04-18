@@ -4,7 +4,9 @@
 use crate::args::OutputFormat;
 use crate::call_cbmc::{FailedProperties, VerificationStatus};
 use crate::cbmc_output_parser::{CheckStatus, ParserItem, Property, TraceItem};
-use crate::coverage::cov_results::{self, fmt_coverage_results, CoverageCheck, CoverageRegion, CoverageResults, CoverageTerm};
+use crate::coverage::cov_results::{
+    self, fmt_coverage_results, CoverageCheck, CoverageRegion, CoverageResults, CoverageTerm,
+};
 use console::style;
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -454,7 +456,6 @@ fn format_result_new_coverage(cov_results: &CoverageResults) -> String {
 
     fmt_coverage_results(&cov_results).expect("error: couldn't format coverage results")
 }
-
 
 /// Attempts to build a message for a failed property with as much detailed
 /// information on the source location as possible.

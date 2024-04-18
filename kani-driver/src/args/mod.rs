@@ -5,8 +5,8 @@
 pub mod assess_args;
 pub mod cargo;
 pub mod common;
-pub mod playback_args;
 pub mod coverage_args;
+pub mod playback_args;
 
 pub use assess_args::*;
 

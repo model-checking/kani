@@ -1,8 +1,8 @@
 use crate::cbmc_output_parser::CheckStatus;
-use std::{collections::BTreeMap, fmt::Display};
-use std::fmt::{self, Write};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use std::fmt::{self, Write};
+use std::{collections::BTreeMap, fmt::Display};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CoverageResults {
@@ -27,7 +27,7 @@ pub fn fmt_coverage_results(coverage_results: &CoverageResults) -> Result<String
                 .or_insert_with(Vec::new)
                 .push(check.clone());
         }
-        
+
         for (function, checks) in checks_by_function {
             writeln!(fmt_string, "{file} ({function})")?;
             let mut sorted_checks: Vec<CoverageCheck> = checks.to_vec();
@@ -50,8 +50,13 @@ pub struct CoverageCheck {
 }
 
 impl CoverageCheck {
-    pub fn new(function: String, term: CoverageTerm, region: CoverageRegion, status: CheckStatus) -> Self {
-        Self {function, term, region, status }
+    pub fn new(
+        function: String,
+        term: CoverageTerm,
+        region: CoverageRegion,
+        status: CheckStatus,
+    ) -> Self {
+        Self { function, term, region, status }
     }
 }
 
