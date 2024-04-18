@@ -48,6 +48,10 @@ no_llvm_build
 /tmp/
 # Created by default with `src/ci/docker/run.sh`
 /obj/
+# Created by kani-compiler
+*.rlib
+*.rmeta
+*.mir
 
 ## Temporary files
 *~
