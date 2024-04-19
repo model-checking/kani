@@ -15,11 +15,15 @@ mod derive;
 use proc_macro::TokenStream;
 use proc_macro_error::proc_macro_error;
 
+use proc_macro2::TokenStream as TokenStream2;
+
 #[cfg(kani_sysroot)]
 use sysroot as attr_impl;
 
+use proc_macro2::{Ident, Span};
 #[cfg(not(kani_sysroot))]
 use regular as attr_impl;
+use syn::{Expr, Stmt};
 
 /// Marks a Kani proof harness
 ///
@@ -198,6 +202,13 @@ pub fn modifies(attr: TokenStream, item: TokenStream) -> TokenStream {
     attr_impl::modifies(attr, item)
 }
 
+#[proc_macro_attribute]
+pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
+    attr_impl::loop_invariant(attr, item)
+}
+
+static mut LOOP_INVARIANT_COUNT: u32 = 0;
+
 /// This module implements Kani attributes in a way that only Kani's compiler can understand.
 /// This code should only be activated when pre-building Kani's sysroot.
 #[cfg(kani_sysroot)]
@@ -206,6 +217,7 @@ mod sysroot {
 
     mod contracts;
 
+    use contracts::helpers::*;
     pub use contracts::{ensures, modifies, proof_for_contract, requires, stub_verified};
 
     use super::*;
@@ -346,6 +358,77 @@ mod sysroot {
     kani_attribute!(stub);
     kani_attribute!(unstable);
     kani_attribute!(unwind);
+
+    pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
+        // Update the loop counter to distinguish loop invariants for different loops.
+        unsafe {
+            LOOP_INVARIANT_COUNT += 1;
+        }
+
+        let mut loop_stmt: Stmt = syn::parse(item.clone()).unwrap();
+        // Parse the loop invariant expression.
+        let inv_expr: Expr = chunks_by(TokenStream2::from(attr.clone()), is_token_stream_2_comma)
+            .map(syn::parse2::<Expr>)
+            .filter_map(|expr| match expr {
+                Err(_) => None,
+                Ok(expr) => Some(expr),
+            })
+            .collect::<Vec<_>>()[0]
+            .clone();
+
+        // Annotate a place holder function call
+        //  kani::kani_loop_invariant()
+        // at the end of the loop.
+        match loop_stmt {
+            Stmt::Expr(ref mut e, _) => match e {
+                Expr::While(ref mut ew) => {
+                    // A while loop of the form 
+                    // ``` rust
+                    //  while guard {
+                    //      body
+                    //  }
+                    // ```
+                    // is annotated as 
+                    // ``` rust
+                    //  kani::kani_loop_invariant_begin();
+                    //  let __kani_loop_invariant_1 = ||(inv);
+                    //  kani::kani_loop_invariant_end();
+                    //  while guard{
+                    //      body    
+                    //      kani::kani_loop_invariant(true);
+                    //  }
+                    // ```
+                    let end_stmt: Stmt = syn::parse(
+                        quote!(
+                            kani::kani_loop_invariant(true);)
+                        .into(),
+                    )
+                    .unwrap();
+                    ew.body.stmts.push(end_stmt);
+                }
+                _ => (),
+            },
+            _ => todo!("implement support for loops other than while loops."),
+        }
+
+        // instrument the invariants as a closure,
+        // and the call to the closure between two placeholders
+        // TODO: all variables in inv_expr should be reference.
+        unsafe {
+            let closre_name = Ident::new(
+                &format!("__kani_loop_invariant_{LOOP_INVARIANT_COUNT}"),
+                Span::call_site(),
+            );
+            quote!(
+                let #closre_name = ||(#inv_expr);
+                kani::kani_loop_invariant_begin();
+                #closre_name();
+                kani::kani_loop_invariant_end();
+                #loop_stmt
+            )
+            .into()
+        }
+    }
 }
 
 /// This module provides dummy implementations of Kani attributes which cannot be interpreted by
@@ -384,4 +467,5 @@ mod regular {
     no_op!(modifies);
     no_op!(proof_for_contract);
     no_op!(stub_verified);
+    no_op!(loop_invariant);
 }
