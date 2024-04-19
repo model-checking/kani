@@ -11,11 +11,9 @@ use std::collections::HashMap;
 
 use proc_macro2::{Ident, Span, TokenStream as TokenStream2};
 use quote::{quote, ToTokens};
-use syn::{
-    Attribute, PredicateType, ReturnType, Signature, TraitBound, TypeParamBound, WhereClause,
-};
+use syn::Attribute;
 
-use super::{helpers::return_type_to_type, ContractConditionsHandler, ContractFunctionState};
+use super::{ContractConditionsHandler, ContractFunctionState};
 
 impl ContractFunctionState {
     /// Do we need to emit the `is_contract_generated` tag attribute on the
@@ -86,57 +84,6 @@ pub fn make_unsafe_argument_copies(
         quote!(#(let #arg_names = kani::internal::untracked_deref(&#arg_values);)*),
         quote!(#(std::mem::forget(#also_arg_names);)*),
     )
-}
-
-/// Looks complicated but does something very simple: attach a bound for
-/// `kani::Arbitrary` on the return type to the provided signature. Pushes it
-/// onto a preexisting where condition, initializing a new `where` condition if
-/// it doesn't already exist.
-///
-/// Very simple example: `fn foo() -> usize { .. }` would be rewritten `fn foo()
-/// -> usize where usize: kani::Arbitrary { .. }`.
-///
-/// This is called when we first emit a replace function. Later we can rely on
-/// this bound already being present.
-pub fn attach_require_kani_any(sig: &mut Signature) {
-    if matches!(sig.output, ReturnType::Default) {
-        // It's the default return type, e.g. `()` so we can skip adding the
-        // constraint.
-        return;
-    }
-    let return_ty = return_type_to_type(&sig.output);
-    let where_clause = sig.generics.where_clause.get_or_insert_with(|| WhereClause {
-        where_token: syn::Token![where](Span::call_site()),
-        predicates: Default::default(),
-    });
-
-    where_clause.predicates.push(syn::WherePredicate::Type(PredicateType {
-        lifetimes: None,
-        bounded_ty: return_ty.into_owned(),
-        colon_token: syn::Token![:](Span::call_site()),
-        bounds: [TypeParamBound::Trait(TraitBound {
-            paren_token: None,
-            modifier: syn::TraitBoundModifier::None,
-            lifetimes: None,
-            path: syn::Path {
-                leading_colon: None,
-                segments: [
-                    syn::PathSegment {
-                        ident: Ident::new("kani", Span::call_site()),
-                        arguments: syn::PathArguments::None,
-                    },
-                    syn::PathSegment {
-                        ident: Ident::new("Arbitrary", Span::call_site()),
-                        arguments: syn::PathArguments::None,
-                    },
-                ]
-                .into_iter()
-                .collect(),
-            },
-        })]
-        .into_iter()
-        .collect(),
-    }))
 }
 
 /// Used as the "single source of truth" for [`try_as_result_assign`] and [`try_as_result_assign_mut`]

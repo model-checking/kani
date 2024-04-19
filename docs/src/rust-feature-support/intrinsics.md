@@ -220,6 +220,7 @@ truncf64 | Yes | |
 try | No | [#267](https://github.com/model-checking/kani/issues/267) |
 type_id | Yes | |
 type_name | Yes | |
+typed_swap | Yes | |
 unaligned_volatile_load | No | See [Notes - Concurrency](#concurrency) |
 unaligned_volatile_store | No | See [Notes - Concurrency](#concurrency) |
 unchecked_add | Yes | |

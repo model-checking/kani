@@ -8,11 +8,14 @@ use crate::args::{Arguments, ReachabilityType};
 use crate::kani_middle::intrinsics::ModelIntrinsics;
 use crate::kani_middle::reachability::{collect_reachable_items, filter_crate_items};
 use crate::kani_middle::stubbing;
+use crate::kani_middle::transform::BodyTransformation;
 use crate::kani_queries::QueryDb;
 use rustc_hir::def_id::{DefId, LocalDefId};
 use rustc_middle::util::Providers;
 use rustc_middle::{mir::Body, query::queries, ty::TyCtxt};
 use stable_mir::mir::mono::MonoItem;
+
+use crate::kani_middle::KaniAttributes;
 
 /// Sets up rustc's query mechanism to apply Kani's custom queries to code from
 /// a crate.
@@ -60,6 +63,17 @@ fn run_kani_mir_passes<'tcx>(
     tracing::debug!(?def_id, "Run Kani transformation passes");
     let mut transformed_body = stubbing::transform(tcx, def_id, body);
     stubbing::transform_foreign_functions(tcx, &mut transformed_body);
+    let item_attributes = KaniAttributes::for_item(tcx, def_id);
+    // If we apply `transform_any_modifies` in all contract-generated items,
+    // we will ended up instantiating `kani::any_modifies` for the replace function
+    // every time, even if we are only checking the contract, because the function
+    // is always included during contract instrumentation. Thus, we must only apply
+    // the transformation if we are using a verified stub or in the presence of recursion.
+    if item_attributes.is_contract_generated()
+        && (stubbing::get_stub_key(tcx, def_id).is_some() || item_attributes.has_recursion())
+    {
+        stubbing::transform_any_modifies(tcx, &mut transformed_body);
+    }
     // This should be applied after stubbing so user stubs take precedence.
     ModelIntrinsics::run_pass(tcx, &mut transformed_body);
     tcx.arena.alloc(transformed_body)
@@ -79,8 +93,9 @@ fn collect_and_partition_mono_items(
     rustc_smir::rustc_internal::run(tcx, || {
         let local_reachable =
             filter_crate_items(tcx, |_, _| true).into_iter().map(MonoItem::Fn).collect::<Vec<_>>();
+
         // We do not actually need the value returned here.
-        collect_reachable_items(tcx, &local_reachable);
+        collect_reachable_items(tcx, &mut BodyTransformation::dummy(), &local_reachable);
     })
     .unwrap();
     (rustc_interface::DEFAULT_QUERY_PROVIDERS.collect_and_partition_mono_items)(tcx, key)

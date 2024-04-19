@@ -18,11 +18,11 @@ use super::vtable_ctx::VtableCtx;
 use crate::codegen_cprover_gotoc::overrides::{fn_hooks, GotocHooks};
 use crate::codegen_cprover_gotoc::utils::full_crate_name;
 use crate::codegen_cprover_gotoc::UnsupportedConstructs;
+use crate::kani_middle::transform::BodyTransformation;
 use crate::kani_queries::QueryDb;
 use cbmc::goto_program::{DatatypeComponent, Expr, Location, Stmt, Symbol, SymbolTable, Type};
 use cbmc::utils::aggr_tag;
 use cbmc::{InternedString, MachineModel};
-use kani_metadata::HarnessMetadata;
 use rustc_data_structures::fx::FxHashMap;
 use rustc_middle::span_bug;
 use rustc_middle::ty::layout::{
@@ -60,8 +60,6 @@ pub struct GotocCtx<'tcx> {
     /// map from symbol identifier to string literal
     /// TODO: consider making the map from Expr to String instead
     pub str_literals: FxHashMap<InternedString, String>,
-    pub proof_harnesses: Vec<HarnessMetadata>,
-    pub test_harnesses: Vec<HarnessMetadata>,
     /// a global counter for generating unique IDs for checks
     pub global_checks_count: u64,
     /// A map of unsupported constructs that were found while codegen
@@ -70,6 +68,8 @@ pub struct GotocCtx<'tcx> {
     /// We collect them and print one warning at the end if not empty instead of printing one
     /// warning at each occurrence.
     pub concurrent_constructs: UnsupportedConstructs,
+    /// The body transformation agent.
+    pub transformer: BodyTransformation,
 }
 
 /// Constructor
@@ -78,6 +78,7 @@ impl<'tcx> GotocCtx<'tcx> {
         tcx: TyCtxt<'tcx>,
         queries: QueryDb,
         machine_model: &MachineModel,
+        transformer: BodyTransformation,
     ) -> GotocCtx<'tcx> {
         let fhks = fn_hooks();
         let symbol_table = SymbolTable::new(machine_model.clone());
@@ -94,11 +95,10 @@ impl<'tcx> GotocCtx<'tcx> {
             current_fn: None,
             type_map: FxHashMap::default(),
             str_literals: FxHashMap::default(),
-            proof_harnesses: vec![],
-            test_harnesses: vec![],
             global_checks_count: 0,
             unsupported_constructs: FxHashMap::default(),
             concurrent_constructs: FxHashMap::default(),
+            transformer,
         }
     }
 }
@@ -137,7 +137,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     // Generate a Symbol Expression representing a function variable from the MIR
     pub fn gen_function_local_variable(&mut self, c: u64, fname: &str, t: Type) -> Symbol {
-        self.gen_stack_variable(c, fname, "var", t, Location::none(), false)
+        self.gen_stack_variable(c, fname, "var", t, Location::none())
     }
 
     /// Given a counter `c` a function name `fname, and a prefix `prefix`, generates a new function local variable
@@ -149,11 +149,10 @@ impl<'tcx> GotocCtx<'tcx> {
         prefix: &str,
         t: Type,
         loc: Location,
-        is_param: bool,
     ) -> Symbol {
         let base_name = format!("{prefix}_{c}");
         let name = format!("{fname}::1::{base_name}");
-        let symbol = Symbol::variable(name, base_name, t, loc).with_is_parameter(is_param);
+        let symbol = Symbol::variable(name, base_name, t, loc);
         self.symbol_table.insert(symbol.clone());
         symbol
     }
@@ -167,8 +166,7 @@ impl<'tcx> GotocCtx<'tcx> {
         loc: Location,
     ) -> (Expr, Stmt) {
         let c = self.current_fn_mut().get_and_incr_counter();
-        let var =
-            self.gen_stack_variable(c, &self.current_fn().name(), "temp", t, loc, false).to_expr();
+        let var = self.gen_stack_variable(c, &self.current_fn().name(), "temp", t, loc).to_expr();
         let value = value.or_else(|| self.codegen_default_initializer(&var));
         let decl = Stmt::decl(var.clone(), value, loc);
         (var, decl)

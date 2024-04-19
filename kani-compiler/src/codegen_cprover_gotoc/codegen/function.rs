@@ -60,7 +60,7 @@ impl<'tcx> GotocCtx<'tcx> {
             debug!("Double codegen of {:?}", old_sym);
         } else {
             assert!(old_sym.is_function());
-            let body = instance.body().unwrap();
+            let body = self.transformer.body(self.tcx, instance);
             self.set_current_fn(instance, &body);
             self.print_instance(instance, &body);
             self.codegen_function_prelude(&body);
@@ -201,7 +201,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     pub fn declare_function(&mut self, instance: Instance) {
         debug!("declaring {}; {:?}", instance.name(), instance);
-        let body = instance.body().unwrap();
+        let body = self.transformer.body(self.tcx, instance);
         self.set_current_fn(instance, &body);
         debug!(krate=?instance.def.krate(), is_std=self.current_fn().is_std(), "declare_function");
         self.ensure(&self.symbol_name_stable(instance), |ctx, fname| {

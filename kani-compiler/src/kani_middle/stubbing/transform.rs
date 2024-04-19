@@ -23,8 +23,13 @@ use tracing::debug;
 /// Returns the `DefId` of the stub for the function/method identified by the
 /// parameter `def_id`, and `None` if the function/method is not stubbed.
 pub fn get_stub(tcx: TyCtxt, def_id: DefId) -> Option<DefId> {
-    let mapping = get_stub_mapping(tcx)?;
-    mapping.get(&def_id).copied()
+    let stub_map = get_stub_mapping(tcx)?;
+    stub_map.get(&def_id).copied()
+}
+
+pub fn get_stub_key(tcx: TyCtxt, def_id: DefId) -> Option<DefId> {
+    let stub_map = get_stub_mapping(tcx)?;
+    stub_map.iter().find_map(|(&key, &val)| if val == def_id { Some(key) } else { None })
 }
 
 /// Returns the new body of a function/method if it has been stubbed out;
@@ -53,6 +58,48 @@ pub fn transform_foreign_functions<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx
         let mut visitor =
             ForeignFunctionTransformer { tcx, local_decls: body.clone().local_decls, stub_map };
         visitor.visit_body(body);
+    }
+}
+
+/// Traverse `body` searching for calls to `kani::any_modifies` and replace these calls
+/// with calls to `kani::any`. This happens as a separate step as it is only necessary
+/// for contract-generated functions.
+pub fn transform_any_modifies<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) {
+    let mut visitor = AnyModifiesTransformer { tcx, local_decls: body.clone().local_decls };
+    visitor.visit_body(body);
+}
+
+struct AnyModifiesTransformer<'tcx> {
+    /// The compiler context.
+    tcx: TyCtxt<'tcx>,
+    /// Local declarations of the callee function. Kani searches here for foreign functions.
+    local_decls: IndexVec<Local, LocalDecl<'tcx>>,
+}
+
+impl<'tcx> MutVisitor<'tcx> for AnyModifiesTransformer<'tcx> {
+    fn tcx(&self) -> TyCtxt<'tcx> {
+        self.tcx
+    }
+
+    fn visit_operand(&mut self, operand: &mut Operand<'tcx>, _location: Location) {
+        let func_ty = operand.ty(&self.local_decls, self.tcx);
+        if let ty::FnDef(reachable_function, arguments) = *func_ty.kind() {
+            if let Some(any_modifies) = self.tcx.get_diagnostic_name(reachable_function)
+                && any_modifies.as_str() == "KaniAnyModifies"
+            {
+                let Operand::Constant(function_definition) = operand else {
+                    return;
+                };
+                let kani_any_symbol = self
+                    .tcx
+                    .get_diagnostic_item(rustc_span::symbol::Symbol::intern("KaniAny"))
+                    .expect("We should have a `kani::any()` definition at this point.");
+                function_definition.const_ = Const::from_value(
+                    ConstValue::ZeroSized,
+                    self.tcx.type_of(kani_any_symbol).instantiate(self.tcx, arguments),
+                );
+            }
+        }
     }
 }
 
@@ -187,7 +234,7 @@ fn deserialize_mapping(tcx: TyCtxt, val: &str) -> HashMap<DefId, DefId> {
     type Item = (u64, u64);
     let item_to_def_id = |item: Item| -> DefId {
         let hash = DefPathHash(Fingerprint::new(item.0, item.1));
-        tcx.def_path_hash_to_def_id(hash, &mut || panic!())
+        tcx.def_path_hash_to_def_id(hash, &())
     };
     let pairs: Vec<(Item, Item)> = serde_json::from_str(val).unwrap();
     let mut m = HashMap::default();

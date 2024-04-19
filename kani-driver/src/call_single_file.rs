@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use anyhow::Result;
+use kani_metadata::UnstableFeature;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -100,6 +101,14 @@ impl KaniSession {
             flags.push("--coverage-checks".into());
         }
 
+        if self.args.common_args.unstable_features.contains(UnstableFeature::ValidValueChecks) {
+            flags.push("--ub-check=validity".into())
+        }
+
+        if self.args.ignore_locals_lifetime {
+            flags.push("--ignore-storage-markers".into())
+        }
+
         flags.extend(self.args.common_args.unstable_features.as_arguments().map(str::to_string));
 
         // This argument will select the Kani flavour of the compiler. It will be removed before
@@ -123,7 +132,7 @@ impl KaniSession {
                 "-Z",
                 "panic_abort_tests=yes",
                 "-Z",
-                "sanitizer=address",
+                "mir-enable-passes=-RemoveStorageMarkers",
             ]
             .map(OsString::from),
         );

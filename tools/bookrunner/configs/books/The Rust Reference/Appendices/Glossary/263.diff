@@ -1,4 +1,0 @@
-- 1
-+ 1 let ok_num = Ok::<_, ()>(5);
-+ 2 assert!(!ok_num.is_err());
-+ 4 assert!([2, 4, 6][..] == vec[..]);

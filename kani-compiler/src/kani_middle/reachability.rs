@@ -25,7 +25,6 @@ use rustc_middle::ty::{TyCtxt, VtblEntry};
 use rustc_smir::rustc_internal;
 use stable_mir::mir::alloc::{AllocId, GlobalAlloc};
 use stable_mir::mir::mono::{Instance, InstanceKind, MonoItem, StaticDef};
-use stable_mir::mir::pretty::pretty_ty;
 use stable_mir::mir::{
     visit::Location, Body, CastKind, Constant, MirVisitor, PointerCoercion, Rvalue, Terminator,
     TerminatorKind,
@@ -34,15 +33,21 @@ use stable_mir::ty::{Allocation, ClosureKind, ConstantKind, RigidTy, Ty, TyKind}
 use stable_mir::CrateItem;
 use stable_mir::{CrateDef, ItemKind};
 
+use crate::kani_middle::attributes::matches_diagnostic as matches_function;
 use crate::kani_middle::coercion;
 use crate::kani_middle::coercion::CoercionBase;
 use crate::kani_middle::stubbing::{get_stub, validate_instance};
+use crate::kani_middle::transform::BodyTransformation;
 
 /// Collect all reachable items starting from the given starting points.
-pub fn collect_reachable_items(tcx: TyCtxt, starting_points: &[MonoItem]) -> Vec<MonoItem> {
+pub fn collect_reachable_items(
+    tcx: TyCtxt,
+    transformer: &mut BodyTransformation,
+    starting_points: &[MonoItem],
+) -> Vec<MonoItem> {
     // For each harness, collect items using the same collector.
     // I.e.: This will return any item that is reachable from one or more of the starting points.
-    let mut collector = MonoItemsCollector::new(tcx);
+    let mut collector = MonoItemsCollector::new(tcx, transformer);
     for item in starting_points {
         collector.collect(item.clone());
     }
@@ -92,7 +97,11 @@ where
 ///
 /// Probably only specifically useful with a predicate to find `TestDescAndFn` const declarations from
 /// tests and extract the closures from them.
-pub fn filter_const_crate_items<F>(tcx: TyCtxt, mut predicate: F) -> Vec<MonoItem>
+pub fn filter_const_crate_items<F>(
+    tcx: TyCtxt,
+    transformer: &mut BodyTransformation,
+    mut predicate: F,
+) -> Vec<MonoItem>
 where
     F: FnMut(TyCtxt, Instance) -> bool,
 {
@@ -103,7 +112,7 @@ where
         // Only collect monomorphic items.
         if let Ok(instance) = Instance::try_from(item) {
             if predicate(tcx, instance) {
-                let body = instance.body().unwrap();
+                let body = transformer.body(tcx, instance);
                 let mut collector = MonoItemsFnCollector {
                     tcx,
                     body: &body,
@@ -118,9 +127,11 @@ where
     roots
 }
 
-struct MonoItemsCollector<'tcx> {
+struct MonoItemsCollector<'tcx, 'a> {
     /// The compiler context.
     tcx: TyCtxt<'tcx>,
+    /// The body transformation object used to retrieve a transformed body.
+    transformer: &'a mut BodyTransformation,
     /// Set of collected items used to avoid entering recursion loops.
     collected: FxHashSet<MonoItem>,
     /// Items enqueued for visiting.
@@ -129,14 +140,15 @@ struct MonoItemsCollector<'tcx> {
     call_graph: debug::CallGraph,
 }
 
-impl<'tcx> MonoItemsCollector<'tcx> {
-    pub fn new(tcx: TyCtxt<'tcx>) -> Self {
+impl<'tcx, 'a> MonoItemsCollector<'tcx, 'a> {
+    pub fn new(tcx: TyCtxt<'tcx>, transformer: &'a mut BodyTransformation) -> Self {
         MonoItemsCollector {
             tcx,
             collected: FxHashSet::default(),
             queue: vec![],
             #[cfg(debug_assertions)]
             call_graph: debug::CallGraph::default(),
+            transformer,
         }
     }
 
@@ -174,7 +186,7 @@ impl<'tcx> MonoItemsCollector<'tcx> {
     fn visit_fn(&mut self, instance: Instance) -> Vec<MonoItem> {
         let _guard = debug_span!("visit_fn", function=?instance).entered();
         if validate_instance(self.tcx, instance) {
-            let body = instance.body().unwrap();
+            let body = self.transformer.body(self.tcx, instance);
             let mut collector = MonoItemsFnCollector {
                 tcx: self.tcx,
                 collected: FxHashSet::default(),
@@ -421,11 +433,26 @@ impl<'a, 'tcx> MirVisitor for MonoItemsFnCollector<'a, 'tcx> {
                                         `{}`. The function `{}` \
                                         cannot be stubbed by `{}` due to \
                                         generic bounds not being met. Callee: {}",
-                                        pretty_ty(receiver_ty.kind()),
+                                        receiver_ty,
                                         trait_,
                                         caller,
                                         self.tcx.def_path_str(stub),
                                         callee,
+                                    ),
+                                );
+                            } else if matches_function(self.tcx, self.instance.def, "KaniAny") {
+                                let receiver_ty = args.0[0].expect_ty();
+                                let sep = callee.rfind("::").unwrap();
+                                let trait_ = &callee[..sep];
+                                self.tcx.dcx().span_err(
+                                    rustc_internal::internal(self.tcx, terminator.span),
+                                    format!(
+                                        "`{}` doesn't implement \
+                                        `{}`. Callee: `{}`\nPlease, check whether the type of all \
+                                        objects in the modifies clause (including return types) \
+                                        implement `{}`.\nThis is a strict condition to use \
+                                        function contracts as verified stubs.",
+                                        receiver_ty, trait_, callee, trait_,
                                     ),
                                 );
                             } else {
@@ -572,7 +599,8 @@ mod debug {
             if let Ok(target) = std::env::var("KANI_REACH_DEBUG") {
                 debug!(?target, "dump_dot");
                 let outputs = tcx.output_filenames(());
-                let path = outputs.output_path(OutputType::Metadata).with_extension("dot");
+                let base_path = outputs.path(OutputType::Metadata);
+                let path = base_path.as_path().with_extension("dot");
                 let out_file = File::create(path)?;
                 let mut writer = BufWriter::new(out_file);
                 writeln!(writer, "digraph ReachabilityGraph {{")?;
