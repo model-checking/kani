@@ -4,19 +4,12 @@
 use crate::args::OutputFormat;
 use crate::call_cbmc::{FailedProperties, VerificationStatus};
 use crate::cbmc_output_parser::{CheckStatus, ParserItem, Property, TraceItem};
-use crate::coverage::cov_results::{
-    self, fmt_coverage_results, CoverageCheck, CoverageRegion, CoverageResults, CoverageTerm,
-};
+use crate::coverage::cov_results::{fmt_coverage_results, CoverageResults};
 use console::style;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use rustc_demangle::demangle;
-use std::collections::{BTreeMap, HashMap};
-use std::fs::File;
-use std::io::{BufRead, BufReader};
-use std::path::PathBuf;
-use std::sync::OnceLock;
-use strum_macros::{AsRefStr, Display};
+use std::collections::HashMap;
 
 type CbmcAltDescriptions = HashMap<&'static str, Vec<(&'static str, Option<&'static str>)>>;
 

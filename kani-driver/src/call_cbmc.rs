@@ -18,7 +18,7 @@ use crate::cbmc_output_parser::{
     extract_results, process_cbmc_output, CheckStatus, Property, VerificationOutput,
 };
 use crate::cbmc_property_renderer::{format_coverage, format_result, kani_cbmc_output_filter};
-use crate::coverage::cov_results::{self, CoverageCheck, CoverageResults};
+use crate::coverage::cov_results::{CoverageCheck, CoverageResults};
 use crate::coverage::cov_results::{CoverageRegion, CoverageTerm};
 use crate::session::KaniSession;
 
@@ -315,7 +315,7 @@ impl VerificationResult {
         &self,
         output_format: &OutputFormat,
         should_panic: bool,
-        coverage_mode: bool,
+        _coverage_mode: bool,
     ) -> String {
         match &self.results {
             Ok(results) => {
@@ -419,7 +419,7 @@ fn coverage_results_from_properties(properties: &[Property]) -> Option<CoverageR
         static RE: OnceLock<Regex> = OnceLock::new();
         RE.get_or_init(|| {
             Regex::new(
-                r#"^Coverage \{ kind: CounterIncrement\((?<counter_num>[0-9]+)\) \} \((?<func_name>[^)]+)\) - (?<span>.+)"#,
+                r#"^CounterIncrement\((?<counter_num>[0-9]+)\) \((?<func_name>[^)]+)\) - (?<span>.+)"#,
             )
             .unwrap()
         })
@@ -429,7 +429,7 @@ fn coverage_results_from_properties(properties: &[Property]) -> Option<CoverageR
         static RE: OnceLock<Regex> = OnceLock::new();
         RE.get_or_init(|| {
             Regex::new(
-                r#"^Coverage \{ kind: ExpressionUsed\((?<expr_num>[0-9]+)\) \} \((?<func_name>[^)]+)\) - (?<span>.+)"#,
+                r#"^ExpressionUsed\((?<expr_num>[0-9]+)\) \((?<func_name>[^)]+)\) - (?<span>.+)"#,
             )
             .unwrap()
         })
@@ -478,6 +478,7 @@ fn coverage_results_from_properties(properties: &[Property]) -> Option<CoverageR
             }
             prop_processed = true;
         }
+        assert!(prop_processed, "error: coverage property not processed\n{prop:?}");
     }
 
     Some(CoverageResults::new(coverage_results))

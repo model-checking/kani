@@ -11,7 +11,6 @@ pub mod playback_args;
 pub use assess_args::*;
 
 use self::common::*;
-use self::coverage_args::CargoCoverageArgs;
 use crate::args::cargo::CargoTargetArgs;
 use crate::util::warning;
 use cargo::CargoCommonArgs;

@@ -258,12 +258,7 @@ pub mod rustc_smir {
     }
 
     fn parse_coverage(coverage_opaque: Opaque) -> Option<CovTerm> {
-        let coverage_clone = coverage_opaque.to_string();
-        let coverage_str = {
-            let coverage_fmt = format!("{coverage_clone}");
-            let cov_fmt_no_prefix = coverage_fmt.strip_prefix("Coverage { kind: ").unwrap();
-            cov_fmt_no_prefix.strip_suffix(" }").unwrap().to_string()
-        };
+        let coverage_str = coverage_opaque.to_string();
         if coverage_str == "Zero" {
             return Some(CovTerm::Zero);
         } else if let Some(rest) = coverage_str.strip_prefix("CounterIncrement(") {
