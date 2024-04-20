@@ -1,3 +1,6 @@
+// Copyright Kani Contributors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
 use crate::cbmc_output_parser::CheckStatus;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
