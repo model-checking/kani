@@ -44,7 +44,7 @@ use std::ptr::{DynMetadata, NonNull, Pointee};
 /// Note that an unaligned pointer is still considered valid.
 ///
 /// TODO: Kani should automatically add those checks when a de-reference happens.
-/// https://github.com/model-checking/kani/issues/2975
+/// <https://github.com/model-checking/kani/issues/2975>
 ///
 /// This function will either panic or return `true`. This is to make it easier to use it in
 /// contracts.
