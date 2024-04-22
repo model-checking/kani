@@ -5,29 +5,9 @@ use std::fs;
 use std::fs::File;
 use std::io::Write;
 
-use crate::args::coverage_args::CargoCoverageArgs;
-use crate::harness_runner;
 use crate::harness_runner::HarnessResult;
-use crate::project;
 use crate::KaniSession;
 use anyhow::Result;
-use tracing::debug;
-
-pub fn coverage_cargo(mut session: KaniSession, _args: CargoCoverageArgs) -> Result<()> {
-    session.args.coverage = true;
-    let project = project::cargo_project(&session, false)?;
-    let harnesses = session.determine_targets(&project.get_all_harnesses())?;
-    debug!(n = harnesses.len(), ?harnesses, "coverage_cargo");
-
-    // Verification
-    let runner = harness_runner::HarnessRunner { sess: &session, project: &project };
-    let results = runner.check_all_harnesses(&harnesses)?;
-
-    let _ = session.save_cov_results(&results);
-
-    // More to come later
-    Ok(())
-}
 
 impl KaniSession {
     pub fn save_cov_results(&self, results: &Vec<HarnessResult>) -> Result<()> {

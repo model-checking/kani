@@ -116,9 +116,6 @@ pub enum CargoKaniSubcommand {
 
     /// Execute concrete playback testcases of a local package.
     Playback(Box<playback_args::CargoPlaybackArgs>),
-
-    /// TBD
-    Cov(Box<coverage_args::CargoCoverageArgs>),
 }
 
 // Common arguments for invoking Kani for verification purpose. This gets put into KaniContext,
@@ -493,7 +490,6 @@ impl ValidateArgs for CargoKaniSubcommand {
         match self {
             // Assess doesn't implement validation yet.
             CargoKaniSubcommand::Assess(_) => Ok(()),
-            CargoKaniSubcommand::Cov(_) => Ok(()),
             CargoKaniSubcommand::Playback(playback) => playback.validate(),
         }
     }

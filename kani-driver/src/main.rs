@@ -11,7 +11,6 @@ use args_toml::join_args;
 
 use crate::args::StandaloneSubcommand;
 use crate::concrete_playback::playback::{playback_cargo, playback_standalone};
-use crate::coverage::coverage::coverage_cargo;
 use crate::project::Project;
 use crate::session::KaniSession;
 use crate::version::print_kani_version;
@@ -80,9 +79,6 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
         Some(CargoKaniSubcommand::Playback(args)) => {
             return playback_cargo(*args);
         }
-        Some(CargoKaniSubcommand::Cov(args)) => {
-            return coverage_cargo(session, *args);
-        }
         None => {}
     }
 
@@ -122,6 +118,10 @@ fn verify_project(project: Project, session: KaniSession) -> Result<()> {
     // Verification
     let runner = harness_runner::HarnessRunner { sess: &session, project: &project };
     let results = runner.check_all_harnesses(&harnesses)?;
+
+    if session.args.coverage {
+        session.save_cov_results(&results)?;
+    }
 
     session.print_final_summary(&results)
 }
