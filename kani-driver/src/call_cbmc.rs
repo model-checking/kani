@@ -419,7 +419,7 @@ fn coverage_results_from_properties(properties: &[Property]) -> Option<CoverageR
         static RE: OnceLock<Regex> = OnceLock::new();
         RE.get_or_init(|| {
             Regex::new(
-                r#"^CounterIncrement\((?<counter_num>[0-9]+)\) \((?<func_name>[^)]+)\) - (?<span>.+)"#,
+                r#"^CounterIncrement\((?<counter_num>[0-9]+)\) \[(?<func_name>[^\]]+)\] - (?<span>.+)"#,
             )
             .unwrap()
         })
@@ -429,7 +429,7 @@ fn coverage_results_from_properties(properties: &[Property]) -> Option<CoverageR
         static RE: OnceLock<Regex> = OnceLock::new();
         RE.get_or_init(|| {
             Regex::new(
-                r#"^ExpressionUsed\((?<expr_num>[0-9]+)\) \((?<func_name>[^)]+)\) - (?<span>.+)"#,
+                r#"^ExpressionUsed\((?<expr_num>[0-9]+)\) \[(?<func_name>[^\]]+)\] - (?<span>.+)"#,
             )
             .unwrap()
         })
