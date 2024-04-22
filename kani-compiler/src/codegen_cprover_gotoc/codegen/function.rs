@@ -238,8 +238,8 @@ pub mod rustc_smir {
     }
 
     /// Function that should be the internal implementation of opaque
-    pub fn coverage_span<'tcx>(
-        tcx: TyCtxt<'tcx>,
+    pub fn coverage_span(
+        tcx: TyCtxt<'_>,
         coverage: CovTerm,
         instance: Instance,
     ) -> Option<CodeRegion> {
@@ -260,13 +260,13 @@ pub mod rustc_smir {
     fn parse_coverage(coverage_opaque: Opaque) -> Option<CovTerm> {
         let coverage_str = coverage_opaque.to_string();
         if coverage_str == "Zero" {
-            return Some(CovTerm::Zero);
+            Some(CovTerm::Zero)
         } else if let Some(rest) = coverage_str.strip_prefix("CounterIncrement(") {
-            let (num_str, _rest) = rest.split_once(")").unwrap();
+            let (num_str, _rest) = rest.split_once(')').unwrap();
             let num = num_str.parse::<u32>().unwrap();
             Some(CovTerm::Counter(num.into()))
         } else if let Some(rest) = coverage_str.strip_prefix("ExpressionUsed(") {
-            let (num_str, _rest) = rest.split_once(")").unwrap();
+            let (num_str, _rest) = rest.split_once(')').unwrap();
             let num = num_str.parse::<u32>().unwrap();
             Some(CovTerm::Expression(num.into()))
         } else {
