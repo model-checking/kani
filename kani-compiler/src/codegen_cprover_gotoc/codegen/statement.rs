@@ -81,9 +81,24 @@ impl<'tcx> GotocCtx<'tcx> {
                 {
                     Stmt::skip(location)
                 } else {
-                    let sym_e = self.codegen_local(*var_id);
-                    let init = self.codegen_default_initializer(&sym_e);
-                    Stmt::decl(sym_e, init, location)
+                    let global_dead_object = self.ensure_global_var(
+                        "__CPROVER_dead_object",
+                        false,
+                        Type::void_pointer(),
+                        Location::none(),
+                        |_, _| None,
+                    );
+                    Stmt::assign(
+                        global_dead_object.clone(),
+                        global_dead_object
+                            .clone()
+                            .eq(self
+                                .codegen_local(*var_id)
+                                .address_of()
+                                .cast_to(global_dead_object.typ().clone()))
+                            .ternary(global_dead_object.typ().null(), global_dead_object),
+                        location,
+                    )
                 }
             }
             StatementKind::StorageDead(var_id) => {
@@ -92,7 +107,23 @@ impl<'tcx> GotocCtx<'tcx> {
                 {
                     Stmt::skip(location)
                 } else {
-                    Stmt::dead(self.codegen_local(*var_id), location)
+                    let global_dead_object = self.ensure_global_var(
+                        "__CPROVER_dead_object",
+                        false,
+                        Type::void_pointer(),
+                        Location::none(),
+                        |_, _| None,
+                    );
+                    Stmt::assign(
+                        global_dead_object.clone(),
+                        Type::bool().nondet().ternary(
+                            self.codegen_local(*var_id)
+                                .address_of()
+                                .cast_to(global_dead_object.typ().clone()),
+                            global_dead_object,
+                        ),
+                        location,
+                    )
                 }
             }
             StatementKind::Intrinsic(NonDivergingIntrinsic::CopyNonOverlapping(
