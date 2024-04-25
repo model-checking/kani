@@ -61,25 +61,16 @@ where
     crate::assert(!ptr.is_null(), "Expected valid pointer, but found `null`");
 
     let (thin_ptr, metadata) = ptr.to_raw_parts();
-    can_read(&metadata, thin_ptr)
-}
-
-fn can_read<M, T>(metadata: &M, data_ptr: *const ()) -> bool
-where
-    M: PtrProperties<T>,
-    T: ?Sized,
-{
-    let marker = Internal;
-    let sz = metadata.pointee_size(marker);
-    if metadata.dangling(marker) as *const _ == data_ptr {
-        crate::assert(sz == 0, "Dangling pointer is only valid for zero-sized access")
+    let sz = metadata.pointee_size(Internal);
+    if sz == 0 {
+        true // ZST pointers are always valid
     } else {
         crate::assert(
-            is_read_ok(data_ptr, sz),
+            is_read_ok(thin_ptr, sz),
             "Expected valid pointer, but found dangling pointer",
         );
+        true
     }
-    true
 }
 
 mod private {
@@ -257,13 +248,13 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Dangling pointer is only valid for zero-sized access")]
+    #[should_panic(expected = "Expected valid pointer, but found dangling pointer")]
     fn test_dangling_char() {
         test_dangling_of_t::<char>();
     }
 
     #[test]
-    #[should_panic(expected = "Dangling pointer is only valid for zero-sized access")]
+    #[should_panic(expected = "Expected valid pointer, but found dangling pointer")]
     fn test_dangling_slice() {
         test_dangling_of_t::<&str>();
     }

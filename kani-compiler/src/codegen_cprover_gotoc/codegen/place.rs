@@ -11,7 +11,7 @@ use crate::codegen_cprover_gotoc::codegen::typ::std_pointee_type;
 use crate::codegen_cprover_gotoc::utils::{dynamic_fat_ptr, slice_fat_ptr};
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::unwrap_or_return_codegen_unimplemented;
-use cbmc::goto_program::{Expr, ExprValue, Location, Type};
+use cbmc::goto_program::{Expr, ExprValue, Location, Stmt, Type};
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_smir::rustc_internal;
 use rustc_target::abi::{TagEncoding, Variants};
@@ -636,6 +636,14 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
+    fn is_zst_object(&self, expr: &Expr) -> bool {
+        match expr.value() {
+            ExprValue::Symbol { .. } => expr.typ().sizeof(&self.symbol_table) == 0,
+            ExprValue::Member { lhs, .. } => self.is_zst_object(lhs),
+            _ => false,
+        }
+    }
+
     /// Codegen the reference to a given place.
     /// We currently have a somewhat weird way of handling ZST.
     /// - For `*(&T)` where `T: Unsized`, the projection's `goto_expr` is a thin pointer, so we
@@ -647,25 +655,28 @@ impl<'tcx> GotocCtx<'tcx> {
         let projection =
             unwrap_or_return_codegen_unimplemented!(self, self.codegen_place_stable(place));
         if self.use_thin_pointer_stable(place_ty) {
-            // For ZST objects rustc does not necessarily generate individual objects.
-            let need_not_be_unique = match projection.goto_expr.value() {
-                ExprValue::Symbol { .. } => self.is_zst_stable(place_ty),
-                _ => false,
-            };
-            let address_of = projection.goto_expr.address_of();
-            if need_not_be_unique {
-                let global_zst_name = "__kani_zst_object";
-                let zst_typ = self.codegen_ty_stable(place_ty);
-                let global_zst_object = self.ensure_global_var(
-                    global_zst_name,
-                    false,
-                    zst_typ,
-                    Location::none(),
-                    |_, _| None, // zero-sized, so no initialization necessary
+            // For ZST objects rustc does not necessarily generate any actual objects.
+            let need_not_be_an_object = self.is_zst_object(&projection.goto_expr);
+            let address_of = projection.goto_expr.clone().address_of();
+            if need_not_be_an_object {
+                // Create a non-deterministic numeric value, assume it is non-zero and (when
+                // interpreted as an address) of proper alignment for the type, and cast that
+                // numeric value to a pointer type.
+                let loc = projection.goto_expr.location();
+                let (var, decl) =
+                    self.decl_temp_variable(Type::size_t(), Some(Type::size_t().nondet()), *loc);
+                let assume_non_zero =
+                    Stmt::assume(var.clone().neq(Expr::int_constant(0, var.typ().clone())), *loc);
+                let layout = self.layout_of_stable(place_ty);
+                let alignment = Expr::int_constant(layout.align.abi.bytes(), var.typ().clone());
+                let assume_aligned = Stmt::assume(
+                    var.clone().rem(alignment).eq(Expr::int_constant(0, var.typ().clone())),
+                    *loc,
                 );
-                Type::bool().nondet().ternary(
-                    address_of.clone(),
-                    global_zst_object.address_of().cast_to(address_of.typ().clone()),
+                let cast_to_pointer_type = var.cast_to(address_of.typ().clone()).as_stmt(*loc);
+                Expr::statement_expression(
+                    vec![decl, assume_non_zero, assume_aligned, cast_to_pointer_type],
+                    address_of.typ().clone(),
                 )
             } else {
                 // Just return the address of the place dereferenced.
