@@ -1,15 +1,16 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+use crate::codegen_cprover_gotoc::codegen::reverse_postorder;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::Stmt;
 use cbmc::InternedString;
 use rustc_middle::ty::Instance as InstanceInternal;
 use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::Instance;
-use stable_mir::mir::{Body, Local, LocalDecl};
+use stable_mir::mir::{Body, Local, LocalDecl, StatementKind};
 use stable_mir::CrateDef;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// This structure represents useful data about the function we are currently compiling.
 #[derive(Debug)]
@@ -26,6 +27,9 @@ pub struct CurrentFnCtx<'tcx> {
     locals: Vec<LocalDecl>,
     /// A list of pretty names for locals that corrspond to user variables.
     local_names: HashMap<Local, InternedString>,
+    /// Collection of variables that are local to an inner block within this function and never
+    /// escapte that block.
+    inner_locals_not_escaping_block: HashSet<usize>,
     /// The symbol name of the current function
     name: String,
     /// A human readable pretty name for the current function
@@ -47,6 +51,30 @@ impl<'tcx> CurrentFnCtx<'tcx> {
             .iter()
             .filter_map(|info| info.local().map(|local| (local, (&info.name).into())))
             .collect::<HashMap<_, _>>();
+        let mut inner_locals_not_escaping_block: HashSet<usize> = HashSet::new();
+        // let mut marked_dead: HashMap<usize, usize> = HashMap::new();
+        // reverse_postorder(&body).for_each(|bb| {
+        //     body.blocks[bb].statements.iter().for_each(|s| {
+        //         if let StatementKind::StorageDead(var_id) = s.kind {
+        //             *marked_dead.entry(var_id).or_default() += 1
+        //         }
+        //     })
+        // });
+        reverse_postorder(&body).for_each(|bb| {
+            inner_locals_not_escaping_block.extend(body.blocks[bb].statements.iter().filter_map(
+                |s| match s.kind {
+                    StatementKind::StorageLive(var_id) => {
+                        Some(var_id)
+                        // if marked_dead.get(&var_id) == Some(&1) {
+                        //     Some(var_id)
+                        // } else {
+                        //     None
+                        // }
+                    }
+                    _ => None,
+                },
+            ))
+        });
         Self {
             block: vec![],
             instance,
@@ -54,6 +82,7 @@ impl<'tcx> CurrentFnCtx<'tcx> {
             krate: instance.def.krate().name,
             locals,
             local_names,
+            inner_locals_not_escaping_block,
             name,
             readable_name,
             temp_var_counter: 0,
@@ -106,6 +135,10 @@ impl<'tcx> CurrentFnCtx<'tcx> {
 
     pub fn local_name(&self, local: Local) -> Option<InternedString> {
         self.local_names.get(&local).copied()
+    }
+
+    pub fn is_inner_local(&self, local: usize) -> bool {
+        self.inner_locals_not_escaping_block.contains(&local)
     }
 }
 

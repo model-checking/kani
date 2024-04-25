@@ -76,14 +76,20 @@ impl<'tcx> GotocCtx<'tcx> {
                 self.codegen_set_discriminant(dest_ty, dest_expr, *variant_index, location)
             }
             StatementKind::StorageLive(var_id) => {
-                if self.queries.args().ignore_storage_markers {
+                if self.queries.args().ignore_storage_markers
+                    || !self.current_fn().is_inner_local(*var_id)
+                {
                     Stmt::skip(location)
                 } else {
-                    Stmt::decl(self.codegen_local(*var_id, location), None, location)
+                    let sym_e = self.codegen_local(*var_id, location);
+                    let init = self.codegen_default_initializer(&sym_e);
+                    Stmt::decl(sym_e, init, location)
                 }
             }
             StatementKind::StorageDead(var_id) => {
-                if self.queries.args().ignore_storage_markers {
+                if self.queries.args().ignore_storage_markers
+                    || !self.current_fn().is_inner_local(*var_id)
+                {
                     Stmt::skip(location)
                 } else {
                     Stmt::dead(self.codegen_local(*var_id, location), location)
