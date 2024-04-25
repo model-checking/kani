@@ -44,11 +44,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
             // Index 0 represents the return value, which does not need to be
             // declared in the first block
-            if lc < 1
-                || (lc > body.arg_locals().len()
-                    && (self.queries.args().ignore_storage_markers
-                        || !self.current_fn().is_inner_local(lc)))
-            {
+            if lc < 1 || lc > body.arg_locals().len() {
                 let init = self.codegen_default_initializer(&sym_e);
                 self.current_fn_mut().push_onto_block(Stmt::decl(sym_e, init, loc));
             }
