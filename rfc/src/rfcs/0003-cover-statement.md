@@ -1,8 +1,8 @@
 - **Feature Name:** Cover statement (`cover-statement`)
 - **Feature Request Issue:** <https://github.com/model-checking/kani/issues/696>
 - **RFC PR:** <https://github.com/model-checking/kani/pull/1906>
-- **Status:** Unstable
-- **Version:** 1
+- **Status:** Stable
+- **Version:** 2
 
 -------------------
 
@@ -138,8 +138,12 @@ However, if the condition can indeed be covered, verification would fail due to 
 
 ## Open questions
 
-Should we allow format arguments in the macro, e.g. `kani::cover!(x > y, "{} can be greater than {}", x, y)`?
-Users may expect this to be supported since the macro looks similar to the `assert` macro, but Kani doesn't include the formatted string in the message description, since it's not available at compile time.
+- ~Should we allow format arguments in the macro, e.g. `kani::cover!(x > y, "{} can be greater than {}", x, y)`?
+Users may expect this to be supported since the macro looks similar to the `assert` macro, but Kani doesn't include the formatted string in the message description, since it's not available at compile time.~
+  - For now, this macro will not accept format arguments, since this
+    is not well handled by Kani.
+    This is an extesion to this API that can be easily added later on if Kani
+    ever supports runtime formatting.
 
 ## Other Considerations
 

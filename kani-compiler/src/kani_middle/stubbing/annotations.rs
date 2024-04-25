@@ -56,7 +56,7 @@ pub fn update_stub_mapping(
                         "duplicate stub mapping: {} mapped to {} and {}",
                         tcx.def_path_str(orig_id),
                         tcx.def_path_str(stub_id),
-                        tcx.def_path_str(tcx.def_path_hash_to_def_id(other, &mut || panic!()))
+                        tcx.def_path_str(tcx.def_path_hash_to_def_id(other, &()))
                     ),
                 );
             }

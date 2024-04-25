@@ -28,8 +28,10 @@ else
       curl -sSL -o "$FILE" "$URL"
       echo "$EXPECTED_HASH $FILE" | sha256sum -c -
       tar zxf $FILE
+      MDBOOK=${SCRIPT_DIR}/mdbook
+  else
+      MDBOOK=mdbook
   fi
-  MDBOOK=${SCRIPT_DIR}/mdbook
 fi
 
 KANI_DIR=$SCRIPT_DIR/..
