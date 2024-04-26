@@ -65,6 +65,8 @@ where
     if sz == 0 {
         true // ZST pointers are always valid
     } else {
+        // Note that this branch can't be tested in concrete execution as `is_read_ok` needs to be
+        // stubbed.
         crate::assert(
             is_read_ok(thin_ptr, sz),
             "Expected valid pointer, but found dangling pointer",
@@ -245,18 +247,6 @@ mod tests {
 
         let vec_ptr = Vec::<T>::new().as_ptr();
         assert_valid_ptr(vec_ptr);
-    }
-
-    #[test]
-    #[should_panic(expected = "Expected valid pointer, but found dangling pointer")]
-    fn test_dangling_char() {
-        test_dangling_of_t::<char>();
-    }
-
-    #[test]
-    #[should_panic(expected = "Expected valid pointer, but found dangling pointer")]
-    fn test_dangling_slice() {
-        test_dangling_of_t::<&str>();
     }
 
     #[test]
