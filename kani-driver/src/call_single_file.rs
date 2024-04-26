@@ -143,10 +143,6 @@ impl KaniSession {
             flags.push("--ub-check=ptr_to_ref_cast".into())
         }
 
-        if self.args.ignore_locals_lifetime {
-            flags.push("--ignore-storage-markers".into())
-        }
-
         flags.extend(self.args.common_args.unstable_features.as_arguments().map(str::to_string));
 
         // This argument will select the Kani flavour of the compiler. It will be removed before
