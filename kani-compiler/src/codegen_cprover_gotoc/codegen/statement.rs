@@ -77,7 +77,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             StatementKind::StorageLive(var_id) => {
                 if self.queries.args().ignore_storage_markers
-                    || !self.current_fn().is_inner_local(*var_id)
+                    || !self.current_fn().is_address_taken_local(*var_id)
                 {
                     Stmt::skip(location)
                 } else {
@@ -103,7 +103,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             StatementKind::StorageDead(var_id) => {
                 if self.queries.args().ignore_storage_markers
-                    || !self.current_fn().is_inner_local(*var_id)
+                    || !self.current_fn().is_address_taken_local(*var_id)
                 {
                     Stmt::skip(location)
                 } else {
