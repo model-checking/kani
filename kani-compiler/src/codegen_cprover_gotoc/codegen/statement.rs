@@ -76,9 +76,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 self.codegen_set_discriminant(dest_ty, dest_expr, *variant_index, location)
             }
             StatementKind::StorageLive(var_id) => {
-                if self.queries.args().ignore_storage_markers
-                    || !self.current_fn().is_address_taken_local(*var_id)
-                {
+                if !self.current_fn().is_address_taken_local(*var_id) {
                     Stmt::skip(location)
                 } else {
                     let global_dead_object = self.ensure_global_var(
@@ -102,9 +100,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 }
             }
             StatementKind::StorageDead(var_id) => {
-                if self.queries.args().ignore_storage_markers
-                    || !self.current_fn().is_address_taken_local(*var_id)
-                {
+                if !self.current_fn().is_address_taken_local(*var_id) {
                     Stmt::skip(location)
                 } else {
                     let global_dead_object = self.ensure_global_var(
