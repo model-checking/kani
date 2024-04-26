@@ -1221,7 +1221,9 @@ impl<'tcx> GotocCtx<'tcx> {
     // `raw_eq` determines whether the raw bytes of two values are equal.
     // https://doc.rust-lang.org/core/intrinsics/fn.raw_eq.html
     //
-    // The implementation below calls `memcmp` and returns equal if the result is zero.
+    // The implementation below calls `memcmp` and returns equal if the result is zero, and
+    // immediately returns zero when ZSTs are compared to mimic what compare_bytes and our memcmp
+    // hook do.
     //
     // TODO: It's UB to call `raw_eq` if any of the bytes in the first or second
     // arguments are uninitialized. At present, we cannot detect if there is
@@ -1240,13 +1242,17 @@ impl<'tcx> GotocCtx<'tcx> {
         let dst = fargs.remove(0).cast_to(Type::void_pointer());
         let val = fargs.remove(0).cast_to(Type::void_pointer());
         let layout = self.layout_of_stable(ty);
-        let sz = Expr::int_constant(layout.size.bytes(), Type::size_t())
-            .with_size_of_annotation(self.codegen_ty_stable(ty));
-        let e = BuiltinFn::Memcmp
-            .call(vec![dst, val, sz], loc)
-            .eq(Type::c_int().zero())
-            .cast_to(Type::c_bool());
-        self.codegen_expr_to_place_stable(p, e)
+        if layout.size.bytes() == 0 {
+            self.codegen_expr_to_place_stable(p, Expr::int_constant(1, Type::c_bool()))
+        } else {
+            let sz = Expr::int_constant(layout.size.bytes(), Type::size_t())
+                .with_size_of_annotation(self.codegen_ty_stable(ty));
+            let e = BuiltinFn::Memcmp
+                .call(vec![dst, val, sz], loc)
+                .eq(Type::c_int().zero())
+                .cast_to(Type::c_bool());
+            self.codegen_expr_to_place_stable(p, e)
+        }
     }
 
     // This is an operation that is primarily relevant for stacked borrow
@@ -1856,8 +1862,14 @@ impl<'tcx> GotocCtx<'tcx> {
             "`dst` must be properly aligned",
             loc,
         );
-        let expr = dst.dereference().assign(src, loc);
-        Stmt::block(vec![align_check, expr], loc)
+        let deref = dst.dereference();
+        if deref.typ().sizeof(&self.symbol_table) == 0 {
+            // do not attempt to dereference (and assign) a ZST
+            align_check
+        } else {
+            let expr = deref.assign(src, loc);
+            Stmt::block(vec![align_check, expr], loc)
+        }
     }
 
     /// Sets `count * size_of::<T>()` bytes of memory starting at `dst` to `val`
