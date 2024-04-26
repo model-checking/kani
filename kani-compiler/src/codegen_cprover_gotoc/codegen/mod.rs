@@ -23,5 +23,4 @@ pub(super) mod typ;
 
 pub use assert::PropertyClass;
 pub use block::bb_label;
-pub use block::reverse_postorder;
 pub use typ::TypeExt;

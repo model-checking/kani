@@ -1,7 +1,5 @@
 SUCCESS\
 address must be a multiple of its type's alignment
-FAILURE\
-unsafe { *raw_ptr } == 10
 SUCCESS\
 pointer NULL
 SUCCESS\
