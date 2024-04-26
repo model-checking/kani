@@ -1,3 +1,7 @@
+// Copyright Kani Contributors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+// This example demonstrates that rustc may choose not to allocate unique locations to ZST objects.
 #[repr(C)]
 #[derive(Copy, Clone)]
 struct Z(i8, i64);
