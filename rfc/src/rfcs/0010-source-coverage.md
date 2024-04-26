@@ -2,7 +2,7 @@
 - **Feature Request Issue:** <https://github.com/model-checking/kani/issues/2640>
 - **RFC PR:** <https://github.com/model-checking/kani/pull/3143>
 - **Status:** Under Review
-- **Version:** 2
+- **Version:** 1
 - **Proof-of-concept:** <https://github.com/model-checking/kani/pull/3119> (Kani) + <https://github.com/model-checking/kani/pull/3121> (`kani-cov`)
 
 -------------------
@@ -36,7 +36,8 @@ Which translates into faster and more reliable coverage options for users.
 
 ### Update: from line to source coverage
 
-In the previous version of this RFC, we introduced and made available a line coverage option in Kani.
+In our first attempt to add a coverage feature fully managed by Kani, we introduced and made available a line coverage option
+(see [RFC: Line coverage](0008-line-coverage.md) for more details).
 This option has since then allowed us to gather more data around the expectations for a coverage option in Kani.
 
 For example, the line coverage output we produced wasn't easy to interpret without knowing some implementation details.
@@ -54,6 +55,7 @@ In the [next section](#user-experience), we'll explain in more detail how we
 expect `kani-cov` to assist with coverage-related tasks.
 
 With these changes, we expect our coverage options to become more flexible, precise and efficient.
+These options are expected to replace the previous options available through the line coverage feature.
 In the [last section](#future-possibilities) of this RFC,
 we'll also discuss the requirements for a potential integration of this coverage feature with the LLVM toolchain.
 
