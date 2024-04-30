@@ -46,10 +46,10 @@ mod invalid_access {
     }
 
     #[kani::proof]
-    #[kani::should_panic]
     pub fn check_invalid_zst() {
         let raw_ptr: *const [char; 0] =
             unsafe { new_dead_ptr::<[char; 2]>(['a', 'b']) } as *const _;
+        // ZST pointer are always valid
         assert_valid_ptr(raw_ptr);
     }
 
