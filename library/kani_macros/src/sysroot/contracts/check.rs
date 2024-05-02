@@ -13,6 +13,8 @@ use super::{
     ContractConditionsData, ContractConditionsHandler,
 };
 
+const WRAPPER_ARG_PREFIX: &str = "_wrapper_arg_";
+
 impl<'a> ContractConditionsHandler<'a> {
     /// Create the body of a check function.
     ///
@@ -60,8 +62,11 @@ impl<'a> ContractConditionsHandler<'a> {
                 let wrapper_args = if let Some(wrapper_call_args) =
                     inner.iter_mut().find_map(|stmt| try_as_wrapper_call_args(stmt, &wrapper_name))
                 {
-                    let wrapper_args =
-                        make_wrapper_idents(wrapper_call_args.len(), attr.len(), "_wrapper_arg_");
+                    let wrapper_args = make_wrapper_idents(
+                        wrapper_call_args.len(),
+                        attr.len(),
+                        WRAPPER_ARG_PREFIX,
+                    );
                     wrapper_call_args
                         .extend(wrapper_args.clone().map(|a| Expr::Verbatim(quote!(#a))));
                     wrapper_args
@@ -125,15 +130,19 @@ impl<'a> ContractConditionsHandler<'a> {
 
     /// Emit a modifies wrapper, possibly augmenting a prior, existing one.
     ///
-    /// We only augment if this clause is a `modifies` clause. In that case we
-    /// expand its signature with one new argument of type `&impl Arbitrary` for
-    /// each expression in the clause.
+    /// We only augment if this clause is a `modifies` clause. Before,
+    /// we annotated the wrapper arguments with `impl kani::Arbitrary`,
+    /// so Rust would infer the proper types for each argument.
+    /// We want to remove the restriction that these arguments must
+    /// implement `kani::Arbitrary` for checking. Now, we annotate each
+    /// argument with a generic type parameter, so the compiler can
+    /// continue inferring the correct types.
     pub fn emit_augmented_modifies_wrapper(&mut self) {
         if let ContractConditionsData::Modifies { attr } = &self.condition_type {
             let wrapper_args = make_wrapper_idents(
                 self.annotated_fn.sig.inputs.len(),
                 attr.len(),
-                "_wrapper_arg_",
+                WRAPPER_ARG_PREFIX,
             );
             // Generate a unique type parameter identifier
             let type_params = make_wrapper_idents(
@@ -212,7 +221,7 @@ fn try_as_wrapper_call_args<'a>(
     }
 }
 
-/// Make `num` [`Ident`]s with the names `_wrapper_arg_{i}` with `i` starting at `low` and
+/// Make `num` [`Ident`]s with the names `prefix{i}` with `i` starting at `low` and
 /// increasing by one each time.
 fn make_wrapper_idents(
     low: usize,
