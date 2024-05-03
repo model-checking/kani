@@ -228,7 +228,7 @@ fn make_wrapper_idents(
     num: usize,
     prefix: &'static str,
 ) -> impl Iterator<Item = syn::Ident> + Clone + 'static {
-    (low..).map(move |i| Ident::new(&format!("{}{}", prefix, i), Span::mixed_site())).take(num)
+    (low..).map(move |i| Ident::new(&format!("{prefix}{i}"), Span::mixed_site())).take(num)
 }
 
 #[cfg(test)]
