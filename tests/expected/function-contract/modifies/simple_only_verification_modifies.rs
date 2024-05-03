@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Zfunction-contracts
 
-//! Check that is possible to use `modifies` clause for verifciation, but not stubbing.
+//! Check that is possible to use `modifies` clause for verification, but not stubbing.
 //! Here, we cover the case when the modifies clause contains references to function
 //! parameters of generic types. Noticed that here the type T is not annotated with
 //! `kani::Arbitrary` since this is no longer a requirement if the contract is only
