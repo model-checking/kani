@@ -674,6 +674,29 @@ impl<'tcx> GotocCtx<'tcx> {
                     &self.symbol_table,
                 )
             }
+            AggregateKind::RawPtr(pointee_ty, _) => {
+                // We expect two operands: "data" and "meta"
+                assert!(operands.len() == 2);
+                let typ = self.codegen_ty_stable(res_ty);
+                let layout = self.layout_of_stable(res_ty);
+                assert!(layout.ty.is_unsafe_ptr());
+                let data = self.codegen_operand_stable(&operands[0]);
+                //dbg!(pointee_ty.kind());
+                match pointee_ty.kind() {
+                    TyKind::RigidTy(RigidTy::Slice(inner_ty)) => {
+                        let pointee_goto_typ = self.codegen_ty_stable(inner_ty);
+                        // cast data to pointer with specified type
+                        let data_cast =
+                            data.cast_to(Type::Pointer { typ: Box::new(pointee_goto_typ) });
+                        let meta = self.codegen_operand_stable(&operands[1]);
+                        slice_fat_ptr(typ, data_cast, meta, &self.symbol_table)
+                    }
+                    _ => {
+                        let pointee_goto_typ = self.codegen_ty_stable(pointee_ty);
+                        data.cast_to(Type::Pointer { typ: Box::new(pointee_goto_typ) })
+                    }
+                }
+            }
             AggregateKind::Coroutine(_, _, _) => self.codegen_rvalue_coroutine(&operands, res_ty),
         }
     }
