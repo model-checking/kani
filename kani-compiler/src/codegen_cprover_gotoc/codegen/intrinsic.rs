@@ -37,7 +37,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let arg1 = fargs.remove(0);
         let arg2 = fargs.remove(0);
         let expr = f(arg1, arg2);
-        self.codegen_expr_to_place_stable(place, expr)
+        self.codegen_expr_to_place_stable(place, expr, Location::none())
     }
 
     /// Given a call to an compiler intrinsic, generate the call and the `goto` terminator
@@ -149,7 +149,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         mm,
                     );
                 let expr = BuiltinFn::$f.call(casted_fargs, loc);
-                self.codegen_expr_to_place_stable(place, expr)
+                self.codegen_expr_to_place_stable(place, expr, loc)
             }};
         }
 
@@ -166,7 +166,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     loc,
                 );
                 let res = a.$f(b);
-                let expr_place = self.codegen_expr_to_place_stable(place, res);
+                let expr_place = self.codegen_expr_to_place_stable(place, res, loc);
                 Stmt::block(vec![div_overflow_check, expr_place], loc)
             }};
         }
@@ -187,7 +187,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 let arg1 = fargs.remove(0);
                 let arg2 = fargs.remove(0);
                 let expr = arg1.$f(arg2, self.symbol_table.machine_model());
-                self.codegen_expr_to_place_stable(place, expr)
+                self.codegen_expr_to_place_stable(place, expr, loc)
             }};
         }
 
@@ -196,7 +196,7 @@ impl<'tcx> GotocCtx<'tcx> {
         macro_rules! codegen_count_intrinsic {
             ($builtin: ident, $allow_zero: expr) => {{
                 let arg = fargs.remove(0);
-                self.codegen_expr_to_place_stable(place, arg.$builtin($allow_zero))
+                self.codegen_expr_to_place_stable(place, arg.$builtin($allow_zero), loc)
             }};
         }
 
@@ -209,7 +209,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 // We assume that the intrinsic has type checked at this point, so
                 // we can use the place type as the expression type.
                 let expr = self.codegen_allocation(&alloc, place_ty, Some(span));
-                self.codegen_expr_to_place_stable(&place, expr)
+                self.codegen_expr_to_place_stable(&place, expr, loc)
             }};
         }
 
@@ -220,7 +220,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 let target_ty = args.0[0].expect_ty();
                 let arg = fargs.remove(0);
                 let size_align = self.size_and_align_of_dst(*target_ty, arg);
-                self.codegen_expr_to_place_stable(place, size_align.$which)
+                self.codegen_expr_to_place_stable(place, size_align.$which, loc)
             }};
         }
 
@@ -271,7 +271,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     (var1.clone()).$op(var2).with_location(loc)
                 };
                 let assign_stmt = (var1.clone()).assign(op_expr, loc);
-                let res_stmt = self.codegen_expr_to_place_stable(place, tmp.clone());
+                let res_stmt = self.codegen_expr_to_place_stable(place, tmp.clone(), loc);
                 Stmt::atomic_block(vec![decl_stmt, assign_stmt, res_stmt], loc)
             }};
         }
@@ -284,7 +284,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     loc,
                     "https://github.com/model-checking/kani/issues/new/choose",
                 );
-                self.codegen_expr_to_place_stable(place, expr)
+                self.codegen_expr_to_place_stable(place, expr, loc)
             }};
         }
 
@@ -387,12 +387,14 @@ impl<'tcx> GotocCtx<'tcx> {
             "atomic_xsub_acqrel" => codegen_atomic_binop!(sub),
             "atomic_xsub_release" => codegen_atomic_binop!(sub),
             "atomic_xsub_relaxed" => codegen_atomic_binop!(sub),
-            "bitreverse" => self.codegen_expr_to_place_stable(place, fargs.remove(0).bitreverse()),
+            "bitreverse" => {
+                self.codegen_expr_to_place_stable(place, fargs.remove(0).bitreverse(), loc)
+            }
             // black_box is an identity function that hints to the compiler
             // to be maximally pessimistic to limit optimizations
-            "black_box" => self.codegen_expr_to_place_stable(place, fargs.remove(0)),
+            "black_box" => self.codegen_expr_to_place_stable(place, fargs.remove(0), loc),
             "breakpoint" => Stmt::skip(loc),
-            "bswap" => self.codegen_expr_to_place_stable(place, fargs.remove(0).bswap()),
+            "bswap" => self.codegen_expr_to_place_stable(place, fargs.remove(0).bswap(), loc),
             "caller_location" => self.codegen_unimplemented_stmt(
                 intrinsic,
                 loc,
@@ -423,7 +425,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 let sig = instance.ty().kind().fn_sig().unwrap().skip_binder();
                 let ty = pointee_type_stable(sig.inputs()[0]).unwrap();
                 let e = self.codegen_get_discriminant(fargs.remove(0).dereference(), ty, ret_ty);
-                self.codegen_expr_to_place_stable(place, e)
+                self.codegen_expr_to_place_stable(place, e, loc)
             }
             "exact_div" => self.codegen_exact_div(fargs, place, loc),
             "exp2f32" => codegen_simple_intrinsic!(Exp2f),
@@ -460,9 +462,9 @@ impl<'tcx> GotocCtx<'tcx> {
             "is_val_statically_known" => {
                 // Returning false is sound according do this intrinsic's documentation:
                 // https://doc.rust-lang.org/nightly/std/intrinsics/fn.is_val_statically_known.html
-                self.codegen_expr_to_place_stable(place, Expr::c_false())
+                self.codegen_expr_to_place_stable(place, Expr::c_false(), loc)
             }
-            "likely" => self.codegen_expr_to_place_stable(place, fargs.remove(0)),
+            "likely" => self.codegen_expr_to_place_stable(place, fargs.remove(0), loc),
             "log10f32" => unstable_codegen!(codegen_simple_intrinsic!(Log10f)),
             "log10f64" => unstable_codegen!(codegen_simple_intrinsic!(Log10)),
             "log2f32" => unstable_codegen!(codegen_simple_intrinsic!(Log2f)),
@@ -490,7 +492,7 @@ impl<'tcx> GotocCtx<'tcx> {
             "powif32" => unstable_codegen!(codegen_simple_intrinsic!(Powif)),
             "powif64" => unstable_codegen!(codegen_simple_intrinsic!(Powi)),
             "pref_align_of" => codegen_intrinsic_const!(),
-            "ptr_guaranteed_cmp" => self.codegen_ptr_guaranteed_cmp(fargs, place),
+            "ptr_guaranteed_cmp" => self.codegen_ptr_guaranteed_cmp(fargs, place, loc),
             "ptr_offset_from" => self.codegen_ptr_offset_from(fargs, place, loc),
             "ptr_offset_from_unsigned" => self.codegen_ptr_offset_from_unsigned(fargs, place, loc),
             "raw_eq" => self.codegen_intrinsic_raw_eq(instance, fargs, place, loc),
@@ -575,16 +577,18 @@ impl<'tcx> GotocCtx<'tcx> {
                 place,
                 loc,
             ),
-            "transmute" => self.codegen_intrinsic_transmute(fargs, ret_ty, place),
+            "transmute" => self.codegen_intrinsic_transmute(fargs, ret_ty, place, loc),
             "truncf32" => codegen_simple_intrinsic!(Truncf),
             "truncf64" => codegen_simple_intrinsic!(Trunc),
             "type_id" => codegen_intrinsic_const!(),
             "type_name" => codegen_intrinsic_const!(),
             "typed_swap" => self.codegen_swap(fargs, farg_types, loc),
             "unaligned_volatile_load" => {
-                unstable_codegen!(
-                    self.codegen_expr_to_place_stable(place, fargs.remove(0).dereference())
-                )
+                unstable_codegen!(self.codegen_expr_to_place_stable(
+                    place,
+                    fargs.remove(0).dereference(),
+                    loc
+                ))
             }
             "unchecked_add" | "unchecked_mul" | "unchecked_shl" | "unchecked_shr"
             | "unchecked_sub" => {
@@ -592,7 +596,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             "unchecked_div" => codegen_op_with_div_overflow_check!(div),
             "unchecked_rem" => codegen_op_with_div_overflow_check!(rem),
-            "unlikely" => self.codegen_expr_to_place_stable(place, fargs.remove(0)),
+            "unlikely" => self.codegen_expr_to_place_stable(place, fargs.remove(0), loc),
             "unreachable" => unreachable!(
                 "Expected `std::intrinsics::unreachable` to be handled by `TerminatorKind::Unreachable`"
             ),
@@ -634,7 +638,8 @@ impl<'tcx> GotocCtx<'tcx> {
         if !arg.typ().is_integer() {
             self.intrinsics_typecheck_fail(span, "ctpop", "integer type", arg_rust_ty)
         } else {
-            self.codegen_expr_to_place_stable(&target_place, arg.popcount())
+            let loc = self.codegen_span_stable(span);
+            self.codegen_expr_to_place_stable(&target_place, arg.popcount(), loc)
         }
     }
 
@@ -723,6 +728,7 @@ impl<'tcx> GotocCtx<'tcx> {
         self.codegen_expr_to_place_stable(
             place,
             Expr::statement_expression(vec![res.as_stmt(loc)], result_type),
+            loc,
         )
     }
 
@@ -756,7 +762,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     "exact_div division does not overflow",
                     loc,
                 ),
-                self.codegen_expr_to_place_stable(p, a.div(b)),
+                self.codegen_expr_to_place_stable(p, a.div(b), loc),
             ],
             loc,
         )
@@ -857,7 +863,7 @@ impl<'tcx> GotocCtx<'tcx> {
         self.store_concurrent_construct(intrinsic, loc);
         let var1_ref = fargs.remove(0);
         let var1 = var1_ref.dereference().with_location(loc);
-        let res_stmt = self.codegen_expr_to_place_stable(p, var1);
+        let res_stmt = self.codegen_expr_to_place_stable(p, var1, loc);
         Stmt::atomic_block(vec![res_stmt], loc)
     }
 
@@ -897,7 +903,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let tuple_expr =
             Expr::struct_expr_from_values(res_type, vec![tmp, Expr::c_true()], &self.symbol_table)
                 .with_location(loc);
-        let res_stmt = self.codegen_expr_to_place_stable(p, tuple_expr);
+        let res_stmt = self.codegen_expr_to_place_stable(p, tuple_expr, loc);
         Stmt::atomic_block(vec![decl_stmt, cond_update_stmt, res_stmt], loc)
     }
 
@@ -925,7 +931,7 @@ impl<'tcx> GotocCtx<'tcx> {
             self.decl_temp_variable(var1.typ().clone(), Some(var1.to_owned()), loc);
         let var2 = fargs.remove(0).with_location(loc);
         let assign_stmt = var1.assign(var2, loc);
-        let res_stmt = self.codegen_expr_to_place_stable(place, tmp);
+        let res_stmt = self.codegen_expr_to_place_stable(place, tmp, loc);
         Stmt::atomic_block(vec![decl_stmt, assign_stmt, res_stmt], loc)
     }
 
@@ -1003,7 +1009,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // fail on passing a reference to it unless we codegen this zero check.
         let copy_if_nontrivial = count_bytes.is_zero().ternary(dst, copy_call);
         let copy_expr = if let Some(p) = p {
-            self.codegen_expr_to_place_stable(p, copy_if_nontrivial)
+            self.codegen_expr_to_place_stable(p, copy_if_nontrivial, loc)
         } else {
             copy_if_nontrivial.as_stmt(loc)
         };
@@ -1057,14 +1063,19 @@ impl<'tcx> GotocCtx<'tcx> {
     //
     // This intrinsic replaces `ptr_guaranteed_eq` and `ptr_guaranteed_ne`:
     // https://doc.rust-lang.org/beta/std/primitive.pointer.html#method.guaranteed_eq
-    fn codegen_ptr_guaranteed_cmp(&mut self, mut fargs: Vec<Expr>, p: &Place) -> Stmt {
+    fn codegen_ptr_guaranteed_cmp(
+        &mut self,
+        mut fargs: Vec<Expr>,
+        p: &Place,
+        loc: Location,
+    ) -> Stmt {
         let a = fargs.remove(0);
         let b = fargs.remove(0);
         let place_type = self.place_ty_stable(p);
         let res_type = self.codegen_ty_stable(place_type);
         let eq_expr = a.eq(b);
         let cmp_expr = eq_expr.ternary(res_type.one(), res_type.zero());
-        self.codegen_expr_to_place_stable(p, cmp_expr)
+        self.codegen_expr_to_place_stable(p, cmp_expr, loc)
     }
 
     /// Computes the offset from a pointer.
@@ -1112,7 +1123,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
         // Re-compute `dst_ptr` with standard addition to avoid conversion
         let dst_ptr = src_ptr.plus(offset);
-        let expr_place = self.codegen_expr_to_place_stable(p, dst_ptr);
+        let expr_place = self.codegen_expr_to_place_stable(p, dst_ptr, loc);
         Stmt::block(vec![bytes_overflow_check, overflow_check, expr_place], loc)
     }
 
@@ -1131,7 +1142,7 @@ impl<'tcx> GotocCtx<'tcx> {
             loc,
         );
 
-        let offset_expr = self.codegen_expr_to_place_stable(p, offset_expr);
+        let offset_expr = self.codegen_expr_to_place_stable(p, offset_expr, loc);
         Stmt::block(vec![overflow_check, offset_expr], loc)
     }
 
@@ -1163,7 +1174,8 @@ impl<'tcx> GotocCtx<'tcx> {
             loc,
         );
 
-        let offset_expr = self.codegen_expr_to_place_stable(p, offset_expr.cast_to(Type::size_t()));
+        let offset_expr =
+            self.codegen_expr_to_place_stable(p, offset_expr.cast_to(Type::size_t()), loc);
         Stmt::block(vec![overflow_check, non_negative_check, offset_expr], loc)
     }
 
@@ -1210,12 +1222,18 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Note(std): An earlier attempt to add alignment checks for both the argument and result types
     /// had catastrophic results in the regression. Hence, we don't perform any additional checks
     /// and only encode the transmute operation here.
-    fn codegen_intrinsic_transmute(&mut self, mut fargs: Vec<Expr>, ret_ty: Ty, p: &Place) -> Stmt {
+    fn codegen_intrinsic_transmute(
+        &mut self,
+        mut fargs: Vec<Expr>,
+        ret_ty: Ty,
+        p: &Place,
+        loc: Location,
+    ) -> Stmt {
         assert!(fargs.len() == 1, "transmute had unexpected arguments {fargs:?}");
         let arg = fargs.remove(0);
         let cbmc_ret_ty = self.codegen_ty_stable(ret_ty);
         let expr = arg.transmute_to(cbmc_ret_ty, &self.symbol_table);
-        self.codegen_expr_to_place_stable(p, expr)
+        self.codegen_expr_to_place_stable(p, expr, loc)
     }
 
     // `raw_eq` determines whether the raw bytes of two values are equal.
@@ -1243,7 +1261,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let val = fargs.remove(0).cast_to(Type::void_pointer());
         let layout = self.layout_of_stable(ty);
         if layout.size.bytes() == 0 {
-            self.codegen_expr_to_place_stable(p, Expr::int_constant(1, Type::c_bool()))
+            self.codegen_expr_to_place_stable(p, Expr::int_constant(1, Type::c_bool()), loc)
         } else {
             let sz = Expr::int_constant(layout.size.bytes(), Type::size_t())
                 .with_size_of_annotation(self.codegen_ty_stable(ty));
@@ -1251,21 +1269,16 @@ impl<'tcx> GotocCtx<'tcx> {
                 .call(vec![dst, val, sz], loc)
                 .eq(Type::c_int().zero())
                 .cast_to(Type::c_bool());
-            self.codegen_expr_to_place_stable(p, e)
+            self.codegen_expr_to_place_stable(p, e, loc)
         }
     }
 
     // This is an operation that is primarily relevant for stacked borrow
     // checks.  For Kani, we simply return the pointer.
-    fn codegen_retag_box_to_raw(
-        &mut self,
-        mut fargs: Vec<Expr>,
-        p: &Place,
-        _loc: Location,
-    ) -> Stmt {
+    fn codegen_retag_box_to_raw(&mut self, mut fargs: Vec<Expr>, p: &Place, loc: Location) -> Stmt {
         assert_eq!(fargs.len(), 1, "raw_box_to_box expected one argument");
         let arg = fargs.remove(0);
-        self.codegen_expr_to_place_stable(p, arg)
+        self.codegen_expr_to_place_stable(p, arg, loc)
     }
 
     fn vtable_info(
@@ -1273,7 +1286,7 @@ impl<'tcx> GotocCtx<'tcx> {
         info: VTableInfo,
         mut fargs: Vec<Expr>,
         place: &Place,
-        _loc: Location,
+        loc: Location,
     ) -> Stmt {
         assert_eq!(fargs.len(), 1, "vtable intrinsics expects one raw pointer argument");
         let vtable_obj = fargs
@@ -1285,7 +1298,7 @@ impl<'tcx> GotocCtx<'tcx> {
             VTableInfo::Size => vtable_obj.member(typ::VTABLE_SIZE_FIELD, &self.symbol_table),
             VTableInfo::Align => vtable_obj.member(typ::VTABLE_ALIGN_FIELD, &self.symbol_table),
         };
-        self.codegen_expr_to_place_stable(place, expr)
+        self.codegen_expr_to_place_stable(place, expr, loc)
     }
 
     /// Gets the length for a `simd_shuffle*` instance, which comes in two
@@ -1465,7 +1478,8 @@ impl<'tcx> GotocCtx<'tcx> {
         }
         self.tcx.dcx().abort_if_errors();
 
-        self.codegen_expr_to_place_stable(p, vec.index_array(index))
+        let loc = self.codegen_span_stable(span);
+        self.codegen_expr_to_place_stable(p, vec.index_array(index), loc)
     }
 
     /// Insert is a generic update of a single value in a SIMD vector.
@@ -1512,7 +1526,7 @@ impl<'tcx> GotocCtx<'tcx> {
             vec![
                 decl,
                 tmp.clone().index_array(index).assign(newval.cast_to(elem_ty), loc),
-                self.codegen_expr_to_place_stable(p, tmp),
+                self.codegen_expr_to_place_stable(p, tmp, loc),
             ],
             loc,
         )
@@ -1585,7 +1599,8 @@ impl<'tcx> GotocCtx<'tcx> {
 
         // Create the vector comparison expression
         let e = f(arg1, arg2, ret_typ);
-        self.codegen_expr_to_place_stable(p, e)
+        let loc = self.codegen_span_stable(span);
+        self.codegen_expr_to_place_stable(p, e, loc)
     }
 
     /// Codegen for `simd_div` and `simd_rem` intrinsics.
@@ -1655,7 +1670,7 @@ impl<'tcx> GotocCtx<'tcx> {
             loc,
         );
         let res = op_fun(a, b);
-        let expr_place = self.codegen_expr_to_place_stable(p, res);
+        let expr_place = self.codegen_expr_to_place_stable(p, res, loc);
         Stmt::block(vec![check_stmt, expr_place], loc)
     }
 
@@ -1713,7 +1728,7 @@ impl<'tcx> GotocCtx<'tcx> {
             _ => unreachable!("expected a simd shift intrinsic"),
         };
         let res = op_fun(values, distances);
-        let expr_place = self.codegen_expr_to_place_stable(p, res);
+        let expr_place = self.codegen_expr_to_place_stable(p, res, loc);
 
         if distance_is_signed {
             let negative_check_stmt = self.codegen_assert_assume(
@@ -1806,7 +1821,8 @@ impl<'tcx> GotocCtx<'tcx> {
             .collect();
         self.tcx.dcx().abort_if_errors();
         let cbmc_ret_ty = self.codegen_ty_stable(rust_ret_type);
-        self.codegen_expr_to_place_stable(p, Expr::vector_expr(cbmc_ret_ty, elems))
+        let loc = self.codegen_span_stable(span);
+        self.codegen_expr_to_place_stable(p, Expr::vector_expr(cbmc_ret_ty, elems), loc)
     }
 
     /// A volatile load of a memory location:
@@ -1836,7 +1852,7 @@ impl<'tcx> GotocCtx<'tcx> {
             loc,
         );
         let expr = src.dereference();
-        let res_stmt = self.codegen_expr_to_place_stable(p, expr);
+        let res_stmt = self.codegen_expr_to_place_stable(p, expr, loc);
         Stmt::block(vec![align_check, res_stmt], loc)
     }
 
