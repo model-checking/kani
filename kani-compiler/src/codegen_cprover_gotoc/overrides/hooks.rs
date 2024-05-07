@@ -13,7 +13,7 @@ use crate::codegen_cprover_gotoc::codegen::{bb_label, PropertyClass};
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::kani_middle::attributes::matches_diagnostic as matches_function;
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
-use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Type};
+use cbmc::goto_program::{BuiltinFn, Expr, Stmt, Type};
 use rustc_middle::ty::TyCtxt;
 use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::Instance;
@@ -236,9 +236,9 @@ impl GotocHook for IsReadOk {
         Stmt::block(
             vec![
                 ret_place.goto_expr.assign(Expr::read_ok(ptr, size).cast_to(ret_type), loc),
-                Stmt::goto(bb_label(target), Location::none()),
+                Stmt::goto(bb_label(target), loc),
             ],
-            Location::none(),
+            loc,
         )
     }
 }
@@ -278,9 +278,9 @@ impl GotocHook for RustAlloc {
                         .cast_to(Type::unsigned_int(8).to_pointer()),
                     loc,
                 ),
-                Stmt::goto(bb_label(target), Location::none()),
+                Stmt::goto(bb_label(target), loc),
             ],
-            Location::none(),
+            loc,
         )
     }
 }

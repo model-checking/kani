@@ -163,7 +163,7 @@ impl<'tcx> GotocCtx<'tcx> {
             TerminatorKind::Return => {
                 let rty = self.current_fn().instance_stable().fn_abi().unwrap().ret.ty;
                 if rty.kind().is_unit() {
-                    self.codegen_ret_unit()
+                    self.codegen_ret_unit(loc)
                 } else {
                     let place = Place::from(RETURN_LOCAL);
                     let place_expr = unwrap_or_return_codegen_unimplemented_stmt!(
@@ -323,17 +323,12 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// A special case handler to codegen `return ();`
-    fn codegen_ret_unit(&mut self) -> Stmt {
+    fn codegen_ret_unit(&mut self, loc: Location) -> Stmt {
         let is_file_local = false;
         let ty = self.codegen_ty_unit();
-        let var = self.ensure_global_var(
-            FN_RETURN_VOID_VAR_NAME,
-            is_file_local,
-            ty,
-            Location::none(),
-            |_, _| None,
-        );
-        Stmt::ret(Some(var), Location::none())
+        let var =
+            self.ensure_global_var(FN_RETURN_VOID_VAR_NAME, is_file_local, ty, loc, |_, _| None);
+        Stmt::ret(Some(var), loc)
     }
 
     /// Generates Goto-C for MIR [TerminatorKind::Drop] calls. We only handle code _after_ Rust's "drop elaboration"
@@ -584,13 +579,11 @@ impl<'tcx> GotocCtx<'tcx> {
                         if instance.is_foreign_item() {
                             vec![self.codegen_foreign_call(func_exp, fargs, destination, loc)]
                         } else {
-                            vec![
-                                self.codegen_expr_to_place_stable(
-                                    destination,
-                                    func_exp.call(fargs),
-                                )
-                                .with_location(loc),
-                            ]
+                            vec![self.codegen_expr_to_place_stable(
+                                destination,
+                                func_exp.call(fargs),
+                                loc,
+                            )]
                         }
                     }
                 };
@@ -612,8 +605,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 // Actually generate the function call and return.
                 Stmt::block(
                     vec![
-                        self.codegen_expr_to_place_stable(destination, func_expr.call(fargs))
-                            .with_location(loc),
+                        self.codegen_expr_to_place_stable(destination, func_expr.call(fargs), loc),
                         Stmt::goto(bb_label(target.unwrap()), loc),
                     ],
                     loc,
@@ -710,7 +702,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
         // Virtual function call and corresponding nonnull assertion.
         let call = fn_ptr.dereference().call(fargs.to_vec());
-        let call_stmt = self.codegen_expr_to_place_stable(place, call).with_location(loc);
+        let call_stmt = self.codegen_expr_to_place_stable(place, call, loc);
         let call_stmt = if self.vtable_ctx.emit_vtable_restrictions {
             self.virtual_call_with_restricted_fn_ptr(trait_fat_ptr.typ().clone(), idx, call_stmt)
         } else {
@@ -725,13 +717,18 @@ impl<'tcx> GotocCtx<'tcx> {
     /// A MIR [Place] is an L-value (i.e. the LHS of an assignment).
     ///
     /// In Kani, we slightly optimize the special case for Unit and don't assign anything.
-    pub(crate) fn codegen_expr_to_place_stable(&mut self, place: &Place, expr: Expr) -> Stmt {
+    pub(crate) fn codegen_expr_to_place_stable(
+        &mut self,
+        place: &Place,
+        expr: Expr,
+        loc: Location,
+    ) -> Stmt {
         if self.place_ty_stable(place).kind().is_unit() {
-            expr.as_stmt(Location::none())
+            expr.as_stmt(loc)
         } else {
             unwrap_or_return_codegen_unimplemented_stmt!(self, self.codegen_place_stable(place))
                 .goto_expr
-                .assign(expr, Location::none())
+                .assign(expr, loc)
         }
     }
 }
