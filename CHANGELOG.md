@@ -4,6 +4,20 @@ This file contains notable changes (e.g. breaking changes, major changes, etc.) 
 
 This file was introduced starting Kani 0.23.0, so it only contains changes from version 0.23.0 onwards.
 
+## [0.51.0]
+
+## What's Changed
+
+* Do not assume that ZST-typed symbols refer to unique objects by @tautschnig in https://github.com/model-checking/kani/pull/3134
+* Remove kani::Arbitrary from the modifies contract instrumentation by @feliperodri in https://github.com/model-checking/kani/pull/3169
+* Emit source locations whenever possible to ease debugging and coverage reporting by @tautschnig in https://github.com/model-checking/kani/pull/3173
+* Fix cargo audit error by @jaisnan in https://github.com/model-checking/kani/pull/3160
+* Rust toolchain is upgraded to nightly-2024-04-21 by @celinval
+
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.50.0...kani-0.51.0
+
+
 ## [0.50.0]
 
 ### Major Changes
