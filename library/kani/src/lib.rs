@@ -140,25 +140,6 @@ pub const fn assert(cond: bool, msg: &'static str) {
 #[rustc_diagnostic_item = "KaniCover"]
 pub const fn cover(_cond: bool, _msg: &'static str) {}
 
-/// This function is only used for loop contract annotation.
-/// It behaves as a placeholder to telling us where is the loop head and loop end
-/// that we want to annotate to.
-#[inline(never)]
-#[rustc_diagnostic_item = "KaniLoopInvariant"]
-pub const fn kani_loop_invariant(_cond: bool) {}
-
-/// This function is only used for loop contract annotation.
-/// It behaves as a placeholder to telling us where the loop invariants stmts begin.
-#[inline(never)]
-#[rustc_diagnostic_item = "KaniLoopInvariantBegin"]
-pub const fn kani_loop_invariant_begin() {}
-
-/// This function is only used for loop contract annotation.
-/// It behaves as a placeholder to telling us where the loop invariants stmts end.
-#[inline(never)]
-#[rustc_diagnostic_item = "KaniLoopInvariantEnd"]
-pub const fn kani_loop_invariant_end() {}
-
 /// This creates an symbolic *valid* value of type `T`. You can assign the return value of this
 /// function to a variable that you want to make symbolic.
 ///

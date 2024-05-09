@@ -64,7 +64,7 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
         ),
     }
 
-    quote!(;
+    quote!(
         #loop_stmt;)
     .into()
 }

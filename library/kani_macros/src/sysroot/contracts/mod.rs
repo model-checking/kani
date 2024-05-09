@@ -238,7 +238,7 @@ use syn::{parse_macro_input, Expr, ItemFn};
 
 mod bootstrap;
 mod check;
-pub mod helpers;
+mod helpers;
 mod initialize;
 mod replace;
 mod shared;

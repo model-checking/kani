@@ -223,7 +223,6 @@ mod sysroot {
     mod contracts;
     mod loop_contracts;
 
-    use contracts::helpers::*;
     pub use contracts::{ensures, modifies, proof_for_contract, requires, stub_verified};
     pub use loop_contracts::loop_invariant;
 
@@ -365,77 +364,6 @@ mod sysroot {
     kani_attribute!(stub);
     kani_attribute!(unstable);
     kani_attribute!(unwind);
-
-    pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
-        // Update the loop counter to distinguish loop invariants for different loops.
-        unsafe {
-            LOOP_INVARIANT_COUNT += 1;
-        }
-
-        let mut loop_stmt: Stmt = syn::parse(item.clone()).unwrap();
-        // Parse the loop invariant expression.
-        let inv_expr: Expr = chunks_by(TokenStream2::from(attr.clone()), is_token_stream_2_comma)
-            .map(syn::parse2::<Expr>)
-            .filter_map(|expr| match expr {
-                Err(_) => None,
-                Ok(expr) => Some(expr),
-            })
-            .collect::<Vec<_>>()[0]
-            .clone();
-
-        // Annotate a place holder function call
-        //  kani::kani_loop_invariant()
-        // at the end of the loop.
-        match loop_stmt {
-            Stmt::Expr(ref mut e, _) => match e {
-                Expr::While(ref mut ew) => {
-                    // A while loop of the form 
-                    // ``` rust
-                    //  while guard {
-                    //      body
-                    //  }
-                    // ```
-                    // is annotated as 
-                    // ``` rust
-                    //  kani::kani_loop_invariant_begin();
-                    //  let __kani_loop_invariant_1 = ||(inv);
-                    //  kani::kani_loop_invariant_end();
-                    //  while guard{
-                    //      body    
-                    //      kani::kani_loop_invariant(true);
-                    //  }
-                    // ```
-                    let end_stmt: Stmt = syn::parse(
-                        quote!(
-                            kani::kani_loop_invariant(true);)
-                        .into(),
-                    )
-                    .unwrap();
-                    ew.body.stmts.push(end_stmt);
-                }
-                _ => (),
-            },
-            _ => todo!("implement support for loops other than while loops."),
-        }
-
-        // instrument the invariants as a closure,
-        // and the call to the closure between two placeholders
-        // TODO: all variables in inv_expr should be reference.
-        unsafe {
-            let closre_name = Ident::new(
-                &format!("__kani_loop_invariant_{LOOP_INVARIANT_COUNT}"),
-                Span::call_site(),
-            );
-            quote!(
-                let #closre_name = ||(#inv_expr);
-                kani::kani_loop_invariant_begin();
-                #closre_name();
-                kani::kani_loop_invariant_end();
-                #loop_stmt
-            )
-            .into()
-        }
-    }
 }
 
 /// This module provides dummy implementations of Kani attributes which cannot be interpreted by
