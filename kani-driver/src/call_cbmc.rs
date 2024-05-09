@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 
 use crate::args::{OutputFormat, VerificationArgs};
 use crate::cbmc_output_parser::{
-    extract_results, process_cbmc_output, CheckStatus, ParserItem, Property, VerificationOutput,
+    extract_results, process_cbmc_output, CheckStatus, Property, VerificationOutput,
 };
 use crate::cbmc_property_renderer::{format_coverage, format_result, kani_cbmc_output_filter};
 use crate::session::KaniSession;
@@ -45,9 +45,6 @@ pub struct VerificationResult {
     pub status: VerificationStatus,
     /// The compact representation for failed properties
     pub failed_properties: FailedProperties,
-    /// The parsed output, message by message, of CBMC. However, the `Result` message has been
-    /// removed and is available in `results` instead.
-    pub messages: Option<Vec<ParserItem>>,
     /// The `Result` properties in detail or the exit_status of CBMC.
     /// Note: CBMC process exit status is only potentially useful if `status` is `Failure`.
     /// Kani will see CBMC report "failure" that's actually success (interpreting "failed"
@@ -254,7 +251,7 @@ impl VerificationResult {
         start_time: Instant,
     ) -> VerificationResult {
         let runtime = start_time.elapsed();
-        let (items, results) = extract_results(output.processed_items);
+        let (_, results) = extract_results(output.processed_items);
 
         if let Some(results) = results {
             let (status, failed_properties) =
@@ -262,7 +259,6 @@ impl VerificationResult {
             VerificationResult {
                 status,
                 failed_properties,
-                messages: Some(items),
                 results: Ok(results),
                 runtime,
                 generated_concrete_test: false,
@@ -272,7 +268,6 @@ impl VerificationResult {
             VerificationResult {
                 status: VerificationStatus::Failure,
                 failed_properties: FailedProperties::Other,
-                messages: Some(items),
                 results: Err(output.process_status),
                 runtime,
                 generated_concrete_test: false,
@@ -284,7 +279,6 @@ impl VerificationResult {
         VerificationResult {
             status: VerificationStatus::Success,
             failed_properties: FailedProperties::None,
-            messages: None,
             results: Ok(vec![]),
             runtime: Duration::from_secs(0),
             generated_concrete_test: false,
@@ -295,7 +289,6 @@ impl VerificationResult {
         VerificationResult {
             status: VerificationStatus::Failure,
             failed_properties: FailedProperties::Other,
-            messages: None,
             // on failure, exit codes in theory might be used,
             // but `mock_failure` should never be used in a context where they will,
             // so again use something weird:

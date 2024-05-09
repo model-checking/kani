@@ -3,16 +3,6 @@
 version = 3
 
 [[package]]
-name = "Inflector"
-version = "0.11.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fe438c63458706e03479442743baae6c88256498e6431708f6dfc520a26515d3"
-dependencies = [
- "lazy_static",
- "regex",
-]
-
-[[package]]
 name = "ahash"
 version = "0.8.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -106,22 +96,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf4b9d6a944f767f8e5e0db018570623c85f3d925ac718db4e06d0187adb21c1"
 
 [[package]]
-name = "bookrunner"
-version = "0.1.0"
-dependencies = [
- "Inflector",
- "pulldown-cmark",
- "pulldown-cmark-escape",
- "rustdoc",
- "serde",
- "serde_json",
- "toml",
- "walkdir",
-]
-
-[[package]]
 name = "build-kani"
-version = "0.48.0"
+version = "0.51.0"
 dependencies = [
  "anyhow",
  "cargo_metadata",
@@ -257,7 +233,7 @@ dependencies = [
 
 [[package]]
 name = "cprover_bindings"
-version = "0.48.0"
+version = "0.51.0"
 dependencies = [
  "lazy_static",
  "linear-map",
@@ -455,14 +431,14 @@ checksum = "b1a46d1a171d865aa5f83f92695765caa047a9b4cbae2cbf37dbd613a793fd4c"
 
 [[package]]
 name = "kani"
-version = "0.48.0"
+version = "0.51.0"
 dependencies = [
  "kani_macros",
 ]
 
 [[package]]
 name = "kani-compiler"
-version = "0.48.0"
+version = "0.51.0"
 dependencies = [
  "clap",
  "cprover_bindings",
@@ -483,7 +459,7 @@ dependencies = [
 
 [[package]]
 name = "kani-driver"
-version = "0.48.0"
+version = "0.51.0"
 dependencies = [
  "anyhow",
  "cargo_metadata",
@@ -511,7 +487,7 @@ dependencies = [
 
 [[package]]
 name = "kani-verifier"
-version = "0.48.0"
+version = "0.51.0"
 dependencies = [
  "anyhow",
  "home",
@@ -520,7 +496,7 @@ dependencies = [
 
 [[package]]
 name = "kani_macros"
-version = "0.48.0"
+version = "0.51.0"
 dependencies = [
  "proc-macro-error",
  "proc-macro2",
@@ -530,7 +506,7 @@ dependencies = [
 
 [[package]]
 name = "kani_metadata"
-version = "0.48.0"
+version = "0.51.0"
 dependencies = [
  "clap",
  "cprover_bindings",
@@ -786,23 +762,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pulldown-cmark"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dce76ce678ffc8e5675b22aa1405de0b7037e2fdf8913fea40d1926c6fe1e6e7"
-dependencies = [
- "bitflags 2.5.0",
- "memchr",
- "unicase",
-]
-
-[[package]]
-name = "pulldown-cmark-escape"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d5d8f9aa0e3cbcfaf8bf00300004ee3b72f74770f9cbac93f6928771f613276b"
-
-[[package]]
 name = "quote"
 version = "1.0.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -919,13 +878,6 @@ name = "rustc-demangle"
 version = "0.1.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d626bb9dae77e28219937af045c257c28bfd3f69333c512553507f5f9798cb76"
-
-[[package]]
-name = "rustdoc"
-version = "0.0.0"
-dependencies = [
- "pulldown-cmark",
-]
 
 [[package]]
 name = "rustix"
@@ -1071,7 +1023,7 @@ checksum = "3c5e1a9a646d36c3599cd173a41282daf47c44583ad367b8e6837255952e5c67"
 
 [[package]]
 name = "std"
-version = "0.48.0"
+version = "0.51.0"
 dependencies = [
  "kani",
 ]
@@ -1301,15 +1253,6 @@ dependencies = [
  "tracing-core",
  "tracing-log",
  "tracing-serde",
-]
-
-[[package]]
-name = "unicase"
-version = "2.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f7d2d4dafb69621809a81864c9c1b864479e1235c0dd4e199924b9742439ed89"
-dependencies = [
- "version_check",
 ]
 
 [[package]]

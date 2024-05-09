@@ -23,8 +23,5 @@ jobs:
         with:
           os: macos-13-xlarge
 
-      - name: Build Kani
-        run: cargo build-dev
-
       - name: Execute Kani regression
         run: ./scripts/kani-regression.sh

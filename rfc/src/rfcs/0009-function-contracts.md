@@ -1,8 +1,8 @@
 - **Feature Name:** Function Contracts
 - **Feature Request Issue:** [#2652](https://github.com/model-checking/kani/issues/2652) and [Milestone](https://github.com/model-checking/kani/milestone/31)
 - **RFC PR:** [#2620](https://github.com/model-checking/kani/pull/2620)
-- **Status:** Under Review 
-- **Version:** 0
+- **Status:** Unstable
+- **Version:** 1
 - **Proof-of-concept:** [features/contracts](https://github.com/model-checking/kani/tree/features/contracts)
 - **Feature Gate:** `-Zfunction-contracts`, enforced by compile time error[^gate]
 
@@ -894,3 +894,4 @@ times larger than what they expect the function will touch).
 [^stubcheck]: Kani cannot report the occurrence of a contract function to check
     in abstracted functions as errors, because the mechanism is needed to verify
     mutually recursive functions.
+

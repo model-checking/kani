@@ -46,7 +46,7 @@ pub mod transform;
 /// error was found.
 pub fn check_crate_items(tcx: TyCtxt, ignore_asm: bool) {
     let krate = tcx.crate_name(LOCAL_CRATE);
-    for item in tcx.hir_crate_items(()).items() {
+    for item in tcx.hir().items() {
         let def_id = item.owner_id.def_id.to_def_id();
         KaniAttributes::for_item(tcx, def_id).check_attributes();
         if tcx.def_kind(def_id) == DefKind::GlobalAsm {
@@ -127,9 +127,11 @@ pub fn dump_mir_items(tcx: TyCtxt, items: &[MonoItem], output: &Path) {
 pub struct SourceLocation {
     pub filename: String,
     pub start_line: usize,
-    pub start_col: usize,
+    #[allow(dead_code)]
+    pub start_col: usize, // set, but not currently used in Goto output
     pub end_line: usize,
-    pub end_col: usize,
+    #[allow(dead_code)]
+    pub end_col: usize, // set, but not currently used in Goto output
 }
 
 impl SourceLocation {

@@ -32,10 +32,6 @@ jobs:
           os: ${{ matrix.os }}
           kani_dir: 'kani'
 
-      - name: Build Kani
-        working-directory: ./kani
-        run: cargo build-dev
-
       - name: Checkout CBMC under "cbmc"
         uses: actions/checkout@v4
         with:
