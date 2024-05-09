@@ -340,3 +340,7 @@ pub use core::assert as __kani__workaround_core_assert;
 pub use kani_macros::*;
 
 pub mod contracts;
+
+mod loop_contracts;
+
+pub use loop_contracts::{kani_loop_invariant_begin_marker, kani_loop_invariant_end_marker};

@@ -8,6 +8,7 @@
 //! It would be too nasty if we spread around these sort of undocumented hooks in place, so
 //! this module addresses this issue.
 
+use super::loop_contracts_hooks::{LoopInvariantBegin, LoopInvariantEnd};
 use crate::codegen_cprover_gotoc::codegen::{bb_label, PropertyClass};
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::kani_middle::attributes::matches_diagnostic as matches_function;
@@ -402,6 +403,8 @@ pub fn fn_hooks() -> GotocHooks {
             Rc::new(RustAlloc),
             Rc::new(MemCmp),
             Rc::new(UntrackedDeref),
+            Rc::new(LoopInvariantBegin),
+            Rc::new(LoopInvariantEnd),
         ],
     }
 }

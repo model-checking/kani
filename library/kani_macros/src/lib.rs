@@ -202,12 +202,17 @@ pub fn modifies(attr: TokenStream, item: TokenStream) -> TokenStream {
     attr_impl::modifies(attr, item)
 }
 
+/// Add a loop invariant to this loop.
+///
+/// The contents of the attribute is a condition that should be satisfied at the
+/// beginning of every iteration of the loop.
+/// All Rust syntax is supported, even calling other functions, but
+/// the computations must be side effect free, e.g. it cannot perform I/O or use
+/// mutable memory.
 #[proc_macro_attribute]
 pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
     attr_impl::loop_invariant(attr, item)
 }
-
-static mut LOOP_INVARIANT_COUNT: u32 = 0;
 
 /// This module implements Kani attributes in a way that only Kani's compiler can understand.
 /// This code should only be activated when pre-building Kani's sysroot.
@@ -216,9 +221,11 @@ mod sysroot {
     use proc_macro_error::{abort, abort_call_site};
 
     mod contracts;
+    mod loop_contracts;
 
     use contracts::helpers::*;
     pub use contracts::{ensures, modifies, proof_for_contract, requires, stub_verified};
+    pub use loop_contracts::loop_invariant;
 
     use super::*;
 

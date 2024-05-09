@@ -469,8 +469,16 @@ impl ToIrep for StmtBody {
                     arguments_irep(arguments.iter(), mm),
                 ],
             ),
-            StmtBody::Goto(dest) => code_irep(IrepId::Goto, vec![])
-                .with_named_sub(IrepId::Destination, Irep::just_string_id(dest.to_string())),
+            StmtBody::Goto { dest, loop_invariants } => {
+                let stmt_goto = code_irep(IrepId::Goto, vec![])
+                    .with_named_sub(IrepId::Destination, Irep::just_string_id(dest.to_string()));
+                if loop_invariants.is_some() {
+                    stmt_goto
+                        .with_named_sub(IrepId::CSpecLoopInvariant, loop_invariants.clone().unwrap().to_irep(mm))
+                } else {
+                    stmt_goto
+                }
+            }
             StmtBody::Ifthenelse { i, t, e } => code_irep(
                 IrepId::Ifthenelse,
                 vec![

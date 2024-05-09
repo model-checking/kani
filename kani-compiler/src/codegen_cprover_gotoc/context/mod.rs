@@ -8,6 +8,7 @@
 
 mod current_fn;
 mod goto_ctx;
+mod loop_contracts_ctx;
 mod vtable_ctx;
 
 pub use goto_ctx::GotocCtx;

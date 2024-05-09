@@ -21,12 +21,23 @@ impl<'tcx> GotocCtx<'tcx> {
         debug!(?bb, "codegen_block");
         let label = bb_label(bb);
         let check_coverage = self.queries.args().check_coverage;
+
+        // record the seen bbidx if loop contracts enabled
+        if self.loop_contracts_ctx.loop_contracts_enabled() {
+            self.loop_contracts_ctx.add_new_seen_bbidx(bb);
+        }
+
         // the first statement should be labelled. if there is no statements, then the
         // terminator should be labelled.
         match bbd.statements.len() {
             0 => {
                 let term = &bbd.terminator;
-                let tcode = self.codegen_terminator(term);
+                let tcode = if self.loop_contracts_ctx.loop_contracts_enabled() {
+                    let codegen_result = self.codegen_terminator(term);
+                    self.loop_contracts_ctx.push_onto_block(codegen_result)
+                } else {
+                    self.codegen_terminator(term)
+                };
                 // When checking coverage, the `coverage` check should be
                 // labelled instead.
                 if check_coverage {
@@ -40,7 +51,12 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             _ => {
                 let stmt = &bbd.statements[0];
-                let scode = self.codegen_statement(stmt);
+                let scode = if self.loop_contracts_ctx.loop_contracts_enabled() {
+                    let codegen_result = self.codegen_statement(stmt);
+                    self.loop_contracts_ctx.push_onto_block(codegen_result)
+                } else {
+                    self.codegen_statement(stmt)
+                };
                 // When checking coverage, the `coverage` check should be
                 // labelled instead.
                 if check_coverage {
@@ -58,7 +74,12 @@ impl<'tcx> GotocCtx<'tcx> {
                         let cover = self.codegen_coverage(span);
                         self.current_fn_mut().push_onto_block(cover);
                     }
-                    let stmt = self.codegen_statement(s);
+                    let stmt = if self.loop_contracts_ctx.loop_contracts_enabled() {
+                        let codegen_result = self.codegen_statement(s);
+                        self.loop_contracts_ctx.push_onto_block(codegen_result)
+                    } else {
+                        self.codegen_statement(s)
+                    };
                     self.current_fn_mut().push_onto_block(stmt);
                 }
                 let term = &bbd.terminator;
@@ -67,7 +88,12 @@ impl<'tcx> GotocCtx<'tcx> {
                     let cover = self.codegen_coverage(span);
                     self.current_fn_mut().push_onto_block(cover);
                 }
-                let tcode = self.codegen_terminator(term);
+                let tcode = if self.loop_contracts_ctx.loop_contracts_enabled() {
+                    let codegen_result = self.codegen_terminator(term);
+                    self.loop_contracts_ctx.push_onto_block(codegen_result)
+                } else {
+                    self.codegen_terminator(term)
+                };
                 self.current_fn_mut().push_onto_block(tcode);
             }
         }
