@@ -15,15 +15,11 @@ mod derive;
 use proc_macro::TokenStream;
 use proc_macro_error::proc_macro_error;
 
-use proc_macro2::TokenStream as TokenStream2;
-
 #[cfg(kani_sysroot)]
 use sysroot as attr_impl;
 
-use proc_macro2::{Ident, Span};
 #[cfg(not(kani_sysroot))]
 use regular as attr_impl;
-use syn::{Expr, Stmt};
 
 /// Marks a Kani proof harness
 ///
