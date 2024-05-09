@@ -87,6 +87,7 @@ impl LoopContractsCtx {
             Type::CInteger(CIntType::Bool),
         )
         .cast_to(Type::bool())
+        .and(Expr::bool_true())
     }
 
     /// Push the `s` onto the block if it is in the loop invariant block
