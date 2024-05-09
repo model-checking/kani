@@ -1,3 +1,6 @@
+// Copyright Kani Contributors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
 use super::hooks::GotocHook;
 use crate::codegen_cprover_gotoc::codegen::bb_label;
 use crate::codegen_cprover_gotoc::GotocCtx;

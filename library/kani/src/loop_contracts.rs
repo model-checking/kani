@@ -1,3 +1,6 @@
+// Copyright Kani Contributors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
 /// This function is only used for loop contract annotation.
 /// It behaves as a placeholder to telling us where the loop invariants stmts begin.
 #[inline(never)]

@@ -1,3 +1,6 @@
+// Copyright Kani Contributors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
 use crate::codegen_cprover_gotoc::codegen::bb_label;
 use cbmc::goto_program::{CIntType, Expr, Stmt, StmtBody, Type};
 use stable_mir::mir::BasicBlockIdx;
@@ -46,7 +49,7 @@ impl LoopContractsCtx {
         Self {
             invariants_block: Vec::new(),
             stage: LoopContractsStage::UserCode,
-            loop_contracts_enabled: loop_contracts_enabled,
+            loop_contracts_enabled,
             seen_bbidx: HashSet::new(),
             current_bbidx_label: None,
             loop_invariant_lhs: None,

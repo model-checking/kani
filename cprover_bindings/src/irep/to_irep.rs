@@ -473,8 +473,10 @@ impl ToIrep for StmtBody {
                 let stmt_goto = code_irep(IrepId::Goto, vec![])
                     .with_named_sub(IrepId::Destination, Irep::just_string_id(dest.to_string()));
                 if loop_invariants.is_some() {
-                    stmt_goto
-                        .with_named_sub(IrepId::CSpecLoopInvariant, loop_invariants.clone().unwrap().to_irep(mm))
+                    stmt_goto.with_named_sub(
+                        IrepId::CSpecLoopInvariant,
+                        loop_invariants.clone().unwrap().to_irep(mm),
+                    )
                 } else {
                     stmt_goto
                 }
