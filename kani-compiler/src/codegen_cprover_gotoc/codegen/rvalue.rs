@@ -691,6 +691,15 @@ impl<'tcx> GotocCtx<'tcx> {
                         let meta = self.codegen_operand_stable(&operands[1]);
                         slice_fat_ptr(typ, data_cast, meta, &self.symbol_table)
                     }
+                    TyKind::RigidTy(RigidTy::Adt(..)) => {
+                        let pointee_goto_typ = self.codegen_ty_stable(pointee_ty);
+                        let data_cast =
+                            data.cast_to(Type::Pointer { typ: Box::new(pointee_goto_typ) });
+                        let meta = self.codegen_operand_stable(&operands[1]);
+                        let vtable_expr = meta.member("vtable_ptr", &self.symbol_table).cast_to(
+                            typ.lookup_field_type("vtable", &self.symbol_table).unwrap());
+                        dynamic_fat_ptr(typ, data_cast, vtable_expr, &self.symbol_table)
+                    }
                     _ => {
                         let pointee_goto_typ = self.codegen_ty_stable(pointee_ty);
                         data.cast_to(Type::Pointer { typ: Box::new(pointee_goto_typ) })
