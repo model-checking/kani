@@ -40,6 +40,7 @@ members = [
   "library/std",
   "tools/compiletest",
   "tools/build-kani",
+  "tools/scanner",
   "kani-driver",
   "kani-compiler",
   "kani_metadata",
