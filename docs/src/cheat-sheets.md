@@ -19,7 +19,7 @@ cargo build-dev
 ### Test
 
 ```bash
-# Full regression suite (does not run bookrunner)
+# Full regression suite
 ./scripts/kani-regression.sh
 ```
 
@@ -37,12 +37,6 @@ rm -r build/x86_64-apple-darwin/tests/
 # Test suite run (we can only run one at a time)
 # cargo run -p compiletest -- --suite ${suite} --mode ${mode}
 cargo run -p compiletest -- --suite kani --mode kani
-```
-
-```bash
-# Run bookrunner
-./scripts/setup/install_bookrunner_deps.sh
-cargo run -p bookrunner
 ```
 
 ```bash

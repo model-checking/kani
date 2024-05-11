@@ -124,7 +124,14 @@ fn build_kani_lib(
         "--message-format",
         "json-diagnostic-rendered-ansi",
     ];
-    let mut rustc_args = vec!["--cfg=kani", "--cfg=kani_sysroot", "-Z", "always-encode-mir"];
+    let mut rustc_args = vec![
+        "--cfg=kani",
+        "--cfg=kani_sysroot",
+        "-Z",
+        "always-encode-mir",
+        "-Z",
+        "mir-enable-passes=-RemoveStorageMarkers",
+    ];
     rustc_args.extend_from_slice(extra_rustc_args);
     let mut cmd = Command::new("cargo")
         .env("CARGO_ENCODED_RUSTFLAGS", rustc_args.join("\x1f"))

@@ -4,5 +4,5 @@
 
 set -eux
 
-# cargo install mdbook-graphviz
+cargo install mdbook-graphviz
 DEBIAN_FRONTEND=noninteractive sudo apt-get install --no-install-recommends --yes graphviz

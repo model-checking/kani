@@ -2,24 +2,16 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Zfunction-contracts
 
-#![allow(unreachable_code, unused_variables)]
-
-/// This only exists so I can fake a [`kani::Arbitrary`] instance for `*const
-/// usize`.
-struct ArbitraryPointer<P>(P);
-
-impl kani::Arbitrary for ArbitraryPointer<*const usize> {
-    fn any() -> Self {
-        unreachable!()
-    }
-}
-
-#[kani::ensures(true)]
-fn return_pointer() -> ArbitraryPointer<*const usize> {
-    unreachable!()
+#[kani::ensures(unsafe{ *result == *input })]
+fn return_pointer(input: *const usize) -> *const usize {
+    input
 }
 
 #[kani::proof_for_contract(return_pointer)]
 fn return_ptr_harness() {
-    return_pointer();
+    let input: usize = 10;
+    let input_ptr = &input as *const usize;
+    unsafe {
+        assert!(*(return_pointer(input_ptr)) == input);
+    }
 }

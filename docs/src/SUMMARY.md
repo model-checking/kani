@@ -31,7 +31,6 @@
   - [cargo kani assess](./dev-assess.md)
   - [Testing](./testing.md)
     - [Regression testing](./regression-testing.md)
-    - [Book runner](./bookrunner.md)
     - [(Experimental) Testing with a Large Number of Repositories](./repo-crawl.md)
   - [Performance comparisons](./performance-comparisons.md)
     - [`benchcomp` command line](./benchcomp-cli.md)

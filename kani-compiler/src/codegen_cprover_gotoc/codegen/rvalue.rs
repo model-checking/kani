@@ -20,6 +20,7 @@ use num::bigint::BigInt;
 use rustc_middle::ty::{TyCtxt, VtblEntry};
 use rustc_smir::rustc_internal;
 use rustc_target::abi::{FieldsShape, TagEncoding, Variants};
+use stable_mir::abi::{Primitive, Scalar, ValueAbi};
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{
     AggregateKind, BinOp, CastKind, NullOp, Operand, Place, PointerCoercion, Rvalue, UnOp,
@@ -32,9 +33,11 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_comparison(&mut self, op: &BinOp, e1: &Operand, e2: &Operand) -> Expr {
         let left_op = self.codegen_operand_stable(e1);
         let right_op = self.codegen_operand_stable(e2);
-        let is_float =
-            matches!(self.operand_ty_stable(e1).kind(), TyKind::RigidTy(RigidTy::Float(..)));
-        comparison_expr(op, left_op, right_op, is_float)
+        let left_ty = self.operand_ty_stable(e1);
+        let right_ty = self.operand_ty_stable(e2);
+        let res_ty = op.ty(left_ty, right_ty);
+        let is_float = matches!(left_ty.kind(), TyKind::RigidTy(RigidTy::Float(..)));
+        self.comparison_expr(op, left_op, right_op, res_ty, is_float)
     }
 
     /// This function codegen comparison for fat pointers.
@@ -72,16 +75,18 @@ impl<'tcx> GotocCtx<'tcx> {
             Expr::statement_expression(body, ret_type).with_location(loc)
         } else {
             // Compare data pointer.
+            let res_ty = op.ty(left_typ, right_typ);
             let left_ptr = self.codegen_operand_stable(left_op);
             let left_data = left_ptr.clone().member("data", &self.symbol_table);
             let right_ptr = self.codegen_operand_stable(right_op);
             let right_data = right_ptr.clone().member("data", &self.symbol_table);
-            let data_cmp = comparison_expr(op, left_data.clone(), right_data.clone(), false);
+            let data_cmp =
+                self.comparison_expr(op, left_data.clone(), right_data.clone(), res_ty, false);
 
             // Compare the slice metadata (this logic could be adapted to compare vtable if needed).
             let left_len = left_ptr.member("len", &self.symbol_table);
             let right_len = right_ptr.member("len", &self.symbol_table);
-            let metadata_cmp = comparison_expr(op, left_len, right_len, false);
+            let metadata_cmp = self.comparison_expr(op, left_len, right_len, res_ty, false);
 
             // Join the results.
             // https://github.com/rust-lang/rust/pull/29781
@@ -93,10 +98,20 @@ impl<'tcx> GotocCtx<'tcx> {
                 // If data is different, only compare data.
                 // If data is equal, apply operator to metadata.
                 BinOp::Lt | BinOp::Le | BinOp::Ge | BinOp::Gt => {
-                    let data_eq =
-                        comparison_expr(&BinOp::Eq, left_data.clone(), right_data.clone(), false);
-                    let data_strict_comp =
-                        comparison_expr(&get_strict_operator(op), left_data, right_data, false);
+                    let data_eq = self.comparison_expr(
+                        &BinOp::Eq,
+                        left_data.clone(),
+                        right_data.clone(),
+                        res_ty,
+                        false,
+                    );
+                    let data_strict_comp = self.comparison_expr(
+                        &get_strict_operator(op),
+                        left_data,
+                        right_data,
+                        res_ty,
+                        false,
+                    );
                     data_strict_comp.or(data_eq.and(metadata_cmp))
                 }
                 _ => unreachable!("Unexpected operator {:?}", op),
@@ -376,7 +391,7 @@ impl<'tcx> GotocCtx<'tcx> {
             BinOp::BitXor | BinOp::BitAnd | BinOp::BitOr => {
                 self.codegen_unchecked_scalar_binop(op, e1, e2)
             }
-            BinOp::Eq | BinOp::Lt | BinOp::Le | BinOp::Ne | BinOp::Ge | BinOp::Gt => {
+            BinOp::Eq | BinOp::Lt | BinOp::Le | BinOp::Ne | BinOp::Ge | BinOp::Gt | BinOp::Cmp => {
                 let op_ty = self.operand_ty_stable(e1);
                 if self.is_fat_pointer_stable(op_ty) {
                     self.codegen_comparison_fat_ptr(op, e1, e2, loc)
@@ -681,7 +696,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 | CastKind::FnPtrToPtr
                 | CastKind::PtrToPtr
                 | CastKind::PointerExposeAddress
-                | CastKind::PointerFromExposedAddress,
+                | CastKind::PointerWithExposedProvenance,
                 e,
                 t,
             ) => self.codegen_misc_cast(e, *t),
@@ -725,7 +740,7 @@ impl<'tcx> GotocCtx<'tcx> {
                             .bytes(),
                         Type::size_t(),
                     ),
-                    NullOp::UbCheck(_) => Expr::c_false(),
+                    NullOp::UbChecks => Expr::c_false(),
                 }
             }
             Rvalue::ShallowInitBox(ref operand, content_ty) => {
@@ -1260,7 +1275,7 @@ impl<'tcx> GotocCtx<'tcx> {
     fn check_vtable_size(&mut self, operand_type: Ty, vt_size: Expr) -> Stmt {
         // Check against the size we get from the layout from the what we
         // get constructing a value of that type
-        let ty: Type = self.codegen_ty_stable(operand_type);
+        let ty = self.codegen_ty_stable(operand_type);
         let codegen_size = ty.sizeof(&self.symbol_table);
         assert_eq!(vt_size.int_constant_value().unwrap(), BigInt::from(codegen_size));
 
@@ -1423,6 +1438,65 @@ impl<'tcx> GotocCtx<'tcx> {
             }
         }
     }
+
+    fn comparison_expr(
+        &mut self,
+        op: &BinOp,
+        left: Expr,
+        right: Expr,
+        res_ty: Ty,
+        is_float: bool,
+    ) -> Expr {
+        match op {
+            BinOp::Eq => {
+                if is_float {
+                    left.feq(right)
+                } else {
+                    left.eq(right)
+                }
+            }
+            BinOp::Lt => left.lt(right),
+            BinOp::Le => left.le(right),
+            BinOp::Ne => {
+                if is_float {
+                    left.fneq(right)
+                } else {
+                    left.neq(right)
+                }
+            }
+            BinOp::Ge => left.ge(right),
+            BinOp::Gt => left.gt(right),
+            BinOp::Cmp => {
+                // Implement https://doc.rust-lang.org/core/cmp/trait.Ord.html as done in cranelift,
+                // i.e., (left > right) - (left < right)
+                // Return value is the Ordering enumeration:
+                // ```
+                // #[repr(i8)]
+                // pub enum Ordering {
+                //     Less = -1,
+                //     Equal = 0,
+                //     Greater = 1,
+                // }
+                // ```
+                let res_typ = self.codegen_ty_stable(res_ty);
+                let ValueAbi::Scalar(Scalar::Initialized { value, valid_range }) =
+                    res_ty.layout().unwrap().shape().abi
+                else {
+                    unreachable!("Unexpected layout")
+                };
+                assert_eq!(valid_range.start, -1i8 as u8 as u128);
+                assert_eq!(valid_range.end, 1);
+                let Primitive::Int { length, signed: true } = value else { unreachable!() };
+                let scalar_typ = Type::signed_int(length.bits());
+                left.clone()
+                    .gt(right.clone())
+                    .cast_to(scalar_typ.clone())
+                    .sub(left.lt(right).cast_to(scalar_typ))
+                    .transmute_to(res_typ, &self.symbol_table)
+            }
+            _ => unreachable!(),
+        }
+    }
 }
 
 /// Perform a wrapping subtraction of an Expr with a constant "expr - constant"
@@ -1442,30 +1516,6 @@ fn wrapping_sub(expr: &Expr, constant: u64) -> Expr {
     } else {
         let constant = Expr::int_constant(constant, unsigned_expr.typ().clone());
         unsigned_expr.sub(constant)
-    }
-}
-
-fn comparison_expr(op: &BinOp, left: Expr, right: Expr, is_float: bool) -> Expr {
-    match op {
-        BinOp::Eq => {
-            if is_float {
-                left.feq(right)
-            } else {
-                left.eq(right)
-            }
-        }
-        BinOp::Lt => left.lt(right),
-        BinOp::Le => left.le(right),
-        BinOp::Ne => {
-            if is_float {
-                left.fneq(right)
-            } else {
-                left.neq(right)
-            }
-        }
-        BinOp::Ge => left.ge(right),
-        BinOp::Gt => left.gt(right),
-        _ => unreachable!(),
     }
 }
 

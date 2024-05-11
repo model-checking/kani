@@ -45,7 +45,7 @@ use std::ptr::{DynMetadata, NonNull, Pointee};
 /// if you don't want to fail for unaligned pointers.
 ///
 /// TODO: Kani should automatically add those checks when a de-reference happens.
-/// https://github.com/model-checking/kani/issues/2975
+/// <https://github.com/model-checking/kani/issues/2975>
 ///
 /// This function will either panic or return `true`. This is to make it easier to use it in
 /// contracts.
@@ -105,17 +105,18 @@ where
     M: PtrProperties<T>,
     T: ?Sized,
 {
-    let marker = Internal;
-    let sz = metadata.pointee_size(marker);
-    if metadata.dangling(marker) as *const _ == data_ptr {
-        crate::assert(sz == 0, "Dangling pointer is only valid for zero-sized access")
+    let sz = metadata.pointee_size(Internal);
+    if sz == 0 {
+        true // ZST pointers are always valid
     } else {
+        // Note that this branch can't be tested in concrete execution as `is_read_ok` needs to be
+        // stubbed.
         crate::assert(
             is_read_ok(data_ptr, sz),
             "Expected valid pointer, but found dangling pointer",
         );
+        true
     }
-    true
 }
 
 mod private {
@@ -302,18 +303,6 @@ mod tests {
 
         let vec_ptr = Vec::<T>::new().as_ptr();
         assert_valid_ptr(vec_ptr);
-    }
-
-    #[test]
-    #[should_panic(expected = "Dangling pointer is only valid for zero-sized access")]
-    fn test_dangling_char() {
-        test_dangling_of_t::<char>();
-    }
-
-    #[test]
-    #[should_panic(expected = "Dangling pointer is only valid for zero-sized access")]
-    fn test_dangling_slice() {
-        test_dangling_of_t::<&str>();
     }
 
     #[test]
