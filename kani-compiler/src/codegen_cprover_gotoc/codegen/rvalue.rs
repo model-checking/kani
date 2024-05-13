@@ -681,7 +681,6 @@ impl<'tcx> GotocCtx<'tcx> {
                 let layout = self.layout_of_stable(res_ty);
                 assert!(layout.ty.is_unsafe_ptr());
                 let data = self.codegen_operand_stable(&operands[0]);
-                //dbg!(pointee_ty.kind());
                 match pointee_ty.kind() {
                     TyKind::RigidTy(RigidTy::Slice(inner_ty)) => {
                         let pointee_goto_typ = self.codegen_ty_stable(inner_ty);
