@@ -44,6 +44,9 @@ use std::ptr::{DynMetadata, NonNull, Pointee};
 /// Note this function also checks for pointer alignment. Use [self::assert_valid_ptr_unaligned]
 /// if you don't want to fail for unaligned pointers.
 ///
+/// This function does not check if the value stored is valid for the given type. Use
+/// [self::has_valid_value] for that.
+///
 /// TODO: Kani should automatically add those checks when a de-reference happens.
 /// <https://github.com/model-checking/kani/issues/2975>
 ///
@@ -62,7 +65,7 @@ where
     crate::assert(!ptr.is_null(), "Expected valid pointer, but found `null`");
     let (thin_ptr, metadata) = ptr.to_raw_parts();
     crate::assert(metadata.is_ptr_aligned(thin_ptr, Internal), "Expected pointer to be aligned");
-    assert_can_read(&metadata, thin_ptr)
+    assert_allocated(&metadata, thin_ptr)
 }
 
 /// Assert that the pointer is valid for access according to [crate::mem] conditions 1, 2 and 3.
@@ -84,23 +87,27 @@ where
     crate::assert(!ptr.is_null(), "Expected valid pointer, but found `null`");
 
     let (thin_ptr, metadata) = ptr.to_raw_parts();
-    assert_can_read(&metadata, thin_ptr)
+    assert_allocated(&metadata, thin_ptr)
 }
 
-/// Checks if `ptr` point to a valid value of type T.
+/// Checks that pointer `ptr` point to a valid value of type `T`.
 ///
-/// Invoking this with an invalid pointer will trigger a memory violation error.
+/// For that, the pointer has to be a valid pointer and the value stored must respect the validity
+/// invariants for type `T`.
+///
+/// Invoking this with an invalid pointer will panic due to a memory violation error.
 #[crate::unstable(
     feature = "mem-predicates",
     issue = 2690,
     reason = "experimental memory predicate API"
 )]
-pub fn points_valid_value<T>(ptr: *const T) -> bool {
+pub fn has_valid_value<T>(ptr: *const T) -> bool {
     assert_valid_ptr(ptr);
-    points_valid_value_intrinsic(ptr)
+    valid_value_intrinsic(ptr)
 }
 
-fn assert_can_read<M, T>(metadata: &M, data_ptr: *const ()) -> bool
+/// Assert that `data_ptr` points to an allocation that can hold the pointee size.
+fn assert_allocated<M, T>(metadata: &M, data_ptr: *const ()) -> bool
 where
     M: PtrProperties<T>,
     T: ?Sized,
@@ -112,7 +119,7 @@ where
         // Note that this branch can't be tested in concrete execution as `is_read_ok` needs to be
         // stubbed.
         crate::assert(
-            is_read_ok(data_ptr, sz),
+            unsafe { is_valid_ptr(data_ptr, sz) },
             "Expected valid pointer, but found dangling pointer",
         );
         true
@@ -210,19 +217,24 @@ where
 
 /// Check if the pointer `_ptr` contains an allocated address of size equal or greater than `_size`.
 ///
-/// This function should only be called to ensure a pointer is valid. The opposite isn't true.
+/// # Safety
+///
+/// This function should only be called to ensure a pointer is always valid, i.e., in an assertion
+/// context.
+///
 /// I.e.: This function always returns `true` if the pointer is valid.
 /// Otherwise, it returns non-det boolean.
-#[rustc_diagnostic_item = "KaniIsReadOk"]
+#[rustc_diagnostic_item = "KaniIsValidPtr"]
 #[inline(never)]
-fn is_read_ok(_ptr: *const (), _size: usize) -> bool {
+unsafe fn is_valid_ptr(_ptr: *const (), _size: usize) -> bool {
     kani_intrinsic()
 }
 
-#[rustc_diagnostic_item = "KaniIsValid"]
+/// Check if the value stored in the given location satisfies type `T` validity requirements.
+#[rustc_diagnostic_item = "KaniHasValidValue"]
 #[inline(never)]
-fn points_valid_value_intrinsic<T>(_ptr: *const T) -> bool {
-    todo!("create intrinsic")
+fn valid_value_intrinsic<T>(_ptr: *const T) -> bool {
+    kani_intrinsic()
 }
 
 #[cfg(test)]

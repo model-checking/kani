@@ -211,7 +211,7 @@ impl GotocHook for Panic {
 struct IsReadOk;
 impl GotocHook for IsReadOk {
     fn hook_applies(&self, tcx: TyCtxt, instance: Instance) -> bool {
-        matches_function(tcx, instance.def, "KaniIsReadOk")
+        matches_function(tcx, instance.def, "KaniIsValidPtr")
     }
 
     fn handle(
