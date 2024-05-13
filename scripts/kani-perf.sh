@@ -27,7 +27,7 @@ done
 suite="perf"
 mode="cargo-kani-test"
 echo "Check compiletest suite=$suite mode=$mode"
-RUST_TEST_THREADS=1 cargo run -p compiletest -- --suite $suite --mode $mode --no-fail-fast
+cargo run -p compiletest -- --suite $suite --mode $mode --no-fail-fast
 exit_code=$?
 
 echo "Cleaning up..."
