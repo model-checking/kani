@@ -72,16 +72,22 @@ mod verify {
 
     #[kani::proof_for_contract(contracts::as_ref)]
     pub fn check_as_ref() {
+        let ptr = kani::any::<Box<usize>>();
+        let non_null = NonNull::new(Box::into_raw(ptr)).unwrap();
+        let _rf = unsafe { contracts::as_ref(&non_null) };
+    }
+
+    #[kani::proof_for_contract(contracts::as_ref)]
+    #[kani::should_panic]
+    pub fn check_as_ref_dangling() {
         let ptr = kani::any::<usize>() as *mut u8;
         kani::assume(!ptr.is_null());
-        let Some(non_null) = NonNull::new(ptr) else {
-            unreachable!();
-        };
+        let non_null = NonNull::new(ptr).unwrap();
         let _rf = unsafe { contracts::as_ref(&non_null) };
     }
 
     /// FIX-ME: Modifies clause fail with pointer to ZST.
-    #[cfg(fixme)]
+    /// <https://github.com/model-checking/kani/issues/3181>
     #[kani::proof_for_contract(contracts::replace)]
     pub fn check_replace_unit() {
         check_replace_impl::<()>();

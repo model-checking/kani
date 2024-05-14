@@ -42,6 +42,10 @@ mod verify {
         contracts::swap(&mut x, &mut y)
     }
 
+    /// FIX-ME: Modifies clause fail with pointer to ZST.
+    /// <https://github.com/model-checking/kani/issues/3181>
+    /// FIX-ME: `typed_swap` intrisic fails for ZST.
+    /// <https://github.com/model-checking/kani/issues/3182>
     #[kani::proof_for_contract(contracts::swap)]
     pub fn check_swap_unit() {
         let mut x: () = kani::any();
