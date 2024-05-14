@@ -19,6 +19,7 @@ use crate::kani_middle::transform::check_values::SourceOp::UnsupportedCheck;
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
 use rustc_middle::ty::TyCtxt;
+use rustc_smir::rustc_internal;
 use stable_mir::abi::{FieldsShape, Scalar, TagEncoding, ValueAbi, VariantsShape, WrappingRange};
 use stable_mir::mir::mono::{Instance, InstanceKind};
 use stable_mir::mir::visit::{Location, PlaceContext, PlaceRef};
@@ -30,14 +31,19 @@ use stable_mir::mir::{
 use stable_mir::target::{MachineInfo, MachineSize};
 use stable_mir::ty::{AdtKind, Const, IndexedVal, RigidTy, Ty, TyKind, UintTy};
 use stable_mir::CrateDef;
-use std::fmt::Debug;
+use std::fmt::{Debug, Formatter};
 use strum_macros::AsRefStr;
 use tracing::{debug, trace};
 
 /// Instrument the code with checks for invalid values.
-#[derive(Debug)]
 pub struct ValidValuePass {
-    pub check_type: CheckType,
+    check_type: CheckType,
+}
+
+impl ValidValuePass {
+    pub fn new(tcx: TyCtxt) -> Self {
+        ValidValuePass { check_type: CheckType::new(tcx) }
+    }
 }
 
 impl TransformPass for ValidValuePass {
@@ -75,6 +81,13 @@ impl TransformPass for ValidValuePass {
     }
 }
 
+impl Debug for ValidValuePass {
+    /// Implement manually since MachineInfo doesn't currently derive Debug.
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        "ValidValuePass".fmt(f)
+    }
+}
+
 impl ValidValuePass {
     fn build_check(&self, tcx: TyCtxt, body: &mut MutableBody, instruction: UnsafeInstruction) {
         debug!(?instruction, "build_check");
@@ -85,27 +98,86 @@ impl ValidValuePass {
                     let value = body.new_assignment(rvalue, &mut source);
                     let rvalue_ptr = Rvalue::AddressOf(Mutability::Not, Place::from(value));
                     for range in ranges {
-                        let result = build_limits(body, &range, rvalue_ptr.clone(), &mut source);
-                        let msg =
-                            format!("Undefined Behavior: Invalid value of type `{target_ty}`",);
+                        let result =
+                            self.build_limits(body, &range, rvalue_ptr.clone(), &mut source);
+                        let msg = format!(
+                            "Undefined Behavior: Invalid value of type `{}`",
+                            // TODO: Fix pretty_ty
+                            rustc_internal::internal(tcx, target_ty)
+                        );
                         body.add_check(tcx, &self.check_type, &mut source, result, &msg);
                     }
                 }
                 SourceOp::DerefValidity { pointee_ty, rvalue, ranges } => {
                     for range in ranges {
-                        let result = build_limits(body, &range, rvalue.clone(), &mut source);
-                        let msg =
-                            format!("Undefined Behavior: Invalid value of type `{pointee_ty}`",);
+                        let result = self.build_limits(body, &range, rvalue.clone(), &mut source);
+                        let msg = format!(
+                            "Undefined Behavior: Invalid value of type `{}`",
+                            // TODO: Fix pretty_ty
+                            rustc_internal::internal(tcx, pointee_ty)
+                        );
                         body.add_check(tcx, &self.check_type, &mut source, result, &msg);
                     }
                 }
                 SourceOp::UnsupportedCheck { check, ty } => {
                     let reason = format!(
-                        "Kani currently doesn't support checking validity of `{check}` for `{ty}`",
+                        "Kani currently doesn't support checking validity of `{check}` for `{}` type",
+                        rustc_internal::internal(tcx, ty)
                     );
                     self.unsupported_check(tcx, body, &mut source, &reason);
                 }
             }
+        }
+    }
+
+    fn build_limits(
+        &self,
+        body: &mut MutableBody,
+        req: &ValidValueReq,
+        rvalue_ptr: Rvalue,
+        source: &mut SourceInstruction,
+    ) -> Local {
+        let span = source.span(body.blocks());
+        debug!(?req, ?rvalue_ptr, ?span, "build_limits");
+        let primitive_ty = uint_ty(req.size.bytes());
+        let start_const = body.new_const_operand(req.valid_range.start, primitive_ty, span);
+        let end_const = body.new_const_operand(req.valid_range.end, primitive_ty, span);
+        let orig_ptr = if req.offset != 0 {
+            let start_ptr = move_local(body.new_assignment(rvalue_ptr, source));
+            let byte_ptr = move_local(body.new_cast_ptr(
+                start_ptr,
+                Ty::unsigned_ty(UintTy::U8),
+                Mutability::Not,
+                source,
+            ));
+            let offset_const = body.new_const_operand(req.offset as _, UintTy::Usize, span);
+            let offset = move_local(body.new_assignment(Rvalue::Use(offset_const), source));
+            move_local(body.new_binary_op(BinOp::Offset, byte_ptr, offset, source))
+        } else {
+            move_local(body.new_assignment(rvalue_ptr, source))
+        };
+        let value_ptr =
+            body.new_cast_ptr(orig_ptr, Ty::unsigned_ty(primitive_ty), Mutability::Not, source);
+        let value =
+            Operand::Copy(Place { local: value_ptr, projection: vec![ProjectionElem::Deref] });
+        let start_result = body.new_binary_op(BinOp::Ge, value.clone(), start_const, source);
+        let end_result = body.new_binary_op(BinOp::Le, value, end_const, source);
+        if req.valid_range.wraps_around() {
+            // valid >= start || valid <= end
+            body.new_binary_op(
+                BinOp::BitOr,
+                move_local(start_result),
+                move_local(end_result),
+                source,
+            )
+        } else {
+            // valid >= start && valid <= end
+            body.new_binary_op(
+                BinOp::BitAnd,
+                move_local(start_result),
+                move_local(end_result),
+                source,
+            )
         }
     }
 
@@ -144,7 +216,7 @@ fn uint_ty(bytes: usize) -> UintTy {
 
 /// Represent a requirement for the value stored in the given offset.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
-pub struct ValidValueReq {
+struct ValidValueReq {
     /// Offset in bytes.
     offset: usize,
     /// Size of this requirement.
@@ -559,7 +631,7 @@ impl<'a> MirVisitor for CheckValueVisitor<'a> {
                     ty: (rvalue.ty(self.locals).unwrap()),
                 }),
                 CastKind::PointerExposeAddress
-                | CastKind::PointerWithExposedProvenance
+                | CastKind::PointerFromExposedAddress
                 | CastKind::PointerCoercion(_)
                 | CastKind::IntToInt
                 | CastKind::FloatToInt
@@ -711,49 +783,10 @@ fn expect_instance(locals: &[LocalDecl], func: &Operand) -> Instance {
     }
 }
 
-pub fn build_limits(
-    body: &mut MutableBody,
-    req: &ValidValueReq,
-    rvalue_ptr: Rvalue,
-    source: &mut SourceInstruction,
-) -> Local {
-    let span = source.span(body.blocks());
-    debug!(?req, ?rvalue_ptr, ?span, "build_limits");
-    let primitive_ty = uint_ty(req.size.bytes());
-    let start_const = body.new_const_operand(req.valid_range.start, primitive_ty, span);
-    let end_const = body.new_const_operand(req.valid_range.end, primitive_ty, span);
-    let orig_ptr = if req.offset != 0 {
-        let start_ptr = move_local(body.new_assignment(rvalue_ptr, source));
-        let byte_ptr = move_local(body.new_cast_ptr(
-            start_ptr,
-            Ty::unsigned_ty(UintTy::U8),
-            Mutability::Not,
-            source,
-        ));
-        let offset_const = body.new_const_operand(req.offset as _, UintTy::Usize, span);
-        let offset = move_local(body.new_assignment(Rvalue::Use(offset_const), source));
-        move_local(body.new_binary_op(BinOp::Offset, byte_ptr, offset, source))
-    } else {
-        move_local(body.new_assignment(rvalue_ptr, source))
-    };
-    let value_ptr =
-        body.new_cast_ptr(orig_ptr, Ty::unsigned_ty(primitive_ty), Mutability::Not, source);
-    let value = Operand::Copy(Place { local: value_ptr, projection: vec![ProjectionElem::Deref] });
-    let start_result = body.new_binary_op(BinOp::Ge, value.clone(), start_const, source);
-    let end_result = body.new_binary_op(BinOp::Le, value, end_const, source);
-    if req.valid_range.wraps_around() {
-        // valid >= start || valid <= end
-        body.new_binary_op(BinOp::BitOr, move_local(start_result), move_local(end_result), source)
-    } else {
-        // valid >= start && valid <= end
-        body.new_binary_op(BinOp::BitAnd, move_local(start_result), move_local(end_result), source)
-    }
-}
-
 /// Traverse the type and find all invalid values and their location in memory.
 ///
 /// Not all values are currently supported. For those not supported, we return Error.
-pub fn ty_validity_per_offset(
+fn ty_validity_per_offset(
     machine_info: &MachineInfo,
     ty: Ty,
     current_offset: usize,
@@ -864,12 +897,6 @@ pub fn ty_validity_per_offset(
                             Ok(struct_validity)
                         }
                     }
-                }
-                RigidTy::Pat(base_ty, ..) => {
-                    // This is similar to a structure with one field and with niche defined.
-                    let mut pat_validity = ty_req();
-                    pat_validity.append(&mut ty_validity_per_offset(machine_info, *base_ty, 0)?);
-                    Ok(pat_validity)
                 }
                 RigidTy::Tuple(tys) => {
                     let mut tuple_validity = vec![];

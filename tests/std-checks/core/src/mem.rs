@@ -20,6 +20,7 @@ pub mod contracts {
     }
 }
 
+#[cfg(kani)]
 mod verify {
     use super::*;
 

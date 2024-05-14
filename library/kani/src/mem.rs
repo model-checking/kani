@@ -231,7 +231,7 @@ unsafe fn is_valid_ptr(_ptr: *const (), _size: usize) -> bool {
 }
 
 /// Check if the value stored in the given location satisfies type `T` validity requirements.
-#[rustc_diagnostic_item = "KaniHasValidValue"]
+#[rustc_diagnostic_item = "KaniValidValue"]
 #[inline(never)]
 fn valid_value_intrinsic<T>(_ptr: *const T) -> bool {
     kani_intrinsic()

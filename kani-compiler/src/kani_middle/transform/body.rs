@@ -12,6 +12,7 @@ use stable_mir::mir::{
     VarDebugInfo,
 };
 use stable_mir::ty::{Const, GenericArgs, Span, Ty, UintTy};
+use std::fmt::Debug;
 use std::mem;
 
 /// This structure mimics a Body that can actually be modified.
@@ -223,6 +224,15 @@ impl MutableBody {
                 self.blocks[*bb].statements.push(new_stmt);
             }
         }
+    }
+
+    /// Clear all the existing logic of this body and turn it into a simple `return`.
+    ///
+    /// We do not prune the local variables today for simplicity.
+    pub fn clear_body(&mut self) {
+        self.blocks.clear();
+        let terminator = Terminator { kind: TerminatorKind::Return, span: self.span };
+        self.blocks.push(BasicBlock { statements: Vec::default(), terminator })
     }
 }
 

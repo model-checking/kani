@@ -7,7 +7,7 @@ use std::ptr::NonNull;
 /// Create wrapper functions to standard library functions that contains their contract.
 pub mod contracts {
     use super::*;
-    use kani::{ensures, implies, mem::*, requires};
+    use kani::{ensures, implies, mem::*, modifies, requires};
 
     #[ensures(implies!(ptr.is_null() => result.is_none()))]
     #[ensures(implies!(!ptr.is_null() => result.is_some()))]
@@ -44,12 +44,14 @@ pub mod contracts {
     ///   - dst must point to a properly initialized value of type T.
     ///
     /// Note that even if T has size 0, the pointer must be non-null and properly aligned.
-    #[requires(has_valid_value(dst))]
+    #[requires(assert_valid_ptr(dst) && has_valid_value(dst))]
+    #[modifies(dst)]
     pub unsafe fn replace<T>(dst: *mut T, src: T) -> T {
         std::ptr::replace(dst, src)
     }
 }
 
+#[cfg(kani)]
 mod verify {
     use super::*;
     use kani::cover;
@@ -76,5 +78,26 @@ mod verify {
             unreachable!();
         };
         let _rf = unsafe { contracts::as_ref(&non_null) };
+    }
+
+    /// FIX-ME: Modifies clause fail with pointer to ZST.
+    #[cfg(fixme)]
+    #[kani::proof_for_contract(contracts::replace)]
+    pub fn check_replace_unit() {
+        check_replace_impl::<()>();
+    }
+
+    #[kani::proof_for_contract(contracts::replace)]
+    pub fn check_replace_char() {
+        check_replace_impl::<char>();
+    }
+
+    fn check_replace_impl<T: kani::Arbitrary + Eq + Clone>() {
+        let mut dst = T::any();
+        let orig = dst.clone();
+        let src = T::any();
+        let ret = unsafe { contracts::replace(&mut dst, src.clone()) };
+        assert_eq!(ret, orig);
+        assert_eq!(dst, src);
     }
 }
