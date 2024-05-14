@@ -58,11 +58,6 @@ jobs:
       - name: Copy benchmarks from new to old
         run: rm -rf ./old/tests/perf ; cp -r ./new/tests/perf ./old/tests/
 
-      - run: |
-          rm -rf old/tests/perf/btreeset old/tests/perf/format old/tests/perf/hashset old/tests/perf/kani-lib old/tests/perf/misc old/tests/perf/s2n-quic old/tests/perf/string
-          rm -rf new/tests/perf/btreeset new/tests/perf/format new/tests/perf/hashset new/tests/perf/kani-lib new/tests/perf/misc new/tests/perf/s2n-quic new/tests/perf/string
-        name: Delete all tests apart from failing one
-
       - name: Run benchcomp
         run: |
           new/tools/benchcomp/bin/benchcomp \
