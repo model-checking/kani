@@ -35,32 +35,52 @@ where
 #[kani::proof]
 #[kani::unwind(16)]
 fn main() {
-    finish(1, || yield);
-    finish(8, || {
-        for _ in 0..8 {
-            yield;
-        }
-    });
-    finish(1, || {
-        if true {
-            yield;
-        } else {
-        }
-    });
-    finish(1, || {
-        if false {
-        } else {
-            yield;
-        }
-    });
-    finish(2, || {
-        if {
-            yield;
-            false
-        } {
-            yield;
-            panic!()
-        }
-        yield
-    });
+    finish(
+        1,
+        #[coroutine]
+        || yield,
+    );
+    finish(
+        8,
+        #[coroutine]
+        || {
+            for _ in 0..8 {
+                yield;
+            }
+        },
+    );
+    finish(
+        1,
+        #[coroutine]
+        || {
+            if true {
+                yield;
+            } else {
+            }
+        },
+    );
+    finish(
+        1,
+        #[coroutine]
+        || {
+            if false {
+            } else {
+                yield;
+            }
+        },
+    );
+    finish(
+        2,
+        #[coroutine]
+        || {
+            if {
+                yield;
+                false
+            } {
+                yield;
+                panic!()
+            }
+            yield
+        },
+    );
 }

@@ -1331,11 +1331,11 @@ impl Expr {
     fn unop_return_type(op: UnaryOperator, arg: &Expr) -> Type {
         match op {
             Bitnot | BitReverse | Bswap | UnaryMinus => arg.typ.clone(),
-            CountLeadingZeros { .. } | CountTrailingZeros { .. } => arg.typ.clone(),
+            CountLeadingZeros { .. } | CountTrailingZeros { .. } => Type::unsigned_int(32),
             ObjectSize | PointerObject => Type::size_t(),
             PointerOffset => Type::ssize_t(),
             IsDynamicObject | IsFinite | Not => Type::bool(),
-            Popcount => arg.typ.clone(),
+            Popcount => Type::unsigned_int(32),
         }
     }
     /// Private helper function to make unary operators
