@@ -23,6 +23,7 @@ pub mod arbitrary;
 #[cfg(feature = "concrete_playback")]
 mod concrete_playback;
 pub mod futures;
+pub mod invariant;
 pub mod mem;
 pub mod slice;
 pub mod tuple;
@@ -34,6 +35,7 @@ pub mod internal;
 mod models;
 
 pub use arbitrary::Arbitrary;
+pub use invariant::Invariant;
 #[cfg(feature = "concrete_playback")]
 pub use concrete_playback::concrete_playback_run;
 
