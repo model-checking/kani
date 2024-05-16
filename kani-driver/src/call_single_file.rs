@@ -133,6 +133,7 @@ impl KaniSession {
                 "panic_abort_tests=yes",
                 "-Z",
                 "mir-enable-passes=-RemoveStorageMarkers",
+                "--check-cfg=cfg(kani)",
             ]
             .map(OsString::from),
         );
