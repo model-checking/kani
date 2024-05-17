@@ -107,6 +107,13 @@ pub fn derive_arbitrary(item: TokenStream) -> TokenStream {
     derive::expand_derive_arbitrary(item)
 }
 
+/// Allow users to auto generate Invariant implementations by using `#[derive(Invariant)]` macro.
+#[proc_macro_error]
+#[proc_macro_derive(Invariant)]
+pub fn derive_invariant(item: TokenStream) -> TokenStream {
+    derive::expand_derive_invariant(item)
+}
+
 /// Add a precondition to this function.
 ///
 /// This is part of the function contract API, for more general information see
