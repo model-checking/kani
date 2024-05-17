@@ -31,7 +31,7 @@ impl Invariant for char {
     }
 }
 
-/// The given type can be represented by an unconstrained symbolic value of size_of::<T>.
+/// Any value is considered safe for the type
 macro_rules! trivial_invariant {
     ( $type: ty ) => {
         impl Invariant for $type {
