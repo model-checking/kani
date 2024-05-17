@@ -9,5 +9,5 @@ pub trait Invariant
 where
     Self: Sized,
 {
-    fn is_valid(&self) -> bool;
+    fn is_safe(&self) -> bool;
 }
