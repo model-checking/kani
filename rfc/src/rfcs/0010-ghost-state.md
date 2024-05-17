@@ -21,10 +21,10 @@ TODO
 We propose that ghost state to be implemented using a trait which is extended by Kani.
 
 ```rust
-/// Trait that indicates a type has an associated ghost code of type `S`.
+/// Trait that indicates a type has an associated ghost code of type `V`.
 ///
 /// A type can have many multiple implementations, each will be mapped to a different ghost state.
-pub trait GhostState<S: Default + GhostValue>: Sized + GhostStateExt<S> {}
+pub trait GhostState<V: GhostValue>: Sized + GhostStateExt<V> {}
 
 /// Trait that specifies types that are safe to be used as a ghost value.
 ///
@@ -37,12 +37,12 @@ pub trait GhostState<S: Default + GhostValue>: Sized + GhostStateExt<S> {}
 pub unsafe trait GhostValue: Sized {}
 
 /// These functions are automatically implemented  
-pub trait GhostStateExt<S> {
+pub trait GhostStateExt<V> {
     /// Set the value of a ghost state.
-    fn set_ghost_state(&self, value: S);
+    fn set_ghost_state(&self, value: V);
 
     /// Get the value of the ghost state.
-    fn ghost_state(&self) -> S;
+    fn ghost_state(&self) -> V;
 
     /// Add a dummy function with a private structure so this trait cannot be overwritten.
     #[doc(hidden)]
@@ -50,20 +50,23 @@ pub trait GhostStateExt<S> {
 }
 ```
 
+With that, each implementation of `GhostState` is considered a separate ghost state type,
+and they will be tracked independently.
+
 For example, let's say a user wants to check their union have been initialized, together with
 which variant.
 
 ```rust
-union Size {
+union MySize {
     unsigned: usize,
     signed: isize,
 }
 
 /// Declare ghost state to track initialization.
-impl kani::GhostState<IsInit> for Size {}
+impl kani::GhostState<IsInit> for MySize {}
 
 /// Declare ghost state to track which variant is used.
-impl kani::GhostState<IsSigned> for Size {}
+impl kani::GhostState<IsSigned> for MySize {}
 
 /// Declare the ghost memory type and declare that it can be used as `GhostValue`
 struct IsInit(bool);
@@ -74,7 +77,7 @@ struct IsSigned(bool);
 
 unsafe impl kani::GhostValue for IsSigned {}
 
-impl Size {
+impl MySize {
     /// Specify safety contract.
     #[kani::requires(self.ghost_state::< IsInit > () && ! self.ghost_state::< IsSigned > ())]
     pub unsafe fn unsigned(&self) -> usize {
@@ -90,6 +93,9 @@ impl Size {
 }
 ```
 
+Note that the example does not include `#[cfg(kani)]` to make it more readable, but the usage of Kani definitions
+force users to do so.
+
 One limitation today is that ghost state cannot be implemented for ZST types.
 Kani compiler will generate an unsupported feature for any reachable occurrence.
 
@@ -100,14 +106,14 @@ that cannot be overridden.
 For that, we added the `private` function, and we will include the following implementation:
 
 ```rust
-impl<T, S> GhostStateExt<S> for T {
+impl<T, V> GhostStateExt<V> for T {
     #[rustc_diagnostic_item = "KaniSetGhost"]
-    fn set_ghost_state(&self, value: S) {
+    fn set_ghost_state(&self, _value: V) {
         kani_intrinsic()
     }
 
     #[rustc_diagnostic_item = "KaniGetGhost"]
-    fn ghost_state(&self) -> S {
+    fn ghost_state(&self) -> V {
         kani_intrinsic()
     }
 
@@ -115,15 +121,24 @@ impl<T, S> GhostStateExt<S> for T {
 }
 ```
 
-Since CBMC ghost memory supports multiple maps which are indexed by a name, we are planning to instantiate one
-map per reachable GhostState implementation.
-This would avoid value collision.
-We could eventually simplify CBMC to avoid using the "OR" logic over the members of a structure.
+### Shadow Memory
+
+To clarify the terminology, shadow memory in the context of this RFC is the mechanism to implement ghost state tracking.
+It can be seen as an abstract map that allow us to retrieve extra metadata associated with an address.
+
+We propose that the initial implementation to be done using a custom shadow memory library (module).
+Similar to the [shadow map](https://github.com/remi-delmas-3000/shadow-map) implemented by @remi-delmas-3000.
+
+Further experiments are needed to narrow down the exact implementation.
+Tts details are outside the scope of this RFC.
 
 ### Changes to Kani compiler
 
-We are creating two new intrinsics to Kani: `KaniSetGhost` and `KaniGetGhost`.
-Those intrinsics will directly map to CBMC's
+The compiler will instantiate one static shadow memory to represent each ghost state instantiation reachable
+from a harness.
+
+The two new intrinsics, `KaniSetGhost` and `KaniGetGhost`, implementations
+will resolve which shadow memory object to perform the insertion / lookup at compile time.
 
 ## Rationale and alternatives
 
@@ -182,16 +197,21 @@ i.e., orphan rule does not apply.
 The major downside is that
 
 1. We either restrict `T` to be sized, or it may not be clear to the user that the shadow memory for the same address
-   changes with coercion. See follow-up section on why generate one shadow memory per `(T, S)` combination.
-2. User has no way to check if the combination of `(T, S)` is being used anywhere else to represent a different state.
+   changes with coercion. See follow-up section on why generate one shadow memory per `(T, V)` combination.
+2. User has no way to check if the combination of `(T, V)` is being used anywhere else to represent a different state.
 
 ### Representing a ghost state
 
-We propose that a ghost state is specific to each combination of type being tracked `T` and the state `S`, i.e.,
-we will create a new shadow memory for each combination of the pair `(T, S)`.
+We propose that a ghost state is specific to each combination of type being tracked `T` and the state value type `V`,
+i.e., we will create a new shadow memory for each combination of the pair `(T, V)`.
 
 First, this ensures there is one specific semantic for each shadow memory.
 The semantics is clear and can be easily documented by documenting the trait implementation.
+
+However, this approach may not be scalable, and we may need to restrict the representation to one of the following:
+
+- Up to one ghost state implementation per type, where `GhostValue` is an associated type instead.
+- Restrict `GhostState` implementation to `*const u8` only, which would limit to one shadow memory per ghost state.
 
 ## Open questions
 
@@ -202,6 +222,7 @@ The semantics is clear and can be easily documented by documenting the trait imp
   For initial implementations, I would prefer keeping it simple and maybe just add print statements.
 - Should Kani automatically propagate ghost state for copy and clone (at least for temporary variables)?
     - What about transmute?
+- Should we restrict the number of shadow memories to max one per `GhostValue` or one per concrete type `T`?
 
 ## Out of scope / Future Improvements
 
