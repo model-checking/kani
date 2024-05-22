@@ -68,6 +68,16 @@ default-unwind = 1
 
 The options here are the same as on the command line (`cargo kani --help`), and flags (that is, command line arguments that don't take a value) are enabled by setting them to `true`.
 
+Starting with Rust 1.80 (or nightly-2024-05-05), every reachable #[cfg] will be automatically checked that they match the expected config names and values.
+To avoid warnings on `cfg(kani)`, we recommend adding the `check-cfg` lint config in your crate's `Cargo.toml` as follows:
+
+```toml
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
+```
+
+For more information please consult this [blog post](https://blog.rust-lang.org/2024/05/06/check-cfg.html).
+
 ## The build process
 
 When Kani builds your code, it does two important things:
