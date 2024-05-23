@@ -73,7 +73,7 @@ impl TypeExt for Type {
                     && components.iter().any(|x| x.name() == "vtable" && x.typ().is_pointer())
             }
             Type::StructTag(tag) => {
-                st.lookup(&tag.to_string()).unwrap().typ.is_rust_trait_fat_ptr(st)
+                st.lookup(tag.to_string()).unwrap().typ.is_rust_trait_fat_ptr(st)
             }
             _ => false,
         }
@@ -1140,7 +1140,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Mapping enums to CBMC types is rather complicated. There are a few cases to consider:
     /// 1. When there is only 0 or 1 variant, this is straightforward as the code shows
     /// 2. When there are more variants, rust might decides to apply the typical encoding which
-    /// regard enums as tagged union, or an optimized form, called niche encoding.
+    ///    regard enums as tagged union, or an optimized form, called niche encoding.
     ///
     /// The direct encoding is straightforward. Enums are just mapped to C as a struct of union of structs.
     /// e.g.

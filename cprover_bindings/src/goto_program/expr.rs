@@ -1055,6 +1055,7 @@ impl Expr {
     ///     <https://github.com/rust-lang/rfcs/blob/master/text/1199-simd-infrastructure.md#comparisons>).
     ///     The signedness doesn't matter, as the result for each element is
     ///     either "all ones" (true) or "all zeros" (false).
+    ///
     /// For example, one can use `simd_eq` on two `f64x4` vectors and assign the
     /// result to a `u64x4` vector. But it's not possible to assign it to: (1) a
     /// `u64x2` because they don't have the same length; or (2) another `f64x4`
@@ -1665,7 +1666,7 @@ impl Expr {
                         continue;
                     }
                     let name = field.name();
-                    exprs.insert(name, self.clone().member(&name.to_string(), symbol_table));
+                    exprs.insert(name, self.clone().member(name.to_string(), symbol_table));
                 }
             }
         }

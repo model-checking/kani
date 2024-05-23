@@ -112,7 +112,7 @@ impl KaniSession {
                 let mut cmd = setup_cargo_command()?;
                 cmd.args(&cargo_args)
                     .args(vec!["-p", &package.name])
-                    .args(&verification_target.to_args())
+                    .args(verification_target.to_args())
                     .args(&pkg_args)
                     .env("RUSTC", &self.kani_compiler)
                     // Use CARGO_ENCODED_RUSTFLAGS instead of RUSTFLAGS is preferred. See
@@ -315,13 +315,16 @@ fn validate_package_names(package_names: &[String], packages: &[Package]) -> Res
 }
 
 /// Extract the packages that should be verified.
-/// If `--package <pkg>` is given, return the list of packages selected.
-/// If `--exclude <pkg>` is given, return the list of packages not excluded.
-/// If `--workspace` is given, return the list of workspace members.
-/// If no argument provided, return the root package if there's one or all members.
+///
+/// The result is build following these rules:
+/// - If `--package <pkg>` is given, return the list of packages selected.
+/// - If `--exclude <pkg>` is given, return the list of packages not excluded.
+/// - If `--workspace` is given, return the list of workspace members.
+/// - If no argument provided, return the root package if there's one or all members.
 ///   - I.e.: Do whatever cargo does when there's no `default_members`.
 ///   - This is because `default_members` is not available in cargo metadata.
 ///     See <https://github.com/rust-lang/cargo/issues/8033>.
+///
 /// In addition, if either `--package <pkg>` or `--exclude <pkg>` is given,
 /// validate that `<pkg>` is a package name in the workspace, or return an error
 /// otherwise.

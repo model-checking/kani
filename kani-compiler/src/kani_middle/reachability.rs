@@ -303,7 +303,7 @@ impl<'a, 'tcx> MonoItemsFnCollector<'a, 'tcx> {
 /// 1. Every function / method / closures that may be directly invoked.
 /// 2. Every function / method / closures that may have their address taken.
 /// 3. Every method that compose the impl of a trait for a given type when there's a conversion
-/// from the type to the trait.
+///    from the type to the trait.
 ///    - I.e.: If we visit the following code:
 ///      ```
 ///      let var = MyType::new();
@@ -313,7 +313,8 @@ impl<'a, 'tcx> MonoItemsFnCollector<'a, 'tcx> {
 /// 4. Every Static variable that is referenced in the function or constant used in the function.
 /// 5. Drop glue.
 /// 6. Static Initialization
-/// This code has been mostly taken from `rustc_monomorphize::collector::MirNeighborCollector`.
+///
+/// Remark: This code has been mostly taken from `rustc_monomorphize::collector::MirNeighborCollector`.
 impl<'a, 'tcx> MirVisitor for MonoItemsFnCollector<'a, 'tcx> {
     /// Collect the following:
     /// - Trait implementations when casting from concrete to dyn Trait.

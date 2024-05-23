@@ -388,7 +388,7 @@ fn collect_expected_tests_from_dir(
             && (file_path.to_str().unwrap().ends_with(".expected")
                 || "expected" == file_path.file_name().unwrap())
         {
-            fs::create_dir_all(&build_dir.join(file_path.file_stem().unwrap())).unwrap();
+            fs::create_dir_all(build_dir.join(file_path.file_stem().unwrap())).unwrap();
             let paths =
                 TestPaths { file: file_path, relative_dir: relative_dir_path.to_path_buf() };
             tests.push(make_test(config, &paths, inputs));
@@ -446,7 +446,7 @@ fn collect_exec_tests_from_dir(
         }
 
         // Create directory for test and add it to the tests to be run
-        fs::create_dir_all(&build_dir.join(file_path.file_stem().unwrap())).unwrap();
+        fs::create_dir_all(build_dir.join(file_path.file_stem().unwrap())).unwrap();
         let paths = TestPaths { file: file_path, relative_dir: relative_dir_path.to_path_buf() };
         tests.push(make_test(config, &paths, inputs));
     }

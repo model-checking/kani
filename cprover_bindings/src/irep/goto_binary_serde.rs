@@ -78,11 +78,9 @@ pub fn read_goto_binary_file(filename: &Path) -> io::Result<()> {
 /// [NumberedIrep] from its unique number.
 ///
 /// In practice:
-/// - the forward directon from [IrepKey] to unique numbers is
-/// implemented using a `HashMap<IrepKey,usize>`
-/// - the inverse direction from unique numbers to [NumberedIrep] is implemented
-/// using a `Vec<NumberedIrep>` called the `index` that stores [NumberedIrep]
-/// under their unique number.
+/// - the forward directon from [IrepKey] to unique numbers is implemented using a `HashMap<IrepKey,usize>`
+/// - the inverse direction from unique numbers to [NumberedIrep] is implemented usign a `Vec<NumberedIrep>`
+///   called the `index` that stores [NumberedIrep] under their unique number.
 ///
 /// Earlier we said that an [NumberedIrep] is conceptually a pair formed of
 /// an [IrepKey] and its unique number. It is represented using only
