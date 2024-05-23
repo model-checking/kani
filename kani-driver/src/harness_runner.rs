@@ -9,6 +9,8 @@ use std::thread;
 use std::sync::mpsc;
 use std::sync::Arc;
 use std::time::Instant;
+use std::fs::File;
+use std::io::Write;
 
 use crate::args::OutputFormat;
 use crate::call_cbmc::{VerificationResult, VerificationStatus};
@@ -135,6 +137,20 @@ impl KaniSession {
             // When quiet, we don't want to print anything at all.
             // When output is old, we also don't have real results to print.
             if !self.args.common_args.quiet && self.args.output_format != OutputFormat::Old {
+                let file_name = harness.pretty_name.clone(); // Clone the pretty_name to avoid borrowing issues
+                let file = File::create(&file_name);
+
+                let output = result.render(
+                    &self.args.output_format,
+                    harness.attributes.should_panic,
+                    self.args.coverage,
+                );
+
+                if let Err(e) = writeln!(file.unwrap(), "{}", output) {
+                    eprintln!("Failed to write to file {}: {}", file_name, e);
+                }
+
+                /*
                 println!(
                     "{}",
                     result.render(
@@ -142,7 +158,7 @@ impl KaniSession {
                         harness.attributes.should_panic,
                         self.args.coverage
                     )
-                );
+                );*/
             }
             self.gen_and_add_concrete_playback(harness, &mut result)?;
             Ok(result)
