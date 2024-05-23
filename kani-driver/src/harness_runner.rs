@@ -33,10 +33,11 @@ pub(crate) struct HarnessResult<'pr> {
     pub harness: &'pr HarnessMetadata,
     pub result: VerificationResult,
 }
+
 impl<'sess, 'pr> HarnessRunner<'sess, 'pr> {
     /// Given a [`HarnessRunner`] (to abstract over how these harnesses were generated), this runs
     /// the proof-checking process for each harness in `harnesses`.
-    pub(crate) async fn check_all_harnesses(
+    pub(crate) fn check_all_harnesses(
         &self,
         harnesses: &'pr [&HarnessMetadata],
     ) -> Result<Vec<HarnessResult<'pr>>> {
@@ -44,42 +45,36 @@ impl<'sess, 'pr> HarnessRunner<'sess, 'pr> {
 
         let sorted_harnesses = crate::metadata::sort_harnesses_by_loc(harnesses);
 
-        let num_threads = self.sess.args.jobs().unwrap_or_else(num_cpus::get);
-        let semaphore = Arc::new(tokio::sync::Semaphore::new(num_threads));
+        let pool = {
+            let mut builder = rayon::ThreadPoolBuilder::new();
+            if let Some(x) = self.sess.args.jobs() {
+                builder = builder.num_threads(x);
+            }
+            builder.build()?
+        };
 
-        let mut tasks = Vec::new();
+        let results = pool.install(|| -> Result<Vec<HarnessResult<'pr>>> {
+            sorted_harnesses
+                .par_iter()
+                .map(|harness| -> Result<HarnessResult<'pr>> {
+                    let harness_filename = harness.pretty_name.replace("::", "-");
+                    let report_dir = self.project.outdir.join(format!("report-{harness_filename}"));
+                    let goto_file =
+                        self.project.get_harness_artifact(&harness, ArtifactType::Goto).unwrap();
+                
+                    self.sess.instrument_model(goto_file, goto_file, &self.project, &harness)?;
 
-        for harness in sorted_harnesses {
-            let harness = harness.clone();
-            let semaphore = semaphore.clone();
-            let sess = self.sess.clone();
-            let project = self.project.clone();
+                    if self.sess.args.synthesize_loop_contracts {
+                        self.sess.synthesize_loop_contracts(goto_file, &goto_file, &harness)?;
+                    }
+                    
+                    let result = self.sess.check_harness(goto_file, &report_dir, harness)?;
+                    Ok(HarnessResult { harness, result })
+                })
+                .collect::<Result<Vec<_>>>()
+        })?;
 
-            let task = tokio::spawn(async move {
-                let _permit = semaphore.acquire().await;
-                let harness_filename = harness.pretty_name.replace("::", "-");
-                let report_dir = project.outdir.join(format!("report-{harness_filename}"));
-                let goto_file = project.get_harness_artifact(&harness, ArtifactType::Goto).unwrap();
-
-                sess.instrument_model(goto_file, goto_file, &project, &harness)?;
-
-                if sess.args.synthesize_loop_contracts {
-                    sess.synthesize_loop_contracts(goto_file, &goto_file, &harness)?;
-                }
-
-                let result = sess.check_harness(goto_file, &report_dir, &harness)?;
-                Ok(HarnessResult { harness, result }) as Result<HarnessResult<'pr>>
-            });
-
-            tasks.push(task);
-        }
-
-        let results: Result<Vec<HarnessResult<'pr>>> = futures::future::join_all(tasks)
-            .await
-            .into_iter()
-            .collect::<Result<Vec<_>, _>>()?;
-
-        Ok(results)
+       Ok(results)
     }
 
     /// Return an error if the user is trying to verify a harness with stubs without enabling the
@@ -109,6 +104,7 @@ impl<'sess, 'pr> HarnessRunner<'sess, 'pr> {
         Ok(())
     }
 }
+
 
 impl KaniSession {
     /// Run the verification process for a single harness
