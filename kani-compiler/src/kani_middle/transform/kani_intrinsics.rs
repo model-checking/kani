@@ -89,7 +89,7 @@ impl IntrinsicGeneratorPass {
         new_body.insert_stmt(stmt, &mut terminator);
         let machine_info = MachineInfo::target();
 
-        // First argument type.
+        // The first and only argument type.
         let arg_ty = new_body.locals()[1].ty;
         let TyKind::RigidTy(RigidTy::RawPtr(target_ty, _)) = arg_ty.kind() else { unreachable!() };
         let validity = ty_validity_per_offset(&machine_info, target_ty, 0);

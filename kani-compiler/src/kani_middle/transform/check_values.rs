@@ -312,9 +312,13 @@ impl<'a> MirVisitor for CheckValueVisitor<'a> {
         } else if self.target.is_none() {
             // Leave it as an exhaustive match to be notified when a new kind is added.
             match &stmt.kind {
-                StatementKind::Intrinsic(NonDivergingIntrinsic::CopyNonOverlapping(_)) => {
-                    // Source and destination have the same type, so no invalid value cannot be
-                    // generated.
+                StatementKind::Intrinsic(NonDivergingIntrinsic::CopyNonOverlapping(copy)) => {
+                    // Source is a *const T and it must be safe for read.
+                    // TODO: Implement value check.
+                    self.push_target(SourceOp::UnsupportedCheck {
+                        check: "copy_nonoverlapping".to_string(),
+                        ty: copy.src.ty(self.locals).unwrap(),
+                    });
                 }
                 StatementKind::Assign(place, rvalue) => {
                     // First check rvalue.
@@ -711,6 +715,15 @@ fn expect_instance(locals: &[LocalDecl], func: &Operand) -> Instance {
     }
 }
 
+/// Instrument MIR to check the value pointed by `rvalue_ptr` satisfies requirement `req`.
+///
+/// The MIR will do something equivalent to:
+/// ```rust
+///     let ptr = rvalue_ptr.byte_offset(req.offset);
+///     let typed_ptr = ptr as *const Unsigned<req.size>; // Some unsigned type with length req.size
+///     let value = unsafe { *typed_ptr };
+///     req.valid_range.contains(value)
+/// ```
 pub fn build_limits(
     body: &mut MutableBody,
     req: &ValidValueReq,

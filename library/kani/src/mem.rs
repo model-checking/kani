@@ -10,8 +10,10 @@
 //!    be dereferenceable: the memory range of the given size starting at the pointer must all be
 //!    within the bounds of a single allocated object. Note that in Rust, every (stack-allocated)
 //!    variable is considered a separate allocated object.
-//!    Even for operations of size zero, the pointer must not be pointing to deallocated memory,
-//!    i.e., deallocation makes pointers invalid even for zero-sized operations.
+//!    ~~Even for operations of size zero, the pointer must not be pointing to deallocated memory,
+//!    i.e., deallocation makes pointers invalid even for zero-sized operations.~~
+//!    ZST access is not OK for any pointer.
+//!    See: <https://github.com/rust-lang/unsafe-code-guidelines/issues/472>
 //! 3. However, casting any non-zero integer literal to a pointer is valid for zero-sized
 //!    accesses, even if some memory happens to exist at that address and gets deallocated.
 //!    This corresponds to writing your own allocator: allocating zero-sized objects is not very
@@ -39,38 +41,35 @@ use crate::mem::private::Internal;
 use std::mem::{align_of, size_of};
 use std::ptr::{DynMetadata, NonNull, Pointee};
 
-/// Assert that the pointer is valid for access according to [crate::mem] conditions 1, 2 and 3.
+/// Check if the pointer is valid for write access according to [crate::mem] conditions 1, 2
+/// and 3.
 ///
-/// Note this function also checks for pointer alignment. Use [self::assert_valid_ptr_unaligned]
+/// Note this function also checks for pointer alignment. Use [self::can_write_unaligned]
 /// if you don't want to fail for unaligned pointers.
 ///
 /// This function does not check if the value stored is valid for the given type. Use
-/// [self::has_valid_value] for that.
+/// [self::can_dereference] for that.
 ///
-/// TODO: Kani should automatically add those checks when a de-reference happens.
-/// <https://github.com/model-checking/kani/issues/2975>
-///
-/// This function will either panic or return `true`. This is to make it easier to use it in
-/// contracts.
+/// This function will panic today if the pointer is not null, and it points to an unallocated or
+/// deallocated memory location. This is an existing Kani limitation.
+/// See <https://github.com/model-checking/kani/issues/2690> for more details.
 #[crate::unstable(
     feature = "mem-predicates",
     issue = 2690,
     reason = "experimental memory predicate API"
 )]
-pub fn assert_valid_ptr<T>(ptr: *const T) -> bool
+pub fn can_write<T>(ptr: *mut T) -> bool
 where
     T: ?Sized,
     <T as Pointee>::Metadata: PtrProperties<T>,
 {
-    crate::assert(!ptr.is_null(), "Expected valid pointer, but found `null`");
     let (thin_ptr, metadata) = ptr.to_raw_parts();
-    crate::assert(metadata.is_ptr_aligned(thin_ptr, Internal), "Expected pointer to be aligned");
-    assert_allocated(&metadata, thin_ptr)
+    metadata.is_ptr_aligned(thin_ptr, Internal) && is_inbounds(&metadata, thin_ptr)
 }
 
 /// Assert that the pointer is valid for access according to [crate::mem] conditions 1, 2 and 3.
 ///
-/// Note this function succeeds for unaligned pointers. See [self::assert_valid_ptr] if you also
+/// Note this function succeeds for unaligned pointers. See [self::can_write] if you also
 /// want to check pointer alignment.
 ///
 /// This function will either panic or return `true`. This is to make it easier to use it in
@@ -79,21 +78,23 @@ where
     issue = 2690,
     reason = "experimental memory predicate API"
 )]
-pub fn assert_valid_ptr_unaligned<T>(ptr: *const T) -> bool
+pub fn can_write_unaligned<T>(ptr: *const T) -> bool
 where
     T: ?Sized,
     <T as Pointee>::Metadata: PtrProperties<T>,
 {
-    crate::assert(!ptr.is_null(), "Expected valid pointer, but found `null`");
-
     let (thin_ptr, metadata) = ptr.to_raw_parts();
-    assert_allocated(&metadata, thin_ptr)
+    is_inbounds(&metadata, thin_ptr)
 }
 
 /// Checks that pointer `ptr` point to a valid value of type `T`.
 ///
-/// For that, the pointer has to be a valid pointer and the value stored must respect the validity
-/// invariants for type `T`.
+/// For that, the pointer has to be a valid pointer according to [crate::mem] conditions 1, 2
+/// and 3,
+/// and the value stored must respect the validity invariants for type `T`.
+///
+/// TODO: Kani should automatically add those checks when a de-reference happens.
+/// <https://github.com/model-checking/kani/issues/2975>
 ///
 /// Invoking this with an invalid pointer will panic due to a memory violation error.
 #[crate::unstable(
@@ -101,28 +102,40 @@ where
     issue = 2690,
     reason = "experimental memory predicate API"
 )]
-pub fn has_valid_value<T>(ptr: *const T) -> bool {
-    assert_valid_ptr(ptr);
-    valid_value_intrinsic(ptr)
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub fn can_dereference<T>(ptr: *const T) -> bool
+where
+    T: ?Sized,
+    <T as Pointee>::Metadata: PtrProperties<T>,
+{
+    let (thin_ptr, metadata) = ptr.to_raw_parts();
+    metadata.is_ptr_aligned(thin_ptr, Internal)
+        && is_inbounds(&metadata, thin_ptr)
+        && unsafe { has_valid_value(ptr) }
 }
 
-/// Assert that `data_ptr` points to an allocation that can hold the pointee size.
-fn assert_allocated<M, T>(metadata: &M, data_ptr: *const ()) -> bool
+/// Checks that `data_ptr` points to an allocation that can hold data of size calculated from `T`.
+///
+/// This will panic if `data_ptr` points to an invalid `non_null`
+fn is_inbounds<M, T>(metadata: &M, data_ptr: *const ()) -> bool
 where
     M: PtrProperties<T>,
     T: ?Sized,
 {
     let sz = metadata.pointee_size(Internal);
     if sz == 0 {
-        true // ZST pointers are always valid
+        true // ZST pointers are always valid including nullptr.
+    } else if data_ptr.is_null() {
+        false
     } else {
         // Note that this branch can't be tested in concrete execution as `is_read_ok` needs to be
         // stubbed.
+        // We first assert that the data_ptr
         crate::assert(
-            unsafe { is_valid_ptr(data_ptr, sz) },
-            "Expected valid pointer, but found dangling pointer",
+            unsafe { is_allocated(data_ptr, 0) },
+            "Kani does not support reasoning about pointer to unallocated memory",
         );
-        true
+        unsafe { is_allocated(data_ptr, sz) }
     }
 }
 
@@ -224,22 +237,22 @@ where
 ///
 /// I.e.: This function always returns `true` if the pointer is valid.
 /// Otherwise, it returns non-det boolean.
-#[rustc_diagnostic_item = "KaniIsValidPtr"]
+#[rustc_diagnostic_item = "KaniIsAllocated"]
 #[inline(never)]
-unsafe fn is_valid_ptr(_ptr: *const (), _size: usize) -> bool {
+unsafe fn is_allocated(_ptr: *const (), _size: usize) -> bool {
     kani_intrinsic()
 }
 
 /// Check if the value stored in the given location satisfies type `T` validity requirements.
 #[rustc_diagnostic_item = "KaniValidValue"]
 #[inline(never)]
-fn valid_value_intrinsic<T>(_ptr: *const T) -> bool {
+unsafe fn has_valid_value<T: ?Sized>(_ptr: *const T) -> bool {
     kani_intrinsic()
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{assert_valid_ptr, PtrProperties};
+    use super::{can_write, PtrProperties};
     use crate::mem::private::Internal;
     use std::fmt::Debug;
     use std::intrinsics::size_of;
@@ -294,13 +307,13 @@ mod tests {
     #[test]
     pub fn test_empty_slice() {
         let slice_ptr = Vec::<char>::new().as_slice() as *const [char];
-        assert_valid_ptr(slice_ptr);
+        can_write(slice_ptr);
     }
 
     #[test]
     pub fn test_empty_str() {
         let slice_ptr = String::new().as_str() as *const str;
-        assert_valid_ptr(slice_ptr);
+        can_write(slice_ptr);
     }
 
     #[test]
@@ -311,21 +324,21 @@ mod tests {
 
     fn test_dangling_of_t<T>() {
         let dangling: *const T = NonNull::<T>::dangling().as_ptr();
-        assert_valid_ptr(dangling);
+        can_write(dangling);
 
         let vec_ptr = Vec::<T>::new().as_ptr();
-        assert_valid_ptr(vec_ptr);
+        can_write(vec_ptr);
     }
 
     #[test]
     #[should_panic(expected = "Expected valid pointer, but found `null`")]
     fn test_null_fat_ptr() {
-        assert_valid_ptr(ptr::null::<char>() as *const dyn Debug);
+        can_write(ptr::null::<char>() as *const dyn Debug);
     }
 
     #[test]
     #[should_panic(expected = "Expected valid pointer, but found `null`")]
     fn test_null_char() {
-        assert_valid_ptr(ptr::null::<char>());
+        can_write(ptr::null::<char>());
     }
 }

@@ -24,6 +24,7 @@ pub mod contracts {
 mod verify {
     use super::*;
 
+    /// Use this type to ensure that mem swap does not drop the value.
     #[derive(kani::Arbitrary)]
     struct CannotDrop<T> {
         inner: T,

@@ -21,12 +21,14 @@ pub mod contracts {
     ///  - The pointer must be properly aligned.
     ///  - It must be “dereferenceable” in the sense defined in the module documentation.
     ///  - TODO: The pointer must point to an initialized instance of T.
+    ///     - We check for value validity, but not initialization yet.
     ///
+    /// TODO: How to ensure aliasing rules??
     /// You must enforce Rust’s aliasing rules, since the returned lifetime 'a is arbitrarily chosen and does not
     /// necessarily reflect the actual lifetime of the data. In particular, while this reference exists, the memory
     /// the pointer points to must not get mutated (except inside UnsafeCell).
     /// Taken from: <https://doc.rust-lang.org/std/ptr/struct.NonNull.html#method.as_ref>
-    #[requires(assert_valid_ptr(obj.as_ptr()))]
+    #[requires(can_dereference(obj.as_ptr()))]
     pub unsafe fn as_ref<'a, T>(obj: &NonNull<T>) -> &'a T {
         obj.as_ref()
     }
@@ -39,12 +41,13 @@ pub mod contracts {
     /// Safety
     ///
     /// Behavior is undefined if any of the following conditions are violated:
-    ///   - dst must be valid for both reads and writes.
-    ///   - dst must be properly aligned.
-    ///   - dst must point to a properly initialized value of type T.
+    ///   - `dst` must be valid for both reads and writes.
+    ///   - `dst` must be properly aligned.
+    ///   - TODO: `dst` must point to a properly initialized value of type `T`.
+    ///     - We check validity but not initialization.
     ///
-    /// Note that even if T has size 0, the pointer must be non-null and properly aligned.
-    #[requires(assert_valid_ptr(dst) && has_valid_value(dst))]
+    /// Note that even if `T` has size 0, the pointer must be non-null and properly aligned.
+    #[requires(can_dereference(dst))]
     #[modifies(dst)]
     pub unsafe fn replace<T>(dst: *mut T, src: T) -> T {
         std::ptr::replace(dst, src)
