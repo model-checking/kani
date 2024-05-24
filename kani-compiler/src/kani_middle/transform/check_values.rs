@@ -505,11 +505,27 @@ impl<'a> MirVisitor for CheckValueVisitor<'a> {
                         // We only care about *mut T as *mut U
                         return;
                     };
+                    if dest_pointee_ty.kind().is_unit() {
+                        // Ignore cast to *mut () since nothing can be written to it.
+                        // This is a common pattern
+                        return;
+                    }
+
                     let src_ty = op.ty(self.locals).unwrap();
                     debug!(?src_ty, ?dest_ty, "visit_rvalue mutcast");
                     let TyKind::RigidTy(RigidTy::RawPtr(src_pointee_ty, _)) = src_ty.kind() else {
                         unreachable!()
                     };
+
+                    if src_pointee_ty.kind().is_unit() {
+                        // We cannot track what was the initial type. Thus, fail.
+                        self.push_target(SourceOp::UnsupportedCheck {
+                            check: "mutable cast".to_string(),
+                            ty: src_ty,
+                        });
+                        return;
+                    }
+
                     if let Ok(src_validity) =
                         ty_validity_per_offset(&self.machine, src_pointee_ty, 0)
                     {
@@ -558,6 +574,8 @@ impl<'a> MirVisitor for CheckValueVisitor<'a> {
                         })
                     }
                 }
+                // `DynStar` is not currently supported in Kani.
+                // TODO: https://github.com/model-checking/kani/issues/1784
                 CastKind::DynStar => self.push_target(UnsupportedCheck {
                     check: "Dyn*".to_string(),
                     ty: (rvalue.ty(self.locals).unwrap()),

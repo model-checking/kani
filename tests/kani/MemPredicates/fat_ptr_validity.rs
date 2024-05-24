@@ -5,24 +5,22 @@
 
 extern crate kani;
 
-use kani::mem::assert_valid_ptr;
+use kani::mem::{can_dereference, can_write};
 
 mod valid_access {
     use super::*;
     #[kani::proof]
     pub fn check_valid_dyn_ptr() {
-        let boxed: Box<dyn PartialEq<u8>> = Box::new(10u8);
-        let raw_ptr = Box::into_raw(boxed);
-        assert_valid_ptr(raw_ptr);
-        let boxed = unsafe { Box::from_raw(raw_ptr) };
-        assert_ne!(*boxed, 0);
+        let mut var = 10u8;
+        let fat_ptr: *mut dyn PartialEq<u8> = &mut var as *mut _;
+        assert!(can_write(fat_ptr));
     }
 
     #[kani::proof]
     pub fn check_valid_slice_ptr() {
         let array = ['a', 'b', 'c'];
         let slice = &array as *const [char];
-        assert_valid_ptr(slice);
+        assert!(can_dereference(slice));
         assert_eq!(unsafe { &*slice }[0], 'a');
         assert_eq!(unsafe { &*slice }[2], 'c');
     }
@@ -30,10 +28,10 @@ mod valid_access {
     #[kani::proof]
     pub fn check_valid_zst() {
         let slice_ptr = Vec::<char>::new().as_slice() as *const [char];
-        assert_valid_ptr(slice_ptr);
+        assert!(can_dereference(slice_ptr));
 
         let str_ptr = String::new().as_str() as *const str;
-        assert_valid_ptr(str_ptr);
+        assert!(can_dereference(str_ptr));
     }
 }
 
@@ -43,14 +41,14 @@ mod invalid_access {
     #[kani::should_panic]
     pub fn check_invalid_dyn_ptr() {
         let raw_ptr: *const dyn PartialEq<u8> = unsafe { new_dead_ptr::<u8>(0) };
-        assert_valid_ptr(raw_ptr);
+        assert!(can_dereference(raw_ptr));
     }
 
     #[kani::proof]
     #[kani::should_panic]
     pub fn check_invalid_slice_ptr() {
         let raw_ptr: *const [char] = unsafe { new_dead_ptr::<[char; 2]>(['a', 'b']) };
-        assert_valid_ptr(raw_ptr);
+        assert!(can_dereference(raw_ptr));
     }
 
     #[kani::proof]
@@ -59,7 +57,7 @@ mod invalid_access {
         let array = [10usize; 10];
         let invalid: *const [usize; 11] = &array as *const [usize; 10] as *const [usize; 11];
         let ptr: *const [usize] = invalid as *const _;
-        assert_valid_ptr(ptr);
+        assert!(can_dereference(ptr));
     }
 
     unsafe fn new_dead_ptr<T>(val: T) -> *const T {
