@@ -39,7 +39,7 @@ impl<'a> ContractConditionsHandler<'a> {
     fn ensure_bootstrapped_replace_body(&self) -> (Vec<syn::Stmt>, Vec<syn::Stmt>) {
         if self.is_first_emit() {
             let return_type = return_type_to_type(&self.annotated_fn.sig.output);
-            (vec![syn::parse_quote!(let result : #return_type = kani::any_modifies();)], vec![])
+            (vec![syn::parse_quote!(let result_kani_internal : #return_type = kani::any_modifies();)], vec![])
         } else {
             let stmts = &self.annotated_fn.block.stmts;
             let idx = stmts
@@ -74,7 +74,7 @@ impl<'a> ContractConditionsHandler<'a> {
                     kani::assert(#attr, stringify!(#attr_copy));
                     #(#before)*
                     #(#after)*
-                    result
+                    result_kani_internal
                 )
             }
             ContractConditionsData::Ensures { attr, argument_names } => {
@@ -85,7 +85,7 @@ impl<'a> ContractConditionsHandler<'a> {
                     #(#after)*
                     kani::assume(#attr);
                     #copy_clean
-                    result
+                    result_kani_internal
                 )
             }
             ContractConditionsData::Modifies { attr } => {
@@ -93,7 +93,7 @@ impl<'a> ContractConditionsHandler<'a> {
                     #(#before)*
                     #(*unsafe { kani::internal::Pointer::assignable(#attr) } = kani::any_modifies();)*
                     #(#after)*
-                    result
+                    result_kani_internal
                 )
             }
         }
@@ -126,7 +126,7 @@ impl<'a> ContractConditionsHandler<'a> {
     }
 }
 
-/// Is this statement `let result : <...> = kani::any_modifies();`.
+/// Is this statement `let result_kani_internal : <...> = kani::any_modifies();`.
 fn is_replace_return_havoc(stmt: &syn::Stmt) -> bool {
     let Some(syn::LocalInit { diverge: None, expr: e, .. }) = try_as_result_assign(stmt) else {
         return false;

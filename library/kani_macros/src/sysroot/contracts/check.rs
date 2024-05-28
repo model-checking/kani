@@ -46,14 +46,14 @@ impl<'a> ContractConditionsHandler<'a> {
                 assert!(matches!(
                     inner.pop(),
                     Some(syn::Stmt::Expr(syn::Expr::Path(pexpr), None))
-                        if pexpr.path.get_ident().map_or(false, |id| id == "result")
+                        if pexpr.path.get_ident().map_or(false, |id| id == "result_kani_internal")
                 ));
 
                 quote!(
                     #arg_copies
                     #(#inner)*
                     #exec_postconditions
-                    result
+                    result_kani_internal
                 )
             }
             ContractConditionsData::Modifies { attr } => {
@@ -96,8 +96,8 @@ impl<'a> ContractConditionsHandler<'a> {
                 quote!(#wrapper_name)
             };
             syn::parse_quote!(
-                let result : #return_type = #wrapper_call(#(#args),*);
-                result
+                let result_kani_internal : #return_type = #wrapper_call(#(#args),*);
+                result_kani_internal
             )
         } else {
             self.annotated_fn.block.stmts.clone()

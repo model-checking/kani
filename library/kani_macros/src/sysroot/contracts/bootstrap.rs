@@ -89,9 +89,9 @@ impl<'a> ContractConditionsHandler<'a> {
                     #call_replace(#(#args),*)
                 } else {
                     unsafe { REENTRY = true };
-                    let result = #call_check(#(#also_args),*);
+                    let result_kani_internal = #call_check(#(#also_args),*);
                     unsafe { REENTRY = false };
-                    result
+                    result_kani_internal
                 }
             }
         ));

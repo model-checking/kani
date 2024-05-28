@@ -114,7 +114,7 @@ macro_rules! try_as_result_assign_pat {
                     ident: result_ident,
                     subpat: None,
                     ..
-                }) if result_ident == "result"
+                }) if result_ident == "result_kani_internal"
             ) => init.$convert(),
             _ => None,
         }
