@@ -12,7 +12,7 @@ use syn::{spanned::Spanned, visit::Visit, visit_mut::VisitMut, Expr, ItemFn, Sig
 use super::{
     helpers::{chunks_by, is_token_stream_2_comma, matches_path},
     ContractConditionsData, ContractConditionsHandler, ContractConditionsType,
-    ContractFunctionState,
+    ContractFunctionState, INTERNAL_RESULT_IDENT,
 };
 
 impl<'a> TryFrom<&'a syn::Attribute> for ContractFunctionState {
@@ -197,7 +197,7 @@ impl<'a> VisitMut for RenamerResult<'a> {
             i.path
                 .segments
                 .first_mut()
-                .map(|p| if p.ident == *self.0 {p.ident = Ident::new("result_kani_internal",Span::call_site())});
+                .map(|p| if p.ident == *self.0 {p.ident = Ident::new(INTERNAL_RESULT_IDENT,Span::call_site())});
         }
     }
 
@@ -206,7 +206,7 @@ impl<'a> VisitMut for RenamerResult<'a> {
     /// [`Self::visit_expr_path_mut`] is scope-unaware.
     fn visit_pat_ident_mut(&mut self, i: &mut syn::PatIdent) {
         if i.ident == *self.0 {
-            i.ident = Ident::new("result_kani_internal",Span::call_site())
+            i.ident = Ident::new(INTERNAL_RESULT_IDENT,Span::call_site())
         }
     }
 }

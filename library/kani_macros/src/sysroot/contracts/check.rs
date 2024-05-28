@@ -10,7 +10,7 @@ use syn::{Expr, FnArg, ItemFn, Token};
 use super::{
     helpers::*,
     shared::{make_unsafe_argument_copies, try_as_result_assign_mut},
-    ContractConditionsData, ContractConditionsHandler,
+    ContractConditionsData, ContractConditionsHandler, INTERNAL_RESULT_IDENT,
 };
 
 const WRAPPER_ARG_PREFIX: &str = "_wrapper_arg_";
@@ -46,14 +46,15 @@ impl<'a> ContractConditionsHandler<'a> {
                 assert!(matches!(
                     inner.pop(),
                     Some(syn::Stmt::Expr(syn::Expr::Path(pexpr), None))
-                        if pexpr.path.get_ident().map_or(false, |id| id == "result_kani_internal")
+                        if pexpr.path.get_ident().map_or(false, |id| id == INTERNAL_RESULT_IDENT)
                 ));
 
+                let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
                 quote!(
                     #arg_copies
                     #(#inner)*
                     #exec_postconditions
-                    result_kani_internal
+                    #result
                 )
             }
             ContractConditionsData::Modifies { attr } => {
@@ -95,9 +96,10 @@ impl<'a> ContractConditionsHandler<'a> {
             } else {
                 quote!(#wrapper_name)
             };
+            let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
             syn::parse_quote!(
-                let result_kani_internal : #return_type = #wrapper_call(#(#args),*);
-                result_kani_internal
+                let #result : #return_type = #wrapper_call(#(#args),*);
+                #result
             )
         } else {
             self.annotated_fn.block.stmts.clone()
