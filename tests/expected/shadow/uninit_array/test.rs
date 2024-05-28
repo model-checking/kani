@@ -6,7 +6,7 @@ use std::alloc::{alloc, dealloc, Layout};
 static mut SM: kani::shadow::ShadowMem = kani::shadow::ShadowMem::new();
 
 fn write(ptr: *mut i32, offset: usize, x: i32) {
-    unsafe { 
+    unsafe {
         let p = ptr.offset(offset as isize);
         p.write(x);
         SM.set_init(p as *mut u8, true);
@@ -15,10 +15,12 @@ fn write(ptr: *mut i32, offset: usize, x: i32) {
 
 fn check_init(b: bool) {
     let layout = Layout::array::<i32>(5).unwrap();
-    let ptr = unsafe { alloc(layout) as *mut i32};
+    let ptr = unsafe { alloc(layout) as *mut i32 };
     write(ptr, 0, 0);
     write(ptr, 1, 1);
-    if b { write(ptr, 2, 2) };
+    if b {
+        write(ptr, 2, 2)
+    };
     write(ptr, 3, 3);
     write(ptr, 4, 4);
     let index: usize = kani::any();

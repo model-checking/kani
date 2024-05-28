@@ -10,7 +10,6 @@ pub struct ShadowMem {
     is_init: [[bool; 64]; 1024],
 }
 
-
 impl ShadowMem {
     pub const fn new() -> Self {
         Self { is_init: [[false; 64]; 1024] }
