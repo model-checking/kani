@@ -16,14 +16,14 @@ impl ShadowMem {
     }
 
     /// # Safety
-    /// 
+    ///
     /// `ptr` must be valid
     pub unsafe fn is_init(&self, ptr: *const u8) -> bool {
         unsafe { read(&self.is_init, ptr) }
     }
 
     /// # Safety
-    /// 
+    ///
     /// `ptr` must be valid
     pub unsafe fn set_init(&mut self, ptr: *const u8, init: bool) {
         unsafe { write(&mut self.is_init, ptr, init) };
@@ -31,7 +31,7 @@ impl ShadowMem {
 }
 
 /// # Safety
-/// 
+///
 /// `ptr` must be valid
 pub unsafe fn read(sm: &[[bool; 64]; 1024], ptr: *const u8) -> bool {
     let obj = unsafe { __KANI_pointer_object(ptr) };
@@ -40,7 +40,7 @@ pub unsafe fn read(sm: &[[bool; 64]; 1024], ptr: *const u8) -> bool {
 }
 
 /// # Safety
-/// 
+///
 /// `ptr` must be valid
 pub unsafe fn write(sm: &mut [[bool; 64]; 1024], ptr: *const u8, val: bool) {
     let obj = unsafe { __KANI_pointer_object(ptr) };
