@@ -228,7 +228,12 @@ impl MutableBody {
 
     /// Clear all the existing logic of this body and turn it into a simple `return`.
     ///
-    /// We do not prune the local variables today for simplicity.
+    /// This function can be used when a new implementation of the body is needed.
+    /// For example, Kani intrinsics usually have a dummy body, which is replaced
+    /// by the compiler. This function allow us to delete the dummy body before
+    /// creating a new one.
+    ///
+    /// Note: We do not prune the local variables today for simplicity.
     pub fn clear_body(&mut self) {
         self.blocks.clear();
         let terminator = Terminator { kind: TerminatorKind::Return, span: self.span };
