@@ -871,6 +871,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// its primary argument and returns a tuple that contains:
     ///  * the previous value
     ///  * a boolean value indicating whether the operation was successful or not
+    ///
     /// In a sequential context, the update is always sucessful so we assume the
     /// second value to be true.
     /// -------------------------
@@ -955,9 +956,10 @@ impl<'tcx> GotocCtx<'tcx> {
     ///  * Both `src`/`dst` must be valid for reads/writes of `count *
     ///      size_of::<T>()` bytes (done by calls to `memmove`)
     ///  * (Exclusive to nonoverlapping copy) The region of memory beginning
-    ///      at `src` with a size of `count * size_of::<T>()` bytes must *not*
-    ///      overlap with the region of memory beginning at `dst` with the same
-    ///      size.
+    ///    at `src` with a size of `count * size_of::<T>()` bytes must *not*
+    ///    overlap with the region of memory beginning at `dst` with the same
+    ///    size.
+    ///
     /// In addition, we check that computing `count` in bytes (i.e., the third
     /// argument of the copy built-in call) would not overflow.
     pub fn codegen_copy(
@@ -1834,7 +1836,7 @@ impl<'tcx> GotocCtx<'tcx> {
     ///
     /// TODO: Add a check for the condition:
     ///  * `src` must point to a properly initialized value of type `T`
-    /// See <https://github.com/model-checking/kani/issues/920> for more details
+    ///    See <https://github.com/model-checking/kani/issues/920> for more details
     fn codegen_volatile_load(
         &mut self,
         mut fargs: Vec<Expr>,
@@ -1894,6 +1896,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Undefined behavior if any of these conditions are violated:
     ///  * `dst` must be valid for writes (done by memset writable check)
     ///  * `dst` must be properly aligned (done by `align_check` below)
+    ///
     /// In addition, we check that computing `bytes` (i.e., the third argument
     /// for the `memset` call) would not overflow
     fn codegen_write_bytes(

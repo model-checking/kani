@@ -110,9 +110,10 @@ struct CrateInfo {
 ///      compilation. The crate metadata is stored here (even if no codegen was actually performed).
 ///    - [CompilationStage::CompilationSkipped] no compilation was actually performed.
 ///      No work needs to be done.
-/// - Note: In a scenario where the compilation fails, the compiler will exit immediately,
-///  independent on the stage. Any artifact produced shouldn't be used.
-/// I.e.:
+///
+/// Note: In a scenario where the compilation fails, the compiler will exit immediately,
+/// independent on the stage. Any artifact produced shouldn't be used. I.e.:
+///
 /// ```dot
 /// graph CompilationStage {
 ///   Init -> {CodegenNoStubs, CompilationSkipped}

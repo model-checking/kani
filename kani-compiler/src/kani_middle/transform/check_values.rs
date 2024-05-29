@@ -628,6 +628,7 @@ impl<'a> MirVisitor for CheckValueVisitor<'a> {
                 AggregateKind::Array(_)
                 | AggregateKind::Closure(_, _)
                 | AggregateKind::Coroutine(_, _, _)
+                | AggregateKind::RawPtr(_, _)
                 | AggregateKind::Tuple => {}
             },
             Rvalue::AddressOf(_, _)

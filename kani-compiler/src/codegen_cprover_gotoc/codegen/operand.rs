@@ -393,7 +393,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// Generate a goto expression for a pointer to a static or thread-local variable.
     fn codegen_instance_pointer(&mut self, instance: Instance, is_thread_local: bool) -> Expr {
-        let sym = self.ensure(&instance.mangled_name(), |ctx, name| {
+        let sym = self.ensure(instance.mangled_name(), |ctx, name| {
             // Rust has a notion of "extern static" variables. These are in an "extern" block,
             // and so aren't initialized in the current codegen unit. For example (from std):
             //      extern "C" {

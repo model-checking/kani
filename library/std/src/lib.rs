@@ -135,14 +135,14 @@ macro_rules! eprint {
 #[cfg(not(feature = "concrete_playback"))]
 #[macro_export]
 macro_rules! println {
-    () => { };
+    () => { $crate::print!("\n") };
     ($($x:tt)*) => {{ let _ = format_args!($($x)*); }};
 }
 
 #[cfg(not(feature = "concrete_playback"))]
 #[macro_export]
 macro_rules! eprintln {
-    () => { };
+    () => { $crate::eprint!("\n") };
     ($($x:tt)*) => {{ let _ = format_args!($($x)*); }};
 }
 

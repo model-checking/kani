@@ -204,7 +204,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let body = self.transformer.body(self.tcx, instance);
         self.set_current_fn(instance, &body);
         debug!(krate=?instance.def.krate(), is_std=self.current_fn().is_std(), "declare_function");
-        self.ensure(&self.symbol_name_stable(instance), |ctx, fname| {
+        self.ensure(self.symbol_name_stable(instance), |ctx, fname| {
             Symbol::function(
                 fname,
                 ctx.fn_typ(instance, &body),

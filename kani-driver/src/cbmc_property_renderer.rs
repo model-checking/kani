@@ -700,6 +700,7 @@ fn update_properties_with_reach_status(
 /// Update the results of `code_coverage` (NOT `cover`) properties.
 /// - `SUCCESS` -> `UNCOVERED`
 /// - `FAILURE` -> `COVERED`
+///
 /// Note that these statuses are intermediate statuses that aren't reported to
 /// users but rather internally consumed and reported finally as `PARTIAL`, `FULL`
 /// or `NONE` based on aggregated line coverage results.
@@ -720,9 +721,10 @@ fn update_results_of_code_covererage_checks(mut properties: Vec<Property>) -> Ve
 
 /// Update the results of cover properties.
 /// We encode cover(cond) as assert(!cond), so if the assertion
-/// fails, then the cover property is satisfied and vice versa.
+/// fails, then the cover property is satisfied and vice versa:
 /// - SUCCESS -> UNSATISFIABLE
 /// - FAILURE -> SATISFIED
+///
 /// Note that if the cover property was unreachable, its status at this point
 /// will be `CheckStatus::Unreachable` and not `CheckStatus::Success` since
 /// `update_properties_with_reach_status` is called beforehand

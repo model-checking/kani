@@ -18,7 +18,7 @@ use rustc_middle::ty::{List, TypeFoldable};
 use rustc_smir::rustc_internal;
 use rustc_span::def_id::DefId;
 use rustc_target::abi::{
-    Abi::Vector, FieldIdx, FieldsShape, Integer, LayoutS, Primitive, Size, TagEncoding,
+    Abi::Vector, FieldIdx, FieldsShape, Float, Integer, LayoutS, Primitive, Size, TagEncoding,
     TyAndLayout, VariantIdx, Variants,
 };
 use stable_mir::abi::{ArgAbi, FnAbi, PassMode};
@@ -73,7 +73,7 @@ impl TypeExt for Type {
                     && components.iter().any(|x| x.name() == "vtable" && x.typ().is_pointer())
             }
             Type::StructTag(tag) => {
-                st.lookup(&tag.to_string()).unwrap().typ.is_rust_trait_fat_ptr(st)
+                st.lookup(tag.to_string()).unwrap().typ.is_rust_trait_fat_ptr(st)
             }
             _ => false,
         }
@@ -1140,7 +1140,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Mapping enums to CBMC types is rather complicated. There are a few cases to consider:
     /// 1. When there is only 0 or 1 variant, this is straightforward as the code shows
     /// 2. When there are more variants, rust might decides to apply the typical encoding which
-    /// regard enums as tagged union, or an optimized form, called niche encoding.
+    ///    regard enums as tagged union, or an optimized form, called niche encoding.
     ///
     /// The direct encoding is straightforward. Enums are just mapped to C as a struct of union of structs.
     /// e.g.
@@ -1354,13 +1354,18 @@ impl<'tcx> GotocCtx<'tcx> {
                     }
                 }
             },
+            Primitive::Float(f) => self.codegen_float_type(f),
+            Primitive::Pointer(_) => Ty::new_ptr(self.tcx, self.tcx.types.u8, Mutability::Not),
+        }
+    }
 
-            Primitive::F32 => self.tcx.types.f32,
-            Primitive::F64 => self.tcx.types.f64,
+    pub fn codegen_float_type(&self, f: Float) -> Ty<'tcx> {
+        match f {
+            Float::F32 => self.tcx.types.f32,
+            Float::F64 => self.tcx.types.f64,
             // `F16` and `F128` are not yet handled.
             // Tracked here: <https://github.com/model-checking/kani/issues/3069>
-            Primitive::F16 | Primitive::F128 => unimplemented!(),
-            Primitive::Pointer(_) => Ty::new_ptr(self.tcx, self.tcx.types.u8, Mutability::Not),
+            Float::F16 | Float::F128 => unimplemented!(),
         }
     }
 
@@ -1672,7 +1677,7 @@ pub fn pointee_type(mir_type: Ty) -> Option<Ty> {
 /// Extracts the pointee type if the given mir type is either a known smart pointer (Box, Rc, ..)
 /// or a regular pointer.
 pub fn std_pointee_type(mir_type: Ty) -> Option<Ty> {
-    mir_type.builtin_deref(true).map(|tm| tm.ty)
+    mir_type.builtin_deref(true)
 }
 
 /// This is a place holder function that should normalize the given type.
