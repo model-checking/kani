@@ -207,11 +207,11 @@ impl GotocHook for Panic {
     }
 }
 
-/// Encodes __CPROVER_r_ok
-struct IsReadOk;
-impl GotocHook for IsReadOk {
+/// Encodes __CPROVER_r_ok(ptr, size)
+struct IsAllocated;
+impl GotocHook for IsAllocated {
     fn hook_applies(&self, tcx: TyCtxt, instance: Instance) -> bool {
-        matches_function(tcx, instance.def, "KaniIsReadOk")
+        matches_function(tcx, instance.def, "KaniIsAllocated")
     }
 
     fn handle(
@@ -398,7 +398,7 @@ pub fn fn_hooks() -> GotocHooks {
             Rc::new(Assert),
             Rc::new(Cover),
             Rc::new(Nondet),
-            Rc::new(IsReadOk),
+            Rc::new(IsAllocated),
             Rc::new(RustAlloc),
             Rc::new(MemCmp),
             Rc::new(UntrackedDeref),

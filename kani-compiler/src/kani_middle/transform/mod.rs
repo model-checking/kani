@@ -16,7 +16,9 @@
 //!
 //! For all instrumentation passes, always use exhaustive matches to ensure soundness in case a new
 //! case is added.
+use crate::kani_middle::transform::body::CheckType;
 use crate::kani_middle::transform::check_values::ValidValuePass;
+use crate::kani_middle::transform::kani_intrinsics::IntrinsicGeneratorPass;
 use crate::kani_queries::QueryDb;
 use rustc_middle::ty::TyCtxt;
 use stable_mir::mir::mono::Instance;
@@ -26,6 +28,7 @@ use std::fmt::Debug;
 
 mod body;
 mod check_values;
+mod kani_intrinsics;
 
 /// Object used to retrieve a transformed instance body.
 /// The transformations to be applied may be controlled by user options.
@@ -50,7 +53,9 @@ impl BodyTransformation {
             inst_passes: vec![],
             cache: Default::default(),
         };
-        transformer.add_pass(queries, ValidValuePass::new(tcx));
+        let check_type = CheckType::new(tcx);
+        transformer.add_pass(queries, ValidValuePass { check_type: check_type.clone() });
+        transformer.add_pass(queries, IntrinsicGeneratorPass { check_type });
         transformer
     }
 

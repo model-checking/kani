@@ -1,0 +1,13 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+[package]
+name = "verify-core"
+version = "0.1.0"
+edition = "2021"
+description = "This crate contains contracts and harnesses for core library"
+
+[package.metadata.kani]
+unstable = { function-contracts = true, mem-predicates = true }
+
+[package.metadata.kani.flags]
+output-format = "terse"
