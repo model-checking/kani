@@ -12,6 +12,7 @@ use stable_mir::mir::{
     VarDebugInfo,
 };
 use stable_mir::ty::{Const, GenericArgs, Span, Ty, UintTy};
+use std::fmt::Debug;
 use std::mem;
 
 /// This structure mimics a Body that can actually be modified.
@@ -223,6 +224,20 @@ impl MutableBody {
                 self.blocks[*bb].statements.push(new_stmt);
             }
         }
+    }
+
+    /// Clear all the existing logic of this body and turn it into a simple `return`.
+    ///
+    /// This function can be used when a new implementation of the body is needed.
+    /// For example, Kani intrinsics usually have a dummy body, which is replaced
+    /// by the compiler. This function allow us to delete the dummy body before
+    /// creating a new one.
+    ///
+    /// Note: We do not prune the local variables today for simplicity.
+    pub fn clear_body(&mut self) {
+        self.blocks.clear();
+        let terminator = Terminator { kind: TerminatorKind::Return, span: self.span };
+        self.blocks.push(BasicBlock { statements: Vec::default(), terminator })
     }
 }
 
