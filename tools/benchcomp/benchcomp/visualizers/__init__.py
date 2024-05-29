@@ -259,7 +259,7 @@ class dump_markdown_results_table:
                 {%- for bench_name, bench_variants in d["scaled_metrics"][metric]["benchmarks"].items () %}
                 {% set v0 = bench_variants[d["scaled_variants"][metric][0]] -%}
                 {% set v1 = bench_variants[d["scaled_variants"][metric][1]] -%}
-                "{{ bench_name }}": [{{ v0|round(3) }}, {{ v1|round(3) }}]
+                "{{ bench_name }}": [{{ v0|safe_round(3) }}, {{ v1|safe_round(3) }}]
                 {%- endfor %}
             ```
             Scatterplot axis ranges are {{ d["scaled_metrics"][metric]["min_value"] }} (bottom/left) to {{ d["scaled_metrics"][metric]["max_value"] }} (top/right).
@@ -273,6 +273,14 @@ class dump_markdown_results_table:
             {%- endfor %}
             {% endfor -%}
             """)
+
+
+    @staticmethod
+    def _safe_round(value, precision):
+        try:
+            return round(value, precision)
+        except TypeError:
+            return 0
 
 
     @staticmethod
@@ -410,6 +418,7 @@ class dump_markdown_results_table:
             loader=jinja2.BaseLoader, autoescape=jinja2.select_autoescape(
                 enabled_extensions=("html"),
                 default_for_string=True))
+        env.filters["safe_round"] = self._safe_round
         template = env.from_string(self._get_template())
         include_scatterplot = self.scatterplot != Plot.OFF
         output = template.render(d=data, scatterplot=include_scatterplot)[:-1]
