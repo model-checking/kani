@@ -33,24 +33,32 @@ impl ShadowMem {
     }
 }
 
+const MAX_NUM_OBJECTS_ASSERT_MSG: &str = "The number of objects exceeds the maximum number supported by Kani's shadow memory model (1024)";
+const MAX_OBJECT_SIZE_ASSERT_MSG: &str =
+    "The object size exceeds the maximum size supported by Kani's shadow memory model (64)";
+
 /// # Safety
 ///
 /// `ptr` must be valid
 pub unsafe fn read(sm: &[[bool; MAX_OBJECT_SIZE]; MAX_NUM_OBJECTS], ptr: *const u8) -> bool {
     let obj = unsafe { __KANI_pointer_object(ptr) };
     let offset = unsafe { __KANI_pointer_offset(ptr) };
-    assert!(obj < MAX_NUM_OBJECTS, "Object index exceeds the maximum number of objects supported by Kani's shadow memory model ({MAX_NUM_OBJECTS})");
-    assert!(offset < MAX_OBJECT_SIZE, "Offset into object exceeds the maximum object size supported by Kani's shadow memory model ({MAX_OBJECT_SIZE})");
+    crate::assert(obj < MAX_NUM_OBJECTS, MAX_NUM_OBJECTS_ASSERT_MSG);
+    crate::assert(offset < MAX_OBJECT_SIZE, MAX_OBJECT_SIZE_ASSERT_MSG);
     sm[obj][offset]
 }
 
 /// # Safety
 ///
 /// `ptr` must be valid
-pub unsafe fn write(sm: &mut [[bool; MAX_OBJECT_SIZE]; MAX_NUM_OBJECTS], ptr: *const u8, val: bool) {
+pub unsafe fn write(
+    sm: &mut [[bool; MAX_OBJECT_SIZE]; MAX_NUM_OBJECTS],
+    ptr: *const u8,
+    val: bool,
+) {
     let obj = unsafe { __KANI_pointer_object(ptr) };
     let offset = unsafe { __KANI_pointer_offset(ptr) };
-    assert!(obj < MAX_NUM_OBJECTS, "Object index exceeds the maximum number of objects supported by Kani's shadow memory model (1024)");
-    assert!(offset < MAX_OBJECT_SIZE, "Offset into object exceeds the maximum object size supported by Kani's shadow memory model (64)");
+    crate::assert(obj < MAX_NUM_OBJECTS, MAX_NUM_OBJECTS_ASSERT_MSG);
+    crate::assert(offset < MAX_OBJECT_SIZE, MAX_OBJECT_SIZE_ASSERT_MSG);
     sm[obj][offset] = val;
 }
