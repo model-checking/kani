@@ -7,7 +7,8 @@ use std::collections::{HashMap, HashSet};
 
 use proc_macro::{Diagnostic, TokenStream};
 use proc_macro2::{Ident, Span, TokenStream as TokenStream2};
-use syn::{spanned::Spanned, visit::Visit, visit_mut::VisitMut, Expr, ItemFn, Signature, parse::ParseStream, parse::Parse, Token};
+use syn::{spanned::Spanned, visit::Visit, visit_mut::VisitMut, Expr, ExprClosure, ItemFn, Signature};
+use quote::quote;
 
 use super::{
     helpers::{chunks_by, is_token_stream_2_comma, matches_path},
@@ -64,22 +65,6 @@ impl ContractFunctionState {
     }
 }
 
-struct EnsuresParseResult {
-    result_name: Ident,
-    attr: Expr,
-}
-
-impl Parse for EnsuresParseResult {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        let mut result_name : Ident = Ident::new("result",Span::call_site());
-        if input.peek2(Token![=>]) {
-            result_name = input.parse()?;
-            let _arrow: Token![=>] = input.parse()?;
-        }
-        Ok(EnsuresParseResult{result_name:result_name, attr:input.parse()?,})
-    }
-}
-
 impl<'a> ContractConditionsHandler<'a> {
     /// Initialize the handler. Constructs the required
     /// [`ContractConditionsType`] depending on `is_requires`.
@@ -97,8 +82,10 @@ impl<'a> ContractConditionsHandler<'a> {
                 ContractConditionsData::Requires { attr: syn::parse(attr)? }
             }
             ContractConditionsType::Ensures => {
-                let data : EnsuresParseResult = syn::parse(attr)?;
-                ContractConditionsData::new_ensures(&annotated_fn.sig, data.attr, data.result_name)
+                let data : ExprClosure = syn::parse(attr)?;
+                let result : Ident = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
+                let attr : Expr = Expr::Verbatim(quote!((#data)(#result)));
+                ContractConditionsData::new_ensures(&annotated_fn.sig, attr)
             }
             ContractConditionsType::Modifies => {
                 ContractConditionsData::new_modifies(attr, &mut output)
@@ -114,12 +101,8 @@ impl ContractConditionsData {
     ///
     /// Renames the [`Ident`]s used in `attr` and stores the translation map in
     /// `argument_names`.
-    fn new_ensures(sig: &Signature, mut attr: Expr, result_name: Ident) -> Self {
+    fn new_ensures(sig: &Signature, mut attr: Expr) -> Self {
         let argument_names = rename_argument_occurrences(sig, &mut attr);
-        
-        let mut ident_rewriter = RenamerResult(&result_name);
-        ident_rewriter.visit_expr_mut(&mut attr);
-
         ContractConditionsData::Ensures { argument_names, attr }
     }
 
@@ -185,29 +168,6 @@ impl<'ast> Visit<'ast> for ArgumentIdentCollector {
     }
     fn visit_receiver(&mut self, _: &'ast syn::Receiver) {
         self.0.insert(Ident::new("self", proc_macro2::Span::call_site()));
-    }
-}
-
-/// renames the ident to the internal result variable
-struct RenamerResult<'a>(&'a Ident);
-
-impl<'a> VisitMut for RenamerResult<'a> {
-    fn visit_expr_path_mut(&mut self, i: &mut syn::ExprPath) {
-        if i.path.segments.len() == 1 {
-            i.path
-                .segments
-                .first_mut()
-                .map(|p| if p.ident == *self.0 {p.ident = Ident::new(INTERNAL_RESULT_IDENT,Span::call_site())});
-        }
-    }
-
-    /// This restores shadowing. Without this we would rename all ident
-    /// occurrences, but not rebinding location. This is because our
-    /// [`Self::visit_expr_path_mut`] is scope-unaware.
-    fn visit_pat_ident_mut(&mut self, i: &mut syn::PatIdent) {
-        if i.ident == *self.0 {
-            i.ident = Ident::new(INTERNAL_RESULT_IDENT,Span::call_site())
-        }
     }
 }
 
