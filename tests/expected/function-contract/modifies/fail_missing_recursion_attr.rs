@@ -5,7 +5,7 @@
 //! Check whether Kani fails if users forgot to annotate recursive
 //! functions with `#[kani::recursion]` when using function contracts.
 
-#[kani::ensures(result < 3)]
+#[kani::ensures(|result| result < 3)]
 fn fail_on_two(i: i32) -> i32 {
     match i {
         0 => fail_on_two(i + 1),

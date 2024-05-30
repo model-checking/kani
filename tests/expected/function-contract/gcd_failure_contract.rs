@@ -6,7 +6,7 @@ type T = u8;
 /// Euclid's algorithm for calculating the GCD of two numbers
 #[kani::requires(x != 0 && y != 0)]
 // Changed `0` to `1` in `x % result == 0` to mess with this contract
-#[kani::ensures(result != 0 && x % result == 1 && y % result == 0)]
+#[kani::ensures(|result| result != 0 && x % result == 1 && y % result == 0)]
 fn gcd(x: T, y: T) -> T {
     let mut max = x;
     let mut min = y;

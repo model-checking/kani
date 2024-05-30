@@ -4,8 +4,8 @@
 
 #[kani::modifies(a)]
 #[kani::modifies(b)]
-#[kani::ensures(*a == 1)]
-#[kani::ensures(*b == 2)]
+#[kani::ensures(|result| *a == 1)]
+#[kani::ensures(|result| *b == 2)]
 fn two_pointers(a: &mut u32, b: &mut u32) {
     *a = 1;
     *b = 2;

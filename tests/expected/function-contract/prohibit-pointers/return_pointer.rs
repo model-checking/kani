@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Zfunction-contracts
 
-#[kani::ensures(unsafe{ *result == *input })]
+#[kani::ensures(|result| unsafe{ *result == *input })]
 fn return_pointer(input: *const usize) -> *const usize {
     input
 }

@@ -8,7 +8,10 @@ use proc_macro2::{Ident, Span};
 use quote::quote;
 use syn::ItemFn;
 
-use super::{helpers::*, shared::identifier_for_generated_function, ContractConditionsHandler, INTERNAL_RESULT_IDENT};
+use super::{
+    helpers::*, shared::identifier_for_generated_function, ContractConditionsHandler,
+    INTERNAL_RESULT_IDENT,
+};
 
 impl<'a> ContractConditionsHandler<'a> {
     /// The complex case. We are the first time a contract is handled on this function, so

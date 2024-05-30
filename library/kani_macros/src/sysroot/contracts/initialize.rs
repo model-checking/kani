@@ -7,8 +7,10 @@ use std::collections::{HashMap, HashSet};
 
 use proc_macro::{Diagnostic, TokenStream};
 use proc_macro2::{Ident, Span, TokenStream as TokenStream2};
-use syn::{spanned::Spanned, visit::Visit, visit_mut::VisitMut, Expr, ExprClosure, ItemFn, Signature};
 use quote::quote;
+use syn::{
+    spanned::Spanned, visit::Visit, visit_mut::VisitMut, Expr, ExprClosure, ItemFn, Signature,
+};
 
 use super::{
     helpers::{chunks_by, is_token_stream_2_comma, matches_path},
@@ -82,9 +84,9 @@ impl<'a> ContractConditionsHandler<'a> {
                 ContractConditionsData::Requires { attr: syn::parse(attr)? }
             }
             ContractConditionsType::Ensures => {
-                let data : ExprClosure = syn::parse(attr)?;
-                let result : Ident = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
-                let attr : Expr = Expr::Verbatim(quote!((#data)(#result)));
+                let data: ExprClosure = syn::parse(attr)?;
+                let result: Ident = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
+                let attr: Expr = Expr::Verbatim(quote!((#data)(#result)));
                 ContractConditionsData::new_ensures(&annotated_fn.sig, attr)
             }
             ContractConditionsType::Modifies => {

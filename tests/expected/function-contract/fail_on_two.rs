@@ -16,7 +16,7 @@
 //! once because the postcondition is violated). If instead the hypothesis (e.g.
 //! contract replacement) is used we'd expect the verification to succeed.
 
-#[kani::ensures(result < 3)]
+#[kani::ensures(|result| result < 3)]
 #[kani::recursion]
 fn fail_on_two(i: i32) -> i32 {
     match i {
@@ -32,7 +32,7 @@ fn harness() {
     let _ = fail_on_two(first);
 }
 
-#[kani::ensures(result < 3)]
+#[kani::ensures(|result| result < 3)]
 #[kani::recursion]
 fn fail_on_two_in_postcondition(i: i32) -> i32 {
     let j = i + 1;
