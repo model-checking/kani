@@ -7,6 +7,6 @@ Failed Checks: internal error: entered unreachable code: fail on two
 
 assertion\
 - Status: FAILURE\
-- Description: "result < 3"
+- Description: "|result| result < 3"
 
-Failed Checks: result < 3
+Failed Checks: |result| result < 3

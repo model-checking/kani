@@ -1,9 +1,9 @@
 assertion\
 - Status: SUCCESS\
-- Description: "x != 0 && y != 0"
+- Description: "|result| x != 0 && y != 0"
 
 assertion\
 - Status: SUCCESS\
-- Description: "result != 0 && x % result == 0 && y % result == 0"
+- Description: "|result| result != 0 && x % result == 0 && y % result == 0"
 
 VERIFICATION:- SUCCESSFUL

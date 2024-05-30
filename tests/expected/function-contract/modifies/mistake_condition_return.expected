@@ -1,3 +1,3 @@
-Failed Checks: assertion failed: res == 100
+Failed Checks: assertion failed: |result| res == 100
 
 VERIFICATION:- FAILED
