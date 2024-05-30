@@ -699,7 +699,7 @@ impl<'tcx> GotocCtx<'tcx> {
                             data_cast
                         } else {
                             let vtable_expr =
-                                meta.member("vtable_ptr", &self.symbol_table).cast_to(
+                                meta.member("_vtable_ptr", &self.symbol_table).cast_to(
                                     typ.lookup_field_type("vtable", &self.symbol_table).unwrap(),
                                 );
                             dynamic_fat_ptr(typ, data_cast, vtable_expr, &self.symbol_table)
