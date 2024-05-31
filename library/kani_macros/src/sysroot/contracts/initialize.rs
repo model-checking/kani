@@ -8,9 +8,7 @@ use std::collections::{HashMap, HashSet};
 use proc_macro::{Diagnostic, TokenStream};
 use proc_macro2::{Ident, Span, TokenStream as TokenStream2};
 use quote::quote;
-use syn::{
-    spanned::Spanned, visit::Visit, visit_mut::VisitMut, Expr, ExprClosure, ItemFn, Signature,
-};
+use syn::{spanned::Spanned, visit::Visit, visit_mut::VisitMut, Expr, ExprClosure, ItemFn};
 
 use super::{
     helpers::{chunks_by, is_token_stream_2_comma, matches_path},
@@ -84,10 +82,11 @@ impl<'a> ContractConditionsHandler<'a> {
                 ContractConditionsData::Requires { attr: syn::parse(attr)? }
             }
             ContractConditionsType::Ensures => {
-                let data: ExprClosure = syn::parse(attr)?;
+                let mut data: ExprClosure = syn::parse(attr)?;
+                let argument_names = rename_argument_occurrences(&annotated_fn.sig, &mut data);
                 let result: Ident = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
-                let attr: Expr = Expr::Verbatim(quote!((#data)(#result)));
-                ContractConditionsData::new_ensures(&annotated_fn.sig, attr)
+                let app: Expr = Expr::Verbatim(quote!((#data)(#result)));
+                ContractConditionsData::Ensures { argument_names, attr: app }
             }
             ContractConditionsType::Modifies => {
                 ContractConditionsData::new_modifies(attr, &mut output)
@@ -98,16 +97,6 @@ impl<'a> ContractConditionsHandler<'a> {
     }
 }
 impl ContractConditionsData {
-    /// Constructs a [`Self::Ensures`] from the signature of the decorated
-    /// function and the contents of the decorating attribute.
-    ///
-    /// Renames the [`Ident`]s used in `attr` and stores the translation map in
-    /// `argument_names`.
-    fn new_ensures(sig: &Signature, mut attr: Expr) -> Self {
-        let argument_names = rename_argument_occurrences(sig, &mut attr);
-        ContractConditionsData::Ensures { argument_names, attr }
-    }
-
     /// Constructs a [`Self::Modifies`] from the contents of the decorating attribute.
     ///
     /// Responsible for parsing the attribute.
@@ -135,7 +124,10 @@ impl ContractConditionsData {
 /// - Creates new names for them;
 /// - Replaces all occurrences of those idents in `attrs` with the new names and;
 /// - Returns the mapping of old names to new names.
-fn rename_argument_occurrences(sig: &syn::Signature, attr: &mut Expr) -> HashMap<Ident, Ident> {
+fn rename_argument_occurrences(
+    sig: &syn::Signature,
+    attr: &mut ExprClosure,
+) -> HashMap<Ident, Ident> {
     let mut arg_ident_collector = ArgumentIdentCollector::new();
     arg_ident_collector.visit_signature(&sig);
 
@@ -150,7 +142,7 @@ fn rename_argument_occurrences(sig: &syn::Signature, attr: &mut Expr) -> HashMap
         .collect::<HashMap<_, _>>();
 
     let mut ident_rewriter = Renamer(&arg_idents);
-    ident_rewriter.visit_expr_mut(attr);
+    ident_rewriter.visit_expr_closure_mut(attr);
     arg_idents
 }
 
