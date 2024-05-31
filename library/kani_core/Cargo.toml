@@ -2,15 +2,13 @@
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
 [package]
-name = "kani"
+name = "kani_core"
 version = "0.51.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 publish = false
+description = "Define core constructs to use with Kani"
 
 [dependencies]
-kani_macros = { path = "../kani_macros" }
-kani_core = { path = "../kani_core" }
 
 [features]
-concrete_playback = []

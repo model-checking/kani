@@ -78,8 +78,9 @@ RUST_FLAGS=(
 )
 export RUSTFLAGS="${RUST_FLAGS[@]}"
 export RUSTC="$KANI_DIR/target/kani/bin/kani-compiler"
+export __CARGO_TESTS_ONLY_SRC_ROOT="/home/ubuntu/rust-dev/"
 # Compile rust to iRep
-$WRAPPER cargo build --verbose -Z build-std --lib --target $TARGET
+$WRAPPER cargo build --verbose -Z build-std=std,core --lib --target $TARGET
 
 echo
 echo "Finished Kani codegen for the Rust standard library successfully..."

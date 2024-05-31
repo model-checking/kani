@@ -413,6 +413,7 @@ checksum = "49f1f14873335454500d59611f1cf4a4b0f786f9ac11f4312a78e4cf2566695b"
 name = "kani"
 version = "0.51.0"
 dependencies = [
+ "kani_core",
  "kani_macros",
 ]
 
@@ -473,6 +474,10 @@ dependencies = [
  "home",
  "os_info",
 ]
+
+[[package]]
+name = "kani_core"
+version = "0.51.0"
 
 [[package]]
 name = "kani_macros"

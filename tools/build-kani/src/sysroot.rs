@@ -103,6 +103,8 @@ fn build_kani_lib(
         "kani",
         "-p",
         "kani_macros",
+        "-p",
+        "kani_core",
         "-Z",
         "unstable-options",
         "--target-dir",
