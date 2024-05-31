@@ -118,11 +118,3 @@ uint8_t *__rust_realloc(uint8_t *ptr, size_t old_size, size_t align, size_t new_
 
     return result;
 }
-
-size_t __KANI_pointer_object(uint8_t *ptr) {
-    return __CPROVER_POINTER_OBJECT(ptr);
-}
-
-size_t __KANI_pointer_offset(uint8_t *ptr) {
-    return __CPROVER_POINTER_OFFSET(ptr);
-}

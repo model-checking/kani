@@ -9,7 +9,7 @@ static mut SM: kani::shadow::ShadowMem = kani::shadow::ShadowMem::new();
 fn check_max_objects<const N: usize>() {
     let arr: [u8; N] = [0; N];
     let last = &arr[N - 1];
-    assert_eq!(unsafe { kani::shadow::__KANI_pointer_offset(last as *const u8) }, N - 1);
+    assert_eq!(kani::mem::pointer_offset(last as *const u8), N - 1);
     // the following call to `set_init` would fail if the object offset for
     // `last` exceeds the maximum allowed by Kani's shadow memory model
     unsafe {
