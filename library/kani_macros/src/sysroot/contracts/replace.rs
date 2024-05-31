@@ -8,7 +8,7 @@ use quote::quote;
 
 use super::{
     helpers::*,
-    shared::{make_unsafe_argument_copies, try_as_result_assign},
+    shared::{build_ensures, count_remembers, make_unsafe_argument_copies, try_as_result_assign},
     ContractConditionsData, ContractConditionsHandler, INTERNAL_RESULT_IDENT,
 };
 
@@ -67,6 +67,7 @@ impl<'a> ContractConditionsHandler<'a> {
     /// generating a replace function.
     fn make_replace_body(&self) -> TokenStream2 {
         let (before, after) = self.ensure_bootstrapped_replace_body();
+        let remember_count = count_remembers(&before);
 
         match &self.condition_type {
             ContractConditionsData::Requires { attr } => {
@@ -82,11 +83,12 @@ impl<'a> ContractConditionsHandler<'a> {
             ContractConditionsData::Ensures { attr, argument_names } => {
                 let (arg_copies, copy_clean) = make_unsafe_argument_copies(&argument_names);
                 let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
+                let ensures_clause = build_ensures(attr, remember_count);
                 quote!(
                     #arg_copies
                     #(#before)*
                     #(#after)*
-                    kani::assume(#attr);
+                    kani::assume(#ensures_clause);
                     #copy_clean
                     #result
                 )
@@ -102,8 +104,7 @@ impl<'a> ContractConditionsHandler<'a> {
             }
             ContractConditionsData::Remember { attr } => {
                 let remember_ident: Ident = Ident::new(
-                    &("remember_kani_internal_".to_owned()
-                        + &((*self.remember_count) - 1).to_string()),
+                    &("remember_kani_internal_".to_owned() + &remember_count.to_string()),
                     Span::call_site(),
                 );
                 let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());

@@ -11,7 +11,7 @@ use std::collections::HashMap;
 
 use proc_macro2::{Ident, Span, TokenStream as TokenStream2};
 use quote::{quote, ToTokens};
-use syn::Attribute;
+use syn::{Attribute, Expr, ExprClosure};
 
 use super::{ContractConditionsHandler, ContractFunctionState, INTERNAL_RESULT_IDENT};
 
@@ -143,4 +143,21 @@ pub fn try_as_result_assign(stmt: &syn::Stmt) -> Option<&syn::LocalInit> {
 /// It's a thin wrapper around [`try_as_result_assign_pat!`] to create a mutable match.
 pub fn try_as_result_assign_mut(stmt: &mut syn::Stmt) -> Option<&mut syn::LocalInit> {
     try_as_result_assign_pat!(stmt, as_mut)
+}
+
+pub fn count_remembers(stmt_vec: &Vec<syn::Stmt>) -> u32 {
+    0
+}
+
+pub fn build_ensures(data: &ExprClosure, remember_count: u32) -> Expr {
+    let result: Ident = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
+    let app: Expr = Expr::Verbatim(quote!((#data)(&#result)));
+    (0..remember_count)
+        .map(|rem| {
+            Ident::new(
+                &("remember_kani_internal_".to_owned() + &rem.to_string()),
+                Span::call_site(),
+            )
+        })
+        .fold(app, |expr, id| Expr::Verbatim(quote!((#expr)(&#id))))
 }

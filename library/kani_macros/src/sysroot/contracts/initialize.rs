@@ -7,13 +7,12 @@ use std::collections::{HashMap, HashSet};
 
 use proc_macro::{Diagnostic, TokenStream};
 use proc_macro2::{Ident, Span, TokenStream as TokenStream2};
-use quote::quote;
-use syn::{spanned::Spanned, visit::Visit, visit_mut::VisitMut, Expr, ExprClosure, ItemFn};
+use syn::{spanned::Spanned, visit::Visit, visit_mut::VisitMut, ExprClosure, ItemFn};
 
 use super::{
     helpers::{chunks_by, is_token_stream_2_comma, matches_path},
     ContractConditionsData, ContractConditionsHandler, ContractConditionsType,
-    ContractFunctionState, INTERNAL_RESULT_IDENT,
+    ContractFunctionState,
 };
 
 impl<'a> TryFrom<&'a syn::Attribute> for ContractFunctionState {
@@ -75,7 +74,6 @@ impl<'a> ContractConditionsHandler<'a> {
         annotated_fn: &'a mut ItemFn,
         attr_copy: TokenStream2,
         hash: Option<u64>,
-        remember_count: &'a mut u32,
     ) -> Result<Self, syn::Error> {
         let mut output = TokenStream2::new();
         let condition_type = match is_requires {
@@ -85,36 +83,17 @@ impl<'a> ContractConditionsHandler<'a> {
             ContractConditionsType::Ensures => {
                 let mut data: ExprClosure = syn::parse(attr)?;
                 let argument_names = rename_argument_occurrences(&annotated_fn.sig, &mut data);
-                let result: Ident = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
-                let app: Expr = Expr::Verbatim(quote!((#data)(&#result)));
-                let remember: Expr = (0..*remember_count)
-                    .map(|rem| {
-                        Ident::new(
-                            &("remember_kani_internal_".to_owned() + &rem.to_string()),
-                            Span::call_site(),
-                        )
-                    })
-                    .fold(app, |expr, id| Expr::Verbatim(quote!((#expr)(&#id))));
-                ContractConditionsData::Ensures { argument_names, attr: remember }
+                ContractConditionsData::Ensures { argument_names, attr: data }
             }
             ContractConditionsType::Modifies => {
                 ContractConditionsData::new_modifies(attr, &mut output)
             }
             ContractConditionsType::Remember => {
-                *remember_count += 1;
                 ContractConditionsData::Remember { attr: syn::parse(attr)? }
             }
         };
 
-        Ok(Self {
-            function_state,
-            condition_type,
-            annotated_fn,
-            attr_copy,
-            output,
-            hash,
-            remember_count,
-        })
+        Ok(Self { function_state, condition_type, annotated_fn, attr_copy, output, hash })
     }
 }
 impl ContractConditionsData {

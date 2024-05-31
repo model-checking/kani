@@ -238,7 +238,7 @@ use proc_macro::TokenStream;
 use proc_macro2::{Ident, TokenStream as TokenStream2};
 use quote::{quote, ToTokens};
 use std::collections::HashMap;
-use syn::{parse_macro_input, Expr, ItemFn};
+use syn::{parse_macro_input, Expr, ExprClosure, ItemFn};
 
 mod bootstrap;
 mod check;
@@ -335,8 +335,6 @@ struct ContractConditionsHandler<'a> {
     /// The stream to which we should write the generated code.
     output: TokenStream2,
     hash: Option<u64>,
-    /// The number of things we have remembered
-    remember_count: &'a mut u32,
 }
 
 /// Which kind of contract attribute are we dealing with?
@@ -363,7 +361,7 @@ enum ContractConditionsData {
         /// we will be emitting.
         argument_names: HashMap<Ident, Ident>,
         /// The contents of the attribute.
-        attr: Expr,
+        attr: ExprClosure,
     },
     Modifies {
         attr: Vec<Expr>,
@@ -431,7 +429,6 @@ fn contract_main(
     let hash = matches!(function_state, ContractFunctionState::Untouched)
         .then(|| helpers::short_hash_of_token_stream(&item_stream_clone));
 
-    let mut remember_count = 0;
     let handler = match ContractConditionsHandler::new(
         function_state,
         is_requires,
@@ -439,7 +436,6 @@ fn contract_main(
         &mut item_fn,
         attr_copy,
         hash,
-        &mut remember_count,
     ) {
         Ok(handler) => handler,
         Err(e) => return e.into_compile_error().into(),

@@ -9,7 +9,9 @@ use syn::{Expr, FnArg, ItemFn, Token};
 
 use super::{
     helpers::*,
-    shared::{make_unsafe_argument_copies, try_as_result_assign_mut},
+    shared::{
+        build_ensures, count_remembers, make_unsafe_argument_copies, try_as_result_assign_mut,
+    },
     ContractConditionsData, ContractConditionsHandler, INTERNAL_RESULT_IDENT,
 };
 
@@ -25,6 +27,7 @@ impl<'a> ContractConditionsHandler<'a> {
     pub fn make_check_body(&mut self) -> TokenStream2 {
         let mut inner = self.ensure_bootstrapped_check_body();
         let Self { attr_copy, .. } = self;
+        let remember_count: u32 = count_remembers(&inner);
 
         match &self.condition_type {
             ContractConditionsData::Requires { attr } => {
@@ -35,11 +38,12 @@ impl<'a> ContractConditionsHandler<'a> {
             }
             ContractConditionsData::Ensures { argument_names, attr } => {
                 let (arg_copies, copy_clean) = make_unsafe_argument_copies(&argument_names);
+                let ensures_clause = build_ensures(attr, remember_count);
 
                 // The code that enforces the postconditions and cleans up the shallow
                 // argument copies (with `mem::forget`).
                 let exec_postconditions = quote!(
-                    kani::assert(#attr, stringify!(#attr_copy));
+                    kani::assert(#ensures_clause, stringify!(#attr_copy));
                     #copy_clean
                 );
 
@@ -84,8 +88,7 @@ impl<'a> ContractConditionsHandler<'a> {
             }
             ContractConditionsData::Remember { attr } => {
                 let remember_ident: Ident = Ident::new(
-                    &("remember_kani_internal_".to_owned()
-                        + &((*self.remember_count) - 1).to_string()),
+                    &("remember_kani_internal_".to_owned() + &remember_count.to_string()),
                     Span::call_site(),
                 );
                 quote!(
