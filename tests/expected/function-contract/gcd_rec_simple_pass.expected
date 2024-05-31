@@ -4,6 +4,6 @@ assertion\
 
 assertion\
 - Status: SUCCESS\
-- Description: "|result| result != 0 && x % result == 0 && y % result == 0"
+- Description: "|result : &T| *result != 0 && x % *result == 0 && y % *result == 0"
 
 VERIFICATION:- SUCCESSFUL

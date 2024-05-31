@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Zfunction-contracts
 
-#[kani::ensures(|result| result == x)]
+#[kani::ensures(|result : &u32| *result == x)]
 fn max(x: u32, y: u32) -> u32 {
     if x > y { x } else { y }
 }

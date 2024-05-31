@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Zfunction-contracts
 
-#[kani::ensures(|result| result <= dividend)]
+#[kani::ensures(|result : &u32| *result <= dividend)]
 fn div((dividend, divisor): (u32, u32)) -> u32 {
     dividend / divisor
 }

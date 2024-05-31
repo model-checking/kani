@@ -1,6 +1,6 @@
 assertion\
 - Status: SUCCESS\
-- Description: "|result| result == x || result == y"\
+- Description: "|result : &u32| *result == x || *result == y"\
 in function max
      
 VERIFICATION:- SUCCESSFUL

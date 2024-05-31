@@ -85,7 +85,7 @@ impl<'a> ContractConditionsHandler<'a> {
                 let mut data: ExprClosure = syn::parse(attr)?;
                 let argument_names = rename_argument_occurrences(&annotated_fn.sig, &mut data);
                 let result: Ident = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
-                let app: Expr = Expr::Verbatim(quote!((#data)(#result)));
+                let app: Expr = Expr::Verbatim(quote!((#data)(&#result)));
                 ContractConditionsData::Ensures { argument_names, attr: app }
             }
             ContractConditionsType::Modifies => {

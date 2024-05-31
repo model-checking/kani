@@ -8,7 +8,7 @@ extern crate kani;
 struct WrappedInt(u32);
 
 impl WrappedInt {
-    #[kani::ensures(|result| (result == self) | (result == y))]
+    #[kani::ensures(|result : &WrappedInt| (*result == self) | (*result == y))]
     fn max(self, y: WrappedInt) -> WrappedInt {
         Self(if self.0 > y.0 { self.0 } else { y.0 })
     }

@@ -7,7 +7,7 @@
 
 #[kani::requires(*ptr < 100)]
 #[kani::modifies(ptr)]
-#[kani::ensures(|result| result == 100)]
+#[kani::ensures(|result : &u32| *result == 100)]
 fn modify(ptr: &mut u32) -> u32 {
     *ptr += 1;
     *ptr

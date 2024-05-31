@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Zfunction-contracts
 
-#[kani::ensures(|result : Option<T>| result.is_some())]
+#[kani::ensures(|result : &Option<T>| result.is_some())]
 fn or_default<T: Default>(opt: Option<T>) -> Option<T> {
     opt.or(Some(T::default()))
 }
