@@ -4,7 +4,7 @@
 // This test checks the maximum number of objects supported by Kani's shadow
 // memory model (currently 1024)
 
-static mut SM: kani::shadow::ShadowMem = kani::shadow::ShadowMem::new();
+static mut SM: kani::shadow::ShadowMem::<bool> = kani::shadow::ShadowMem::new(false);
 
 fn check_max_objects<const N: usize>() {
     let mut i = 0;
@@ -28,10 +28,10 @@ fn check_max_objects<const N: usize>() {
         kani::mem::pointer_object(&x as *const i32 as *const u8),
         N + 2
     );
-    // the following call to `set_init` would fail if the object ID for `x`
-    // exceeds the maximum allowed by Kani's shadow memory model
+    // the following call to `set` would fail if the object ID for `x` exceeds
+    // the maximum allowed by Kani's shadow memory model
     unsafe {
-        SM.set_init(&x as *const i32 as *const u8, true);
+        SM.set(&x as *const i32 as *const u8, true);
     }
 }
 

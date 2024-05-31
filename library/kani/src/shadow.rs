@@ -8,34 +8,30 @@ const MAX_NUM_OBJECTS_ASSERT_MSG: &str = "The number of objects exceeds the maxi
 const MAX_OBJECT_SIZE_ASSERT_MSG: &str =
     "The object size exceeds the maximum size supported by Kani's shadow memory model (64)";
 
-pub struct ShadowMem {
-    is_init: [[bool; MAX_OBJECT_SIZE]; MAX_NUM_OBJECTS],
+pub struct ShadowMem<T: Copy> {
+    mem: [[T; MAX_OBJECT_SIZE]; MAX_NUM_OBJECTS],
 }
 
-impl ShadowMem {
-    pub const fn new() -> Self {
-        Self { is_init: [[false; MAX_OBJECT_SIZE]; MAX_NUM_OBJECTS] }
+impl<T: Copy> ShadowMem<T> {
+    pub const fn new(val: T) -> Self {
+        Self { mem: [[val; MAX_OBJECT_SIZE]; MAX_NUM_OBJECTS] }
     }
 
-    /// # Safety
-    ///
-    /// `ptr` must be valid
-    pub unsafe fn is_init(&self, ptr: *const u8) -> bool {
+    /// Get the shadow memory value of the given pointer
+    pub fn get(&self, ptr: *const u8) -> T {
         let obj = crate::mem::pointer_object(ptr);
         let offset = crate::mem::pointer_offset(ptr);
         crate::assert(obj < MAX_NUM_OBJECTS, MAX_NUM_OBJECTS_ASSERT_MSG);
         crate::assert(offset < MAX_OBJECT_SIZE, MAX_OBJECT_SIZE_ASSERT_MSG);
-        self.is_init[obj][offset]
+        self.mem[obj][offset]
     }
 
-    /// # Safety
-    ///
-    /// `ptr` must be valid
-    pub unsafe fn set_init(&mut self, ptr: *const u8, init: bool) {
+    /// Set the shadow memory value of the given pointer
+    pub fn set(&mut self, ptr: *const u8, val: T) {
         let obj = crate::mem::pointer_object(ptr);
         let offset = crate::mem::pointer_offset(ptr);
         crate::assert(obj < MAX_NUM_OBJECTS, MAX_NUM_OBJECTS_ASSERT_MSG);
         crate::assert(offset < MAX_OBJECT_SIZE, MAX_OBJECT_SIZE_ASSERT_MSG);
-        self.is_init[obj][offset] = init;
+        self.mem[obj][offset] = val;
     }
 }

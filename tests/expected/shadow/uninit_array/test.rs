@@ -3,13 +3,13 @@
 
 use std::alloc::{alloc, dealloc, Layout};
 
-static mut SM: kani::shadow::ShadowMem = kani::shadow::ShadowMem::new();
+static mut SM: kani::shadow::ShadowMem::<bool> = kani::shadow::ShadowMem::new(false);
 
 fn write(ptr: *mut i32, offset: usize, x: i32) {
     unsafe {
         let p = ptr.offset(offset as isize);
         p.write(x);
-        SM.set_init(p as *mut u8, true);
+        SM.set(p as *mut u8, true);
     };
 }
 
@@ -28,7 +28,7 @@ fn check_init(b: bool) {
         unsafe {
             let p = ptr.offset(index as isize);
             let x = p.read();
-            assert!(SM.is_init(p as *mut u8));
+            assert!(SM.get(p as *mut u8));
             assert_eq!(x, index as i32);
         }
     }

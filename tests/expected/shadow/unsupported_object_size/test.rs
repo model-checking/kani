@@ -4,7 +4,7 @@
 // This test checks the maximum object size supported by Kani's shadow
 // memory model (currently 64)
 
-static mut SM: kani::shadow::ShadowMem = kani::shadow::ShadowMem::new();
+static mut SM: kani::shadow::ShadowMem::<bool> = kani::shadow::ShadowMem::new(false);
 
 fn check_max_objects<const N: usize>() {
     let arr: [u8; N] = [0; N];
@@ -13,7 +13,7 @@ fn check_max_objects<const N: usize>() {
     // the following call to `set_init` would fail if the object offset for
     // `last` exceeds the maximum allowed by Kani's shadow memory model
     unsafe {
-        SM.set_init(last as *const u8, true);
+        SM.set(last as *const u8, true);
     }
 }
 
