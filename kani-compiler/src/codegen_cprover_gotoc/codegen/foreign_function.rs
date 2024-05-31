@@ -35,8 +35,6 @@ lazy_static! {
             "__rust_alloc_zeroed".into(),
             "__rust_dealloc".into(),
             "__rust_realloc".into(),
-            "__KANI_pointer_object".into(),
-            "__KANI_pointer_offset".into(),
         ])
     };
 }
