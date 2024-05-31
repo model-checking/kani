@@ -82,6 +82,17 @@ impl<'a> ContractConditionsHandler<'a> {
                     #(#inner)*
                 )
             }
+            ContractConditionsData::Remember { attr } => {
+                let remember_ident: Ident = Ident::new(
+                    &("remember_kani_internal_".to_owned()
+                        + &((*self.remember_count) - 1).to_string()),
+                    Span::call_site(),
+                );
+                quote!(
+                    let #remember_ident = #attr;
+                    #(#inner)*
+                )
+            }
         }
     }
 

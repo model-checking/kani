@@ -146,6 +146,11 @@ pub fn ensures(attr: TokenStream, item: TokenStream) -> TokenStream {
     attr_impl::ensures(attr, item)
 }
 
+#[proc_macro_attribute]
+pub fn remember(attr: TokenStream, item: TokenStream) -> TokenStream {
+    attr_impl::remember(attr, item)
+}
+
 /// Designates this function as a harness to check a function contract.
 ///
 /// The argument to this macro is the relative path (e.g. `foo` or
@@ -206,7 +211,7 @@ mod sysroot {
 
     mod contracts;
 
-    pub use contracts::{ensures, modifies, proof_for_contract, requires, stub_verified};
+    pub use contracts::{ensures, modifies, proof_for_contract, remember, requires, stub_verified};
 
     use super::*;
 
@@ -381,6 +386,7 @@ mod regular {
     no_op!(unwind);
     no_op!(requires);
     no_op!(ensures);
+    no_op!(remember);
     no_op!(modifies);
     no_op!(proof_for_contract);
     no_op!(stub_verified);

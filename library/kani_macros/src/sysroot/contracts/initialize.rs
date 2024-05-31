@@ -75,6 +75,7 @@ impl<'a> ContractConditionsHandler<'a> {
         annotated_fn: &'a mut ItemFn,
         attr_copy: TokenStream2,
         hash: Option<u64>,
+        remember_count: &'a mut u32,
     ) -> Result<Self, syn::Error> {
         let mut output = TokenStream2::new();
         let condition_type = match is_requires {
@@ -86,14 +87,34 @@ impl<'a> ContractConditionsHandler<'a> {
                 let argument_names = rename_argument_occurrences(&annotated_fn.sig, &mut data);
                 let result: Ident = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
                 let app: Expr = Expr::Verbatim(quote!((#data)(&#result)));
-                ContractConditionsData::Ensures { argument_names, attr: app }
+                let remember: Expr = (0..*remember_count)
+                    .map(|rem| {
+                        Ident::new(
+                            &("remember_kani_internal_".to_owned() + &rem.to_string()),
+                            Span::call_site(),
+                        )
+                    })
+                    .fold(app, |expr, id| Expr::Verbatim(quote!((#expr)(&#id))));
+                ContractConditionsData::Ensures { argument_names, attr: remember }
             }
             ContractConditionsType::Modifies => {
                 ContractConditionsData::new_modifies(attr, &mut output)
             }
+            ContractConditionsType::Remember => {
+                *remember_count += 1;
+                ContractConditionsData::Remember { attr: syn::parse(attr)? }
+            }
         };
 
-        Ok(Self { function_state, condition_type, annotated_fn, attr_copy, output, hash })
+        Ok(Self {
+            function_state,
+            condition_type,
+            annotated_fn,
+            attr_copy,
+            output,
+            hash,
+            remember_count,
+        })
     }
 }
 impl ContractConditionsData {
