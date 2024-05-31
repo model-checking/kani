@@ -13,11 +13,22 @@ pub struct ShadowMem<T: Copy> {
 }
 
 impl<T: Copy> ShadowMem<T> {
+    /// Create a new shadow memory instance initialized with the given value
+    #[crate::unstable(
+        feature = "ghost-state",
+        issue = 3184,
+        reason = "experimental ghost state/shadow memory API"
+    )]
     pub const fn new(val: T) -> Self {
         Self { mem: [[val; MAX_OBJECT_SIZE]; MAX_NUM_OBJECTS] }
     }
 
     /// Get the shadow memory value of the given pointer
+    #[crate::unstable(
+        feature = "ghost-state",
+        issue = 3184,
+        reason = "experimental ghost state/shadow memory API"
+    )]
     pub fn get<U>(&self, ptr: *const U) -> T {
         let obj = crate::mem::pointer_object(ptr);
         let offset = crate::mem::pointer_offset(ptr);
@@ -27,6 +38,11 @@ impl<T: Copy> ShadowMem<T> {
     }
 
     /// Set the shadow memory value of the given pointer
+    #[crate::unstable(
+        feature = "ghost-state",
+        issue = 3184,
+        reason = "experimental ghost state/shadow memory API"
+    )]
     pub fn set<U>(&mut self, ptr: *const U, val: T) {
         let obj = crate::mem::pointer_object(ptr);
         let offset = crate::mem::pointer_offset(ptr);

@@ -1,10 +1,11 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+// kani-flags: -Zghost-state
 
 // This test checks the maximum object size supported by Kani's shadow
 // memory model (currently 64)
 
-static mut SM: kani::shadow::ShadowMem::<bool> = kani::shadow::ShadowMem::new(false);
+static mut SM: kani::shadow::ShadowMem<bool> = kani::shadow::ShadowMem::new(false);
 
 fn check_max_objects<const N: usize>() {
     let arr: [u8; N] = [0; N];

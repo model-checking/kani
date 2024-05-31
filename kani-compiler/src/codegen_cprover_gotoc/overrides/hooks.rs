@@ -310,8 +310,6 @@ impl GotocHook for PointerOffset {
     }
 }
 
-
-
 struct RustAlloc;
 // Removing this hook causes regression failures.
 // https://github.com/model-checking/kani/issues/1170

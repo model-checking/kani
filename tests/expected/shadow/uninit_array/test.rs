@@ -1,5 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+// kani-flags: -Zghost-state
 
 // This is a basic test for the shadow memory implementation.
 // It checks that shadow memory can be used to track whether a memory location
@@ -7,7 +8,7 @@
 
 use std::alloc::{alloc, dealloc, Layout};
 
-static mut SM: kani::shadow::ShadowMem::<bool> = kani::shadow::ShadowMem::new(false);
+static mut SM: kani::shadow::ShadowMem<bool> = kani::shadow::ShadowMem::new(false);
 
 fn write(ptr: *mut i8, offset: usize, x: i8) {
     unsafe {
