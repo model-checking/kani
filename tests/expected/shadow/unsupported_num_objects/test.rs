@@ -16,7 +16,7 @@ fn check_max_objects<const N: usize>() {
     while i < N {
         let x = i;
         assert_eq!(
-            kani::mem::pointer_object(&x as *const usize as *const u8),
+            kani::mem::pointer_object(&x as *const usize),
             i + 2
         );
         i += 1;
@@ -25,13 +25,13 @@ fn check_max_objects<const N: usize>() {
     // create a new object whose ID is `N` + 2
     let x = 42;
     assert_eq!(
-        kani::mem::pointer_object(&x as *const i32 as *const u8),
+        kani::mem::pointer_object(&x as *const i32),
         N + 2
     );
     // the following call to `set` would fail if the object ID for `x` exceeds
     // the maximum allowed by Kani's shadow memory model
     unsafe {
-        SM.set(&x as *const i32 as *const u8, true);
+        SM.set(&x as *const i32, true);
     }
 }
 

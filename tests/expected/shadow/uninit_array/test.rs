@@ -1,21 +1,28 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+// This is a basic test for the shadow memory implementation.
+// It checks that shadow memory can be used to track whether a memory location
+// is initialized.
+
 use std::alloc::{alloc, dealloc, Layout};
 
 static mut SM: kani::shadow::ShadowMem::<bool> = kani::shadow::ShadowMem::new(false);
 
-fn write(ptr: *mut i32, offset: usize, x: i32) {
+fn write(ptr: *mut i8, offset: usize, x: i8) {
     unsafe {
         let p = ptr.offset(offset as isize);
         p.write(x);
-        SM.set(p as *mut u8, true);
+        SM.set(p as *const i8, true);
     };
 }
 
 fn check_init(b: bool) {
-    let layout = Layout::array::<i32>(5).unwrap();
-    let ptr = unsafe { alloc(layout) as *mut i32 };
+    // allocate an array of 5 i8's
+    let layout = Layout::array::<i8>(5).unwrap();
+    let ptr = unsafe { alloc(layout) as *mut i8 };
+
+    // unconditionally write to all 5 locations except for the middle element
     write(ptr, 0, 0);
     write(ptr, 1, 1);
     if b {
@@ -23,13 +30,18 @@ fn check_init(b: bool) {
     };
     write(ptr, 3, 3);
     write(ptr, 4, 4);
+
+    // non-deterministically read from any of the elements and assert that:
+    // 1. The memory location is initialized
+    // 2. It has the expected value
+    // This would fail if `b` is false and `index == 2`
     let index: usize = kani::any();
     if index < 5 {
         unsafe {
             let p = ptr.offset(index as isize);
             let x = p.read();
-            assert!(SM.get(p as *mut u8));
-            assert_eq!(x, index as i32);
+            assert!(SM.get(p));
+            assert_eq!(x, index as i8);
         }
     }
     unsafe { dealloc(ptr as *mut u8, layout) };

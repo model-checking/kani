@@ -18,7 +18,7 @@ impl<T: Copy> ShadowMem<T> {
     }
 
     /// Get the shadow memory value of the given pointer
-    pub fn get(&self, ptr: *const u8) -> T {
+    pub fn get<U>(&self, ptr: *const U) -> T {
         let obj = crate::mem::pointer_object(ptr);
         let offset = crate::mem::pointer_offset(ptr);
         crate::assert(obj < MAX_NUM_OBJECTS, MAX_NUM_OBJECTS_ASSERT_MSG);
@@ -27,7 +27,7 @@ impl<T: Copy> ShadowMem<T> {
     }
 
     /// Set the shadow memory value of the given pointer
-    pub fn set(&mut self, ptr: *const u8, val: T) {
+    pub fn set<U>(&mut self, ptr: *const U, val: T) {
         let obj = crate::mem::pointer_object(ptr);
         let offset = crate::mem::pointer_offset(ptr);
         crate::assert(obj < MAX_NUM_OBJECTS, MAX_NUM_OBJECTS_ASSERT_MSG);
