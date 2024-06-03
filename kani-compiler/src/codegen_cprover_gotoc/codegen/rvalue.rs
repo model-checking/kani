@@ -721,7 +721,9 @@ impl<'tcx> GotocCtx<'tcx> {
         match rv {
             Rvalue::Use(p) => self.codegen_operand_stable(p),
             Rvalue::Repeat(op, sz) => self.codegen_rvalue_repeat(op, sz, loc),
-            Rvalue::Ref(_, _, p) | Rvalue::AddressOf(_, p) => self.codegen_place_ref_stable(&p),
+            Rvalue::Ref(_, _, p) | Rvalue::AddressOf(_, p) => {
+                self.codegen_place_ref_stable(&p, &loc)
+            }
             Rvalue::Len(p) => self.codegen_rvalue_len(p),
             // Rust has begun distinguishing "ptr -> num" and "num -> ptr" (providence-relevant casts) but we do not yet:
             // Should we? Tracking ticket: https://github.com/model-checking/kani/issues/1274

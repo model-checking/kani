@@ -337,7 +337,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 Stmt::skip(loc)
             }
             InstanceKind::Shim => {
-                let place_ref = self.codegen_place_ref_stable(place);
+                let place_ref = self.codegen_place_ref_stable(place, &loc);
                 match place_ty.kind() {
                     TyKind::RigidTy(RigidTy::Dynamic(..)) => {
                         // Virtual drop via a vtable lookup.
