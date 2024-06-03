@@ -757,7 +757,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }
         }
         // Otherwise, just return place_ref.
-        return place_ref;
+        place_ref
     }
 
     /// Given a MIR place, generate a CBMC expression that represents it as a CBMC lvalue.
