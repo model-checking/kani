@@ -57,7 +57,7 @@
 //! This is called a postcondition and it also has access to the arguments and
 //! is expressed in regular Rust code. The same restrictions apply as did for
 //! [`requires`][macro@requires]. In addition to the postcondition is expressed
-//! as a closure where the value returned from the function is passed to this 
+//! as a closure where the value returned from the function is passed to this
 //! closure by reference.
 //!
 //! You may combine as many [`requires`][macro@requires] and
