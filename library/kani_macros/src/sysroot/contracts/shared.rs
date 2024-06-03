@@ -11,7 +11,7 @@ use std::collections::HashMap;
 
 use proc_macro2::{Ident, Span, TokenStream as TokenStream2};
 use quote::{quote, ToTokens};
-use syn::{Attribute, Expr, ExprClosure};
+use syn::{Attribute, Expr, ExprClosure, Local, PatIdent, Stmt};
 
 use super::{ContractConditionsHandler, ContractFunctionState, INTERNAL_RESULT_IDENT};
 
@@ -145,11 +145,27 @@ pub fn try_as_result_assign_mut(stmt: &mut syn::Stmt) -> Option<&mut syn::LocalI
     try_as_result_assign_pat!(stmt, as_mut)
 }
 
-pub fn count_remembers(stmt_vec: &Vec<syn::Stmt>) -> u32 {
-    0
+pub fn count_remembers(stmt_vec: &Vec<syn::Stmt>) -> usize {
+    stmt_vec
+        .iter()
+        .filter(|&s: &&syn::Stmt| match s {
+            Stmt::Local(Local { attrs: _, let_token: _, pat, init: _, semi_token: _ }) => match pat
+            {
+                syn::Pat::Ident(PatIdent {
+                    attrs: _,
+                    by_ref: _,
+                    mutability: _,
+                    ident,
+                    subpat: _,
+                }) => ident.to_string().starts_with("remember_kani_internal_"),
+                _ => false,
+            },
+            _ => false,
+        })
+        .count()
 }
 
-pub fn build_ensures(data: &ExprClosure, remember_count: u32) -> Expr {
+pub fn build_ensures(data: &ExprClosure, remember_count: usize) -> Expr {
     let result: Ident = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
     let app: Expr = Expr::Verbatim(quote!((#data)(&#result)));
     (0..remember_count)

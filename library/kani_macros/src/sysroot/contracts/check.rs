@@ -27,7 +27,7 @@ impl<'a> ContractConditionsHandler<'a> {
     pub fn make_check_body(&mut self) -> TokenStream2 {
         let mut inner = self.ensure_bootstrapped_check_body();
         let Self { attr_copy, .. } = self;
-        let remember_count: u32 = count_remembers(&inner);
+        let remember_count: usize = count_remembers(&inner);
 
         match &self.condition_type {
             ContractConditionsData::Requires { attr } => {
