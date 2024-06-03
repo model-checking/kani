@@ -68,6 +68,8 @@ export RUST_BACKTRACE=1
 export RUSTC_LOG=error
 
 RUST_FLAGS=(
+    "-Z"
+    "unstable-options"
     "--kani-compiler"
     "-Cpanic=abort"
     "-Zalways-encode-mir"
@@ -75,12 +77,15 @@ RUST_FLAGS=(
     "-Cllvm-args=--ignore-global-asm"
     "-Cllvm-args=--reachability=pub_fns"
     "-Cllvm-args=--build-std"
+    "-L"
+    "/home/ubuntu/kani/target/kani/lib"
+    "--cfg=kani"
 )
 export RUSTFLAGS="${RUST_FLAGS[@]}"
 export RUSTC="$KANI_DIR/target/kani/bin/kani-compiler"
 export __CARGO_TESTS_ONLY_SRC_ROOT="/home/ubuntu/rust-dev/"
 # Compile rust to iRep
-$WRAPPER cargo build --verbose -Z build-std=std,core --lib --target $TARGET
+$WRAPPER cargo build --verbose -Z build-std=core --lib --target $TARGET
 
 echo
 echo "Finished Kani codegen for the Rust standard library successfully..."
