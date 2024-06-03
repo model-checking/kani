@@ -79,16 +79,15 @@ where
         .iter()
         .filter_map(|item| {
             // Only collect monomorphic items.
-            // TODO: Remove the def_kind check once https://github.com/rust-lang/rust/pull/119135 has been released.
-            let def_id = rustc_internal::internal(tcx, item.def_id());
-            (matches!(tcx.def_kind(def_id), rustc_hir::def::DefKind::Ctor(..))
-                || matches!(item.kind(), ItemKind::Fn))
-            .then(|| {
-                Instance::try_from(*item)
+            match item.kind() {
+                ItemKind::Fn => Instance::try_from(*item)
                     .ok()
-                    .and_then(|instance| predicate(tcx, instance).then_some(instance))
-            })
-            .flatten()
+                    .and_then(|instance| predicate(tcx, instance).then_some(instance)),
+                ItemKind::Ctor(_) => Instance::try_from(*item).ok().and_then(|instance| {
+                    (predicate(tcx, instance) && instance.has_body()).then_some(instance)
+                }),
+                _ => None,
+            }
         })
         .collect::<Vec<_>>()
 }
