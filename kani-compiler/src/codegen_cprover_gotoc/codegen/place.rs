@@ -738,7 +738,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     // Then, generate a __CPROVER_r_ok check.
                     let raw_ptr_read_ok_expr = Expr::read_ok(
                         ptr.cast_to(Type::void_pointer()),
-                        Expr::size_constant(pointee_size as u128, &self.symbol_table),
+                        Expr::int_constant(pointee_size, Type::size_t()),
                     )
                     .cast_to(Type::Bool);
                     // Finally, assert that the pointer points to a valid memory location.
