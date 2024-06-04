@@ -33,10 +33,8 @@ pub mod internal;
 
 mod models;
 
-pub use arbitrary::Arbitrary;
 #[cfg(feature = "concrete_playback")]
 pub use concrete_playback::concrete_playback_run;
-use kani_core;
 
 #[cfg(not(feature = "concrete_playback"))]
 /// NOP `concrete_playback` for type checking during verification mode.
@@ -45,8 +43,8 @@ pub fn concrete_playback_run<F: Fn()>(_: Vec<Vec<u8>>, _: F) {
 }
 pub use futures::{block_on, block_on_with_spawn, spawn, yield_now, RoundRobin};
 
-// Declare core Kani intrinsics.
-kani_core::kani_intrinsics!();
+// Declare common Kani features.
+kani_core::kani_lib!(kani);
 
 /// `implies!(premise => conclusion)` means that if the `premise` is true, so
 /// must be the `conclusion`.
@@ -115,8 +113,5 @@ macro_rules! cover {
 #[doc(hidden)]
 #[cfg(not(feature = "concrete_playback"))]
 pub use core::assert as __kani__workaround_core_assert;
-
-// Kani proc macros must be in a separate crate
-pub use kani_macros::*;
 
 pub mod contracts;

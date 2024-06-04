@@ -22,10 +22,34 @@ mod arbitrary;
 
 pub use kani_macros::*;
 
+/// Users should only need to invoke this.
+///
+/// Options are:
+/// - `kani`: Add definitions needed for Kani library.
+/// - `core`: Define a `kani` module inside `core` crate.
+/// - `std`: TODO: Define a `kani` module inside `std` crate. Users must define kani inside core.
+#[macro_export]
+macro_rules! kani_lib {
+    (core) => {
+        #[cfg(kani)]
+        #[unstable(feature = "kani", issue = "none")]
+        pub mod kani {
+            pub use kani_core::{ensures, proof, proof_for_contract, requires, should_panic};
+            kani_core::kani_intrinsics!();
+            kani_core::generate_arbitrary!(core);
+        }
+    };
+
+    (kani) => {
+        pub use kani_core::*;
+        kani_core::kani_intrinsics!();
+        kani_core::generate_arbitrary!(std);
+    };
+}
+
 #[macro_export]
 macro_rules! kani_intrinsics {
     () => {
-
         /// Creates an assumption that will be valid after this statement run. Note that the assumption
         /// will only be applied for paths that follow the assumption. If the assumption doesn't hold, the
         /// program will exit successfully.
