@@ -652,7 +652,12 @@ impl<'tcx> GotocCtx<'tcx> {
     ///   build the fat pointer from there.
     /// - For `*(Wrapper<T>)` where `T: Unsized`, the projection's `goto_expr` returns an object,
     ///   and we need to take it's address and build the fat pointer.
-    pub fn codegen_place_ref_stable(&mut self, place: &Place, loc: &Location) -> Expr {
+    pub fn codegen_place_ref_stable(
+        &mut self,
+        place: &Place,
+        loc: &Location,
+        inject_check_if_ptr_to_ref_cast: bool,
+    ) -> Expr {
         let place_ty = self.place_ty_stable(place);
         let projection =
             unwrap_or_return_codegen_unimplemented!(self, self.codegen_place_stable(place));
@@ -705,54 +710,59 @@ impl<'tcx> GotocCtx<'tcx> {
         // If converting a raw pointer to a reference, &(*ptr), need to inject
         // a check to make sure that the pointer points to a valid memory location,
         // since dereferencing an invalid pointer is UB in Rust.
-        if let Some(ProjectionElem::Deref) = place.projection.last() {
-            // Create a place without the topmost dereference projection.
-            let ptr_place = {
-                let mut ptr_place = place.clone();
-                ptr_place.projection.pop();
-                ptr_place
-            };
-            // Only inject the check if dereferencing a raw pointer.
-            let ptr_place_ty = self.place_ty_stable(&ptr_place);
-            if ptr_place_ty.kind().is_raw_ptr() {
-                // Extract the size of the pointee.
-                let pointee_size = {
-                    let TypeAndMut { ty: pointee_ty, .. } =
-                        ptr_place_ty.kind().builtin_deref(true).unwrap();
-                    let pointee_ty_layout = pointee_ty.layout().unwrap();
-                    pointee_ty_layout.shape().size.bytes()
+        if inject_check_if_ptr_to_ref_cast {
+            if let Some(ProjectionElem::Deref) = place.projection.last() {
+                // Create a place without the topmost dereference projection.
+                let ptr_place = {
+                    let mut ptr_place = place.clone();
+                    ptr_place.projection.pop();
+                    ptr_place
                 };
-
-                // __CPROVER_r_ok fails if size == 0, so need to explicitly avoid the check.
-                if pointee_size != 0 {
-                    // Encode __CPROVER_r_ok(ptr, size).
-                    // First, generate a CBMC expression representing the pointer.
-                    let ptr = {
-                        let ptr_projection = self.codegen_place_stable(&ptr_place).unwrap();
-                        if self.use_thin_pointer_stable(place_ty) {
-                            ptr_projection.goto_expr().clone()
-                        } else {
-                            ptr_projection.goto_expr().clone().member("data", &self.symbol_table)
-                        }
+                // Only inject the check if dereferencing a raw pointer.
+                let ptr_place_ty = self.place_ty_stable(&ptr_place);
+                if ptr_place_ty.kind().is_raw_ptr() {
+                    // Extract the size of the pointee.
+                    let pointee_size = {
+                        let TypeAndMut { ty: pointee_ty, .. } =
+                            ptr_place_ty.kind().builtin_deref(true).unwrap();
+                        let pointee_ty_layout = pointee_ty.layout().unwrap();
+                        pointee_ty_layout.shape().size.bytes()
                     };
-                    // Then, generate a __CPROVER_r_ok check.
-                    let raw_ptr_read_ok_expr = Expr::read_ok(
-                        ptr.cast_to(Type::void_pointer()),
-                        Expr::int_constant(pointee_size, Type::size_t()),
-                    )
-                    .cast_to(Type::Bool);
-                    // Finally, assert that the pointer points to a valid memory location.
-                    let raw_ptr_read_ok = self.codegen_assert(
-                        raw_ptr_read_ok_expr,
-                        PropertyClass::SafetyCheck,
-                        "dereferencing a pointer to invalid memory location",
-                        *loc,
-                    );
-                    let typ = place_ref.typ().clone();
-                    return Expr::statement_expression(
-                        vec![raw_ptr_read_ok, place_ref.as_stmt(*loc)],
-                        typ,
-                    );
+
+                    // __CPROVER_r_ok fails if size == 0, so need to explicitly avoid the check.
+                    if pointee_size != 0 {
+                        // Encode __CPROVER_r_ok(ptr, size).
+                        // First, generate a CBMC expression representing the pointer.
+                        let ptr = {
+                            let ptr_projection = self.codegen_place_stable(&ptr_place).unwrap();
+                            if self.use_thin_pointer_stable(place_ty) {
+                                ptr_projection.goto_expr().clone()
+                            } else {
+                                ptr_projection
+                                    .goto_expr()
+                                    .clone()
+                                    .member("data", &self.symbol_table)
+                            }
+                        };
+                        // Then, generate a __CPROVER_r_ok check.
+                        let raw_ptr_read_ok_expr = Expr::read_ok(
+                            ptr.cast_to(Type::void_pointer()),
+                            Expr::int_constant(pointee_size, Type::size_t()),
+                        )
+                        .cast_to(Type::Bool);
+                        // Finally, assert that the pointer points to a valid memory location.
+                        let raw_ptr_read_ok = self.codegen_assert(
+                            raw_ptr_read_ok_expr,
+                            PropertyClass::SafetyCheck,
+                            "dereferencing a pointer to invalid memory location",
+                            *loc,
+                        );
+                        let typ = place_ref.typ().clone();
+                        return Expr::statement_expression(
+                            vec![raw_ptr_read_ok, place_ref.as_stmt(*loc)],
+                            typ,
+                        );
+                    }
                 }
             }
         }
