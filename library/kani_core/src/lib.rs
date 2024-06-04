@@ -19,18 +19,8 @@
 #![no_core]
 
 mod arbitrary;
-mod contracts;
 
-#[macro_export]
-macro_rules! macro_for_contracts {
-    () => {
-        pub use contracts::ensures;
-        pub use contracts::modifies;
-        pub use contracts::proof_for_contract;
-        pub use contracts::requires;
-        pub use contracts::stub_verified;
-    };
-}
+pub use kani_macros::*;
 
 #[macro_export]
 macro_rules! kani_intrinsics {

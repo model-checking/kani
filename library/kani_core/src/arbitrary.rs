@@ -11,6 +11,8 @@ macro_rules! trivial_arbitrary {
                 // This size_of call does not use generic_const_exprs feature. It's inside a macro, and Self isn't generic.
                 unsafe { any_raw_internal::<Self, { mem_mod::size_of::<Self>() }>() }
             }
+            // Disable this for standard library since we cannot enable generic constant expr.
+            #[cfg(kani_lib)]
             fn any_array<const MAX_ARRAY_LENGTH: usize>() -> [Self; MAX_ARRAY_LENGTH]
             where
                 // `generic_const_exprs` requires all potential errors to be reflected in the signature/header.
@@ -53,6 +55,7 @@ macro_rules! generate_arbitrary {
             Self: Sized,
         {
             fn any() -> Self;
+            #[cfg(kani_lib)]
             fn any_array<const MAX_ARRAY_LENGTH: usize>() -> [Self; MAX_ARRAY_LENGTH]
             // the requirement defined in the where clause must appear on the `impl`'s method `any_array`
             // but also on the corresponding trait's method
@@ -101,6 +104,7 @@ macro_rules! generate_arbitrary {
             }
         }
 
+        #[cfg(kani_lib)]
         impl<T, const N: usize> Arbitrary for [T; N]
         where
             T: Arbitrary,
