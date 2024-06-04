@@ -19,7 +19,13 @@ fn main() -> Result<()> {
     let args = parser::ArgParser::parse();
 
     match args.subcommand {
-        parser::Commands::BuildDev(build_parser) => build_lib(&build_bin(&build_parser.args)?),
+        parser::Commands::BuildDev(build_parser) => {
+            let bin_folder = &build_bin(&build_parser.args)?;
+            if !build_parser.skip_libs {
+                build_lib(&bin_folder)?;
+            }
+            Ok(())
+        }
         parser::Commands::Bundle(bundle_parser) => {
             let version_string = bundle_parser.version;
             let kani_string = format!("kani-{version_string}");
