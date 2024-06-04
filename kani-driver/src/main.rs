@@ -30,6 +30,7 @@ mod call_single_file;
 mod cbmc_output_parser;
 mod cbmc_property_renderer;
 mod concrete_playback;
+mod coverage;
 mod harness_runner;
 mod metadata;
 mod project;
@@ -117,6 +118,10 @@ fn verify_project(project: Project, session: KaniSession) -> Result<()> {
     // Verification
     let runner = harness_runner::HarnessRunner { sess: &session, project: &project };
     let results = runner.check_all_harnesses(&harnesses)?;
+
+    if session.args.coverage {
+        session.save_cov_results(&results)?;
+    }
 
     session.print_final_summary(&results)
 }

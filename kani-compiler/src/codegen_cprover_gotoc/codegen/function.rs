@@ -216,3 +216,61 @@ impl<'tcx> GotocCtx<'tcx> {
         self.reset_current_fn();
     }
 }
+
+pub mod rustc_smir {
+    use crate::stable_mir::CrateDef;
+    use rustc_middle::mir::coverage::CodeRegion;
+    use rustc_middle::mir::coverage::CovTerm;
+    use rustc_middle::ty::TyCtxt;
+    use stable_mir::mir::mono::Instance;
+    use stable_mir::Opaque;
+
+    type CoverageOpaque = stable_mir::Opaque;
+
+    /// Wrapper since we don't have a structured coverage.
+    pub fn coverage_opaque_span(
+        tcx: TyCtxt,
+        coverage_opaque: CoverageOpaque,
+        instance: Instance,
+    ) -> Option<CodeRegion> {
+        let cov_term = parse_coverage(coverage_opaque)?;
+        coverage_span(tcx, cov_term, instance)
+    }
+
+    /// Function that should be the internal implementation of opaque
+    pub fn coverage_span(
+        tcx: TyCtxt<'_>,
+        coverage: CovTerm,
+        instance: Instance,
+    ) -> Option<CodeRegion> {
+        let instance_def = rustc_smir::rustc_internal::internal(tcx, instance.def.def_id());
+        let body = tcx.instance_mir(rustc_middle::ty::InstanceDef::Item(instance_def));
+        let cov_info = &body.function_coverage_info.clone().unwrap();
+        // NOTE: This helps see coverage mappings a given function
+        // println!("COVERAGE: {:?}", &cov_info.mappings);
+        for mapping in &cov_info.mappings {
+            if mapping.kind.terms().next().unwrap() == coverage {
+                println!("COVERAGE: {:?}", mapping.code_region.clone());
+                return Some(mapping.code_region.clone());
+            }
+        }
+        None
+    }
+
+    fn parse_coverage(coverage_opaque: Opaque) -> Option<CovTerm> {
+        let coverage_str = coverage_opaque.to_string();
+        if coverage_str == "Zero" {
+            Some(CovTerm::Zero)
+        } else if let Some(rest) = coverage_str.strip_prefix("CounterIncrement(") {
+            let (num_str, _rest) = rest.split_once(')').unwrap();
+            let num = num_str.parse::<u32>().unwrap();
+            Some(CovTerm::Counter(num.into()))
+        } else if let Some(rest) = coverage_str.strip_prefix("ExpressionUsed(") {
+            let (num_str, _rest) = rest.split_once(')').unwrap();
+            let num = num_str.parse::<u32>().unwrap();
+            Some(CovTerm::Expression(num.into()))
+        } else {
+            None
+        }
+    }
+}

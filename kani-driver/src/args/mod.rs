@@ -5,6 +5,7 @@
 pub mod assess_args;
 pub mod cargo;
 pub mod common;
+pub mod coverage_args;
 pub mod playback_args;
 
 pub use assess_args::*;
@@ -635,12 +636,12 @@ impl ValidateArgs for VerificationArgs {
         }
 
         if self.coverage
-            && !self.common_args.unstable_features.contains(UnstableFeature::LineCoverage)
+            && !self.common_args.unstable_features.contains(UnstableFeature::SourceCoverage)
         {
             return Err(Error::raw(
                 ErrorKind::MissingRequiredArgument,
                 "The `--coverage` argument is unstable and requires `-Z \
-            line-coverage` to be used.",
+            source-coverage` to be used.",
             ));
         }
 

@@ -3,6 +3,7 @@
 use super::typ::TypeExt;
 use super::typ::FN_RETURN_VOID_VAR_NAME;
 use super::{bb_label, PropertyClass};
+use crate::codegen_cprover_gotoc::codegen::function::rustc_smir::coverage_opaque_span;
 use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
 use cbmc::goto_program::{Expr, Location, Stmt, Type};
@@ -108,12 +109,31 @@ impl<'tcx> GotocCtx<'tcx> {
                     location,
                 )
             }
+            StatementKind::Coverage(cov) => {
+                // debug!(?opaque, "StatementKind::Coverage Opaque");
+                // self.codegen_coverage(stmt.span)
+
+                let fun = self.current_fn().readable_name();
+                let instance = self.current_fn().instance_stable();
+                let cov_info = format!("{cov:?} {{{fun}}}");
+                // NOTE: This helps see the coverage info we're processing
+                // println!("COVERAGE: {:?} {:?} {:?}", cov, fun, stmt.span);
+                let cov_span = coverage_opaque_span(self.tcx, cov.clone(), instance);
+                if let Some(code_region) = cov_span {
+                    let coverage_stmt = self.codegen_coverage(&cov_info, stmt.span, code_region);
+                    // TODO: Avoid single-statement blocks when conversion of
+                    // standalone statements to the irep format is fixed.
+                    // More details in <https://github.com/model-checking/kani/issues/3012>
+                    Stmt::block(vec![coverage_stmt], location)
+                } else {
+                    Stmt::skip(location)
+                }
+            }
             StatementKind::PlaceMention(_) => todo!(),
             StatementKind::FakeRead(..)
             | StatementKind::Retag(_, _)
             | StatementKind::AscribeUserType { .. }
             | StatementKind::Nop
-            | StatementKind::Coverage { .. }
             | StatementKind::ConstEvalCounter => Stmt::skip(location),
         }
         .with_location(location)
