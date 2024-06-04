@@ -82,6 +82,8 @@ pub enum UnstableFeature {
     LineCoverage,
     /// Enable function contracts [RFC 9](https://model-checking.github.io/kani/rfc/rfcs/0009-function-contracts.html)
     FunctionContracts,
+    /// Enable loop contracts [RFC 12]
+    LoopContracts,
     /// Memory predicate APIs.
     MemPredicates,
     /// Automatically check that no invalid value is produced which is considered UB in Rust.

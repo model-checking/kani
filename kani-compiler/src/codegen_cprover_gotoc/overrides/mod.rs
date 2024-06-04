@@ -7,5 +7,6 @@
 //! Instead, we use a "hook" to generate the correct CBMC intrinsic.
 
 mod hooks;
+mod loop_contracts_hooks;
 
 pub use hooks::{fn_hooks, GotocHooks};

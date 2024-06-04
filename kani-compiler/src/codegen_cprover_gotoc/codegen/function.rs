@@ -56,6 +56,9 @@ impl<'tcx> GotocCtx<'tcx> {
         let old_sym = self.symbol_table.lookup(&name).unwrap();
 
         let _trace_span = debug_span!("CodegenFunction", name = instance.name()).entered();
+        if self.loop_contracts_ctx.loop_contracts_enabled() {
+            self.loop_contracts_ctx.enter_new_function();
+        }
         if old_sym.is_function_definition() {
             debug!("Double codegen of {:?}", old_sym);
         } else {
