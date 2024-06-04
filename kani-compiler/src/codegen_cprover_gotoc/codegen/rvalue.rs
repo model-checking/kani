@@ -722,7 +722,15 @@ impl<'tcx> GotocCtx<'tcx> {
             Rvalue::Use(p) => self.codegen_operand_stable(p),
             Rvalue::Repeat(op, sz) => self.codegen_rvalue_repeat(op, sz, loc),
             Rvalue::Ref(_, _, p) | Rvalue::AddressOf(_, p) => {
-                self.codegen_place_ref_stable(&p, &loc, true)
+                let place_ref = self.codegen_place_ref_stable(&p);
+                let place_ref_type = place_ref.typ().clone();
+                match self.codegen_raw_ptr_deref_validity_check(&p, &loc) {
+                    Some(ptr_validity_check_expr) => Expr::statement_expression(
+                        vec![ptr_validity_check_expr, place_ref.as_stmt(loc)],
+                        place_ref_type,
+                    ),
+                    None => place_ref,
+                }
             }
             Rvalue::Len(p) => self.codegen_rvalue_len(p),
             // Rust has begun distinguishing "ptr -> num" and "num -> ptr" (providence-relevant casts) but we do not yet:
