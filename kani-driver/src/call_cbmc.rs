@@ -183,6 +183,7 @@ impl KaniSession {
 
         if self.args.checks.unwinding_on() {
             args.push("--unwinding-assertions".into());
+            args.push("--no-self-loops-to-assumptions".into());
         }
 
         if self.args.extra_pointer_checks {
