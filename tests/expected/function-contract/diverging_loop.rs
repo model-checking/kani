@@ -1,6 +1,6 @@
 #[kani::ensures(result == 1)]
 fn foo() -> i32 {
-    loop {};
+    loop {}
     2
 }
 
