@@ -290,6 +290,20 @@ unsafe fn has_valid_value<T: ?Sized>(_ptr: *const T) -> bool {
     kani_intrinsic()
 }
 
+/// Get the object ID of the given pointer.
+#[rustc_diagnostic_item = "KaniPointerObject"]
+#[inline(never)]
+pub fn pointer_object<T: ?Sized>(_ptr: *const T) -> usize {
+    kani_intrinsic()
+}
+
+/// Get the object offset of the given pointer.
+#[rustc_diagnostic_item = "KaniPointerOffset"]
+#[inline(never)]
+pub fn pointer_offset<T: ?Sized>(_ptr: *const T) -> usize {
+    kani_intrinsic()
+}
+
 #[cfg(test)]
 mod tests {
     use super::{can_dereference, can_write, PtrProperties};
