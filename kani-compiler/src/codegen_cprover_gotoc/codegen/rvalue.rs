@@ -799,6 +799,12 @@ impl<'tcx> GotocCtx<'tcx> {
                     }
                 }
                 UnOp::Neg => self.codegen_operand_stable(e).neg(),
+                UnOp::PtrMetadata => {
+                    // 1. create a test that uses std::ptr::metadata
+                    // 2. figure out what the operand is (should be a raw ptr)
+                    // 3. figure out what res_ty is
+                    todo!()
+                }
             },
             Rvalue::Discriminant(p) => {
                 let place =
