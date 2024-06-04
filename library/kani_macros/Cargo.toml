@@ -19,4 +19,7 @@ syn = { version = "2.0.18", features = ["full", "visit-mut", "visit"] }
 
 [package.metadata.rust-analyzer]
 # This package uses rustc crates.
-rustc_private=true
+rustc_private = true
+
+[features]
+no_core = []

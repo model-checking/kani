@@ -469,6 +469,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "kani_core"
+version = "0.51.0"
+dependencies = [
+ "kani_macros",
+]
+
+[[package]]
 name = "kani_macros"
 version = "0.52.0"
 dependencies = [
