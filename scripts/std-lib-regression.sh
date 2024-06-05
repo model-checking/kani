@@ -94,7 +94,7 @@ export RUSTFLAGS="${RUST_FLAGS[@]}"
 export RUSTC_LOGS="info"
 
 export RUSTC="$KANI_DIR/target/kani/bin/kani-compiler"
-export __CARGO_TESTS_ONLY_SRC_ROOT="/home/ubuntu/rust-dev"
+# export __CARGO_TESTS_ONLY_SRC_ROOT="/home/ubuntu/rust-dev"
 # Compile rust to iRep
 $WRAPPER cargo build --verbose -Z build-std=core --lib --target $TARGET
 
