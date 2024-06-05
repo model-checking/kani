@@ -6,6 +6,7 @@ pub mod assess_args;
 pub mod cargo;
 pub mod common;
 pub mod playback_args;
+pub mod std_args;
 
 pub use assess_args::*;
 
@@ -90,6 +91,8 @@ pub struct StandaloneArgs {
 pub enum StandaloneSubcommand {
     /// Execute concrete playback testcases of a local crate.
     Playback(Box<playback_args::KaniPlaybackArgs>),
+    /// Verify the rust standard library.
+    VerifyStd(Box<std_args::VerifyStdArgs>),
 }
 
 #[derive(Debug, clap::Parser)]

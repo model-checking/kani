@@ -8,14 +8,16 @@ use crate::session::{setup_cargo_command, KaniSession};
 use crate::util;
 use anyhow::{bail, Context, Result};
 use cargo_metadata::diagnostic::{Diagnostic, DiagnosticLevel};
-use cargo_metadata::{Message, Metadata, MetadataCommand, Package, Target};
+use cargo_metadata::{
+    Artifact as RustcArtifact, Message, Metadata, MetadataCommand, Package, Target,
+};
 use kani_metadata::{ArtifactType, CompilerArtifactStub};
 use std::ffi::{OsStr, OsString};
 use std::fmt::{self, Display};
 use std::fs::{self, File};
 use std::io::BufReader;
 use std::io::IsTerminal;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use tracing::{debug, trace};
 
@@ -43,6 +45,47 @@ pub struct CargoOutputs {
 }
 
 impl KaniSession {
+    /// Create a new cargo library in the given path.
+    pub fn cargo_init_lib(&self, path: &Path) -> Result<()> {
+        let mut cmd = setup_cargo_command()?;
+        cmd.args(["init", "--lib", path.to_string_lossy().as_ref()]);
+        self.run_terminal(cmd)
+    }
+
+    pub fn cargo_build_std(&self, std_path: &Path, krate_path: &Path) -> Result<Vec<Artifact>> {
+        let mut rustc_args = self.kani_rustc_flags();
+        rustc_args.push(to_rustc_arg(self.kani_compiler_flags()).into());
+        rustc_args.push(self.reachability_arg().into());
+
+        let mut cargo_args: Vec<OsString> = vec!["build".into()];
+        cargo_args.append(&mut cargo_config_args());
+
+        // Configuration needed to parse cargo compilation status.
+        cargo_args.push("--message-format".into());
+        cargo_args.push("json-diagnostic-rendered-ansi".into());
+        cargo_args.push("-Z".into());
+        cargo_args.push("build-std=panic_abort,std".into());
+
+        if self.args.common_args.verbose {
+            cargo_args.push("-v".into());
+        }
+
+        // Since we are verifying the standard library, we set the reachability to all crates.
+        println!("{}", krate_path.display());
+        let mut cmd = setup_cargo_command()?;
+        cmd.args(&cargo_args)
+            .current_dir(krate_path)
+            .env("RUSTC", &self.kani_compiler)
+            // Use CARGO_ENCODED_RUSTFLAGS instead of RUSTFLAGS is preferred. See
+            // https://doc.rust-lang.org/cargo/reference/environment-variables.html
+            .env("CARGO_ENCODED_RUSTFLAGS", rustc_args.join(OsStr::new("\x1f")))
+            .env("CARGO_TERM_PROGRESS_WHEN", "never")
+            .env("__CARGO_TESTS_ONLY_SRC_ROOT", std_path.as_os_str());
+
+        let build_artifacts = self.run_build(cmd)?;
+        Ok(build_artifacts.into_iter().filter_map(map_kani_artifact).collect())
+    }
+
     /// Calls `cargo_build` to generate `*.symtab.json` files in `target_dir`
     pub fn cargo_build(&self, keep_going: bool) -> Result<CargoOutputs> {
         let build_target = env!("TARGET"); // see build.rs
@@ -120,7 +163,7 @@ impl KaniSession {
                     .env("CARGO_ENCODED_RUSTFLAGS", rustc_args.join(OsStr::new("\x1f")))
                     .env("CARGO_TERM_PROGRESS_WHEN", "never");
 
-                match self.run_cargo(cmd, verification_target.target()) {
+                match self.run_build_target(cmd, verification_target.target()) {
                     Err(err) => {
                         if keep_going {
                             let target_str = format!("{verification_target}");
@@ -179,9 +222,9 @@ impl KaniSession {
 
     /// Run cargo and collect any error found.
     /// We also collect the metadata file generated during compilation if any.
-    fn run_cargo(&self, cargo_cmd: Command, target: &Target) -> Result<Option<Artifact>> {
+    fn run_build(&self, cargo_cmd: Command) -> Result<Vec<RustcArtifact>> {
         let support_color = std::io::stdout().is_terminal();
-        let mut artifact = None;
+        let mut artifacts = vec![];
         if let Some(mut cargo_process) = self.run_piped(cargo_cmd)? {
             let reader = BufReader::new(cargo_process.stdout.take().unwrap());
             let mut error_count = 0;
@@ -211,33 +254,9 @@ impl KaniSession {
                         }
                     },
                     Message::CompilerArtifact(rustc_artifact) => {
-                        /// Compares two targets, and falls back to a weaker
-                        /// comparison where we avoid dashes in their names.
-                        fn same_target(t1: &Target, t2: &Target) -> bool {
-                            (t1 == t2)
-                                || (t1.name.replace('-', "_") == t2.name.replace('-', "_")
-                                    && t1.kind == t2.kind
-                                    && t1.src_path == t2.src_path
-                                    && t1.edition == t2.edition
-                                    && t1.doctest == t2.doctest
-                                    && t1.test == t2.test
-                                    && t1.doc == t2.doc)
-                        }
-                        // This used to be `rustc_artifact == *target`, but it
-                        // started to fail after the `cargo` change in
-                        // <https://github.com/rust-lang/cargo/pull/12783>
-                        //
-                        // We should revisit this check after a while to see if
-                        // it's not needed anymore or it can be restricted to
-                        // certain cases.
-                        // TODO: <https://github.com/model-checking/kani/issues/3111>
-                        if same_target(&rustc_artifact.target, target) {
-                            debug_assert!(
-                                artifact.is_none(),
-                                "expected only one artifact for `{target:?}`",
-                            );
-                            artifact = Some(rustc_artifact);
-                        }
+                        // Compares two targets, and falls back to a weaker
+                        // comparison where we avoid dashes in their names.
+                        artifacts.push(rustc_artifact)
                     }
                     Message::BuildScriptExecuted(_) | Message::BuildFinished(_) => {
                         // do nothing
@@ -263,11 +282,44 @@ impl KaniSession {
                 );
             }
         }
-        // We generate kani specific artifacts only for the build target. The build target is
-        // always the last artifact generated in a build, and all the other artifacts are related
-        // to dependencies or build scripts. Hence, we need to invoke `map_kani_artifact` only
-        // for the last compiler artifact.
-        Ok(artifact.and_then(map_kani_artifact))
+        Ok(artifacts)
+    }
+
+    /// Run cargo and collect any error found.
+    /// We also collect the metadata file generated during compilation if any.
+    fn run_build_target(&self, cargo_cmd: Command, target: &Target) -> Result<Option<Artifact>> {
+        fn same_target(t1: &Target, t2: &Target) -> bool {
+            (t1 == t2)
+                || (t1.name.replace('-', "_") == t2.name.replace('-', "_")
+                    && t1.kind == t2.kind
+                    && t1.src_path == t2.src_path
+                    && t1.edition == t2.edition
+                    && t1.doctest == t2.doctest
+                    && t1.test == t2.test
+                    && t1.doc == t2.doc)
+        }
+
+        let mut artifacts = self.run_build(cargo_cmd)?;
+
+        // This used to be `rustc_artifact == *target`, but it
+        // started to fail after the `cargo` change in
+        // <https://github.com/rust-lang/cargo/pull/12783>
+        //
+        // We should revisit this check after a while to see if
+        // it's not needed anymore or it can be restricted to
+        // certain cases.
+        // TODO: <https://github.com/model-checking/kani/issues/3111>
+        if let Some(artifact) = artifacts.pop()
+            && same_target(&artifact.target, target)
+        {
+            // We generate kani specific artifacts only for the build target. The build target is
+            // always the last artifact generated in a build, and all the other artifacts are related
+            // to dependencies or build scripts. Hence, we need to invoke `map_kani_artifact` only
+            // for the last compiler artifact.
+            Ok(map_kani_artifact(artifact))
+        } else {
+            Ok(None)
+        }
     }
 }
 
