@@ -391,6 +391,10 @@ impl<'a, 'tcx> MirVisitor for MonoItemsFnCollector<'a, 'tcx> {
                 // Nothing to do here.
                 return;
             }
+            ConstantKind::Ty(_) => {
+                // Nothing to do here.
+                return;
+            }
         };
         self.collect_allocation(&allocation);
     }

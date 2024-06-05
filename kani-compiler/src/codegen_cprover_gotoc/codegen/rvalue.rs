@@ -25,7 +25,7 @@ use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{
     AggregateKind, BinOp, CastKind, NullOp, Operand, Place, PointerCoercion, Rvalue, UnOp,
 };
-use stable_mir::ty::{ClosureKind, Const, IntTy, RigidTy, Size, Ty, TyKind, UintTy, VariantIdx};
+use stable_mir::ty::{ClosureKind, TyConst, IntTy, RigidTy, Size, Ty, TyKind, UintTy, VariantIdx};
 use std::collections::BTreeMap;
 use tracing::{debug, trace, warn};
 
@@ -160,7 +160,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// Codegens expressions of the type `let a  = [4u8; 6];`
-    fn codegen_rvalue_repeat(&mut self, op: &Operand, sz: &Const, loc: Location) -> Expr {
+    fn codegen_rvalue_repeat(&mut self, op: &Operand, sz: &TyConst, loc: Location) -> Expr {
         let op_expr = self.codegen_operand_stable(op);
         let width = sz.eval_target_usize().unwrap();
         op_expr.array_constant(width).with_location(loc)
@@ -169,7 +169,7 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_rvalue_len(&mut self, p: &Place) -> Expr {
         let pt = self.place_ty_stable(p);
         match pt.kind() {
-            TyKind::RigidTy(RigidTy::Array(_, sz)) => self.codegen_const(&sz, None),
+            TyKind::RigidTy(RigidTy::Array(_, sz)) => self.codegen_const_ty(&sz, None),
             TyKind::RigidTy(RigidTy::Slice(_)) => {
                 unwrap_or_return_codegen_unimplemented!(self, self.codegen_place_stable(p))
                     .fat_ptr_goto_expr
@@ -1483,7 +1483,7 @@ impl<'tcx> GotocCtx<'tcx> {
             ) => {
                 // Cast to a slice fat pointer.
                 assert_eq!(src_elt_type, dst_elt_type);
-                let dst_goto_len = self.codegen_const(&src_elt_count, None);
+                let dst_goto_len = self.codegen_const_ty(&src_elt_count, None);
                 let src_pointee_ty = pointee_type_stable(coerce_info.src_ty).unwrap();
                 let dst_data_expr = if src_pointee_ty.kind().is_array() {
                     src_goto_expr.cast_to(self.codegen_ty_stable(src_elt_type).to_pointer())

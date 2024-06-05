@@ -11,7 +11,7 @@ use stable_mir::mir::alloc::{AllocId, GlobalAlloc};
 use stable_mir::mir::mono::{Instance, StaticDef};
 use stable_mir::mir::Operand;
 use stable_mir::ty::{
-    Allocation, Const, ConstantKind, FloatTy, FnDef, GenericArgs, IntTy, RigidTy, Size, Span, Ty,
+    Allocation, MirConst, TyConst, ConstantKind, TyConstKind, FloatTy, FnDef, GenericArgs, IntTy, RigidTy, Size, Span, Ty,
     TyKind, UintTy,
 };
 use stable_mir::{CrateDef, CrateItem};
@@ -63,17 +63,17 @@ impl<'tcx> GotocCtx<'tcx> {
     ) -> Expr {
         let stable_const = rustc_internal::stable(constant);
         let stable_span = rustc_internal::stable(span);
-        self.codegen_const(&stable_const, stable_span)
+        self.codegen_const_ty(&stable_const, stable_span)
     }
 
-    /// Generate a goto expression that represents a constant.
+    /// Generate a goto expression that represents a MIR-level constant.
     ///
     /// There are two possible constants included in the body of an instance:
     /// - Allocated: It will have its byte representation already defined. We try to eagerly
     ///   generate code for it as simple literals or constants if possible. Otherwise, we create
     ///   a memory allocation for them and access them indirectly.
     /// - ZeroSized: These are ZST constants and they just need to match the right type.
-    pub fn codegen_const(&mut self, constant: &Const, span: Option<Span>) -> Expr {
+    pub fn codegen_const(&mut self, constant: &MirConst, span: Option<Span>) -> Expr {
         trace!(?constant, "codegen_constant");
         match constant.kind() {
             ConstantKind::Allocated(alloc) => self.codegen_allocation(alloc, constant.ty(), span),
@@ -88,6 +88,37 @@ impl<'tcx> GotocCtx<'tcx> {
                 }
             }
             ConstantKind::Param(..) | ConstantKind::Unevaluated(..) => {
+                unreachable!()
+            }
+            ConstantKind::Ty(t) => {
+                self.codegen_const_ty(t, span)
+            }
+        }
+    }
+
+    /// Generate a goto expression that represents a type-level constant.
+    ///
+    /// There are two possible constants included in the body of an instance:
+    /// - Allocated: It will have its byte representation already defined. We try to eagerly
+    ///   generate code for it as simple literals or constants if possible. Otherwise, we create
+    ///   a memory allocation for them and access them indirectly.
+    /// - ZeroSized: These are ZST constants and they just need to match the right type.
+    pub fn codegen_const_ty(&mut self, constant: &TyConst, span: Option<Span>) -> Expr {
+        trace!(?constant, "codegen_constant");
+        match constant.kind() {
+            TyConstKind::ZSTValue(lit_ty) => {
+                match lit_ty.kind() {
+                    // Rust "function items" (not closures, not function pointers, see `codegen_fndef`)
+                    TyKind::RigidTy(RigidTy::FnDef(def, args)) => {
+                        self.codegen_fndef(def, &args, span)
+                    }
+                    _ => Expr::init_unit(self.codegen_ty_stable(*lit_ty), &self.symbol_table),
+                }
+            }
+            TyConstKind::Bound(..) | TyConstKind::Value(..) => {
+                unreachable!()
+            }
+            TyConstKind::Param(..) | TyConstKind::Unevaluated(..) => {
                 unreachable!()
             }
         }

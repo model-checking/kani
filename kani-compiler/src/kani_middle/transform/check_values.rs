@@ -28,7 +28,7 @@ use stable_mir::mir::{
     Statement, StatementKind, Terminator, TerminatorKind,
 };
 use stable_mir::target::{MachineInfo, MachineSize};
-use stable_mir::ty::{AdtKind, Const, IndexedVal, RigidTy, Ty, TyKind, UintTy};
+use stable_mir::ty::{AdtKind, MirConst, TyConst, IndexedVal, RigidTy, Ty, TyKind, UintTy};
 use stable_mir::CrateDef;
 use std::fmt::Debug;
 use strum_macros::AsRefStr;
@@ -118,7 +118,7 @@ impl ValidValuePass {
     ) {
         let span = source.span(body.blocks());
         let rvalue = Rvalue::Use(Operand::Constant(Constant {
-            literal: Const::from_bool(false),
+            literal: MirConst::from_bool(false),
             span,
             user_ty: None,
         }));
@@ -388,7 +388,10 @@ impl<'a> MirVisitor for CheckValueVisitor<'a> {
                                 match validity {
                                     Ok(ranges) if ranges.is_empty() => {}
                                     Ok(ranges) => {
-                                        let sz = Const::try_from_uint(
+                                        // TODO: try_new_ty_const_uint isn't public, and there is
+                                        // no TyConst equivalent to try_from_uint. It's not at all
+                                        // clear how to create a TyConst at all.
+                                        let sz = TyConst::try_new_ty_const_uint(
                                             target_ty.layout().unwrap().shape().size.bytes()
                                                 as u128,
                                             UintTy::Usize,

@@ -11,7 +11,7 @@ use stable_mir::mir::{
     Operand, Place, Rvalue, Statement, StatementKind, Terminator, TerminatorKind, UnwindAction,
     VarDebugInfo,
 };
-use stable_mir::ty::{Const, GenericArgs, Span, Ty, UintTy};
+use stable_mir::ty::{MirConst, GenericArgs, Span, Ty, UintTy};
 use std::fmt::Debug;
 use std::mem;
 
@@ -84,12 +84,12 @@ impl MutableBody {
     }
 
     pub fn new_str_operand(&mut self, msg: &str, span: Span) -> Operand {
-        let literal = Const::from_str(msg);
+        let literal = MirConst::from_str(msg);
         Operand::Constant(Constant { span, user_ty: None, literal })
     }
 
     pub fn new_const_operand(&mut self, val: u128, uint_ty: UintTy, span: Span) -> Operand {
-        let literal = Const::try_from_uint(val, uint_ty).unwrap();
+        let literal = MirConst::try_from_uint(val, uint_ty).unwrap();
         Operand::Constant(Constant { span, user_ty: None, literal })
     }
 
