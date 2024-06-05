@@ -4,9 +4,20 @@ This file contains notable changes (e.g. breaking changes, major changes, etc.) 
 
 This file was introduced starting Kani 0.23.0, so it only contains changes from version 0.23.0 onwards.
 
-## [0.51.0]
+## [0.52.0]
 
 ## What's Changed
+* New section about linter configuraton checking in the doc by @remi-delmas-3000 in https://github.com/model-checking/kani/pull/3198
+* Fix `{,e}println!()` by @GrigorenkoPV in https://github.com/model-checking/kani/pull/3209
+* Contracts for a few core functions by @celinval in https://github.com/model-checking/kani/pull/3107
+* Add simple API for shadow memory by @zhassan-aws in https://github.com/model-checking/kani/pull/3200
+* Upgrade Rust toolchain to 2024-05-28 by @zhassan-aws @remi-delmas-3000 @qinheping
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.51.0...kani-0.52.0
+
+## [0.51.0]
+
+### What's Changed
 
 * Do not assume that ZST-typed symbols refer to unique objects by @tautschnig in https://github.com/model-checking/kani/pull/3134
 * Remove `kani::Arbitrary` from the `modifies` contract instrumentation by @feliperodri in https://github.com/model-checking/kani/pull/3169

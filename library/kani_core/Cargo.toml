@@ -1,15 +1,11 @@
 # Copyright Kani Contributors
 # SPDX-License-Identifier: Apache-2.0 OR MIT
-
 [package]
-name = "kani"
-version = "0.52.0"
+name = "kani_core"
+version = "0.51.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 publish = false
 
 [dependencies]
-kani_macros = { path = "../kani_macros" }
-
-[features]
-concrete_playback = []
+kani_macros = { path = "../kani_macros", features = ["no_core"] }

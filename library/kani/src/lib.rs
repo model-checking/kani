@@ -24,6 +24,7 @@ pub mod arbitrary;
 mod concrete_playback;
 pub mod futures;
 pub mod mem;
+pub mod shadow;
 pub mod slice;
 pub mod tuple;
 pub mod vec;
