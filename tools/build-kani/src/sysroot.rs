@@ -120,6 +120,14 @@ fn build_kani_lib(
     let target_dir = env!("KANI_BUILD_LIBS");
     let args = [
         "build",
+        "-p",
+        "std",
+        "-p",
+        "kani",
+        "-p",
+        "kani_macros",
+        "-p",
+        "kani_core",
         "-Z",
         "unstable-options",
         "--target-dir",

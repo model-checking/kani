@@ -55,11 +55,6 @@ pub fn main() {
 }
 ' > src/lib.rs
 
-# Until we add support to this via our bundle, rebuild the kani library too.
-echo "
-kani = {path=\"${KANI_DIR}/library/kani\"}
-" >> Cargo.toml
-
 # Use same nightly toolchain used to build Kani
 cp ${KANI_DIR}/rust-toolchain.toml .
 
@@ -68,18 +63,28 @@ export RUST_BACKTRACE=1
 export RUSTC_LOG=error
 
 RUST_FLAGS=(
+    "-Zunstable-options"
+    "-Zcrate-attr=feature(register_tool)"
+    "-Zcrate-attr=register_tool(kanitool)"
     "--kani-compiler"
+    "-Cllvm-args=--build-std"
+    "-Cllvm-args=--ignore-global-asm"
+    "-Cllvm-args=--goto-c"
+    "-Cllvm-args=--reachability=harnesses"
     "-Cpanic=abort"
     "-Zalways-encode-mir"
-    "-Cllvm-args=--goto-c"
-    "-Cllvm-args=--ignore-global-asm"
-    "-Cllvm-args=--reachability=pub_fns"
-    "-Cllvm-args=--build-std"
+    "--extern kani_core"
+    "-L"
+    "${KANI_DIR}/target/kani/lib"
+    "--cfg=kani"
 )
 export RUSTFLAGS="${RUST_FLAGS[@]}"
+export RUSTC_LOGS="info"
+
 export RUSTC="$KANI_DIR/target/kani/bin/kani-compiler"
+export __CARGO_TESTS_ONLY_SRC_ROOT="/tmp/std"
 # Compile rust to iRep
-$WRAPPER cargo build --verbose -Z build-std --lib --target $TARGET
+$WRAPPER cargo build --verbose -Z build-std=core --lib --target $TARGET
 
 echo
 echo "Finished Kani codegen for the Rust standard library successfully..."
