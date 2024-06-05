@@ -166,18 +166,14 @@ pub fn count_remembers(stmt_vec: &Vec<syn::Stmt>) -> usize {
 }
 
 pub fn build_ensures(data: &ExprClosure, remember_count: usize) -> Expr {
-    let result: Ident = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
-    let mut expr: Expr = Expr::Verbatim(quote!((#data)(&#result)));
     let mut p: syn::punctuated::Punctuated<syn::Expr, syn::Token![,]> =
         syn::punctuated::Punctuated::new();
-
+    let result: Ident = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
+    p.push(Expr::Verbatim(quote!(&#result)));
     for ident in (0..remember_count).map(|rem| {
         Ident::new(&("remember_kani_internal_".to_owned() + &rem.to_string()), Span::call_site())
     }) {
         p.push(Expr::Verbatim(quote!(&#ident)))
     }
-    if p.len() > 0 {
-        expr = Expr::Verbatim(quote!((#expr)(#p)))
-    }
-    expr
+    Expr::Verbatim(quote!((#data)(#p)))
 }

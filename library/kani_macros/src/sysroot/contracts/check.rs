@@ -9,7 +9,9 @@ use syn::{Expr, FnArg, ItemFn, Token};
 
 use super::{
     helpers::*,
-    shared::{make_unsafe_argument_copies, try_as_result_assign_mut},
+    shared::{
+        build_ensures, count_remembers, make_unsafe_argument_copies, try_as_result_assign_mut,
+    },
     ContractConditionsData, ContractConditionsHandler, INTERNAL_RESULT_IDENT,
 };
 

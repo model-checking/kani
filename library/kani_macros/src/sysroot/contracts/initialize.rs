@@ -7,13 +7,12 @@ use std::collections::{HashMap, HashSet};
 
 use proc_macro::{Diagnostic, TokenStream};
 use proc_macro2::{Ident, Span, TokenStream as TokenStream2};
-use quote::quote;
-use syn::{spanned::Spanned, visit::Visit, visit_mut::VisitMut, Expr, ExprClosure, ItemFn};
+use syn::{spanned::Spanned, visit::Visit, visit_mut::VisitMut, ExprClosure, ItemFn};
 
 use super::{
     helpers::{chunks_by, is_token_stream_2_comma, matches_path},
     ContractConditionsData, ContractConditionsHandler, ContractConditionsType,
-    ContractFunctionState, INTERNAL_RESULT_IDENT,
+    ContractFunctionState,
 };
 
 impl<'a> TryFrom<&'a syn::Attribute> for ContractFunctionState {
