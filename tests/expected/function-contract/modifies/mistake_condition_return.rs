@@ -16,8 +16,8 @@
 // However, contract instrumentation will create a separate non-deterministic
 // value to return in this function that can only be constrained by using the
 // `result` keyword. Thus the correct condition would be
-// `#[kani::ensures(result == 100)]`.
-#[kani::ensures(*ptr == 100)]
+// `#[kani::ensures(|result| result == 100)]`.
+#[kani::ensures(|result| *ptr == 100)]
 fn modify(ptr: &mut u32) -> u32 {
     *ptr += 1;
     *ptr
