@@ -36,7 +36,7 @@ ADD_TEST_TO_SOURCE=true
 # Check if any arguments are provided
 if [[ "$#" -gt 0 ]]; then
     # Check if the first argument is "no_test_add"
-    if [[ "$1" == "--no_test_add" ]]; then
+    if [[ "$1" == "--build-core" ]]; then
         ADD_TEST_TO_SOURCE=false
     fi
 fi
@@ -64,6 +64,8 @@ if $ADD_TEST_TO_SOURCE; then
       assert!("2021".parse::<u32>().unwrap() == 2021);
   }
   ' > src/lib.rs
+
+  rm ${KANI_DIR}/target/kani/lib/libstd.rlib
 fi
 
 
