@@ -451,6 +451,13 @@ fn check_no_cargo_opt(is_set: bool, name: &str) -> Result<(), Error> {
 impl ValidateArgs for StandaloneArgs {
     fn validate(&self) -> Result<(), Error> {
         self.verify_opts.validate()?;
+
+        match &self.command {
+            Some(StandaloneSubcommand::VerifyStd(args)) => args.validate()?,
+            // TODO: Invoke PlaybackArgs::validate()
+            None | Some(StandaloneSubcommand::Playback(..)) => {}
+        };
+
         // Cargo target arguments.
         check_no_cargo_opt(self.verify_opts.target.bins, "--bins")?;
         check_no_cargo_opt(self.verify_opts.target.lib, "--lib")?;

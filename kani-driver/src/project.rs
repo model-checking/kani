@@ -386,6 +386,10 @@ fn standalone_artifact(out_dir: &Path, crate_name: &String, typ: ArtifactType) -
     Artifact { path, typ }
 }
 
+/// Verify the custom version of the standard library in the given path.
+///
+/// Note that we assume that `std_path` points to a directory named "library".
+/// This should be checked as part of the argument validation.
 pub(crate) fn std_project(std_path: &Path, session: &KaniSession) -> Result<Project> {
     // Create output directory
     let outdir = if let Some(target_dir) = &session.args.target_dir {
@@ -404,7 +408,8 @@ pub(crate) fn std_project(std_path: &Path, session: &KaniSession) -> Result<Proj
     session.cargo_init_lib(&dummy_crate)?;
 
     // Build cargo project for dummy crate.
-    let outputs = session.cargo_build_std(&std_path.canonicalize()?, &dummy_crate)?;
+    let std_path = std_path.canonicalize()?;
+    let outputs = session.cargo_build_std(std_path.parent().unwrap(), &dummy_crate)?;
 
     // Get the metadata and return a Kani project.
     let metadata = outputs.iter().map(|md_file| from_json(md_file)).collect::<Result<Vec<_>>>()?;
