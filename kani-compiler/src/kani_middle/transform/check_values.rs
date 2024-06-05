@@ -28,7 +28,7 @@ use stable_mir::mir::{
     Statement, StatementKind, Terminator, TerminatorKind,
 };
 use stable_mir::target::{MachineInfo, MachineSize};
-use stable_mir::ty::{AdtKind, MirConst, TyConst, IndexedVal, RigidTy, Ty, TyKind, UintTy};
+use stable_mir::ty::{AdtKind, IndexedVal, MirConst, RigidTy, Ty, TyConst, TyKind, UintTy};
 use stable_mir::CrateDef;
 use std::fmt::Debug;
 use strum_macros::AsRefStr;

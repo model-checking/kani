@@ -25,7 +25,7 @@ use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{
     AggregateKind, BinOp, CastKind, NullOp, Operand, Place, PointerCoercion, Rvalue, UnOp,
 };
-use stable_mir::ty::{ClosureKind, TyConst, IntTy, RigidTy, Size, Ty, TyKind, UintTy, VariantIdx};
+use stable_mir::ty::{ClosureKind, IntTy, RigidTy, Size, Ty, TyConst, TyKind, UintTy, VariantIdx};
 use std::collections::BTreeMap;
 use tracing::{debug, trace, warn};
 

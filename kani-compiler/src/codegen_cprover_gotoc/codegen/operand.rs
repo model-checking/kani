@@ -11,8 +11,8 @@ use stable_mir::mir::alloc::{AllocId, GlobalAlloc};
 use stable_mir::mir::mono::{Instance, StaticDef};
 use stable_mir::mir::Operand;
 use stable_mir::ty::{
-    Allocation, MirConst, TyConst, ConstantKind, TyConstKind, FloatTy, FnDef, GenericArgs, IntTy, RigidTy, Size, Span, Ty,
-    TyKind, UintTy,
+    Allocation, ConstantKind, FloatTy, FnDef, GenericArgs, IntTy, MirConst, RigidTy, Size, Span,
+    Ty, TyConst, TyConstKind, TyKind, UintTy,
 };
 use stable_mir::{CrateDef, CrateItem};
 use tracing::{debug, trace};
@@ -90,9 +90,7 @@ impl<'tcx> GotocCtx<'tcx> {
             ConstantKind::Param(..) | ConstantKind::Unevaluated(..) => {
                 unreachable!()
             }
-            ConstantKind::Ty(t) => {
-                self.codegen_const_ty(t, span)
-            }
+            ConstantKind::Ty(t) => self.codegen_const_ty(t, span),
         }
     }
 

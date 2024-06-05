@@ -11,7 +11,7 @@ use stable_mir::mir::{
     Operand, Place, Rvalue, Statement, StatementKind, Terminator, TerminatorKind, UnwindAction,
     VarDebugInfo,
 };
-use stable_mir::ty::{MirConst, GenericArgs, Span, Ty, UintTy};
+use stable_mir::ty::{GenericArgs, MirConst, Span, Ty, UintTy};
 use std::fmt::Debug;
 use std::mem;
 
