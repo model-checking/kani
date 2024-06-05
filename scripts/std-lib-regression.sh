@@ -32,6 +32,15 @@ else
   exit 0
 fi
 
+ADD_TEST_TO_SOURCE=true
+# Check if any arguments are provided
+if [[ "$#" -gt 0 ]]; then
+    # Check if the first argument is "no_test_add"
+    if [[ "$1" == "--no_test_add" ]]; then
+        ADD_TEST_TO_SOURCE=false
+    fi
+fi
+
 # Get Kani root
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 KANI_DIR=$(dirname "$SCRIPT_DIR")
@@ -49,11 +58,14 @@ cargo new std_lib_test --lib
 cd std_lib_test
 
 # Add some content to the rust file including an std function that is non-generic.
-echo '
-pub fn main() {
-    assert!("2021".parse::<u32>().unwrap() == 2021);
-}
-' > src/lib.rs
+if $ADD_TEST_TO_SOURCE; then
+  echo '
+  pub fn main() {
+      assert!("2021".parse::<u32>().unwrap() == 2021);
+  }
+  ' > src/lib.rs
+fi
+
 
 # Use same nightly toolchain used to build Kani
 cp ${KANI_DIR}/rust-toolchain.toml .
@@ -82,7 +94,7 @@ export RUSTFLAGS="${RUST_FLAGS[@]}"
 export RUSTC_LOGS="info"
 
 export RUSTC="$KANI_DIR/target/kani/bin/kani-compiler"
-export __CARGO_TESTS_ONLY_SRC_ROOT="/tmp/std"
+export __CARGO_TESTS_ONLY_SRC_ROOT="/home/ubuntu/rust-dev"
 # Compile rust to iRep
 $WRAPPER cargo build --verbose -Z build-std=core --lib --target $TARGET
 
