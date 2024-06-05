@@ -15,22 +15,6 @@ where
     fn is_safe(&self) -> bool;
 }
 
-impl Invariant for bool {
-    #[inline(always)]
-    fn is_safe(&self) -> bool {
-        let value = *self as u8;
-        value < 2
-    }
-}
-
-impl Invariant for char {
-    #[inline(always)]
-    fn is_safe(&self) -> bool {
-        let value = *self as u32;
-        value <= 0xD7FF || (0xE000..=0x10FFFF).contains(&value)
-    }
-}
-
 /// Any value is considered safe for the type
 macro_rules! trivial_invariant {
     ( $type: ty ) => {
@@ -64,3 +48,5 @@ trivial_invariant!(f32);
 trivial_invariant!(f64);
 
 trivial_invariant!(());
+trivial_invariant!(bool);
+trivial_invariant!(char);

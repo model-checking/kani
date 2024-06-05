@@ -6,32 +6,6 @@
 extern crate kani;
 use kani::Invariant;
 
-#[kani::proof]
-#[kani::should_panic]
-fn check_unsafe_char() {
-    let unsafe_char = unsafe { char::from_u32_unchecked(0x110000) };
-    assert!(unsafe_char.is_safe());
-}
-
-#[kani::proof]
-fn check_safe_char() {
-    let safe_char: char = kani::any();
-    assert!(safe_char.is_safe());
-}
-
-#[kani::proof]
-#[kani::should_panic]
-fn check_unsafe_bool() {
-    let unsafe_bool: bool = unsafe { std::mem::transmute(2_u8) };
-    assert!(unsafe_bool.is_safe());
-}
-
-#[kani::proof]
-fn check_safe_bool() {
-    let safe_bool: bool = kani::any();
-    assert!(safe_bool.is_safe());
-}
-
 macro_rules! check_safe_type {
     ( $type: ty ) => {
         let value: $type = kani::any();
@@ -59,4 +33,6 @@ fn check_safe_impls() {
     check_safe_type!(f64);
 
     check_safe_type!(());
+    check_safe_type!(bool);
+    check_safe_type!(char);
 }
