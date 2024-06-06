@@ -3,13 +3,13 @@
 
 //! Logic used for generating the code that replaces a function with its contract.
 
-use proc_macro2::{Ident, TokenStream as TokenStream2};
+use proc_macro2::{Ident, Span, TokenStream as TokenStream2};
 use quote::quote;
 
 use super::{
     helpers::*,
     shared::{make_unsafe_argument_copies, try_as_result_assign},
-    ContractConditionsData, ContractConditionsHandler,
+    ContractConditionsData, ContractConditionsHandler, INTERNAL_RESULT_IDENT,
 };
 
 impl<'a> ContractConditionsHandler<'a> {
@@ -39,7 +39,8 @@ impl<'a> ContractConditionsHandler<'a> {
     fn ensure_bootstrapped_replace_body(&self) -> (Vec<syn::Stmt>, Vec<syn::Stmt>) {
         if self.is_first_emit() {
             let return_type = return_type_to_type(&self.annotated_fn.sig.output);
-            (vec![syn::parse_quote!(let result : #return_type = kani::any_modifies();)], vec![])
+            let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
+            (vec![syn::parse_quote!(let #result : #return_type = kani::any_modifies();)], vec![])
         } else {
             let stmts = &self.annotated_fn.block.stmts;
             let idx = stmts
@@ -70,30 +71,33 @@ impl<'a> ContractConditionsHandler<'a> {
         match &self.condition_type {
             ContractConditionsData::Requires { attr } => {
                 let Self { attr_copy, .. } = self;
+                let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
                 quote!(
                     kani::assert(#attr, stringify!(#attr_copy));
                     #(#before)*
                     #(#after)*
-                    result
+                    #result
                 )
             }
             ContractConditionsData::Ensures { attr, argument_names } => {
                 let (arg_copies, copy_clean) = make_unsafe_argument_copies(&argument_names);
+                let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
                 quote!(
                     #arg_copies
                     #(#before)*
                     #(#after)*
                     kani::assume(#attr);
                     #copy_clean
-                    result
+                    #result
                 )
             }
             ContractConditionsData::Modifies { attr } => {
+                let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
                 quote!(
                     #(#before)*
                     #(*unsafe { kani::internal::Pointer::assignable(#attr) } = kani::any_modifies();)*
                     #(#after)*
-                    result
+                    #result
                 )
             }
         }
@@ -126,7 +130,7 @@ impl<'a> ContractConditionsHandler<'a> {
     }
 }
 
-/// Is this statement `let result : <...> = kani::any_modifies();`.
+/// Is this statement `let result_kani_internal : <...> = kani::any_modifies();`.
 fn is_replace_return_havoc(stmt: &syn::Stmt) -> bool {
     let Some(syn::LocalInit { diverge: None, expr: e, .. }) = try_as_result_assign(stmt) else {
         return false;

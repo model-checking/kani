@@ -159,9 +159,9 @@
 //!         call_replace(fn args...)
 //!     } else {
 //!         unsafe { reentry = true };
-//!         let result = call_check(fn args...);
+//!         let result_kani_internal = call_check(fn args...);
 //!         unsafe { reentry = false };
-//!         result
+//!         result_kani_internal
 //!     }
 //! }
 //! ```
@@ -173,7 +173,7 @@
 //!
 //! ```
 //! #[kani::requires(divisor != 0)]
-//! #[kani::ensures(result <= dividend)]
+//! #[kani::ensures(|result : &u32| *result <= dividend)]
 //! fn div(dividend: u32, divisor: u32) -> u32 {
 //!     dividend / divisor
 //! }
@@ -186,31 +186,35 @@
 //! #[kanitool::replaced_with = "div_replace_965916"]
 //! fn div(dividend: u32, divisor: u32) -> u32 { dividend / divisor }
 //!
-//! #[allow(dead_code)]
-//! #[allow(unused_variables)]
-//! #[kanitool::is_contract_generated(check)]
-//! fn div_check_965916(dividend: u32, divisor: u32) -> u32 {
-//!     let dividend_renamed = kani::internal::untracked_deref(&dividend);
-//!     let divisor_renamed = kani::internal::untracked_deref(&divisor);
-//!     let result = { kani::assume(divisor != 0); { dividend / divisor } };
-//!     kani::assert(result <= dividend_renamed, "result <= dividend");
+//! #[allow(dead_code, unused_variables)]
+//! #[kanitool :: is_contract_generated(check)] fn
+//! div_check_b97df2(dividend : u32, divisor : u32) -> u32
+//! {
+//!     let dividend_renamed = kani::internal::untracked_deref(& dividend);
+//!     let divisor_renamed = kani::internal::untracked_deref(& divisor);
+//!     kani::assume(divisor != 0);
+//!     let result_kani_internal : u32 = div_wrapper_b97df2(dividend, divisor);
+//!     kani::assert(
+//!     (| result : & u32 | *result <= dividend_renamed)(& result_kani_internal),
+//!     stringify!(|result : &u32| *result <= dividend));
 //!     std::mem::forget(dividend_renamed);
 //!     std::mem::forget(divisor_renamed);
-//!     result
+//!     result_kani_internal
 //! }
 //!
-//! #[allow(dead_code)]
-//! #[allow(unused_variables)]
-//! #[kanitool::is_contract_generated(replace)]
-//! fn div_replace_965916(dividend: u32, divisor: u32) -> u32 {
-//!     kani::assert(divisor != 0, "divisor != 0");
-//!     let dividend_renamed = kani::internal::untracked_deref(&dividend);
-//!     let divisor_renamed = kani::internal::untracked_deref(&divisor);
-//!     let result = kani::any();
-//!     kani::assume(result <= dividend_renamed, "result <= dividend");
-//!     std::mem::forget(dividend_renamed);
+//! #[allow(dead_code, unused_variables)]
+//! #[kanitool :: is_contract_generated(replace)] fn
+//! div_replace_b97df2(dividend : u32, divisor : u32) -> u32
+//! {
+//!     let divisor_renamed = kani::internal::untracked_deref(& divisor);
+//!     let dividend_renamed = kani::internal::untracked_deref(& dividend);
+//!     kani::assert(divisor != 0, stringify! (divisor != 0));
+//!     let result_kani_internal : u32 = kani::any_modifies();
+//!     kani::assume(
+//!     (|result : & u32| *result <= dividend_renamed)(&result_kani_internal));
 //!     std::mem::forget(divisor_renamed);
-//!     result
+//!     std::mem::forget(dividend_renamed);
+//!     result_kani_internal
 //! }
 //!
 //! #[allow(dead_code)]
@@ -220,12 +224,12 @@
 //!     static mut REENTRY: bool = false;
 //!
 //!     if unsafe { REENTRY } {
-//!         div_replace_965916(dividend, divisor)
+//!         div_replace_b97df2(dividend, divisor)
 //!     } else {
 //!         unsafe { reentry = true };
-//!         let result = div_check_965916(dividend, divisor);
+//!         let result_kani_internal = div_check_b97df2(dividend, divisor);
 //!         unsafe { reentry = false };
-//!         result
+//!         result_kani_internal
 //!     }
 //! }
 //! ```
@@ -242,6 +246,8 @@ mod helpers;
 mod initialize;
 mod replace;
 mod shared;
+
+const INTERNAL_RESULT_IDENT: &str = "result_kani_internal";
 
 pub fn requires(attr: TokenStream, item: TokenStream) -> TokenStream {
     contract_main(attr, item, ContractConditionsType::Requires)

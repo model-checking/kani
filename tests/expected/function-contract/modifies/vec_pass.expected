@@ -15,6 +15,6 @@ in function modify_replace
 
 assertion\
 - Status: SUCCESS\
-- Description: "v[0] == src"
+- Description: "|result| v[0] == src"
 
 VERIFICATION:- SUCCESSFUL
