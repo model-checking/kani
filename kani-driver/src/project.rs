@@ -23,6 +23,8 @@ use anyhow::{Context, Result};
 use kani_metadata::{
     artifact::convert_type, ArtifactType, ArtifactType::*, HarnessMetadata, KaniMetadata,
 };
+use std::env::current_dir;
+use std::fs;
 use std::fs::File;
 use std::io::BufWriter;
 use std::ops::Deref;
@@ -382,4 +384,34 @@ fn standalone_artifact(out_dir: &Path, crate_name: &String, typ: ArtifactType) -
     let mut path = out_dir.join(crate_name);
     let _ = path.set_extension(typ);
     Artifact { path, typ }
+}
+
+/// Verify the custom version of the standard library in the given path.
+///
+/// Note that we assume that `std_path` points to a directory named "library".
+/// This should be checked as part of the argument validation.
+pub(crate) fn std_project(std_path: &Path, session: &KaniSession) -> Result<Project> {
+    // Create output directory
+    let outdir = if let Some(target_dir) = &session.args.target_dir {
+        target_dir.clone()
+    } else {
+        current_dir()?.join("target")
+    };
+    fs::create_dir_all(&outdir)?; // This is a no-op if directory exists.
+    let outdir = outdir.canonicalize()?;
+
+    // Create dummy crate needed to build using `cargo -Z build-std`
+    let dummy_crate = outdir.join("kani_verify_std");
+    if dummy_crate.exists() {
+        fs::remove_dir_all(&dummy_crate)?;
+    }
+    session.cargo_init_lib(&dummy_crate)?;
+
+    // Build cargo project for dummy crate.
+    let std_path = std_path.canonicalize()?;
+    let outputs = session.cargo_build_std(std_path.parent().unwrap(), &dummy_crate)?;
+
+    // Get the metadata and return a Kani project.
+    let metadata = outputs.iter().map(|md_file| from_json(md_file)).collect::<Result<Vec<_>>>()?;
+    Project::try_new(session, outdir, metadata, None, None)
 }

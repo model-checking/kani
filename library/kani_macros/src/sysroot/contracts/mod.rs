@@ -294,7 +294,7 @@ pub fn proof_for_contract(attr: TokenStream, item: TokenStream) -> TokenStream {
         #[kanitool::proof_for_contract = stringify!(#args)]
         #(#attrs)*
         #vis #sig {
-            let _ = std::boxed::Box::new(0_usize);
+            kani::internal::init_contracts();
             #block
         }
     )
