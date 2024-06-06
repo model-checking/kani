@@ -11,11 +11,11 @@
 ///
 /// In summary, the reference distinguishes two kinds of type invariants:
 ///  - *Validity invariant*: An invariant that all data must uphold any time
-///  it's accessed or copied in a typed manner. This invariant is exploited by
-///  the compiler to perform optimizations.
+///    it's accessed or copied in a typed manner. This invariant is exploited by
+///    the compiler to perform optimizations.
 ///  - *Safety invariant*: An invariant that safe code may assume all data to
-///  uphold. This invariant can be temporarily violated by unsafe code, but must
-///  always be upheld when interfacing with unknown safe code.
+///    uphold. This invariant can be temporarily violated by unsafe code, but
+///    must always be upheld when interfacing with unknown safe code.
 ///
 /// Therefore, validity invariants must be upheld at all times, while safety
 /// invariants only need to be upheld at the boundaries to safe code.
