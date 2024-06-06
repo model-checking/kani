@@ -131,11 +131,11 @@ pub fn requires(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// This is part of the function contract API, for more general information see
 /// the [module-level documentation](../kani/contracts/index.html).
 ///
-/// The contents of the attribute is a condition over the input values to the
-/// annotated function *and* its return value, accessible as a variable called
-/// `result`. All Rust syntax is supported, even calling other functions, but
-/// the computations must be side effect free, e.g. it cannot perform I/O or use
-/// mutable memory.
+/// The contents of the attribute is a closure that captures the input values to
+/// the annotated function and the input to the function is the return value of
+/// the function passed by reference. All Rust syntax is supported, even calling
+/// other functions, but the computations must be side effect free, e.g. it
+/// cannot perform I/O or use mutable memory.
 ///
 /// Kani requires each function that uses a contract (this attribute or
 /// [`requires`][macro@requires]) to have at least one designated

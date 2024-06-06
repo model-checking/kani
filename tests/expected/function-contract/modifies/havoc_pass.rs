@@ -3,7 +3,7 @@
 // kani-flags: -Zfunction-contracts
 
 #[kani::modifies(dst)]
-#[kani::ensures(*dst == src)]
+#[kani::ensures(|result| *dst == src)]
 fn copy(src: u32, dst: &mut u32) {
     *dst = src;
 }

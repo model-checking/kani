@@ -51,14 +51,14 @@
 //! approximation of the result of division for instance could be this:
 //!
 //! ```
-//! #[ensures(result <= dividend)]
+//! #[ensures(|result : &u32| *result <= dividend)]
 //! ```
 //!
 //! This is called a postcondition and it also has access to the arguments and
 //! is expressed in regular Rust code. The same restrictions apply as did for
-//! [`requires`][macro@requires]. In addition to the arguments the postcondition
-//! also has access to the value returned from the function in a variable called
-//! `result`.
+//! [`requires`][macro@requires]. In addition to the postcondition is expressed
+//! as a closure where the value returned from the function is passed to this
+//! closure by reference.
 //!
 //! You may combine as many [`requires`][macro@requires] and
 //! [`ensures`][macro@ensures] attributes on a single function as you please.
@@ -67,7 +67,7 @@
 //!
 //! ```
 //! #[kani::requires(divisor != 0)]
-//! #[kani::ensures(result <= dividend)]
+//! #[kani::ensures(|result : &u32| *result <= dividend)]
 //! fn my_div(dividend: u32, divisor: u32) -> u32 {
 //!   dividend / divisor
 //! }
