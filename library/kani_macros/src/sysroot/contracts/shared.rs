@@ -82,10 +82,11 @@ pub fn make_unsafe_argument_copies(
     let also_also_arg_names = renaming_map.values();
     let arg_values = renaming_map.keys();
     let also_arg_values = renaming_map.keys();
+    let also_also_arg_values = renaming_map.keys();
     (
         quote!(#(let #arg_names = kani::internal::untracked_deref(&#arg_values);)*),
-        quote!(#(let #also_arg_values = #also_arg_names;)*),
-        quote!(#(std::mem::forget(#also_also_arg_names);)*),
+        quote!(#(let #also_arg_values = kani::internal::untracked_deref(&#also_arg_names);)*),
+        quote!(#(std::mem::forget(#also_also_arg_names); std::mem::forget(#also_also_arg_values);)*),
     )
 }
 
