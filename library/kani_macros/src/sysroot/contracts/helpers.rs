@@ -269,7 +269,6 @@ pub fn short_hash_of_token_stream(stream: &proc_macro::TokenStream) -> u64 {
     long_hash % SIX_HEX_DIGITS_MASK
 }
 
-
 macro_rules! assert_spanned_err {
     ($condition:expr, $span_source:expr, $msg:expr, $($args:expr),+) => {
         if !$condition {

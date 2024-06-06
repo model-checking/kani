@@ -11,9 +11,10 @@ use std::collections::HashMap;
 
 use proc_macro2::{Ident, Span, TokenStream as TokenStream2};
 use quote::{quote, ToTokens};
-use syn::{Attribute, Expr, ExprClosure, Local, PatIdent, Stmt, ExprCall, ExprPath,
-    spanned::Spanned, visit_mut::VisitMut, Path,
-    };
+use syn::{
+    spanned::Spanned, visit_mut::VisitMut, Attribute, Expr, ExprCall, ExprClosure, ExprPath, Local,
+    PatIdent, Path, Stmt,
+};
 
 use super::{ContractConditionsHandler, ContractFunctionState, INTERNAL_RESULT_IDENT};
 
@@ -169,15 +170,20 @@ pub fn count_remembers(stmt_vec: &Vec<syn::Stmt>) -> usize {
 
 pub fn build_ensures(data: &ExprClosure, remember_count: usize) -> (TokenStream2, Expr) {
     let mut remembers_exprs = vec![];
-    let mut vis = OldVisitor{t:OldLifter::new(), remember_count, remembers_exprs: &mut remembers_exprs};
+    let mut vis =
+        OldVisitor { t: OldLifter::new(), remember_count, remembers_exprs: &mut remembers_exprs };
     let mut expr = &mut data.clone();
     vis.visit_expr_closure_mut(&mut expr);
 
-    let remembers_stmts : TokenStream2 = remembers_exprs.iter().enumerate().fold(quote!(), |collect, (index, expr)| {
-        let rem = index + remember_count;
-        let ident = Ident::new(&("remember_kani_internal_".to_owned() + &rem.to_string()), Span::call_site());
-        quote!(let #ident = &#expr; #collect)
-    });
+    let remembers_stmts: TokenStream2 =
+        remembers_exprs.iter().enumerate().fold(quote!(), |collect, (index, expr)| {
+            let rem = index + remember_count;
+            let ident = Ident::new(
+                &("remember_kani_internal_".to_owned() + &rem.to_string()),
+                Span::call_site(),
+            );
+            quote!(let #ident = &#expr; #collect)
+        });
 
     let result: Ident = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
     (remembers_stmts, Expr::Verbatim(quote!((#expr)(&#result))))
@@ -190,7 +196,13 @@ trait OldTrigger {
     /// (potentially altered) first argument.
     ///
     /// The second argument is the span of the original `old` expr
-    fn trigger(&mut self, e: &mut Expr, s: Span, remember_count : usize, output : &mut Vec<Expr>) -> bool;
+    fn trigger(
+        &mut self,
+        e: &mut Expr,
+        s: Span,
+        remember_count: usize,
+        output: &mut Vec<Expr>,
+    ) -> bool;
 }
 
 struct OldLifter;
@@ -204,16 +216,16 @@ impl OldLifter {
 struct OldDenier;
 
 impl OldTrigger for OldDenier {
-    fn trigger(&mut self, _: &mut Expr, s: Span, _ : usize, _ : &mut Vec<Expr>) -> bool {
+    fn trigger(&mut self, _: &mut Expr, s: Span, _: usize, _: &mut Vec<Expr>) -> bool {
         s.unwrap().error("Nested calls to `old` are prohibited").emit();
         false
     }
 }
 
-struct OldVisitor<'a, T>{
-    t : T,
-    remember_count : usize,
-    remembers_exprs : &'a mut Vec<Expr>,
+struct OldVisitor<'a, T> {
+    t: T,
+    remember_count: usize,
+    remembers_exprs: &'a mut Vec<Expr>,
 }
 
 impl<T: OldTrigger> syn::visit_mut::VisitMut for OldVisitor<'_, T> {
@@ -242,7 +254,12 @@ impl<T: OldTrigger> syn::visit_mut::VisitMut for OldVisitor<'_, T> {
             let span = ex.span();
             let new_expr = if let Expr::Call(ExprCall { ref mut args, .. }) = ex {
                 self.t
-                    .trigger(args.iter_mut().next().unwrap(), span, self.remember_count, self.remembers_exprs)
+                    .trigger(
+                        args.iter_mut().next().unwrap(),
+                        span,
+                        self.remember_count,
+                        self.remembers_exprs,
+                    )
                     .then(|| args.pop().unwrap().into_value())
             } else {
                 unreachable!()
@@ -257,15 +274,24 @@ impl<T: OldTrigger> syn::visit_mut::VisitMut for OldVisitor<'_, T> {
 }
 
 impl OldTrigger for OldLifter {
-    fn trigger(&mut self, e: &mut Expr, _: Span, remember_count : usize, remembers_exprs : &mut Vec<Expr>) -> bool {
-        let mut denier = OldVisitor{t:OldDenier, remember_count, remembers_exprs};
+    fn trigger(
+        &mut self,
+        e: &mut Expr,
+        _: Span,
+        remember_count: usize,
+        remembers_exprs: &mut Vec<Expr>,
+    ) -> bool {
+        let mut denier = OldVisitor { t: OldDenier, remember_count, remembers_exprs };
         // This ensures there are no nested calls to `old`
         denier.visit_expr_mut(e);
 
         let index = remember_count + remembers_exprs.len();
         remembers_exprs.push((*e).clone());
-        let ident = Ident::new(&("remember_kani_internal_".to_owned() + &index.to_string()), Span::call_site());
-        let _ = std::mem::replace(e,Expr::Verbatim(quote!((*#ident))));
+        let ident = Ident::new(
+            &("remember_kani_internal_".to_owned() + &index.to_string()),
+            Span::call_site(),
+        );
+        let _ = std::mem::replace(e, Expr::Verbatim(quote!((*#ident))));
         true
     }
 }
