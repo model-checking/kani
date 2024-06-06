@@ -182,7 +182,7 @@ pub fn build_ensures(data: &ExprClosure, remember_count: usize) -> (TokenStream2
                 &("remember_kani_internal_".to_owned() + &rem.to_string()),
                 Span::call_site(),
             );
-            quote!(let #ident = &#expr; #collect)
+            quote!(let #ident = #expr; #collect)
         });
 
     let result: Ident = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
@@ -291,7 +291,7 @@ impl OldTrigger for OldLifter {
             &("remember_kani_internal_".to_owned() + &index.to_string()),
             Span::call_site(),
         );
-        let _ = std::mem::replace(e, Expr::Verbatim(quote!((*#ident))));
+        let _ = std::mem::replace(e, Expr::Verbatim(quote!((#ident))));
         true
     }
 }
