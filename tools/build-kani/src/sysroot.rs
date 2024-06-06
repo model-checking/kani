@@ -103,7 +103,7 @@ fn build_playback_lib(compiler_path: &Path) -> Result<()> {
 
 /// Build the no core library folder that will be used during std verification.
 fn build_no_core_lib(compiler_path: &Path) -> Result<()> {
-    let extra_args = ["--features=kani_macros/no_core"];
+    let extra_args = ["--features=kani_macros/no_core", "--features=kani_core/no_core"];
     let packages = ["kani_core", "kani_macros"];
     let artifacts = build_kani_lib(compiler_path, &packages, &extra_args, &[])?;
     copy_artifacts(&artifacts, &kani_no_core_lib(), false)
@@ -120,14 +120,6 @@ fn build_kani_lib(
     let target_dir = env!("KANI_BUILD_LIBS");
     let args = [
         "build",
-        "-p",
-        "std",
-        "-p",
-        "kani",
-        "-p",
-        "kani_macros",
-        "-p",
-        "kani_core",
         "-Z",
         "unstable-options",
         "--target-dir",

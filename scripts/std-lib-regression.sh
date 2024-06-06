@@ -85,18 +85,19 @@ RUST_FLAGS=(
     "-Cllvm-args=--ignore-global-asm"
     "-Cllvm-args=--goto-c"
     "-Cllvm-args=--reachability=harnesses"
+    "-Cllvm-args=-Zfunction-contracts"
     "-Cpanic=abort"
     "-Zalways-encode-mir"
     "--extern kani_core"
     "-L"
-    "${KANI_DIR}/target/kani/lib"
+    "${KANI_DIR}/target/kani/no_core/lib"
     "--cfg=kani"
 )
 export RUSTFLAGS="${RUST_FLAGS[@]}"
 export RUSTC_LOGS="info"
 
 export RUSTC="$KANI_DIR/target/kani/bin/kani-compiler"
-# export __CARGO_TESTS_ONLY_SRC_ROOT="/home/ubuntu/rust-dev"
+export __CARGO_TESTS_ONLY_SRC_ROOT="/home/ubuntu/rust-dev"
 # Compile rust to iRep
 $WRAPPER cargo build --verbose -Z build-std=core --lib --target $TARGET
 

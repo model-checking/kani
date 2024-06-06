@@ -82,6 +82,9 @@ pub fn make_unsafe_argument_copies(
     let arg_values = renaming_map.keys();
     (
         quote!(#(let #arg_names = kani::internal::untracked_deref(&#arg_values);)*),
+        #[cfg(feature = "no_core")]
+        quote!(#(crate::mem::block(#also_arg_names);)*),
+        #[cfg(not(feature = "no_core"))]
         quote!(#(std::mem::forget(#also_arg_names);)*),
     )
 }

@@ -23,20 +23,6 @@ macro_rules! generate_arbitrary {
             }
         }
 
-        macro_rules! nonzero_arbitrary {
-            ( $type: ty, $base: ty ) => {
-                use core_path::num::*;
-                impl Arbitrary for $type {
-                    #[inline(always)]
-                    fn any() -> Self {
-                        let val = <$base>::any();
-                        assume(val != 0);
-                        unsafe { <$type>::new_unchecked(val) }
-                    }
-                }
-            };
-        }
-
         /// The given type can be represented by an unconstrained symbolic value of size_of::<T>.
         macro_rules! trivial_arbitrary {
             ( $type: ty ) => {
@@ -60,6 +46,20 @@ macro_rules! generate_arbitrary {
                                 { core_path::mem::size_of::<[Self; MAX_ARRAY_LENGTH]>() },
                             >()
                         }
+                    }
+                }
+            };
+        }
+
+        macro_rules! nonzero_arbitrary {
+            ( $type: ty, $base: ty ) => {
+                use core_path::num::*;
+                impl Arbitrary for $type {
+                    #[inline(always)]
+                    fn any() -> Self {
+                        let val = <$base>::any();
+                        assume(val != 0);
+                        unsafe { <$type>::new_unchecked(val) }
                     }
                 }
             };
@@ -145,6 +145,17 @@ macro_rules! generate_arbitrary {
         impl Arbitrary for PhantomPinned {
             fn any() -> Self {
                 PhantomPinned
+            }
+        }
+
+        #[cfg(kani_sysroot)]
+        impl<T, const N: usize> Arbitrary for [T; N]
+        where
+            T: Arbitrary,
+            [(); core_path::mem::size_of::<[T; N]>()]:,
+        {
+            fn any() -> Self {
+                T::any_array()
             }
         }
     };
