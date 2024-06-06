@@ -23,6 +23,7 @@ pub mod arbitrary;
 #[cfg(feature = "concrete_playback")]
 mod concrete_playback;
 pub mod futures;
+pub mod invariant;
 pub mod mem;
 pub mod shadow;
 pub mod slice;
@@ -37,6 +38,7 @@ mod models;
 pub use arbitrary::Arbitrary;
 #[cfg(feature = "concrete_playback")]
 pub use concrete_playback::concrete_playback_run;
+pub use invariant::Invariant;
 
 #[cfg(not(feature = "concrete_playback"))]
 /// NOP `concrete_playback` for type checking during verification mode.
