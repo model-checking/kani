@@ -34,11 +34,13 @@ impl<'a> ContractConditionsHandler<'a> {
                 )
             }
             ContractConditionsData::Ensures { argument_names, attr } => {
-                let (arg_copies, copy_clean) = make_unsafe_argument_copies(&argument_names);
+                let (arg_copies, copy_rename, copy_clean) =
+                    make_unsafe_argument_copies(&argument_names);
 
                 // The code that enforces the postconditions and cleans up the shallow
                 // argument copies (with `mem::forget`).
                 let exec_postconditions = quote!(
+                    #copy_rename
                     kani::assert(#attr, stringify!(#attr_copy));
                     #copy_clean
                 );

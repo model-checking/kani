@@ -73,16 +73,19 @@ pub fn identifier_for_generated_function(
 /// `requires` and `ensures` clauses and later clean them up.
 ///
 /// This function creates the code necessary to both make the copies (first
-/// tuple elem) and to clean them (second tuple elem).
+/// tuple elem), to rebind them (second tuple elem), and to clean them (third tuple elem).
 pub fn make_unsafe_argument_copies(
     renaming_map: &HashMap<Ident, Ident>,
-) -> (TokenStream2, TokenStream2) {
+) -> (TokenStream2, TokenStream2, TokenStream2) {
     let arg_names = renaming_map.values();
     let also_arg_names = renaming_map.values();
+    let also_also_arg_names = renaming_map.values();
     let arg_values = renaming_map.keys();
+    let also_arg_values = renaming_map.keys();
     (
         quote!(#(let #arg_names = kani::internal::untracked_deref(&#arg_values);)*),
-        quote!(#(std::mem::forget(#also_arg_names);)*),
+        quote!(#(let #also_arg_values = #also_arg_names;)*),
+        quote!(#(std::mem::forget(#also_also_arg_names);)*),
     )
 }
 

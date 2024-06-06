@@ -80,12 +80,14 @@ impl<'a> ContractConditionsHandler<'a> {
                 )
             }
             ContractConditionsData::Ensures { attr, argument_names } => {
-                let (arg_copies, copy_clean) = make_unsafe_argument_copies(&argument_names);
+                let (arg_copies, copy_rename, copy_clean) =
+                    make_unsafe_argument_copies(&argument_names);
                 let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
                 quote!(
                     #arg_copies
                     #(#before)*
                     #(#after)*
+                    #copy_rename
                     kani::assume(#attr);
                     #copy_clean
                     #result
