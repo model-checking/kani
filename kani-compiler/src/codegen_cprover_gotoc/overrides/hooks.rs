@@ -207,11 +207,11 @@ impl GotocHook for Panic {
     }
 }
 
-/// Encodes __CPROVER_r_ok
-struct IsReadOk;
-impl GotocHook for IsReadOk {
+/// Encodes __CPROVER_r_ok(ptr, size)
+struct IsAllocated;
+impl GotocHook for IsAllocated {
     fn hook_applies(&self, tcx: TyCtxt, instance: Instance) -> bool {
-        matches_function(tcx, instance.def, "KaniIsReadOk")
+        matches_function(tcx, instance.def, "KaniIsAllocated")
     }
 
     fn handle(
@@ -235,6 +235,74 @@ impl GotocHook for IsReadOk {
         Stmt::block(
             vec![
                 ret_place.goto_expr.assign(Expr::read_ok(ptr, size).cast_to(ret_type), loc),
+                Stmt::goto(bb_label(target), loc),
+            ],
+            loc,
+        )
+    }
+}
+
+/// Encodes __CPROVER_pointer_object(ptr)
+struct PointerObject;
+impl GotocHook for PointerObject {
+    fn hook_applies(&self, tcx: TyCtxt, instance: Instance) -> bool {
+        matches_function(tcx, instance.def, "KaniPointerObject")
+    }
+
+    fn handle(
+        &self,
+        gcx: &mut GotocCtx,
+        _instance: Instance,
+        mut fargs: Vec<Expr>,
+        assign_to: &Place,
+        target: Option<BasicBlockIdx>,
+        span: Span,
+    ) -> Stmt {
+        assert_eq!(fargs.len(), 1);
+        let ptr = fargs.pop().unwrap().cast_to(Type::void_pointer());
+        let target = target.unwrap();
+        let loc = gcx.codegen_caller_span_stable(span);
+        let ret_place =
+            unwrap_or_return_codegen_unimplemented_stmt!(gcx, gcx.codegen_place_stable(assign_to));
+        let ret_type = ret_place.goto_expr.typ().clone();
+
+        Stmt::block(
+            vec![
+                ret_place.goto_expr.assign(Expr::pointer_object(ptr).cast_to(ret_type), loc),
+                Stmt::goto(bb_label(target), loc),
+            ],
+            loc,
+        )
+    }
+}
+
+/// Encodes __CPROVER_pointer_offset(ptr)
+struct PointerOffset;
+impl GotocHook for PointerOffset {
+    fn hook_applies(&self, tcx: TyCtxt, instance: Instance) -> bool {
+        matches_function(tcx, instance.def, "KaniPointerOffset")
+    }
+
+    fn handle(
+        &self,
+        gcx: &mut GotocCtx,
+        _instance: Instance,
+        mut fargs: Vec<Expr>,
+        assign_to: &Place,
+        target: Option<BasicBlockIdx>,
+        span: Span,
+    ) -> Stmt {
+        assert_eq!(fargs.len(), 1);
+        let ptr = fargs.pop().unwrap().cast_to(Type::void_pointer());
+        let target = target.unwrap();
+        let loc = gcx.codegen_caller_span_stable(span);
+        let ret_place =
+            unwrap_or_return_codegen_unimplemented_stmt!(gcx, gcx.codegen_place_stable(assign_to));
+        let ret_type = ret_place.goto_expr.typ().clone();
+
+        Stmt::block(
+            vec![
+                ret_place.goto_expr.assign(Expr::pointer_offset(ptr).cast_to(ret_type), loc),
                 Stmt::goto(bb_label(target), loc),
             ],
             loc,
@@ -398,7 +466,9 @@ pub fn fn_hooks() -> GotocHooks {
             Rc::new(Assert),
             Rc::new(Cover),
             Rc::new(Nondet),
-            Rc::new(IsReadOk),
+            Rc::new(IsAllocated),
+            Rc::new(PointerObject),
+            Rc::new(PointerOffset),
             Rc::new(RustAlloc),
             Rc::new(MemCmp),
             Rc::new(UntrackedDeref),

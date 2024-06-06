@@ -15,3 +15,5 @@ doctest = false
 name = "bar"
 doctest = false
 
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }

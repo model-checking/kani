@@ -333,8 +333,9 @@ impl<'tcx> GotocCtx<'tcx> {
     ///      assert!(v.0 == [1, 2]); // refers to the entire array
     ///    }
     /// ```
-    /// * Note that projection inside SIMD structs may eventually become illegal.
-    /// See <https://github.com/rust-lang/stdarch/pull/1422#discussion_r1176415609> thread.
+    ///
+    /// Note that projection inside SIMD structs may eventually become illegal.
+    /// See thread <https://github.com/rust-lang/stdarch/pull/1422#discussion_r1176415609>.
     ///
     /// Since the goto representation for both is the same, we use the expected type to decide
     /// what to return.

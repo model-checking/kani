@@ -65,7 +65,7 @@ fn my_div(dividend: u32, divisor: u32) -> u32 {
 
    ```rs
    #[kani::requires(divisor != 0)]
-   #[kani::ensures(result <= dividend)]
+   #[kani::ensures(|result : &u32| *result <= dividend)]
    fn my_div(dividend: u32, divisor: u32) -> u32 {
      dividend / divisor
    }
@@ -79,8 +79,7 @@ fn my_div(dividend: u32, divisor: u32) -> u32 {
 
    Conditions in contracts are Rust expressions which reference the
    function arguments and, in case of `ensures`, the return value of the
-   function. The return value is a special variable called `result` (see [open
-   questions](#open-questions) on a discussion about (re)naming). Syntactically
+   function. The return value is passed into the ensures closure statement by reference. Syntactically
    Kani supports any Rust expression, including function calls, defining types
    etc. However they must be side-effect free (see also side effects
    [here](#changes-to-other-components)) or Kani will throw a compile error.
@@ -132,8 +131,8 @@ fn my_div(dividend: u32, divisor: u32) -> u32 {
      let dividend = kani::any();
      let divisor = kani::any();
      kani::assume(divisor != 0); // requires
-     let result = my_div(dividend, divisor);
-     kani::assert(result <= dividend); // ensures
+     let result_kani_internal = my_div(dividend, divisor);
+     kani::assert((|result : &u32| *result <= dividend)(result_kani_internal)); // ensures
    }
    ```
 
@@ -306,7 +305,7 @@ available to `ensures`. It is used like so:
 
 ```rs
 impl<T> Vec<T> {
-  #[kani::ensures(old(self.is_empty()) || result.is_some())]
+  #[kani::ensures(|result : &Option<T>| old(self.is_empty()) || result.is_some())]
   fn pop(&mut self) -> Option<T> {
     ...
   }
@@ -324,8 +323,8 @@ Note also that `old` is syntax, not a function and implemented as an extraction
 and lifting during code generation. It can reference e.g. `pop`'s arguments but
 not local variables. Compare the following
 
-**Invalid ❌:** `#[kani::ensures({ let x = self.is_empty(); old(x) } || result.is_some())]`</br>
-**Valid ✅:** `#[kani::ensures(old({ let x = self.is_empty(); x }) || result.is_some())]`
+**Invalid ❌:** `#[kani::ensures(|result : &Option<T>| { let x = self.is_empty(); old(x) } || result.is_some())]`</br>
+**Valid ✅:** `#[kani::ensures(|result : &Option<T>| old({ let x = self.is_empty(); x }) || result.is_some())]`
 
 And it will only be recognized as `old(...)`, not as `let old1 = old; old1(...)` etc.
 
@@ -410,7 +409,7 @@ the below example:
 
 ```rs
 impl<T> Vec<T> {
-  #[kani::ensures(self.is_empty() || self.len() == old(self.len()) - 1)]
+  #[kani::ensures(|result : &Option<T>| self.is_empty() || self.len() == old(self.len()) - 1)]
   fn pop(&mut self) -> Option<T> {
     ...
   }
@@ -425,8 +424,8 @@ following:
 impl<T> Vec<T> {
   fn check_pop(&mut self) -> Option<T> {
     let old_1 = self.len();
-    let result = Self::pop(self);
-    kani::assert(self.is_empty() || self.len() == old_1 - 1)
+    let result_kani_internal = Self::pop(self);
+    kani::assert((|result : &Option<T>| self.is_empty() || self.len() == old_1 - 1)(result_kani_internal))
   }
 }
 ```
@@ -450,7 +449,7 @@ sensible contract for it might look as follows:
 
 ```rs
 impl<T> Vec<T> {
-  #[ensures(self.len() == result.0.len() + result.1.len())]
+  #[ensures(|result : &(&mut [T], &mut [T])| self.len() == result.0.len() + result.1.len())]
   fn split_at_mut(&mut self, i: usize) -> (&mut [T], &mut [T]) {
     ...
   }
