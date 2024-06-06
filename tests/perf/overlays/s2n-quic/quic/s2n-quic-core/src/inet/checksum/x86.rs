@@ -1,5 +1,7 @@
-// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
-// SPDX-License-Identifier: Apache-2.0
+// Copyright Kani Contributors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! This file is here to overlay the respective files in s2n-quic to disable the check failing on CI.
 
 #![cfg_attr(kani, allow(dead_code))]
 
