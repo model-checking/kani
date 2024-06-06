@@ -1,0 +1,2 @@
+error: Nested calls to `old` are prohibited
+#[kani::ensures(|result| old(*ptr + old(1)) == *ptr)]
