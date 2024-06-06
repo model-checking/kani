@@ -21,8 +21,13 @@
 /// invariants only need to be upheld at the boundaries to safe code.
 ///
 /// Safety invariants are particularly interesting for user-defined types, and
-/// the `Invariant` trait allows you to check them with Kani. For example,
-/// let's say you're creating a type that represents a date:
+/// the `Invariant` trait allows you to check them with Kani.
+///
+/// It can also be used in tests. It's a programmatic way to specify (in Rust)
+/// properties over your data types. Since it's written in Rust, it can be used
+/// for static and dynamic checking.
+///
+/// For example, let's say you're creating a type that represents a date:
 ///
 /// ```rust
 /// #[derive(kani::Arbitrary)]
