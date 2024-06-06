@@ -287,8 +287,16 @@ impl KaniSession {
     }
 
     /// Run cargo and collect any error found.
-    /// We also collect the metadata file generated during compilation if any.
+    /// We also collect the metadata file generated during compilation if any for the given target.
     fn run_build_target(&self, cargo_cmd: Command, target: &Target) -> Result<Option<Artifact>> {
+        /// This used to be `rustc_artifact == *target`, but it
+        /// started to fail after the `cargo` change in
+        /// <https://github.com/rust-lang/cargo/pull/12783>
+        ///
+        /// We should revisit this check after a while to see if
+        /// it's not needed anymore or it can be restricted to
+        /// certain cases.
+        /// TODO: <https://github.com/model-checking/kani/issues/3111>
         fn same_target(t1: &Target, t2: &Target) -> bool {
             (t1 == t2)
                 || (t1.name.replace('-', "_") == t2.name.replace('-', "_")
@@ -300,27 +308,15 @@ impl KaniSession {
                     && t1.doc == t2.doc)
         }
 
-        let mut artifacts = self.run_build(cargo_cmd)?;
+        let artifacts = self.run_build(cargo_cmd)?;
+        debug!(?artifacts, "run_build_target");
 
-        // This used to be `rustc_artifact == *target`, but it
-        // started to fail after the `cargo` change in
-        // <https://github.com/rust-lang/cargo/pull/12783>
-        //
-        // We should revisit this check after a while to see if
-        // it's not needed anymore or it can be restricted to
-        // certain cases.
-        // TODO: <https://github.com/model-checking/kani/issues/3111>
-        if let Some(artifact) = artifacts.pop()
-            && same_target(&artifact.target, target)
-        {
-            // We generate kani specific artifacts only for the build target. The build target is
-            // always the last artifact generated in a build, and all the other artifacts are related
-            // to dependencies or build scripts. Hence, we need to invoke `map_kani_artifact` only
-            // for the last compiler artifact.
-            Ok(map_kani_artifact(artifact))
-        } else {
-            Ok(None)
-        }
+        // We generate kani specific artifacts only for the build target. The build target is
+        // always the last artifact generated in a build, and all the other artifacts are related
+        // to dependencies or build scripts.
+        Ok(artifacts.into_iter().rev().find_map(|artifact| {
+            if same_target(&artifact.target, target) { map_kani_artifact(artifact) } else { None }
+        }))
     }
 }
 
