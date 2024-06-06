@@ -88,9 +88,6 @@ impl<'a> ContractConditionsHandler<'a> {
             ContractConditionsType::Modifies => {
                 ContractConditionsData::new_modifies(attr, &mut output)
             }
-            ContractConditionsType::Remember => {
-                ContractConditionsData::Remember { attr: syn::parse(attr)? }
-            }
         };
 
         Ok(Self { function_state, condition_type, annotated_fn, attr_copy, output, hash })

@@ -38,7 +38,7 @@ impl<'a> ContractConditionsHandler<'a> {
             }
             ContractConditionsData::Ensures { argument_names, attr } => {
                 let (arg_copies, copy_clean) = make_unsafe_argument_copies(&argument_names);
-                let ensures_clause = build_ensures(attr, remember_count);
+                let (remembers_stmts, ensures_clause) = build_ensures(attr, remember_count);
 
                 // The code that enforces the postconditions and cleans up the shallow
                 // argument copies (with `mem::forget`).
@@ -56,6 +56,7 @@ impl<'a> ContractConditionsHandler<'a> {
                 let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
                 quote!(
                     #arg_copies
+                    #remembers_stmts
                     #(#inner)*
                     #exec_postconditions
                     #result
@@ -83,16 +84,6 @@ impl<'a> ContractConditionsHandler<'a> {
 
                 quote!(
                     #(let #wrapper_args = unsafe { kani::internal::Pointer::decouple_lifetime(&#attr) };)*
-                    #(#inner)*
-                )
-            }
-            ContractConditionsData::Remember { attr } => {
-                let remember_ident: Ident = Ident::new(
-                    &("remember_kani_internal_".to_owned() + &remember_count.to_string()),
-                    Span::call_site(),
-                );
-                quote!(
-                    let #remember_ident = #attr;
                     #(#inner)*
                 )
             }

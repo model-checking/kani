@@ -225,4 +225,4 @@
 //! Rust pointer type (`&T`, `&mut T`, `*const T` or `*mut T`). In addition `T`
 //! must implement [`Arbitrary`](super::Arbitrary). This is used to assign
 //! `kani::any()` to the location when the function is used in a `stub_verified`.
-pub use super::{ensures, modifies, proof_for_contract, remember, requires, stub_verified};
+pub use super::{ensures, modifies, proof_for_contract, requires, stub_verified};

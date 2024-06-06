@@ -268,3 +268,22 @@ pub fn short_hash_of_token_stream(stream: &proc_macro::TokenStream) -> u64 {
     let long_hash = hasher.finish();
     long_hash % SIX_HEX_DIGITS_MASK
 }
+
+
+macro_rules! assert_spanned_err {
+    ($condition:expr, $span_source:expr, $msg:expr, $($args:expr),+) => {
+        if !$condition {
+            $span_source.span().unwrap().error(format!($msg, $($args),*)).emit();
+            assert!(false);
+        }
+    };
+    ($condition:expr, $span_source:expr, $msg:expr $(,)?) => {
+        if !$condition {
+            $span_source.span().unwrap().error($msg).emit();
+            assert!(false);
+        }
+    };
+    ($condition:expr, $span_source:expr) => {
+        assert_spanned_err!($condition, $span_source, concat!("Failed assertion ", stringify!($condition)))
+    };
+}

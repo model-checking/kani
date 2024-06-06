@@ -11,8 +11,7 @@ impl<T: kani::Arbitrary> kani::Arbitrary for NoCopy<T> {
     }
 }
 
-#[kani::remember(ptr.clone())]
-#[kani::ensures(|result, old_ptr : &NoCopy<u32>| (*old_ptr).0 + 1 == ptr.0)]
+#[kani::ensures(|result| old(ptr.clone()).0 + 1 == ptr.0)]
 #[kani::requires(ptr.0 < 100)]
 #[kani::modifies(&mut ptr.0)]
 fn modify(ptr: &mut NoCopy<u32>) {
