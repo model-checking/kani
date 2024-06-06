@@ -13,7 +13,7 @@ use proc_macro2::{Ident, Span, TokenStream as TokenStream2};
 use quote::{quote, ToTokens};
 use syn::Attribute;
 
-use super::{ContractConditionsHandler, ContractFunctionState};
+use super::{ContractConditionsHandler, ContractFunctionState, INTERNAL_RESULT_IDENT};
 
 impl ContractFunctionState {
     /// Do we need to emit the `is_contract_generated` tag attribute on the
@@ -114,7 +114,7 @@ macro_rules! try_as_result_assign_pat {
                     ident: result_ident,
                     subpat: None,
                     ..
-                }) if result_ident == "result"
+                }) if result_ident == INTERNAL_RESULT_IDENT
             ) => init.$convert(),
             _ => None,
         }
