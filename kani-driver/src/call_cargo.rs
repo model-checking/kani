@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use crate::args::VerificationArgs;
-use crate::call_single_file::to_rustc_arg;
+use crate::call_single_file::{to_rustc_arg, LibConfig};
 use crate::project::Artifact;
-use crate::session::{setup_cargo_command, KaniSession};
+use crate::session::{lib_folder, lib_no_core_folder, setup_cargo_command, KaniSession};
 use crate::util;
 use anyhow::{bail, Context, Result};
 use cargo_metadata::diagnostic::{Diagnostic, DiagnosticLevel};
@@ -53,7 +53,8 @@ impl KaniSession {
     }
 
     pub fn cargo_build_std(&self, std_path: &Path, krate_path: &Path) -> Result<Vec<Artifact>> {
-        let mut rustc_args = self.kani_rustc_flags();
+        let lib_path = lib_no_core_folder().unwrap();
+        let mut rustc_args = self.kani_rustc_flags(LibConfig::new_no_core(lib_path));
         rustc_args.push(to_rustc_arg(self.kani_compiler_flags()).into());
         rustc_args.push(self.reachability_arg().into());
 
@@ -64,14 +65,13 @@ impl KaniSession {
         cargo_args.push("--message-format".into());
         cargo_args.push("json-diagnostic-rendered-ansi".into());
         cargo_args.push("-Z".into());
-        cargo_args.push("build-std=panic_abort,std".into());
+        cargo_args.push("build-std=panic_abort,core,std".into());
 
         if self.args.common_args.verbose {
             cargo_args.push("-v".into());
         }
 
         // Since we are verifying the standard library, we set the reachability to all crates.
-        println!("{}", krate_path.display());
         let mut cmd = setup_cargo_command()?;
         cmd.args(&cargo_args)
             .current_dir(krate_path)
@@ -103,7 +103,8 @@ impl KaniSession {
             fs::remove_dir_all(&target_dir)?;
         }
 
-        let mut rustc_args = self.kani_rustc_flags();
+        let lib_path = lib_folder().unwrap();
+        let mut rustc_args = self.kani_rustc_flags(LibConfig::new(lib_path));
         rustc_args.push(to_rustc_arg(self.kani_compiler_flags()).into());
 
         let mut cargo_args: Vec<OsString> = vec!["rustc".into()];

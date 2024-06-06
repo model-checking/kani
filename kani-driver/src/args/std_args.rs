@@ -36,7 +36,7 @@ impl ValidateArgs for VerifyStdArgs {
         {
             return Err(Error::raw(
                 ErrorKind::MissingRequiredArgument,
-                format!("The `verify-std` subcommand is unstable and requires -Z unstable-options",),
+                "The `verify-std` subcommand is unstable and requires -Z unstable-options",
             ));
         }
 
