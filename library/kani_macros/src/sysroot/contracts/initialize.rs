@@ -154,7 +154,4 @@ impl<'ast> Visit<'ast> for ArgumentIdentCollector {
         self.0.insert(i.ident.clone());
         syn::visit::visit_pat_ident(self, i)
     }
-    fn visit_receiver(&mut self, _: &'ast syn::Receiver) {
-        self.0.insert(Ident::new("self", proc_macro2::Span::call_site()));
-    }
 }
