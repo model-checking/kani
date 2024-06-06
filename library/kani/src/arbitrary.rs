@@ -1,8 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-//! This module introduces the Arbitrary trait as well as implementation for primitive types and
-//! other std containers.
+//! This module introduces the `Arbitrary` trait as well as implementation for
+//! primitive types and other std containers.
 
 use std::{
     marker::{PhantomData, PhantomPinned},
@@ -66,7 +66,7 @@ trivial_arbitrary!(i64);
 trivial_arbitrary!(i128);
 trivial_arbitrary!(isize);
 
-// We do not constraint floating points values per type spec. Users must add assumptions to their
+// We do not constrain floating points values per type spec. Users must add assumptions to their
 // verification code if they want to eliminate NaN, infinite, or subnormal.
 trivial_arbitrary!(f32);
 trivial_arbitrary!(f64);
