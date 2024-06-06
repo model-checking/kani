@@ -280,6 +280,11 @@ pub fn lib_playback_folder() -> Result<PathBuf> {
     Ok(base_folder()?.join("playback/lib"))
 }
 
+/// Return the path for the folder where the pre-compiled rust libraries with no_core.
+pub fn lib_no_core_folder() -> Result<PathBuf> {
+    Ok(base_folder()?.join("no_core/lib"))
+}
+
 /// Return the base folder for the entire kani installation.
 pub fn base_folder() -> Result<PathBuf> {
     Ok(bin_folder()?
