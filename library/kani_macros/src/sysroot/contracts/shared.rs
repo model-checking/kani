@@ -148,6 +148,9 @@ pub fn try_as_result_assign_mut(stmt: &mut syn::Stmt) -> Option<&mut syn::LocalI
     try_as_result_assign_pat!(stmt, as_mut)
 }
 
+/// This function goes through the vector of statements and counts the number of variables
+/// with idents prefixed by `remember_kani_internal_`. This avoid variable name collisions by
+/// counter incrementation for each such new variable.
 pub fn count_remembers(stmt_vec: &Vec<syn::Stmt>) -> usize {
     stmt_vec
         .iter()
@@ -168,6 +171,14 @@ pub fn count_remembers(stmt_vec: &Vec<syn::Stmt>) -> usize {
         .count()
 }
 
+/// When a #[kani::ensures(|result|expr)] is expanded, this function is called on
+/// with build_ensures(|result|expr, remember_count) where remember_count is the total number of
+/// remember_kani_internal_ variables that exist before building this ensures statement.
+/// This function goes through the expr and extracts out all the `old` expressions and creates a sequence
+/// of statements that instantiate these expressions as `let remember_kani_internal_x = old_expr;` with
+/// `x` starting t the `remember_count` and incrementing from there. This is returned as the first return
+/// parameter. The second return parameter is the expression formed by passing in the result variable into
+/// the input closure.
 pub fn build_ensures(data: &ExprClosure, remember_count: usize) -> (TokenStream2, Expr) {
     let mut remembers_exprs = vec![];
     let mut vis =
@@ -195,7 +206,13 @@ trait OldTrigger {
     /// indicates whether the entire `old()` call should be replaced by the
     /// (potentially altered) first argument.
     ///
-    /// The second argument is the span of the original `old` expr
+    /// The second argument is the span of the original `old` expr.
+    ///
+    /// The third argument is the number of remember variables that have already been
+    /// instantiated in the surrounding environment.
+    ///
+    /// The fourth argument is a collection of all the expressions that need to be lifted
+    /// into the past environment as new remember variables.
     fn trigger(
         &mut self,
         e: &mut Expr,
@@ -285,8 +302,11 @@ impl OldTrigger for OldLifter {
         // This ensures there are no nested calls to `old`
         denier.visit_expr_mut(e);
 
+        // The index of the remembers_exprs is offset by the remember_count of the surrounding environment
         let index = remember_count + remembers_exprs.len();
+        // save the original expression to be lifted into the past remember environment
         remembers_exprs.push((*e).clone());
+        // change the expression to refer to the new remember variable
         let ident = Ident::new(
             &("remember_kani_internal_".to_owned() + &index.to_string()),
             Span::call_site(),
