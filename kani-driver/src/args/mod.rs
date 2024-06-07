@@ -6,6 +6,7 @@ pub mod assess_args;
 pub mod cargo;
 pub mod common;
 pub mod playback_args;
+pub mod std_args;
 
 pub use assess_args::*;
 
@@ -90,6 +91,8 @@ pub struct StandaloneArgs {
 pub enum StandaloneSubcommand {
     /// Execute concrete playback testcases of a local crate.
     Playback(Box<playback_args::KaniPlaybackArgs>),
+    /// Verify the rust standard library.
+    VerifyStd(Box<std_args::VerifyStdArgs>),
 }
 
 #[derive(Debug, clap::Parser)]
@@ -448,6 +451,13 @@ fn check_no_cargo_opt(is_set: bool, name: &str) -> Result<(), Error> {
 impl ValidateArgs for StandaloneArgs {
     fn validate(&self) -> Result<(), Error> {
         self.verify_opts.validate()?;
+
+        match &self.command {
+            Some(StandaloneSubcommand::VerifyStd(args)) => args.validate()?,
+            // TODO: Invoke PlaybackArgs::validate()
+            None | Some(StandaloneSubcommand::Playback(..)) => {}
+        };
+
         // Cargo target arguments.
         check_no_cargo_opt(self.verify_opts.target.bins, "--bins")?;
         check_no_cargo_opt(self.verify_opts.target.lib, "--lib")?;
