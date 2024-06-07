@@ -1,5 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+// kani-flags: -Z ptr-to-ref-cast-checks
 
 //! This test case checks that raw pointer validity is checked before converting it to a reference, e.g., &(*ptr).
 
