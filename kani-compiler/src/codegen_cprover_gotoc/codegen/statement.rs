@@ -337,6 +337,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 Stmt::skip(loc)
             }
             InstanceKind::Shim => {
+                // Since the reference is used right away here, no need to inject a check for pointer validity.
                 let place_ref = self.codegen_place_ref_stable(place);
                 match place_ty.kind() {
                     TyKind::RigidTy(RigidTy::Dynamic(..)) => {

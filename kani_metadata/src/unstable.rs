@@ -89,6 +89,8 @@ pub enum UnstableFeature {
     ValidValueChecks,
     /// Ghost state and shadow memory APIs.
     GhostState,
+    /// Automatically check that pointers are valid when casting them to references.
+    PtrToRefCastChecks,
     /// Enable an unstable option or subcommand.
     UnstableOptions,
 }
