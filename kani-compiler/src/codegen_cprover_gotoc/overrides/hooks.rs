@@ -458,6 +458,45 @@ impl GotocHook for UntrackedDeref {
     }
 }
 
+struct InitContracts;
+
+/// CBMC contracts currently has a limitation where `free` has to be in scope.
+/// However, if there is no dynamic allocation in the harness, slicing removes `free` from the
+/// scope.
+///
+/// Thus, this function will basically translate into:
+/// ```c
+/// // This is a no-op.
+/// free(NULL);
+/// ```
+impl GotocHook for InitContracts {
+    fn hook_applies(&self, tcx: TyCtxt, instance: Instance) -> bool {
+        matches_function(tcx, instance.def, "KaniInitContracts")
+    }
+
+    fn handle(
+        &self,
+        gcx: &mut GotocCtx,
+        _instance: Instance,
+        fargs: Vec<Expr>,
+        _assign_to: &Place,
+        target: Option<BasicBlockIdx>,
+        span: Span,
+    ) -> Stmt {
+        assert_eq!(fargs.len(), 0,);
+        let loc = gcx.codegen_span_stable(span);
+        Stmt::block(
+            vec![
+                BuiltinFn::Free
+                    .call(vec![Expr::pointer_constant(0, Type::void_pointer())], loc)
+                    .as_stmt(loc),
+                Stmt::goto(bb_label(target.unwrap()), loc),
+            ],
+            loc,
+        )
+    }
+}
+
 pub fn fn_hooks() -> GotocHooks {
     GotocHooks {
         hooks: vec![
@@ -472,6 +511,7 @@ pub fn fn_hooks() -> GotocHooks {
             Rc::new(RustAlloc),
             Rc::new(MemCmp),
             Rc::new(UntrackedDeref),
+            Rc::new(InitContracts),
         ],
     }
 }

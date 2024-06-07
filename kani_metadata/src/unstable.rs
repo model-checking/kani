@@ -87,10 +87,12 @@ pub enum UnstableFeature {
     /// Automatically check that no invalid value is produced which is considered UB in Rust.
     /// Note that this does not include checking uninitialized value.
     ValidValueChecks,
-    /// Ghost state and shadow memory APIs
+    /// Ghost state and shadow memory APIs.
     GhostState,
     /// Automatically check that pointers are valid when casting them to references.
     PtrToRefCastChecks,
+    /// Enable an unstable option or subcommand.
+    UnstableOptions,
 }
 
 impl UnstableFeature {
