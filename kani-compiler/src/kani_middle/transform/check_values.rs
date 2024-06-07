@@ -392,9 +392,6 @@ impl<'a, 'b> MirVisitor for CheckValueVisitor<'a, 'b> {
                                 match validity {
                                     Ok(ranges) if ranges.is_empty() => {}
                                     Ok(ranges) => {
-                                        // TODO: try_new_ty_const_uint isn't public, and there is
-                                        // no TyConst equivalent to try_from_uint. It's not at all
-                                        // clear how to create a TyConst at all.
                                         let sz = rustc_internal::stable(Const::from_target_usize(
                                             self.tcx,
                                             target_ty.layout().unwrap().shape().size.bytes() as u64,
