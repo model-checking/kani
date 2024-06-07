@@ -57,6 +57,7 @@ impl KaniSession {
         let mut rustc_args = self.kani_rustc_flags(LibConfig::new_no_core(lib_path));
         rustc_args.push(to_rustc_arg(self.kani_compiler_flags()).into());
         rustc_args.push(self.reachability_arg().into());
+        // Ignore global assembly, since `compiler_builtins` has some.
         rustc_args.push(to_rustc_arg(vec!["--ignore-global-asm".to_string()]).into());
         rustc_args.push(to_rustc_arg(vec!["-Zfunction-contracts".to_string()]).into());
         rustc_args.push(to_rustc_arg(vec!["--enable-stubbing".to_string()]).into());
