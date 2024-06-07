@@ -374,7 +374,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     let raw_ptr_read_ok = self.codegen_assert(
                         raw_ptr_read_ok_expr,
                         PropertyClass::SafetyCheck,
-                        "dereferencing a pointer to invalid memory location",
+                        "dereference failure: pointer invalid",
                         *loc,
                     );
                     return Some(raw_ptr_read_ok);

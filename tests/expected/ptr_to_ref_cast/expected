@@ -1,68 +1,68 @@
 Checking harness check_zst_deref...
 
-Status: FAILURE
-Description: "dereferencing a pointer to invalid memory location"
-Location: tests/expected/ptr_to_ref_cast/ptr_to_ref_cast.rs:131:35 in function zst_deref
+Status: FAILURE\
+Description: "dereference failure: pointer invalid"\
+in function zst_deref
 
 VERIFICATION:- FAILED
 
 Checking harness check_equal_size_deref...
 
-Status: SUCCESS
-Description: "dereferencing a pointer to invalid memory location"
-Location: tests/expected/ptr_to_ref_cast/ptr_to_ref_cast.rs:106:31 in function equal_size_deref
+Status: SUCCESS\
+Description: "dereference failure: pointer invalid"\
+in function equal_size_deref
 
-Status: SUCCESS
-Description: "dereferencing a pointer to invalid memory location"
-Location: tests/expected/ptr_to_ref_cast/ptr_to_ref_cast.rs:109:38 in function equal_size_deref
+Status: SUCCESS\
+Description: "dereference failure: pointer invalid"\
+in function equal_size_deref
 
 VERIFICATION:- SUCCESSFUL
 
 Checking harness check_smaller_deref...
 
-Status: SUCCESS
-Description: "dereferencing a pointer to invalid memory location"
-Location: tests/expected/ptr_to_ref_cast/ptr_to_ref_cast.rs:88:31 in function smaller_deref
+Status: SUCCESS\
+Description: "dereference failure: pointer invalid"\
+in function smaller_deref
 
-Status: SUCCESS
-Description: "dereferencing a pointer to invalid memory location"
-Location: tests/expected/ptr_to_ref_cast/ptr_to_ref_cast.rs:92:38 in function smaller_deref
+Status: SUCCESS\
+Description: "dereference failure: pointer invalid"\
+in function smaller_deref
 
 VERIFICATION:- SUCCESSFUL
 
 Checking harness check_larger_deref_struct...
 
-Status: FAILURE
-Description: "dereferencing a pointer to invalid memory location"
-Location: tests/expected/ptr_to_ref_cast/ptr_to_ref_cast.rs:74:31 in function larger_deref_struct
+Status: FAILURE\
+Description: "dereference failure: pointer invalid"\
+in function larger_deref_struct
 
 VERIFICATION:- FAILED
 
 Checking harness check_larger_deref_into_ptr...
 
-Status: FAILURE
-Description: "dereferencing a pointer to invalid memory location"
-Location: tests/expected/ptr_to_ref_cast/ptr_to_ref_cast.rs:48:38 in function larger_deref_into_ptr
+Status: FAILURE\
+Description: "dereference failure: pointer invalid"\
+in function larger_deref_into_ptr
 
 VERIFICATION:- FAILED
 
 Checking harness check_larger_deref...
 
-Status: FAILURE
-Description: "dereferencing a pointer to invalid memory location"
-Location: tests/expected/ptr_to_ref_cast/ptr_to_ref_cast.rs:34:32 in function larger_deref
+Status: FAILURE\
+Description: "dereference failure: pointer invalid"\
+in function larger_deref
 
 VERIFICATION:- FAILED
 
 Checking harness check_store...
 
-Status: FAILURE
-Description: "dereferencing a pointer to invalid memory location"
-Location: tests/expected/ptr_to_ref_cast/ptr_to_ref_cast.rs:17:28 in function Store::<'_, 3>::from
+Status: FAILURE\
+Description: "dereference failure: pointer invalid"\
+in function Store::<'_, 3>::from
 
-Status: SUCCESS
-Description: "assertion failed: broken.data.len() == 3"
-Location: tests/expected/ptr_to_ref_cast/ptr_to_ref_cast.rs:26:5 in function check_store
+Status: SUCCESS\
+Description: "assertion failed: broken.data.len() == 3"\
+in function check_store
 
 VERIFICATION:- FAILED
 
