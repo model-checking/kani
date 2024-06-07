@@ -407,6 +407,10 @@ pub(crate) fn std_project(std_path: &Path, session: &KaniSession) -> Result<Proj
     }
     session.cargo_init_lib(&dummy_crate)?;
 
+    let mut input = String::new();
+    println!("Press ENTER: ");
+    let _n = std::io::stdin().read_line(&mut input).unwrap();
+
     // Build cargo project for dummy crate.
     let std_path = std_path.canonicalize()?;
     let outputs = session.cargo_build_std(std_path.parent().unwrap(), &dummy_crate)?;

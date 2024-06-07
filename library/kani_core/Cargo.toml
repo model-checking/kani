@@ -10,7 +10,7 @@ publish = false
 description = "Define core constructs to use with Kani"
 
 [dependencies]
-kani_macros = { path = "../kani_macros" }
+kani_macros = { path = "../kani_macros", default-features = false }
 
 [features]
 no_core=["kani_macros/no_core"]

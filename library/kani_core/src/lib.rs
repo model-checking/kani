@@ -255,5 +255,30 @@ macro_rules! kani_intrinsics {
             #[allow(clippy::empty_loop)]
             loop {}
         }
-    };
+
+        pub mod internal {
+            /// A way to break the ownerhip rules. Only used by contracts where we can
+            /// guarantee it is done safely.
+            #[inline(never)]
+            #[doc(hidden)]
+            #[rustc_diagnostic_item = "KaniUntrackedDeref"]
+            pub fn untracked_deref<T>(_: &T) -> T {
+                todo!()
+            }
+
+            /// CBMC contracts currently has a limitation where `free` has to be in scope.
+            /// However, if there is no dynamic allocation in the harness, slicing removes `free` from the
+            /// scope.
+            ///
+            /// Thus, this function will basically translate into:
+            /// ```c
+            /// // This is a no-op.
+            /// free(NULL);
+            /// ```
+            #[inline(never)]
+            #[doc(hidden)]
+            #[rustc_diagnostic_item = "KaniInitContracts"]
+            pub fn init_contracts() {}
+        }
+    }
 }

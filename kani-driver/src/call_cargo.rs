@@ -57,8 +57,10 @@ impl KaniSession {
         let mut rustc_args = self.kani_rustc_flags(LibConfig::new_no_core(lib_path));
         rustc_args.push(to_rustc_arg(self.kani_compiler_flags()).into());
         rustc_args.push(self.reachability_arg().into());
+        rustc_args.push(to_rustc_arg(vec!["--ignore-global-asm".to_string()]).into());
+        rustc_args.push(to_rustc_arg(vec!["-Zfunction-contracts".to_string()]).into());
 
-        let mut cargo_args: Vec<OsString> = vec!["build".into()];
+        let mut cargo_args: Vec<OsString> = vec!["rustc".into()];
         cargo_args.append(&mut cargo_config_args());
 
         // Configuration needed to parse cargo compilation status.
@@ -70,6 +72,9 @@ impl KaniSession {
         if self.args.common_args.verbose {
             cargo_args.push("-v".into());
         }
+
+        // cargo_args.push("--".into());
+        // cargo_args.push("-Zunpretty=expanded".into());
 
         // Since we are verifying the standard library, we set the reachability to all crates.
         let mut cmd = setup_cargo_command()?;
@@ -103,8 +108,8 @@ impl KaniSession {
             fs::remove_dir_all(&target_dir)?;
         }
 
-        let lib_path = lib_folder().unwrap();
-        let mut rustc_args = self.kani_rustc_flags(LibConfig::new(lib_path));
+        let lib_path = lib_no_core_folder().unwrap();
+        let mut rustc_args = self.kani_rustc_flags(LibConfig::new_no_core(lib_path));
         rustc_args.push(to_rustc_arg(self.kani_compiler_flags()).into());
 
         let mut cargo_args: Vec<OsString> = vec!["rustc".into()];

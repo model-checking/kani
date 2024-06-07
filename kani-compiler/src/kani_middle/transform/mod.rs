@@ -75,6 +75,7 @@ impl BodyTransformation {
             Some(TransformationResult::Modified(body)) => body.clone(),
             Some(TransformationResult::NotModified) => instance.body().unwrap(),
             None => {
+                println!("****** INSTANCE NAME {:?}***********", instance.name());
                 let mut body = instance.body().unwrap();
                 let mut modified = false;
                 for pass in self.opt_passes.iter().chain(self.inst_passes.iter()) {

@@ -9,7 +9,7 @@ license = "MIT OR Apache-2.0"
 publish = false
 
 [dependencies]
-kani_macros = { path = "../kani_macros" }
+kani_macros = { path = "../kani_macros", default-features = false }
 
 [features]
 concrete_playback = []

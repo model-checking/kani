@@ -92,6 +92,7 @@ RUST_FLAGS=(
     "-L"
     "${KANI_DIR}/target/kani/no_core/lib"
     "--cfg=kani"
+    "--cfg=no_core"
 )
 export RUSTFLAGS="${RUST_FLAGS[@]}"
 export RUSTC_LOGS="info"
