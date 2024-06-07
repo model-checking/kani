@@ -113,9 +113,8 @@ impl<'tcx> GotocCtx<'tcx> {
                     _ => Expr::init_unit(self.codegen_ty_stable(*lit_ty), &self.symbol_table),
                 }
             }
-            TyConstKind::Bound(..) | TyConstKind::Value(..) => {
-                unreachable!()
-            }
+            TyConstKind::Value(ty, alloc) => self.codegen_allocation(alloc, *ty, span),
+            TyConstKind::Bound(..) => unreachable!(),
             TyConstKind::Param(..) | TyConstKind::Unevaluated(..) => {
                 unreachable!()
             }
