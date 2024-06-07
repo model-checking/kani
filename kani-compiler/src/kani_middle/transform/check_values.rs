@@ -18,7 +18,8 @@ use crate::kani_middle::transform::body::{CheckType, MutableBody, SourceInstruct
 use crate::kani_middle::transform::check_values::SourceOp::UnsupportedCheck;
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
-use rustc_middle::ty::TyCtxt;
+use rustc_middle::ty::{Const, TyCtxt};
+use rustc_smir::rustc_internal;
 use stable_mir::abi::{FieldsShape, Scalar, TagEncoding, ValueAbi, VariantsShape, WrappingRange};
 use stable_mir::mir::mono::{Instance, InstanceKind};
 use stable_mir::mir::visit::{Location, PlaceContext, PlaceRef};
@@ -28,7 +29,7 @@ use stable_mir::mir::{
     Statement, StatementKind, Terminator, TerminatorKind,
 };
 use stable_mir::target::{MachineInfo, MachineSize};
-use stable_mir::ty::{AdtKind, IndexedVal, MirConst, RigidTy, Ty, TyConst, TyKind, UintTy};
+use stable_mir::ty::{AdtKind, IndexedVal, MirConst, RigidTy, Ty, TyKind, UintTy};
 use stable_mir::CrateDef;
 use std::fmt::Debug;
 use strum_macros::AsRefStr;
@@ -65,7 +66,7 @@ impl TransformPass for ValidValuePass {
         // Do not cache body.blocks().len() since it will change as we add new checks.
         for bb_idx in 0..new_body.blocks().len() {
             let Some(candidate) =
-                CheckValueVisitor::find_next(&new_body, bb_idx, bb_idx >= orig_len)
+                CheckValueVisitor::find_next(tcx, &new_body, bb_idx, bb_idx >= orig_len)
             else {
                 continue;
             };
@@ -262,7 +263,8 @@ struct UnsafeInstruction {
 ///   - Transmute
 ///   - MemCopy
 ///   - Cast
-struct CheckValueVisitor<'a> {
+struct CheckValueVisitor<'a, 'b> {
+    tcx: TyCtxt<'b>,
     locals: &'a [LocalDecl],
     /// Whether we should skip the next instruction, since it might've been instrumented already.
     /// When we instrument an instruction, we partition the basic block, and the instruction that
@@ -279,13 +281,15 @@ struct CheckValueVisitor<'a> {
     machine: MachineInfo,
 }
 
-impl<'a> CheckValueVisitor<'a> {
+impl<'a, 'b> CheckValueVisitor<'a, 'b> {
     fn find_next(
+        tcx: TyCtxt<'b>,
         body: &'a MutableBody,
         bb: BasicBlockIdx,
         skip_first: bool,
     ) -> Option<UnsafeInstruction> {
         let mut visitor = CheckValueVisitor {
+            tcx,
             locals: body.locals(),
             skip_next: skip_first,
             current: SourceInstruction::Statement { idx: 0, bb },
@@ -305,7 +309,7 @@ impl<'a> CheckValueVisitor<'a> {
     }
 }
 
-impl<'a> MirVisitor for CheckValueVisitor<'a> {
+impl<'a, 'b> MirVisitor for CheckValueVisitor<'a, 'b> {
     fn visit_statement(&mut self, stmt: &Statement, location: Location) {
         if self.skip_next {
             self.skip_next = false;
@@ -391,12 +395,10 @@ impl<'a> MirVisitor for CheckValueVisitor<'a> {
                                         // TODO: try_new_ty_const_uint isn't public, and there is
                                         // no TyConst equivalent to try_from_uint. It's not at all
                                         // clear how to create a TyConst at all.
-                                        let sz = TyConst::try_new_ty_const_uint(
-                                            target_ty.layout().unwrap().shape().size.bytes()
-                                                as u128,
-                                            UintTy::Usize,
-                                        )
-                                        .unwrap();
+                                        let sz = rustc_internal::stable(Const::from_target_usize(
+                                            self.tcx,
+                                            target_ty.layout().unwrap().shape().size.bytes() as u64,
+                                        ));
                                         self.push_target(SourceOp::BytesValidity {
                                             target_ty,
                                             rvalue: Rvalue::Repeat(args[1].clone(), sz),
