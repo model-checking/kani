@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Zfunction-contracts
 
-#[kani::ensures(result == 1)]
+#[kani::ensures(|result : &i32| *result == 1)]
 fn foo() -> i32 {
     loop {}
     2
