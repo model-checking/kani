@@ -8,7 +8,7 @@ struct S<'a> {
 }
 #[kani::requires(*s.target < 100)]
 #[kani::modifies(s.target)]
-#[kani::ensures(*s.target == prior + 1)]
+#[kani::ensures(|result| *s.target == prior + 1)]
 fn modify(s: S, prior: u32) {
     *s.target += 1;
 }

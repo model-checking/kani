@@ -9,8 +9,8 @@ pub mod contracts {
     use super::*;
     use kani::{ensures, implies, mem::*, modifies, requires};
 
-    #[ensures(implies!(ptr.is_null() => result.is_none()))]
-    #[ensures(implies!(!ptr.is_null() => result.is_some()))]
+    #[ensures(|result : &Option<NonNull<T>>| implies!(ptr.is_null() => result.is_none()))]
+    #[ensures(|result : &Option<NonNull<T>>| implies!(!ptr.is_null() => result.is_some()))]
     pub fn new<T>(ptr: *mut T) -> Option<NonNull<T>> {
         NonNull::new(ptr)
     }

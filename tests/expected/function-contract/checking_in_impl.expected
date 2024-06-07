@@ -1,5 +1,5 @@
 - Status: SUCCESS\
-- Description: "(result == self) | (result == y)"\
+- Description: "|result : &WrappedInt| (*result == self) | (*result == y)"\
 in function WrappedInt::max
 
 VERIFICATION:- SUCCESSFUL

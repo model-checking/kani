@@ -1,0 +1,11 @@
+[TEST] Run kani verify-std
+Checking harness kani::check_success...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness kani::check_panic...
+VERIFICATION:- SUCCESSFUL (encountered one or more panics as expected)
+
+Checking harness num::verify::check_non_zero...
+VERIFICATION:- SUCCESSFUL
+
+Complete - 3 successfully verified harnesses, 0 failures, 3 total.
