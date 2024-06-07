@@ -68,4 +68,5 @@ exclude = [
   "tests/script-based-pre",
   "tests/script-based-pre/build-cache-bin/target/new_dep",
   "tests/script-based-pre/build-cache-dirty/target/new_dep",
+  "tests/script-based-pre/verify_std_cmd/tmp_dir/target/kani_verify_std",
 ]
