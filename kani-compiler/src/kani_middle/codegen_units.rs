@@ -76,6 +76,7 @@ impl CodegenUnits {
 
             // Even if no_stubs is empty we still need to store rustc metadata.
             let units = group_by_stubs(tcx, &all_harnesses);
+            debug!(?units, "CodegenUnits::new");
             CodegenUnits { units, harness_info: all_harnesses, crate_info }
         } else {
             // Leave other reachability type handling as is for now.
@@ -116,7 +117,7 @@ fn stub_def(tcx: TyCtxt, def_id: DefId) -> FnDef {
     if let TyKind::RigidTy(RigidTy::FnDef(def, _)) = ty.kind() {
         def
     } else {
-        unreachable!("Expected stub function, but found: {ty}")
+        unreachable!("Expected stub function for `{:?}`, but found: {ty}", tcx.def_path(def_id))
     }
 }
 

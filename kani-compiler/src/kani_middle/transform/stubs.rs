@@ -44,14 +44,12 @@ impl TransformPass for FnStubPass {
     fn transform(&self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
         trace!(function=?instance.name(), "transform");
         let ty = instance.ty();
-        let TyKind::RigidTy(RigidTy::FnDef(fn_def, args)) = ty.kind() else {
-            unreachable!("Expected stub function, but found: {ty}")
-        };
-
-        if let Some(replace) = self.stubs.get(&fn_def) {
-            let new_instance = Instance::resolve(*replace, &args).unwrap();
-            if validate_instance(tcx, new_instance) {
-                return (true, new_instance.body().unwrap());
+        if let TyKind::RigidTy(RigidTy::FnDef(fn_def, args)) = ty.kind() {
+            if let Some(replace) = self.stubs.get(&fn_def) {
+                let new_instance = Instance::resolve(*replace, &args).unwrap();
+                if validate_instance(tcx, new_instance) {
+                    return (true, new_instance.body().unwrap());
+                }
             }
         }
         (false, body)
