@@ -25,10 +25,6 @@ pub fn provide(providers: &mut Providers, queries: &QueryDb) {
         // Don't override queries if we are only compiling our dependencies.
         providers.optimized_mir = run_mir_passes;
         providers.extern_queries.optimized_mir = run_mir_passes_extern;
-        if args.stubbing_enabled {
-            // TODO: Check if there's at least one stub being applied.
-            providers.collect_and_partition_mono_items = collect_and_partition_mono_items;
-        }
     }
 }
 
@@ -77,26 +73,4 @@ fn run_kani_mir_passes<'tcx>(
     // This should be applied after stubbing so user stubs take precedence.
     ModelIntrinsics::run_pass(tcx, &mut transformed_body);
     tcx.arena.alloc(transformed_body)
-}
-
-/// Runs a reachability analysis before running the default
-/// `collect_and_partition_mono_items` query. The reachability analysis finds
-/// trait mismatches introduced by stubbing and performs a graceful exit in
-/// these cases. Left to its own devices, the default query panics.
-/// This is an issue when compiling a library, since the crate metadata is
-/// generated (using this query) before code generation begins (which is
-/// when we normally run the reachability analysis).
-fn collect_and_partition_mono_items(
-    tcx: TyCtxt,
-    key: (),
-) -> queries::collect_and_partition_mono_items::ProvidedValue {
-    rustc_smir::rustc_internal::run(tcx, || {
-        let local_reachable =
-            filter_crate_items(tcx, |_, _| true).into_iter().map(MonoItem::Fn).collect::<Vec<_>>();
-
-        // We do not actually need the value returned here.
-        collect_reachable_items(tcx, &mut BodyTransformation::dummy(), &local_reachable);
-    })
-    .unwrap();
-    (rustc_interface::DEFAULT_QUERY_PROVIDERS.collect_and_partition_mono_items)(tcx, key)
 }

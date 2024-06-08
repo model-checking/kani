@@ -16,9 +16,11 @@
 //!
 //! For all instrumentation passes, always use exhaustive matches to ensure soundness in case a new
 //! case is added.
+use crate::kani_middle::codegen_units::{CodegenUnit, CodegenUnits};
 use crate::kani_middle::transform::body::CheckType;
 use crate::kani_middle::transform::check_values::ValidValuePass;
 use crate::kani_middle::transform::kani_intrinsics::IntrinsicGeneratorPass;
+use crate::kani_middle::transform::stubs::FnStubPass;
 use crate::kani_queries::QueryDb;
 use rustc_middle::ty::TyCtxt;
 use stable_mir::mir::mono::Instance;
@@ -29,6 +31,7 @@ use std::fmt::Debug;
 pub(crate) mod body;
 mod check_values;
 mod kani_intrinsics;
+mod stubs;
 
 /// Object used to retrieve a transformed instance body.
 /// The transformations to be applied may be controlled by user options.
@@ -37,9 +40,9 @@ mod kani_intrinsics;
 /// after.
 #[derive(Debug)]
 pub struct BodyTransformation {
-    /// The passes that may optimize the function body.
+    /// The passes that may change the function body according to harness configuration.
     /// We store them separately from the instrumentation passes because we run the in specific order.
-    opt_passes: Vec<Box<dyn TransformPass>>,
+    user_mod_passes: Vec<Box<dyn TransformPass>>,
     /// The passes that may add safety checks to the function body.
     inst_passes: Vec<Box<dyn TransformPass>>,
     /// Cache transformation results.
@@ -47,13 +50,14 @@ pub struct BodyTransformation {
 }
 
 impl BodyTransformation {
-    pub fn new(queries: &QueryDb, tcx: TyCtxt) -> Self {
+    pub fn new(queries: &QueryDb, tcx: TyCtxt, unit: &CodegenUnit) -> Self {
         let mut transformer = BodyTransformation {
-            opt_passes: vec![],
+            user_mod_passes: vec![],
             inst_passes: vec![],
             cache: Default::default(),
         };
         let check_type = CheckType::new(tcx);
+        transformer.add_pass(queries, FnStubPass { stubs: unit.stubs.clone() });
         transformer.add_pass(queries, ValidValuePass { check_type: check_type.clone() });
         transformer.add_pass(queries, IntrinsicGeneratorPass { check_type });
         transformer
@@ -63,7 +67,11 @@ impl BodyTransformation {
     /// the stubbing validation hack (see `collect_and_partition_mono_items` override.
     /// Once we move the stubbing logic to a [TransformPass], we should be able to remove this.
     pub fn dummy() -> Self {
-        BodyTransformation { opt_passes: vec![], inst_passes: vec![], cache: Default::default() }
+        BodyTransformation {
+            user_mod_passes: vec![],
+            inst_passes: vec![],
+            cache: Default::default(),
+        }
     }
 
     /// Retrieve the body of an instance.
@@ -77,7 +85,7 @@ impl BodyTransformation {
             None => {
                 let mut body = instance.body().unwrap();
                 let mut modified = false;
-                for pass in self.opt_passes.iter().chain(self.inst_passes.iter()) {
+                for pass in self.user_mod_passes.iter().chain(self.inst_passes.iter()) {
                     let result = pass.transform(tcx, body, instance);
                     modified |= result.0;
                     body = result.1;
@@ -98,9 +106,7 @@ impl BodyTransformation {
         if pass.is_enabled(&query_db) {
             match P::transformation_type() {
                 TransformationType::Instrumentation => self.inst_passes.push(Box::new(pass)),
-                TransformationType::Optimization => {
-                    unreachable!()
-                }
+                TransformationType::UserTransformation => self.user_mod_passes.push(Box::new(pass)),
             }
         }
     }
@@ -111,9 +117,8 @@ impl BodyTransformation {
 pub(crate) enum TransformationType {
     /// Should only add assertion checks to ensure the program is correct.
     Instrumentation,
-    /// May replace inefficient code with more performant but equivalent code.
-    #[allow(dead_code)]
-    Optimization,
+    /// Apply some user requested transformation.
+    UserTransformation,
 }
 
 /// A trait to represent transformation passes that can be used to modify the body of a function.

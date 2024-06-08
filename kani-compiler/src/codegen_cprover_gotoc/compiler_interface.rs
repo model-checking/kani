@@ -7,7 +7,7 @@ use crate::args::ReachabilityType;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::kani_middle::analysis;
 use crate::kani_middle::attributes::{is_test_harness_description, KaniAttributes};
-use crate::kani_middle::codegen_units::CodegenUnits;
+use crate::kani_middle::codegen_units::{CodegenUnit, CodegenUnits};
 use crate::kani_middle::metadata::{canonical_mangled_name, gen_test_metadata};
 use crate::kani_middle::provide;
 use crate::kani_middle::reachability::{
@@ -237,9 +237,11 @@ impl CodegenBackend for GotocCodegenBackend {
                 ReachabilityType::Harnesses => {
                     let units = CodegenUnits::new(&queries, tcx);
                     // Cross-crate collecting of all items that are reachable from the crate harnesses.
-                    for harnesses in units.iter() {
-                        let mut transformer = BodyTransformation::new(&queries, tcx);
-                        for harness in harnesses {
+                    for unit in units.iter() {
+                        // We reset the body cache for now because each codegen unit has different
+                        // configurations that affect how we transform the instance body.
+                        let mut transformer = BodyTransformation::new(&queries, tcx, &unit);
+                        for harness in &unit.harnesses {
                             let model_path = units.harness_model_path(*harness).unwrap();
                             let contract_metadata =
                                 contract_metadata_for_harness(tcx, harness.def.def_id()).unwrap();
@@ -266,7 +268,8 @@ impl CodegenBackend for GotocCodegenBackend {
                     // We're iterating over crate items here, so what we have to codegen is the "test description" containing the
                     // test closure that we want to execute
                     // TODO: Refactor this code so we can guarantee that the pair (test_fn, test_desc) actually match.
-                    let mut transformer = BodyTransformation::new(&queries, tcx);
+                    let unit = CodegenUnit::default();
+                    let mut transformer = BodyTransformation::new(&queries, tcx, &unit);
                     let mut descriptions = vec![];
                     let harnesses = filter_const_crate_items(tcx, &mut transformer, |_, item| {
                         if is_test_harness_description(tcx, item.def) {
@@ -309,7 +312,8 @@ impl CodegenBackend for GotocCodegenBackend {
                 }
                 ReachabilityType::None => {}
                 ReachabilityType::PubFns => {
-                    let mut transformer = BodyTransformation::new(&queries, tcx);
+                    let unit = CodegenUnit::default();
+                    let transformer = BodyTransformation::new(&queries, tcx, &unit);
                     let main_instance =
                         stable_mir::entry_fn().map(|main_fn| Instance::try_from(main_fn).unwrap());
                     let local_reachable = filter_crate_items(tcx, |_, instance| {

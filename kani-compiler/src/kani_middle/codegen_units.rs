@@ -19,7 +19,9 @@ use kani_metadata::{ArtifactType, HarnessMetadata, KaniMetadata};
 use rustc_hir::def_id::{DefId, DefPathHash};
 use rustc_middle::ty::TyCtxt;
 use rustc_session::config::OutputType;
+use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::Instance;
+use stable_mir::ty::{FnDef, RigidTy, TyKind};
 use std::collections::{BTreeMap, HashMap};
 use std::fs::File;
 use std::io::BufWriter;
@@ -30,13 +32,7 @@ use tracing::debug;
 type Harness = Instance;
 
 /// A set of stubs.
-type Stubs = HashMap<DefId, DefId>;
-
-#[derive(Clone, Debug)]
-struct HarnessInfo {
-    pub metadata: HarnessMetadata,
-    pub stub_map: Stubs,
-}
+pub type Stubs = HashMap<FnDef, FnDef>;
 
 /// Store some relevant information about the crate compilation.
 #[derive(Clone, Debug)]
@@ -49,9 +45,15 @@ struct CrateInfo {
 
 /// We group the harnesses that have the same stubs.
 pub struct CodegenUnits {
-    units: Vec<Vec<Harness>>,
-    all_harnesses: HashMap<Harness, HarnessInfo>,
+    units: Vec<CodegenUnit>,
+    harness_info: HashMap<Harness, HarnessMetadata>,
     crate_info: CrateInfo,
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct CodegenUnit {
+    pub harnesses: Vec<Harness>,
+    pub stubs: Stubs,
 }
 
 impl CodegenUnits {
@@ -68,33 +70,20 @@ impl CodegenUnits {
                 .into_iter()
                 .map(|harness| {
                     let metadata = gen_proof_metadata(tcx, harness, &base_filename);
-                    let stub_map = harness_stub_map(tcx, harness, &metadata);
-                    (harness, HarnessInfo { metadata, stub_map })
+                    (harness, metadata)
                 })
                 .collect::<HashMap<_, _>>();
 
-            let (no_stubs, with_stubs): (Vec<_>, Vec<_>) = if queries.args().stubbing_enabled {
-                // Partition harnesses that don't have stub with the ones with stub.
-                all_harnesses
-                    .keys()
-                    .cloned()
-                    .partition(|harness| all_harnesses[harness].stub_map.is_empty())
-            } else {
-                // Generate code without stubs.
-                (all_harnesses.keys().cloned().collect(), vec![])
-            };
-
             // Even if no_stubs is empty we still need to store rustc metadata.
-            let mut units = vec![no_stubs];
-            units.extend(group_by_stubs(tcx, with_stubs, &all_harnesses));
-            CodegenUnits { units, all_harnesses, crate_info }
+            let units = group_by_stubs(tcx, &all_harnesses);
+            CodegenUnits { units, harness_info: all_harnesses, crate_info }
         } else {
             // Leave other reachability type handling as is for now.
-            CodegenUnits { units: vec![], all_harnesses: HashMap::default(), crate_info }
+            CodegenUnits { units: vec![], harness_info: HashMap::default(), crate_info }
         }
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = &Vec<Harness>> {
+    pub fn iter(&self) -> impl Iterator<Item = &CodegenUnit> {
         self.units.iter()
     }
 
@@ -105,17 +94,13 @@ impl CodegenUnits {
     }
 
     pub fn harness_model_path(&self, harness: Harness) -> Option<&PathBuf> {
-        self.all_harnesses[&harness].metadata.goto_file.as_ref()
+        self.harness_info[&harness].goto_file.as_ref()
     }
 
     /// Generate [KaniMetadata] for the target crate.
     fn generate_metadata(&self) -> KaniMetadata {
-        let (proof_harnesses, test_harnesses) = self
-            .all_harnesses
-            .values()
-            .map(|info| &info.metadata)
-            .cloned()
-            .partition(|md| md.attributes.proof);
+        let (proof_harnesses, test_harnesses) =
+            self.harness_info.values().cloned().partition(|md| md.attributes.proof);
         KaniMetadata {
             crate_name: self.crate_info.name.clone(),
             proof_harnesses,
@@ -125,21 +110,38 @@ impl CodegenUnits {
     }
 }
 
+fn stub_def(tcx: TyCtxt, def_id: DefId) -> FnDef {
+    let ty_internal = tcx.type_of(def_id).instantiate_identity();
+    let ty = rustc_internal::stable(ty_internal);
+    if let TyKind::RigidTy(RigidTy::FnDef(def, _)) = ty.kind() {
+        def
+    } else {
+        unreachable!("Expected stub function, but found: {ty}")
+    }
+}
+
 /// Group the harnesses by their stubs.
 fn group_by_stubs(
     tcx: TyCtxt,
-    harnesses: Vec<Harness>,
-    all_harnesses: &HashMap<Harness, HarnessInfo>,
-) -> Vec<Vec<Harness>> {
-    let mut per_stubs: HashMap<BTreeMap<DefPathHash, DefPathHash>, Vec<Harness>> =
+    all_harnesses: &HashMap<Harness, HarnessMetadata>,
+) -> Vec<CodegenUnit> {
+    let mut per_stubs: HashMap<BTreeMap<DefPathHash, DefPathHash>, CodegenUnit> =
         HashMap::default();
-    for harness in harnesses {
-        let stub_map = all_harnesses[&harness]
-            .stub_map
+    for (harness, metadata) in all_harnesses {
+        let stub_ids = harness_stub_map(tcx, *harness, metadata);
+        let stub_map = stub_ids
             .iter()
             .map(|(k, v)| (tcx.def_path_hash(*k), tcx.def_path_hash(*v)))
             .collect::<BTreeMap<_, _>>();
-        per_stubs.entry(stub_map).or_default().push(harness)
+        if let Some(unit) = per_stubs.get_mut(&stub_map) {
+            unit.harnesses.push(*harness);
+        } else {
+            let stubs = stub_ids
+                .iter()
+                .map(|(from, to)| (stub_def(tcx, *from), stub_def(tcx, *to)))
+                .collect::<HashMap<_, _>>();
+            per_stubs.insert(stub_map, CodegenUnit { stubs, harnesses: vec![*harness] });
+        }
     }
     per_stubs.into_values().collect()
 }

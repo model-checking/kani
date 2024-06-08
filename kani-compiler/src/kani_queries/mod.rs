@@ -2,11 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! Define the communication between KaniCompiler and the codegen implementation.
 
-use cbmc::{InternString, InternedString};
+use cbmc::InternedString;
 use kani_metadata::AssignsContract;
 use std::{
     collections::HashMap,
-    path::PathBuf,
     sync::{Arc, Mutex},
 };
 
