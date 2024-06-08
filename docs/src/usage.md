@@ -84,6 +84,7 @@ When Kani builds your code, it does two important things:
 
 1. It sets `cfg(kani)`.
 2. It injects the `kani` crate.
+3. For host crates (crates that your target crate depends on), Kani sets `cfg(kani_host)`.
 
 A proof harness (which you can [learn more about in the tutorial](./kani-tutorial.md)), is a function annotated with `#[kani::proof]` much like a test is annotated with `#[test]`.
 But you may experience a similar problem using Kani as you would with `dev-dependencies`: if you try writing `#[kani::proof]` directly in your code, `cargo build` will fail because it doesn't know what the `kani` crate is.
