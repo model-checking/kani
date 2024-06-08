@@ -6,12 +6,12 @@ mod annotations;
 mod transform;
 
 use rustc_span::DUMMY_SP;
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 use tracing::{debug, trace};
 
 pub use self::transform::*;
 use kani_metadata::HarnessMetadata;
-use rustc_hir::definitions::DefPathHash;
+use rustc_hir::def_id::DefId;
 use rustc_middle::mir::Const;
 use rustc_middle::ty::{self, EarlyBinder, ParamEnv, TyCtxt, TypeFoldable};
 use rustc_smir::rustc_internal;
@@ -27,10 +27,10 @@ pub fn harness_stub_map(
     tcx: TyCtxt,
     harness: Instance,
     metadata: &HarnessMetadata,
-) -> BTreeMap<DefPathHash, DefPathHash> {
+) -> HashMap<DefId, DefId> {
     let def_id = rustc_internal::internal(tcx, harness.def.def_id());
     let attrs = &metadata.attributes;
-    let mut stub_pairs = BTreeMap::default();
+    let mut stub_pairs = HashMap::default();
     for stubs in &attrs.stubs {
         update_stub_mapping(tcx, def_id.expect_local(), stubs, &mut stub_pairs);
     }

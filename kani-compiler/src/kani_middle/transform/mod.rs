@@ -26,7 +26,7 @@ use stable_mir::mir::Body;
 use std::collections::HashMap;
 use std::fmt::Debug;
 
-mod body;
+pub(crate) mod body;
 mod check_values;
 mod kani_intrinsics;
 
@@ -108,7 +108,7 @@ impl BodyTransformation {
 
 /// The type of transformation that a pass may perform.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
-enum TransformationType {
+pub(crate) enum TransformationType {
     /// Should only add assertion checks to ensure the program is correct.
     Instrumentation,
     /// May replace inefficient code with more performant but equivalent code.
@@ -117,7 +117,7 @@ enum TransformationType {
 }
 
 /// A trait to represent transformation passes that can be used to modify the body of a function.
-trait TransformPass: Debug {
+pub(crate) trait TransformPass: Debug {
     /// The type of transformation that this pass implements.
     fn transformation_type() -> TransformationType
     where

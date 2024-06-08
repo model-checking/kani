@@ -10,8 +10,7 @@ use std::collections::{BTreeMap, HashMap};
 
 use lazy_static::lazy_static;
 use regex::Regex;
-use rustc_data_structures::fingerprint::Fingerprint;
-use rustc_hir::{def_id::DefId, definitions::DefPathHash};
+use rustc_hir::def_id::DefId;
 use rustc_index::IndexVec;
 use rustc_middle::mir::{
     visit::MutVisitor, Body, Const, ConstValue, Local, LocalDecl, Location, Operand,
@@ -209,53 +208,56 @@ fn check_compatibility<'a, 'tcx>(
     matches
 }
 
-/// The prefix we will use when serializing the stub mapping as a rustc argument.
-const RUSTC_ARG_PREFIX: &str = "kani_stubs=";
-
-/// Serializes the stub mapping into a rustc argument.
-pub fn mk_rustc_arg(stub_mapping: &BTreeMap<DefPathHash, DefPathHash>) -> String {
-    // Serialize each `DefPathHash` as a pair of `u64`s, and the whole mapping
-    // as an association list.
-    let mut pairs = Vec::new();
-    for (k, v) in stub_mapping {
-        let (k_a, k_b) = k.0.split();
-        let kparts = (k_a.as_u64(), k_b.as_u64());
-        let (v_a, v_b) = v.0.split();
-        let vparts = (v_a.as_u64(), v_b.as_u64());
-        pairs.push((kparts, vparts));
-    }
-    // Store our serialized mapping as a fake LLVM argument (safe to do since
-    // LLVM will never see them).
-    format!("-Cllvm-args='{RUSTC_ARG_PREFIX}{}'", serde_json::to_string(&pairs).unwrap())
-}
-
-/// Deserializes the stub mapping from the rustc argument value.
-fn deserialize_mapping(tcx: TyCtxt, val: &str) -> HashMap<DefId, DefId> {
-    type Item = (u64, u64);
-    let item_to_def_id = |item: Item| -> DefId {
-        let hash = DefPathHash(Fingerprint::new(item.0, item.1));
-        tcx.def_path_hash_to_def_id(hash, &())
-    };
-    let pairs: Vec<(Item, Item)> = serde_json::from_str(val).unwrap();
-    let mut m = HashMap::default();
-    for (k, v) in pairs {
-        let kid = item_to_def_id(k);
-        let vid = item_to_def_id(v);
-        m.insert(kid, vid);
-    }
-    m
-}
-
 /// Retrieves the stub mapping from the compiler configuration.
-fn get_stub_mapping(tcx: TyCtxt) -> Option<HashMap<DefId, DefId>> {
-    // Use a static so that we compile the regex only once.
-    lazy_static! {
-        static ref RE: Regex = Regex::new(&format!("'{RUSTC_ARG_PREFIX}(.*)'")).unwrap();
+fn get_stub_mapping(_tcx: TyCtxt) -> Option<HashMap<DefId, DefId>> {
+    None
+}
+
+#[cfg(new_stub)]
+mod new_stub {
+    use crate::kani_middle::attributes::matches_diagnostic;
+    use crate::kani_middle::transform::body::{CheckType, MutableBody, SourceInstruction};
+    use crate::kani_middle::transform::{TransformPass, TransformationType};
+    use crate::kani_queries::QueryDb;
+    use rustc_middle::ty::TyCtxt;
+    use stable_mir::mir::mono::Instance;
+    use stable_mir::mir::{
+        BinOp, Body, Constant, Operand, Place, Rvalue, Statement, StatementKind, RETURN_LOCAL,
+    };
+    use stable_mir::target::MachineInfo;
+    use stable_mir::ty::{Const, RigidTy, TyKind};
+    use std::fmt::Debug;
+    use strum_macros::AsRefStr;
+    use tracing::trace;
+
+    /// Generate the body for a few Kani intrinsics.
+    #[derive(Debug)]
+    pub struct FnStubPass {
+        pub check_type: CheckType,
     }
-    for arg in &tcx.sess.opts.cg.llvm_args {
-        if let Some(captures) = RE.captures(arg) {
-            return Some(deserialize_mapping(tcx, captures.get(1).unwrap().as_str()));
+
+    impl TransformPass for FnStubPass {
+        fn transformation_type() -> TransformationType
+        where
+            Self: Sized,
+        {
+            TransformationType::Instrumentation
+        }
+
+        fn is_enabled(&self, _query_db: &QueryDb) -> bool
+        where
+            Self: Sized,
+        {
+            true
+        }
+
+        /// Transform the function body by inserting checks one-by-one.
+        /// For every unsafe dereference or a transmute operation, we check all values are valid.
+        fn transform(&self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
+            trace!(function=?instance.name(), "transform");
+            body
         }
     }
-    None
+
+    impl FnStubPass {}
 }
