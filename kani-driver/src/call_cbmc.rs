@@ -182,7 +182,9 @@ impl KaniSession {
         }
 
         if self.args.checks.unwinding_on() {
+            // TODO: With CBMC v6 the below can be removed as those are defaults.
             args.push("--unwinding-assertions".into());
+            args.push("--no-self-loops-to-assumptions".into());
         }
 
         if self.args.extra_pointer_checks {
