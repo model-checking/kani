@@ -1,0 +1,7 @@
+
+
+rustc version: 1.74.0-nightly (4e78abb43 2023-08-28)
+platform: x86_64-unknown-linux-gnu
+
+query stack during panic:
+end of query stack
