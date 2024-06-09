@@ -8,7 +8,7 @@ use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::kani_middle::analysis;
 use crate::kani_middle::attributes::{is_test_harness_description, KaniAttributes};
 use crate::kani_middle::codegen_units::{CodegenUnit, CodegenUnits};
-use crate::kani_middle::metadata::{canonical_mangled_name, gen_test_metadata};
+use crate::kani_middle::metadata::gen_test_metadata;
 use crate::kani_middle::provide;
 use crate::kani_middle::reachability::{
     collect_reachable_items, filter_const_crate_items, filter_crate_items,
@@ -18,7 +18,7 @@ use crate::kani_middle::{check_reachable_items, dump_mir_items};
 use crate::kani_queries::QueryDb;
 use cbmc::goto_program::Location;
 use cbmc::irep::goto_binary_serde::write_goto_binary_file;
-use cbmc::{InternString, RoundingMode};
+use cbmc::RoundingMode;
 use cbmc::{InternedString, MachineModel};
 use kani_metadata::artifact::convert_type;
 use kani_metadata::UnsupportedFeature;
@@ -49,8 +49,7 @@ use rustc_target::spec::PanicStrategy;
 use stable_mir::mir::mono::{Instance, MonoItem};
 use stable_mir::{CrateDef, DefId};
 use std::any::Any;
-use std::collections::HashSet;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::fs::File;

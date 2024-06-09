@@ -16,7 +16,7 @@
 //!
 //! For all instrumentation passes, always use exhaustive matches to ensure soundness in case a new
 //! case is added.
-use crate::kani_middle::codegen_units::{CodegenUnit, CodegenUnits};
+use crate::kani_middle::codegen_units::CodegenUnit;
 use crate::kani_middle::transform::body::CheckType;
 use crate::kani_middle::transform::check_values::ValidValuePass;
 use crate::kani_middle::transform::contracts::AnyModifiesPass;
@@ -66,13 +66,6 @@ impl BodyTransformation {
         transformer.add_pass(queries, ValidValuePass { check_type: check_type.clone() });
         transformer.add_pass(queries, IntrinsicGeneratorPass { check_type });
         transformer
-    }
-
-    /// Allow the creation of a dummy transformer that doesn't apply any transformation due to
-    /// the stubbing validation hack (see `collect_and_partition_mono_items` override.
-    /// Once we move the stubbing logic to a [TransformPass], we should be able to remove this.
-    pub fn dummy() -> Self {
-        BodyTransformation { stub_passes: vec![], inst_passes: vec![], cache: Default::default() }
     }
 
     /// Retrieve the body of an instance.

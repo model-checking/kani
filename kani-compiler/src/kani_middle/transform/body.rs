@@ -313,7 +313,7 @@ pub trait MutMirVisitor {
         self.super_rvalue(rvalue)
     }
 
-    fn visit_operand(&mut self, operand: &mut Operand) {}
+    fn visit_operand(&mut self, _operand: &mut Operand) {}
 
     fn super_body(&mut self, body: &mut MutableBody) {
         for bb in body.blocks.iter_mut() {

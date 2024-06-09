@@ -14,7 +14,6 @@ use crate::kani_middle::metadata::gen_proof_metadata;
 use crate::kani_middle::reachability::filter_crate_items;
 use crate::kani_middle::stubbing::{check_compatibility, harness_stub_map};
 use crate::kani_queries::QueryDb;
-use cbmc::{InternString, InternedString};
 use kani_metadata::{ArtifactType, AssignsContract, HarnessMetadata, KaniMetadata};
 use rustc_hir::def_id::{DefId, DefPathHash};
 use rustc_middle::ty::TyCtxt;
@@ -40,8 +39,6 @@ pub type Stubs = HashMap<FnDef, FnDef>;
 struct CrateInfo {
     /// The name of the crate being compiled.
     pub name: String,
-    /// The metadata output path that shall be generated as part of the crate compilation.
-    pub output_path: PathBuf,
 }
 
 /// We group the harnesses that have the same stubs.
@@ -59,10 +56,7 @@ pub struct CodegenUnit {
 
 impl CodegenUnits {
     pub fn new(queries: &QueryDb, tcx: TyCtxt) -> Self {
-        let crate_info = CrateInfo {
-            name: stable_mir::local_crate().name.as_str().into(),
-            output_path: metadata_output_path(tcx),
-        };
+        let crate_info = CrateInfo { name: stable_mir::local_crate().name.as_str().into() };
         if queries.args().reachability_analysis == ReachabilityType::Harnesses {
             let base_filepath = tcx.output_filenames(()).path(OutputType::Object);
             let base_filename = base_filepath.as_path();

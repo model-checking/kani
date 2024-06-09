@@ -15,32 +15,19 @@
 //! in order to apply the stubs. For the subsequent runs, we add the stub configuration to
 //! `-C llvm-args`.
 
-use crate::args::{Arguments, ReachabilityType};
+use crate::args::Arguments;
 #[cfg(feature = "cprover")]
 use crate::codegen_cprover_gotoc::GotocCodegenBackend;
-use crate::kani_middle::attributes::is_proof_harness;
 use crate::kani_middle::check_crate_items;
-use crate::kani_middle::metadata::gen_proof_metadata;
-use crate::kani_middle::reachability::filter_crate_items;
-use crate::kani_middle::stubbing::{self, harness_stub_map};
 use crate::kani_queries::QueryDb;
 use crate::session::init_session;
 use clap::Parser;
-use kani_metadata::{ArtifactType, HarnessMetadata, KaniMetadata};
 use rustc_codegen_ssa::traits::CodegenBackend;
-use rustc_data_structures::fx::FxHashMap;
 use rustc_driver::{Callbacks, Compilation, RunCompiler};
-use rustc_hir::def_id::LOCAL_CRATE;
 use rustc_interface::Config;
-use rustc_middle::ty::TyCtxt;
 use rustc_session::config::ErrorOutputType;
 use rustc_smir::rustc_internal;
 use rustc_span::ErrorGuaranteed;
-use std::collections::{BTreeMap, HashMap};
-use std::fs::File;
-use std::io::BufWriter;
-use std::mem;
-use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::{Arc, Mutex};
 use tracing::debug;

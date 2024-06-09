@@ -1,28 +1,20 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! This module contains code related to the MIR-to-MIR pass to enable contracts.
-use crate::kani_middle::attributes::{matches_diagnostic, KaniAttributes};
-use crate::kani_middle::codegen_units::{CodegenUnit, Stubs};
-use crate::kani_middle::stubbing;
-use crate::kani_middle::stubbing::validate_stub;
-use crate::kani_middle::transform::body::{CheckType, MutableBody, SourceInstruction};
+use crate::kani_middle::attributes::KaniAttributes;
+use crate::kani_middle::codegen_units::CodegenUnit;
+use crate::kani_middle::transform::body::MutableBody;
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
 use cbmc::{InternString, InternedString};
-use itertools::Itertools;
 use rustc_middle::ty::TyCtxt;
 use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::Instance;
-use stable_mir::mir::{
-    BinOp, Body, Constant, Operand, Place, Rvalue, Statement, StatementKind, TerminatorKind,
-    RETURN_LOCAL,
-};
-use stable_mir::target::MachineInfo;
-use stable_mir::ty::{Abi, Const as MirConst, FnDef, RigidTy, TyKind};
+use stable_mir::mir::{Body, Constant, Operand, TerminatorKind};
+use stable_mir::ty::{Const as MirConst, FnDef, RigidTy, TyKind};
 use stable_mir::{CrateDef, DefId};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::fmt::Debug;
-use strum_macros::AsRefStr;
 use tracing::{debug, trace};
 
 /// Check if we can replace calls to any_modifies.
@@ -55,7 +47,7 @@ impl TransformPass for AnyModifiesPass {
     }
 
     /// Transform the function body by replacing it with the stub body.
-    fn transform(&self, tcx: TyCtxt, mut body: Body, instance: Instance) -> (bool, Body) {
+    fn transform(&self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
         trace!(function=?instance.name(), "AnyModifiesPass::transform");
 
         if instance.def.def_id() == self.kani_any.unwrap().def_id() {
@@ -63,7 +55,7 @@ impl TransformPass for AnyModifiesPass {
             self.any_body(tcx, body)
         } else if self.should_apply(tcx, instance) {
             // Replace any modifies occurrences.
-            self.replace_any_modifies(tcx, body)
+            self.replace_any_modifies(body)
         } else {
             (false, body)
         }
@@ -90,7 +82,7 @@ impl AnyModifiesPass {
             let attributes = KaniAttributes::for_instance(tcx, *harness);
             let target_fn =
                 attributes.proof_for_contract().map(|symbol| symbol.unwrap().as_str().intern());
-            (target_fn, unit.stubs.iter().map(|(from, _)| from.def_id()).collect::<HashSet<_>>())
+            (target_fn, unit.stubs.keys().map(|from| from.def_id()).collect::<HashSet<_>>())
         } else {
             (None, HashSet::new())
         };
@@ -105,17 +97,15 @@ impl AnyModifiesPass {
     fn should_apply(&self, tcx: TyCtxt, instance: Instance) -> bool {
         let item_attributes =
             KaniAttributes::for_item(tcx, rustc_internal::internal(tcx, instance.def.def_id()));
-        let result =
-            self.stubbed.contains(&instance.def.def_id()) || item_attributes.has_recursion();
-        result
+        self.stubbed.contains(&instance.def.def_id()) || item_attributes.has_recursion()
     }
 
     /// Replace calls to `any_modifies` by calls to `any`.
-    fn replace_any_modifies(&self, tcx: TyCtxt, mut body: Body) -> (bool, Body) {
+    fn replace_any_modifies(&self, mut body: Body) -> (bool, Body) {
         let mut changed = false;
         let locals = body.locals().to_vec();
         for bb in body.blocks.iter_mut() {
-            let TerminatorKind::Call { func, args, .. } = &mut bb.terminator.kind else { continue };
+            let TerminatorKind::Call { func, .. } = &mut bb.terminator.kind else { continue };
             if let TyKind::RigidTy(RigidTy::FnDef(def, instance_args)) =
                 func.ty(&locals).unwrap().kind()
                 && Some(def) == self.kani_any_modifies
@@ -146,7 +136,7 @@ impl AnyModifiesPass {
                         valid = false;
                         debug!(?e, "AnyModifiesPass::any_body failed");
                         let receiver_ty = args.0[0].expect_ty();
-                        let msg = if let Some(target_fn) = self.target_fn {
+                        let msg = if self.target_fn.is_some() {
                             format!(
                                 "`{receiver_ty}` doesn't implement `kani::Arbitrary`.\
                                         Please, check `{}` contract.",

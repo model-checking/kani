@@ -6,16 +6,10 @@
 
 use crate::args::{Arguments, ReachabilityType};
 use crate::kani_middle::intrinsics::ModelIntrinsics;
-use crate::kani_middle::reachability::{collect_reachable_items, filter_crate_items};
-use crate::kani_middle::stubbing;
-use crate::kani_middle::transform::BodyTransformation;
 use crate::kani_queries::QueryDb;
 use rustc_hir::def_id::{DefId, LocalDefId};
 use rustc_middle::util::Providers;
-use rustc_middle::{mir::Body, query::queries, ty::TyCtxt};
-use stable_mir::mir::mono::MonoItem;
-
-use crate::kani_middle::KaniAttributes;
+use rustc_middle::{mir::Body, ty::TyCtxt};
 
 /// Sets up rustc's query mechanism to apply Kani's custom queries to code from
 /// a crate.

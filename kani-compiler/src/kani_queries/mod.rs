@@ -2,20 +2,16 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! Define the communication between KaniCompiler and the codegen implementation.
 
-use cbmc::InternedString;
-use kani_metadata::AssignsContract;
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-};
+use std::sync::{Arc, Mutex};
 
 use crate::args::Arguments;
 
 /// This structure should only be used behind a synchronized reference or a snapshot.
+///
+/// TODO: Merge this with arguments
 #[derive(Debug, Default, Clone)]
 pub struct QueryDb {
     args: Option<Arguments>,
-    modifies_contracts: HashMap<InternedString, AssignsContract>,
 }
 
 impl QueryDb {
@@ -29,19 +25,5 @@ impl QueryDb {
 
     pub fn args(&self) -> &Arguments {
         self.args.as_ref().expect("Arguments have not been initialized")
-    }
-
-    /// Register that a CBMC-level `assigns` contract for a function that is
-    /// called from this harness.
-    pub fn register_assigns_contract(
-        &mut self,
-        harness_name: InternedString,
-        contract: AssignsContract,
-    ) {
-        let replaced = self.modifies_contracts.insert(harness_name, contract);
-        assert!(
-            replaced.is_none(),
-            "Invariant broken, tried adding second modifies contracts to: {harness_name}",
-        )
     }
 }

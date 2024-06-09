@@ -33,10 +33,8 @@ use stable_mir::ty::{Allocation, ClosureKind, ConstantKind, RigidTy, Ty, TyKind}
 use stable_mir::CrateItem;
 use stable_mir::{CrateDef, ItemKind};
 
-use crate::kani_middle::attributes::matches_diagnostic as matches_function;
 use crate::kani_middle::coercion;
 use crate::kani_middle::coercion::CoercionBase;
-use crate::kani_middle::stubbing::validate_stub;
 use crate::kani_middle::transform::BodyTransformation;
 
 /// Collect all reachable items starting from the given starting points.
@@ -113,12 +111,8 @@ where
         if let Ok(instance) = Instance::try_from(item) {
             if predicate(tcx, instance) {
                 let body = transformer.body(tcx, instance);
-                let mut collector = MonoItemsFnCollector {
-                    tcx,
-                    body: &body,
-                    collected: FxHashSet::default(),
-                    instance: &instance,
-                };
+                let mut collector =
+                    MonoItemsFnCollector { tcx, body: &body, collected: FxHashSet::default() };
                 collector.visit_body(&body);
                 roots.extend(collector.collected.into_iter());
             }
@@ -186,12 +180,8 @@ impl<'tcx, 'a> MonoItemsCollector<'tcx, 'a> {
     fn visit_fn(&mut self, instance: Instance) -> Vec<MonoItem> {
         let _guard = debug_span!("visit_fn", function=?instance).entered();
         let body = self.transformer.body(self.tcx, instance);
-        let mut collector = MonoItemsFnCollector {
-            tcx: self.tcx,
-            collected: FxHashSet::default(),
-            body: &body,
-            instance: &instance,
-        };
+        let mut collector =
+            MonoItemsFnCollector { tcx: self.tcx, collected: FxHashSet::default(), body: &body };
         collector.visit_body(&body);
         collector.collected.into_iter().collect()
     }
@@ -225,7 +215,6 @@ struct MonoItemsFnCollector<'a, 'tcx> {
     tcx: TyCtxt<'tcx>,
     collected: FxHashSet<MonoItem>,
     body: &'a Body,
-    instance: &'a Instance,
 }
 
 impl<'a, 'tcx> MonoItemsFnCollector<'a, 'tcx> {

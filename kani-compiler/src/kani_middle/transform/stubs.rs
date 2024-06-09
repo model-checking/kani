@@ -2,28 +2,17 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! This module contains code related to the MIR-to-MIR pass that performs the
 //! stubbing of functions and methods.
-use crate::kani_middle::attributes::matches_diagnostic;
 use crate::kani_middle::codegen_units::Stubs;
 use crate::kani_middle::stubbing::validate_stub;
-use crate::kani_middle::transform::body::{
-    CheckType, MutMirVisitor, MutableBody, SourceInstruction,
-};
-use crate::kani_middle::transform::check_values::{ty_validity_per_offset, ValidValueReq};
+use crate::kani_middle::transform::body::{MutMirVisitor, MutableBody};
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
-use itertools::Itertools;
 use rustc_middle::ty::TyCtxt;
 use stable_mir::mir::mono::Instance;
-use stable_mir::mir::{
-    BinOp, Body, Constant, LocalDecl, Operand, Place, Rvalue, Statement, StatementKind, Terminator,
-    TerminatorKind, RETURN_LOCAL,
-};
-use stable_mir::target::MachineInfo;
-use stable_mir::ty::{Abi, Const as MirConst, FnDef, RigidTy, TyKind};
-use stable_mir::CrateDef;
+use stable_mir::mir::{Body, Constant, LocalDecl, Operand, Terminator, TerminatorKind};
+use stable_mir::ty::{Const as MirConst, FnDef, RigidTy, TyKind};
 use std::collections::HashMap;
 use std::fmt::Debug;
-use strum_macros::AsRefStr;
 use tracing::{debug, trace};
 
 /// Replace the body of a function that is stubbed by the other.
@@ -106,10 +95,10 @@ impl TransformPass for ExternFnStubPass {
     ///
     /// We need to find function calls and function pointers.
     /// We should replace this with a visitor once StableMIR includes a mutable one.
-    fn transform(&self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
+    fn transform(&self, _tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
         trace!(function=?instance.name(), "transform");
         let mut new_body = MutableBody::from(body);
-        let mut changed = false;
+        let changed = false;
         let locals = new_body.locals().to_vec();
         let mut visitor = ExternFnStubVisitor { changed, locals, stubs: &self.stubs };
         visitor.visit_body(&mut new_body);
