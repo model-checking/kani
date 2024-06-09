@@ -54,6 +54,21 @@ pub mod kani {
         let new = mid as u8;
         assert!(orig == new, "Conversion round trip works");
     }
+
+    pub fn assert_true(cond: bool) {
+        assert!(cond)
+    }
+
+    pub fn assert_false(cond: bool) {
+        assert!(!cond)
+    }
+
+    #[kani_core::proof]
+    #[kani_core::stub(assert_true, assert_false)]
+    fn check_stub() {
+        // Check this is in fact asserting false.
+        assert_true(false)
+    }
 }
 '
 
@@ -85,7 +100,7 @@ cat ${TMP_DIR}/std_lib.rs >> ${TMP_DIR}/library/std/src/lib.rs
 
 echo "[TEST] Run kani verify-std"
 export RUST_BACKTRACE=1
-kani verify-std -Z unstable-options "${TMP_DIR}/library" --target-dir "${TMP_DIR}/target"
+kani verify-std -Z unstable-options "${TMP_DIR}/library" --target-dir "${TMP_DIR}/target" -Z stubbing
 
 # Cleanup
 rm -r ${TMP_DIR}
