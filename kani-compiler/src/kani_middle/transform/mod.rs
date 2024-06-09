@@ -19,6 +19,7 @@
 use crate::kani_middle::codegen_units::{CodegenUnit, CodegenUnits};
 use crate::kani_middle::transform::body::CheckType;
 use crate::kani_middle::transform::check_values::ValidValuePass;
+use crate::kani_middle::transform::contracts::AnyModifiesPass;
 use crate::kani_middle::transform::kani_intrinsics::IntrinsicGeneratorPass;
 use crate::kani_middle::transform::stubs::{ExternFnStubPass, FnStubPass};
 use crate::kani_queries::QueryDb;
@@ -60,6 +61,8 @@ impl BodyTransformation {
         let check_type = CheckType::new(tcx);
         transformer.add_pass(queries, FnStubPass::new(&unit.stubs));
         transformer.add_pass(queries, ExternFnStubPass::new(&unit.stubs));
+        // This has to come after stubs since we want this to replace the stubbed body.
+        transformer.add_pass(queries, AnyModifiesPass::new(tcx, &unit));
         transformer.add_pass(queries, ValidValuePass { check_type: check_type.clone() });
         transformer.add_pass(queries, IntrinsicGeneratorPass { check_type });
         transformer

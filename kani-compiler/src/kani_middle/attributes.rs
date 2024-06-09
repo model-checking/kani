@@ -238,6 +238,11 @@ impl<'tcx> KaniAttributes<'tcx> {
             .map(|target| expect_key_string_value(self.tcx.sess, target))
     }
 
+    pub fn proof_for_contract(&self) -> Option<Result<Symbol, ErrorGuaranteed>> {
+        self.expect_maybe_one(KaniAttributeKind::ProofForContract)
+            .map(|target| expect_key_string_value(self.tcx.sess, target))
+    }
+
     pub fn inner_check(&self) -> Option<Result<DefId, ErrorGuaranteed>> {
         self.eval_sibling_attribute(KaniAttributeKind::InnerCheck)
     }

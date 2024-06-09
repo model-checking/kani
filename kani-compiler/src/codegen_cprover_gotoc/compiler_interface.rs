@@ -49,8 +49,8 @@ use rustc_target::spec::PanicStrategy;
 use stable_mir::mir::mono::{Instance, MonoItem};
 use stable_mir::{CrateDef, DefId};
 use std::any::Any;
-use std::collections::BTreeMap;
 use std::collections::HashSet;
+use std::collections::{BTreeMap, HashMap};
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::fs::File;
@@ -235,7 +235,8 @@ impl CodegenBackend for GotocCodegenBackend {
             let mut results = GotoCodegenResults::new(tcx, reachability);
             match reachability {
                 ReachabilityType::Harnesses => {
-                    let units = CodegenUnits::new(&queries, tcx);
+                    let mut units = CodegenUnits::new(&queries, tcx);
+                    let mut modifies_instances = vec![];
                     // Cross-crate collecting of all items that are reachable from the crate harnesses.
                     for unit in units.iter() {
                         // We reset the body cache for now because each codegen unit has different
@@ -255,14 +256,12 @@ impl CodegenBackend for GotocCodegenBackend {
                             );
                             transformer = results.extend(gcx, items, None);
                             if let Some(assigns_contract) = contract_info {
-                                self.queries.lock().unwrap().register_assigns_contract(
-                                    canonical_mangled_name(*harness).intern(),
-                                    assigns_contract,
-                                );
+                                modifies_instances.push((*harness, assigns_contract));
                             }
                         }
                     }
-                    units.store_metadata(&queries, tcx);
+                    units.store_modifies(&modifies_instances);
+                    units.write_metadata(&queries, tcx);
                 }
                 ReachabilityType::Tests => {
                     // We're iterating over crate items here, so what we have to codegen is the "test description" containing the

@@ -3,14 +3,12 @@
 //! This module contains code for implementing stubbing.
 
 mod annotations;
-mod transform;
 
 use itertools::Itertools;
 use rustc_span::DUMMY_SP;
 use std::collections::HashMap;
 use tracing::{debug, trace};
 
-pub use self::transform::*;
 use kani_metadata::HarnessMetadata;
 use rustc_hir::def_id::DefId;
 use rustc_middle::mir::Const;
@@ -44,24 +42,25 @@ pub fn harness_stub_map(
 /// does **NOT** check whether the type variables are constrained to implement
 /// the same traits; trait mismatches are checked during monomorphization.
 pub fn check_compatibility(tcx: TyCtxt, old_def: FnDef, new_def: FnDef) -> Result<(), String> {
-    let old_def_id = rustc_internal::internal(tcx, old_def.def_id());
-    let new_def_id = rustc_internal::internal(tcx, new_def.def_id());
-    let old_ty = rustc_internal::stable(tcx.type_of(old_def_id)).value;
-    let new_ty = rustc_internal::stable(tcx.type_of(new_def_id)).value;
-    let old_sig = old_ty.kind().fn_sig().unwrap().skip_binder();
-    let new_sig = new_ty.kind().fn_sig().unwrap().skip_binder();
+    // TODO: Validate stubs that do not have body.
+    // We could potentially look at the function signature to see if they match.
+    // However, they will include region information which can make types different.
+    let Some(old_body) = old_def.body() else { return Ok(()) };
+    let Some(new_body) = new_def.body() else { return Ok(()) };
     // Check whether the arities match.
-    if old_sig.inputs_and_output.len() != new_sig.inputs_and_output.len() {
+    if old_body.arg_locals().len() != new_body.arg_locals().len() {
         let msg = format!(
             "arity mismatch: original function/method `{}` takes {} argument(s), stub `{}` takes {}",
             old_def.name(),
-            old_sig.inputs_and_output.len() - 1,
+            old_body.arg_locals().len(),
             new_def.name(),
-            new_sig.inputs_and_output.len() - 1,
+            new_body.arg_locals().len(),
         );
         return Err(msg);
     }
     // Check whether the numbers of generic parameters match.
+    let old_def_id = rustc_internal::internal(tcx, old_def.def_id());
+    let new_def_id = rustc_internal::internal(tcx, new_def.def_id());
     let old_num_generics = tcx.generics_of(old_def_id).count();
     let stub_num_generics = tcx.generics_of(new_def_id).count();
     if old_num_generics != stub_num_generics {
@@ -81,21 +80,21 @@ pub fn check_compatibility(tcx: TyCtxt, old_def: FnDef, new_def: FnDef) -> Resul
     // instead, we should be checking for the equivalence of types up to the
     // renaming of generic parameters.
     // <https://github.com/model-checking/kani/issues/1953>
-    let old_ret_ty = old_sig.output();
-    let new_ret_ty = new_sig.output();
+    let old_ret_ty = old_body.ret_local().ty;
+    let new_ret_ty = new_body.ret_local().ty;
     let mut diff = vec![];
     if old_ret_ty != new_ret_ty {
         diff.push(format!("Expected return type `{old_ret_ty}`, but found `{new_ret_ty}`"));
     }
-    for (i, (old_arg_ty, new_arg_ty)) in
-        old_sig.inputs().iter().zip(new_sig.inputs().iter()).enumerate()
+    for (i, (old_arg, new_arg)) in
+        old_body.arg_locals().iter().zip(new_body.arg_locals().iter()).enumerate()
     {
-        if old_arg_ty != new_arg_ty {
+        if old_arg.ty != new_arg.ty {
             diff.push(format!(
                 "Expected type `{}` for parameter {}, but found `{}`",
-                old_arg_ty,
+                old_arg.ty,
                 i + 1,
-                new_arg_ty
+                new_arg.ty
             ));
         }
     }

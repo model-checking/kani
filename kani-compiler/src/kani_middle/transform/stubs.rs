@@ -110,9 +110,6 @@ impl TransformPass for ExternFnStubPass {
                 if let Some(replace) = self.stubs.get(&def) {
                     debug!(func=?instance.name(), orig=?def.name(), replace=?replace.name(),
                         "ExternFnStubPass::transform");
-                    tracing::error!(func=?instance.name(), orig=?def.name(), replace=?replace
-                        .name(),
-                        "ExternFnStubPass::transform");
                     let instance = Instance::resolve(*replace, &args).unwrap();
                     let literal = MirConst::try_new_zero_sized(instance.ty()).unwrap();
                     let span = bb.terminator.span;

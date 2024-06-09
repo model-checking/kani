@@ -44,10 +44,4 @@ impl QueryDb {
             "Invariant broken, tried adding second modifies contracts to: {harness_name}",
         )
     }
-
-    /// Lookup all CBMC-level `assigns` contract were registered with
-    /// [`Self::add_assigns_contract`].
-    pub fn assigns_contracts(&self) -> impl Iterator<Item = (&InternedString, &AssignsContract)> {
-        self.modifies_contracts.iter()
-    }
 }

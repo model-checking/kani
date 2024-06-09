@@ -58,17 +58,6 @@ fn run_kani_mir_passes<'tcx>(
 ) -> &'tcx Body<'tcx> {
     tracing::debug!(?def_id, "Run Kani transformation passes");
     let mut transformed_body = body.clone();
-    let item_attributes = KaniAttributes::for_item(tcx, def_id);
-    // If we apply `transform_any_modifies` in all contract-generated items,
-    // we will ended up instantiating `kani::any_modifies` for the replace function
-    // every time, even if we are only checking the contract, because the function
-    // is always included during contract instrumentation. Thus, we must only apply
-    // the transformation if we are using a verified stub or in the presence of recursion.
-    if item_attributes.is_contract_generated()
-        && (stubbing::get_stub_key(tcx, def_id).is_some() || item_attributes.has_recursion())
-    {
-        stubbing::transform_any_modifies(tcx, &mut transformed_body);
-    }
     // This should be applied after stubbing so user stubs take precedence.
     ModelIntrinsics::run_pass(tcx, &mut transformed_body);
     tcx.arena.alloc(transformed_body)

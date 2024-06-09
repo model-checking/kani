@@ -15,7 +15,7 @@ use crate::kani_middle::reachability::filter_crate_items;
 use crate::kani_middle::stubbing::{check_compatibility, harness_stub_map};
 use crate::kani_queries::QueryDb;
 use cbmc::{InternString, InternedString};
-use kani_metadata::{ArtifactType, HarnessMetadata, KaniMetadata};
+use kani_metadata::{ArtifactType, AssignsContract, HarnessMetadata, KaniMetadata};
 use rustc_hir::def_id::{DefId, DefPathHash};
 use rustc_middle::ty::TyCtxt;
 use rustc_session::config::OutputType;
@@ -90,7 +90,15 @@ impl CodegenUnits {
         self.units.iter()
     }
 
-    pub fn store_metadata(&self, queries: &QueryDb, tcx: TyCtxt) {
+    /// We store which instance of modifies was generated.
+    pub fn store_modifies(&mut self, harness_modifies: &[(Harness, AssignsContract)]) {
+        for (harness, modifies) in harness_modifies {
+            self.harness_info.get_mut(harness).unwrap().contract = Some(modifies.clone());
+        }
+    }
+
+    /// Write compilation metadata into a file.
+    pub fn write_metadata(&self, queries: &QueryDb, tcx: TyCtxt) {
         let metadata = self.generate_metadata();
         let outpath = metadata_output_path(tcx);
         store_metadata(queries, &metadata, &outpath);
