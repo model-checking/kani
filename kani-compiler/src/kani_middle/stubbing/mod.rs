@@ -5,6 +5,7 @@
 mod annotations;
 mod transform;
 
+use itertools::Itertools;
 use rustc_span::DUMMY_SP;
 use std::collections::HashMap;
 use tracing::{debug, trace};
@@ -18,6 +19,7 @@ use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::visit::{Location, MirVisitor};
 use stable_mir::mir::Constant;
+use stable_mir::ty::FnDef;
 use stable_mir::{CrateDef, CrateItem};
 
 use self::annotations::update_stub_mapping;
@@ -37,6 +39,78 @@ pub fn harness_stub_map(
     stub_pairs
 }
 
+/// Checks whether the stub is compatible with the original function/method: do
+/// the arities and types (of the parameters and return values) match up? This
+/// does **NOT** check whether the type variables are constrained to implement
+/// the same traits; trait mismatches are checked during monomorphization.
+pub fn check_compatibility(tcx: TyCtxt, old_def: FnDef, new_def: FnDef) -> Result<(), String> {
+    let old_def_id = rustc_internal::internal(tcx, old_def.def_id());
+    let new_def_id = rustc_internal::internal(tcx, new_def.def_id());
+    let old_ty = rustc_internal::stable(tcx.type_of(old_def_id)).value;
+    let new_ty = rustc_internal::stable(tcx.type_of(new_def_id)).value;
+    let old_sig = old_ty.kind().fn_sig().unwrap().skip_binder();
+    let new_sig = new_ty.kind().fn_sig().unwrap().skip_binder();
+    // Check whether the arities match.
+    if old_sig.inputs_and_output.len() != new_sig.inputs_and_output.len() {
+        let msg = format!(
+            "arity mismatch: original function/method `{}` takes {} argument(s), stub `{}` takes {}",
+            old_def.name(),
+            old_sig.inputs_and_output.len() - 1,
+            new_def.name(),
+            new_sig.inputs_and_output.len() - 1,
+        );
+        return Err(msg);
+    }
+    // Check whether the numbers of generic parameters match.
+    let old_num_generics = tcx.generics_of(old_def_id).count();
+    let stub_num_generics = tcx.generics_of(new_def_id).count();
+    if old_num_generics != stub_num_generics {
+        let msg = format!(
+            "mismatch in the number of generic parameters: original function/method `{}` takes {} generic parameters(s), stub `{}` takes {}",
+            old_def.name(),
+            old_num_generics,
+            new_def.name(),
+            stub_num_generics
+        );
+        return Err(msg);
+    }
+    // Check whether the types match. Index 0 refers to the returned value,
+    // indices [1, `arg_count`] refer to the parameters.
+    // TODO: We currently force generic parameters in the stub to have exactly
+    // the same names as their counterparts in the original function/method;
+    // instead, we should be checking for the equivalence of types up to the
+    // renaming of generic parameters.
+    // <https://github.com/model-checking/kani/issues/1953>
+    let old_ret_ty = old_sig.output();
+    let new_ret_ty = new_sig.output();
+    let mut diff = vec![];
+    if old_ret_ty != new_ret_ty {
+        diff.push(format!("Expected return type `{old_ret_ty}`, but found `{new_ret_ty}`"));
+    }
+    for (i, (old_arg_ty, new_arg_ty)) in
+        old_sig.inputs().iter().zip(new_sig.inputs().iter()).enumerate()
+    {
+        if old_arg_ty != new_arg_ty {
+            diff.push(format!(
+                "Expected type `{}` for parameter {}, but found `{}`",
+                old_arg_ty,
+                i + 1,
+                new_arg_ty
+            ));
+        }
+    }
+    if !diff.is_empty() {
+        Err(format!(
+            "Cannot stub `{}` by `{}`.\n - {}",
+            old_def.name(),
+            new_def.name(),
+            diff.iter().join("\n - ")
+        ))
+    } else {
+        Ok(())
+    }
+}
+
 /// Validate that an instance body can be instantiated.
 ///
 /// Stubbing may cause an instance to not be correctly instantiated since we delay checking its
@@ -44,17 +118,13 @@ pub fn harness_stub_map(
 ///
 /// In stable MIR, trying to retrieve an `Instance::body()` will ICE if we cannot evaluate a
 /// constant as expected. For now, use internal APIs to anticipate this issue.
-pub fn validate_instance(tcx: TyCtxt, instance: Instance) -> bool {
+pub fn validate_stub(tcx: TyCtxt, instance: Instance) -> bool {
+    debug!(?instance, "validate_instance");
+    let item = CrateItem::try_from(instance).unwrap();
     let internal_instance = rustc_internal::internal(tcx, instance);
-    if get_stub(tcx, internal_instance.def_id()).is_some() {
-        debug!(?instance, "validate_instance");
-        let item = CrateItem::try_from(instance).unwrap();
-        let mut checker = StubConstChecker::new(tcx, internal_instance, item);
-        checker.visit_body(&item.body());
-        checker.is_valid()
-    } else {
-        true
-    }
+    let mut checker = StubConstChecker::new(tcx, internal_instance, item);
+    checker.visit_body(&item.body());
+    checker.is_valid()
 }
 
 struct StubConstChecker<'tcx> {

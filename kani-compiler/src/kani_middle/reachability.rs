@@ -36,7 +36,7 @@ use stable_mir::{CrateDef, ItemKind};
 use crate::kani_middle::attributes::matches_diagnostic as matches_function;
 use crate::kani_middle::coercion;
 use crate::kani_middle::coercion::CoercionBase;
-use crate::kani_middle::stubbing::{get_stub, validate_instance};
+use crate::kani_middle::stubbing::{get_stub, validate_stub};
 use crate::kani_middle::transform::BodyTransformation;
 
 /// Collect all reachable items starting from the given starting points.

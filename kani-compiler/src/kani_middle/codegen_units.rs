@@ -12,7 +12,7 @@ use crate::args::ReachabilityType;
 use crate::kani_middle::attributes::is_proof_harness;
 use crate::kani_middle::metadata::gen_proof_metadata;
 use crate::kani_middle::reachability::filter_crate_items;
-use crate::kani_middle::stubbing::harness_stub_map;
+use crate::kani_middle::stubbing::{check_compatibility, harness_stub_map};
 use crate::kani_queries::QueryDb;
 use cbmc::{InternString, InternedString};
 use kani_metadata::{ArtifactType, HarnessMetadata, KaniMetadata};
@@ -22,6 +22,7 @@ use rustc_session::config::OutputType;
 use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::Instance;
 use stable_mir::ty::{FnDef, RigidTy, TyKind};
+use stable_mir::CrateDef;
 use std::collections::{BTreeMap, HashMap};
 use std::fs::File;
 use std::io::BufWriter;
@@ -76,6 +77,7 @@ impl CodegenUnits {
 
             // Even if no_stubs is empty we still need to store rustc metadata.
             let units = group_by_stubs(tcx, &all_harnesses);
+            validate_units(tcx, &units);
             debug!(?units, "CodegenUnits::new");
             CodegenUnits { units, harness_info: all_harnesses, crate_info }
         } else {
@@ -164,4 +166,15 @@ fn store_metadata(queries: &QueryDb, metadata: &KaniMetadata, filename: &Path) {
     } else {
         serde_json::to_writer(writer, &metadata).unwrap();
     }
+}
+
+fn validate_units(tcx: TyCtxt, units: &[CodegenUnit]) {
+    for unit in units {
+        for (from, to) in &unit.stubs {
+            let Err(msg) = check_compatibility(tcx, *from, *to) else { continue };
+            let span = unit.harnesses.first().unwrap().def.span();
+            tcx.dcx().span_err(rustc_internal::internal(tcx, span), msg);
+        }
+    }
+    tcx.dcx().abort_if_errors();
 }

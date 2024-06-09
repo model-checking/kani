@@ -57,8 +57,7 @@ fn run_kani_mir_passes<'tcx>(
     body: &'tcx Body<'tcx>,
 ) -> &'tcx Body<'tcx> {
     tracing::debug!(?def_id, "Run Kani transformation passes");
-    let mut transformed_body = stubbing::transform(tcx, def_id, body);
-    stubbing::transform_foreign_functions(tcx, &mut transformed_body);
+    let mut transformed_body = body.clone();
     let item_attributes = KaniAttributes::for_item(tcx, def_id);
     // If we apply `transform_any_modifies` in all contract-generated items,
     // we will ended up instantiating `kani::any_modifies` for the replace function
