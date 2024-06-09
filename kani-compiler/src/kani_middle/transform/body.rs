@@ -6,11 +6,7 @@
 use crate::kani_middle::find_fn_def;
 use rustc_middle::ty::TyCtxt;
 use stable_mir::mir::mono::Instance;
-use stable_mir::mir::{
-    BasicBlock, BasicBlockIdx, BinOp, Body, CastKind, Constant, Local, LocalDecl, Mutability,
-    Operand, Place, Rvalue, Statement, StatementKind, Terminator, TerminatorKind, UnwindAction,
-    VarDebugInfo,
-};
+use stable_mir::mir::*;
 use stable_mir::ty::{Const, GenericArgs, Span, Ty, UintTy};
 use std::fmt::Debug;
 use std::mem;
@@ -287,4 +283,137 @@ impl SourceInstruction {
 
 fn find_instance(tcx: TyCtxt, diagnostic: &str) -> Option<Instance> {
     Instance::resolve(find_fn_def(tcx, diagnostic)?, &GenericArgs(vec![])).ok()
+}
+
+/// Basic mutable body visitor.
+///
+/// We removed a many methods for simplicity.
+///
+/// TODO: Contribute this to stable_mir.
+/// This code was based on the existing MirVisitor:
+/// <https://github.com/rust-lang/rust/blob/master/compiler/stable_mir/src/mir/visit.rs>
+pub trait MutMirVisitor {
+    fn visit_body(&mut self, body: &mut MutableBody) {
+        self.super_body(body)
+    }
+
+    fn visit_basic_block(&mut self, bb: &mut BasicBlock) {
+        self.super_basic_block(bb)
+    }
+
+    fn visit_statement(&mut self, stmt: &mut Statement) {
+        self.super_statement(stmt)
+    }
+
+    fn visit_terminator(&mut self, term: &mut Terminator) {
+        self.super_terminator(term)
+    }
+
+    fn visit_rvalue(&mut self, rvalue: &mut Rvalue) {
+        self.super_rvalue(rvalue)
+    }
+
+    fn visit_operand(&mut self, operand: &mut Operand) {}
+
+    fn super_body(&mut self, body: &mut MutableBody) {
+        for bb in body.blocks.iter_mut() {
+            self.visit_basic_block(bb);
+        }
+    }
+
+    fn super_basic_block(&mut self, bb: &mut BasicBlock) {
+        for stmt in &mut bb.statements {
+            self.visit_statement(stmt);
+        }
+        self.visit_terminator(&mut bb.terminator);
+    }
+
+    fn super_statement(&mut self, stmt: &mut Statement) {
+        match &mut stmt.kind {
+            StatementKind::Assign(_, rvalue) => {
+                self.visit_rvalue(rvalue);
+            }
+            StatementKind::Intrinsic(intrisic) => match intrisic {
+                NonDivergingIntrinsic::Assume(operand) => {
+                    self.visit_operand(operand);
+                }
+                NonDivergingIntrinsic::CopyNonOverlapping(CopyNonOverlapping {
+                    src,
+                    dst,
+                    count,
+                }) => {
+                    self.visit_operand(src);
+                    self.visit_operand(dst);
+                    self.visit_operand(count);
+                }
+            },
+            StatementKind::FakeRead(_, _)
+            | StatementKind::SetDiscriminant { .. }
+            | StatementKind::Deinit(_)
+            | StatementKind::StorageLive(_)
+            | StatementKind::StorageDead(_)
+            | StatementKind::Retag(_, _)
+            | StatementKind::PlaceMention(_)
+            | StatementKind::AscribeUserType { .. }
+            | StatementKind::Coverage(_)
+            | StatementKind::ConstEvalCounter
+            | StatementKind::Nop => {}
+        }
+    }
+
+    fn super_terminator(&mut self, term: &mut Terminator) {
+        let Terminator { kind, .. } = term;
+        match kind {
+            TerminatorKind::Assert { cond, .. } => {
+                self.visit_operand(cond);
+            }
+            TerminatorKind::Call { func, args, .. } => {
+                self.visit_operand(func);
+                for arg in args {
+                    self.visit_operand(arg);
+                }
+            }
+            TerminatorKind::SwitchInt { discr, .. } => {
+                self.visit_operand(discr);
+            }
+            TerminatorKind::InlineAsm { .. } => {
+                // we don't support inline assembly.
+            }
+            TerminatorKind::Return
+            | TerminatorKind::Goto { .. }
+            | TerminatorKind::Resume
+            | TerminatorKind::Abort
+            | TerminatorKind::Drop { .. }
+            | TerminatorKind::Unreachable => {}
+        }
+    }
+
+    fn super_rvalue(&mut self, rvalue: &mut Rvalue) {
+        match rvalue {
+            Rvalue::Aggregate(_, operands) => {
+                for op in operands {
+                    self.visit_operand(op);
+                }
+            }
+            Rvalue::BinaryOp(_, lhs, rhs) | Rvalue::CheckedBinaryOp(_, lhs, rhs) => {
+                self.visit_operand(lhs);
+                self.visit_operand(rhs);
+            }
+            Rvalue::Cast(_, op, _) => {
+                self.visit_operand(op);
+            }
+            Rvalue::Repeat(op, _) => {
+                self.visit_operand(op);
+            }
+            Rvalue::ShallowInitBox(op, _) => self.visit_operand(op),
+            Rvalue::UnaryOp(_, op) | Rvalue::Use(op) => {
+                self.visit_operand(op);
+            }
+            Rvalue::AddressOf(..) => {}
+            Rvalue::CopyForDeref(_) | Rvalue::Discriminant(_) | Rvalue::Len(_) => {}
+            Rvalue::Ref(..) => {}
+            Rvalue::ThreadLocalRef(_) => {}
+            Rvalue::NullaryOp(..) => {}
+        }
+    }
 }

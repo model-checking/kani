@@ -5,15 +5,18 @@
 use crate::kani_middle::attributes::matches_diagnostic;
 use crate::kani_middle::codegen_units::Stubs;
 use crate::kani_middle::stubbing::validate_stub;
-use crate::kani_middle::transform::body::{CheckType, MutableBody, SourceInstruction};
+use crate::kani_middle::transform::body::{
+    CheckType, MutMirVisitor, MutableBody, SourceInstruction,
+};
+use crate::kani_middle::transform::check_values::{ty_validity_per_offset, ValidValueReq};
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
 use itertools::Itertools;
 use rustc_middle::ty::TyCtxt;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{
-    BinOp, Body, Constant, Operand, Place, Rvalue, Statement, StatementKind, TerminatorKind,
-    RETURN_LOCAL,
+    BinOp, Body, Constant, LocalDecl, Operand, Place, Rvalue, Statement, StatementKind, Terminator,
+    TerminatorKind, RETURN_LOCAL,
 };
 use stable_mir::target::MachineInfo;
 use stable_mir::ty::{Abi, Const as MirConst, FnDef, RigidTy, TyKind};
@@ -100,26 +103,17 @@ impl TransformPass for ExternFnStubPass {
     }
 
     /// Search for calls to extern functions that should be stubbed.
-    fn transform(&self, tcx: TyCtxt, mut body: Body, instance: Instance) -> (bool, Body) {
+    ///
+    /// We need to find function calls and function pointers.
+    /// We should replace this with a visitor once StableMIR includes a mutable one.
+    fn transform(&self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
         trace!(function=?instance.name(), "transform");
+        let mut new_body = MutableBody::from(body);
         let mut changed = false;
-        let locals = body.locals().to_vec();
-        for bb in body.blocks.iter_mut() {
-            let TerminatorKind::Call { func, .. } = &mut bb.terminator.kind else { continue };
-            if let TyKind::RigidTy(RigidTy::FnDef(def, args)) = func.ty(&locals).unwrap().kind() {
-                if let Some(replace) = self.stubs.get(&def) {
-                    debug!(func=?instance.name(), orig=?def.name(), replace=?replace.name(),
-                        "ExternFnStubPass::transform");
-                    let instance = Instance::resolve(*replace, &args).unwrap();
-                    let literal = MirConst::try_new_zero_sized(instance.ty()).unwrap();
-                    let span = bb.terminator.span;
-                    let new_func = Constant { span, user_ty: None, literal };
-                    *func = Operand::Constant(new_func);
-                    changed = true;
-                }
-            }
-        }
-        (changed, body)
+        let locals = new_body.locals().to_vec();
+        let mut visitor = ExternFnStubVisitor { changed, locals, stubs: &self.stubs };
+        visitor.visit_body(&mut new_body);
+        (visitor.changed, new_body.into())
     }
 }
 
@@ -138,4 +132,47 @@ impl ExternFnStubPass {
 
 fn has_body(def: FnDef) -> bool {
     def.body().is_some()
+}
+
+struct ExternFnStubVisitor<'a> {
+    changed: bool,
+    locals: Vec<LocalDecl>,
+    stubs: &'a Stubs,
+}
+
+impl<'a> MutMirVisitor for ExternFnStubVisitor<'a> {
+    fn visit_terminator(&mut self, term: &mut Terminator) {
+        // Replace direct calls
+        if let TerminatorKind::Call { func, .. } = &mut term.kind {
+            if let TyKind::RigidTy(RigidTy::FnDef(def, args)) =
+                func.ty(&self.locals).unwrap().kind()
+            {
+                if let Some(new_def) = self.stubs.get(&def) {
+                    let instance = Instance::resolve(*new_def, &args).unwrap();
+                    let literal = MirConst::try_new_zero_sized(instance.ty()).unwrap();
+                    let span = term.span;
+                    let new_func = Constant { span, user_ty: None, literal };
+                    *func = Operand::Constant(new_func);
+                    self.changed = true;
+                }
+            }
+        }
+        self.super_terminator(term);
+    }
+
+    fn visit_operand(&mut self, operand: &mut Operand) {
+        let func_ty = operand.ty(&self.locals).unwrap();
+        if let TyKind::RigidTy(RigidTy::FnDef(orig_def, args)) = func_ty.kind() {
+            if let Some(new_def) = self.stubs.get(&orig_def) {
+                let Operand::Constant(Constant { span, .. }) = operand else {
+                    unreachable!();
+                };
+                let instance = Instance::resolve_for_fn_ptr(*new_def, &args).unwrap();
+                let literal = MirConst::try_new_zero_sized(instance.ty()).unwrap();
+                let new_func = Constant { span: *span, user_ty: None, literal };
+                *operand = Operand::Constant(new_func);
+                self.changed = true;
+            }
+        }
+    }
 }
