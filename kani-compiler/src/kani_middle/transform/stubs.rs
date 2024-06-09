@@ -3,14 +3,17 @@
 //! This module contains code related to the MIR-to-MIR pass that performs the
 //! stubbing of functions and methods.
 use crate::kani_middle::codegen_units::Stubs;
-use crate::kani_middle::stubbing::validate_stub;
+use crate::kani_middle::stubbing::validate_stub_const;
 use crate::kani_middle::transform::body::{MutMirVisitor, MutableBody};
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
 use rustc_middle::ty::TyCtxt;
+use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::Instance;
+use stable_mir::mir::visit::{Location, MirVisitor};
 use stable_mir::mir::{Body, Constant, LocalDecl, Operand, Terminator, TerminatorKind};
 use stable_mir::ty::{Const as MirConst, FnDef, RigidTy, TyKind};
+use stable_mir::CrateDef;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use tracing::{debug, trace};
@@ -46,9 +49,10 @@ impl TransformPass for FnStubPass {
         if let TyKind::RigidTy(RigidTy::FnDef(fn_def, args)) = ty.kind() {
             if let Some(replace) = self.stubs.get(&fn_def) {
                 let new_instance = Instance::resolve(*replace, &args).unwrap();
-                if validate_stub(tcx, new_instance) {
-                    debug!(from=?instance.name(), to=?new_instance.name(), "FnStubPass::transform");
-                    return (true, new_instance.body().unwrap());
+                debug!(from=?instance.name(), to=?new_instance.name(), "FnStubPass::transform");
+                if let Some(body) = FnStubValidator::validate(tcx, (fn_def, *replace), new_instance)
+                {
+                    return (true, body);
                 }
             }
         }
@@ -121,6 +125,57 @@ impl ExternFnStubPass {
 
 fn has_body(def: FnDef) -> bool {
     def.body().is_some()
+}
+
+/// Validate that the body of the stub is valid for the given instantiation
+struct FnStubValidator<'a, 'tcx> {
+    stub: (FnDef, FnDef),
+    tcx: TyCtxt<'tcx>,
+    locals: &'a [LocalDecl],
+    is_valid: bool,
+}
+
+impl<'a, 'tcx> FnStubValidator<'a, 'tcx> {
+    fn validate(tcx: TyCtxt, stub: (FnDef, FnDef), new_instance: Instance) -> Option<Body> {
+        if validate_stub_const(tcx, new_instance) {
+            let body = new_instance.body().unwrap();
+            let mut validator =
+                FnStubValidator { stub, tcx, locals: body.locals(), is_valid: true };
+            validator.visit_body(&body);
+            validator.is_valid.then_some(body)
+        } else {
+            None
+        }
+    }
+}
+
+impl<'a, 'tcx> MirVisitor for FnStubValidator<'a, 'tcx> {
+    fn visit_operand(&mut self, op: &Operand, loc: Location) {
+        let op_ty = op.ty(self.locals).unwrap();
+        if let TyKind::RigidTy(RigidTy::FnDef(def, args)) = op_ty.kind() {
+            if Instance::resolve(def, &args).is_err() {
+                self.is_valid = false;
+                let callee = def.name();
+                let receiver_ty = args.0[0].expect_ty();
+                let sep = callee.rfind("::").unwrap();
+                let trait_ = &callee[..sep];
+                self.tcx.dcx().span_err(
+                    rustc_internal::internal(self.tcx, loc.span()),
+                    format!(
+                        "`{}` doesn't implement \
+                                        `{}`. The function `{}` \
+                                        cannot be stubbed by `{}` due to \
+                                        generic bounds not being met. Callee: {}",
+                        receiver_ty,
+                        trait_,
+                        self.stub.0.name(),
+                        self.stub.1.name(),
+                        callee,
+                    ),
+                );
+            }
+        }
+    }
 }
 
 struct ExternFnStubVisitor<'a> {

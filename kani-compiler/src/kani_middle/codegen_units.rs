@@ -22,7 +22,7 @@ use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::Instance;
 use stable_mir::ty::{FnDef, RigidTy, TyKind};
 use stable_mir::CrateDef;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::File;
 use std::io::BufWriter;
 use std::path::{Path, PathBuf};
@@ -145,6 +145,7 @@ fn group_by_stubs(
                 .iter()
                 .map(|(from, to)| (stub_def(tcx, *from), stub_def(tcx, *to)))
                 .collect::<HashMap<_, _>>();
+            let stubs = apply_transitivity(tcx, *harness, stubs);
             per_stubs.insert(stub_map, CodegenUnit { stubs, harnesses: vec![*harness] });
         }
     }
@@ -170,13 +171,44 @@ fn store_metadata(queries: &QueryDb, metadata: &KaniMetadata, filename: &Path) {
     }
 }
 
+/// Validate the unit configuration.
 fn validate_units(tcx: TyCtxt, units: &[CodegenUnit]) {
     for unit in units {
         for (from, to) in &unit.stubs {
+            // We use harness span since we don't keep the attribute span.
             let Err(msg) = check_compatibility(tcx, *from, *to) else { continue };
             let span = unit.harnesses.first().unwrap().def.span();
             tcx.dcx().span_err(rustc_internal::internal(tcx, span), msg);
         }
     }
     tcx.dcx().abort_if_errors();
+}
+
+/// Apply stub transitivity operations.
+///
+/// If `fn1` is stubbed by `fn2`, and `fn2` is stubbed by `fn3`, `f1` is in fact stubbed by `fn3`.
+fn apply_transitivity(tcx: TyCtxt, harness: Harness, stubs: Stubs) -> Stubs {
+    let mut new_stubs = Stubs::with_capacity(stubs.len());
+    for (orig, new) in stubs.iter() {
+        let mut new_fn = *new;
+        let mut visited = HashSet::new();
+        while let Some(stub) = stubs.get(&new_fn) {
+            if !visited.insert(stub) {
+                // Visiting the same stub, i.e. found cycle.
+                let span = harness.def.span();
+                tcx.dcx().span_err(
+                    rustc_internal::internal(tcx, span),
+                    format!(
+                        "Cannot stub `{}`. Stub configuration for harness `{}` has a cycle",
+                        orig.name(),
+                        harness.def.name(),
+                    ),
+                );
+                break;
+            }
+            new_fn = *stub;
+        }
+        new_stubs.insert(*orig, new_fn);
+    }
+    new_stubs
 }

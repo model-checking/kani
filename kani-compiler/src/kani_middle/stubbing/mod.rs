@@ -117,7 +117,7 @@ pub fn check_compatibility(tcx: TyCtxt, old_def: FnDef, new_def: FnDef) -> Resul
 ///
 /// In stable MIR, trying to retrieve an `Instance::body()` will ICE if we cannot evaluate a
 /// constant as expected. For now, use internal APIs to anticipate this issue.
-pub fn validate_stub(tcx: TyCtxt, instance: Instance) -> bool {
+pub fn validate_stub_const(tcx: TyCtxt, instance: Instance) -> bool {
     debug!(?instance, "validate_instance");
     let item = CrateItem::try_from(instance).unwrap();
     let internal_instance = rustc_internal::internal(tcx, instance);
