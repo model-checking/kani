@@ -233,7 +233,7 @@
 //!     }
 //! }
 //! ```
-//! 
+//!
 //! Additionally, there is functionality that allows the referencing of
 //! history values within the ensures statement. This means we can
 //! precompute a value before the function is called and have access to
@@ -244,7 +244,7 @@
 //! The results of these old computations are placed into
 //! `remember_kani_internal_XXX` variables of incrementing index to avoid
 //! collisions of variable names. Consider the following example:
-//! 
+//!
 //! ```
 //! #[kani::modifies(a)]
 //! #[kani::ensures(|result| old(*a).wrapping_add(1) == *a)]
@@ -253,16 +253,16 @@
 //!     *a=a.wrapping_add(1);
 //!     *a
 //! }
-//! 
+//!
 //! #[kani::proof_for_contract(add1)]
 //! fn verify_success() {
 //!     let a : &mut u32 = &mut kani::any();
 //!     add1(a);
 //! }
 //! ```
-//! 
+//!
 //! This expands to
-//! 
+//!
 //! ```
 //! #[allow(dead_code, unused_variables)]
 //! #[kanitool :: is_contract_generated(check)]
@@ -281,7 +281,7 @@
 //!     std::mem::forget(a_renamed);
 //!     result_kani_internal
 //! }
-//! 
+//!
 //! #[allow(dead_code, unused_variables)]
 //! #[kanitool :: is_contract_generated(replace)]
 //! fn add1_replace_86e6df(a : & mut u32) -> u32 {
