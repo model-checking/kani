@@ -8,7 +8,7 @@ type T = u8;
 #[kani::requires(x != 0 && y != 0)]
 #[kani::ensures(|result : &T| *result != 0 && x % *result == 0 && y % *result == 0)]
 fn gcd(mut x: T, mut y: T) -> T {
-    (x, y) = (if x > y {x} else {y}, if x > y {y} else {x});
+    (x, y) = (if x > y { x } else { y }, if x > y { y } else { x });
     loop {
         let res = x % y;
         if res == 0 {
