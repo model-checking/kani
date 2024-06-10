@@ -7,7 +7,6 @@
 //! Today, only stub / contracts can affect the harness codegen. Thus, we group the harnesses
 //! according to their stub configuration.
 
-// TODO: Move this out of CBMC crate.
 use crate::args::ReachabilityType;
 use crate::kani_middle::attributes::is_proof_harness;
 use crate::kani_middle::metadata::gen_proof_metadata;
