@@ -233,6 +233,71 @@
 //!     }
 //! }
 //! ```
+//! 
+//! Additionally, there is functionality that allows the referencing of
+//! history values within the ensures statement. This means we can
+//! precompute a value before the function is called and have access to
+//! this value in the later ensures statement. This is done via the
+//! `old` monad which lets you access the old state within the present
+//! state. Each occurance of old is lifted, so is is necessary that
+//! each lifted occurance is closed with respect to the function arguments.
+//! The results of these old computations are placed into
+//! `remember_kani_internal_XXX` variables of incrementing index to avoid
+//! collisions of variable names. Consider the following example:
+//! 
+//! ```
+//! #[kani::modifies(a)]
+//! #[kani::ensures(|result| old(*a).wrapping_add(1) == *a)]
+//! #[kani::ensures(|result : &u32| old(*a).wrapping_add(1) == *result)]
+//! fn add1(a : &mut u32) -> u32 {
+//!     *a=a.wrapping_add(1);
+//!     *a
+//! }
+//! 
+//! #[kani::proof_for_contract(add1)]
+//! fn verify_success() {
+//!     let a : &mut u32 = &mut kani::any();
+//!     add1(a);
+//! }
+//! ```
+//! 
+//! This expands to
+//! 
+//! ```
+//! #[allow(dead_code, unused_variables)]
+//! #[kanitool :: is_contract_generated(check)]
+//! fn add1_check_86e6df(a : & mut u32) -> u32 {
+//!     let a_renamed = kani::internal::untracked_deref(& a);
+//!     let remember_kani_internal_1 = *a_renamed;
+//!     let a_renamed = kani::internal::untracked_deref(& a);
+//!     let remember_kani_internal_0 = * a_renamed;
+//!     let _wrapper_arg_1 = unsafe { kani :: internal :: Pointer :: decouple_lifetime(& a) };
+//!     let result_kani_internal : u32 = add1_wrapper_86e6df(a, _wrapper_arg_1);
+//!     kani::assert((| result | (remember_kani_internal_0).wrapping_add(1) == *a_renamed) (& result_kani_internal),
+//!         stringify! (|result| old(*a).wrapping_add(1) == *a));
+//!     std::mem::forget(a_renamed);
+//!     kani::assert((| result : & u32 | (remember_kani_internal_1).wrapping_add(1) == *result) (& result_kani_internal),
+//!         stringify!(|result : &u32| old(*a).wrapping_add(1) == *result));
+//!     std::mem::forget(a_renamed);
+//!     result_kani_internal
+//! }
+//! 
+//! #[allow(dead_code, unused_variables)]
+//! #[kanitool :: is_contract_generated(replace)]
+//! fn add1_replace_86e6df(a : & mut u32) -> u32 {
+//!     let a_renamed = kani::internal::untracked_deref(& a);
+//!     let remember_kani_internal_1 = *a_renamed;
+//!     let a_renamed = kani::internal::untracked_deref(& a);
+//!     let remember_kani_internal_0 = *a_renamed;
+//!     let result_kani_internal : u32 = kani::any_modifies();
+//!     *unsafe{ kani :: internal :: Pointer :: assignable(a) } = kani::any_modifies();
+//!     kani ::assume((| result | (remember_kani_internal_0).wrapping_add(1) == *a_renamed) (& result_kani_internal));
+//!     std :: mem :: forget(a_renamed);
+//!     kani ::assume((| result : & u32 | (remember_kani_internal_1).wrapping_add(1) == *result) (& result_kani_internal));
+//!     std :: mem :: forget(a_renamed);
+//!     result_kani_internal
+//! }
+//! ```
 
 use proc_macro::TokenStream;
 use proc_macro2::{Ident, TokenStream as TokenStream2};
