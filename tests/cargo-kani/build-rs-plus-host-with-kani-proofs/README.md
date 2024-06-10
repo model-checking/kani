@@ -1,4 +1,4 @@
-This repo contains contains a minimal example that breaks compilation when using [kani](https://github.com/model-checking/kani), where I would expect compilation to work.
+This repository contains a minimal example that breaks compilation when using [kani](https://github.com/model-checking/kani), where we would expect compilation to work.
 
 Deleting the `binary/build.rs` script makes the compilation work suddenly, despite it being skipped anyways:
 
