@@ -7,7 +7,8 @@ use crate::args::ReachabilityType;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::kani_middle::analysis;
 use crate::kani_middle::attributes::{is_test_harness_description, KaniAttributes};
-use crate::kani_middle::metadata::{canonical_mangled_name, gen_test_metadata};
+use crate::kani_middle::codegen_units::{CodegenUnit, CodegenUnits};
+use crate::kani_middle::metadata::gen_test_metadata;
 use crate::kani_middle::provide;
 use crate::kani_middle::reachability::{
     collect_reachable_items, filter_const_crate_items, filter_crate_items,
@@ -17,7 +18,7 @@ use crate::kani_middle::{check_reachable_items, dump_mir_items};
 use crate::kani_queries::QueryDb;
 use cbmc::goto_program::Location;
 use cbmc::irep::goto_binary_serde::write_goto_binary_file;
-use cbmc::{InternString, RoundingMode};
+use cbmc::RoundingMode;
 use cbmc::{InternedString, MachineModel};
 use kani_metadata::artifact::convert_type;
 use kani_metadata::UnsupportedFeature;
@@ -49,7 +50,6 @@ use stable_mir::mir::mono::{Instance, MonoItem};
 use stable_mir::{CrateDef, DefId};
 use std::any::Any;
 use std::collections::BTreeMap;
-use std::collections::HashSet;
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::fs::File;
@@ -231,43 +231,43 @@ impl CodegenBackend for GotocCodegenBackend {
             let base_filepath = tcx.output_filenames(()).path(OutputType::Object);
             let base_filename = base_filepath.as_path();
             let reachability = queries.args().reachability_analysis;
-            let mut transformer = BodyTransformation::new(&queries, tcx);
             let mut results = GotoCodegenResults::new(tcx, reachability);
             match reachability {
                 ReachabilityType::Harnesses => {
+                    let mut units = CodegenUnits::new(&queries, tcx);
+                    let mut modifies_instances = vec![];
                     // Cross-crate collecting of all items that are reachable from the crate harnesses.
-                    let harnesses = queries.target_harnesses();
-                    let mut items: HashSet<_> = HashSet::with_capacity(harnesses.len());
-                    items.extend(harnesses);
-                    let harnesses = filter_crate_items(tcx, |_, instance| {
-                        items.contains(&instance.mangled_name().intern())
-                    });
-                    for harness in harnesses {
-                        let model_path =
-                            queries.harness_model_path(&harness.mangled_name()).unwrap();
-                        let contract_metadata =
-                            contract_metadata_for_harness(tcx, harness.def.def_id()).unwrap();
-                        let (gcx, items, contract_info) = self.codegen_items(
-                            tcx,
-                            &[MonoItem::Fn(harness)],
-                            model_path,
-                            &results.machine_model,
-                            contract_metadata,
-                            transformer,
-                        );
-                        transformer = results.extend(gcx, items, None);
-                        if let Some(assigns_contract) = contract_info {
-                            self.queries.lock().unwrap().register_assigns_contract(
-                                canonical_mangled_name(harness).intern(),
-                                assigns_contract,
+                    for unit in units.iter() {
+                        // We reset the body cache for now because each codegen unit has different
+                        // configurations that affect how we transform the instance body.
+                        let mut transformer = BodyTransformation::new(&queries, tcx, &unit);
+                        for harness in &unit.harnesses {
+                            let model_path = units.harness_model_path(*harness).unwrap();
+                            let contract_metadata =
+                                contract_metadata_for_harness(tcx, harness.def.def_id()).unwrap();
+                            let (gcx, items, contract_info) = self.codegen_items(
+                                tcx,
+                                &[MonoItem::Fn(*harness)],
+                                model_path,
+                                &results.machine_model,
+                                contract_metadata,
+                                transformer,
                             );
+                            transformer = results.extend(gcx, items, None);
+                            if let Some(assigns_contract) = contract_info {
+                                modifies_instances.push((*harness, assigns_contract));
+                            }
                         }
                     }
+                    units.store_modifies(&modifies_instances);
+                    units.write_metadata(&queries, tcx);
                 }
                 ReachabilityType::Tests => {
                     // We're iterating over crate items here, so what we have to codegen is the "test description" containing the
                     // test closure that we want to execute
                     // TODO: Refactor this code so we can guarantee that the pair (test_fn, test_desc) actually match.
+                    let unit = CodegenUnit::default();
+                    let mut transformer = BodyTransformation::new(&queries, tcx, &unit);
                     let mut descriptions = vec![];
                     let harnesses = filter_const_crate_items(tcx, &mut transformer, |_, item| {
                         if is_test_harness_description(tcx, item.def) {
@@ -310,6 +310,8 @@ impl CodegenBackend for GotocCodegenBackend {
                 }
                 ReachabilityType::None => {}
                 ReachabilityType::PubFns => {
+                    let unit = CodegenUnit::default();
+                    let transformer = BodyTransformation::new(&queries, tcx, &unit);
                     let main_instance =
                         stable_mir::entry_fn().map(|main_fn| Instance::try_from(main_fn).unwrap());
                     let local_reachable = filter_crate_items(tcx, |_, instance| {
