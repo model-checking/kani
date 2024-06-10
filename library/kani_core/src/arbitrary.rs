@@ -1,6 +1,12 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+//! This macro generates implementations of the `Arbitrary` trait for various types. The `Arbitrary` trait defines
+//! methods for generating arbitrary (unconstrained) values of the implementing type.
+//! trivial_arbitrary and nonzero_arbitrary are implementations of Arbitrary for types that can be represented
+//! by an unconstrained symbolic value of their size (e.g., `u8`, `u16`, `u32`, etc.).
+//!
+//! TODO: Use this inside kani library so that we dont have to maintain two copies of the same proc macro for arbitrary.
 #[macro_export]
 macro_rules! generate_arbitrary {
     ($core:path) => {

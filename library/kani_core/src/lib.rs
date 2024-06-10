@@ -47,6 +47,11 @@ macro_rules! kani_lib {
     };
 }
 
+/// Kani intrinsics contains the public APIs used by users to verify their harnesses.
+/// This macro is a part of kani_core as that allows us to verify even libraries that are no_core
+/// such as core in rust's std library itself.
+///
+/// TODO: Use this inside kani library so that we dont have to maintain two copies of the same intrinsics.
 #[macro_export]
 macro_rules! kani_intrinsics {
     () => {
