@@ -1,1 +1,2 @@
-error[E0391]: cycle detected when optimizing MIR for `crate_b::assert_false`
+error: Cannot stub `crate_b::assert_false`. Stub configuration for harness `check_inverted` has a cycle
+error: Cannot stub `crate_b::assert_true`. Stub configuration for harness `check_inverted` has a cycle

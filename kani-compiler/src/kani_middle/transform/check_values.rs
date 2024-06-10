@@ -732,7 +732,8 @@ fn expect_instance(locals: &[LocalDecl], func: &Operand) -> Instance {
     let ty = func.ty(locals).unwrap();
     match ty.kind() {
         TyKind::RigidTy(RigidTy::FnDef(def, args)) => Instance::resolve(def, &args).unwrap(),
-        _ => unreachable!(),
+        TyKind::RigidTy(RigidTy::FnPtr(sig)) => todo!("Add support to FnPtr: {sig:?}"),
+        _ => unreachable!("Found: {func:?}"),
     }
 }
 

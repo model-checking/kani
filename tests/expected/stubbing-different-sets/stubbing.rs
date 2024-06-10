@@ -1,8 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-//
-// Check that Kani handles different sets of stubbing correctly.
-// I.e., not correctly replacing the stubs will cause a harness to fail.
+// kani-flags: -Z stubbing
+//! Check that Kani handles different sets of stubbing correctly.
+//! I.e., not correctly replacing the stubs will cause a harness to fail.
 
 fn identity(i: i8) -> i8 {
     i
