@@ -326,10 +326,10 @@ pub fn cargo_config_args() -> Vec<OsString> {
     [
         "--target",
         env!("TARGET"),
-        // Propagate `--cfg=kani` to build scripts.
+        // Propagate `--cfg=kani_host` to build scripts.
         "-Zhost-config",
         "-Ztarget-applies-to-host",
-        "--config=host.rustflags=[\"--cfg=kani\"]",
+        "--config=host.rustflags=[\"--cfg=kani_host\"]",
     ]
     .map(OsString::from)
     .to_vec()
@@ -561,7 +561,7 @@ fn package_targets(args: &VerificationArgs, package: &Package) -> Vec<Verificati
         }
         if !ignored_unsupported.is_empty() {
             println!(
-                "Skipped the following unsupported targets: '{}'.",
+                "Skipped verification of the following unsupported targets: '{}'.",
                 ignored_unsupported.join("', '")
             );
         }
