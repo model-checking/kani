@@ -3,7 +3,12 @@
 
 // From https://github.com/model-checking/kani/issues/3101
 
-pub const SOME_CONSTANT: u32 = 42;
+#[cfg(not(any(kani, kani_host)))]
+pub const SOME_CONSTANT: u32 = 0;
+#[cfg(kani)]
+pub const SOME_CONSTANT: u32 = 1;
+#[cfg(kani_host)]
+pub const SOME_CONSTANT: u32 = 2;
 
 pub struct SomeStruct {
     pub some_field: u32,
@@ -21,7 +26,7 @@ mod verification {
     use super::*;
 
     #[kani::proof]
-    fn zero() {
-        assert_ne!(SOME_CONSTANT, 0);
+    fn one() {
+        assert_eq!(constants::SOME_CONSTANT, 1);
     }
 }

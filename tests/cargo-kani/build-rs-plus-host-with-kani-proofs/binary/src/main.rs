@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 // From https://github.com/model-checking/kani/issues/3101
+// This file demonstrates that Kani is working on the `binary` crate itself.
 
 use constants::SomeStruct;
 
