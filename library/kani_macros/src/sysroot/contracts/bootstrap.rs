@@ -85,7 +85,7 @@ impl<'a> ContractConditionsHandler<'a> {
 
         let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
         self.output.extend(quote!(
-            #[allow(dead_code, unused_variables)]
+            #[allow(dead_code, unused_variables, unused_mut)]
             #[kanitool::is_contract_generated(recursion_wrapper)]
             #wrapper_sig {
                 static mut REENTRY: bool = false;
