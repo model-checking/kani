@@ -50,7 +50,7 @@ impl<'a> ContractConditionsHandler<'a> {
     pub fn emit_common_header(&mut self) {
         if self.function_state.emit_tag_attr() {
             self.output.extend(quote!(
-                #[allow(dead_code, unused_variables)]
+                #[allow(dead_code, unused_variables, unused_mut)]
             ));
         }
         self.output.extend(self.annotated_fn.attrs.iter().flat_map(Attribute::to_token_stream));
