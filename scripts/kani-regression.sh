@@ -49,7 +49,6 @@ RUSTFLAGS=--cfg=kani_sysroot cargo test -p kani_macros --features syn/extra-trai
 
 # Declare testing suite information (suite and mode)
 TESTS=(
-    "script-based-pre exec"
     "kani kani"
     "expected expected"
     "ui expected"
@@ -59,6 +58,7 @@ TESTS=(
     "smack kani"
     "cargo-kani cargo-kani"
     "cargo-ui cargo-kani"
+    "script-based-pre exec"
     "coverage coverage-based"
     "kani-docs cargo-kani"
     "kani-fixme kani-fixme"
