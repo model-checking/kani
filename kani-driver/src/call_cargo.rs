@@ -62,7 +62,6 @@ impl KaniSession {
         rustc_args.push(to_rustc_arg(vec!["-Zfunction-contracts".to_string()]).into());
         rustc_args.push(to_rustc_arg(vec!["--enable-stubbing".to_string()]).into());
 
-
         let mut cargo_args: Vec<OsString> = vec!["build".into()];
         cargo_args.append(&mut cargo_config_args());
 

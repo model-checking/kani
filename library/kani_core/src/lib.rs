@@ -280,5 +280,5 @@ macro_rules! kani_intrinsics {
             #[rustc_diagnostic_item = "KaniInitContracts"]
             pub fn init_contracts() {}
         }
-    }
+    };
 }
