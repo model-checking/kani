@@ -24,7 +24,6 @@ fn check_empty_struct_invariant_1() {
     assert!(void.is_safe());
 }
 
-
 #[kani::proof]
 fn check_empty_struct_invariant_2() {
     let void: Void2 = kani::any();
