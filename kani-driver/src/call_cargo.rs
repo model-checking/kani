@@ -59,7 +59,6 @@ impl KaniSession {
         rustc_args.push(self.reachability_arg().into());
         // Ignore global assembly, since `compiler_builtins` has some.
         rustc_args.push(to_rustc_arg(vec!["--ignore-global-asm".to_string()]).into());
-        rustc_args.push(to_rustc_arg(vec!["-Zfunction-contracts".to_string()]).into());
 
         let mut cargo_args: Vec<OsString> = vec!["build".into()];
         cargo_args.append(&mut cargo_config_args());

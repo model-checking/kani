@@ -47,6 +47,16 @@ pub mod kani {
         assert!(num != 0, "Found zero");
     }
 
+    #[kani::proof_for_contract(obviously_true)]
+    fn check_proof_contract() {
+        obviously_true(true);
+    }
+
+    #[kani::requires(x == true)]
+    fn obviously_true(x: bool) -> bool {
+        x
+    }
+
     #[kani_core::proof]
     fn check_success() {
         let orig: u8 = any_raw_inner();
