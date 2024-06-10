@@ -100,7 +100,7 @@ impl Callbacks for KaniCompiler {
         debug!(?queries, "config end");
     }
 
-    /// After analysis, we check the crate items for Kani API misusage or configuration issues.
+    /// After analysis, we check the crate items for Kani API misuse or configuration issues.
     fn after_analysis<'tcx>(
         &mut self,
         _compiler: &rustc_interface::interface::Compiler,

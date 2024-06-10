@@ -287,7 +287,7 @@ fn find_instance(tcx: TyCtxt, diagnostic: &str) -> Option<Instance> {
 
 /// Basic mutable body visitor.
 ///
-/// We removed a many methods for simplicity.
+/// We removed many methods for simplicity.
 ///
 /// TODO: Contribute this to stable_mir.
 /// This code was based on the existing MirVisitor:
