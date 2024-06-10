@@ -32,6 +32,7 @@ use self::attributes::KaniAttributes;
 
 pub mod analysis;
 pub mod attributes;
+pub mod codegen_units;
 pub mod coercion;
 mod intrinsics;
 pub mod metadata;
