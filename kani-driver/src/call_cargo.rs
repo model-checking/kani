@@ -74,9 +74,6 @@ impl KaniSession {
             cargo_args.push("-v".into());
         }
 
-        // cargo_args.push("--".into());
-        // cargo_args.push("-Zunpretty=expanded".into());
-
         // Since we are verifying the standard library, we set the reachability to all crates.
         let mut cmd = setup_cargo_command()?;
         cmd.args(&cargo_args)
@@ -110,7 +107,7 @@ impl KaniSession {
         }
 
         let lib_path = lib_folder().unwrap();
-        let mut rustc_args = self.kani_rustc_flags(LibConfig::new_no_core(lib_path));
+        let mut rustc_args = self.kani_rustc_flags(LibConfig::new(lib_path));
         rustc_args.push(to_rustc_arg(self.kani_compiler_flags()).into());
 
         let mut cargo_args: Vec<OsString> = vec!["rustc".into()];
