@@ -44,7 +44,7 @@ members = [
   "kani-driver",
   "kani-compiler",
   "kani_metadata",
-  "library/kani_core", "target/kani_verify_std",
+  "library/kani_core",
 ]
 
 # This indicates what package to e.g. build with 'cargo build' without --workspace

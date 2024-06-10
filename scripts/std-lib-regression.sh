@@ -32,15 +32,6 @@ else
   exit 0
 fi
 
-ADD_TEST_TO_SOURCE=true
-# Check if any arguments are provided
-if [[ "$#" -gt 0 ]]; then
-    # Check if the first argument is "no_test_add"
-    if [[ "$1" == "--build-core" ]]; then
-        ADD_TEST_TO_SOURCE=false
-    fi
-fi
-
 # Get Kani root
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 KANI_DIR=$(dirname "$SCRIPT_DIR")
@@ -58,16 +49,16 @@ cargo new std_lib_test --lib
 cd std_lib_test
 
 # Add some content to the rust file including an std function that is non-generic.
-if $ADD_TEST_TO_SOURCE; then
-  echo '
-  pub fn main() {
-      assert!("2021".parse::<u32>().unwrap() == 2021);
-  }
-  ' > src/lib.rs
+echo '
+pub fn main() {
+    assert!("2021".parse::<u32>().unwrap() == 2021);
+}
+' > src/lib.rs
 
-  rm ${KANI_DIR}/target/kani/lib/libstd.rlib
-fi
-
+# Until we add support to this via our bundle, rebuild the kani library too.
+echo "
+kani = {path=\"${KANI_DIR}/library/kani\"}
+" >> Cargo.toml
 
 # Use same nightly toolchain used to build Kani
 cp ${KANI_DIR}/rust-toolchain.toml .
@@ -77,30 +68,18 @@ export RUST_BACKTRACE=1
 export RUSTC_LOG=error
 
 RUST_FLAGS=(
-    "-Zunstable-options"
-    "-Zcrate-attr=feature(register_tool)"
-    "-Zcrate-attr=register_tool(kanitool)"
     "--kani-compiler"
-    "-Cllvm-args=--build-std"
-    "-Cllvm-args=--ignore-global-asm"
-    "-Cllvm-args=--goto-c"
-    "-Cllvm-args=--reachability=harnesses"
-    "-Cllvm-args=-Zfunction-contracts"
     "-Cpanic=abort"
     "-Zalways-encode-mir"
-    "--extern kani_core"
-    "-L"
-    "${KANI_DIR}/target/kani/no_core/lib"
-    "--cfg=kani"
-    "--cfg=no_core"
+    "-Cllvm-args=--goto-c"
+    "-Cllvm-args=--ignore-global-asm"
+    "-Cllvm-args=--reachability=pub_fns"
+    "-Cllvm-args=--build-std"
 )
 export RUSTFLAGS="${RUST_FLAGS[@]}"
-export RUSTC_LOGS="info"
-
 export RUSTC="$KANI_DIR/target/kani/bin/kani-compiler"
-export __CARGO_TESTS_ONLY_SRC_ROOT="/home/ubuntu/rust-dev"
 # Compile rust to iRep
-$WRAPPER cargo build --verbose -Z build-std=core --lib --target $TARGET
+$WRAPPER cargo build --verbose -Z build-std --lib --target $TARGET
 
 echo
 echo "Finished Kani codegen for the Rust standard library successfully..."

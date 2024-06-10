@@ -39,20 +39,14 @@ impl<'tcx> GotocCtx<'tcx> {
         let recursion_wrapper_id =
             function_under_contract_attrs.checked_with_id().unwrap().unwrap();
         let expected_name = format!("{}::REENTRY", tcx.item_name(recursion_wrapper_id));
-        let mut recursion_tracker = items.iter().filter_map(|i| { tracing::error!(?i, "++++++++++++++++++++++"); match i {
+        let mut recursion_tracker = items.iter().filter_map(|i| match i {
             MonoItem::Static(recursion_tracker)
                 if (*recursion_tracker).name().contains(expected_name.as_str()) =>
             {
                 Some(*recursion_tracker)
             }
             _ => None,
-        }});
-
-        let names = items.iter().filter_map(|item| { let MonoItem::Fn(i) = item else { return None };
-            Some(i.name())
-        }).collect::<Vec<_>>();
-
-        tracing::error!(?names, ?recursion_wrapper_id, "******************");
+        });
 
         let recursion_tracker_def = recursion_tracker
             .next()

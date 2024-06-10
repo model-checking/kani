@@ -60,11 +60,8 @@ impl KaniSession {
         // Ignore global assembly, since `compiler_builtins` has some.
         rustc_args.push(to_rustc_arg(vec!["--ignore-global-asm".to_string()]).into());
         rustc_args.push(to_rustc_arg(vec!["-Zfunction-contracts".to_string()]).into());
-        rustc_args.push(to_rustc_arg(vec!["--enable-stubbing".to_string()]).into());
-        rustc_args.push(to_rustc_arg(vec!["--ignore-global-asm".to_string()]).into());
-        rustc_args.push(to_rustc_arg(vec!["-Zfunction-contracts".to_string()]).into());
 
-        let mut cargo_args: Vec<OsString> = vec!["rustc".into()];
+        let mut cargo_args: Vec<OsString> = vec!["build".into()];
         cargo_args.append(&mut cargo_config_args());
 
         // Configuration needed to parse cargo compilation status.
@@ -112,7 +109,7 @@ impl KaniSession {
             fs::remove_dir_all(&target_dir)?;
         }
 
-        let lib_path = lib_no_core_folder().unwrap();
+        let lib_path = lib_folder().unwrap();
         let mut rustc_args = self.kani_rustc_flags(LibConfig::new_no_core(lib_path));
         rustc_args.push(to_rustc_arg(self.kani_compiler_flags()).into());
 
