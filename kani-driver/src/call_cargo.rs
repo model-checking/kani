@@ -561,7 +561,7 @@ fn package_targets(args: &VerificationArgs, package: &Package) -> Vec<Verificati
         }
         if !ignored_unsupported.is_empty() {
             println!(
-                "Skipped the following unsupported targets: '{}'.",
+                "Skipped verification of the following unsupported targets: '{}'.",
                 ignored_unsupported.join("', '")
             );
         }
