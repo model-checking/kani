@@ -1,2 +1,8 @@
          - Status: SUCCESS\
-         - Description: "assertion failed: point.is_safe()"
+         - Description: "assertion failed: void1.is_safe()"
+
+         - Status: SUCCESS\
+         - Description: "assertion failed: void2.is_safe()"
+
+         - Status: SUCCESS\
+         - Description: "assertion failed: void3.is_safe()"
