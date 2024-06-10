@@ -9,20 +9,14 @@ type T = u8;
 #[kani::ensures(|result : &T| *result != 0 && x % *result == 0 && y % *result == 0)]
 fn gcd(mut x: T, mut y: T) -> T {
     (x, y) = (if x > y {x} else {y}, if x > y {y} else {x});
-    if min > max {
-        let val = max;
-        max = min;
-        min = val;
-    }
-
     loop {
-        let res = max % min;
+        let res = x % y;
         if res == 0 {
-            return min;
+            return y;
         }
 
-        max = min;
-        min = res;
+        x = y;
+        y = res;
     }
 }
 
