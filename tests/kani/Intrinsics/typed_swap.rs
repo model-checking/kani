@@ -19,3 +19,10 @@ fn test_typed_swap_u32() {
     assert!(b == a_before);
     assert!(a == b_before);
 }
+
+#[kani::proof]
+pub fn check_swap_unit() {
+    let mut x: () = kani::any();
+    let mut y: () = kani::any();
+    std::mem::swap(&mut x, &mut y)
+}
