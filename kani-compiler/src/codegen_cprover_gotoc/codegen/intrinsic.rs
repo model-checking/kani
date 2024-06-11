@@ -1880,12 +1880,11 @@ impl<'tcx> GotocCtx<'tcx> {
             "`dst` must be properly aligned",
             loc,
         );
-        let deref = dst.dereference();
-        if deref.typ().sizeof(&self.symbol_table) == 0 {
+        if self.is_zst_stable(pointee_type_stable(dst_typ).unwrap()) {
             // do not attempt to dereference (and assign) a ZST
             align_check
         } else {
-            let expr = deref.assign(src, loc);
+            let expr = dst.dereference().assign(src, loc);
             Stmt::block(vec![align_check, expr], loc)
         }
     }
@@ -1991,8 +1990,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let x = fargs.remove(0);
         let y = fargs.remove(0);
 
-        let deref_y = y.clone().dereference();
-        if deref_y.typ().sizeof(&self.symbol_table) == 0 {
+        if self.is_zst_stable(pointee_type_stable(farg_types[0]).unwrap()) {
             // do not attempt to dereference (and assign) a ZST
             Stmt::skip(loc)
         } else {
@@ -2020,6 +2018,7 @@ impl<'tcx> GotocCtx<'tcx> {
             );
 
             // T t = *y; *y = *x; *x = t;
+            let deref_y = y.clone().dereference();
             let (temp_var, assign_to_t) =
                 self.decl_temp_variable(deref_y.typ().clone(), Some(deref_y), loc);
             let assign_to_y = y.dereference().assign(x.clone().dereference(), loc);
