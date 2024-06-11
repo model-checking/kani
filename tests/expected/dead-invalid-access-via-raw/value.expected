@@ -1,0 +1,4 @@
+Failed Checks: assertion failed: *p_subscoped == 7
+ File: "value.rs", line 23, in main
+Failed Checks: dereference failure: dead object
+ File: "value.rs", line 23, in main
