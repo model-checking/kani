@@ -19,6 +19,7 @@
 #![no_core]
 
 mod arbitrary;
+mod mem;
 
 pub use kani_macros::*;
 
@@ -34,15 +35,21 @@ macro_rules! kani_lib {
         #[cfg(kani)]
         #[unstable(feature = "kani", issue = "none")]
         pub mod kani {
-            pub use kani_core::{ensures, proof, proof_for_contract, requires, should_panic};
-            kani_core::kani_intrinsics!();
+            pub use kani_core::{
+                ensures, modifies, proof, proof_for_contract, requires, should_panic,
+            };
+            kani_core::kani_intrinsics!(core);
             kani_core::generate_arbitrary!(core);
+
+            pub mod mem {
+                kani_core::kani_mem!(core);
+            }
         }
     };
 
     (kani) => {
         pub use kani_core::*;
-        kani_core::kani_intrinsics!();
+        kani_core::kani_intrinsics!(std);
         kani_core::generate_arbitrary!(std);
     };
 }
@@ -54,7 +61,7 @@ macro_rules! kani_lib {
 /// TODO: Use this inside kani library so that we dont have to maintain two copies of the same intrinsics.
 #[macro_export]
 macro_rules! kani_intrinsics {
-    () => {
+    ($core:tt) => {
         /// Creates an assumption that will be valid after this statement run. Note that the assumption
         /// will only be applied for paths that follow the assumption. If the assumption doesn't hold, the
         /// program will exit successfully.
@@ -262,6 +269,74 @@ macro_rules! kani_intrinsics {
         }
 
         pub mod internal {
+
+            /// Helper trait for code generation for `modifies` contracts.
+            ///
+            /// We allow the user to provide us with a pointer-like object that we convert as needed.
+            #[doc(hidden)]
+            pub trait Pointer<'a> {
+                /// Type of the pointed-to data
+                type Inner;
+
+                /// Used for checking assigns contracts where we pass immutable references to the function.
+                ///
+                /// We're using a reference to self here, because the user can use just a plain function
+                /// argument, for instance one of type `&mut _`, in the `modifies` clause which would move it.
+                unsafe fn decouple_lifetime(&self) -> &'a Self::Inner;
+
+                /// used for havocking on replecement of a `modifies` clause.
+                unsafe fn assignable(self) -> &'a mut Self::Inner;
+            }
+
+            impl<'a, 'b, T> Pointer<'a> for &'b T {
+                type Inner = T;
+                unsafe fn decouple_lifetime(&self) -> &'a Self::Inner {
+                    $core::mem::transmute(*self)
+                }
+
+                #[allow(clippy::transmute_ptr_to_ref)]
+                unsafe fn assignable(self) -> &'a mut Self::Inner {
+                    $core::mem::transmute(self as *const T)
+                }
+            }
+
+            impl<'a, 'b, T> Pointer<'a> for &'b mut T {
+                type Inner = T;
+
+                #[allow(clippy::transmute_ptr_to_ref)]
+                unsafe fn decouple_lifetime(&self) -> &'a Self::Inner {
+                    $core::mem::transmute::<_, &&'a T>(self)
+                }
+
+                unsafe fn assignable(self) -> &'a mut Self::Inner {
+                    $core::mem::transmute(self)
+                }
+            }
+
+            impl<'a, T> Pointer<'a> for *const T {
+                type Inner = T;
+                unsafe fn decouple_lifetime(&self) -> &'a Self::Inner {
+                    &**self as &'a T
+                }
+
+                #[allow(clippy::transmute_ptr_to_ref)]
+                unsafe fn assignable(self) -> &'a mut Self::Inner {
+                    $core::mem::transmute(self)
+                }
+            }
+
+            impl<'a, T> Pointer<'a> for *mut T {
+                type Inner = T;
+                unsafe fn decouple_lifetime(&self) -> &'a Self::Inner {
+                    &**self as &'a T
+                }
+
+                #[allow(clippy::transmute_ptr_to_ref)]
+                unsafe fn assignable(self) -> &'a mut Self::Inner {
+                    $core::mem::transmute(self)
+                }
+            }
+
             /// A way to break the ownerhip rules. Only used by contracts where we can
             /// guarantee it is done safely.
             #[inline(never)]
