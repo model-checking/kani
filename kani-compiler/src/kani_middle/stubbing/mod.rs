@@ -17,7 +17,7 @@ use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::visit::{Location, MirVisitor};
 use stable_mir::mir::Constant;
-use stable_mir::ty::FnDef;
+use stable_mir::ty::{FnDef, RigidTy, TyKind};
 use stable_mir::{CrateDef, CrateItem};
 
 use self::annotations::update_stub_mapping;
@@ -35,6 +35,24 @@ pub fn harness_stub_map(
         update_stub_mapping(tcx, def_id.expect_local(), stubs, &mut stub_pairs);
     }
     stub_pairs
+}
+
+/// Retrieve the index of the host parameter if old definition has one, but not the new definition.
+///
+/// This is to allow constant functions to be stubbed by non-constant functions when the
+/// `effect` feature is on.
+///
+/// Note that the opposite is not supported today, but users should be able to change their stubs.
+///
+/// Note that this has no effect at runtime.
+pub fn contract_host_param(tcx: TyCtxt, old_def: FnDef, new_def: FnDef) -> Option<usize> {
+    let old_generics = tcx.generics_of(rustc_internal::internal(tcx, old_def.def_id()));
+    let new_generics = tcx.generics_of(rustc_internal::internal(tcx, new_def.def_id()));
+    if old_generics.host_effect_index.is_some() && new_generics.host_effect_index.is_none() {
+        old_generics.host_effect_index
+    } else {
+        None
+    }
 }
 
 /// Checks whether the stub is compatible with the original function/method: do
@@ -61,15 +79,26 @@ pub fn check_compatibility(tcx: TyCtxt, old_def: FnDef, new_def: FnDef) -> Resul
     // Check whether the numbers of generic parameters match.
     let old_def_id = rustc_internal::internal(tcx, old_def.def_id());
     let new_def_id = rustc_internal::internal(tcx, new_def.def_id());
-    let old_num_generics = tcx.generics_of(old_def_id).count();
-    let stub_num_generics = tcx.generics_of(new_def_id).count();
-    if old_num_generics != stub_num_generics {
+    let old_ty = rustc_internal::stable(tcx.type_of(old_def_id)).value;
+    let new_ty = rustc_internal::stable(tcx.type_of(new_def_id)).value;
+    let TyKind::RigidTy(RigidTy::FnDef(_, mut old_args)) = old_ty.kind() else {
+        unreachable!("Expected Fn")
+    };
+    let TyKind::RigidTy(RigidTy::FnDef(_, new_args)) = new_ty.kind() else {
+        unreachable!("Expected Fn")
+    };
+    if let Some(idx) = contract_host_param(tcx, old_def, new_def) {
+        old_args.0.remove(idx);
+    }
+
+    // TODO: We should check for the parameter type too or replacement will fail.
+    if old_args.0.len() != new_args.0.len() {
         let msg = format!(
             "mismatch in the number of generic parameters: original function/method `{}` takes {} generic parameters(s), stub `{}` takes {}",
             old_def.name(),
-            old_num_generics,
+            old_args.0.len(),
             new_def.name(),
-            stub_num_generics
+            new_args.0.len(),
         );
         return Err(msg);
     }
