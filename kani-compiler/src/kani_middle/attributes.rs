@@ -198,10 +198,6 @@ impl<'tcx> KaniAttributes<'tcx> {
             .collect()
     }
 
-    pub(crate) fn is_contract_generated(&self) -> bool {
-        self.map.contains_key(&KaniAttributeKind::IsContractGenerated)
-    }
-
     pub(crate) fn has_recursion(&self) -> bool {
         self.map.contains_key(&KaniAttributeKind::Recursion)
     }
@@ -235,6 +231,11 @@ impl<'tcx> KaniAttributes<'tcx> {
     /// indicates a contract does exist but an error occurred during resolution.
     pub fn checked_with(&self) -> Option<Result<Symbol, ErrorGuaranteed>> {
         self.expect_maybe_one(KaniAttributeKind::CheckedWith)
+            .map(|target| expect_key_string_value(self.tcx.sess, target))
+    }
+
+    pub fn proof_for_contract(&self) -> Option<Result<Symbol, ErrorGuaranteed>> {
+        self.expect_maybe_one(KaniAttributeKind::ProofForContract)
             .map(|target| expect_key_string_value(self.tcx.sess, target))
     }
 
@@ -632,7 +633,7 @@ fn parse_modify_values<'a>(
             TokenTree::Token(token, _) => {
                 if let TokenKind::Ident(id, _) = &token.kind {
                     let hir = tcx.hir();
-                    let bid = hir.body_owned_by(local_def_id);
+                    let bid = hir.body_owned_by(local_def_id).id();
                     Some(
                         hir.body_param_names(bid)
                             .zip(mir.args_iter())

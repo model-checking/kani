@@ -18,7 +18,7 @@ use cbmc::goto_program::{
 use cbmc::MachineModel;
 use cbmc::{btree_string_map, InternString, InternedString};
 use num::bigint::BigInt;
-use rustc_middle::ty::{TyCtxt, VtblEntry};
+use rustc_middle::ty::{ParamEnv, TyCtxt, VtblEntry};
 use rustc_smir::rustc_internal;
 use rustc_target::abi::{FieldsShape, TagEncoding, Variants};
 use stable_mir::abi::{Primitive, Scalar, ValueAbi};
@@ -26,7 +26,7 @@ use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{
     AggregateKind, BinOp, CastKind, NullOp, Operand, Place, PointerCoercion, Rvalue, UnOp,
 };
-use stable_mir::ty::{ClosureKind, Const, IntTy, RigidTy, Size, Ty, TyKind, UintTy, VariantIdx};
+use stable_mir::ty::{ClosureKind, IntTy, RigidTy, Size, Ty, TyConst, TyKind, UintTy, VariantIdx};
 use std::collections::BTreeMap;
 use tracing::{debug, trace, warn};
 
@@ -161,7 +161,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// Codegens expressions of the type `let a  = [4u8; 6];`
-    fn codegen_rvalue_repeat(&mut self, op: &Operand, sz: &Const, loc: Location) -> Expr {
+    fn codegen_rvalue_repeat(&mut self, op: &Operand, sz: &TyConst, loc: Location) -> Expr {
         let op_expr = self.codegen_operand_stable(op);
         let width = sz.eval_target_usize().unwrap();
         op_expr.array_constant(width).with_location(loc)
@@ -170,7 +170,7 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_rvalue_len(&mut self, p: &Place) -> Expr {
         let pt = self.place_ty_stable(p);
         match pt.kind() {
-            TyKind::RigidTy(RigidTy::Array(_, sz)) => self.codegen_const(&sz, None),
+            TyKind::RigidTy(RigidTy::Array(_, sz)) => self.codegen_const_ty(&sz, None),
             TyKind::RigidTy(RigidTy::Slice(_)) => {
                 unwrap_or_return_codegen_unimplemented!(self, self.codegen_place_stable(p))
                     .fat_ptr_goto_expr
@@ -779,9 +779,10 @@ impl<'tcx> GotocCtx<'tcx> {
                         .with_size_of_annotation(self.codegen_ty_stable(*t)),
                     NullOp::AlignOf => Expr::int_constant(layout.align.abi.bytes(), Type::size_t()),
                     NullOp::OffsetOf(fields) => Expr::int_constant(
-                        layout
+                        self.tcx
                             .offset_of_subfield(
-                                self,
+                                ParamEnv::reveal_all(),
+                                layout,
                                 fields.iter().map(|(var_idx, field_idx)| {
                                     (
                                         rustc_internal::internal(self.tcx, var_idx),
@@ -814,6 +815,51 @@ impl<'tcx> GotocCtx<'tcx> {
                     }
                 }
                 UnOp::Neg => self.codegen_operand_stable(e).neg(),
+                UnOp::PtrMetadata => {
+                    let src_goto_expr = self.codegen_operand_stable(e);
+                    let dst_goto_typ = self.codegen_ty_stable(res_ty);
+                    debug!(
+                        "PtrMetadata |{:?}| with result type |{:?}|",
+                        src_goto_expr, dst_goto_typ
+                    );
+                    if let Some(_vtable_typ) =
+                        src_goto_expr.typ().lookup_field_type("vtable", &self.symbol_table)
+                    {
+                        let vtable_expr = src_goto_expr.member("vtable", &self.symbol_table);
+                        let dst_components =
+                            dst_goto_typ.lookup_components(&self.symbol_table).unwrap();
+                        assert_eq!(dst_components.len(), 2);
+                        assert_eq!(dst_components[0].name(), "_vtable_ptr");
+                        assert!(dst_components[0].typ().is_pointer());
+                        assert_eq!(dst_components[1].name(), "_phantom");
+                        self.assert_is_rust_phantom_data_like(&dst_components[1].typ());
+                        Expr::struct_expr(
+                            dst_goto_typ,
+                            btree_string_map![
+                                ("_vtable_ptr", vtable_expr.cast_to(dst_components[0].typ())),
+                                (
+                                    "_phantom",
+                                    Expr::struct_expr(
+                                        dst_components[1].typ(),
+                                        [].into(),
+                                        &self.symbol_table
+                                    )
+                                )
+                            ],
+                            &self.symbol_table,
+                        )
+                    } else if let Some(len_typ) =
+                        src_goto_expr.typ().lookup_field_type("len", &self.symbol_table)
+                    {
+                        assert_eq!(len_typ, dst_goto_typ);
+                        src_goto_expr.member("len", &self.symbol_table)
+                    } else {
+                        unreachable!(
+                            "fat pointer with neither vtable nor len: {:?}",
+                            src_goto_expr
+                        );
+                    }
+                }
             },
             Rvalue::Discriminant(p) => {
                 let place =
@@ -1453,7 +1499,7 @@ impl<'tcx> GotocCtx<'tcx> {
             ) => {
                 // Cast to a slice fat pointer.
                 assert_eq!(src_elt_type, dst_elt_type);
-                let dst_goto_len = self.codegen_const(&src_elt_count, None);
+                let dst_goto_len = self.codegen_const_ty(&src_elt_count, None);
                 let src_pointee_ty = pointee_type_stable(coerce_info.src_ty).unwrap();
                 let dst_data_expr = if src_pointee_ty.kind().is_array() {
                     src_goto_expr.cast_to(self.codegen_ty_stable(src_elt_type).to_pointer())

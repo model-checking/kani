@@ -18,7 +18,7 @@ use stable_mir::mir::{
     BinOp, Body, Constant, Operand, Place, Rvalue, Statement, StatementKind, RETURN_LOCAL,
 };
 use stable_mir::target::MachineInfo;
-use stable_mir::ty::{Const, RigidTy, TyKind};
+use stable_mir::ty::{MirConst, RigidTy, TyKind};
 use std::fmt::Debug;
 use strum_macros::AsRefStr;
 use tracing::trace;
@@ -82,7 +82,7 @@ impl IntrinsicGeneratorPass {
             Rvalue::Use(Operand::Constant(Constant {
                 span,
                 user_ty: None,
-                literal: Const::from_bool(true),
+                literal: MirConst::from_bool(true),
             })),
         );
         let stmt = Statement { kind: assign, span };
@@ -116,7 +116,7 @@ impl IntrinsicGeneratorPass {
             Err(msg) => {
                 // We failed to retrieve all the valid ranges.
                 let rvalue = Rvalue::Use(Operand::Constant(Constant {
-                    literal: Const::from_bool(false),
+                    literal: MirConst::from_bool(false),
                     span,
                     user_ty: None,
                 }));

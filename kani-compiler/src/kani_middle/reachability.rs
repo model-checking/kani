@@ -33,10 +33,8 @@ use stable_mir::ty::{Allocation, ClosureKind, ConstantKind, RigidTy, Ty, TyKind}
 use stable_mir::CrateItem;
 use stable_mir::{CrateDef, ItemKind};
 
-use crate::kani_middle::attributes::matches_diagnostic as matches_function;
 use crate::kani_middle::coercion;
 use crate::kani_middle::coercion::CoercionBase;
-use crate::kani_middle::stubbing::{get_stub, validate_instance};
 use crate::kani_middle::transform::BodyTransformation;
 
 /// Collect all reachable items starting from the given starting points.
@@ -113,12 +111,8 @@ where
         if let Ok(instance) = Instance::try_from(item) {
             if predicate(tcx, instance) {
                 let body = transformer.body(tcx, instance);
-                let mut collector = MonoItemsFnCollector {
-                    tcx,
-                    body: &body,
-                    collected: FxHashSet::default(),
-                    instance: &instance,
-                };
+                let mut collector =
+                    MonoItemsFnCollector { tcx, body: &body, collected: FxHashSet::default() };
                 collector.visit_body(&body);
                 roots.extend(collector.collected.into_iter());
             }
@@ -185,19 +179,11 @@ impl<'tcx, 'a> MonoItemsCollector<'tcx, 'a> {
     /// Visit a function and collect all mono-items reachable from its instructions.
     fn visit_fn(&mut self, instance: Instance) -> Vec<MonoItem> {
         let _guard = debug_span!("visit_fn", function=?instance).entered();
-        if validate_instance(self.tcx, instance) {
-            let body = self.transformer.body(self.tcx, instance);
-            let mut collector = MonoItemsFnCollector {
-                tcx: self.tcx,
-                collected: FxHashSet::default(),
-                body: &body,
-                instance: &instance,
-            };
-            collector.visit_body(&body);
-            collector.collected.into_iter().collect()
-        } else {
-            vec![]
-        }
+        let body = self.transformer.body(self.tcx, instance);
+        let mut collector =
+            MonoItemsFnCollector { tcx: self.tcx, collected: FxHashSet::default(), body: &body };
+        collector.visit_body(&body);
+        collector.collected.into_iter().collect()
     }
 
     /// Visit a static object and collect drop / initialization functions.
@@ -229,7 +215,6 @@ struct MonoItemsFnCollector<'a, 'tcx> {
     tcx: TyCtxt<'tcx>,
     collected: FxHashSet<MonoItem>,
     body: &'a Body,
-    instance: &'a Instance,
 }
 
 impl<'a, 'tcx> MonoItemsFnCollector<'a, 'tcx> {
@@ -391,6 +376,10 @@ impl<'a, 'tcx> MirVisitor for MonoItemsFnCollector<'a, 'tcx> {
                 // Nothing to do here.
                 return;
             }
+            ConstantKind::Ty(_) => {
+                // Nothing to do here.
+                return;
+            }
         };
         self.collect_allocation(&allocation);
     }
@@ -403,65 +392,8 @@ impl<'a, 'tcx> MirVisitor for MonoItemsFnCollector<'a, 'tcx> {
             TerminatorKind::Call { ref func, .. } => {
                 let fn_ty = func.ty(self.body.locals()).unwrap();
                 if let TyKind::RigidTy(RigidTy::FnDef(fn_def, args)) = fn_ty.kind() {
-                    let instance_opt = Instance::resolve(fn_def, &args).ok();
-                    match instance_opt {
-                        None => {
-                            let caller = CrateItem::try_from(*self.instance).unwrap().name();
-                            let callee = fn_def.name();
-                            // Check if the current function has been stubbed.
-                            if let Some(stub) = get_stub(
-                                self.tcx,
-                                rustc_internal::internal(self.tcx, self.instance).def_id(),
-                            ) {
-                                // During the MIR stubbing transformation, we do not
-                                // force type variables in the stub's signature to
-                                // implement the same traits as those in the
-                                // original function/method. A trait mismatch shows
-                                // up here, when we try to resolve a trait method
-
-                                // FIXME: This assumes the type resolving the
-                                // trait is the first argument, but that isn't
-                                // necessarily true. It could be any argument or
-                                // even the return type, for instance for a
-                                // trait like `FromIterator`.
-                                let receiver_ty = args.0[0].expect_ty();
-                                let sep = callee.rfind("::").unwrap();
-                                let trait_ = &callee[..sep];
-                                self.tcx.dcx().span_err(
-                                    rustc_internal::internal(self.tcx, terminator.span),
-                                    format!(
-                                        "`{}` doesn't implement \
-                                        `{}`. The function `{}` \
-                                        cannot be stubbed by `{}` due to \
-                                        generic bounds not being met. Callee: {}",
-                                        receiver_ty,
-                                        trait_,
-                                        caller,
-                                        self.tcx.def_path_str(stub),
-                                        callee,
-                                    ),
-                                );
-                            } else if matches_function(self.tcx, self.instance.def, "KaniAny") {
-                                let receiver_ty = args.0[0].expect_ty();
-                                let sep = callee.rfind("::").unwrap();
-                                let trait_ = &callee[..sep];
-                                self.tcx.dcx().span_err(
-                                    rustc_internal::internal(self.tcx, terminator.span),
-                                    format!(
-                                        "`{}` doesn't implement \
-                                        `{}`. Callee: `{}`\nPlease, check whether the type of all \
-                                        objects in the modifies clause (including return types) \
-                                        implement `{}`.\nThis is a strict condition to use \
-                                        function contracts as verified stubs.",
-                                        receiver_ty, trait_, callee, trait_,
-                                    ),
-                                );
-                            } else {
-                                panic!("unable to resolve call to `{callee}` in `{caller}`")
-                            }
-                        }
-                        Some(instance) => self.collect_instance(instance, true),
-                    };
+                    let instance = Instance::resolve(fn_def, &args).unwrap();
+                    self.collect_instance(instance, true);
                 } else {
                     assert!(
                         matches!(fn_ty.kind().rigid(), Some(RigidTy::FnPtr(..))),

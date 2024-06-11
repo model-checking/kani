@@ -103,7 +103,7 @@ fn build_playback_lib(compiler_path: &Path) -> Result<()> {
 
 /// Build the no core library folder that will be used during std verification.
 fn build_no_core_lib(compiler_path: &Path) -> Result<()> {
-    let extra_args = ["--features=kani_macros/no_core"];
+    let extra_args = ["--features=kani_macros/no_core", "--features=kani_core/no_core"];
     let packages = ["kani_core", "kani_macros"];
     let artifacts = build_kani_lib(compiler_path, &packages, &extra_args, &[])?;
     copy_artifacts(&artifacts, &kani_no_core_lib(), false)
@@ -265,11 +265,11 @@ fn build_artifacts(cargo_cmd: &mut Child) -> Vec<Artifact> {
 /// Extra arguments to be given to `cargo build` while building Kani's binaries.
 /// Note that the following arguments are always provided:
 /// ```bash
-/// cargo build --bins -Z unstable-options --out-dir $KANI_SYSROOT/bin/
+/// cargo build --bins -Z unstable-options --artifact-dir $KANI_SYSROOT/bin/
 /// ```
 pub fn build_bin<T: AsRef<OsStr>>(extra_args: &[T]) -> Result<PathBuf> {
     let out_dir = kani_sysroot_bin();
-    let args = ["--bins", "-Z", "unstable-options", "--out-dir", out_dir.to_str().unwrap()];
+    let args = ["--bins", "-Z", "unstable-options", "--artifact-dir", out_dir.to_str().unwrap()];
     Command::new("cargo")
         .arg("build")
         .args(extra_args)

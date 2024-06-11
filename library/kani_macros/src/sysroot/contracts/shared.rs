@@ -53,7 +53,7 @@ impl<'a> ContractConditionsHandler<'a> {
     pub fn emit_common_header(&mut self) {
         if self.function_state.emit_tag_attr() {
             self.output.extend(quote!(
-                #[allow(dead_code, unused_variables)]
+                #[allow(dead_code, unused_variables, unused_mut)]
             ));
         }
         self.output.extend(self.annotated_fn.attrs.iter().flat_map(Attribute::to_token_stream));
@@ -85,7 +85,10 @@ pub fn make_unsafe_argument_copies(
     let arg_values = renaming_map.keys();
     (
         quote!(#(let #arg_names = kani::internal::untracked_deref(&#arg_values);)*),
+        #[cfg(not(feature = "no_core"))]
         quote!(#(std::mem::forget(#also_arg_names);)*),
+        #[cfg(feature = "no_core")]
+        quote!(#(core::mem::forget(#also_arg_names);)*),
     )
 }
 
