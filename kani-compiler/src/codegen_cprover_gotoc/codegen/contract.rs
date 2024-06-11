@@ -47,6 +47,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             _ => None,
         });
+
         let recursion_tracker_def = recursion_tracker
             .next()
             .expect("There should be at least one recursion tracker (REENTRY) in scope");

@@ -23,51 +23,26 @@ cp -r "${STD_PATH}" "${TMP_DIR}"
 # Insert a small harness in one of the standard library modules.
 CORE_CODE='
 #[cfg(kani)]
+kani_core::kani_lib!(core);
+
+#[cfg(kani)]
 #[unstable(feature = "kani", issue = "none")]
-pub mod kani {
-    pub use kani_core::proof;
+pub mod verify {
+    use crate::kani;
 
-    #[rustc_diagnostic_item = "KaniAnyRaw"]
-    #[inline(never)]
-    pub fn any_raw_inner<T>() -> T {
-        loop {}
+    #[kani::proof]
+    pub fn harness() {
+        kani::assert(true, "yay");
     }
 
-    #[inline(never)]
-    #[rustc_diagnostic_item = "KaniAssert"]
-    pub const fn assert(cond: bool, msg: &'\''static str) {
-        let _ = cond;
-        let _ = msg;
+    #[kani::proof_for_contract(fake_function)]
+    fn dummy_proof() {
+        fake_function(true);
     }
 
-    #[kani_core::proof]
-    #[kani_core::should_panic]
-    fn check_panic() {
-        let num: u8 = any_raw_inner();
-        assert!(num != 0, "Found zero");
-    }
-
-    #[kani_core::proof]
-    fn check_success() {
-        let orig: u8 = any_raw_inner();
-        let mid = orig as i8;
-        let new = mid as u8;
-        assert!(orig == new, "Conversion round trip works");
-    }
-
-    pub fn assert_true(cond: bool) {
-        assert!(cond)
-    }
-
-    pub fn assert_false(cond: bool) {
-        assert!(!cond)
-    }
-
-    #[kani_core::proof]
-    #[kani_core::stub(assert_true, assert_false)]
-    fn check_stub() {
-        // Check this is in fact asserting false.
-        assert_true(false)
+    #[kani::requires(x == true)]
+    fn fake_function(x: bool) -> bool {
+        x
     }
 }
 '
@@ -100,7 +75,7 @@ cat ${TMP_DIR}/std_lib.rs >> ${TMP_DIR}/library/std/src/lib.rs
 
 echo "[TEST] Run kani verify-std"
 export RUST_BACKTRACE=1
-kani verify-std -Z unstable-options "${TMP_DIR}/library" --target-dir "${TMP_DIR}/target" -Z stubbing
+kani verify-std -Z unstable-options "${TMP_DIR}/library" --target-dir "${TMP_DIR}/target" -Z function-contracts -Z stubbing
 
 # Cleanup
 rm -r ${TMP_DIR}
