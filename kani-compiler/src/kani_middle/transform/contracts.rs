@@ -11,7 +11,7 @@ use rustc_middle::ty::TyCtxt;
 use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{Body, Constant, Operand, TerminatorKind};
-use stable_mir::ty::{Const as MirConst, FnDef, RigidTy, TyKind};
+use stable_mir::ty::{FnDef, MirConst, RigidTy, TyKind};
 use stable_mir::{CrateDef, DefId};
 use std::collections::HashSet;
 use std::fmt::Debug;

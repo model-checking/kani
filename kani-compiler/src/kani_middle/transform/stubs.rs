@@ -12,7 +12,7 @@ use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::visit::{Location, MirVisitor};
 use stable_mir::mir::{Body, Constant, LocalDecl, Operand, Terminator, TerminatorKind};
-use stable_mir::ty::{Const as MirConst, FnDef, RigidTy, TyKind};
+use stable_mir::ty::{FnDef, MirConst, RigidTy, TyKind};
 use stable_mir::CrateDef;
 use std::collections::HashMap;
 use std::fmt::Debug;
