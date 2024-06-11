@@ -42,14 +42,14 @@ impl<'tcx> GotocCtx<'tcx> {
                     // where the reference is implicit.
                     unwrap_or_return_codegen_unimplemented_stmt!(
                         self,
-                        self.codegen_place_stable(lhs)
+                        self.codegen_place_stable(lhs, location)
                     )
                     .goto_expr
                     .assign(self.codegen_rvalue_stable(rhs, location).address_of(), location)
                 } else if rty.kind().is_bool() {
                     unwrap_or_return_codegen_unimplemented_stmt!(
                         self,
-                        self.codegen_place_stable(lhs)
+                        self.codegen_place_stable(lhs, location)
                     )
                     .goto_expr
                     .assign(
@@ -59,7 +59,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 } else {
                     unwrap_or_return_codegen_unimplemented_stmt!(
                         self,
-                        self.codegen_place_stable(lhs)
+                        self.codegen_place_stable(lhs, location)
                     )
                     .goto_expr
                     .assign(self.codegen_rvalue_stable(rhs, location), location)
@@ -70,7 +70,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 let dest_ty = self.place_ty_stable(place);
                 let dest_expr = unwrap_or_return_codegen_unimplemented_stmt!(
                     self,
-                    self.codegen_place_stable(place)
+                    self.codegen_place_stable(place, location)
                 )
                 .goto_expr;
                 self.codegen_set_discriminant(dest_ty, dest_expr, *variant_index, location)
@@ -79,14 +79,14 @@ impl<'tcx> GotocCtx<'tcx> {
                 if self.queries.args().ignore_storage_markers {
                     Stmt::skip(location)
                 } else {
-                    Stmt::decl(self.codegen_local(*var_id), None, location)
+                    Stmt::decl(self.codegen_local(*var_id, location), None, location)
                 }
             }
             StatementKind::StorageDead(var_id) => {
                 if self.queries.args().ignore_storage_markers {
                     Stmt::skip(location)
                 } else {
-                    Stmt::dead(self.codegen_local(*var_id), location)
+                    Stmt::dead(self.codegen_local(*var_id, location), location)
                 }
             }
             StatementKind::Intrinsic(NonDivergingIntrinsic::CopyNonOverlapping(
@@ -156,7 +156,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     let place = Place::from(RETURN_LOCAL);
                     let place_expr = unwrap_or_return_codegen_unimplemented_stmt!(
                         self,
-                        self.codegen_place_stable(&place)
+                        self.codegen_place_stable(&place, loc)
                     )
                     .goto_expr;
                     assert_eq!(rty, self.place_ty_stable(&place), "Unexpected return type");
@@ -304,9 +304,12 @@ impl<'tcx> GotocCtx<'tcx> {
             // We ignore assignment for all zero size types
             Stmt::skip(loc)
         } else {
-            unwrap_or_return_codegen_unimplemented_stmt!(self, self.codegen_place_stable(place))
-                .goto_expr
-                .deinit(loc)
+            unwrap_or_return_codegen_unimplemented_stmt!(
+                self,
+                self.codegen_place_stable(place, loc)
+            )
+            .goto_expr
+            .deinit(loc)
         }
     }
 
@@ -338,7 +341,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             InstanceKind::Shim => {
                 // Since the reference is used right away here, no need to inject a check for pointer validity.
-                let place_ref = self.codegen_place_ref_stable(place);
+                let place_ref = self.codegen_place_ref_stable(place, loc);
                 match place_ty.kind() {
                     TyKind::RigidTy(RigidTy::Dynamic(..)) => {
                         // Virtual drop via a vtable lookup.
@@ -364,7 +367,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         // Non-virtual, direct drop_in_place call
                         assert!(!matches!(drop_instance.kind, InstanceKind::Virtual { .. }));
 
-                        let func = self.codegen_func_expr(drop_instance, None);
+                        let func = self.codegen_func_expr(drop_instance, loc);
                         // The only argument should be a self reference
                         let args = vec![place_ref];
 
@@ -564,7 +567,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     InstanceKind::Item | InstanceKind::Intrinsic | InstanceKind::Shim => {
                         // We need to handle FnDef items in a special way because `codegen_operand` compiles them to dummy structs.
                         // (cf. the function documentation)
-                        let func_exp = self.codegen_func_expr(instance, None);
+                        let func_exp = self.codegen_func_expr(instance, loc);
                         if instance.is_foreign_item() {
                             vec![self.codegen_foreign_call(func_exp, fargs, destination, loc)]
                         } else {
@@ -715,9 +718,12 @@ impl<'tcx> GotocCtx<'tcx> {
         if self.place_ty_stable(place).kind().is_unit() {
             expr.as_stmt(loc)
         } else {
-            unwrap_or_return_codegen_unimplemented_stmt!(self, self.codegen_place_stable(place))
-                .goto_expr
-                .assign(expr, loc)
+            unwrap_or_return_codegen_unimplemented_stmt!(
+                self,
+                self.codegen_place_stable(place, loc)
+            )
+            .goto_expr
+            .assign(expr, loc)
         }
     }
 }

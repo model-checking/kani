@@ -73,7 +73,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 ret_type.nondet().as_stmt(loc).with_location(loc),
             ];
 
-            Expr::statement_expression(body, ret_type).with_location(loc)
+            Expr::statement_expression(body, ret_type, loc)
         } else {
             // Compare data pointer.
             let res_ty = op.ty(left_typ, right_typ);
@@ -167,12 +167,12 @@ impl<'tcx> GotocCtx<'tcx> {
         op_expr.array_constant(width).with_location(loc)
     }
 
-    fn codegen_rvalue_len(&mut self, p: &Place) -> Expr {
+    fn codegen_rvalue_len(&mut self, p: &Place, loc: Location) -> Expr {
         let pt = self.place_ty_stable(p);
         match pt.kind() {
-            TyKind::RigidTy(RigidTy::Array(_, sz)) => self.codegen_const_ty(&sz, None),
+            TyKind::RigidTy(RigidTy::Array(_, sz)) => self.codegen_const_ty(&sz, loc),
             TyKind::RigidTy(RigidTy::Slice(_)) => {
-                unwrap_or_return_codegen_unimplemented!(self, self.codegen_place_stable(p))
+                unwrap_or_return_codegen_unimplemented!(self, self.codegen_place_stable(p, loc))
                     .fat_ptr_goto_expr
                     .unwrap()
                     .member("len", &self.symbol_table)
@@ -224,6 +224,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 var.member(ARITH_OVERFLOW_RESULT_FIELD, &self.symbol_table).as_stmt(loc),
             ],
             ret_type,
+            loc,
         )
     }
 
@@ -254,7 +255,7 @@ impl<'tcx> GotocCtx<'tcx> {
             ],
             &self.symbol_table,
         );
-        Expr::statement_expression(vec![decl, cast.as_stmt(loc)], expected_typ)
+        Expr::statement_expression(vec![decl, cast.as_stmt(loc)], expected_typ, loc)
     }
 
     /// Generate code for a binary arithmetic operation with UB / overflow checks in place.
@@ -371,6 +372,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 Expr::statement_expression(
                     vec![check, result.clone().as_stmt(loc)],
                     result.typ().clone(),
+                    loc,
                 )
             }
             BinOp::AddUnchecked | BinOp::MulUnchecked | BinOp::SubUnchecked => {
@@ -384,6 +386,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     Expr::statement_expression(
                         vec![check, result.clone().as_stmt(loc)],
                         result.typ().clone(),
+                        loc,
                     )
                 } else {
                     result
@@ -429,6 +432,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 Expr::statement_expression(
                     vec![bytes_overflow_check, overflow_check, res.as_stmt(loc)],
                     ce1.typ().clone(),
+                    loc,
                 )
             }
         }
@@ -566,7 +570,7 @@ impl<'tcx> GotocCtx<'tcx> {
             // 2- Initialize the members of the temporary variant.
             let initial_projection =
                 ProjectedPlace::try_from_ty(temp_var.clone(), res_ty, self).unwrap();
-            let variant_proj = self.codegen_variant_lvalue(initial_projection, variant_index);
+            let variant_proj = self.codegen_variant_lvalue(initial_projection, variant_index, loc);
             let variant_expr = variant_proj.goto_expr.clone();
             let layout = self.layout_of_stable(res_ty);
             let fields = match &layout.variants {
@@ -603,7 +607,7 @@ impl<'tcx> GotocCtx<'tcx> {
         stmts.push(set_discriminant);
         // 4- Return temporary variable.
         stmts.push(temp_var.as_stmt(loc));
-        Expr::statement_expression(stmts, typ)
+        Expr::statement_expression(stmts, typ, loc)
     }
 
     fn codegen_rvalue_aggregate(
@@ -723,13 +727,14 @@ impl<'tcx> GotocCtx<'tcx> {
             Rvalue::Use(p) => self.codegen_operand_stable(p),
             Rvalue::Repeat(op, sz) => self.codegen_rvalue_repeat(op, sz, loc),
             Rvalue::Ref(_, _, p) | Rvalue::AddressOf(_, p) => {
-                let place_ref = self.codegen_place_ref_stable(&p);
+                let place_ref = self.codegen_place_ref_stable(&p, loc);
                 if self.queries.args().ub_check.contains(&ExtraChecks::PtrToRefCast) {
                     let place_ref_type = place_ref.typ().clone();
                     match self.codegen_raw_ptr_deref_validity_check(&p, &loc) {
                         Some(ptr_validity_check_expr) => Expr::statement_expression(
                             vec![ptr_validity_check_expr, place_ref.as_stmt(loc)],
                             place_ref_type,
+                            loc,
                         ),
                         None => place_ref,
                     }
@@ -737,7 +742,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     place_ref
                 }
             }
-            Rvalue::Len(p) => self.codegen_rvalue_len(p),
+            Rvalue::Len(p) => self.codegen_rvalue_len(p, loc),
             // Rust has begun distinguishing "ptr -> num" and "num -> ptr" (providence-relevant casts) but we do not yet:
             // Should we? Tracking ticket: https://github.com/model-checking/kani/issues/1274
             Rvalue::Cast(
@@ -862,9 +867,11 @@ impl<'tcx> GotocCtx<'tcx> {
                 }
             },
             Rvalue::Discriminant(p) => {
-                let place =
-                    unwrap_or_return_codegen_unimplemented!(self, self.codegen_place_stable(p))
-                        .goto_expr;
+                let place = unwrap_or_return_codegen_unimplemented!(
+                    self,
+                    self.codegen_place_stable(p, loc)
+                )
+                .goto_expr;
                 let pt = self.place_ty_stable(p);
                 self.codegen_get_discriminant(place, pt, res_ty)
             }
@@ -879,7 +886,7 @@ impl<'tcx> GotocCtx<'tcx> {
             // A CopyForDeref is equivalent to a read from a place at the codegen level.
             // https://github.com/rust-lang/rust/blob/1673f1450eeaf4a5452e086db0fe2ae274a0144f/compiler/rustc_middle/src/mir/syntax.rs#L1055
             Rvalue::CopyForDeref(place) => {
-                unwrap_or_return_codegen_unimplemented!(self, self.codegen_place_stable(place))
+                unwrap_or_return_codegen_unimplemented!(self, self.codegen_place_stable(place, loc))
                     .goto_expr
             }
         }
@@ -1130,7 +1137,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     let instance = Instance::resolve(def, &args).unwrap();
                     // We need to handle this case in a special way because `codegen_operand_stable` compiles FnDefs to dummy structs.
                     // (cf. the function documentation)
-                    self.codegen_func_expr(instance, None).address_of()
+                    self.codegen_func_expr(instance, loc).address_of()
                 }
                 _ => unreachable!(),
             },
@@ -1141,7 +1148,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 {
                     let instance = Instance::resolve_closure(def, &args, ClosureKind::FnOnce)
                         .expect("failed to normalize and resolve closure during codegen");
-                    self.codegen_func_expr(instance, None).address_of()
+                    self.codegen_func_expr(instance, loc).address_of()
                 } else {
                     unreachable!("{:?} cannot be cast to a fn ptr", operand)
                 }
@@ -1173,7 +1180,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 let src_goto_expr = self.codegen_operand_stable(operand);
                 let src_mir_type = self.operand_ty_stable(operand);
                 let dst_mir_type = t;
-                self.codegen_unsized_cast(src_goto_expr, src_mir_type, dst_mir_type)
+                self.codegen_unsized_cast(src_goto_expr, src_mir_type, dst_mir_type, loc)
             }
         }
     }
@@ -1191,6 +1198,7 @@ impl<'tcx> GotocCtx<'tcx> {
         src_goto_expr: Expr,
         src_mir_type: Ty,
         dst_mir_type: Ty,
+        loc: Location,
     ) -> Expr {
         // The MIR may include casting that isn't necessary. Detect this early on and return the
         // expression for the RHS.
@@ -1204,7 +1212,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
         // Handle the leaf which should always be a pointer.
         let (ptr_cast_info, ptr_src_expr) = path.pop().unwrap();
-        let initial_expr = self.codegen_cast_to_fat_pointer(ptr_src_expr, ptr_cast_info);
+        let initial_expr = self.codegen_cast_to_fat_pointer(ptr_src_expr, ptr_cast_info, loc);
 
         // Iterate from the back of the path initializing each struct that requires the coercion.
         // This code is required for handling smart pointers.
@@ -1370,7 +1378,7 @@ impl<'tcx> GotocCtx<'tcx> {
     // Check the size are inserting in to the vtable against two sources of
     // truth: (1) the compile-time rustc sizeof functions, and (2) the CBMC
     //  __CPROVER_OBJECT_SIZE function.
-    fn check_vtable_size(&mut self, operand_type: Ty, vt_size: Expr) -> Stmt {
+    fn check_vtable_size(&mut self, operand_type: Ty, vt_size: Expr, loc: Location) -> Stmt {
         // Check against the size we get from the layout from the what we
         // get constructing a value of that type
         let ty = self.codegen_ty_stable(operand_type);
@@ -1380,7 +1388,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // Insert a CBMC-time size check, roughly:
         //     <Ty> local_temp = nondet();
         //     assert(__CPROVER_OBJECT_SIZE(&local_temp) == vt_size);
-        let (temp_var, decl) = self.decl_temp_variable(ty.clone(), None, Location::none());
+        let (temp_var, decl) = self.decl_temp_variable(ty.clone(), None, loc);
         let cbmc_size = if ty.is_empty() {
             // CBMC errors on passing a pointer to void to __CPROVER_OBJECT_SIZE.
             // In practice, we have seen this with the Never type, which has size 0:
@@ -1396,11 +1404,11 @@ impl<'tcx> GotocCtx<'tcx> {
         let check = Expr::eq(cbmc_size, vt_size);
         let assert_msg =
             format!("Correct CBMC vtable size for {ty:?} (MIR type {:?})", operand_type.kind());
-        let size_assert = self.codegen_sanity(check, &assert_msg, Location::none());
-        Stmt::block(vec![decl, size_assert], Location::none())
+        let size_assert = self.codegen_sanity(check, &assert_msg, loc);
+        Stmt::block(vec![decl, size_assert], loc)
     }
 
-    fn codegen_vtable(&mut self, src_mir_type: Ty, dst_mir_type: Ty) -> Expr {
+    fn codegen_vtable(&mut self, src_mir_type: Ty, dst_mir_type: Ty, loc: Location) -> Expr {
         let trait_type = match dst_mir_type.kind() {
             // DST is pointer type
             TyKind::RigidTy(RigidTy::Ref(_, pointee_type, ..)) => pointee_type,
@@ -1422,7 +1430,7 @@ impl<'tcx> GotocCtx<'tcx> {
             vtable_impl_name,
             true,
             Type::struct_tag(vtable_name),
-            Location::none(),
+            loc,
             |ctx, var| {
                 // Build the vtable, using Rust's vtable_entries to determine field order
                 let vtable_entries = if let Some(principal) = trait_type.kind().trait_principal() {
@@ -1433,7 +1441,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 };
 
                 let (vt_size, vt_align) = ctx.codegen_vtable_size_and_align(src_mir_type);
-                let size_assert = ctx.check_vtable_size(src_mir_type, vt_size.clone());
+                let size_assert = ctx.check_vtable_size(src_mir_type, vt_size.clone(), loc);
 
                 let vtable_fields: Vec<Expr> = vtable_entries
                     .iter()
@@ -1461,8 +1469,8 @@ impl<'tcx> GotocCtx<'tcx> {
                     vtable_fields,
                     &ctx.symbol_table,
                 );
-                let body = var.assign(vtable, Location::none());
-                let block = Stmt::block(vec![size_assert, body], Location::none());
+                let body = var.assign(vtable, loc);
+                let block = Stmt::block(vec![size_assert, body], loc);
                 Some(block)
             },
         )
@@ -1476,6 +1484,7 @@ impl<'tcx> GotocCtx<'tcx> {
         &mut self,
         src_goto_expr: Expr,
         coerce_info: CoerceUnsizedInfo,
+        loc: Location,
     ) -> Expr {
         assert_ne!(coerce_info.src_ty.kind(), coerce_info.dst_ty.kind());
 
@@ -1499,7 +1508,7 @@ impl<'tcx> GotocCtx<'tcx> {
             ) => {
                 // Cast to a slice fat pointer.
                 assert_eq!(src_elt_type, dst_elt_type);
-                let dst_goto_len = self.codegen_const_ty(&src_elt_count, None);
+                let dst_goto_len = self.codegen_const_ty(&src_elt_count, loc);
                 let src_pointee_ty = pointee_type_stable(coerce_info.src_ty).unwrap();
                 let dst_data_expr = if src_pointee_ty.kind().is_array() {
                     src_goto_expr.cast_to(self.codegen_ty_stable(src_elt_type).to_pointer())
@@ -1527,7 +1536,7 @@ impl<'tcx> GotocCtx<'tcx> {
             (_, TyKind::RigidTy(RigidTy::Dynamic(..))) => {
                 // Generate the data and vtable pointer that will be stored in the fat pointer.
                 let dst_data_expr = src_goto_expr.cast_to(dst_data_type);
-                let vtable = self.codegen_vtable(metadata_src_type, metadata_dst_type);
+                let vtable = self.codegen_vtable(metadata_src_type, metadata_dst_type, loc);
                 let vtable_expr = vtable.address_of();
                 dynamic_fat_ptr(fat_ptr_type, dst_data_expr, vtable_expr, &self.symbol_table)
             }
