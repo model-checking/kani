@@ -74,6 +74,8 @@ impl<'a> ContractConditionsHandler<'a> {
 
         let mut wrapper_sig = sig.clone();
         wrapper_sig.ident = recursion_wrapper_name;
+        // We use non-constant functions, thus, the wrapper cannot be constant.
+        wrapper_sig.constness = None;
 
         let args = pats_to_idents(&mut wrapper_sig.inputs).collect::<Vec<_>>();
         let also_args = args.iter();
