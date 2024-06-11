@@ -1,4 +1,4 @@
-error[E0382]: borrow of moved value: `ptr_renamed`
+error[E0382]: borrow of moved value: `ptr`
 value moved here
 borrow occurs due to use in closure
-move occurs because `ptr_renamed` has type `&mut NoCopy<u32>`, which does not implement the `Copy` trait
+move occurs because `ptr` has type `&mut NoCopy<u32>`, which does not implement the `Copy` trait
