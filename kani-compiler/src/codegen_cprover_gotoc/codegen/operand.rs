@@ -64,8 +64,11 @@ impl<'tcx> GotocCtx<'tcx> {
         span: Option<SpanInternal>,
     ) -> Expr {
         let stable_const = rustc_internal::stable(constant);
-        let stable_span = rustc_internal::stable(span);
-        self.codegen_const_ty(&stable_const, self.codegen_span_stable(stable_span.unwrap()))
+        if let Some(stable_span) = rustc_internal::stable(span) {
+            self.codegen_const_ty(&stable_const, self.codegen_span_stable(stable_span))
+        } else {
+            self.codegen_const_ty(&stable_const, Location::none())
+        }
     }
 
     /// Generate a goto expression that represents a MIR-level constant.
