@@ -229,7 +229,7 @@ macro_rules! kani_intrinsics {
         #[rustc_diagnostic_item = "KaniAnyRaw"]
         #[inline(never)]
         #[allow(dead_code)]
-        fn any_raw_inner<T>() -> T {
+        pub fn any_raw_inner<T>() -> T {
             kani_intrinsic()
         }
 
