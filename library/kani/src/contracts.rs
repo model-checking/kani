@@ -228,7 +228,7 @@
 //!
 //! ## History Expressions
 //!
-//! Additionally, an ensures clause is allowed to refer to history computations
+//! Additionally, an ensures clause is allowed to refer to the state of the function arguments before function execution and perform simple computations on them
 //! via an `old` monad. Any instance of `old(computation)` will evaluate the
 //! computation before the function is called. It is required that this computation
 //! is effect free and closed with respect to the function arguments.
