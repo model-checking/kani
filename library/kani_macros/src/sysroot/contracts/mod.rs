@@ -253,7 +253,7 @@
 //! fn modify(ptr: &mut u32) {
 //!     *ptr += 1;
 //! }
-//! 
+//!
 //! #[kani::proof_for_contract(modify)]
 //! fn main() {
 //!     let mut i = kani::any();
