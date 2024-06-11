@@ -119,6 +119,8 @@ impl<'a> ContractConditionsHandler<'a> {
             self.output.extend(quote!(#[kanitool::is_contract_generated(replace)]));
         }
         let mut sig = self.annotated_fn.sig.clone();
+        // We use non-constant functions, thus, the wrapper cannot be constant.
+        sig.constness = None;
         let body = self.make_replace_body();
         if let Some(ident) = override_function_ident {
             sig.ident = ident;

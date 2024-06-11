@@ -84,8 +84,19 @@ impl KaniSession {
             .env("CARGO_TERM_PROGRESS_WHEN", "never")
             .env("__CARGO_TESTS_ONLY_SRC_ROOT", std_path.as_os_str());
 
-        let build_artifacts = self.run_build(cmd)?;
-        Ok(build_artifacts.into_iter().filter_map(map_kani_artifact).collect())
+        Ok(self
+            .run_build(cmd)?
+            .into_iter()
+            .filter_map(|artifact| {
+                if artifact.target.crate_types.contains(&CRATE_TYPE_LIB.to_string())
+                    || artifact.target.crate_types.contains(&CRATE_TYPE_RLIB.to_string())
+                {
+                    map_kani_artifact(artifact)
+                } else {
+                    None
+                }
+            })
+            .collect())
     }
 
     /// Calls `cargo_build` to generate `*.symtab.json` files in `target_dir`

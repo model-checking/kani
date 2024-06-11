@@ -36,12 +36,12 @@
 //! expanded. When we expand the first (outermost) `requires` or `ensures`
 //! attribute on such a function we re-emit the function unchanged but we also
 //! generate fresh "check" and "replace" functions that enforce the condition
-//! carried by the attribute currently being expanded. We copy all additional
-//! attributes from the original function to both the "check" and the "replace".
-//! This allows us to deal both with renaming and also support non-contract
-//! attributes.
+//! carried by the attribute currently being expanded.
 //!
-//! In addition to copying attributes we also add new marker attributes to
+//! We don't copy all attributes from the original function since they may have
+//! unintended consequences for the stubs, such as `inline` or `rustc_diagnostic_item`.
+//!
+//! We also add new marker attributes to
 //! advance the state machine. The "check" function gets a
 //! `kanitool::is_contract_generated(check)` attributes and analogous for
 //! replace. The re-emitted original meanwhile is decorated with

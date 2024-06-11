@@ -40,7 +40,10 @@ pub mod verify {
         fake_function(true);
     }
 
+    /// Add a `rustc_diagnostic_item` to ensure this works.
+    /// See <https://github.com/model-checking/kani/issues/3251> for more details.
     #[kani::requires(x == true)]
+    #[rustc_diagnostic_item = "fake_function"]
     fn fake_function(x: bool) -> bool {
         x
     }
