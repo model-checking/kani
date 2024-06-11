@@ -226,7 +226,7 @@
 //! must implement [`Arbitrary`](super::Arbitrary). This is used to assign
 //! `kani::any()` to the location when the function is used in a `stub_verified`.
 //!
-//! ## History Variables
+//! ## History Expressions
 //!
 //! Additionally, an ensures clause is allowed to refer to history computations
 //! via an `old` monad. Any instance of `old(computation)` will evaluate the
