@@ -3,11 +3,9 @@
 
 //! Initialization routine for the contract handler
 
-use std::collections::{HashMap, HashSet};
-
 use proc_macro::{Diagnostic, TokenStream};
-use proc_macro2::{Ident, Span, TokenStream as TokenStream2};
-use syn::{spanned::Spanned, visit::Visit, visit_mut::VisitMut, ExprClosure, ItemFn};
+use proc_macro2::{Ident, TokenStream as TokenStream2};
+use syn::{spanned::Spanned, ItemFn};
 
 use super::{
     helpers::{chunks_by, is_token_stream_2_comma, matches_path},
@@ -81,9 +79,7 @@ impl<'a> ContractConditionsHandler<'a> {
                 ContractConditionsData::Requires { attr: syn::parse(attr)? }
             }
             ContractConditionsType::Ensures => {
-                let mut data: ExprClosure = syn::parse(attr)?;
-                let argument_names = rename_argument_occurrences(&annotated_fn.sig, &mut data);
-                ContractConditionsData::Ensures { argument_names, attr: data }
+                ContractConditionsData::Ensures { attr: syn::parse(attr)? }
             }
             ContractConditionsType::Modifies => {
                 ContractConditionsData::new_modifies(attr, &mut output)
@@ -110,78 +106,5 @@ impl ContractConditionsData {
             .collect();
 
         ContractConditionsData::Modifies { attr }
-    }
-}
-
-/// A supporting function for creating shallow, unsafe copies of the arguments
-/// for the postconditions.
-///
-/// This function:
-/// - Collects all [`Ident`]s found in the argument patterns;
-/// - Creates new names for them;
-/// - Replaces all occurrences of those idents in `attrs` with the new names and;
-/// - Returns the mapping of old names to new names.
-fn rename_argument_occurrences(
-    sig: &syn::Signature,
-    attr: &mut ExprClosure,
-) -> HashMap<Ident, Ident> {
-    let mut arg_ident_collector = ArgumentIdentCollector::new();
-    arg_ident_collector.visit_signature(&sig);
-
-    let mk_new_ident_for = |id: &Ident| Ident::new(&format!("{}_renamed", id), Span::mixed_site());
-    let arg_idents = arg_ident_collector
-        .0
-        .into_iter()
-        .map(|i| {
-            let new = mk_new_ident_for(&i);
-            (i, new)
-        })
-        .collect::<HashMap<_, _>>();
-
-    let mut ident_rewriter = Renamer(&arg_idents);
-    ident_rewriter.visit_expr_closure_mut(attr);
-    arg_idents
-}
-
-/// Collect all named identifiers used in the argument patterns of a function.
-struct ArgumentIdentCollector(HashSet<Ident>);
-
-impl ArgumentIdentCollector {
-    fn new() -> Self {
-        Self(HashSet::new())
-    }
-}
-
-impl<'ast> Visit<'ast> for ArgumentIdentCollector {
-    fn visit_pat_ident(&mut self, i: &'ast syn::PatIdent) {
-        self.0.insert(i.ident.clone());
-        syn::visit::visit_pat_ident(self, i)
-    }
-    fn visit_receiver(&mut self, _: &'ast syn::Receiver) {
-        self.0.insert(Ident::new("self", proc_macro2::Span::call_site()));
-    }
-}
-
-/// Applies the contained renaming (key renamed to value) to every ident pattern
-/// and ident expr visited.
-struct Renamer<'a>(&'a HashMap<Ident, Ident>);
-
-impl<'a> VisitMut for Renamer<'a> {
-    fn visit_expr_path_mut(&mut self, i: &mut syn::ExprPath) {
-        if i.path.segments.len() == 1 {
-            i.path
-                .segments
-                .first_mut()
-                .and_then(|p| self.0.get(&p.ident).map(|new| p.ident = new.clone()));
-        }
-    }
-
-    /// This restores shadowing. Without this we would rename all ident
-    /// occurrences, but not rebinding location. This is because our
-    /// [`Self::visit_expr_path_mut`] is scope-unaware.
-    fn visit_pat_ident_mut(&mut self, i: &mut syn::PatIdent) {
-        if let Some(new) = self.0.get(&i.ident) {
-            i.ident = new.clone();
-        }
     }
 }

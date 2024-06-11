@@ -7,13 +7,13 @@
 //! This is so we can keep [`super`] distraction-free as the definitions of data
 //! structures and the entry point for contract handling.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use proc_macro2::{Ident, Span, TokenStream as TokenStream2};
 use quote::{quote, ToTokens};
 use syn::{
-    spanned::Spanned, visit_mut::VisitMut, Attribute, Expr, ExprCall, ExprClosure, ExprPath, Local,
-    PatIdent, Path, Stmt,
+    spanned::Spanned, visit::Visit, visit_mut::VisitMut, Attribute, Expr, ExprCall, ExprClosure,
+    ExprPath, Local, PatIdent, Path, Stmt,
 };
 
 use super::{ContractConditionsHandler, ContractFunctionState, INTERNAL_RESULT_IDENT};
@@ -207,21 +207,29 @@ pub fn count_remembers(stmt_vec: &Vec<syn::Stmt>) -> usize {
 /// This function goes through the expr and extracts out all the `old` expressions and creates a sequence
 /// of statements that instantiate these expressions as `let remember_kani_internal_x = old_expr;` with
 /// `x` starting t the `remember_count` and incrementing from there. This is returned as the first return
-/// parameter. The second return parameter is the expression formed by passing in the result variable into
-/// the input closure.
-pub fn build_ensures(data: &ExprClosure, remember_count: usize) -> (TokenStream2, Expr) {
+/// parameter along with changing all the variables to _renamed. The second parameter is the closing of
+/// all the unsafe argument copies. The third return parameter is the expression formed by passing in the
+/// result variable into the input closure and changing all the variables to _renamed.
+pub fn build_ensures(
+    fn_sig: &syn::Signature,
+    data: &ExprClosure,
+    remember_count: usize,
+) -> (TokenStream2, TokenStream2, Expr) {
     let mut remembers_exprs = HashMap::new();
     let mut vis =
         OldVisitor { t: OldLifter::new(), remember_count, remembers_exprs: &mut remembers_exprs };
     let mut expr = &mut data.clone();
     vis.visit_expr_closure_mut(&mut expr);
 
+    let arg_names = rename_argument_occurrences(fn_sig, &mut expr);
+    let (start, end) = make_unsafe_argument_copies(&arg_names);
+
     let remembers_stmts: TokenStream2 = remembers_exprs
         .iter()
-        .fold(quote!(), |collect, (ident, expr)| quote!(let #ident = #expr; #collect));
+        .fold(start, |collect, (ident, expr)| quote!(let #ident = #expr; #collect));
 
     let result: Ident = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
-    (remembers_stmts, Expr::Verbatim(quote!((#expr)(&#result))))
+    (remembers_stmts, end, Expr::Verbatim(quote!((#expr)(&#result))))
 }
 
 trait OldTrigger {
@@ -337,5 +345,78 @@ impl OldTrigger for OldLifter {
         // change the expression to refer to the new remember variable
         let _ = std::mem::replace(e, Expr::Verbatim(quote!((#ident))));
         true
+    }
+}
+
+/// A supporting function for creating shallow, unsafe copies of the arguments
+/// for the postconditions.
+///
+/// This function:
+/// - Collects all [`Ident`]s found in the argument patterns;
+/// - Creates new names for them;
+/// - Replaces all occurrences of those idents in `attrs` with the new names and;
+/// - Returns the mapping of old names to new names.
+fn rename_argument_occurrences(
+    sig: &syn::Signature,
+    attr: &mut ExprClosure,
+) -> HashMap<Ident, Ident> {
+    let mut arg_ident_collector = ArgumentIdentCollector::new();
+    arg_ident_collector.visit_signature(&sig);
+
+    let mk_new_ident_for = |id: &Ident| Ident::new(&format!("{}_renamed", id), Span::mixed_site());
+    let arg_idents = arg_ident_collector
+        .0
+        .into_iter()
+        .map(|i| {
+            let new = mk_new_ident_for(&i);
+            (i, new)
+        })
+        .collect::<HashMap<_, _>>();
+
+    let mut ident_rewriter = Renamer(&arg_idents);
+    ident_rewriter.visit_expr_closure_mut(attr);
+    arg_idents
+}
+
+/// Collect all named identifiers used in the argument patterns of a function.
+struct ArgumentIdentCollector(HashSet<Ident>);
+
+impl ArgumentIdentCollector {
+    fn new() -> Self {
+        Self(HashSet::new())
+    }
+}
+
+impl<'ast> Visit<'ast> for ArgumentIdentCollector {
+    fn visit_pat_ident(&mut self, i: &'ast syn::PatIdent) {
+        self.0.insert(i.ident.clone());
+        syn::visit::visit_pat_ident(self, i)
+    }
+    fn visit_receiver(&mut self, _: &'ast syn::Receiver) {
+        self.0.insert(Ident::new("self", proc_macro2::Span::call_site()));
+    }
+}
+
+/// Applies the contained renaming (key renamed to value) to every ident pattern
+/// and ident expr visited.
+struct Renamer<'a>(&'a HashMap<Ident, Ident>);
+
+impl<'a> VisitMut for Renamer<'a> {
+    fn visit_expr_path_mut(&mut self, i: &mut syn::ExprPath) {
+        if i.path.segments.len() == 1 {
+            i.path
+                .segments
+                .first_mut()
+                .and_then(|p| self.0.get(&p.ident).map(|new| p.ident = new.clone()));
+        }
+    }
+
+    /// This restores shadowing. Without this we would rename all ident
+    /// occurrences, but not rebinding location. This is because our
+    /// [`Self::visit_expr_path_mut`] is scope-unaware.
+    fn visit_pat_ident_mut(&mut self, i: &mut syn::PatIdent) {
+        if let Some(new) = self.0.get(&i.ident) {
+            i.ident = new.clone();
+        }
     }
 }

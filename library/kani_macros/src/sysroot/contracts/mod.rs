@@ -302,7 +302,6 @@
 use proc_macro::TokenStream;
 use proc_macro2::{Ident, TokenStream as TokenStream2};
 use quote::{quote, ToTokens};
-use std::collections::HashMap;
 use syn::{parse_macro_input, Expr, ExprClosure, ItemFn};
 
 mod bootstrap;
@@ -418,9 +417,6 @@ enum ContractConditionsData {
         attr: Expr,
     },
     Ensures {
-        /// Translation map from original argument names to names of the copies
-        /// we will be emitting.
-        argument_names: HashMap<Ident, Ident>,
         /// The contents of the attribute.
         attr: ExprClosure,
     },

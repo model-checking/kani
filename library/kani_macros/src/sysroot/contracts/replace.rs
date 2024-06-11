@@ -8,7 +8,7 @@ use quote::quote;
 
 use super::{
     helpers::*,
-    shared::{build_ensures, count_remembers, make_unsafe_argument_copies, try_as_result_assign},
+    shared::{build_ensures, count_remembers, try_as_result_assign},
     ContractConditionsData, ContractConditionsHandler, INTERNAL_RESULT_IDENT,
 };
 
@@ -80,13 +80,12 @@ impl<'a> ContractConditionsHandler<'a> {
                     #result
                 )
             }
-            ContractConditionsData::Ensures { attr, argument_names } => {
-                let (arg_copies, copy_clean) = make_unsafe_argument_copies(&argument_names);
+            ContractConditionsData::Ensures { attr } => {
+                let (arg_copies, copy_clean, ensures_clause) =
+                    build_ensures(&self.annotated_fn.sig, attr, remember_count);
                 let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
-                let (remembers_stmts, ensures_clause) = build_ensures(attr, remember_count);
                 quote!(
                     #arg_copies
-                    #remembers_stmts
                     #(#before)*
                     #(#after)*
                     kani::assume(#ensures_clause);
