@@ -81,3 +81,82 @@ impl<T: Copy> ShadowMem<T> {
         self.mem[obj][offset] = val;
     }
 }
+
+pub static mut GLOBAL_SM: ShadowMem<bool> = ShadowMem::new(false);
+
+#[rustc_diagnostic_item = "KaniShadowMemoryGet"]
+pub fn global_sm_get<U>(ptr: *const U) -> bool {
+    return unsafe { GLOBAL_SM.get(ptr) };
+}
+
+#[rustc_diagnostic_item = "KaniShadowMemorySet"]
+pub fn global_sm_set<U>(ptr: *const U, val: bool) {
+    return unsafe { GLOBAL_SM.set(ptr, val) };
+}
+
+#[rustc_diagnostic_item = "KaniShadowMemoryGetWithLayout"]
+pub fn global_sm_get_with_layout<const N: usize>(ptr: *const (), layout: [bool; N]) -> bool {
+    let mut offset: usize = 0;
+    while offset < N {
+        unsafe {
+            if layout[offset] && !GLOBAL_SM.get((ptr as *const u8).add(offset)) {
+                return false;
+            }
+            offset += 1;
+        }
+    }
+    return true;
+}
+
+#[rustc_diagnostic_item = "KaniShadowMemorySetWithLayout"]
+pub fn global_sm_set_with_layout<const N: usize>(ptr: *const (), layout: [bool; N], value: bool) {
+    let mut offset: usize = 0;
+    while offset < N {
+        unsafe {
+            GLOBAL_SM.set((ptr as *const u8).add(offset), value && layout[offset]);
+        }
+        offset += 1;
+    }
+}
+
+#[rustc_diagnostic_item = "KaniShadowMemoryGetWithLayoutDynamic"]
+pub fn global_sm_get_with_layout_dynamic<const N: usize>(
+    ptr: *const (),
+    layout: [bool; N],
+    n: usize,
+) -> bool {
+    let mut count: usize = 0;
+    while count < n {
+        let mut offset: usize = 0;
+        while offset < N {
+            unsafe {
+                if layout[offset] && !GLOBAL_SM.get((ptr as *const u8).add(count * N + offset)) {
+                    return false;
+                }
+                offset += 1;
+            }
+        }
+        count += 1;
+    }
+    return true;
+}
+
+#[rustc_diagnostic_item = "KaniShadowMemorySetWithLayoutDynamic"]
+pub fn global_sm_set_with_layout_dynamic<const N: usize>(
+    ptr: *const (),
+    layout: [bool; N],
+    n: usize,
+    value: bool,
+) {
+    let mut count: usize = 0;
+    while count < n {
+        let mut offset: usize = 0;
+        while offset < N {
+            unsafe {
+                GLOBAL_SM.set((ptr as *const u8).add(count * N + offset), value && layout[offset]);
+            }
+            offset += 1;
+        }
+        count += 1;
+    }
+}

@@ -252,14 +252,23 @@ impl GotocHook for PointerObject {
     fn handle(
         &self,
         gcx: &mut GotocCtx,
-        _instance: Instance,
+        instance: Instance,
         mut fargs: Vec<Expr>,
         assign_to: &Place,
         target: Option<BasicBlockIdx>,
         span: Span,
     ) -> Stmt {
         assert_eq!(fargs.len(), 1);
-        let ptr = fargs.pop().unwrap().cast_to(Type::void_pointer());
+        let ptr = {
+            let ptr = fargs.pop().unwrap();
+            let place_ty = instance.args().0[0].expect_ty().clone();
+            if gcx.use_thin_pointer_stable(place_ty) {
+                ptr
+            } else {
+                ptr.member("data", &gcx.symbol_table)
+            }
+        }
+        .cast_to(Type::void_pointer());
         let target = target.unwrap();
         let loc = gcx.codegen_caller_span_stable(span);
         let ret_place =
@@ -286,14 +295,23 @@ impl GotocHook for PointerOffset {
     fn handle(
         &self,
         gcx: &mut GotocCtx,
-        _instance: Instance,
+        instance: Instance,
         mut fargs: Vec<Expr>,
         assign_to: &Place,
         target: Option<BasicBlockIdx>,
         span: Span,
     ) -> Stmt {
         assert_eq!(fargs.len(), 1);
-        let ptr = fargs.pop().unwrap().cast_to(Type::void_pointer());
+        let ptr = {
+            let ptr = fargs.pop().unwrap();
+            let place_ty = instance.args().0[0].expect_ty().clone();
+            if gcx.use_thin_pointer_stable(place_ty) {
+                ptr
+            } else {
+                ptr.member("data", &gcx.symbol_table)
+            }
+        }
+        .cast_to(Type::void_pointer());
         let target = target.unwrap();
         let loc = gcx.codegen_caller_span_stable(span);
         let ret_place =

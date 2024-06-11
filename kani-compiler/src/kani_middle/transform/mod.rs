@@ -17,6 +17,7 @@
 //! For all instrumentation passes, always use exhaustive matches to ensure soundness in case a new
 //! case is added.
 use crate::kani_middle::transform::body::CheckType;
+use crate::kani_middle::transform::check_uninit::UninitPass;
 use crate::kani_middle::transform::check_values::ValidValuePass;
 use crate::kani_middle::transform::kani_intrinsics::IntrinsicGeneratorPass;
 use crate::kani_queries::QueryDb;
@@ -27,6 +28,7 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 
 mod body;
+mod check_uninit;
 mod check_values;
 mod kani_intrinsics;
 
@@ -55,6 +57,7 @@ impl BodyTransformation {
         };
         let check_type = CheckType::new(tcx);
         transformer.add_pass(queries, ValidValuePass { check_type: check_type.clone() });
+        transformer.add_pass(queries, UninitPass { check_type: check_type.clone() });
         transformer.add_pass(queries, IntrinsicGeneratorPass { check_type });
         transformer
     }

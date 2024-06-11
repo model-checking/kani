@@ -186,6 +186,33 @@ impl MutableBody {
         }
     }
 
+    /// Add a new call to the basic block indicated by the given index.
+    ///
+    /// The new call will have the same span as the source instruction, and the basic block
+    /// will be split. The source instruction will be adjusted to point to the first instruction in
+    /// the new basic block.
+    pub fn add_call(
+        &mut self,
+        callee: &Instance,
+        source: &mut SourceInstruction,
+        args: Vec<Operand>,
+        destination: Place,
+    ) {
+        let new_bb = self.blocks.len();
+        let span = source.span(&self.blocks);
+        let callee_op =
+            Operand::Copy(Place::from(self.new_local(callee.ty(), span, Mutability::Not)));
+        let kind = TerminatorKind::Call {
+            func: callee_op,
+            args,
+            destination,
+            target: Some(new_bb),
+            unwind: UnwindAction::Terminate,
+        };
+        let terminator = Terminator { kind, span };
+        self.split_bb(source, terminator);
+    }
+
     /// Split a basic block right before the source location and use the new terminator
     /// in the basic block that was split.
     ///
