@@ -1,1 +1,5 @@
+assertion\
+	 - Status: SUCCESS\
+	 - Description: "|result| old(ptr.0) + 1 == ptr.0"\
+
 VERIFICATION:- SUCCESSFUL

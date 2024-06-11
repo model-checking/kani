@@ -1,1 +1,5 @@
+assertion\
+	 - Status: SUCCESS\
+	 - Description: "|result| old({ let x = &ptr; let y = **x; y + 1 }) == *ptr"\
+
 VERIFICATION:- SUCCESSFUL
