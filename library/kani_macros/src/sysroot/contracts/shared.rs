@@ -183,21 +183,15 @@ pub fn count_remembers(stmt_vec: &Vec<syn::Stmt>) -> usize {
 /// parameter. The second return parameter is the expression formed by passing in the result variable into
 /// the input closure.
 pub fn build_ensures(data: &ExprClosure, remember_count: usize) -> (TokenStream2, Expr) {
-    let mut remembers_exprs = vec![];
+    let mut remembers_exprs = HashMap::new();
     let mut vis =
         OldVisitor { t: OldLifter::new(), remember_count, remembers_exprs: &mut remembers_exprs };
     let mut expr = &mut data.clone();
     vis.visit_expr_closure_mut(&mut expr);
 
-    let remembers_stmts: TokenStream2 =
-        remembers_exprs.iter().enumerate().fold(quote!(), |collect, (index, expr)| {
-            let rem = index + remember_count;
-            let ident = Ident::new(
-                &("remember_kani_internal_".to_owned() + &rem.to_string()),
-                Span::call_site(),
-            );
-            quote!(let #ident = #expr; #collect)
-        });
+    let remembers_stmts: TokenStream2 = remembers_exprs
+        .iter()
+        .fold(quote!(), |collect, (ident, expr)| quote!(let #ident = #expr; #collect));
 
     let result: Ident = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
     (remembers_stmts, Expr::Verbatim(quote!((#expr)(&#result))))
@@ -221,7 +215,7 @@ trait OldTrigger {
         e: &mut Expr,
         s: Span,
         remember_count: usize,
-        output: &mut Vec<Expr>,
+        output: &mut HashMap<Ident, Expr>,
     ) -> bool;
 }
 
@@ -236,7 +230,7 @@ impl OldLifter {
 struct OldDenier;
 
 impl OldTrigger for OldDenier {
-    fn trigger(&mut self, _: &mut Expr, s: Span, _: usize, _: &mut Vec<Expr>) -> bool {
+    fn trigger(&mut self, _: &mut Expr, s: Span, _: usize, _: &mut HashMap<Ident, Expr>) -> bool {
         s.unwrap().error("Nested calls to `old` are prohibited").emit();
         false
     }
@@ -245,7 +239,7 @@ impl OldTrigger for OldDenier {
 struct OldVisitor<'a, T> {
     t: T,
     remember_count: usize,
-    remembers_exprs: &'a mut Vec<Expr>,
+    remembers_exprs: &'a mut HashMap<Ident, Expr>,
 }
 
 impl<T: OldTrigger> syn::visit_mut::VisitMut for OldVisitor<'_, T> {
@@ -299,7 +293,7 @@ impl OldTrigger for OldLifter {
         e: &mut Expr,
         _: Span,
         remember_count: usize,
-        remembers_exprs: &mut Vec<Expr>,
+        remembers_exprs: &mut HashMap<Ident, Expr>,
     ) -> bool {
         let mut denier = OldVisitor { t: OldDenier, remember_count, remembers_exprs };
         // This ensures there are no nested calls to `old`
@@ -307,13 +301,13 @@ impl OldTrigger for OldLifter {
 
         // The index of the remembers_exprs is offset by the remember_count of the surrounding environment
         let index = remember_count + remembers_exprs.len();
-        // save the original expression to be lifted into the past remember environment
-        remembers_exprs.push((*e).clone());
-        // change the expression to refer to the new remember variable
         let ident = Ident::new(
             &("remember_kani_internal_".to_owned() + &index.to_string()),
             Span::call_site(),
         );
+        // save the original expression to be lifted into the past remember environment
+        remembers_exprs.insert(ident.clone(), (*e).clone());
+        // change the expression to refer to the new remember variable
         let _ = std::mem::replace(e, Expr::Verbatim(quote!((#ident))));
         true
     }
