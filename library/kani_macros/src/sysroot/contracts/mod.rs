@@ -246,55 +246,67 @@
 //! collisions of variable names. Consider the following example:
 //!
 //! ```
-//! #[kani::modifies(a)]
-//! #[kani::ensures(|result| old(*a).wrapping_add(1) == *a)]
-//! #[kani::ensures(|result : &u32| old(*a).wrapping_add(1) == *result)]
-//! fn add1(a : &mut u32) -> u32 {
-//!     *a=a.wrapping_add(1);
-//!     *a
+//! #[kani::ensures(|result| old(*ptr + 1) == *ptr)]
+//! #[kani::ensures(|result| old(*ptr + 1) == *ptr)]
+//! #[kani::requires(*ptr < 100)]
+//! #[kani::modifies(ptr)]
+//! fn modify(ptr: &mut u32) {
+//!     *ptr += 1;
+//! }
+//! 
+//! #[kani::proof_for_contract(modify)]
+//! fn main() {
+//!     let mut i = kani::any();
+//!     modify(&mut i);
 //! }
 //!
-//! #[kani::proof_for_contract(add1)]
-//! fn verify_success() {
-//!     let a : &mut u32 = &mut kani::any();
-//!     add1(a);
-//! }
 //! ```
 //!
 //! This expands to
 //!
 //! ```
-//! #[allow(dead_code, unused_variables)]
-//! #[kanitool :: is_contract_generated(check)]
-//! fn add1_check_86e6df(a : & mut u32) -> u32 {
-//!     let a_renamed = kani::internal::untracked_deref(& a);
-//!     let remember_kani_internal_1 = *a_renamed;
-//!     let a_renamed = kani::internal::untracked_deref(& a);
-//!     let remember_kani_internal_0 = * a_renamed;
-//!     let _wrapper_arg_1 = unsafe { kani :: internal :: Pointer :: decouple_lifetime(& a) };
-//!     let result_kani_internal : u32 = add1_wrapper_86e6df(a, _wrapper_arg_1);
-//!     kani::assert((| result | (remember_kani_internal_0).wrapping_add(1) == *a_renamed) (& result_kani_internal),
-//!         stringify! (|result| old(*a).wrapping_add(1) == *a));
-//!     std::mem::forget(a_renamed);
-//!     kani::assert((| result : & u32 | (remember_kani_internal_1).wrapping_add(1) == *result) (& result_kani_internal),
-//!         stringify!(|result : &u32| old(*a).wrapping_add(1) == *result));
-//!     std::mem::forget(a_renamed);
+//! #[allow(dead_code, unused_variables, unused_mut)]
+//! #[kanitool::is_contract_generated(check)]
+//! fn modify_check_633496(ptr: &mut u32) {
+//!     let _wrapper_arg_1 =
+//!         unsafe { kani::internal::Pointer::decouple_lifetime(&ptr) };
+//!     kani::assume(*ptr < 100);
+//!     let remember_kani_internal_1 = *ptr + 1;
+//!     let ptr_renamed = kani::internal::untracked_deref(&ptr);
+//!     let remember_kani_internal_0 = *ptr + 1;
+//!     let ptr_renamed = kani::internal::untracked_deref(&ptr);
+//!     let result_kani_internal: () = modify_wrapper_633496(ptr, _wrapper_arg_1);
+//!     kani::assert((|result|
+//!                     (remember_kani_internal_0) ==
+//!                         *ptr_renamed)(&result_kani_internal),
+//!         "|result| old(*ptr + 1) == *ptr");
+//!     std::mem::forget(ptr_renamed);
+//!     kani::assert((|result|
+//!                     (remember_kani_internal_1) ==
+//!                         *ptr_renamed)(&result_kani_internal),
+//!         "|result| old(*ptr + 1) == *ptr");
+//!     std::mem::forget(ptr_renamed);
 //!     result_kani_internal
 //! }
-//!
-//! #[allow(dead_code, unused_variables)]
-//! #[kanitool :: is_contract_generated(replace)]
-//! fn add1_replace_86e6df(a : & mut u32) -> u32 {
-//!     let a_renamed = kani::internal::untracked_deref(& a);
-//!     let remember_kani_internal_1 = *a_renamed;
-//!     let a_renamed = kani::internal::untracked_deref(& a);
-//!     let remember_kani_internal_0 = *a_renamed;
-//!     let result_kani_internal : u32 = kani::any_modifies();
-//!     *unsafe{ kani :: internal :: Pointer :: assignable(a) } = kani::any_modifies();
-//!     kani ::assume((| result | (remember_kani_internal_0).wrapping_add(1) == *a_renamed) (& result_kani_internal));
-//!     std :: mem :: forget(a_renamed);
-//!     kani ::assume((| result : & u32 | (remember_kani_internal_1).wrapping_add(1) == *result) (& result_kani_internal));
-//!     std :: mem :: forget(a_renamed);
+//! #[allow(dead_code, unused_variables, unused_mut)]
+//! #[kanitool::is_contract_generated(replace)]
+//! fn modify_replace_633496(ptr: &mut u32) {
+//!     kani::assert(*ptr < 100, "*ptr < 100");
+//!     let remember_kani_internal_1 = *ptr + 1;
+//!     let ptr_renamed = kani::internal::untracked_deref(&ptr);
+//!     let remember_kani_internal_0 = *ptr + 1;
+//!     let ptr_renamed = kani::internal::untracked_deref(&ptr);
+//!     let result_kani_internal: () = kani::any_modifies();
+//!     *unsafe { kani::internal::Pointer::assignable(ptr) } =
+//!         kani::any_modifies();
+//!     kani::assume((|result|
+//!                     (remember_kani_internal_0) ==
+//!                         *ptr_renamed)(&result_kani_internal));
+//!     std::mem::forget(ptr_renamed);
+//!     kani::assume((|result|
+//!                     (remember_kani_internal_1) ==
+//!                         *ptr_renamed)(&result_kani_internal));
+//!     std::mem::forget(ptr_renamed);
 //!     result_kani_internal
 //! }
 //! ```
