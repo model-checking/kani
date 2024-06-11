@@ -88,7 +88,9 @@ impl KaniSession {
             .run_build(cmd)?
             .into_iter()
             .filter_map(|artifact| {
-                if artifact.target.crate_types.contains(&CRATE_TYPE_LIB.to_string()) {
+                if artifact.target.crate_types.contains(&CRATE_TYPE_LIB.to_string())
+                    || artifact.target.crate_types.contains(&CRATE_TYPE_RLIB.to_string())
+                {
                     map_kani_artifact(artifact)
                 } else {
                     None
