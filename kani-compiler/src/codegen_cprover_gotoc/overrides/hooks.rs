@@ -262,6 +262,7 @@ impl GotocHook for PointerObject {
         let ptr = {
             let ptr = fargs.pop().unwrap();
             let place_ty = instance.args().0[0].expect_ty().clone();
+            // Handle both fat and thin pointers.
             if gcx.use_thin_pointer_stable(place_ty) {
                 ptr
             } else {
@@ -305,6 +306,7 @@ impl GotocHook for PointerOffset {
         let ptr = {
             let ptr = fargs.pop().unwrap();
             let place_ty = instance.args().0[0].expect_ty().clone();
+            // Handle both fat and thin pointers.
             if gcx.use_thin_pointer_stable(place_ty) {
                 ptr
             } else {

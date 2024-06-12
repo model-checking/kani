@@ -1,3 +1,7 @@
+// Copyright Kani Contributors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+// kani-flags: -Z ghost-state -Z uninit-checks
+
 #![feature(core_intrinsics)]
 #![feature(custom_mir)]
 
@@ -5,7 +9,7 @@ use std::intrinsics::mir::*;
 use std::ptr;
 
 #[repr(C)]
-struct S(u8, u16);
+struct S(u16, u16);
 
 #[kani::proof]
 #[custom_mir(dialect = "runtime", phase = "optimized")]

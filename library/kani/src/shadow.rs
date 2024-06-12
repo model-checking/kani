@@ -82,49 +82,18 @@ impl<T: Copy> ShadowMem<T> {
     }
 }
 
+/// Small helper to access the `len` field of a slice DST.
+#[rustc_diagnostic_item = "KaniGetSliceSizeHelper"]
+pub fn get_slice_size(slice: *const [()]) -> usize {
+    slice.len()
+}
+
+/// Global shadow memory object.
 pub static mut GLOBAL_SM: ShadowMem<bool> = ShadowMem::new(false);
 
+// Get initialization setate of `n` items laid out according to the `layout` starting at address `ptr`.
 #[rustc_diagnostic_item = "KaniShadowMemoryGet"]
-pub fn global_sm_get<U>(ptr: *const U) -> bool {
-    return unsafe { GLOBAL_SM.get(ptr) };
-}
-
-#[rustc_diagnostic_item = "KaniShadowMemorySet"]
-pub fn global_sm_set<U>(ptr: *const U, val: bool) {
-    return unsafe { GLOBAL_SM.set(ptr, val) };
-}
-
-#[rustc_diagnostic_item = "KaniShadowMemoryGetWithLayout"]
-pub fn global_sm_get_with_layout<const N: usize>(ptr: *const (), layout: [bool; N]) -> bool {
-    let mut offset: usize = 0;
-    while offset < N {
-        unsafe {
-            if layout[offset] && !GLOBAL_SM.get((ptr as *const u8).add(offset)) {
-                return false;
-            }
-            offset += 1;
-        }
-    }
-    return true;
-}
-
-#[rustc_diagnostic_item = "KaniShadowMemorySetWithLayout"]
-pub fn global_sm_set_with_layout<const N: usize>(ptr: *const (), layout: [bool; N], value: bool) {
-    let mut offset: usize = 0;
-    while offset < N {
-        unsafe {
-            GLOBAL_SM.set((ptr as *const u8).add(offset), value && layout[offset]);
-        }
-        offset += 1;
-    }
-}
-
-#[rustc_diagnostic_item = "KaniShadowMemoryGetWithLayoutDynamic"]
-pub fn global_sm_get_with_layout_dynamic<const N: usize>(
-    ptr: *const (),
-    layout: [bool; N],
-    n: usize,
-) -> bool {
+pub fn global_sm_get<const N: usize>(ptr: *const (), layout: [bool; N], n: usize) -> bool {
     let mut count: usize = 0;
     while count < n {
         let mut offset: usize = 0;
@@ -141,13 +110,9 @@ pub fn global_sm_get_with_layout_dynamic<const N: usize>(
     return true;
 }
 
-#[rustc_diagnostic_item = "KaniShadowMemorySetWithLayoutDynamic"]
-pub fn global_sm_set_with_layout_dynamic<const N: usize>(
-    ptr: *const (),
-    layout: [bool; N],
-    n: usize,
-    value: bool,
-) {
+// Set initialization setate to `value` for `n` items laid out according to the `layout` starting at address `ptr`.
+#[rustc_diagnostic_item = "KaniShadowMemorySet"]
+pub fn global_sm_set<const N: usize>(ptr: *const (), layout: [bool; N], n: usize, value: bool) {
     let mut count: usize = 0;
     while count < n {
         let mut offset: usize = 0;

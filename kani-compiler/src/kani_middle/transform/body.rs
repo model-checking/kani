@@ -107,6 +107,20 @@ impl MutableBody {
         self.new_assignment(rvalue, before)
     }
 
+    /// Transmute to a raw pointer of `*mut type` and return a new local where that value is stored.
+    pub fn new_cast_transmute(
+        &mut self,
+        from: Operand,
+        pointee_ty: Ty,
+        mutability: Mutability,
+        before: &mut SourceInstruction,
+    ) -> Local {
+        assert!(from.ty(self.locals()).unwrap().kind().is_raw_ptr());
+        let target_ty = Ty::new_ptr(pointee_ty, mutability);
+        let rvalue = Rvalue::Cast(CastKind::Transmute, from, target_ty);
+        self.new_assignment(rvalue, before)
+    }
+
     /// Add a new assignment for the given binary operation.
     ///
     /// Return the local where the result is saved.

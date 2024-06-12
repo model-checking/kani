@@ -1,9 +1,14 @@
+// Copyright Kani Contributors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+// kani-flags: -Z ghost-state -Z uninit-checks
+
 #![allow(dropping_copy_types)]
 
 use std::alloc::{alloc, dealloc, Layout};
 use std::slice::from_raw_parts;
 
 #[kani::proof]
+#[kani::should_panic]
 fn main() {
     let layout = Layout::from_size_align(32, 8).unwrap();
     unsafe {
