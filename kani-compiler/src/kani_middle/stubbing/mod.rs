@@ -82,10 +82,10 @@ pub fn check_compatibility(tcx: TyCtxt, old_def: FnDef, new_def: FnDef) -> Resul
     let old_ty = rustc_internal::stable(tcx.type_of(old_def_id)).value;
     let new_ty = rustc_internal::stable(tcx.type_of(new_def_id)).value;
     let TyKind::RigidTy(RigidTy::FnDef(_, mut old_args)) = old_ty.kind() else {
-        unreachable!("Expected Fn")
+        unreachable!("Expected function, but found {old_ty}")
     };
     let TyKind::RigidTy(RigidTy::FnDef(_, new_args)) = new_ty.kind() else {
-        unreachable!("Expected Fn")
+        unreachable!("Expected function, but found {new_ty}")
     };
     if let Some(idx) = contract_host_param(tcx, old_def, new_def) {
         old_args.0.remove(idx);
