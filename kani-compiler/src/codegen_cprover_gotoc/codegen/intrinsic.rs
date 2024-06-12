@@ -33,11 +33,12 @@ impl<'tcx> GotocCtx<'tcx> {
         place: &Place,
         mut fargs: Vec<Expr>,
         f: F,
+        loc: Location,
     ) -> Stmt {
         let arg1 = fargs.remove(0);
         let arg2 = fargs.remove(0);
         let expr = f(arg1, arg2);
-        self.codegen_expr_to_place_stable(place, expr, Location::none())
+        self.codegen_expr_to_place_stable(place, expr, loc)
     }
 
     /// Given a call to an compiler intrinsic, generate the call and the `goto` terminator
@@ -178,7 +179,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
         // Intrinsics which encode a simple binary operation
         macro_rules! codegen_intrinsic_binop {
-            ($f:ident) => {{ self.binop(place, fargs, |a, b| a.$f(b)) }};
+            ($f:ident) => {{ self.binop(place, fargs, |a, b| a.$f(b), loc) }};
         }
 
         // Intrinsics which encode a simple binary operation which need a machine model
@@ -208,7 +209,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 let alloc = stable_instance.try_const_eval(place_ty).unwrap();
                 // We assume that the intrinsic has type checked at this point, so
                 // we can use the place type as the expression type.
-                let expr = self.codegen_allocation(&alloc, place_ty, Some(span));
+                let expr = self.codegen_allocation(&alloc, place_ty, loc);
                 self.codegen_expr_to_place_stable(&place, expr, loc)
             }};
         }
@@ -727,7 +728,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let res = self.codegen_binop_with_overflow(binop, left, right, result_type.clone(), loc);
         self.codegen_expr_to_place_stable(
             place,
-            Expr::statement_expression(vec![res.as_stmt(loc)], result_type),
+            Expr::statement_expression(vec![res.as_stmt(loc)], result_type, loc),
             loc,
         )
     }
@@ -1042,9 +1043,11 @@ impl<'tcx> GotocCtx<'tcx> {
         let is_lhs_ok = lhs_var.clone().is_nonnull();
         let is_rhs_ok = rhs_var.clone().is_nonnull();
         let should_skip_pointer_checks = is_len_zero.and(is_lhs_ok).and(is_rhs_ok);
-        let place_expr =
-            unwrap_or_return_codegen_unimplemented_stmt!(self, self.codegen_place_stable(place))
-                .goto_expr;
+        let place_expr = unwrap_or_return_codegen_unimplemented_stmt!(
+            self,
+            self.codegen_place_stable(place, loc)
+        )
+        .goto_expr;
         let res = should_skip_pointer_checks.ternary(
             Expr::int_constant(0, place_expr.typ().clone()), // zero bytes are always equal (as long as pointers are nonnull and aligned)
             BuiltinFn::Memcmp
@@ -1634,7 +1637,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 loc,
             )
         } else {
-            self.binop(p, fargs, op_fun)
+            self.binop(p, fargs, op_fun, loc)
         }
     }
 

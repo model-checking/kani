@@ -252,7 +252,7 @@ impl<'tcx> GotocCtx<'tcx> {
             t.nondet().as_stmt(loc),
         ];
 
-        Expr::statement_expression(body, t).with_location(loc)
+        Expr::statement_expression(body, t, loc)
     }
 
     /// Kani does not currently support all MIR constructs.
@@ -356,7 +356,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     // Encode __CPROVER_r_ok(ptr, size).
                     // First, generate a CBMC expression representing the pointer.
                     let ptr = {
-                        let ptr_projection = self.codegen_place_stable(&ptr_place).unwrap();
+                        let ptr_projection = self.codegen_place_stable(&ptr_place, *loc).unwrap();
                         let place_ty = self.place_ty_stable(place);
                         if self.use_thin_pointer_stable(place_ty) {
                             ptr_projection.goto_expr().clone()
