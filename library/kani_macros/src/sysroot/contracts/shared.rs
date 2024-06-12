@@ -76,7 +76,9 @@ impl<'a> ContractConditionsHandler<'a> {
                     .filter(|attr| {
                         if let Some(ident) = attr.path().get_ident() {
                             let name = ident.to_string();
-                            !name.starts_with("rustc") && !(name == "stable")
+                            !name.starts_with("rustc")
+                                && !(name == "stable")
+                                && !(name == "unstable")
                         } else {
                             true
                         }

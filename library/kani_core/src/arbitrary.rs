@@ -72,6 +72,8 @@ macro_rules! generate_arbitrary {
         }
 
         // Generate trivial arbitrary values
+        trivial_arbitrary!(());
+
         trivial_arbitrary!(u8);
         trivial_arbitrary!(u16);
         trivial_arbitrary!(u32);

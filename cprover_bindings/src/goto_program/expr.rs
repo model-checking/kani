@@ -140,6 +140,7 @@ pub enum ExprValue {
     /// `({ op1; op2; ...})`
     StatementExpression {
         statements: Vec<Stmt>,
+        location: Location,
     },
     /// A raw string constant. Note that you normally actually want a pointer to the first element.
     /// `"s"`
@@ -739,10 +740,10 @@ impl Expr {
     /// <https://gcc.gnu.org/onlinedocs/gcc/Statement-Exprs.html>
     /// e.g. `({ int y = foo (); int z; if (y > 0) z = y; else z = - y; z; })`
     /// `({ op1; op2; ...})`
-    pub fn statement_expression(ops: Vec<Stmt>, typ: Type) -> Self {
+    pub fn statement_expression(ops: Vec<Stmt>, typ: Type, loc: Location) -> Self {
         assert!(!ops.is_empty());
         assert_eq!(ops.last().unwrap().get_expression().unwrap().typ, typ);
-        expr!(StatementExpression { statements: ops }, typ)
+        expr!(StatementExpression { statements: ops, location: loc }, typ).with_location(loc)
     }
 
     /// Internal helper function for Struct initalizer

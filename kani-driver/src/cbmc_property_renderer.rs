@@ -162,7 +162,7 @@ enum CoverageStatus {
 const UNSUPPORTED_CONSTRUCT_DESC: &str = "is not currently supported by Kani";
 const UNWINDING_ASSERT_DESC: &str = "unwinding assertion loop";
 const UNWINDING_ASSERT_REC_DESC: &str = "recursion unwinding assertion";
-const DEFAULT_ASSERTION: &str = "assertion";
+const UNDEFINED_FUNCTION_DESC: &str = "undefined function should be unreachable";
 
 impl ParserItem {
     /// Determines if an item must be skipped or not.
@@ -618,8 +618,7 @@ fn modify_undefined_function_checks(mut properties: Vec<Property>) -> (Vec<Prope
     let mut has_unknown_location_checks = false;
     for prop in &mut properties {
         if let Some(function) = &prop.source_location.function
-            && prop.description == DEFAULT_ASSERTION
-            && prop.source_location.file.is_none()
+            && prop.description == UNDEFINED_FUNCTION_DESC
         {
             // Missing functions come with mangled names.
             // `demangle` produces the demangled version if it's a mangled name.
