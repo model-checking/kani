@@ -35,9 +35,8 @@ macro_rules! kani_lib {
         #[cfg(kani)]
         #[unstable(feature = "kani", issue = "none")]
         pub mod kani {
-            pub use kani_core::{
-                ensures, modifies, proof, proof_for_contract, requires, should_panic,
-            };
+            // We need to list them all today because there is conflict with unstable.
+            pub use kani_core::*;
             kani_core::kani_intrinsics!(core);
             kani_core::generate_arbitrary!(core);
 

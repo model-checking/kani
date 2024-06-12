@@ -782,10 +782,10 @@ impl<'a> UnstableAttrParseError<'a> {
         tcx.dcx()
             .struct_span_err(
                 self.attr.span,
-                format!("failed to parse `#[kani::unstable]`: {}", self.reason),
+                format!("failed to parse `#[kani::unstable_feature]`: {}", self.reason),
             )
             .with_note(format!(
-                "expected format: #[kani::unstable({}, {}, {})]",
+                "expected format: #[kani::unstable_feature({}, {}, {})]",
                 r#"feature="<IDENTIFIER>""#, r#"issue="<ISSUE>""#, r#"reason="<DESCRIPTION>""#
             ))
             .emit()
