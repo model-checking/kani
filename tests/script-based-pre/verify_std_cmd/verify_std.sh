@@ -40,9 +40,25 @@ pub mod verify {
         fake_function(true);
     }
 
+    /// Add a `rustc_diagnostic_item` to ensure this works.
+    /// See <https://github.com/model-checking/kani/issues/3251> for more details.
     #[kani::requires(x == true)]
+    #[rustc_diagnostic_item = "fake_function"]
     fn fake_function(x: bool) -> bool {
         x
+    }
+
+    #[kani::proof_for_contract(dummy_read)]
+    fn check_dummy_read() {
+        let val: char = kani::any();
+        assert_eq!(unsafe { dummy_read(&val) }, val);
+    }
+
+    /// Ensure we can verify constant functions.
+    #[kani::requires(kani::mem::can_dereference(ptr))]
+    #[rustc_diagnostic_item = "dummy_read"]
+    const unsafe fn dummy_read<T: Copy>(ptr: *const T) -> T {
+        *ptr
     }
 }
 '

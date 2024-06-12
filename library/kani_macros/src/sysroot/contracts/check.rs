@@ -120,6 +120,8 @@ impl<'a> ContractConditionsHandler<'a> {
         }
         let body = self.make_check_body();
         let mut sig = self.annotated_fn.sig.clone();
+        // We use non-constant functions, thus, the wrapper cannot be constant.
+        sig.constness = None;
         if let Some(ident) = override_function_dent {
             sig.ident = ident;
         }

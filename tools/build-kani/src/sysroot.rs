@@ -75,9 +75,9 @@ fn build_target() -> &'static str {
 /// - The `lib-playback/` folder contains the sysroot used for playback.
 pub fn build_lib(bin_folder: &Path) -> Result<()> {
     let compiler_path = bin_folder.join("kani-compiler");
+    build_no_core_lib(&compiler_path)?;
     build_verification_lib(&compiler_path)?;
-    build_playback_lib(&compiler_path)?;
-    build_no_core_lib(&compiler_path)
+    build_playback_lib(&compiler_path)
 }
 
 /// Build the `lib/` folder for the new sysroot used during verification.
