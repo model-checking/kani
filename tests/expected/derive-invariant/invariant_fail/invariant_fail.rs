@@ -6,7 +6,11 @@
 
 extern crate kani;
 use kani::Invariant;
-
+// Note: This represents an incorrect usage of `Arbitrary` and `Invariant`.
+//
+// The `Arbitrary` implementation should respect the type invariant,
+// but Kani does not enforce this in any way at the moment.
+// <https://github.com/model-checking/kani/issues/3265>
 #[derive(kani::Arbitrary)]
 struct NotNegative(i32);
 
