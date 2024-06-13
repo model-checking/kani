@@ -37,7 +37,9 @@ impl TypeLayout {
                     size: match ty.layout().unwrap().shape().fields {
                         FieldsShape::Array { stride, count } if count == 0 => stride,
                         _ => {
-                            return Err(format!("Unsupported DST for invalid memory check: `{ty}`"));
+                            return Err(format!(
+                                "Unsupported DST for invalid memory check: `{ty}`"
+                            ));
                         }
                     },
                 };

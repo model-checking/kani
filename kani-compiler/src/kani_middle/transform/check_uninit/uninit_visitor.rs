@@ -12,7 +12,7 @@ use strum_macros::AsRefStr;
 pub enum SourceOp {
     Get { place: Place, count: Operand },
     Set { place: Place, count: Operand, value: bool },
-    Unsupported { instruction: String, place: Place },
+    Unsupported { unsupported_instruction: String, place: Place },
 }
 
 #[derive(Clone, Debug)]
@@ -163,7 +163,7 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
             self.current = SourceInstruction::Terminator { bb: self.bb };
             // Leave it as an exhaustive match to be notified when a new kind is added.
             match &term.kind {
-                TerminatorKind::Call { func, args, .. } => {
+                TerminatorKind::Call { func, args, destination, .. } => {
                     self.super_terminator(term, location);
                     let instance = expect_instance(self.locals, func);
                     match instance.kind {
@@ -218,10 +218,26 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                             if instance.is_foreign_item() {
                                 match instance.name().as_str() {
                                     /* TODO: implement those */
-                                    "alloc::alloc::__rust_alloc" => {}
-                                    "alloc::alloc::__rust_realloc" => {}
-                                    "alloc::alloc::__rust_alloc_zeroed" => {}
-                                    "alloc::alloc::__rust_dealloc" => {}
+                                    "alloc::alloc::__rust_alloc"
+                                    | "alloc::alloc::__rust_realloc" => {
+                                        /* Memory is uninitialized, nothing to do here. */
+                                    }
+                                    "alloc::alloc::__rust_alloc_zeroed" => {
+                                        /* Memory is initialized here, need to update shadow memory. */
+                                        self.push_target(SourceOp::Set {
+                                            place: destination.clone(),
+                                            count: args[0].clone(),
+                                            value: true,
+                                        });
+                                    }
+                                    "alloc::alloc::__rust_dealloc" => {
+                                        /* Memory is uninitialized here, need to update shadow memory. */
+                                        self.push_target(SourceOp::Set {
+                                            place: expect_place(&args[0]).clone(),
+                                            count: args[1].clone(),
+                                            value: false,
+                                        });
+                                    }
                                     _ => {}
                                 }
                             }
@@ -270,7 +286,7 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                         && (!ptx.is_mutating() || place.projection.len() > idx + 1)
                     {
                         self.push_target(SourceOp::Unsupported {
-                            instruction: "union access".to_string(),
+                            unsupported_instruction: "union access".to_string(),
                             place: intermediate_place.clone(),
                         });
                     }

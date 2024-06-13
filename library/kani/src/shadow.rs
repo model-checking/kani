@@ -83,16 +83,18 @@ impl<T: Copy> ShadowMem<T> {
 }
 
 /// Global shadow memory object.
-pub static mut GLOBAL_SM: ShadowMem<bool> = ShadowMem::new(false);
+static mut __KANI_GLOBAL_SM: ShadowMem<bool> = ShadowMem::new(false);
 
 // Get initialization setate of `n` items laid out according to the `layout` starting at address `ptr`.
-fn global_sm_get_inner<const N: usize>(ptr: *const (), layout: [bool; N], n: usize) -> bool {
+fn __kani_global_sm_get_inner<const N: usize>(ptr: *const (), layout: [bool; N], n: usize) -> bool {
     let mut count: usize = 0;
     while count < n {
         let mut offset: usize = 0;
         while offset < N {
             unsafe {
-                if layout[offset] && !GLOBAL_SM.get((ptr as *const u8).add(count * N + offset)) {
+                if layout[offset]
+                    && !__KANI_GLOBAL_SM.get((ptr as *const u8).add(count * N + offset))
+                {
                     return false;
                 }
                 offset += 1;
@@ -104,13 +106,19 @@ fn global_sm_get_inner<const N: usize>(ptr: *const (), layout: [bool; N], n: usi
 }
 
 // Set initialization setate to `value` for `n` items laid out according to the `layout` starting at address `ptr`.
-fn global_sm_set_inner<const N: usize>(ptr: *const (), layout: [bool; N], n: usize, value: bool) {
+fn __kani_global_sm_set_inner<const N: usize>(
+    ptr: *const (),
+    layout: [bool; N],
+    n: usize,
+    value: bool,
+) {
     let mut count: usize = 0;
     while count < n {
         let mut offset: usize = 0;
         while offset < N {
             unsafe {
-                GLOBAL_SM.set((ptr as *const u8).add(count * N + offset), value && layout[offset]);
+                __KANI_GLOBAL_SM
+                    .set((ptr as *const u8).add(count * N + offset), value && layout[offset]);
             }
             offset += 1;
         }
@@ -119,27 +127,36 @@ fn global_sm_set_inner<const N: usize>(ptr: *const (), layout: [bool; N], n: usi
 }
 
 #[rustc_diagnostic_item = "KaniShadowMemoryGet"]
-pub fn global_sm_get<const N: usize>(ptr: *const (), layout: [bool; N], n: usize) -> bool {
+pub fn __kani_global_sm_get<const N: usize>(ptr: *const (), layout: [bool; N], n: usize) -> bool {
     let (ptr, _) = ptr.to_raw_parts();
-    global_sm_get_inner(ptr, layout, n)
+    __kani_global_sm_get_inner(ptr, layout, n)
 }
 
 #[rustc_diagnostic_item = "KaniShadowMemorySet"]
-pub fn global_sm_set<const N: usize>(ptr: *const (), layout: [bool; N], n: usize, value: bool) {
+pub fn __kani_global_sm_set<const N: usize>(
+    ptr: *const (),
+    layout: [bool; N],
+    n: usize,
+    value: bool,
+) {
     let (ptr, _) = ptr.to_raw_parts();
-    global_sm_set_inner(ptr, layout, n, value);
+    __kani_global_sm_set_inner(ptr, layout, n, value);
 }
 
 #[rustc_diagnostic_item = "KaniShadowMemoryGetSlice"]
-pub fn global_sm_get_slice<const N: usize>(ptr: *const [()], layout: [bool; N], n: usize) -> bool {
+pub fn __kani_global_sm_get_slice<const N: usize>(
+    ptr: *const [()],
+    layout: [bool; N],
+    n: usize,
+) -> bool {
     let (ptr, meta) = ptr.to_raw_parts();
     // The pointee type is a DST, more than `n` objects can be accessed.
     let n = n * meta;
-    global_sm_get_inner(ptr, layout, n)
+    __kani_global_sm_get_inner(ptr, layout, n)
 }
 
 #[rustc_diagnostic_item = "KaniShadowMemorySetSlice"]
-pub fn global_sm_set_slice<const N: usize>(
+pub fn __kani_global_sm_set_slice<const N: usize>(
     ptr: *const [()],
     layout: [bool; N],
     n: usize,
@@ -148,5 +165,5 @@ pub fn global_sm_set_slice<const N: usize>(
     let (ptr, meta) = ptr.to_raw_parts();
     // The pointee type is a DST, more than `n` objects can be accessed.
     let n = n * meta;
-    global_sm_set_inner(ptr, layout, n, value);
+    __kani_global_sm_set_inner(ptr, layout, n, value);
 }

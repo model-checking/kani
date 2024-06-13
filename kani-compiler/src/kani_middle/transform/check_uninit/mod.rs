@@ -6,9 +6,12 @@
 
 use crate::args::ExtraChecks;
 use crate::kani_middle::find_fn_def;
-use crate::kani_middle::transform::body::{CheckType, MutableBody, SourceInstruction};
+use crate::kani_middle::transform::body::{
+    CheckType, InsertPosition, MutableBody, SourceInstruction,
+};
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
+use itertools::Itertools;
 use rustc_middle::ty::TyCtxt;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{AggregateKind, Body, Constant, Mutability, Operand, Place, Rvalue};
@@ -22,7 +25,15 @@ mod uninit_visitor;
 use ty_layout::TypeLayout;
 use uninit_visitor::{CheckUninitVisitor, InitRelevantInstruction, SourceOp};
 
-const UNINIT_ALLOWLIST: &[&str] = &["kani::shadow"];
+const UNINIT_ALLOWLIST: &[&str] = &[
+    "kani::shadow::__kani_global_sm_get_inner",
+    "kani::shadow::__kani_global_sm_set_inner",
+    "kani::shadow::__kani_global_sm_get",
+    "kani::shadow::__kani_global_sm_set",
+    "kani::shadow::__kani_global_sm_get_slice",
+    "kani::shadow::__kani_global_sm_set_slice",
+    "std::alloc::alloc",
+];
 
 /// Instrument the code with checks for uninitialized memory.
 #[derive(Debug)]
@@ -49,7 +60,12 @@ impl TransformPass for UninitPass {
     fn transform(&self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
         trace!(function=?instance.name(), "transform");
 
-        if UNINIT_ALLOWLIST.iter().any(|allowlist_item| instance.name().contains(allowlist_item)) {
+        let name_without_generics = instance
+            .name()
+            .split("::")
+            .filter(|chunk| !chunk.starts_with("<") && !chunk.ends_with(">"))
+            .join("::");
+        if UNINIT_ALLOWLIST.iter().any(|allowlist_item| name_without_generics == *allowlist_item) {
             return (false, body);
         }
 
@@ -59,7 +75,7 @@ impl TransformPass for UninitPass {
         let mut bb_idx = 0;
         while bb_idx < new_body.blocks().len() {
             if let Some(candidate) =
-                CheckUninitVisitor::find_next(&new_body, bb_idx, bb_idx >= orig_len)
+                CheckUninitVisitor::find_next(&new_body, bb_idx, new_body.skip_first(bb_idx))
             {
                 self.build_check(tcx, &mut new_body, candidate);
                 bb_idx += 1
@@ -79,18 +95,29 @@ impl UninitPass {
         instruction: InitRelevantInstruction,
     ) {
         debug!(?instruction, "build_check");
-        let mut source = instruction.source;
         for operation in instruction.operations {
-            let place = match &operation {
-                SourceOp::Get { place, .. } | SourceOp::Set { place, .. } => place,
-                SourceOp::Unsupported { instruction, place } => {
+            let mut source = instruction.source;
+            match &operation {
+                SourceOp::Unsupported { unsupported_instruction, place } => {
                     let place_ty = place.ty(body.locals()).unwrap();
                     let reason = format!(
-                        "Kani currently doesn't support checking memory initialization using instruction `{instruction}` for type `{place_ty}`",
+                        "Kani currently doesn't support checking memory initialization using instruction `{unsupported_instruction}` for type `{place_ty}`",
                     );
                     self.unsupported_check(tcx, body, &mut source, &reason);
                     continue;
                 }
+                _ => {}
+            };
+
+            let insert_position = match &operation {
+                SourceOp::Get { .. } => InsertPosition::Before,
+                SourceOp::Set { .. } => InsertPosition::After,
+                SourceOp::Unsupported { .. } => unreachable!(),
+            };
+
+            let place = match &operation {
+                SourceOp::Get { place, .. } | SourceOp::Set { place, .. } => place,
+                SourceOp::Unsupported { .. } => unreachable!(),
             };
 
             let place_ty = place.ty(body.locals()).unwrap();
@@ -138,6 +165,7 @@ impl UninitPass {
                             .collect(),
                     ),
                     &mut source,
+                    insert_position,
                 ),
                 projection: vec![],
             };
@@ -149,12 +177,14 @@ impl UninitPass {
                         Ty::from_rigid_kind(RigidTy::Slice(Ty::new_tuple(&[]))),
                         Mutability::Not,
                         &mut source,
+                        insert_position,
                     ),
                 _ => body.new_cast_ptr(
                     Operand::Copy(place.clone()),
                     Ty::new_tuple(&[]),
                     Mutability::Not,
                     &mut source,
+                    insert_position,
                 ),
             };
 
@@ -201,6 +231,7 @@ impl UninitPass {
                     body.add_call(
                         &shadow_memory_get,
                         &mut source,
+                        insert_position,
                         vec![
                             Operand::Copy(Place { local: ptr_local, projection: vec![] }),
                             Operand::Move(layout_place),
@@ -212,6 +243,7 @@ impl UninitPass {
                         tcx,
                         &self.check_type,
                         &mut source,
+                        insert_position,
                         ret_place.local,
                         &format!("Undefined Behavior: Reading from an uninitialized pointer of type `{place_ty}`"),
                     )
@@ -257,6 +289,7 @@ impl UninitPass {
                     body.add_call(
                         &shadow_memory_set,
                         &mut source,
+                        insert_position,
                         vec![
                             Operand::Copy(Place { local: ptr_local, projection: vec![] }),
                             Operand::Move(layout_place),
@@ -290,7 +323,7 @@ impl UninitPass {
             span,
             user_ty: None,
         }));
-        let result = body.new_assignment(rvalue, source);
-        body.add_check(tcx, &self.check_type, source, result, reason);
+        let result = body.new_assignment(rvalue, source, InsertPosition::Before);
+        body.add_check(tcx, &self.check_type, source, InsertPosition::Before, result, reason);
     }
 }

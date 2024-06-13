@@ -8,7 +8,9 @@
 //! by the transformation.
 
 use crate::kani_middle::attributes::matches_diagnostic;
-use crate::kani_middle::transform::body::{CheckType, MutableBody, SourceInstruction};
+use crate::kani_middle::transform::body::{
+    CheckType, InsertPosition, MutableBody, SourceInstruction,
+};
 use crate::kani_middle::transform::check_values::{build_limits, ty_validity_per_offset};
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
@@ -86,7 +88,7 @@ impl IntrinsicGeneratorPass {
             })),
         );
         let stmt = Statement { kind: assign, span };
-        new_body.insert_stmt(stmt, &mut terminator);
+        new_body.insert_stmt(stmt, &mut terminator, InsertPosition::Before);
         let machine_info = MachineInfo::target();
 
         // The first and only argument type.
@@ -110,7 +112,7 @@ impl IntrinsicGeneratorPass {
                     );
                     let assign = StatementKind::Assign(Place::from(ret_var), rvalue);
                     let stmt = Statement { kind: assign, span };
-                    new_body.insert_stmt(stmt, &mut terminator);
+                    new_body.insert_stmt(stmt, &mut terminator, InsertPosition::Before);
                 }
             }
             Err(msg) => {
@@ -120,11 +122,19 @@ impl IntrinsicGeneratorPass {
                     span,
                     user_ty: None,
                 }));
-                let result = new_body.new_assignment(rvalue, &mut terminator);
+                let result =
+                    new_body.new_assignment(rvalue, &mut terminator, InsertPosition::Before);
                 let reason = format!(
                     "Kani currently doesn't support checking validity of `{target_ty}`. {msg}"
                 );
-                new_body.add_check(tcx, &self.check_type, &mut terminator, result, &reason);
+                new_body.add_check(
+                    tcx,
+                    &self.check_type,
+                    &mut terminator,
+                    InsertPosition::Before,
+                    result,
+                    &reason,
+                );
             }
         }
         new_body.into()

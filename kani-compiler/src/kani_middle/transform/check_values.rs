@@ -14,7 +14,9 @@
 //!   1. We could merge the invalid values by the offset.
 //!   2. We could avoid checking places that have been checked before.
 use crate::args::ExtraChecks;
-use crate::kani_middle::transform::body::{CheckType, MutableBody, SourceInstruction};
+use crate::kani_middle::transform::body::{
+    CheckType, InsertPosition, MutableBody, SourceInstruction,
+};
 use crate::kani_middle::transform::check_values::SourceOp::UnsupportedCheck;
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
@@ -82,13 +84,20 @@ impl ValidValuePass {
         for operation in instruction.operations {
             match operation {
                 SourceOp::BytesValidity { ranges, target_ty, rvalue } => {
-                    let value = body.new_assignment(rvalue, &mut source);
+                    let value = body.new_assignment(rvalue, &mut source, InsertPosition::Before);
                     let rvalue_ptr = Rvalue::AddressOf(Mutability::Not, Place::from(value));
                     for range in ranges {
                         let result = build_limits(body, &range, rvalue_ptr.clone(), &mut source);
                         let msg =
                             format!("Undefined Behavior: Invalid value of type `{target_ty}`",);
-                        body.add_check(tcx, &self.check_type, &mut source, result, &msg);
+                        body.add_check(
+                            tcx,
+                            &self.check_type,
+                            &mut source,
+                            InsertPosition::Before,
+                            result,
+                            &msg,
+                        );
                     }
                 }
                 SourceOp::DerefValidity { pointee_ty, rvalue, ranges } => {
@@ -96,7 +105,14 @@ impl ValidValuePass {
                         let result = build_limits(body, &range, rvalue.clone(), &mut source);
                         let msg =
                             format!("Undefined Behavior: Invalid value of type `{pointee_ty}`",);
-                        body.add_check(tcx, &self.check_type, &mut source, result, &msg);
+                        body.add_check(
+                            tcx,
+                            &self.check_type,
+                            &mut source,
+                            InsertPosition::Before,
+                            result,
+                            &msg,
+                        );
                     }
                 }
                 SourceOp::UnsupportedCheck { check, ty } => {
@@ -122,8 +138,8 @@ impl ValidValuePass {
             span,
             user_ty: None,
         }));
-        let result = body.new_assignment(rvalue, source);
-        body.add_check(tcx, &self.check_type, source, result, reason);
+        let result = body.new_assignment(rvalue, source, InsertPosition::Before);
+        body.add_check(tcx, &self.check_type, source, InsertPosition::Before, result, reason);
     }
 }
 
@@ -755,30 +771,60 @@ pub fn build_limits(
     let start_const = body.new_const_operand(req.valid_range.start, primitive_ty, span);
     let end_const = body.new_const_operand(req.valid_range.end, primitive_ty, span);
     let orig_ptr = if req.offset != 0 {
-        let start_ptr = move_local(body.new_assignment(rvalue_ptr, source));
+        let start_ptr = move_local(body.new_assignment(rvalue_ptr, source, InsertPosition::Before));
         let byte_ptr = move_local(body.new_cast_ptr(
             start_ptr,
             Ty::unsigned_ty(UintTy::U8),
             Mutability::Not,
             source,
+            InsertPosition::Before,
         ));
         let offset_const = body.new_const_operand(req.offset as _, UintTy::Usize, span);
-        let offset = move_local(body.new_assignment(Rvalue::Use(offset_const), source));
-        move_local(body.new_binary_op(BinOp::Offset, byte_ptr, offset, source))
+        let offset = move_local(body.new_assignment(
+            Rvalue::Use(offset_const),
+            source,
+            InsertPosition::Before,
+        ));
+        move_local(body.new_binary_op(
+            BinOp::Offset,
+            byte_ptr,
+            offset,
+            source,
+            InsertPosition::Before,
+        ))
     } else {
-        move_local(body.new_assignment(rvalue_ptr, source))
+        move_local(body.new_assignment(rvalue_ptr, source, InsertPosition::Before))
     };
-    let value_ptr =
-        body.new_cast_ptr(orig_ptr, Ty::unsigned_ty(primitive_ty), Mutability::Not, source);
+    let value_ptr = body.new_cast_ptr(
+        orig_ptr,
+        Ty::unsigned_ty(primitive_ty),
+        Mutability::Not,
+        source,
+        InsertPosition::Before,
+    );
     let value = Operand::Copy(Place { local: value_ptr, projection: vec![ProjectionElem::Deref] });
-    let start_result = body.new_binary_op(BinOp::Ge, value.clone(), start_const, source);
-    let end_result = body.new_binary_op(BinOp::Le, value, end_const, source);
+    let start_result =
+        body.new_binary_op(BinOp::Ge, value.clone(), start_const, source, InsertPosition::Before);
+    let end_result =
+        body.new_binary_op(BinOp::Le, value, end_const, source, InsertPosition::Before);
     if req.valid_range.wraps_around() {
         // valid >= start || valid <= end
-        body.new_binary_op(BinOp::BitOr, move_local(start_result), move_local(end_result), source)
+        body.new_binary_op(
+            BinOp::BitOr,
+            move_local(start_result),
+            move_local(end_result),
+            source,
+            InsertPosition::Before,
+        )
     } else {
         // valid >= start && valid <= end
-        body.new_binary_op(BinOp::BitAnd, move_local(start_result), move_local(end_result), source)
+        body.new_binary_op(
+            BinOp::BitAnd,
+            move_local(start_result),
+            move_local(end_result),
+            source,
+            InsertPosition::Before,
+        )
     }
 }
 
