@@ -3,7 +3,7 @@
 //! This module contains code related to the MIR-to-MIR pass that performs the
 //! stubbing of functions and methods.
 use crate::kani_middle::codegen_units::Stubs;
-use crate::kani_middle::stubbing::validate_stub_const;
+use crate::kani_middle::stubbing::{contract_host_param, validate_stub_const};
 use crate::kani_middle::transform::body::{MutMirVisitor, MutableBody};
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
@@ -12,7 +12,7 @@ use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::visit::{Location, MirVisitor};
 use stable_mir::mir::{Body, Constant, LocalDecl, Operand, Terminator, TerminatorKind};
-use stable_mir::ty::{Const as MirConst, FnDef, RigidTy, TyKind};
+use stable_mir::ty::{FnDef, MirConst, RigidTy, TyKind};
 use stable_mir::CrateDef;
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -46,8 +46,12 @@ impl TransformPass for FnStubPass {
     fn transform(&self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
         trace!(function=?instance.name(), "transform");
         let ty = instance.ty();
-        if let TyKind::RigidTy(RigidTy::FnDef(fn_def, args)) = ty.kind() {
+        if let TyKind::RigidTy(RigidTy::FnDef(fn_def, mut args)) = ty.kind() {
             if let Some(replace) = self.stubs.get(&fn_def) {
+                if let Some(idx) = contract_host_param(tcx, fn_def, *replace) {
+                    debug!(?idx, "FnStubPass::transform remove_host_param");
+                    args.0.remove(idx);
+                }
                 let new_instance = Instance::resolve(*replace, &args).unwrap();
                 debug!(from=?instance.name(), to=?new_instance.name(), "FnStubPass::transform");
                 if let Some(body) = FnStubValidator::validate(tcx, (fn_def, *replace), new_instance)

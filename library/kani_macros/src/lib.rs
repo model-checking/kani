@@ -96,7 +96,7 @@ pub fn solver(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// See https://model-checking.github.io/kani/rfc/rfcs/0006-unstable-api.html for more details.
 #[doc(hidden)]
 #[proc_macro_attribute]
-pub fn unstable(attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn unstable_feature(attr: TokenStream, item: TokenStream) -> TokenStream {
     attr_impl::unstable(attr, item)
 }
 

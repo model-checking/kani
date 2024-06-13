@@ -299,9 +299,9 @@ impl ToIrep for ExprValue {
                 named_sub: linear_map![],
             },
             ExprValue::SelfOp { op, e } => side_effect_irep(op.to_irep_id(), vec![e.to_irep(mm)]),
-            ExprValue::StatementExpression { statements: ops } => side_effect_irep(
+            ExprValue::StatementExpression { statements: ops, location: loc } => side_effect_irep(
                 IrepId::StatementExpression,
-                vec![Stmt::block(ops.to_vec(), Location::none()).to_irep(mm)],
+                vec![Stmt::block(ops.to_vec(), *loc).to_irep(mm)],
             ),
             ExprValue::StringConstant { s } => Irep {
                 id: IrepId::StringConstant,

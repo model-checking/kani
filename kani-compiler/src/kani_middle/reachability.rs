@@ -262,10 +262,21 @@ impl<'a, 'tcx> MonoItemsFnCollector<'a, 'tcx> {
     /// Collect an instance depending on how it is used (invoked directly or via fn_ptr).
     fn collect_instance(&mut self, instance: Instance, is_direct_call: bool) {
         let should_collect = match instance.kind {
-            InstanceKind::Virtual { .. } | InstanceKind::Intrinsic => {
+            InstanceKind::Virtual { .. } => {
                 // Instance definition has no body.
                 assert!(is_direct_call, "Expected direct call {instance:?}");
                 false
+            }
+            InstanceKind::Intrinsic => {
+                // Intrinsics may have a fallback body.
+                assert!(is_direct_call, "Expected direct call {instance:?}");
+                let TyKind::RigidTy(RigidTy::FnDef(def, _)) = instance.ty().kind() else {
+                    unreachable!("Expected function type for intrinsic: {instance:?}")
+                };
+                // The compiler is currently transitioning how to handle intrinsic fallback body.
+                // Until https://github.com/rust-lang/project-stable-mir/issues/79 is implemented
+                // we have to check `must_be_overridden` and `has_body`.
+                !def.as_intrinsic().unwrap().must_be_overridden() && instance.has_body()
             }
             InstanceKind::Shim | InstanceKind::Item => true,
         };
@@ -373,6 +384,10 @@ impl<'a, 'tcx> MirVisitor for MonoItemsFnCollector<'a, 'tcx> {
             }
             ConstantKind::Param(_) => unreachable!("Unexpected parameter constant: {constant:?}"),
             ConstantKind::ZeroSized => {
+                // Nothing to do here.
+                return;
+            }
+            ConstantKind::Ty(_) => {
                 // Nothing to do here.
                 return;
             }

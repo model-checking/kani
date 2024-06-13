@@ -633,7 +633,7 @@ fn parse_modify_values<'a>(
             TokenTree::Token(token, _) => {
                 if let TokenKind::Ident(id, _) = &token.kind {
                     let hir = tcx.hir();
-                    let bid = hir.body_owned_by(local_def_id);
+                    let bid = hir.body_owned_by(local_def_id).id();
                     Some(
                         hir.body_param_names(bid)
                             .zip(mir.args_iter())
@@ -782,10 +782,10 @@ impl<'a> UnstableAttrParseError<'a> {
         tcx.dcx()
             .struct_span_err(
                 self.attr.span,
-                format!("failed to parse `#[kani::unstable]`: {}", self.reason),
+                format!("failed to parse `#[kani::unstable_feature]`: {}", self.reason),
             )
             .with_note(format!(
-                "expected format: #[kani::unstable({}, {}, {})]",
+                "expected format: #[kani::unstable_feature({}, {}, {})]",
                 r#"feature="<IDENTIFIER>""#, r#"issue="<ISSUE>""#, r#"reason="<DESCRIPTION>""#
             ))
             .emit()

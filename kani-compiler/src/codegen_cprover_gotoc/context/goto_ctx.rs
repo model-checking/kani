@@ -137,8 +137,14 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     // Generate a Symbol Expression representing a function variable from the MIR
-    pub fn gen_function_local_variable(&mut self, c: u64, fname: &str, t: Type) -> Symbol {
-        self.gen_stack_variable(c, fname, "var", t, Location::none())
+    pub fn gen_function_local_variable(
+        &mut self,
+        c: u64,
+        fname: &str,
+        t: Type,
+        loc: Location,
+    ) -> Symbol {
+        self.gen_stack_variable(c, fname, "var", t, loc)
     }
 
     /// Given a counter `c` a function name `fname, and a prefix `prefix`, generates a new function local variable
@@ -283,13 +289,14 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn register_initializer(&mut self, var_name: &str, body: Stmt) -> &Symbol {
         let fn_name = Self::initializer_fn_name(var_name);
         let pretty_name = format!("{var_name}::init");
+        let loc = *body.location();
         self.ensure(&fn_name, |_tcx, _| {
             Symbol::function(
                 &fn_name,
                 Type::code(vec![], Type::constructor()),
-                Some(Stmt::block(vec![body], Location::none())), //TODO is this block needed?
+                Some(Stmt::block(vec![body], loc)), //TODO is this block needed?
                 &pretty_name,
-                Location::none(),
+                loc,
             )
             .with_is_file_local(true)
         })

@@ -93,7 +93,7 @@ impl GotocCodegenBackend {
             || collect_reachable_items(tcx, &mut transformer, starting_items),
             "codegen reachability analysis",
         );
-        dump_mir_items(tcx, &items, &symtab_goto.with_extension("kani.mir"));
+        dump_mir_items(tcx, &mut transformer, &items, &symtab_goto.with_extension("kani.mir"));
 
         // Follow rustc naming convention (cx is abbrev for context).
         // https://rustc-dev-guide.rust-lang.org/conventions.html#naming-conventions
