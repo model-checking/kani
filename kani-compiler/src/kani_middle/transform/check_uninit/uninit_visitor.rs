@@ -166,52 +166,67 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                 TerminatorKind::Call { func, args, .. } => {
                     self.super_terminator(term, location);
                     let instance = expect_instance(self.locals, func);
-                    if instance.kind == InstanceKind::Intrinsic {
-                        match instance.intrinsic_name().unwrap().as_str() {
-                            "write_bytes" => {
-                                assert_eq!(
-                                    args.len(),
-                                    3,
-                                    "Unexpected number of arguments for `write_bytes`"
-                                );
-                                assert!(matches!(
-                                    args[0].ty(self.locals).unwrap().kind(),
-                                    TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Mut))
-                                ));
-                                self.push_target(SourceOp::Set {
-                                    place: expect_place(&args[0]).clone(),
-                                    count: args[2].clone(),
-                                    value: true,
-                                })
+                    match instance.kind {
+                        InstanceKind::Intrinsic => {
+                            match instance.intrinsic_name().unwrap().as_str() {
+                                "write_bytes" => {
+                                    assert_eq!(
+                                        args.len(),
+                                        3,
+                                        "Unexpected number of arguments for `write_bytes`"
+                                    );
+                                    assert!(matches!(
+                                        args[0].ty(self.locals).unwrap().kind(),
+                                        TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Mut))
+                                    ));
+                                    self.push_target(SourceOp::Set {
+                                        place: expect_place(&args[0]).clone(),
+                                        count: args[2].clone(),
+                                        value: true,
+                                    })
+                                }
+                                "compare_bytes" => {
+                                    assert_eq!(
+                                        args.len(),
+                                        3,
+                                        "Unexpected number of arguments for `compare_bytes`"
+                                    );
+                                    assert!(matches!(
+                                        args[0].ty(self.locals).unwrap().kind(),
+                                        TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Not))
+                                    ));
+                                    assert!(matches!(
+                                        args[1].ty(self.locals).unwrap().kind(),
+                                        TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Not))
+                                    ));
+                                    self.push_target(SourceOp::Get {
+                                        place: expect_place(&args[0]).clone(),
+                                        count: args[2].clone(),
+                                    });
+                                    self.push_target(SourceOp::Get {
+                                        place: expect_place(&args[1]).clone(),
+                                        count: args[2].clone(),
+                                    });
+                                }
+                                "transmute" | "transmute_copy" => {
+                                    unreachable!("Should've been lowered")
+                                }
+                                _ => { /* TODO: add other intrinsics */ }
                             }
-                            "compare_bytes" => {
-                                assert_eq!(
-                                    args.len(),
-                                    3,
-                                    "Unexpected number of arguments for `compare_bytes`"
-                                );
-                                assert!(matches!(
-                                    args[0].ty(self.locals).unwrap().kind(),
-                                    TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Not))
-                                ));
-                                assert!(matches!(
-                                    args[1].ty(self.locals).unwrap().kind(),
-                                    TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Not))
-                                ));
-                                self.push_target(SourceOp::Get {
-                                    place: expect_place(&args[0]).clone(),
-                                    count: args[2].clone(),
-                                });
-                                self.push_target(SourceOp::Get {
-                                    place: expect_place(&args[1]).clone(),
-                                    count: args[2].clone(),
-                                });
-                            }
-                            "transmute" | "transmute_copy" => {
-                                unreachable!("Should've been lowered")
-                            }
-                            _ => {}
                         }
+                        InstanceKind::Item => {
+                            if instance.is_foreign_item() {
+                                match instance.name().as_str() {
+                                    /* TODO: implement those */
+                                    "alloc::alloc::__rust_alloc" => {}
+                                    "alloc::alloc::__rust_realloc" => {}
+                                    "alloc::alloc::__rust_alloc_zeroed" => {}
+                                    "alloc::alloc::__rust_dealloc" => {}
+                                    _ => {}
+                                }
+                            }
+                        }
+                        _ => {}
                     }
                 }
                 TerminatorKind::Drop { place, .. } => {

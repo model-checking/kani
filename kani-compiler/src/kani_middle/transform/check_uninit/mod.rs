@@ -22,7 +22,7 @@ mod uninit_visitor;
 use ty_layout::TypeLayout;
 use uninit_visitor::{CheckUninitVisitor, InitRelevantInstruction, SourceOp};
 
-const UNINIT_ALLOWLIST: &[&str] = &["kani::shadow", "std::alloc::alloc", "std::ptr::drop_in_place"];
+const UNINIT_ALLOWLIST: &[&str] = &["kani::shadow"];
 
 /// Instrument the code with checks for uninitialized memory.
 #[derive(Debug)]
@@ -115,82 +115,81 @@ impl UninitPass {
                 }
             };
 
-            let count = match &type_layout {
-                TypeLayout::StaticallySized { .. } => match &operation {
-                    SourceOp::Get { count, .. } | SourceOp::Set { count, .. } => count.clone(),
-                    SourceOp::Unsupported { .. } => unreachable!(),
-                },
-                TypeLayout::DynamicallySized { .. } => {
-                    let slice_local = body.new_cast_transmute(
+            let count = match &operation {
+                SourceOp::Get { count, .. } | SourceOp::Set { count, .. } => count.clone(),
+                SourceOp::Unsupported { .. } => unreachable!(),
+            };
+
+            let span = source.span(body.blocks());
+            let layout_place = Place {
+                local: body.new_assignment(
+                    Rvalue::Aggregate(
+                        AggregateKind::Array(Ty::bool_ty()),
+                        type_layout
+                            .as_byte_layout()
+                            .iter()
+                            .map(|byte| {
+                                Operand::Constant(Constant {
+                                    span,
+                                    user_ty: None,
+                                    literal: Const::from_bool(*byte),
+                                })
+                            })
+                            .collect(),
+                    ),
+                    &mut source,
+                ),
+                projection: vec![],
+            };
+
+            let ptr_local = match pointee_ty.kind() {
+                TyKind::RigidTy(RigidTy::Slice(_)) | TyKind::RigidTy(RigidTy::Str) => body
+                    .new_cast_transmute(
                         Operand::Copy(place.clone()),
                         Ty::from_rigid_kind(RigidTy::Slice(Ty::new_tuple(&[]))),
                         Mutability::Not,
                         &mut source,
-                    );
-
-                    let get_slice_size = Instance::resolve(
-                        find_fn_def(tcx, "KaniGetSliceSizeHelper").unwrap(),
-                        &GenericArgs(vec![]),
-                    )
-                    .unwrap();
-
-                    let ret_place = Place {
-                        local: body.new_local(
-                            Ty::usize_ty(),
-                            source.span(body.blocks()),
-                            Mutability::Not,
-                        ),
-                        projection: vec![],
-                    };
-                    body.add_call(
-                        &get_slice_size,
-                        &mut source,
-                        vec![Operand::Copy(Place { local: slice_local, projection: vec![] })],
-                        ret_place.clone(),
-                    );
-                    Operand::Copy(ret_place)
-                }
-            };
-
-            let span = source.span(body.blocks());
-            let layout_local = body.new_assignment(
-                Rvalue::Aggregate(
-                    AggregateKind::Array(Ty::bool_ty()),
-                    type_layout
-                        .as_byte_layout()
-                        .iter()
-                        .map(|byte| {
-                            Operand::Constant(Constant {
-                                span,
-                                user_ty: None,
-                                literal: Const::from_bool(*byte),
-                            })
-                        })
-                        .collect(),
+                    ),
+                _ => body.new_cast_ptr(
+                    Operand::Copy(place.clone()),
+                    Ty::new_tuple(&[]),
+                    Mutability::Not,
+                    &mut source,
                 ),
-                &mut source,
-            );
-
-            let ptr_local = body.new_cast_ptr(
-                Operand::Copy(place.clone()),
-                Ty::new_tuple(&[]),
-                Mutability::Not,
-                &mut source,
-            );
+            };
 
             match operation {
                 SourceOp::Get { .. } => {
-                    let sm_get = Instance::resolve(
-                        find_fn_def(tcx, "KaniShadowMemoryGet").unwrap(),
-                        &GenericArgs(vec![GenericArgKind::Const(
-                            Const::try_from_uint(
-                                type_layout.as_byte_layout().len() as u128,
-                                UintTy::Usize,
+                    let shadow_memory_get = match pointee_ty.kind() {
+                        TyKind::RigidTy(RigidTy::Slice(_)) | TyKind::RigidTy(RigidTy::Str) => {
+                            Instance::resolve(
+                                find_fn_def(tcx, "KaniShadowMemoryGetSlice").unwrap(),
+                                &GenericArgs(vec![GenericArgKind::Const(
+                                    Const::try_from_uint(
+                                        type_layout.as_byte_layout().len() as u128,
+                                        UintTy::Usize,
+                                    )
+                                    .unwrap(),
+                                )]),
                             )
-                            .unwrap(),
-                        )]),
-                    )
-                    .unwrap();
+                            .unwrap()
+                        }
+                        _ => Instance::resolve(
+                            find_fn_def(tcx, "KaniShadowMemoryGet").unwrap(),
+                            &GenericArgs(vec![
+                                GenericArgKind::Const(
+                                    Const::try_from_uint(
+                                        type_layout.as_byte_layout().len() as u128,
+                                        UintTy::Usize,
+                                    )
+                                    .unwrap(),
+                                ),
+                                GenericArgKind::Type(pointee_ty),
+                            ]),
+                        )
+                        .unwrap(),
+                    };
+
                     let ret_place = Place {
                         local: body.new_local(
                             Ty::bool_ty(),
@@ -200,11 +199,11 @@ impl UninitPass {
                         projection: vec![],
                     };
                     body.add_call(
-                        &sm_get,
+                        &shadow_memory_get,
                         &mut source,
                         vec![
                             Operand::Copy(Place { local: ptr_local, projection: vec![] }),
-                            Operand::Move(Place { local: layout_local, projection: vec![] }),
+                            Operand::Move(layout_place),
                             count,
                         ],
                         ret_place.clone(),
@@ -218,17 +217,35 @@ impl UninitPass {
                     )
                 }
                 SourceOp::Set { value, .. } => {
-                    let sm_set = Instance::resolve(
-                        find_fn_def(tcx, "KaniShadowMemorySet").unwrap(),
-                        &GenericArgs(vec![GenericArgKind::Const(
-                            Const::try_from_uint(
-                                type_layout.as_byte_layout().len() as u128,
-                                UintTy::Usize,
+                    let shadow_memory_set = match pointee_ty.kind() {
+                        TyKind::RigidTy(RigidTy::Slice(_)) | TyKind::RigidTy(RigidTy::Str) => {
+                            Instance::resolve(
+                                find_fn_def(tcx, "KaniShadowMemorySetSlice").unwrap(),
+                                &GenericArgs(vec![GenericArgKind::Const(
+                                    Const::try_from_uint(
+                                        type_layout.as_byte_layout().len() as u128,
+                                        UintTy::Usize,
+                                    )
+                                    .unwrap(),
+                                )]),
                             )
-                            .unwrap(),
-                        )]),
-                    )
-                    .unwrap();
+                            .unwrap()
+                        }
+                        _ => Instance::resolve(
+                            find_fn_def(tcx, "KaniShadowMemorySet").unwrap(),
+                            &GenericArgs(vec![
+                                GenericArgKind::Const(
+                                    Const::try_from_uint(
+                                        type_layout.as_byte_layout().len() as u128,
+                                        UintTy::Usize,
+                                    )
+                                    .unwrap(),
+                                ),
+                                GenericArgKind::Type(pointee_ty),
+                            ]),
+                        )
+                        .unwrap(),
+                    };
                     let ret_place = Place {
                         local: body.new_local(
                             Ty::new_tuple(&[]),
@@ -238,11 +255,11 @@ impl UninitPass {
                         projection: vec![],
                     };
                     body.add_call(
-                        &sm_set,
+                        &shadow_memory_set,
                         &mut source,
                         vec![
                             Operand::Copy(Place { local: ptr_local, projection: vec![] }),
-                            Operand::Move(Place { local: layout_local, projection: vec![] }),
+                            Operand::Move(layout_place),
                             count,
                             Operand::Constant(Constant {
                                 span,
