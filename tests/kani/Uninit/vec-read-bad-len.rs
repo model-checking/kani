@@ -2,16 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Z ghost-state -Z uninit-checks
 
-use std::ptr::addr_of;
-
-#[repr(C)]
-struct S(u32, u8);
+use std::ops::Index;
 
 #[kani::proof]
 #[kani::should_panic]
 fn main() {
-    let s = S(0, 0);
-    let ptr: *const u8 = addr_of!(s) as *const u8;
-    let padding = unsafe { *(ptr.add(5)) };
+    let mut v: Vec<u8> = Vec::with_capacity(10);
+    unsafe {
+        v.set_len(5);
+    }
+    let el = v.index(0);
 }
-

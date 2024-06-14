@@ -11,7 +11,6 @@ use crate::kani_middle::transform::body::{
 };
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
-use itertools::Itertools;
 use rustc_middle::ty::TyCtxt;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{AggregateKind, Body, Constant, Mutability, Operand, Place, Rvalue};
@@ -25,15 +24,7 @@ mod uninit_visitor;
 use ty_layout::TypeLayout;
 use uninit_visitor::{CheckUninitVisitor, InitRelevantInstruction, SourceOp};
 
-const UNINIT_ALLOWLIST: &[&str] = &[
-    "kani::shadow::__kani_global_sm_get_inner",
-    "kani::shadow::__kani_global_sm_set_inner",
-    "kani::shadow::__kani_global_sm_get",
-    "kani::shadow::__kani_global_sm_set",
-    "kani::shadow::__kani_global_sm_get_slice",
-    "kani::shadow::__kani_global_sm_set_slice",
-    "std::alloc::alloc",
-];
+const KANI_SHADOW_MEMORY_PREFIX: &str = "__kani_global_sm";
 
 /// Instrument the code with checks for uninitialized memory.
 #[derive(Debug)]
@@ -60,17 +51,14 @@ impl TransformPass for UninitPass {
     fn transform(&self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
         trace!(function=?instance.name(), "transform");
 
-        let name_without_generics = instance
-            .name()
-            .split("::")
-            .filter(|chunk| !chunk.starts_with("<") && !chunk.ends_with(">"))
-            .join("::");
-        if UNINIT_ALLOWLIST.iter().any(|allowlist_item| name_without_generics == *allowlist_item) {
+        // Need to break infinite recursion when shadow memory checks are inserted.
+        if instance.name().contains(KANI_SHADOW_MEMORY_PREFIX) {
             return (false, body);
         }
 
         let mut new_body = MutableBody::from(body);
         let orig_len = new_body.blocks().len();
+
         // Do not cache body.blocks().len() since it will change as we add new checks.
         let mut bb_idx = 0;
         while bb_idx < new_body.blocks().len() {
@@ -95,13 +83,11 @@ impl UninitPass {
         instruction: InitRelevantInstruction,
     ) {
         debug!(?instruction, "build_check");
-        let (operations_before, operations_after): (Vec<_>, Vec<_>) =
-            instruction.operations.into_iter().partition(|operation| match operation {
-                SourceOp::Get { .. }
-                | SourceOp::BlessDrop { .. }
-                | SourceOp::Unsupported { .. } => true,
-                SourceOp::Set { .. } => false,
-            });
+        // Need to partition operations to make sure we add prefix operations before postfix operations.
+        let (operations_before, operations_after): (Vec<_>, Vec<_>) = instruction
+            .operations
+            .into_iter()
+            .partition(|operation| operation.should_be_inserted_before());
         let operations: Vec<_> =
             vec![operations_before, operations_after].into_iter().flatten().collect();
 
@@ -113,63 +99,40 @@ impl UninitPass {
                     let reason = format!(
                         "Kani currently doesn't support checking memory initialization using instruction `{unsupported_instruction}` for type `{place_ty}`",
                     );
-                    self.unsupported_check(tcx, body, &mut source, &reason);
+                    self.unsupported_check(tcx, body, &mut source, operation.position(), &reason);
                     continue;
                 }
                 _ => {}
             };
 
-            let insert_position = match &operation {
-                SourceOp::Get { .. } => InsertPosition::Before,
-                SourceOp::Set { .. } => InsertPosition::After,
-                SourceOp::BlessDrop { .. } => InsertPosition::Before,
-                SourceOp::Unsupported { .. } => unreachable!(),
-            };
-
-            let place = match &operation {
-                SourceOp::Get { place, .. } | SourceOp::Set { place, .. } => place,
-                SourceOp::BlessDrop { place, .. } => &Place {
-                    local: body.new_assignment(
-                        Rvalue::AddressOf(Mutability::Not, place.clone()),
-                        &mut source,
-                        insert_position,
-                    ),
-                    projection: vec![],
-                },
-                SourceOp::Unsupported { .. } => unreachable!(),
-            };
-
-            let place_ty = place.ty(body.locals()).unwrap();
-            let pointee_ty = match place_ty.kind() {
+            let insert_position = operation.position();
+            let ptr_operand = operation.mk_operand(body, &mut source);
+            let ptr_operand_ty = ptr_operand.ty(body.locals()).unwrap();
+            let pointee_ty = match ptr_operand_ty.kind() {
                 TyKind::RigidTy(RigidTy::RawPtr(pointee_ty, _)) => pointee_ty,
                 _ => {
                     unreachable!(
-                        "Should only build checks for raw pointers, `{place_ty}` encountered"
+                        "Should only build checks for raw pointers, `{ptr_operand_ty}` encountered"
                     )
                 }
             };
 
+            // Generate type layout for the item.
             let type_layout = match TypeLayout::get_mask(pointee_ty) {
                 Ok(type_layout) => type_layout,
                 Err(err) => {
-                    let place_ty = place.ty(body.locals()).unwrap();
                     let reason = format!(
-                        "Kani currently doesn't support checking memory initialization using instruction for type `{place_ty}` due to the following: `{err}`",
+                        "Kani currently doesn't support checking memory initialization using instruction for type `{ptr_operand_ty}` due to the following: `{err}`",
                     );
-                    self.unsupported_check(tcx, body, &mut source, &reason);
+                    self.unsupported_check(tcx, body, &mut source, operation.position(), &reason);
                     continue;
                 }
             };
 
-            let count = match &operation {
-                SourceOp::Get { count, .. }
-                | SourceOp::Set { count, .. }
-                | SourceOp::BlessDrop { count, .. } => count.clone(),
-                SourceOp::Unsupported { .. } => unreachable!(),
-            };
-
+            let count = operation.expect_count();
             let span = source.span(body.blocks());
-            let layout_place = Place {
+            // Generate a corresponding array of data & padding bits.
+            let layout_operand = Operand::Move(Place {
                 local: body.new_assignment(
                     Rvalue::Aggregate(
                         AggregateKind::Array(Ty::bool_ty()),
@@ -189,28 +152,33 @@ impl UninitPass {
                     insert_position,
                 ),
                 projection: vec![],
-            };
+            });
 
-            let ptr_local = match pointee_ty.kind() {
-                TyKind::RigidTy(RigidTy::Slice(_)) | TyKind::RigidTy(RigidTy::Str) => body
-                    .new_cast_transmute(
-                        Operand::Copy(place.clone()),
-                        Ty::from_rigid_kind(RigidTy::Slice(Ty::new_tuple(&[]))),
+            // Cast the operand to the appropriate unit type (fat vs thin pointer).
+            let ptr_cast_operand = Operand::Move(Place {
+                local: match pointee_ty.kind() {
+                    TyKind::RigidTy(RigidTy::Slice(_)) | TyKind::RigidTy(RigidTy::Str) => body
+                        .new_cast_transmute(
+                            ptr_operand,
+                            Ty::from_rigid_kind(RigidTy::Slice(Ty::new_tuple(&[]))),
+                            Mutability::Not,
+                            &mut source,
+                            insert_position,
+                        ),
+                    _ => body.new_cast_ptr(
+                        ptr_operand,
+                        Ty::new_tuple(&[]),
                         Mutability::Not,
                         &mut source,
                         insert_position,
                     ),
-                _ => body.new_cast_ptr(
-                    Operand::Copy(place.clone()),
-                    Ty::new_tuple(&[]),
-                    Mutability::Not,
-                    &mut source,
-                    insert_position,
-                ),
-            };
+                },
+                projection: vec![],
+            });
 
             match operation {
                 SourceOp::Get { .. } => {
+                    // Resolve appropriate function depending on the pointer type.
                     let shadow_memory_get = match pointee_ty.kind() {
                         TyKind::RigidTy(RigidTy::Slice(_)) | TyKind::RigidTy(RigidTy::Str) => {
                             Instance::resolve(
@@ -253,11 +221,7 @@ impl UninitPass {
                         &shadow_memory_get,
                         &mut source,
                         insert_position,
-                        vec![
-                            Operand::Copy(Place { local: ptr_local, projection: vec![] }),
-                            Operand::Move(layout_place),
-                            count,
-                        ],
+                        vec![ptr_cast_operand, layout_operand, count],
                         ret_place.clone(),
                     );
                     body.add_check(
@@ -266,10 +230,13 @@ impl UninitPass {
                         &mut source,
                         insert_position,
                         ret_place.local,
-                        &format!("Undefined Behavior: Reading from an uninitialized pointer of type `{place_ty}`"),
+                        &format!("Undefined Behavior: Reading from an uninitialized pointer of type `{ptr_operand_ty}`"),
                     )
                 }
-                SourceOp::Set { value, .. } | SourceOp::BlessDrop { value, .. } => {
+                SourceOp::Set { value, .. }
+                | SourceOp::BlessConst { value, .. }
+                | SourceOp::BlessRef { value, .. } => {
+                    // Resolve appropriate function depending on the pointer type.
                     let shadow_memory_set = match pointee_ty.kind() {
                         TyKind::RigidTy(RigidTy::Slice(_)) | TyKind::RigidTy(RigidTy::Str) => {
                             Instance::resolve(
@@ -312,8 +279,8 @@ impl UninitPass {
                         &mut source,
                         insert_position,
                         vec![
-                            Operand::Copy(Place { local: ptr_local, projection: vec![] }),
-                            Operand::Move(layout_place),
+                            ptr_cast_operand,
+                            layout_operand,
                             count,
                             Operand::Constant(Constant {
                                 span,
@@ -336,6 +303,7 @@ impl UninitPass {
         tcx: TyCtxt,
         body: &mut MutableBody,
         source: &mut SourceInstruction,
+        position: InsertPosition,
         reason: &str,
     ) {
         let span = source.span(body.blocks());
@@ -344,7 +312,7 @@ impl UninitPass {
             span,
             user_ty: None,
         }));
-        let result = body.new_assignment(rvalue, source, InsertPosition::Before);
-        body.add_check(tcx, &self.check_type, source, InsertPosition::Before, result, reason);
+        let result = body.new_assignment(rvalue, source, position);
+        body.add_check(tcx, &self.check_type, source, position, result, reason);
     }
 }

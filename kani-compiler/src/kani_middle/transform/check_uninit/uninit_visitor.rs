@@ -1,19 +1,65 @@
-use crate::kani_middle::transform::body::{MutableBody, SourceInstruction};
+use crate::kani_middle::transform::body::{InsertPosition, MutableBody, SourceInstruction};
+use stable_mir::mir::alloc::GlobalAlloc;
 use stable_mir::mir::mono::{Instance, InstanceKind};
 use stable_mir::mir::visit::{Location, PlaceContext};
 use stable_mir::mir::{
     BasicBlockIdx, Constant, LocalDecl, MirVisitor, Mutability, NonDivergingIntrinsic, Operand,
     Place, ProjectionElem, Rvalue, Statement, StatementKind, Terminator, TerminatorKind,
 };
-use stable_mir::ty::{Const, RigidTy, Span, TyKind, UintTy};
+use stable_mir::ty::{Const, ConstantKind, RigidTy, Span, TyKind, UintTy};
 use strum_macros::AsRefStr;
 
 #[derive(AsRefStr, Clone, Debug)]
 pub enum SourceOp {
     Get { place: Place, count: Operand },
     Set { place: Place, count: Operand, value: bool },
-    BlessDrop { place: Place, count: Operand, value: bool },
-    Unsupported { unsupported_instruction: String, place: Place },
+    BlessConst { constant: Constant, count: Operand, value: bool },
+    BlessRef { place: Place, count: Operand, value: bool },
+    Unsupported { place: Place, unsupported_instruction: String },
+}
+
+impl SourceOp {
+    pub fn mk_operand(&self, body: &mut MutableBody, source: &mut SourceInstruction) -> Operand {
+        match self {
+            SourceOp::Get { place, .. } | SourceOp::Set { place, .. } => {
+                Operand::Copy(place.clone())
+            }
+            SourceOp::BlessRef { place, .. } => Operand::Copy(Place {
+                local: body.new_assignment(
+                    Rvalue::AddressOf(Mutability::Not, place.clone()),
+                    source,
+                    self.position(),
+                ),
+                projection: vec![],
+            }),
+            SourceOp::BlessConst { constant, .. } => Operand::Constant(constant.clone()),
+            SourceOp::Unsupported { .. } => unreachable!(),
+        }
+    }
+
+    pub fn expect_count(&self) -> Operand {
+        match self {
+            SourceOp::Get { count, .. }
+            | SourceOp::Set { count, .. }
+            | SourceOp::BlessConst { count, .. }
+            | SourceOp::BlessRef { count, .. } => count.clone(),
+            SourceOp::Unsupported { .. } => unreachable!(),
+        }
+    }
+
+    pub fn position(&self) -> InsertPosition {
+        match self {
+            SourceOp::Get { .. }
+            | SourceOp::BlessConst { .. }
+            | SourceOp::BlessRef { .. }
+            | SourceOp::Unsupported { .. } => InsertPosition::Before,
+            SourceOp::Set { .. } => InsertPosition::After,
+        }
+    }
+
+    pub fn should_be_inserted_before(&self) -> bool {
+        self.position() == InsertPosition::Before
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -264,7 +310,7 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                     let place_ty = place.ty(&self.locals).unwrap();
                     // When drop is codegen'ed, a reference is taken to the place which is later implicitly coerced to a pointer.
                     // Hence, we need to bless this pointer as initialized.
-                    self.push_target(SourceOp::BlessDrop {
+                    self.push_target(SourceOp::BlessRef {
                         place: place.clone(),
                         count: mk_const_operand(1, location.span()),
                         value: true,
@@ -324,5 +370,32 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
             }
         }
         self.super_place(place, ptx, location)
+    }
+
+    fn visit_operand(&mut self, operand: &Operand, location: Location) {
+        match operand {
+            Operand::Constant(constant) => match constant.literal.kind() {
+                ConstantKind::Allocated(allocation) => {
+                    for (_, prov) in &allocation.provenance.ptrs {
+                        match GlobalAlloc::from(prov.0) {
+                            GlobalAlloc::Static(static_def) => {
+                                let dbg_string = format!("{:?}", static_def);
+                                if dbg_string.contains("__rust_no_alloc_shim_is_unstable") {
+                                    self.push_target(SourceOp::BlessConst {
+                                        constant: constant.clone(),
+                                        count: mk_const_operand(1, location.span()),
+                                        value: true,
+                                    });
+                                }
+                            }
+                            _ => {}
+                        };
+                    }
+                }
+                _ => {}
+            },
+            _ => {}
+        }
+        self.super_operand(operand, location);
     }
 }
