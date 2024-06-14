@@ -36,11 +36,7 @@ impl TypeLayout {
                     offset: 0,
                     size: match ty.layout().unwrap().shape().fields {
                         FieldsShape::Array { stride, count } if count == 0 => stride,
-                        _ => {
-                            return Err(format!(
-                                "Unsupported DST for invalid memory check: `{ty}`"
-                            ));
-                        }
+                        _ => MachineSize::from_bits(8),
                     },
                 };
                 let ty_size = data_bytes.size.bytes();

@@ -155,26 +155,31 @@ impl UninitPass {
             });
 
             // Cast the operand to the appropriate unit type (fat vs thin pointer).
-            let ptr_cast_operand = Operand::Move(Place {
-                local: match pointee_ty.kind() {
-                    TyKind::RigidTy(RigidTy::Slice(_)) | TyKind::RigidTy(RigidTy::Str) => body
-                        .new_cast_transmute(
+            let ptr_cast_operand = match pointee_ty.kind() {
+                TyKind::RigidTy(RigidTy::Slice(_)) | TyKind::RigidTy(RigidTy::Str) => {
+                    Operand::Move(Place {
+                        local: body.new_cast_transmute(
                             ptr_operand,
                             Ty::from_rigid_kind(RigidTy::Slice(Ty::new_tuple(&[]))),
                             Mutability::Not,
                             &mut source,
                             insert_position,
                         ),
-                    _ => body.new_cast_ptr(
+                        projection: vec![],
+                    })
+                }
+                TyKind::RigidTy(RigidTy::Dynamic(..)) => ptr_operand,
+                _ => Operand::Move(Place {
+                    local: body.new_cast_ptr(
                         ptr_operand,
                         Ty::new_tuple(&[]),
                         Mutability::Not,
                         &mut source,
                         insert_position,
                     ),
-                },
-                projection: vec![],
-            });
+                    projection: vec![],
+                }),
+            };
 
             match operation {
                 SourceOp::Get { .. } => {
@@ -193,8 +198,8 @@ impl UninitPass {
                             )
                             .unwrap()
                         }
-                        _ => Instance::resolve(
-                            find_fn_def(tcx, "KaniShadowMemoryGet").unwrap(),
+                        TyKind::RigidTy(RigidTy::Dynamic(..)) => Instance::resolve(
+                            find_fn_def(tcx, "KaniShadowMemoryGetDynamic").unwrap(),
                             &GenericArgs(vec![
                                 GenericArgKind::Const(
                                     Const::try_from_uint(
@@ -205,6 +210,17 @@ impl UninitPass {
                                 ),
                                 GenericArgKind::Type(pointee_ty),
                             ]),
+                        )
+                        .unwrap(),
+                        _ => Instance::resolve(
+                            find_fn_def(tcx, "KaniShadowMemoryGet").unwrap(),
+                            &GenericArgs(vec![GenericArgKind::Const(
+                                Const::try_from_uint(
+                                    type_layout.as_byte_layout().len() as u128,
+                                    UintTy::Usize,
+                                )
+                                .unwrap(),
+                            )]),
                         )
                         .unwrap(),
                     };
@@ -251,8 +267,8 @@ impl UninitPass {
                             )
                             .unwrap()
                         }
-                        _ => Instance::resolve(
-                            find_fn_def(tcx, "KaniShadowMemorySet").unwrap(),
+                        TyKind::RigidTy(RigidTy::Dynamic(..)) => Instance::resolve(
+                            find_fn_def(tcx, "KaniShadowMemorySetDynamic").unwrap(),
                             &GenericArgs(vec![
                                 GenericArgKind::Const(
                                     Const::try_from_uint(
@@ -263,6 +279,17 @@ impl UninitPass {
                                 ),
                                 GenericArgKind::Type(pointee_ty),
                             ]),
+                        )
+                        .unwrap(),
+                        _ => Instance::resolve(
+                            find_fn_def(tcx, "KaniShadowMemorySet").unwrap(),
+                            &GenericArgs(vec![GenericArgKind::Const(
+                                Const::try_from_uint(
+                                    type_layout.as_byte_layout().len() as u128,
+                                    UintTy::Usize,
+                                )
+                                .unwrap(),
+                            )]),
                         )
                         .unwrap(),
                     };
