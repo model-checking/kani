@@ -11,6 +11,7 @@ use std::slice::from_raw_parts;
 fn main() {
     let layout = Layout::from_size_align(32, 8).unwrap();
     unsafe {
+        // This returns initialized memory.
         let ptr = alloc_zeroed(layout);
         *ptr = 0x41;
         *ptr.add(1) = 0x42;

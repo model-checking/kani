@@ -23,9 +23,9 @@ fn main() {
             sptr = ptr::addr_of_mut!(s);
             sptr2 = sptr as *mut [u8; 4];
             *sptr2 = [0; 4];
-            *sptr = S(0, 0); // should reset the padding
-            _val = *sptr2; // should hence be UB
-            //~^ERROR: encountered uninitialized memory
+            *sptr = S(0, 0);
+            // Both S(u16, u16) and [u8; 4] have the same layout, so the memory is initialized.
+            _val = *sptr2; 
             Return()
         }
     }
