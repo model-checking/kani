@@ -5,7 +5,8 @@
 #[kani::proof]
 fn main() {
     let mut v: Vec<u8> = Vec::with_capacity(10);
-    unsafe { *v.as_mut_ptr().add(5) = 0x42 };
-    let def = unsafe { *v.as_ptr().add(5) }; // Not UB since accessing initialized memory.
-    let x = def + 1;
+    unsafe {
+        v.set_len(5);
+    }
+    // We would read uninitialized values on drop, but MIRI doesn't seem to complain about it either.
 }

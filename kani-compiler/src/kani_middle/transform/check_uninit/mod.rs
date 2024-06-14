@@ -95,8 +95,18 @@ impl UninitPass {
         instruction: InitRelevantInstruction,
     ) {
         debug!(?instruction, "build_check");
-        for operation in instruction.operations {
-            let mut source = instruction.source;
+        let (operations_before, operations_after): (Vec<_>, Vec<_>) =
+            instruction.operations.into_iter().partition(|operation| match operation {
+                SourceOp::Get { .. }
+                | SourceOp::BlessDrop { .. }
+                | SourceOp::Unsupported { .. } => true,
+                SourceOp::Set { .. } => false,
+            });
+        let operations: Vec<_> =
+            vec![operations_before, operations_after].into_iter().flatten().collect();
+
+        let mut source = instruction.source;
+        for operation in operations {
             match &operation {
                 SourceOp::Unsupported { unsupported_instruction, place } => {
                     let place_ty = place.ty(body.locals()).unwrap();
