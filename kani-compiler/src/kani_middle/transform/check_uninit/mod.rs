@@ -112,11 +112,20 @@ impl UninitPass {
             let insert_position = match &operation {
                 SourceOp::Get { .. } => InsertPosition::Before,
                 SourceOp::Set { .. } => InsertPosition::After,
+                SourceOp::BlessDrop { .. } => InsertPosition::Before,
                 SourceOp::Unsupported { .. } => unreachable!(),
             };
 
             let place = match &operation {
                 SourceOp::Get { place, .. } | SourceOp::Set { place, .. } => place,
+                SourceOp::BlessDrop { place, .. } => &Place {
+                    local: body.new_assignment(
+                        Rvalue::AddressOf(Mutability::Not, place.clone()),
+                        &mut source,
+                        insert_position,
+                    ),
+                    projection: vec![],
+                },
                 SourceOp::Unsupported { .. } => unreachable!(),
             };
 
@@ -143,7 +152,9 @@ impl UninitPass {
             };
 
             let count = match &operation {
-                SourceOp::Get { count, .. } | SourceOp::Set { count, .. } => count.clone(),
+                SourceOp::Get { count, .. }
+                | SourceOp::Set { count, .. }
+                | SourceOp::BlessDrop { count, .. } => count.clone(),
                 SourceOp::Unsupported { .. } => unreachable!(),
             };
 
@@ -248,7 +259,7 @@ impl UninitPass {
                         &format!("Undefined Behavior: Reading from an uninitialized pointer of type `{place_ty}`"),
                     )
                 }
-                SourceOp::Set { value, .. } => {
+                SourceOp::Set { value, .. } | SourceOp::BlessDrop { value, .. } => {
                     let shadow_memory_set = match pointee_ty.kind() {
                         TyKind::RigidTy(RigidTy::Slice(_)) | TyKind::RigidTy(RigidTy::Str) => {
                             Instance::resolve(

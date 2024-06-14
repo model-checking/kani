@@ -3,7 +3,7 @@ use stable_mir::mir::mono::{Instance, InstanceKind};
 use stable_mir::mir::visit::{Location, PlaceContext};
 use stable_mir::mir::{
     BasicBlockIdx, Constant, LocalDecl, MirVisitor, Mutability, NonDivergingIntrinsic, Operand,
-    Place, ProjectionElem, Statement, StatementKind, Terminator, TerminatorKind,
+    Place, ProjectionElem, Rvalue, Statement, StatementKind, Terminator, TerminatorKind,
 };
 use stable_mir::ty::{Const, RigidTy, Span, TyKind, UintTy};
 use strum_macros::AsRefStr;
@@ -12,6 +12,7 @@ use strum_macros::AsRefStr;
 pub enum SourceOp {
     Get { place: Place, count: Operand },
     Set { place: Place, count: Operand, value: bool },
+    BlessDrop { place: Place, count: Operand, value: bool },
     Unsupported { unsupported_instruction: String, place: Place },
 }
 
@@ -123,7 +124,7 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                 StatementKind::Assign(place, rvalue) => {
                     // First check rvalue.
                     self.visit_rvalue(rvalue, location);
-                    // Then check the destination place.
+                    // Check whether we are assigning into a dereference (*ptr = _).
                     if let Some(place_without_deref) = try_remove_topmost_deref(place) {
                         if place_without_deref.ty(&self.locals).unwrap().kind().is_raw_ptr() {
                             self.push_target(SourceOp::Set {
@@ -131,6 +132,19 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                 count: mk_const_operand(1, location.span()),
                                 value: true,
                             });
+                        }
+                    }
+                    // Check whether Rvalue creates a new initialized pointer previously not captured inside shadow memory.
+                    if place.ty(&self.locals).unwrap().kind().is_raw_ptr() {
+                        match rvalue {
+                            Rvalue::AddressOf(..) => {
+                                self.push_target(SourceOp::Set {
+                                    place: place.clone(),
+                                    count: mk_const_operand(1, location.span()),
+                                    value: true,
+                                });
+                            }
+                            _ => {}
                         }
                     }
                 }
@@ -247,7 +261,15 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                 }
                 TerminatorKind::Drop { place, .. } => {
                     self.super_terminator(term, location);
-                    if place.ty(&self.locals).unwrap().kind().is_raw_ptr() {
+                    let place_ty = place.ty(&self.locals).unwrap();
+                    // When drop is codegen'ed, a reference is taken to the place which is later implicitly coerced to a pointer.
+                    // Hence, we need to bless this pointer as initialized.
+                    self.push_target(SourceOp::BlessDrop {
+                        place: place.clone(),
+                        count: mk_const_operand(1, location.span()),
+                        value: true,
+                    });
+                    if place_ty.kind().is_raw_ptr() {
                         self.push_target(SourceOp::Set {
                             place: place.clone(),
                             count: mk_const_operand(1, location.span()),
