@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Zfunction-contracts
 
-#[kani::ensures(|result| old(*ptr) == *ptr)]
+#[kani::ensures(|_| old(*ptr) == *ptr)]
 #[kani::requires(*ptr < 100)]
 #[kani::modifies(ptr)]
 fn modify(ptr: &mut u32) {

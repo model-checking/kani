@@ -1,7 +1,7 @@
 assertion\
 - Status: FAILURE\
-- Description: "|result| old(*ptr) == *ptr"
+- Description: "|_| old(*ptr) == *ptr"
 
-Failed Checks: |result| old(*ptr) == *ptr
+Failed Checks: |_| old(*ptr) == *ptr
 
 VERIFICATION:- FAILED
