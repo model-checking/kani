@@ -549,6 +549,49 @@ This is the technical portion of the RFC. Please provide high level details of t
 <!-- For Developers -->
 <!-- `old` discussion here -->
 
+We developed the `old` contract for history expressions via understanding it as a modality.
+The `old` monad links the "language of the past" to the "language of the present".
+Implementing the full generality of the monad is rather difficult, so we focus on a particular usage of the monad.
+
+We have an external syntax representation which is what the user inputs. We then parse this and logically manipulate it as a monad, prefixing all the `bind` operations. We then output the final compiled macro output as rust code.
+
+In particular, if we have an ensures statement like
+```rust
+#[kani::ensures(old(*ptr)+1==*ptr)]
+```
+Then we comprehend this as syntax for the statement (not within rust)
+```
+bind (*ptr : O(u32)) (|remember : u32| remember + 1 == *ptr)
+```
+Here, the `O(u32)` is taking the type of the past `u32` and converting it into a type in the present `O(u32)` while the bind operation lets you use the value of the past `u32` to express a type in the present `bool`.
+
+This then gets compiled to (within rust)
+```rust
+let remember = *ptr;
+let result = ...;
+kani::assert(remember + 1 == *ptr)
+```
+This means that the underlying principle of the monad is there, but external syntax appears to be less like a monad because otherwise it would be too difficult to implement, and the user most likely only cares about this particular construction of prefixing all the `bind` operations.
+
+This construction requires that `old` expressions are closed with resprect to the input parameters. This is due to the lifting into the prefixed `bind` operations.
+
+A major drawback is that eta expansion fails. If we eta expand a function f, it becomes |x|f(x). Note that eta expansions guarantee that the original f and the |x|f(x) are equivalent which makes a lot of sense since you’re just calling the same function. However, we have that `old(y)` is not equivalent to `(|x|old(x))(y)`. `y` is a closed expression, so the first statement works. `x` is a bound variable, so it is an open expression, so compilation will fail.
+
+The reason for this restriction is that the user will most likely only want to use this particular prefixed `bind` structure for their code, so exposing the concept of monads to the user level would only confuse the user. It is also simpler from an implementation perspective to limit the monad to this particular usage.
+
+As for nested old, such as `old(old(*ptr)+*ptr)`, it is reasonable to interpret this as syntax representing
+```
+bind (bind(*ptr)(|remember_1| remember_1 + *ptr)) (|remember_0| ...)
+```
+which compiles to
+```rust
+let remember_1 = *ptr;
+let remember_0 = remember_1 + *ptr;
+let result = ...;
+...
+```
+so the restriction is just a matter of there not being implementation support for this kind of statement rather than the theory itself. It is not particularly useful to implement this because we claim that there should be no effectful computation within the contracts, so you can substitute the `remember_1` into the second line without worrying about the effects. Hence, we opt for simply restricting this behavior instead of implementing it. (Note: it can be implemented by changing `denier.visit_expr_mut(e);` into `self.visit_expr_mut(e);`)
+
 <!-- 
 - What are the pros and cons of this design?
 - What is the impact of not doing this?
