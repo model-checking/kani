@@ -102,7 +102,7 @@ fn __kani_global_sm_get_inner<const N: usize>(ptr: *const (), layout: [bool; N],
         }
         count += 1;
     }
-    return true;
+    true
 }
 
 // Set initialization setate to `value` for `n` items laid out according to the `layout` starting at address `ptr`.
