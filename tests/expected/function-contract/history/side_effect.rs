@@ -6,6 +6,7 @@
 /// which leads to confusion in the ensures clause. There are
 /// currently no checks to prevent side effects within `old`
 /// expressions.
+/// See https://github.com/model-checking/kani/issues/3213
 #[kani::ensures(|result| old({*ptr+=1; *ptr}) == _val)]
 #[kani::requires(*ptr < 100)]
 #[kani::requires(*ptr == _val)]
