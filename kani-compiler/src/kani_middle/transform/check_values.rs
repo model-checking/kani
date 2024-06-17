@@ -24,7 +24,7 @@ use stable_mir::abi::{FieldsShape, Scalar, TagEncoding, ValueAbi, VariantsShape,
 use stable_mir::mir::mono::{Instance, InstanceKind};
 use stable_mir::mir::visit::{Location, PlaceContext, PlaceRef};
 use stable_mir::mir::{
-    AggregateKind, BasicBlockIdx, BinOp, Body, CastKind, Constant, FieldIdx, Local, LocalDecl,
+    AggregateKind, BasicBlockIdx, BinOp, Body, CastKind, ConstOperand, FieldIdx, Local, LocalDecl,
     MirVisitor, Mutability, NonDivergingIntrinsic, Operand, Place, ProjectionElem, Rvalue,
     Statement, StatementKind, Terminator, TerminatorKind,
 };
@@ -118,8 +118,8 @@ impl ValidValuePass {
         reason: &str,
     ) {
         let span = source.span(body.blocks());
-        let rvalue = Rvalue::Use(Operand::Constant(Constant {
-            literal: MirConst::from_bool(false),
+        let rvalue = Rvalue::Use(Operand::Constant(ConstOperand {
+            const_: MirConst::from_bool(false),
             span,
             user_ty: None,
         }));
