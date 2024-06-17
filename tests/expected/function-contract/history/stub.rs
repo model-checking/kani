@@ -16,15 +16,15 @@ fn double_harness() {
 }
 
 #[kani::ensures(|result| old(*ptr + *ptr + *ptr + *ptr) == *ptr)]
-#[kani::requires(*ptr < 100)]
+#[kani::requires(*ptr < 50)]
 #[kani::modifies(ptr)]
-#[kani::stub_verified(double)]
 fn quadruple(ptr: &mut u32) {
     double(ptr);
     double(ptr)
 }
 
 #[kani::proof_for_contract(quadruple)]
+#[kani::stub_verified(double)]
 fn quadruple_harness() {
     let mut i = kani::any();
     quadruple(&mut i);
