@@ -439,15 +439,18 @@ fn struct_invariant_conjunction(ident: &Ident, fields: &Fields) -> TokenStream {
 /// Generates an `Invariant` implementation where the `is_safe` function body is
 /// the `attr` expression passed to the attribute macro.
 /// Only available for structs.
-pub fn attr_custom_invariant(attr: TokenStream, item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+pub fn attr_custom_invariant(
+    attr: TokenStream,
+    item: proc_macro::TokenStream,
+) -> proc_macro::TokenStream {
     let derive_item = parse_macro_input!(item as DeriveInput);
     let item_name = &derive_item.ident;
 
     if !matches!(derive_item.data, Data::Struct(..)) {
         abort!(Span::call_site(), "Cannot define invariant for `{}`", item_name;
-                note = item_name.span() =>
-                "`#[kani::invariant(..)]` is only available for structs"
-            )
+            note = item_name.span() =>
+            "`#[kani::invariant(..)]` is only available for structs"
+        )
     }
 
     // Keep a copy of the original item to re-emit it later.
