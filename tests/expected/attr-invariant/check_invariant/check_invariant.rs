@@ -1,7 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-//! Check that Kani can automatically derive `Invariant` for structs with named fields.
+//! Check that the `kani::invariant` attribute is applied and the associated
+//! invariant can be checked through an `is_safe` call.
 
 extern crate kani;
 use kani::Invariant;
