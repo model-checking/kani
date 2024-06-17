@@ -1,3 +1,8 @@
+// Copyright Kani Contributors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+//! Visitor that collects all instructions relevant to uninitialized memory access.
+
 use crate::kani_middle::transform::body::{InsertPosition, MutableBody, SourceInstruction};
 use stable_mir::mir::alloc::GlobalAlloc;
 use stable_mir::mir::mono::{Instance, InstanceKind};

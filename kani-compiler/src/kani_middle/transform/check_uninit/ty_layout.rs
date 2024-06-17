@@ -1,3 +1,8 @@
+// Copyright Kani Contributors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+//! Utility functions that help calculate type layout.
+
 use stable_mir::abi::{FieldsShape, Scalar, TagEncoding, ValueAbi, VariantsShape};
 use stable_mir::target::{MachineInfo, MachineSize};
 use stable_mir::ty::{AdtKind, IndexedVal, RigidTy, Ty, TyKind};
