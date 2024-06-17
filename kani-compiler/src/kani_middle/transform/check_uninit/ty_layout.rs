@@ -7,18 +7,21 @@ use stable_mir::CrateDef;
 struct DataBytes {
     /// Offset in bytes.
     offset: usize,
-    /// Size of this requirement.
+    /// Size of this data chunk.
     size: MachineSize,
 }
 
 pub type ByteLayout = Vec<bool>;
 
+// Depending on whether the type is statically or dynamically sized,
+// the layout of the element or the layout of the actual type is returned.
 pub enum TypeLayout {
     StaticallySized { layout: ByteLayout },
     DynamicallySized { element_layout: ByteLayout },
 }
 
 impl TypeLayout {
+    /// Retrieve data layout for a type.
     pub fn get_mask(ty: Ty) -> Result<Self, String> {
         if ty.layout().unwrap().shape().is_sized() {
             let ty_layout = data_bytes_for_ty(&MachineInfo::target(), ty, 0)?;
@@ -51,6 +54,7 @@ impl TypeLayout {
         }
     }
 
+    // Convert type layout to a vector of byte flags.
     pub fn as_byte_layout(&self) -> &ByteLayout {
         match self {
             TypeLayout::StaticallySized { layout } => layout,
@@ -59,6 +63,7 @@ impl TypeLayout {
     }
 }
 
+/// Get a size of an initialized scalar.
 fn scalar_ty_size(machine_info: &MachineInfo, ty: Ty) -> Option<DataBytes> {
     let shape = ty.layout().unwrap().shape();
     match shape.abi {
@@ -74,6 +79,7 @@ fn scalar_ty_size(machine_info: &MachineInfo, ty: Ty) -> Option<DataBytes> {
     }
 }
 
+/// Retrieve a set of data bytes with offsets for a type.
 fn data_bytes_for_ty(
     machine_info: &MachineInfo,
     ty: Ty,

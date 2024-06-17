@@ -25,7 +25,7 @@ fn main() {
             *sptr2 = [0; 4];
             *sptr = S(0, 0);
             // Both S(u16, u16) and [u8; 4] have the same layout, so the memory is initialized.
-            _val = *sptr2; 
+            _val = *sptr2;
             Return()
         }
     }

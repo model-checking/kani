@@ -13,4 +13,3 @@ fn main() {
     let ptr: *const u8 = addr_of!(s) as *const u8;
     let padding = unsafe { *(ptr.add(4)) };
 }
-

@@ -83,7 +83,8 @@ impl UninitPass {
         instruction: InitRelevantInstruction,
     ) {
         debug!(?instruction, "build_check");
-        // Need to partition operations to make sure we add prefix operations before postfix operations.
+        // Need to partition operations to make sure we add prefix operations before postfix operations
+        // to ensure instruction pointer shifts correctly.
         let (operations_before, operations_after): (Vec<_>, Vec<_>) = instruction
             .operations
             .into_iter()
@@ -108,7 +109,7 @@ impl UninitPass {
                 TyKind::RigidTy(RigidTy::RawPtr(pointee_ty, _)) => pointee_ty,
                 _ => {
                     unreachable!(
-                        "Should only build checks for raw pointers, `{ptr_operand_ty}` encountered"
+                        "Should only build checks for raw pointers, `{ptr_operand_ty}` encountered."
                     )
                 }
             };
@@ -118,7 +119,7 @@ impl UninitPass {
                 Ok(type_layout) => type_layout,
                 Err(err) => {
                     let reason = format!(
-                        "Kani currently doesn't support checking memory initialization using instruction for type `{ptr_operand_ty}` due to the following: `{err}`",
+                        "Kani currently doesn't support checking memory initialization for `{ptr_operand_ty}` due to the following error: `{err}`",
                     );
                     self.unsupported_check(tcx, body, &mut source, operation.position(), &reason);
                     continue;
@@ -195,6 +196,7 @@ impl UninitPass {
                         ),
                         projection: vec![],
                     };
+                    // Retrieve current shadow memory info.
                     body.add_call(
                         &shadow_memory_get,
                         &mut source,
@@ -202,6 +204,7 @@ impl UninitPass {
                         vec![ptr_operand, layout_operand, count],
                         ret_place.clone(),
                     );
+                    // Make sure all non-padding bytes are initialized.
                     body.add_check(
                         tcx,
                         &self.check_type,
@@ -256,6 +259,7 @@ impl UninitPass {
                         ),
                         projection: vec![],
                     };
+                    // Initialize all non-padding bytes.
                     body.add_call(
                         &shadow_memory_set,
                         &mut source,

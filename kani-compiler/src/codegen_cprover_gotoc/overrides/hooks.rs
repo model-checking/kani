@@ -260,7 +260,7 @@ impl GotocHook for PointerObject {
     ) -> Stmt {
         assert_eq!(fargs.len(), 1);
         let ptr = fargs.pop().unwrap().cast_to(Type::void_pointer());
-        let target: usize = target.unwrap();
+        let target = target.unwrap();
         let loc = gcx.codegen_caller_span_stable(span);
         let ret_place =
             unwrap_or_return_codegen_unimplemented_stmt!(gcx, gcx.codegen_place_stable(assign_to));
