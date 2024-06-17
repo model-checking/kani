@@ -94,12 +94,9 @@ impl UninitPass {
 
         let mut source = instruction.source;
         for operation in operations {
-            match &operation {
-                SourceOp::Unsupported { reason } => {
-                    self.unsupported_check(tcx, body, &mut source, operation.position(), &reason);
-                    continue;
-                }
-                _ => {}
+            if let SourceOp::Unsupported { reason } = &operation {
+                self.unsupported_check(tcx, body, &mut source, operation.position(), &reason);
+                continue;
             };
 
             let insert_position = operation.position();

@@ -33,8 +33,10 @@ impl TypeLayout {
             let ty_size = ty.layout().unwrap().shape().size.bytes();
             let mut layout_mask = vec![false; ty_size];
             for data_bytes in ty_layout.iter() {
-                for i in data_bytes.offset..data_bytes.offset + data_bytes.size.bytes() {
-                    layout_mask[i] = true;
+                for layout_item in
+                    layout_mask.iter_mut().skip(data_bytes.offset).take(data_bytes.size.bytes())
+                {
+                    *layout_item = true;
                 }
             }
             Ok(Self::StaticallySized { layout: layout_mask })
@@ -43,14 +45,16 @@ impl TypeLayout {
                 let data_bytes = DataBytes {
                     offset: 0,
                     size: match ty.layout().unwrap().shape().fields {
-                        FieldsShape::Array { stride, count } if count == 0 => stride,
+                        FieldsShape::Array { stride, count: 0 } => stride,
                         _ => MachineSize::from_bits(0),
                     },
                 };
                 let ty_size = data_bytes.size.bytes();
                 let mut layout_mask = vec![false; ty_size];
-                for i in data_bytes.offset..data_bytes.offset + data_bytes.size.bytes() {
-                    layout_mask[i] = true;
+                for layout_item in
+                    layout_mask.iter_mut().skip(data_bytes.offset).take(data_bytes.size.bytes())
+                {
+                    *layout_item = true;
                 }
                 layout_mask
             };

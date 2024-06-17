@@ -188,15 +188,12 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                     }
                     // Check whether Rvalue creates a new initialized pointer previously not captured inside shadow memory.
                     if place.ty(&self.locals).unwrap().kind().is_raw_ptr() {
-                        match rvalue {
-                            Rvalue::AddressOf(..) => {
-                                self.push_target(SourceOp::Set {
-                                    place: place.clone(),
-                                    count: mk_const_operand(1, location.span()),
-                                    value: true,
-                                });
-                            }
-                            _ => {}
+                        if let Rvalue::AddressOf(..) = rvalue {
+                            self.push_target(SourceOp::Set {
+                                place: place.clone(),
+                                count: mk_const_operand(1, location.span()),
+                                value: true,
+                            });
                         }
                     }
                 }
@@ -385,40 +382,30 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
     }
 
     fn visit_operand(&mut self, operand: &Operand, location: Location) {
-        match operand {
-            Operand::Constant(constant) => match constant.const_.kind() {
-                ConstantKind::Allocated(allocation) => {
-                    for (_, prov) in &allocation.provenance.ptrs {
-                        match GlobalAlloc::from(prov.0) {
-                            GlobalAlloc::Static(static_def) => {
-                                let dbg_string = format!("{:?}", static_def);
-                                if dbg_string.contains("__rust_no_alloc_shim_is_unstable") {
-                                    self.push_target(SourceOp::BlessConst {
-                                        constant: constant.clone(),
-                                        count: mk_const_operand(1, location.span()),
-                                        value: true,
-                                    });
-                                }
-                            }
-                            _ => {}
-                        };
-                    }
+        if let Operand::Constant(constant) = operand {
+            if let ConstantKind::Allocated(allocation) = constant.const_.kind() {
+                for (_, prov) in &allocation.provenance.ptrs {
+                    if let GlobalAlloc::Static(static_def) = GlobalAlloc::from(prov.0) {
+                        let dbg_string = format!("{:?}", static_def);
+                        if dbg_string.contains("__rust_no_alloc_shim_is_unstable") {
+                            self.push_target(SourceOp::BlessConst {
+                                constant: constant.clone(),
+                                count: mk_const_operand(1, location.span()),
+                                value: true,
+                            });
+                        }
+                    };
                 }
-                _ => {}
-            },
-            _ => {}
+            }
         }
         self.super_operand(operand, location);
     }
 
     fn visit_rvalue(&mut self, rvalue: &Rvalue, location: Location) {
-        match rvalue {
-            Rvalue::Cast(CastKind::PointerCoercion(PointerCoercion::Unsize), _, _) => {
-                self.push_target(SourceOp::Unsupported {
-                    reason: "Kani does not support reasoning about memory initialization of unsized pointers.".to_string(),
-                });
-            }
-            _ => {}
+        if let Rvalue::Cast(CastKind::PointerCoercion(PointerCoercion::Unsize), _, _) = rvalue {
+            self.push_target(SourceOp::Unsupported {
+                reason: "Kani does not support reasoning about memory initialization of unsized pointers.".to_string(),
+            });
         };
         self.super_rvalue(rvalue, location);
     }
