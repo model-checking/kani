@@ -553,19 +553,19 @@ We developed the `old` contract for history expressions via understanding it as 
 The `old` monad links the "language of the past" to the "language of the present".
 Implementing the full generality of the monad is rather difficult, so we focus on a particular usage of the monad.
 
-We have an external syntax representation which is what the user inputs. We then parse this and logically manipulate it as a monad, prefixing all the `bind` operations. We then output the final compiled macro output as rust code.
+We have an external syntax representation which is what the user inputs. We then parse this and logically manipulate it as a monad, prefixing all the `bind` operations. We then output the final compiled macro output as Rust code.
 
 In particular, if we have an ensures statement like
 ```rust
 #[kani::ensures(old(*ptr)+1==*ptr)]
 ```
-Then we comprehend this as syntax for the statement (not within rust)
+Then we comprehend this as syntax for the statement (not within Rust)
 ```
 bind (*ptr : O(u32)) (|remember : u32| remember + 1 == *ptr)
 ```
 Here, the `O(u32)` is taking the type of the past `u32` and converting it into a type in the present `O(u32)` while the bind operation lets you use the value of the past `u32` to express a type in the present `bool`.
 
-This then gets compiled to (within rust)
+This then gets compiled to (within Rust)
 ```rust
 let remember = *ptr;
 let result = ...;
