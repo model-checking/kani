@@ -549,7 +549,7 @@ This is the technical portion of the RFC. Please provide high level details of t
 <!-- For Developers -->
 <!-- `old` discussion here -->
 
-We developed the `old` contract for history expressions via understanding it as a modality.
+We developed the `old` contract for history expressions via understanding it as a [modality](https://en.wikipedia.org/wiki/Monad_(functional_programming)) originating from [Moggi 1991](https://www.sciencedirect.com/science/article/pii/0890540191900524).
 The `old` monad links the "language of the past" to the "language of the present".
 Implementing the full generality of the monad is rather difficult, so we focus on a particular usage of the monad.
 
