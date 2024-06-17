@@ -11,6 +11,9 @@ impl<T: kani::Arbitrary> kani::Arbitrary for NoCopy<T> {
     }
 }
 
+/// This is test includes `derive(Clone)` and demonstrates that
+/// you can precompute the clone to copy and save the struct
+/// so that in the future we can access the old contents via the `.0`.
 #[kani::ensures(|result| old(ptr.clone()).0 + 1 == ptr.0)]
 #[kani::requires(ptr.0 < 100)]
 #[kani::modifies(&mut ptr.0)]

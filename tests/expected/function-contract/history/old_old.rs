@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Zfunction-contracts
 
+/// We prohibit nested calls to old since this should be
+/// unobservable to the user.
 #[kani::ensures(|result| old(*ptr + old(1)) == *ptr)]
 #[kani::requires(*ptr < 100)]
 #[kani::modifies(ptr)]

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Zfunction-contracts
 
+// testing block computation within `old` expression
 #[kani::ensures(|result| old({let x = &ptr; let y = **x; y + 1}) == *ptr)]
 #[kani::requires(*ptr < 100)]
 #[kani::modifies(ptr)]

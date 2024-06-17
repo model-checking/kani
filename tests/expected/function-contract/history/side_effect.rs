@@ -2,6 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Zfunction-contracts
 
+/// This test performs a side effect within the `old` expression
+/// which leads to confusion in the ensures clause. There are
+/// currently no checks to prevent side effects within `old`
+/// expressions.
 #[kani::ensures(|result| old({*ptr+=1; *ptr}) == _val)]
 #[kani::requires(*ptr < 100)]
 #[kani::requires(*ptr == _val)]

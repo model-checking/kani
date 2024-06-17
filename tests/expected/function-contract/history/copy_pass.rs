@@ -10,6 +10,10 @@ impl<T: kani::Arbitrary> kani::Arbitrary for NoCopy<T> {
     }
 }
 
+/// In this test, the `NoCopy` struct cannot be copied
+/// to be accessed in the future, but we can still copy
+/// the `u32` stored inside it to be accessed in the future.
+/// The precomputation of `ptr.0` gets passed to the future.
 #[kani::ensures(|result| old(ptr.0) + 1 == ptr.0)]
 #[kani::requires(ptr.0 < 100)]
 #[kani::modifies(&mut ptr.0)]
