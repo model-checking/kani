@@ -27,8 +27,6 @@
 //! }
 //! ```
 
-use std::ptr::DynMetadata;
-
 const MAX_NUM_OBJECTS: usize = 1024;
 const MAX_OBJECT_SIZE: usize = 64;
 
@@ -175,34 +173,5 @@ pub fn __kani_global_sm_set_slice<const N: usize, T: ?Sized>(
     let meta: usize = unsafe { std::mem::transmute_copy(&meta) };
     // The pointee type is a slice, more than `n` objects can be accessed.
     let n = n * meta;
-    __kani_global_sm_set_inner(ptr, layout, n, value);
-}
-
-// This method should only be called if T is known to be a trait object.
-#[rustc_diagnostic_item = "KaniShadowMemoryGetDynamic"]
-pub fn __kani_global_sm_get_dynamic<const N: usize, T: ?Sized>(
-    ptr: *const T,
-    layout: [bool; N],
-    n: usize,
-) -> bool {
-    let (ptr, meta) = ptr.to_raw_parts();
-    let meta: DynMetadata<T> = unsafe { std::mem::transmute_copy(&meta) };
-    // The pointee type is a dyn Trait, more than `n` objects can be accessed.
-    let n = n * meta.size_of();
-    __kani_global_sm_get_inner(ptr, layout, n)
-}
-
-// This method should only be called if T is known to be a trait object.
-#[rustc_diagnostic_item = "KaniShadowMemorySetDynamic"]
-pub fn __kani_global_sm_set_dynamic<const N: usize, T: ?Sized>(
-    ptr: *const T,
-    layout: [bool; N],
-    n: usize,
-    value: bool,
-) {
-    let (ptr, meta) = ptr.to_raw_parts();
-    let meta: DynMetadata<T> = unsafe { std::mem::transmute_copy(&meta) };
-    // The pointee type is a slice, more than `n` objects can be accessed.
-    let n = n * meta.size_of();
     __kani_global_sm_set_inner(ptr, layout, n, value);
 }

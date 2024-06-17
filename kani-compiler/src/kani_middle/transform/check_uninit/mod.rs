@@ -94,11 +94,7 @@ impl UninitPass {
         let mut source = instruction.source;
         for operation in operations {
             match &operation {
-                SourceOp::Unsupported { unsupported_instruction, place } => {
-                    let place_ty = place.ty(body.locals()).unwrap();
-                    let reason = format!(
-                        "Kani currently doesn't support checking memory initialization using instruction `{unsupported_instruction}` for type `{place_ty}`",
-                    );
+                SourceOp::Unsupported { reason } => {
                     self.unsupported_check(tcx, body, &mut source, operation.position(), &reason);
                     continue;
                 }
@@ -174,20 +170,7 @@ impl UninitPass {
                             )
                             .unwrap()
                         }
-                        TyKind::RigidTy(RigidTy::Dynamic(..)) => Instance::resolve(
-                            find_fn_def(tcx, "KaniShadowMemoryGetDynamic").unwrap(),
-                            &GenericArgs(vec![
-                                GenericArgKind::Const(
-                                    Const::try_from_uint(
-                                        type_layout.as_byte_layout().len() as u128,
-                                        UintTy::Usize,
-                                    )
-                                    .unwrap(),
-                                ),
-                                GenericArgKind::Type(pointee_ty),
-                            ]),
-                        )
-                        .unwrap(),
+                        TyKind::RigidTy(RigidTy::Dynamic(..)) => continue, // Any layout is valid when dereferencing a pointer to `dyn Trait`.
                         _ => Instance::resolve(
                             find_fn_def(tcx, "KaniShadowMemoryGet").unwrap(),
                             &GenericArgs(vec![
@@ -249,20 +232,7 @@ impl UninitPass {
                             )
                             .unwrap()
                         }
-                        TyKind::RigidTy(RigidTy::Dynamic(..)) => Instance::resolve(
-                            find_fn_def(tcx, "KaniShadowMemorySetDynamic").unwrap(),
-                            &GenericArgs(vec![
-                                GenericArgKind::Const(
-                                    Const::try_from_uint(
-                                        type_layout.as_byte_layout().len() as u128,
-                                        UintTy::Usize,
-                                    )
-                                    .unwrap(),
-                                ),
-                                GenericArgKind::Type(pointee_ty),
-                            ]),
-                        )
-                        .unwrap(),
+                        TyKind::RigidTy(RigidTy::Dynamic(..)) => continue, // Any layout is valid when dereferencing a pointer to `dyn Trait`.
                         _ => Instance::resolve(
                             find_fn_def(tcx, "KaniShadowMemorySet").unwrap(),
                             &GenericArgs(vec![

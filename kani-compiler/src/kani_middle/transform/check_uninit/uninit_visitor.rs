@@ -3,8 +3,9 @@ use stable_mir::mir::alloc::GlobalAlloc;
 use stable_mir::mir::mono::{Instance, InstanceKind};
 use stable_mir::mir::visit::{Location, PlaceContext};
 use stable_mir::mir::{
-    BasicBlockIdx, Constant, LocalDecl, MirVisitor, Mutability, NonDivergingIntrinsic, Operand,
-    Place, ProjectionElem, Rvalue, Statement, StatementKind, Terminator, TerminatorKind,
+    BasicBlockIdx, CastKind, Constant, LocalDecl, MirVisitor, Mutability, NonDivergingIntrinsic,
+    Operand, Place, PointerCoercion, ProjectionElem, Rvalue, Statement, StatementKind, Terminator,
+    TerminatorKind,
 };
 use stable_mir::ty::{Const, ConstantKind, RigidTy, Span, TyKind, UintTy};
 use strum_macros::AsRefStr;
@@ -15,7 +16,7 @@ pub enum SourceOp {
     Set { place: Place, count: Operand, value: bool },
     BlessConst { constant: Constant, count: Operand, value: bool },
     BlessRef { place: Place, count: Operand, value: bool },
-    Unsupported { place: Place, unsupported_instruction: String },
+    Unsupported { reason: String },
 }
 
 impl SourceOp {
@@ -109,14 +110,14 @@ fn try_remove_topmost_deref(place: &Place) -> Option<Place> {
     }
 }
 
-/// Retrieve instance for the given function operand.
-///
-/// This will panic if the operand is not a function or if it cannot be resolved.
-fn expect_instance(locals: &[LocalDecl], func: &Operand) -> Instance {
+/// Try retrieving instance for the given function operand.
+fn try_resolve_instance(locals: &[LocalDecl], func: &Operand) -> Result<Instance, String> {
     let ty = func.ty(locals).unwrap();
     match ty.kind() {
-        TyKind::RigidTy(RigidTy::FnDef(def, args)) => Instance::resolve(def, &args).unwrap(),
-        _ => unreachable!(),
+        TyKind::RigidTy(RigidTy::FnDef(def, args)) => Ok(Instance::resolve(def, &args).unwrap()),
+        _ => Err(format!(
+            "Kani does not support reasoning about memory initialization of arguments to `{ty:?}`."
+        )),
     }
 }
 
@@ -225,7 +226,14 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
             match &term.kind {
                 TerminatorKind::Call { func, args, destination, .. } => {
                     self.super_terminator(term, location);
-                    let instance = expect_instance(self.locals, func);
+                    let instance = match try_resolve_instance(self.locals, func) {
+                        Ok(instance) => instance,
+                        Err(reason) => {
+                            self.super_terminator(term, location);
+                            self.push_target(SourceOp::Unsupported { reason });
+                            return;
+                        }
+                    };
                     match instance.kind {
                         InstanceKind::Intrinsic => {
                             match instance.intrinsic_name().unwrap().as_str() {
@@ -354,8 +362,7 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                         && (!ptx.is_mutating() || place.projection.len() > idx + 1)
                     {
                         self.push_target(SourceOp::Unsupported {
-                            unsupported_instruction: "union access".to_string(),
-                            place: intermediate_place.clone(),
+                            reason: "Kani does not support reasoning about memory initialization of unions.".to_string(),
                         });
                     }
                 }
@@ -397,5 +404,17 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
             _ => {}
         }
         self.super_operand(operand, location);
+    }
+
+    fn visit_rvalue(&mut self, rvalue: &Rvalue, location: Location) {
+        match rvalue {
+            Rvalue::Cast(CastKind::PointerCoercion(PointerCoercion::Unsize), _, _) => {
+                self.push_target(SourceOp::Unsupported {
+                    reason: "Kani does not support reasoning about memory initialization of unsized pointers.".to_string(),
+                });
+            }
+            _ => {}
+        };
+        self.super_rvalue(rvalue, location);
     }
 }

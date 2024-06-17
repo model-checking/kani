@@ -36,7 +36,7 @@ impl TypeLayout {
                     offset: 0,
                     size: match ty.layout().unwrap().shape().fields {
                         FieldsShape::Array { stride, count } if count == 0 => stride,
-                        _ => MachineSize::from_bits(8),
+                        _ => MachineSize::from_bits(0),
                     },
                 };
                 let ty_size = data_bytes.size.bytes();
