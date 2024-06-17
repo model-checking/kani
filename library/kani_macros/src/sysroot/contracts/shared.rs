@@ -336,7 +336,7 @@ impl OldTrigger for OldLifter {
         // This ensures there are no nested calls to `old`
         denier.visit_expr_mut(e);
 
-        // The index of the remembers_exprs is offset by the remember_count of the surrounding environment
+        // The index of the `remembers_exprs` is offset by the `remember_count` of the surrounding environment
         let index = remember_count + remembers_exprs.len();
         let ident = Ident::new(
             &("remember_kani_internal_".to_owned() + &index.to_string()),
