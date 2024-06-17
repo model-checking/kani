@@ -26,7 +26,7 @@ use rustc_smir::rustc_internal;
 use stable_mir::mir::alloc::{AllocId, GlobalAlloc};
 use stable_mir::mir::mono::{Instance, InstanceKind, MonoItem, StaticDef};
 use stable_mir::mir::{
-    visit::Location, Body, CastKind, Constant, MirVisitor, PointerCoercion, Rvalue, Terminator,
+    visit::Location, Body, CastKind, ConstOperand, MirVisitor, PointerCoercion, Rvalue, Terminator,
     TerminatorKind,
 };
 use stable_mir::ty::{Allocation, ClosureKind, ConstantKind, RigidTy, Ty, TyKind};
@@ -375,9 +375,9 @@ impl<'a, 'tcx> MirVisitor for MonoItemsFnCollector<'a, 'tcx> {
     }
 
     /// Collect constants that are represented as static variables.
-    fn visit_constant(&mut self, constant: &Constant, location: Location) {
-        debug!(?constant, ?location, literal=?constant.literal, "visit_constant");
-        let allocation = match constant.literal.kind() {
+    fn visit_const_operand(&mut self, constant: &ConstOperand, location: Location) {
+        debug!(?constant, ?location, literal=?constant.const_, "visit_constant");
+        let allocation = match constant.const_.kind() {
             ConstantKind::Allocated(allocation) => allocation,
             ConstantKind::Unevaluated(_) => {
                 unreachable!("Instance with polymorphic constant: `{constant:?}`")
