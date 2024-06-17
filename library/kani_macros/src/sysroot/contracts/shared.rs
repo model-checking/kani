@@ -203,15 +203,15 @@ pub fn count_remembers(stmt_vec: &Vec<syn::Stmt>) -> usize {
         .count()
 }
 
-/// When a #[kani::ensures(|result|expr)] is expanded, this function is called on
-/// with build_ensures(|result|expr, remember_count) where remember_count is the total number of
-/// remember_kani_internal_ variables that exist before building this ensures statement.
+/// When a `#[kani::ensures(|result|expr)]` is expanded, this function is called on
+/// with `build_ensures(|result|expr, remember_count)` where `remember_count` is the total number of
+/// `remember_kani_internal_` variables that exist before building this ensures statement.
 /// This function goes through the expr and extracts out all the `old` expressions and creates a sequence
 /// of statements that instantiate these expressions as `let remember_kani_internal_x = old_expr;` with
-/// `x` starting t the `remember_count` and incrementing from there. This is returned as the first return
-/// parameter along with changing all the variables to _renamed. The second parameter is the closing of
+/// `x` starting the `remember_count` and incrementing from there. This is returned as the first return
+/// parameter along with changing all the variables to `_renamed`. The second parameter is the closing of
 /// all the unsafe argument copies. The third return parameter is the expression formed by passing in the
-/// result variable into the input closure and changing all the variables to _renamed.
+/// result variable into the input closure and changing all the variables to `_renamed`.
 pub fn build_ensures(
     fn_sig: &syn::Signature,
     data: &ExprClosure,
