@@ -44,6 +44,32 @@ jobs:
           os: macos-13
           arch: x86_64-apple-darwin
 
+  build_bundle_macos_aarch64:
+    name: BuildBundle-MacOs-ARM
+    runs-on: macos-14
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.bundle.outputs.version }}
+      bundle: ${{ steps.bundle.outputs.bundle }}
+      package: ${{ steps.bundle.outputs.package }}
+      crate_version: ${{ steps.bundle.outputs.crate_version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Kani Dependencies
+        uses: ./.github/actions/setup
+        with:
+          os: macos-14
+
+      - name: Build bundle
+        id: bundle
+        uses: ./.github/actions/build-bundle
+        with:
+          os: macos-14
+          arch: aarch64-apple-darwin
+
   build_bundle_linux:
     name: BuildBundle-Linux
     runs-on: ubuntu-20.04
