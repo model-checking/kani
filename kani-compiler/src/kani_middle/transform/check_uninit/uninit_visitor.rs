@@ -3,18 +3,18 @@ use stable_mir::mir::alloc::GlobalAlloc;
 use stable_mir::mir::mono::{Instance, InstanceKind};
 use stable_mir::mir::visit::{Location, PlaceContext};
 use stable_mir::mir::{
-    BasicBlockIdx, CastKind, Constant, LocalDecl, MirVisitor, Mutability, NonDivergingIntrinsic,
-    Operand, Place, PointerCoercion, ProjectionElem, Rvalue, Statement, StatementKind, Terminator,
-    TerminatorKind,
+    BasicBlockIdx, CastKind, ConstOperand, LocalDecl, MirVisitor, Mutability,
+    NonDivergingIntrinsic, Operand, Place, PointerCoercion, ProjectionElem, Rvalue, Statement,
+    StatementKind, Terminator, TerminatorKind,
 };
-use stable_mir::ty::{Const, ConstantKind, RigidTy, Span, TyKind, UintTy};
+use stable_mir::ty::{ConstantKind, MirConst, RigidTy, Span, TyKind, UintTy};
 use strum_macros::AsRefStr;
 
 #[derive(AsRefStr, Clone, Debug)]
 pub enum SourceOp {
     Get { place: Place, count: Operand },
     Set { place: Place, count: Operand, value: bool },
-    BlessConst { constant: Constant, count: Operand, value: bool },
+    BlessConst { constant: ConstOperand, count: Operand, value: bool },
     BlessRef { place: Place, count: Operand, value: bool },
     Unsupported { reason: String },
 }
@@ -94,10 +94,10 @@ fn expect_place(op: &Operand) -> &Place {
 }
 
 fn mk_const_operand(value: usize, span: Span) -> Operand {
-    Operand::Constant(Constant {
+    Operand::Constant(ConstOperand {
         span,
         user_ty: None,
-        literal: Const::try_from_uint(value as u128, UintTy::Usize).unwrap(),
+        const_: MirConst::try_from_uint(value as u128, UintTy::Usize).unwrap(),
     })
 }
 
@@ -381,7 +381,7 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
 
     fn visit_operand(&mut self, operand: &Operand, location: Location) {
         match operand {
-            Operand::Constant(constant) => match constant.literal.kind() {
+            Operand::Constant(constant) => match constant.const_.kind() {
                 ConstantKind::Allocated(allocation) => {
                     for (_, prov) in &allocation.provenance.ptrs {
                         match GlobalAlloc::from(prov.0) {

@@ -13,8 +13,8 @@ use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
 use rustc_middle::ty::TyCtxt;
 use stable_mir::mir::mono::Instance;
-use stable_mir::mir::{AggregateKind, Body, Constant, Mutability, Operand, Place, Rvalue};
-use stable_mir::ty::{Const, GenericArgKind, GenericArgs, RigidTy, Ty, TyKind, UintTy};
+use stable_mir::mir::{AggregateKind, Body, ConstOperand, Mutability, Operand, Place, Rvalue};
+use stable_mir::ty::{GenericArgKind, GenericArgs, MirConst, RigidTy, Ty, TyConst, TyKind};
 use std::fmt::Debug;
 use tracing::{debug, trace};
 
@@ -137,10 +137,10 @@ impl UninitPass {
                             .as_byte_layout()
                             .iter()
                             .map(|byte| {
-                                Operand::Constant(Constant {
+                                Operand::Constant(ConstOperand {
                                     span,
                                     user_ty: None,
-                                    literal: Const::from_bool(*byte),
+                                    const_: MirConst::from_bool(*byte),
                                 })
                             })
                             .collect(),
@@ -160,9 +160,8 @@ impl UninitPass {
                                 find_fn_def(tcx, "KaniShadowMemoryGetSlice").unwrap(),
                                 &GenericArgs(vec![
                                     GenericArgKind::Const(
-                                        Const::try_from_uint(
-                                            type_layout.as_byte_layout().len() as u128,
-                                            UintTy::Usize,
+                                        TyConst::try_from_target_usize(
+                                            type_layout.as_byte_layout().len() as u64,
                                         )
                                         .unwrap(),
                                     ),
@@ -176,9 +175,8 @@ impl UninitPass {
                             find_fn_def(tcx, "KaniShadowMemoryGet").unwrap(),
                             &GenericArgs(vec![
                                 GenericArgKind::Const(
-                                    Const::try_from_uint(
-                                        type_layout.as_byte_layout().len() as u128,
-                                        UintTy::Usize,
+                                    TyConst::try_from_target_usize(
+                                        type_layout.as_byte_layout().len() as u64,
                                     )
                                     .unwrap(),
                                 ),
@@ -224,9 +222,8 @@ impl UninitPass {
                                 find_fn_def(tcx, "KaniShadowMemorySetSlice").unwrap(),
                                 &GenericArgs(vec![
                                     GenericArgKind::Const(
-                                        Const::try_from_uint(
-                                            type_layout.as_byte_layout().len() as u128,
-                                            UintTy::Usize,
+                                        TyConst::try_from_target_usize(
+                                            type_layout.as_byte_layout().len() as u64,
                                         )
                                         .unwrap(),
                                     ),
@@ -240,9 +237,8 @@ impl UninitPass {
                             find_fn_def(tcx, "KaniShadowMemorySet").unwrap(),
                             &GenericArgs(vec![
                                 GenericArgKind::Const(
-                                    Const::try_from_uint(
-                                        type_layout.as_byte_layout().len() as u128,
-                                        UintTy::Usize,
+                                    TyConst::try_from_target_usize(
+                                        type_layout.as_byte_layout().len() as u64,
                                     )
                                     .unwrap(),
                                 ),
@@ -268,10 +264,10 @@ impl UninitPass {
                             ptr_operand,
                             layout_operand,
                             count,
-                            Operand::Constant(Constant {
+                            Operand::Constant(ConstOperand {
                                 span,
                                 user_ty: None,
-                                literal: Const::from_bool(value),
+                                const_: MirConst::from_bool(value),
                             }),
                         ],
                         ret_place,
@@ -293,8 +289,8 @@ impl UninitPass {
         reason: &str,
     ) {
         let span = source.span(body.blocks());
-        let rvalue = Rvalue::Use(Operand::Constant(Constant {
-            literal: Const::from_bool(false),
+        let rvalue = Rvalue::Use(Operand::Constant(ConstOperand {
+            const_: MirConst::from_bool(false),
             span,
             user_ty: None,
         }));
