@@ -96,7 +96,7 @@ pub fn solver(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// See https://model-checking.github.io/kani/rfc/rfcs/0006-unstable-api.html for more details.
 #[doc(hidden)]
 #[proc_macro_attribute]
-pub fn unstable(attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn unstable_feature(attr: TokenStream, item: TokenStream) -> TokenStream {
     attr_impl::unstable(attr, item)
 }
 
@@ -105,6 +105,13 @@ pub fn unstable(attr: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro_derive(Arbitrary)]
 pub fn derive_arbitrary(item: TokenStream) -> TokenStream {
     derive::expand_derive_arbitrary(item)
+}
+
+/// Allow users to auto generate Invariant implementations by using `#[derive(Invariant)]` macro.
+#[proc_macro_error]
+#[proc_macro_derive(Invariant)]
+pub fn derive_invariant(item: TokenStream) -> TokenStream {
+    derive::expand_derive_invariant(item)
 }
 
 /// Add a precondition to this function.

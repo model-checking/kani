@@ -17,10 +17,10 @@ use crate::kani_queries::QueryDb;
 use rustc_middle::ty::TyCtxt;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{
-    BinOp, Body, Constant, Operand, Place, Rvalue, Statement, StatementKind, RETURN_LOCAL,
+    BinOp, Body, ConstOperand, Operand, Place, Rvalue, Statement, StatementKind, RETURN_LOCAL,
 };
 use stable_mir::target::MachineInfo;
-use stable_mir::ty::{Const, RigidTy, TyKind};
+use stable_mir::ty::{MirConst, RigidTy, TyKind};
 use std::fmt::Debug;
 use strum_macros::AsRefStr;
 use tracing::trace;
@@ -81,10 +81,10 @@ impl IntrinsicGeneratorPass {
         let span = new_body.locals()[ret_var].span;
         let assign = StatementKind::Assign(
             Place::from(ret_var),
-            Rvalue::Use(Operand::Constant(Constant {
+            Rvalue::Use(Operand::Constant(ConstOperand {
                 span,
                 user_ty: None,
-                literal: Const::from_bool(true),
+                const_: MirConst::from_bool(true),
             })),
         );
         let stmt = Statement { kind: assign, span };
@@ -117,8 +117,8 @@ impl IntrinsicGeneratorPass {
             }
             Err(msg) => {
                 // We failed to retrieve all the valid ranges.
-                let rvalue = Rvalue::Use(Operand::Constant(Constant {
-                    literal: Const::from_bool(false),
+                let rvalue = Rvalue::Use(Operand::Constant(ConstOperand {
+                    const_: MirConst::from_bool(false),
                     span,
                     user_ty: None,
                 }));

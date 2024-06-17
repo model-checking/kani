@@ -188,6 +188,10 @@ impl KaniSession {
             }
         }
 
+        if self.args.coverage {
+            flags.push("-Zmir-enable-passes=-SingleUseConsts".into());
+        }
+
         // This argument will select the Kani flavour of the compiler. It will be removed before
         // rustc driver is invoked.
         flags.push("--kani-compiler".into());

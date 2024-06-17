@@ -3,7 +3,7 @@
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::kani_middle::attributes::KaniAttributes;
 use cbmc::goto_program::FunctionContract;
-use cbmc::goto_program::Lambda;
+use cbmc::goto_program::{Lambda, Location};
 use kani_metadata::AssignsContract;
 use rustc_hir::def_id::DefId as InternalDefId;
 use rustc_smir::rustc_internal;
@@ -47,6 +47,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             _ => None,
         });
+
         let recursion_tracker_def = recursion_tracker
             .next()
             .expect("There should be at least one recursion tracker (REENTRY) in scope");
@@ -104,7 +105,11 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// Convert the Kani level contract into a CBMC level contract by creating a
     /// CBMC lambda.
-    fn codegen_modifies_contract(&mut self, modified_places: Vec<Local>) -> FunctionContract {
+    fn codegen_modifies_contract(
+        &mut self,
+        modified_places: Vec<Local>,
+        loc: Location,
+    ) -> FunctionContract {
         let goto_annotated_fn_name = self.current_fn().name();
         let goto_annotated_fn_typ = self
             .symbol_table
@@ -119,7 +124,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 Lambda::as_contract_for(
                     &goto_annotated_fn_typ,
                     None,
-                    self.codegen_place_stable(&local.into()).unwrap().goto_expr.dereference(),
+                    self.codegen_place_stable(&local.into(), loc).unwrap().goto_expr.dereference(),
                 )
             })
             .collect();
@@ -137,7 +142,8 @@ impl<'tcx> GotocCtx<'tcx> {
         assert!(self.current_fn.is_none());
         let body = instance.body().unwrap();
         self.set_current_fn(instance, &body);
-        let goto_contract = self.codegen_modifies_contract(modified_places);
+        let goto_contract =
+            self.codegen_modifies_contract(modified_places, self.codegen_span_stable(body.span));
         let name = self.current_fn().name();
 
         self.symbol_table.attach_contract(name, goto_contract);

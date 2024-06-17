@@ -33,11 +33,12 @@ impl<'tcx> GotocCtx<'tcx> {
         place: &Place,
         mut fargs: Vec<Expr>,
         f: F,
+        loc: Location,
     ) -> Stmt {
         let arg1 = fargs.remove(0);
         let arg2 = fargs.remove(0);
         let expr = f(arg1, arg2);
-        self.codegen_expr_to_place_stable(place, expr, Location::none())
+        self.codegen_expr_to_place_stable(place, expr, loc)
     }
 
     /// Given a call to an compiler intrinsic, generate the call and the `goto` terminator
@@ -178,7 +179,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
         // Intrinsics which encode a simple binary operation
         macro_rules! codegen_intrinsic_binop {
-            ($f:ident) => {{ self.binop(place, fargs, |a, b| a.$f(b)) }};
+            ($f:ident) => {{ self.binop(place, fargs, |a, b| a.$f(b), loc) }};
         }
 
         // Intrinsics which encode a simple binary operation which need a machine model
@@ -208,7 +209,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 let alloc = stable_instance.try_const_eval(place_ty).unwrap();
                 // We assume that the intrinsic has type checked at this point, so
                 // we can use the place type as the expression type.
-                let expr = self.codegen_allocation(&alloc, place_ty, Some(span));
+                let expr = self.codegen_allocation(&alloc, place_ty, loc);
                 self.codegen_expr_to_place_stable(&place, expr, loc)
             }};
         }
@@ -727,7 +728,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let res = self.codegen_binop_with_overflow(binop, left, right, result_type.clone(), loc);
         self.codegen_expr_to_place_stable(
             place,
-            Expr::statement_expression(vec![res.as_stmt(loc)], result_type),
+            Expr::statement_expression(vec![res.as_stmt(loc)], result_type, loc),
             loc,
         )
     }
@@ -1042,9 +1043,11 @@ impl<'tcx> GotocCtx<'tcx> {
         let is_lhs_ok = lhs_var.clone().is_nonnull();
         let is_rhs_ok = rhs_var.clone().is_nonnull();
         let should_skip_pointer_checks = is_len_zero.and(is_lhs_ok).and(is_rhs_ok);
-        let place_expr =
-            unwrap_or_return_codegen_unimplemented_stmt!(self, self.codegen_place_stable(place))
-                .goto_expr;
+        let place_expr = unwrap_or_return_codegen_unimplemented_stmt!(
+            self,
+            self.codegen_place_stable(place, loc)
+        )
+        .goto_expr;
         let res = should_skip_pointer_checks.ternary(
             Expr::int_constant(0, place_expr.typ().clone()), // zero bytes are always equal (as long as pointers are nonnull and aligned)
             BuiltinFn::Memcmp
@@ -1634,7 +1637,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 loc,
             )
         } else {
-            self.binop(p, fargs, op_fun)
+            self.binop(p, fargs, op_fun, loc)
         }
     }
 
@@ -1880,12 +1883,11 @@ impl<'tcx> GotocCtx<'tcx> {
             "`dst` must be properly aligned",
             loc,
         );
-        let deref = dst.dereference();
-        if deref.typ().sizeof(&self.symbol_table) == 0 {
+        if self.is_zst_stable(pointee_type_stable(dst_typ).unwrap()) {
             // do not attempt to dereference (and assign) a ZST
             align_check
         } else {
-            let expr = deref.assign(src, loc);
+            let expr = dst.dereference().assign(src, loc);
             Stmt::block(vec![align_check, expr], loc)
         }
     }
@@ -1991,30 +1993,42 @@ impl<'tcx> GotocCtx<'tcx> {
         let x = fargs.remove(0);
         let y = fargs.remove(0);
 
-        // if(same_object(x, y)) {
-        //   assert(x + 1 <= y || y + 1 <= x);
-        //   assume(x + 1 <= y || y + 1 <= x);
-        // }
-        let one = Expr::int_constant(1, Type::c_int());
-        let non_overlapping =
-            x.clone().plus(one.clone()).le(y.clone()).or(y.clone().plus(one.clone()).le(x.clone()));
-        let non_overlapping_check = self.codegen_assert_assume(
-            non_overlapping,
-            PropertyClass::SafetyCheck,
-            "memory regions pointed to by `x` and `y` must not overlap",
-            loc,
-        );
-        let non_overlapping_stmt =
-            Stmt::if_then_else(x.clone().same_object(y.clone()), non_overlapping_check, None, loc);
+        if self.is_zst_stable(pointee_type_stable(farg_types[0]).unwrap()) {
+            // do not attempt to dereference (and assign) a ZST
+            Stmt::skip(loc)
+        } else {
+            // if(same_object(x, y)) {
+            //   assert(x + 1 <= y || y + 1 <= x);
+            //   assume(x + 1 <= y || y + 1 <= x);
+            // }
+            let one = Expr::int_constant(1, Type::c_int());
+            let non_overlapping = x
+                .clone()
+                .plus(one.clone())
+                .le(y.clone())
+                .or(y.clone().plus(one.clone()).le(x.clone()));
+            let non_overlapping_check = self.codegen_assert_assume(
+                non_overlapping,
+                PropertyClass::SafetyCheck,
+                "memory regions pointed to by `x` and `y` must not overlap",
+                loc,
+            );
+            let non_overlapping_stmt = Stmt::if_then_else(
+                x.clone().same_object(y.clone()),
+                non_overlapping_check,
+                None,
+                loc,
+            );
 
-        // T t = *y; *y = *x; *x = t;
-        let deref_y = y.clone().dereference();
-        let (temp_var, assign_to_t) =
-            self.decl_temp_variable(deref_y.typ().clone(), Some(deref_y), loc);
-        let assign_to_y = y.dereference().assign(x.clone().dereference(), loc);
-        let assign_to_x = x.dereference().assign(temp_var, loc);
+            // T t = *y; *y = *x; *x = t;
+            let deref_y = y.clone().dereference();
+            let (temp_var, assign_to_t) =
+                self.decl_temp_variable(deref_y.typ().clone(), Some(deref_y), loc);
+            let assign_to_y = y.dereference().assign(x.clone().dereference(), loc);
+            let assign_to_x = x.dereference().assign(temp_var, loc);
 
-        Stmt::block(vec![non_overlapping_stmt, assign_to_t, assign_to_y, assign_to_x], loc)
+            Stmt::block(vec![non_overlapping_stmt, assign_to_t, assign_to_y, assign_to_x], loc)
+        }
     }
 }
 

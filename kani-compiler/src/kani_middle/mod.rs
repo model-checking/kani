@@ -6,9 +6,9 @@
 use std::collections::HashSet;
 use std::path::Path;
 
+use crate::kani_middle::transform::BodyTransformation;
 use crate::kani_queries::QueryDb;
 use rustc_hir::{def::DefKind, def_id::LOCAL_CRATE};
-use rustc_middle::mir::write_mir_pretty;
 use rustc_middle::span_bug;
 use rustc_middle::ty::layout::{
     FnAbiError, FnAbiOf, FnAbiOfHelpers, FnAbiRequest, HasParamEnv, HasTyCtxt, LayoutError,
@@ -21,9 +21,9 @@ use rustc_span::source_map::respan;
 use rustc_span::Span;
 use rustc_target::abi::call::FnAbi;
 use rustc_target::abi::{HasDataLayout, TargetDataLayout};
-use stable_mir::mir::mono::{InstanceKind, MonoItem};
+use stable_mir::mir::mono::{Instance, MonoItem};
 use stable_mir::ty::{FnDef, RigidTy, Span as SpanStable, TyKind};
-use stable_mir::{CrateDef, DefId};
+use stable_mir::CrateDef;
 use std::fs::File;
 use std::io::BufWriter;
 use std::io::Write;
@@ -32,6 +32,7 @@ use self::attributes::KaniAttributes;
 
 pub mod analysis;
 pub mod attributes;
+pub mod codegen_units;
 pub mod coercion;
 mod intrinsics;
 pub mod metadata;
@@ -92,17 +93,19 @@ pub fn check_reachable_items(tcx: TyCtxt, queries: &QueryDb, items: &[MonoItem])
 }
 
 /// Print MIR for the reachable items if the `--emit mir` option was provided to rustc.
-pub fn dump_mir_items(tcx: TyCtxt, items: &[MonoItem], output: &Path) {
+pub fn dump_mir_items(
+    tcx: TyCtxt,
+    transformer: &mut BodyTransformation,
+    items: &[MonoItem],
+    output: &Path,
+) {
     /// Convert MonoItem into a DefId.
     /// Skip stuff that we cannot generate the MIR items.
-    fn visible_item(item: &MonoItem) -> Option<(MonoItem, DefId)> {
+    fn get_instance(item: &MonoItem) -> Option<Instance> {
         match item {
             // Exclude FnShims and others that cannot be dumped.
-            MonoItem::Fn(instance) if matches!(instance.kind, InstanceKind::Item) => {
-                Some((item.clone(), instance.def.def_id()))
-            }
-            MonoItem::Fn(..) => None,
-            MonoItem::Static(def) => Some((item.clone(), def.def_id())),
+            MonoItem::Fn(instance) => Some(*instance),
+            MonoItem::Static(def) => Some((*def).into()),
             MonoItem::GlobalAsm(_) => None,
         }
     }
@@ -113,10 +116,10 @@ pub fn dump_mir_items(tcx: TyCtxt, items: &[MonoItem], output: &Path) {
         let mut writer = BufWriter::new(out_file);
 
         // For each def_id, dump their MIR
-        for (item, def_id) in items.iter().filter_map(visible_item) {
-            writeln!(writer, "// Item: {item:?}").unwrap();
-            write_mir_pretty(tcx, Some(rustc_internal::internal(tcx, def_id)), &mut writer)
-                .unwrap();
+        for instance in items.iter().filter_map(get_instance) {
+            writeln!(writer, "// Item: {} ({})", instance.name(), instance.mangled_name()).unwrap();
+            let body = transformer.body(tcx, instance);
+            let _ = body.dump(&mut writer, &instance.name());
         }
     }
 }
