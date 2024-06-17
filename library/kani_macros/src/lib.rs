@@ -93,6 +93,7 @@ pub fn solver(attr: TokenStream, item: TokenStream) -> TokenStream {
 }
 
 #[proc_macro_attribute]
+#[proc_macro_error]
 pub fn invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
     derive::attr_custom_invariant(attr.into(), item)
 }
