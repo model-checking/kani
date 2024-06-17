@@ -239,8 +239,8 @@
 //! precompute a value before the function is called and have access to
 //! this value in the later ensures statement. This is done via the
 //! `old` monad which lets you access the old state within the present
-//! state. Each occurance of old is lifted, so is is necessary that
-//! each lifted occurance is closed with respect to the function arguments.
+//! state. Each occurrence of `old` is lifted, so is is necessary that
+//! each lifted occurrence is closed with respect to the function arguments.
 //! The results of these old computations are placed into
 //! `remember_kani_internal_XXX` variables of incrementing index to avoid
 //! collisions of variable names. Consider the following example:
