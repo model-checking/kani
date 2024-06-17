@@ -154,33 +154,6 @@ impl UninitPass {
                 projection: vec![],
             });
 
-            // Cast the operand to the appropriate unit type (fat vs thin pointer).
-            let ptr_cast_operand = match pointee_ty.kind() {
-                TyKind::RigidTy(RigidTy::Slice(_)) | TyKind::RigidTy(RigidTy::Str) => {
-                    Operand::Move(Place {
-                        local: body.new_cast_transmute(
-                            ptr_operand,
-                            Ty::from_rigid_kind(RigidTy::Slice(Ty::new_tuple(&[]))),
-                            Mutability::Not,
-                            &mut source,
-                            insert_position,
-                        ),
-                        projection: vec![],
-                    })
-                }
-                TyKind::RigidTy(RigidTy::Dynamic(..)) => ptr_operand,
-                _ => Operand::Move(Place {
-                    local: body.new_cast_ptr(
-                        ptr_operand,
-                        Ty::new_tuple(&[]),
-                        Mutability::Not,
-                        &mut source,
-                        insert_position,
-                    ),
-                    projection: vec![],
-                }),
-            };
-
             match operation {
                 SourceOp::Get { .. } => {
                     // Resolve appropriate function depending on the pointer type.
@@ -188,13 +161,16 @@ impl UninitPass {
                         TyKind::RigidTy(RigidTy::Slice(_)) | TyKind::RigidTy(RigidTy::Str) => {
                             Instance::resolve(
                                 find_fn_def(tcx, "KaniShadowMemoryGetSlice").unwrap(),
-                                &GenericArgs(vec![GenericArgKind::Const(
-                                    Const::try_from_uint(
-                                        type_layout.as_byte_layout().len() as u128,
-                                        UintTy::Usize,
-                                    )
-                                    .unwrap(),
-                                )]),
+                                &GenericArgs(vec![
+                                    GenericArgKind::Const(
+                                        Const::try_from_uint(
+                                            type_layout.as_byte_layout().len() as u128,
+                                            UintTy::Usize,
+                                        )
+                                        .unwrap(),
+                                    ),
+                                    GenericArgKind::Type(pointee_ty),
+                                ]),
                             )
                             .unwrap()
                         }
@@ -214,13 +190,16 @@ impl UninitPass {
                         .unwrap(),
                         _ => Instance::resolve(
                             find_fn_def(tcx, "KaniShadowMemoryGet").unwrap(),
-                            &GenericArgs(vec![GenericArgKind::Const(
-                                Const::try_from_uint(
-                                    type_layout.as_byte_layout().len() as u128,
-                                    UintTy::Usize,
-                                )
-                                .unwrap(),
-                            )]),
+                            &GenericArgs(vec![
+                                GenericArgKind::Const(
+                                    Const::try_from_uint(
+                                        type_layout.as_byte_layout().len() as u128,
+                                        UintTy::Usize,
+                                    )
+                                    .unwrap(),
+                                ),
+                                GenericArgKind::Type(pointee_ty),
+                            ]),
                         )
                         .unwrap(),
                     };
@@ -237,7 +216,7 @@ impl UninitPass {
                         &shadow_memory_get,
                         &mut source,
                         insert_position,
-                        vec![ptr_cast_operand, layout_operand, count],
+                        vec![ptr_operand, layout_operand, count],
                         ret_place.clone(),
                     );
                     body.add_check(
@@ -257,13 +236,16 @@ impl UninitPass {
                         TyKind::RigidTy(RigidTy::Slice(_)) | TyKind::RigidTy(RigidTy::Str) => {
                             Instance::resolve(
                                 find_fn_def(tcx, "KaniShadowMemorySetSlice").unwrap(),
-                                &GenericArgs(vec![GenericArgKind::Const(
-                                    Const::try_from_uint(
-                                        type_layout.as_byte_layout().len() as u128,
-                                        UintTy::Usize,
-                                    )
-                                    .unwrap(),
-                                )]),
+                                &GenericArgs(vec![
+                                    GenericArgKind::Const(
+                                        Const::try_from_uint(
+                                            type_layout.as_byte_layout().len() as u128,
+                                            UintTy::Usize,
+                                        )
+                                        .unwrap(),
+                                    ),
+                                    GenericArgKind::Type(pointee_ty),
+                                ]),
                             )
                             .unwrap()
                         }
@@ -283,13 +265,16 @@ impl UninitPass {
                         .unwrap(),
                         _ => Instance::resolve(
                             find_fn_def(tcx, "KaniShadowMemorySet").unwrap(),
-                            &GenericArgs(vec![GenericArgKind::Const(
-                                Const::try_from_uint(
-                                    type_layout.as_byte_layout().len() as u128,
-                                    UintTy::Usize,
-                                )
-                                .unwrap(),
-                            )]),
+                            &GenericArgs(vec![
+                                GenericArgKind::Const(
+                                    Const::try_from_uint(
+                                        type_layout.as_byte_layout().len() as u128,
+                                        UintTy::Usize,
+                                    )
+                                    .unwrap(),
+                                ),
+                                GenericArgKind::Type(pointee_ty),
+                            ]),
                         )
                         .unwrap(),
                     };
@@ -306,7 +291,7 @@ impl UninitPass {
                         &mut source,
                         insert_position,
                         vec![
-                            ptr_cast_operand,
+                            ptr_operand,
                             layout_operand,
                             count,
                             Operand::Constant(Constant {

@@ -8,7 +8,6 @@ use std::alloc::{alloc, dealloc, Layout};
 use std::slice::from_raw_parts;
 
 #[kani::proof]
-#[kani::should_panic]
 fn main() {
     let layout = Layout::from_size_align(32, 8).unwrap();
     unsafe {

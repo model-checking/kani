@@ -6,7 +6,6 @@ use std::alloc::{alloc, Layout};
 use std::fmt::Debug;
 
 #[kani::proof]
-#[kani::should_panic]
 fn main() {
     let layout = Layout::new::<u16>();
     unsafe {

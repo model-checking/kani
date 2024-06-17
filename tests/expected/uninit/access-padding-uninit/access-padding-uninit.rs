@@ -8,10 +8,8 @@ use std::ptr::addr_of;
 struct S(u32, u8);
 
 #[kani::proof]
-#[kani::should_panic]
 fn main() {
     let s = S(0, 0);
     let ptr: *const u8 = addr_of!(s) as *const u8;
     let padding = unsafe { *(ptr.add(5)) };
 }
-

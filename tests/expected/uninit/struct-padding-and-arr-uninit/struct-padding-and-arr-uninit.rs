@@ -12,7 +12,6 @@ use std::ptr;
 struct S(u8, u16);
 
 #[kani::proof]
-#[kani::should_panic]
 #[custom_mir(dialect = "runtime", phase = "optimized")]
 fn main() {
     mir! {

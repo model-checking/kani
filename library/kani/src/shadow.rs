@@ -129,14 +129,18 @@ fn __kani_global_sm_set_inner<const N: usize>(
 }
 
 #[rustc_diagnostic_item = "KaniShadowMemoryGet"]
-pub fn __kani_global_sm_get<const N: usize>(ptr: *const (), layout: [bool; N], n: usize) -> bool {
+pub fn __kani_global_sm_get<const N: usize, T: Sized>(
+    ptr: *const T,
+    layout: [bool; N],
+    n: usize,
+) -> bool {
     let (ptr, _) = ptr.to_raw_parts();
     __kani_global_sm_get_inner(ptr, layout, n)
 }
 
 #[rustc_diagnostic_item = "KaniShadowMemorySet"]
-pub fn __kani_global_sm_set<const N: usize>(
-    ptr: *const (),
+pub fn __kani_global_sm_set<const N: usize, T: Sized>(
+    ptr: *const T,
     layout: [bool; N],
     n: usize,
     value: bool,
@@ -145,31 +149,36 @@ pub fn __kani_global_sm_set<const N: usize>(
     __kani_global_sm_set_inner(ptr, layout, n, value);
 }
 
+// This method should only be called if T is known to be a slice.
 #[rustc_diagnostic_item = "KaniShadowMemoryGetSlice"]
-pub fn __kani_global_sm_get_slice<const N: usize>(
-    ptr: *const [()],
+pub fn __kani_global_sm_get_slice<const N: usize, T: ?Sized>(
+    ptr: *const T,
     layout: [bool; N],
     n: usize,
 ) -> bool {
     let (ptr, meta) = ptr.to_raw_parts();
+    let meta: usize = unsafe { std::mem::transmute_copy(&meta) };
     // The pointee type is a slice, more than `n` objects can be accessed.
     let n = n * meta;
     __kani_global_sm_get_inner(ptr, layout, n)
 }
 
+// This method should only be called if T is known to be a slice.
 #[rustc_diagnostic_item = "KaniShadowMemorySetSlice"]
-pub fn __kani_global_sm_set_slice<const N: usize>(
-    ptr: *const [()],
+pub fn __kani_global_sm_set_slice<const N: usize, T: ?Sized>(
+    ptr: *const T,
     layout: [bool; N],
     n: usize,
     value: bool,
 ) {
     let (ptr, meta) = ptr.to_raw_parts();
+    let meta: usize = unsafe { std::mem::transmute_copy(&meta) };
     // The pointee type is a slice, more than `n` objects can be accessed.
     let n = n * meta;
     __kani_global_sm_set_inner(ptr, layout, n, value);
 }
 
+// This method should only be called if T is known to be a trait object.
 #[rustc_diagnostic_item = "KaniShadowMemoryGetDynamic"]
 pub fn __kani_global_sm_get_dynamic<const N: usize, T: ?Sized>(
     ptr: *const T,
@@ -183,6 +192,7 @@ pub fn __kani_global_sm_get_dynamic<const N: usize, T: ?Sized>(
     __kani_global_sm_get_inner(ptr, layout, n)
 }
 
+// This method should only be called if T is known to be a trait object.
 #[rustc_diagnostic_item = "KaniShadowMemorySetDynamic"]
 pub fn __kani_global_sm_set_dynamic<const N: usize, T: ?Sized>(
     ptr: *const T,
