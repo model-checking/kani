@@ -235,12 +235,12 @@ pub fn build_ensures(
 }
 
 trait OldTrigger {
-    /// You are provided the expression that is the first argument of the
+    /// You are provided with the expression that is the first argument of the
     /// `old()` call. You may modify it as you see fit. The return value
     /// indicates whether the entire `old()` call should be replaced by the
     /// (potentially altered) first argument.
     ///
-    /// The second argument is the span of the original `old` expr.
+    /// The second argument is the span of the original `old` expression.
     ///
     /// The third argument is the number of remember variables that have already been
     /// instantiated in the surrounding environment.
