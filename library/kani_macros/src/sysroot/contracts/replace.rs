@@ -8,7 +8,7 @@ use quote::quote;
 
 use super::{
     helpers::*,
-    shared::{build_ensures, count_remembers, try_as_result_assign},
+    shared::{build_ensures, try_as_result_assign},
     ContractConditionsData, ContractConditionsHandler, INTERNAL_RESULT_IDENT,
 };
 
@@ -67,7 +67,6 @@ impl<'a> ContractConditionsHandler<'a> {
     /// generating a replace function.
     fn make_replace_body(&self) -> TokenStream2 {
         let (before, after) = self.ensure_bootstrapped_replace_body();
-        let remember_count = count_remembers(&before);
 
         match &self.condition_type {
             ContractConditionsData::Requires { attr } => {
@@ -82,7 +81,7 @@ impl<'a> ContractConditionsHandler<'a> {
             }
             ContractConditionsData::Ensures { attr } => {
                 let (arg_copies, copy_clean, ensures_clause) =
-                    build_ensures(&self.annotated_fn.sig, attr, remember_count);
+                    build_ensures(&self.annotated_fn.sig, attr);
                 let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
                 quote!(
                     #arg_copies

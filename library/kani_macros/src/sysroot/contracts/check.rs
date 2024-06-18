@@ -9,7 +9,7 @@ use syn::{Expr, FnArg, ItemFn, Token};
 
 use super::{
     helpers::*,
-    shared::{build_ensures, count_remembers, try_as_result_assign_mut},
+    shared::{build_ensures, try_as_result_assign_mut},
     ContractConditionsData, ContractConditionsHandler, INTERNAL_RESULT_IDENT,
 };
 
@@ -25,7 +25,6 @@ impl<'a> ContractConditionsHandler<'a> {
     pub fn make_check_body(&mut self) -> TokenStream2 {
         let mut inner = self.ensure_bootstrapped_check_body();
         let Self { attr_copy, .. } = self;
-        let remember_count: usize = count_remembers(&inner);
 
         match &self.condition_type {
             ContractConditionsData::Requires { attr } => {
@@ -36,7 +35,7 @@ impl<'a> ContractConditionsHandler<'a> {
             }
             ContractConditionsData::Ensures { attr } => {
                 let (arg_copies, copy_clean, ensures_clause) =
-                    build_ensures(&self.annotated_fn.sig, attr, remember_count);
+                    build_ensures(&self.annotated_fn.sig, attr);
 
                 // The code that enforces the postconditions and cleans up the shallow
                 // argument copies (with `mem::forget`).

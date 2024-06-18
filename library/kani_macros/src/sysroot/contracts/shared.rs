@@ -11,9 +11,10 @@ use std::collections::{HashMap, HashSet};
 
 use proc_macro2::{Ident, Span, TokenStream as TokenStream2};
 use quote::{quote, ToTokens};
+use std::hash::{DefaultHasher, Hash, Hasher};
 use syn::{
     spanned::Spanned, visit::Visit, visit_mut::VisitMut, Attribute, Expr, ExprCall, ExprClosure,
-    ExprPath, Local, PatIdent, Path, Stmt,
+    ExprPath, Path,
 };
 
 use super::{ContractConditionsHandler, ContractFunctionState, INTERNAL_RESULT_IDENT};
@@ -180,46 +181,19 @@ pub fn try_as_result_assign_mut(stmt: &mut syn::Stmt) -> Option<&mut syn::LocalI
     try_as_result_assign_pat!(stmt, as_mut)
 }
 
-/// This function goes through the vector of statements and counts the number of variables
-/// with idents prefixed by `remember_kani_internal_`. This avoid variable name collisions by
-/// counter incrementation for each such new variable.
-pub fn count_remembers(stmt_vec: &Vec<syn::Stmt>) -> usize {
-    stmt_vec
-        .iter()
-        .filter(|&s: &&syn::Stmt| match s {
-            Stmt::Local(Local { attrs: _, let_token: _, pat, init: _, semi_token: _ }) => match pat
-            {
-                syn::Pat::Ident(PatIdent {
-                    attrs: _,
-                    by_ref: _,
-                    mutability: _,
-                    ident,
-                    subpat: _,
-                }) => ident.to_string().starts_with("remember_kani_internal_"),
-                _ => false,
-            },
-            _ => false,
-        })
-        .count()
-}
-
-/// When a `#[kani::ensures(|result|expr)]` is expanded, this function is called on
-/// with `build_ensures(|result|expr, remember_count)` where `remember_count` is the total number of
-/// `remember_kani_internal_` variables that exist before building this ensures statement.
+/// When a `#[kani::ensures(|result|expr)]` is expanded, this function is called on with `build_ensures(|result|expr)`.
 /// This function goes through the expr and extracts out all the `old` expressions and creates a sequence
-/// of statements that instantiate these expressions as `let remember_kani_internal_x = old_expr;` with
-/// `x` starting the `remember_count` and incrementing from there. This is returned as the first return
-/// parameter along with changing all the variables to `_renamed`. The second parameter is the closing of
-/// all the unsafe argument copies. The third return parameter is the expression formed by passing in the
-/// result variable into the input closure and changing all the variables to `_renamed`.
+/// of statements that instantiate these expressions as `let remember_kani_internal_x = old_expr;` 
+/// where x is a unique hash. This is returned as the first return parameter along with changing all the
+/// variables to `_renamed`. The second parameter is the closing of all the unsafe argument copies. The third
+/// return parameter is the expression formed by passing in the result variable into the input closure and
+/// changing all the variables to `_renamed`.
 pub fn build_ensures(
     fn_sig: &syn::Signature,
     data: &ExprClosure,
-    remember_count: usize,
 ) -> (TokenStream2, TokenStream2, Expr) {
     let mut remembers_exprs = HashMap::new();
-    let mut vis =
-        OldVisitor { t: OldLifter::new(), remember_count, remembers_exprs: &mut remembers_exprs };
+    let mut vis = OldVisitor { t: OldLifter::new(), remembers_exprs: &mut remembers_exprs };
     let mut expr = &mut data.clone();
     vis.visit_expr_closure_mut(&mut expr);
 
@@ -242,18 +216,9 @@ trait OldTrigger {
     ///
     /// The second argument is the span of the original `old` expression.
     ///
-    /// The third argument is the number of remember variables that have already been
-    /// instantiated in the surrounding environment.
-    ///
-    /// The fourth argument is a collection of all the expressions that need to be lifted
+    /// The third argument is a collection of all the expressions that need to be lifted
     /// into the past environment as new remember variables.
-    fn trigger(
-        &mut self,
-        e: &mut Expr,
-        s: Span,
-        remember_count: usize,
-        output: &mut HashMap<Ident, Expr>,
-    ) -> bool;
+    fn trigger(&mut self, e: &mut Expr, s: Span, output: &mut HashMap<Ident, Expr>) -> bool;
 }
 
 struct OldLifter;
@@ -267,7 +232,7 @@ impl OldLifter {
 struct OldDenier;
 
 impl OldTrigger for OldDenier {
-    fn trigger(&mut self, _: &mut Expr, s: Span, _: usize, _: &mut HashMap<Ident, Expr>) -> bool {
+    fn trigger(&mut self, _: &mut Expr, s: Span, _: &mut HashMap<Ident, Expr>) -> bool {
         s.unwrap().error("Nested calls to `old` are prohibited").emit();
         false
     }
@@ -275,7 +240,6 @@ impl OldTrigger for OldDenier {
 
 struct OldVisitor<'a, T> {
     t: T,
-    remember_count: usize,
     remembers_exprs: &'a mut HashMap<Ident, Expr>,
 }
 
@@ -305,12 +269,7 @@ impl<T: OldTrigger> syn::visit_mut::VisitMut for OldVisitor<'_, T> {
             let span = ex.span();
             let new_expr = if let Expr::Call(ExprCall { ref mut args, .. }) = ex {
                 self.t
-                    .trigger(
-                        args.iter_mut().next().unwrap(),
-                        span,
-                        self.remember_count,
-                        self.remembers_exprs,
-                    )
+                    .trigger(args.iter_mut().next().unwrap(), span, self.remembers_exprs)
                     .then(|| args.pop().unwrap().into_value())
             } else {
                 unreachable!()
@@ -329,19 +288,15 @@ impl OldTrigger for OldLifter {
         &mut self,
         e: &mut Expr,
         _: Span,
-        remember_count: usize,
         remembers_exprs: &mut HashMap<Ident, Expr>,
     ) -> bool {
-        let mut denier = OldVisitor { t: OldDenier, remember_count, remembers_exprs };
+        let mut denier = OldVisitor { t: OldDenier, remembers_exprs };
         // This ensures there are no nested calls to `old`
         denier.visit_expr_mut(e);
-
-        // The index of the `remembers_exprs` is offset by the `remember_count` of the surrounding environment
-        let index = remember_count + remembers_exprs.len();
-        let ident = Ident::new(
-            &("remember_kani_internal_".to_owned() + &index.to_string()),
-            Span::call_site(),
-        );
+        let mut hasher = DefaultHasher::new();
+        e.hash(&mut hasher);
+        let ident =
+            Ident::new(&format!("remember_kani_internal_{:x}", hasher.finish()), Span::call_site());
         // save the original expression to be lifted into the past remember environment
         remembers_exprs.insert(ident.clone(), (*e).clone());
         // change the expression to refer to the new remember variable
