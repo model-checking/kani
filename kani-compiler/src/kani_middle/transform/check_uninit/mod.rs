@@ -21,7 +21,7 @@ use tracing::{debug, trace};
 mod ty_layout;
 mod uninit_visitor;
 
-use ty_layout::TypeLayout;
+pub use ty_layout::TypeLayout;
 use uninit_visitor::{CheckUninitVisitor, InitRelevantInstruction, SourceOp};
 
 const KANI_SHADOW_MEMORY_PREFIX: &str = "__kani_global_sm";

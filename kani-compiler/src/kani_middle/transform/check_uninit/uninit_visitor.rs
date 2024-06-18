@@ -385,15 +385,12 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
         if let Operand::Constant(constant) = operand {
             if let ConstantKind::Allocated(allocation) = constant.const_.kind() {
                 for (_, prov) in &allocation.provenance.ptrs {
-                    if let GlobalAlloc::Static(static_def) = GlobalAlloc::from(prov.0) {
-                        let dbg_string = format!("{:?}", static_def);
-                        if dbg_string.contains("__rust_no_alloc_shim_is_unstable") {
-                            self.push_target(SourceOp::BlessConst {
-                                constant: constant.clone(),
-                                count: mk_const_operand(1, location.span()),
-                                value: true,
-                            });
-                        }
+                    if let GlobalAlloc::Static(_) = GlobalAlloc::from(prov.0) {
+                        self.push_target(SourceOp::BlessConst {
+                            constant: constant.clone(),
+                            count: mk_const_operand(1, location.span()),
+                            value: true,
+                        });
                     };
                 }
             }
