@@ -233,15 +233,92 @@
 //!     }
 //! }
 //! ```
+//!
+//! Additionally, there is functionality that allows the referencing of
+//! history values within the ensures statement. This means we can
+//! precompute a value before the function is called and have access to
+//! this value in the later ensures statement. This is done via the
+//! `old` monad which lets you access the old state within the present
+//! state. Each occurrence of `old` is lifted, so is is necessary that
+//! each lifted occurrence is closed with respect to the function arguments.
+//! The results of these old computations are placed into
+//! `remember_kani_internal_XXX` variables of incrementing index to avoid
+//! collisions of variable names. Consider the following example:
+//!
+//! ```
+//! #[kani::ensures(|result| old(*ptr + 1) == *ptr)]
+//! #[kani::ensures(|result| old(*ptr + 1) == *ptr)]
+//! #[kani::requires(*ptr < 100)]
+//! #[kani::modifies(ptr)]
+//! fn modify(ptr: &mut u32) {
+//!     *ptr += 1;
+//! }
+//!
+//! #[kani::proof_for_contract(modify)]
+//! fn main() {
+//!     let mut i = kani::any();
+//!     modify(&mut i);
+//! }
+//!
+//! ```
+//!
+//! This expands to
+//!
+//! ```
+//! #[allow(dead_code, unused_variables, unused_mut)]
+//! #[kanitool::is_contract_generated(check)]
+//! fn modify_check_633496(ptr: &mut u32) {
+//!     let _wrapper_arg_1 =
+//!         unsafe { kani::internal::Pointer::decouple_lifetime(&ptr) };
+//!     kani::assume(*ptr < 100);
+//!     let remember_kani_internal_1 = *ptr + 1;
+//!     let ptr_renamed = kani::internal::untracked_deref(&ptr);
+//!     let remember_kani_internal_0 = *ptr + 1;
+//!     let ptr_renamed = kani::internal::untracked_deref(&ptr);
+//!     let result_kani_internal: () = modify_wrapper_633496(ptr, _wrapper_arg_1);
+//!     kani::assert((|result|
+//!                     (remember_kani_internal_0) ==
+//!                         *ptr_renamed)(&result_kani_internal),
+//!         "|result| old(*ptr + 1) == *ptr");
+//!     std::mem::forget(ptr_renamed);
+//!     kani::assert((|result|
+//!                     (remember_kani_internal_1) ==
+//!                         *ptr_renamed)(&result_kani_internal),
+//!         "|result| old(*ptr + 1) == *ptr");
+//!     std::mem::forget(ptr_renamed);
+//!     result_kani_internal
+//! }
+//! #[allow(dead_code, unused_variables, unused_mut)]
+//! #[kanitool::is_contract_generated(replace)]
+//! fn modify_replace_633496(ptr: &mut u32) {
+//!     kani::assert(*ptr < 100, "*ptr < 100");
+//!     let remember_kani_internal_1 = *ptr + 1;
+//!     let ptr_renamed = kani::internal::untracked_deref(&ptr);
+//!     let remember_kani_internal_0 = *ptr + 1;
+//!     let ptr_renamed = kani::internal::untracked_deref(&ptr);
+//!     let result_kani_internal: () = kani::any_modifies();
+//!     *unsafe { kani::internal::Pointer::assignable(ptr) } =
+//!         kani::any_modifies();
+//!     kani::assume((|result|
+//!                     (remember_kani_internal_0) ==
+//!                         *ptr_renamed)(&result_kani_internal));
+//!     std::mem::forget(ptr_renamed);
+//!     kani::assume((|result|
+//!                     (remember_kani_internal_1) ==
+//!                         *ptr_renamed)(&result_kani_internal));
+//!     std::mem::forget(ptr_renamed);
+//!     result_kani_internal
+//! }
+//! ```
 
 use proc_macro::TokenStream;
 use proc_macro2::{Ident, TokenStream as TokenStream2};
 use quote::{quote, ToTokens};
-use std::collections::HashMap;
-use syn::{parse_macro_input, Expr, ItemFn};
+use syn::{parse_macro_input, Expr, ExprClosure, ItemFn};
 
 mod bootstrap;
 mod check;
+#[macro_use]
 mod helpers;
 mod initialize;
 mod replace;
@@ -352,11 +429,8 @@ enum ContractConditionsData {
         attr: Expr,
     },
     Ensures {
-        /// Translation map from original argument names to names of the copies
-        /// we will be emitting.
-        argument_names: HashMap<Ident, Ident>,
         /// The contents of the attribute.
-        attr: Expr,
+        attr: ExprClosure,
     },
     Modifies {
         attr: Vec<Expr>,
