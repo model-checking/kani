@@ -4,12 +4,10 @@
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::Stmt;
 use cbmc::InternedString;
-use rustc_middle::mir::Body as InternalBody;
-use rustc_middle::ty::Instance as InternalInstance;
+use rustc_middle::ty::Instance as InstanceInternal;
 use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{Body, Local, LocalDecl};
-use stable_mir::ty::FnSig;
 use stable_mir::CrateDef;
 use std::collections::HashMap;
 
@@ -20,12 +18,10 @@ pub struct CurrentFnCtx<'tcx> {
     block: Vec<Stmt>,
     /// The codegen instance for the current function
     instance: Instance,
-    /// The current function signature.
-    fn_sig: FnSig,
     /// The crate this function is from
     krate: String,
-    /// The MIR for the current instance. This is using the internal representation.
-    mir: &'tcx InternalBody<'tcx>,
+    /// The current instance. This is using the internal representation.
+    instance_internal: InstanceInternal<'tcx>,
     /// A list of local declarations used to retrieve MIR component types.
     locals: Vec<LocalDecl>,
     /// A list of pretty names for locals that corrspond to user variables.
@@ -41,7 +37,7 @@ pub struct CurrentFnCtx<'tcx> {
 /// Constructor
 impl<'tcx> CurrentFnCtx<'tcx> {
     pub fn new(instance: Instance, gcx: &GotocCtx<'tcx>, body: &Body) -> Self {
-        let internal_instance = rustc_internal::internal(instance);
+        let instance_internal = rustc_internal::internal(gcx.tcx, instance);
         let readable_name = instance.name();
         let name =
             if &readable_name == "main" { readable_name.clone() } else { instance.mangled_name() };
@@ -51,12 +47,10 @@ impl<'tcx> CurrentFnCtx<'tcx> {
             .iter()
             .filter_map(|info| info.local().map(|local| (local, (&info.name).into())))
             .collect::<HashMap<_, _>>();
-        let fn_sig = gcx.fn_sig_of_instance_stable(instance);
         Self {
             block: vec![],
             instance,
-            fn_sig,
-            mir: gcx.tcx.instance_mir(internal_instance.def),
+            instance_internal,
             krate: instance.def.krate().name,
             locals,
             local_names,
@@ -88,17 +82,12 @@ impl<'tcx> CurrentFnCtx<'tcx> {
 /// Getters
 impl<'tcx> CurrentFnCtx<'tcx> {
     /// The function we are currently compiling
-    pub fn instance(&self) -> InternalInstance<'tcx> {
-        rustc_internal::internal(self.instance)
+    pub fn instance(&self) -> InstanceInternal<'tcx> {
+        self.instance_internal
     }
 
     pub fn instance_stable(&self) -> Instance {
         self.instance
-    }
-
-    /// The internal MIR for the function we are currently compiling using internal APIs.
-    pub fn body_internal(&self) -> &'tcx InternalBody<'tcx> {
-        self.mir
     }
 
     /// The name of the function we are currently compiling
@@ -109,11 +98,6 @@ impl<'tcx> CurrentFnCtx<'tcx> {
     /// The pretty name of the function we are currently compiling
     pub fn readable_name(&self) -> &str {
         &self.readable_name
-    }
-
-    /// The signature of the function we are currently compiling
-    pub fn sig(&self) -> &FnSig {
-        &self.fn_sig
     }
 
     pub fn locals(&self) -> &[LocalDecl] {

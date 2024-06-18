@@ -1,7 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use crate::cbmc_string::{InternStringOption, InternedString};
-use std::convert::TryInto;
 use std::fmt::Debug;
 
 /// A `Location` represents a source location.

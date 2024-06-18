@@ -4,13 +4,9 @@
 //! Ensure we can handle SIMD defined in the standard library
 //! FIXME: <https://github.com/model-checking/kani/issues/2631>
 #![allow(non_camel_case_types)]
-#![feature(repr_simd, platform_intrinsics, portable_simd)]
+#![feature(repr_simd, core_intrinsics, portable_simd)]
+use std::intrinsics::simd::simd_add;
 use std::simd::f32x4;
-
-extern "platform-intrinsic" {
-    fn simd_add<T>(x: T, y: T) -> T;
-    fn simd_eq<T, U>(x: T, y: T) -> U;
-}
 
 #[repr(simd)]
 #[derive(Clone, PartialEq, kani::Arbitrary)]

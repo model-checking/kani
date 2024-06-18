@@ -4,6 +4,8 @@ use super::super::utils::aggr_tag;
 use super::{DatatypeComponent, Expr, Location, Parameter, Stmt, Type};
 use crate::{InternStringOption, InternedString};
 
+use std::fmt::Display;
+
 /// Based off the CBMC symbol implementation here:
 /// <https://github.com/diffblue/cbmc/blob/develop/src/util/symbol.h>
 #[derive(Clone, Debug)]
@@ -452,14 +454,13 @@ impl SymbolValues {
     }
 }
 
-/// ToString
-
-impl ToString for SymbolModes {
-    fn to_string(&self) -> String {
-        match self {
+/// Display
+impl Display for SymbolModes {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mode = match self {
             SymbolModes::C => "C",
             SymbolModes::Rust => "Rust",
-        }
-        .to_string()
+        };
+        write!(f, "{mode}")
     }
 }

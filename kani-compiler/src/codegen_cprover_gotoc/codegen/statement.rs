@@ -7,14 +7,16 @@ use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
 use cbmc::goto_program::{Expr, Location, Stmt, Type};
 use rustc_middle::ty::layout::LayoutOf;
+use rustc_middle::ty::{List, ParamEnv};
 use rustc_smir::rustc_internal;
 use rustc_target::abi::{FieldsShape, Primitive, TagEncoding, Variants};
+use stable_mir::abi::{ArgAbi, FnAbi, PassMode};
 use stable_mir::mir::mono::{Instance, InstanceKind};
 use stable_mir::mir::{
     AssertMessage, BasicBlockIdx, CopyNonOverlapping, NonDivergingIntrinsic, Operand, Place,
     Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind, RETURN_LOCAL,
 };
-use stable_mir::ty::{RigidTy, Span, Ty, TyKind, VariantIdx};
+use stable_mir::ty::{Abi, RigidTy, Span, Ty, TyKind, VariantIdx};
 use tracing::{debug, debug_span, trace};
 
 impl<'tcx> GotocCtx<'tcx> {
@@ -40,14 +42,14 @@ impl<'tcx> GotocCtx<'tcx> {
                     // where the reference is implicit.
                     unwrap_or_return_codegen_unimplemented_stmt!(
                         self,
-                        self.codegen_place_stable(lhs)
+                        self.codegen_place_stable(lhs, location)
                     )
                     .goto_expr
                     .assign(self.codegen_rvalue_stable(rhs, location).address_of(), location)
                 } else if rty.kind().is_bool() {
                     unwrap_or_return_codegen_unimplemented_stmt!(
                         self,
-                        self.codegen_place_stable(lhs)
+                        self.codegen_place_stable(lhs, location)
                     )
                     .goto_expr
                     .assign(
@@ -57,7 +59,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 } else {
                     unwrap_or_return_codegen_unimplemented_stmt!(
                         self,
-                        self.codegen_place_stable(lhs)
+                        self.codegen_place_stable(lhs, location)
                     )
                     .goto_expr
                     .assign(self.codegen_rvalue_stable(rhs, location), location)
@@ -68,13 +70,25 @@ impl<'tcx> GotocCtx<'tcx> {
                 let dest_ty = self.place_ty_stable(place);
                 let dest_expr = unwrap_or_return_codegen_unimplemented_stmt!(
                     self,
-                    self.codegen_place_stable(place)
+                    self.codegen_place_stable(place, location)
                 )
                 .goto_expr;
                 self.codegen_set_discriminant(dest_ty, dest_expr, *variant_index, location)
             }
-            StatementKind::StorageLive(_) => Stmt::skip(location), // TODO: fix me
-            StatementKind::StorageDead(_) => Stmt::skip(location), // TODO: fix me
+            StatementKind::StorageLive(var_id) => {
+                if self.queries.args().ignore_storage_markers {
+                    Stmt::skip(location)
+                } else {
+                    Stmt::decl(self.codegen_local(*var_id, location), None, location)
+                }
+            }
+            StatementKind::StorageDead(var_id) => {
+                if self.queries.args().ignore_storage_markers {
+                    Stmt::skip(location)
+                } else {
+                    Stmt::dead(self.codegen_local(*var_id, location), location)
+                }
+            }
             StatementKind::Intrinsic(NonDivergingIntrinsic::CopyNonOverlapping(
                 CopyNonOverlapping { src, dst, count },
             )) => {
@@ -135,17 +149,18 @@ impl<'tcx> GotocCtx<'tcx> {
                 "https://github.com/model-checking/kani/issues/692",
             ),
             TerminatorKind::Return => {
-                let rty = self.current_fn().sig().output();
+                let rty = self.current_fn().instance_stable().fn_abi().unwrap().ret.ty;
                 if rty.kind().is_unit() {
-                    self.codegen_ret_unit()
+                    self.codegen_ret_unit(loc)
                 } else {
                     let place = Place::from(RETURN_LOCAL);
                     let place_expr = unwrap_or_return_codegen_unimplemented_stmt!(
                         self,
-                        self.codegen_place_stable(&place)
+                        self.codegen_place_stable(&place, loc)
                     )
                     .goto_expr;
-                    if self.place_ty_stable(&place).kind().is_bool() {
+                    assert_eq!(rty, self.place_ty_stable(&place), "Unexpected return type");
+                    if rty.kind().is_bool() {
                         place_expr.cast_to(Type::c_bool()).ret(loc)
                     } else {
                         place_expr.ret(loc)
@@ -219,8 +234,8 @@ impl<'tcx> GotocCtx<'tcx> {
         location: Location,
     ) -> Stmt {
         // this requires place points to an enum type.
-        let dest_ty_internal = rustc_internal::internal(dest_ty);
-        let variant_index_internal = rustc_internal::internal(variant_index);
+        let dest_ty_internal = rustc_internal::internal(self.tcx, dest_ty);
+        let variant_index_internal = rustc_internal::internal(self.tcx, variant_index);
         let layout = self.layout_of(dest_ty_internal);
         match &layout.variants {
             Variants::Single { .. } => Stmt::skip(location),
@@ -289,24 +304,22 @@ impl<'tcx> GotocCtx<'tcx> {
             // We ignore assignment for all zero size types
             Stmt::skip(loc)
         } else {
-            unwrap_or_return_codegen_unimplemented_stmt!(self, self.codegen_place_stable(place))
-                .goto_expr
-                .deinit(loc)
+            unwrap_or_return_codegen_unimplemented_stmt!(
+                self,
+                self.codegen_place_stable(place, loc)
+            )
+            .goto_expr
+            .deinit(loc)
         }
     }
 
     /// A special case handler to codegen `return ();`
-    fn codegen_ret_unit(&mut self) -> Stmt {
+    fn codegen_ret_unit(&mut self, loc: Location) -> Stmt {
         let is_file_local = false;
         let ty = self.codegen_ty_unit();
-        let var = self.ensure_global_var(
-            FN_RETURN_VOID_VAR_NAME,
-            is_file_local,
-            ty,
-            Location::none(),
-            |_, _| None,
-        );
-        Stmt::ret(Some(var), Location::none())
+        let var =
+            self.ensure_global_var(FN_RETURN_VOID_VAR_NAME, is_file_local, ty, loc, |_, _| None);
+        Stmt::ret(Some(var), loc)
     }
 
     /// Generates Goto-C for MIR [TerminatorKind::Drop] calls. We only handle code _after_ Rust's "drop elaboration"
@@ -327,7 +340,8 @@ impl<'tcx> GotocCtx<'tcx> {
                 Stmt::skip(loc)
             }
             InstanceKind::Shim => {
-                let place_ref = self.codegen_place_ref_stable(place);
+                // Since the reference is used right away here, no need to inject a check for pointer validity.
+                let place_ref = self.codegen_place_ref_stable(place, loc);
                 match place_ty.kind() {
                     TyKind::RigidTy(RigidTy::Dynamic(..)) => {
                         // Virtual drop via a vtable lookup.
@@ -353,7 +367,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         // Non-virtual, direct drop_in_place call
                         assert!(!matches!(drop_instance.kind, InstanceKind::Virtual { .. }));
 
-                        let func = self.codegen_func_expr(drop_instance, None);
+                        let func = self.codegen_func_expr(drop_instance, loc);
                         // The only argument should be a self reference
                         let args = vec![place_ref];
 
@@ -431,31 +445,21 @@ impl<'tcx> GotocCtx<'tcx> {
     /// as subsequent parameters.
     ///
     /// See [GotocCtx::ty_needs_untupled_args] for more details.
-    fn codegen_untupled_args(
-        &mut self,
-        instance: Instance,
-        fargs: &mut Vec<Expr>,
-        last_mir_arg: Option<&Operand>,
-    ) {
-        debug!("codegen_untuple_closure_args instance: {:?}, fargs {:?}", instance.name(), fargs);
-        if !fargs.is_empty() {
-            let tuple_ty = self.operand_ty_stable(last_mir_arg.unwrap());
-            if self.is_zst_stable(tuple_ty) {
-                // Don't pass anything if all tuple elements are ZST.
-                // ZST arguments are ignored.
-                return;
-            }
-            let tupe = fargs.remove(fargs.len() - 1);
-            if let TyKind::RigidTy(RigidTy::Tuple(tupled_args)) = tuple_ty.kind() {
-                for (idx, arg_ty) in tupled_args.iter().enumerate() {
-                    if !self.is_zst_stable(*arg_ty) {
-                        // Access the tupled parameters through the `member` operation
-                        let idx_expr = tupe.clone().member(&idx.to_string(), &self.symbol_table);
-                        fargs.push(idx_expr);
-                    }
-                }
-            }
-        }
+    fn codegen_untupled_args(&mut self, op: &Operand, args_abi: &[ArgAbi]) -> Vec<Expr> {
+        let tuple_ty = self.operand_ty_stable(op);
+        let tuple_expr = self.codegen_operand_stable(op);
+        let TyKind::RigidTy(RigidTy::Tuple(tupled_args)) = tuple_ty.kind() else { unreachable!() };
+        tupled_args
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, _)| {
+                let arg_abi = &args_abi[idx];
+                (arg_abi.mode != PassMode::Ignore).then(|| {
+                    // Access the tupled parameters through the `member` operation
+                    tuple_expr.clone().member(idx.to_string(), &self.symbol_table)
+                })
+            })
+            .collect()
     }
 
     /// Because function calls terminate basic blocks, to "end" a function call, we
@@ -471,25 +475,24 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Generate Goto-C for each argument to a function call.
     ///
     /// N.B. public only because instrinsics use this directly, too.
-    /// When `skip_zst` is set to `true`, the return value will not include any argument that is ZST.
-    /// This is used because we ignore ZST arguments, except for intrinsics.
-    pub(crate) fn codegen_funcall_args(&mut self, args: &[Operand], skip_zst: bool) -> Vec<Expr> {
-        let fargs = args
+    pub(crate) fn codegen_funcall_args(&mut self, fn_abi: &FnAbi, args: &[Operand]) -> Vec<Expr> {
+        let fargs: Vec<Expr> = args
             .iter()
-            .filter_map(|op| {
-                let op_ty = self.operand_ty_stable(op);
-                if op_ty.kind().is_bool() {
+            .enumerate()
+            .filter_map(|(i, op)| {
+                // Functions that require caller info will have an extra parameter.
+                let arg_abi = &fn_abi.args.get(i);
+                let ty = self.operand_ty_stable(op);
+                if ty.kind().is_bool() {
                     Some(self.codegen_operand_stable(op).cast_to(Type::c_bool()))
-                } else if !self.is_zst_stable(op_ty) || !skip_zst {
+                } else if arg_abi.map_or(true, |abi| abi.mode != PassMode::Ignore) {
                     Some(self.codegen_operand_stable(op))
                 } else {
-                    // We ignore ZST types.
-                    debug!(arg=?op, "codegen_funcall_args ignore");
                     None
                 }
             })
             .collect();
-        debug!(?fargs, "codegen_funcall_args");
+        debug!(?fargs, args_abi=?fn_abi.args, "codegen_funcall_args");
         fargs
     }
 
@@ -514,27 +517,45 @@ impl<'tcx> GotocCtx<'tcx> {
         span: Span,
     ) -> Stmt {
         debug!(?func, ?args, ?destination, ?span, "codegen_funcall");
-        if self.is_intrinsic(&func) {
-            return self.codegen_funcall_of_intrinsic(
-                &func,
-                &args,
-                &destination,
-                target.map(|bb| bb),
-                span,
-            );
+        let instance_opt = self.get_instance(func);
+        if let Some(instance) = instance_opt
+            && matches!(instance.kind, InstanceKind::Intrinsic)
+        {
+            let TyKind::RigidTy(RigidTy::FnDef(def, _)) = instance.ty().kind() else {
+                unreachable!("Expected function type for intrinsic: {instance:?}")
+            };
+            // The compiler is currently transitioning how to handle intrinsic fallback body.
+            // Until https://github.com/rust-lang/project-stable-mir/issues/79 is implemented
+            // we have to check `must_be_overridden` and `has_body`.
+            if def.as_intrinsic().unwrap().must_be_overridden() || !instance.has_body() {
+                return self.codegen_funcall_of_intrinsic(
+                    instance,
+                    &args,
+                    &destination,
+                    target.map(|bb| bb),
+                    span,
+                );
+            }
         }
 
         let loc = self.codegen_span_stable(span);
-        let funct = self.operand_ty_stable(func);
-        let mut fargs = self.codegen_funcall_args(&args, true);
-        match funct.kind() {
-            TyKind::RigidTy(RigidTy::FnDef(def, subst)) => {
-                let instance = Instance::resolve(def, &subst).unwrap();
-
-                // TODO(celina): Move this check to be inside codegen_funcall_args.
-                if self.ty_needs_untupled_args(rustc_internal::internal(funct)) {
-                    self.codegen_untupled_args(instance, &mut fargs, args.last());
-                }
+        let fn_ty = self.operand_ty_stable(func);
+        match fn_ty.kind() {
+            fn_def @ TyKind::RigidTy(RigidTy::FnDef(..)) => {
+                let instance = instance_opt.unwrap();
+                let fn_abi = instance.fn_abi().unwrap();
+                let mut fargs = if args.is_empty()
+                    || fn_def.fn_sig().unwrap().value.abi != Abi::RustCall
+                {
+                    self.codegen_funcall_args(&fn_abi, &args)
+                } else {
+                    let (untupled, first_args) = args.split_last().unwrap();
+                    let mut fargs = self.codegen_funcall_args(&fn_abi, &first_args);
+                    fargs.append(
+                        &mut self.codegen_untupled_args(untupled, &fn_abi.args[first_args.len()..]),
+                    );
+                    fargs
+                };
 
                 if let Some(hk) = self.hooks.hook_applies(self.tcx, instance) {
                     return hk.handle(self, instance, fargs, destination, *target, span);
@@ -554,24 +575,37 @@ impl<'tcx> GotocCtx<'tcx> {
                     InstanceKind::Item | InstanceKind::Intrinsic | InstanceKind::Shim => {
                         // We need to handle FnDef items in a special way because `codegen_operand` compiles them to dummy structs.
                         // (cf. the function documentation)
-                        let func_exp = self.codegen_func_expr(instance, None);
-                        vec![
-                            self.codegen_expr_to_place_stable(destination, func_exp.call(fargs))
-                                .with_location(loc),
-                        ]
+                        let func_exp = self.codegen_func_expr(instance, loc);
+                        if instance.is_foreign_item() {
+                            vec![self.codegen_foreign_call(func_exp, fargs, destination, loc)]
+                        } else {
+                            vec![self.codegen_expr_to_place_stable(
+                                destination,
+                                func_exp.call(fargs),
+                                loc,
+                            )]
+                        }
                     }
                 };
                 stmts.push(self.codegen_end_call(*target, loc));
                 Stmt::block(stmts, loc)
             }
             // Function call through a pointer
-            TyKind::RigidTy(RigidTy::FnPtr(_)) => {
+            TyKind::RigidTy(RigidTy::FnPtr(fn_sig)) => {
+                let fn_sig_internal = rustc_internal::internal(self.tcx, fn_sig);
+                let fn_ptr_abi = rustc_internal::stable(
+                    self.tcx
+                        .fn_abi_of_fn_ptr(
+                            ParamEnv::reveal_all().and((fn_sig_internal, &List::empty())),
+                        )
+                        .unwrap(),
+                );
+                let fargs = self.codegen_funcall_args(&fn_ptr_abi, &args);
                 let func_expr = self.codegen_operand_stable(func).dereference();
                 // Actually generate the function call and return.
                 Stmt::block(
                     vec![
-                        self.codegen_expr_to_place_stable(destination, func_expr.call(fargs))
-                            .with_location(loc),
+                        self.codegen_expr_to_place_stable(destination, func_expr.call(fargs), loc),
                         Stmt::goto(bb_label(target.unwrap()), loc),
                     ],
                     loc,
@@ -587,7 +621,7 @@ impl<'tcx> GotocCtx<'tcx> {
     fn extract_ptr(&self, arg_expr: Expr, arg_ty: Ty) -> Expr {
         // Generate an expression that indexes the pointer.
         let expr = self
-            .receiver_data_path(rustc_internal::internal(arg_ty))
+            .receiver_data_path(rustc_internal::internal(self.tcx, arg_ty))
             .fold(arg_expr, |curr_expr, (name, _)| curr_expr.member(name, &self.symbol_table));
 
         trace!(?arg_ty, gotoc_ty=?expr.typ(), gotoc_expr=?expr.value(), "extract_ptr");
@@ -668,7 +702,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
         // Virtual function call and corresponding nonnull assertion.
         let call = fn_ptr.dereference().call(fargs.to_vec());
-        let call_stmt = self.codegen_expr_to_place_stable(place, call).with_location(loc);
+        let call_stmt = self.codegen_expr_to_place_stable(place, call, loc);
         let call_stmt = if self.vtable_ctx.emit_vtable_restrictions {
             self.virtual_call_with_restricted_fn_ptr(trait_fat_ptr.typ().clone(), idx, call_stmt)
         } else {
@@ -683,13 +717,21 @@ impl<'tcx> GotocCtx<'tcx> {
     /// A MIR [Place] is an L-value (i.e. the LHS of an assignment).
     ///
     /// In Kani, we slightly optimize the special case for Unit and don't assign anything.
-    pub(crate) fn codegen_expr_to_place_stable(&mut self, place: &Place, expr: Expr) -> Stmt {
+    pub(crate) fn codegen_expr_to_place_stable(
+        &mut self,
+        place: &Place,
+        expr: Expr,
+        loc: Location,
+    ) -> Stmt {
         if self.place_ty_stable(place).kind().is_unit() {
-            expr.as_stmt(Location::none())
+            expr.as_stmt(loc)
         } else {
-            unwrap_or_return_codegen_unimplemented_stmt!(self, self.codegen_place_stable(place))
-                .goto_expr
-                .assign(expr, Location::none())
+            unwrap_or_return_codegen_unimplemented_stmt!(
+                self,
+                self.codegen_place_stable(place, loc)
+            )
+            .goto_expr
+            .assign(expr, loc)
         }
     }
 }

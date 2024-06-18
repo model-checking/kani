@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 //! Checks that the `simd_rem` intrinsic returns the expected results for floating point numbers.
-#![feature(repr_simd, platform_intrinsics)]
+#![feature(repr_simd, core_intrinsics)]
+use std::intrinsics::simd::simd_rem;
 
 #[repr(simd)]
 #[allow(non_camel_case_types)]
@@ -17,10 +18,6 @@ impl f32x2 {
     fn non_simd_rem(self, divisors: Self) -> Self {
         f32x2(self.0 % divisors.0, self.1 % divisors.1)
     }
-}
-
-extern "platform-intrinsic" {
-    fn simd_rem<T>(x: T, y: T) -> T;
 }
 
 #[kani::proof]

@@ -6,6 +6,7 @@ pub mod assess_args;
 pub mod cargo;
 pub mod common;
 pub mod playback_args;
+pub mod std_args;
 
 pub use assess_args::*;
 
@@ -79,6 +80,9 @@ pub struct StandaloneArgs {
 
     #[command(subcommand)]
     pub command: Option<StandaloneSubcommand>,
+
+    #[arg(long, hide = true)]
+    pub crate_name: Option<String>,
 }
 
 /// Kani takes optional subcommands to request specialized behavior.
@@ -87,6 +91,8 @@ pub struct StandaloneArgs {
 pub enum StandaloneSubcommand {
     /// Execute concrete playback testcases of a local crate.
     Playback(Box<playback_args::KaniPlaybackArgs>),
+    /// Verify the rust standard library.
+    VerifyStd(Box<std_args::VerifyStdArgs>),
 }
 
 #[derive(Debug, clap::Parser)]
@@ -248,6 +254,14 @@ pub struct VerificationArgs {
     /// This option may impact the soundness of the analysis and may cause false proofs and/or counterexamples
     #[arg(long, hide_short_help = true, requires("enable_unstable"))]
     pub ignore_global_asm: bool,
+
+    /// Ignore lifetimes of local variables. This effectively extends their
+    /// lifetimes to the function scope, and hence may cause Kani to miss
+    /// undefined behavior resulting from using the variable after it dies.
+    /// This option may impact the soundness of the analysis and may cause false
+    /// proofs and/or counterexamples
+    #[arg(long, hide_short_help = true, requires("enable_unstable"))]
+    pub ignore_locals_lifetime: bool,
 
     /// Write the GotoC symbol table to a file in JSON format instead of goto binary format.
     #[arg(long, hide_short_help = true)]
@@ -437,6 +451,13 @@ fn check_no_cargo_opt(is_set: bool, name: &str) -> Result<(), Error> {
 impl ValidateArgs for StandaloneArgs {
     fn validate(&self) -> Result<(), Error> {
         self.verify_opts.validate()?;
+
+        match &self.command {
+            Some(StandaloneSubcommand::VerifyStd(args)) => args.validate()?,
+            // TODO: Invoke PlaybackArgs::validate()
+            None | Some(StandaloneSubcommand::Playback(..)) => {}
+        };
+
         // Cargo target arguments.
         check_no_cargo_opt(self.verify_opts.target.bins, "--bins")?;
         check_no_cargo_opt(self.verify_opts.target.lib, "--lib")?;

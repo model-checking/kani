@@ -1,0 +1,15 @@
+[TEST] Run kani verify-std
+
+Checking harness verify::dummy_proof...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness verify::harness...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness verify::check_dummy_read...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness num::verify::check_non_zero...
+VERIFICATION:- SUCCESSFUL
+
+Complete - 4 successfully verified harnesses, 0 failures, 4 total.

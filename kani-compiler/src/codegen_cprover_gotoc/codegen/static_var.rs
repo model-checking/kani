@@ -19,7 +19,7 @@ impl<'tcx> GotocCtx<'tcx> {
         debug!("codegen_static");
         let alloc = def.eval_initializer().unwrap();
         let symbol_name = Instance::from(def).mangled_name();
-        self.codegen_alloc_in_memory(alloc, symbol_name);
+        self.codegen_alloc_in_memory(alloc, symbol_name, self.codegen_span_stable(def.span()));
     }
 
     /// Mutates the Goto-C symbol table to add a forward-declaration of the static variable.
@@ -33,6 +33,10 @@ impl<'tcx> GotocCtx<'tcx> {
 
         let typ = self.codegen_ty_stable(instance.ty());
         let location = self.codegen_span_stable(def.span());
+        // Contracts instrumentation relies on `--nondet-static-exclude` to properly
+        // havoc static variables. Kani uses the location and pretty name to identify
+        // the correct variables. If the wrong name is used, CBMC may fail silently.
+        // More details at https://github.com/diffblue/cbmc/issues/8225.
         let symbol = Symbol::static_variable(symbol_name.clone(), symbol_name, typ, location)
             .with_is_hidden(false) // Static items are always user defined.
             .with_pretty_name(pretty_name);

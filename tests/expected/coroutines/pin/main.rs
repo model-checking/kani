@@ -1,17 +1,19 @@
-// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 // Test contains a call to a coroutine via a Pin
 // from https://github.com/model-checking/kani/issues/416
 
 #![feature(coroutines, coroutine_trait)]
+#![feature(stmt_expr_attributes)]
 
 use std::ops::{Coroutine, CoroutineState};
 use std::pin::Pin;
 
 #[kani::proof]
 fn main() {
-    let mut coroutine = || {
+    let mut coroutine = #[coroutine]
+    || {
         yield 1;
         return true;
     };

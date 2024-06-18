@@ -3,7 +3,6 @@
 //! This module handles Kani metadata generation. For example, generating HarnessMetadata for a
 //! given function.
 
-use std::default::Default;
 use std::path::Path;
 
 use crate::kani_middle::attributes::test_harness_name;
@@ -24,7 +23,7 @@ pub fn canonical_mangled_name(instance: Instance) -> String {
 /// Create the harness metadata for a proof harness for a given function.
 pub fn gen_proof_metadata(tcx: TyCtxt, instance: Instance, base_name: &Path) -> HarnessMetadata {
     let def = instance.def;
-    let attributes = KaniAttributes::for_instance(tcx, instance).harness_attributes();
+    let kani_attributes = KaniAttributes::for_instance(tcx, instance);
     let pretty_name = instance.name();
     let mangled_name = canonical_mangled_name(instance);
 
@@ -41,7 +40,7 @@ pub fn gen_proof_metadata(tcx: TyCtxt, instance: Instance, base_name: &Path) -> 
         original_file: loc.filename,
         original_start_line: loc.start_line,
         original_end_line: loc.end_line,
-        attributes,
+        attributes: kani_attributes.harness_attributes(),
         // TODO: This no longer needs to be an Option.
         goto_file: Some(model_file),
         contract: Default::default(),

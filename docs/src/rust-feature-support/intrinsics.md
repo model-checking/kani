@@ -148,10 +148,10 @@ cttz_nonzero | Yes | |
 discriminant_value | Yes | |
 drop_in_place | No | |
 exact_div | Yes | |
-exp2f32 | No | |
-exp2f64 | No | |
-expf32 | No | |
-expf64 | No | |
+exp2f32 | Partial | Results are overapproximated |
+exp2f64 | Partial | Results are overapproximated |
+expf32 | Partial | Results are overapproximated |
+expf64 | Partial | Results are overapproximated |
 fabsf32 | Yes | |
 fabsf64 | Yes | |
 fadd_fast | Yes | |
@@ -170,8 +170,8 @@ log10f32 | No | |
 log10f64 | No | |
 log2f32 | No | |
 log2f64 | No | |
-logf32 | No | |
-logf64 | No | |
+logf32 | Partial | Results are overapproximated |
+logf64 | Partial | Results are overapproximated |
 maxnumf32 | Yes | |
 maxnumf64 | Yes | |
 min_align_of | Yes | |
@@ -185,8 +185,8 @@ nearbyintf64 | Yes | |
 needs_drop | Yes | |
 nontemporal_store | No | |
 offset | Partial | Doesn't check [all UB conditions](https://doc.rust-lang.org/std/primitive.pointer.html#safety-2) |
-powf32 | No | |
-powf64 | No | |
+powf32 | Partial | Results are overapproximated |
+powf64 | Partial | Results are overapproximated |
 powif32 | No | |
 powif64 | No | |
 pref_align_of | Yes | |
@@ -220,6 +220,7 @@ truncf64 | Yes | |
 try | No | [#267](https://github.com/model-checking/kani/issues/267) |
 type_id | Yes | |
 type_name | Yes | |
+typed_swap | Yes | |
 unaligned_volatile_load | No | See [Notes - Concurrency](#concurrency) |
 unaligned_volatile_store | No | See [Notes - Concurrency](#concurrency) |
 unchecked_add | Yes | |

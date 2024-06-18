@@ -1,7 +1,8 @@
-// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 #![feature(coroutines, coroutine_trait)]
+#![feature(stmt_expr_attributes)]
 
 use std::ops::{Coroutine, CoroutineState};
 use std::pin::Pin;
@@ -10,7 +11,8 @@ use std::pin::Pin;
 #[kani::unwind(2)]
 fn main() {
     let val: bool = kani::any();
-    let mut coroutine = move || {
+    let mut coroutine = #[coroutine]
+    move || {
         let x = val;
         yield x;
         return !x;

@@ -3,7 +3,7 @@
 
 [package]
 name = "kani_metadata"
-version = "0.45.0"
+version = "0.52.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 publish = false
@@ -13,6 +13,6 @@ publish = false
 [dependencies]
 serde = {version = "1", features = ["derive"]}
 cbmc = { path = "../cprover_bindings", package = "cprover_bindings" }
-strum = "0.25.0"
-strum_macros = "0.25.2"
+strum = "0.26"
+strum_macros = "0.26"
 clap = { version = "4.4.11", features = ["derive"] }

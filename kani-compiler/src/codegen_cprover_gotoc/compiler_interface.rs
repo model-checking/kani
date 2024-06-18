@@ -7,16 +7,18 @@ use crate::args::ReachabilityType;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::kani_middle::analysis;
 use crate::kani_middle::attributes::{is_test_harness_description, KaniAttributes};
-use crate::kani_middle::metadata::{canonical_mangled_name, gen_test_metadata};
+use crate::kani_middle::codegen_units::{CodegenUnit, CodegenUnits};
+use crate::kani_middle::metadata::gen_test_metadata;
 use crate::kani_middle::provide;
 use crate::kani_middle::reachability::{
     collect_reachable_items, filter_const_crate_items, filter_crate_items,
 };
+use crate::kani_middle::transform::BodyTransformation;
 use crate::kani_middle::{check_reachable_items, dump_mir_items};
 use crate::kani_queries::QueryDb;
 use cbmc::goto_program::Location;
 use cbmc::irep::goto_binary_serde::write_goto_binary_file;
-use cbmc::{InternString, RoundingMode};
+use cbmc::RoundingMode;
 use cbmc::{InternedString, MachineModel};
 use kani_metadata::artifact::convert_type;
 use kani_metadata::UnsupportedFeature;
@@ -48,12 +50,10 @@ use stable_mir::mir::mono::{Instance, MonoItem};
 use stable_mir::{CrateDef, DefId};
 use std::any::Any;
 use std::collections::BTreeMap;
-use std::collections::HashSet;
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::fs::File;
 use std::io::BufWriter;
-use std::iter::FromIterator;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Arc, Mutex};
@@ -87,16 +87,18 @@ impl GotocCodegenBackend {
         symtab_goto: &Path,
         machine_model: &MachineModel,
         check_contract: Option<InternalDefId>,
+        mut transformer: BodyTransformation,
     ) -> (GotocCtx<'tcx>, Vec<MonoItem>, Option<AssignsContract>) {
         let items = with_timer(
-            || collect_reachable_items(tcx, starting_items),
+            || collect_reachable_items(tcx, &mut transformer, starting_items),
             "codegen reachability analysis",
         );
-        dump_mir_items(tcx, &items, &symtab_goto.with_extension("kani.mir"));
+        dump_mir_items(tcx, &mut transformer, &items, &symtab_goto.with_extension("kani.mir"));
 
         // Follow rustc naming convention (cx is abbrev for context).
         // https://rustc-dev-guide.rust-lang.org/conventions.html#naming-conventions
-        let mut gcx = GotocCtx::new(tcx, (*self.queries.lock().unwrap()).clone(), machine_model);
+        let mut gcx =
+            GotocCtx::new(tcx, (*self.queries.lock().unwrap()).clone(), machine_model, transformer);
         check_reachable_items(gcx.tcx, &gcx.queries, &items);
 
         let contract_info = with_timer(
@@ -226,45 +228,48 @@ impl CodegenBackend for GotocCodegenBackend {
             // - Tests: Generate one model per test harnesses.
             // - PubFns: Generate code for all reachable logic starting from the local public functions.
             // - None: Don't generate code. This is used to compile dependencies.
-            let base_filename = tcx.output_filenames(()).output_path(OutputType::Object);
+            let base_filepath = tcx.output_filenames(()).path(OutputType::Object);
+            let base_filename = base_filepath.as_path();
             let reachability = queries.args().reachability_analysis;
             let mut results = GotoCodegenResults::new(tcx, reachability);
             match reachability {
                 ReachabilityType::Harnesses => {
+                    let mut units = CodegenUnits::new(&queries, tcx);
+                    let mut modifies_instances = vec![];
                     // Cross-crate collecting of all items that are reachable from the crate harnesses.
-                    let harnesses = queries.target_harnesses();
-                    let mut items: HashSet<_> = HashSet::with_capacity(harnesses.len());
-                    items.extend(harnesses);
-                    let harnesses = filter_crate_items(tcx, |_, instance| {
-                        items.contains(&instance.mangled_name().intern())
-                    });
-                    for harness in harnesses {
-                        let model_path =
-                            queries.harness_model_path(&harness.mangled_name()).unwrap();
-                        let contract_metadata =
-                            contract_metadata_for_harness(tcx, harness.def.def_id()).unwrap();
-                        let (gcx, items, contract_info) = self.codegen_items(
-                            tcx,
-                            &[MonoItem::Fn(harness)],
-                            model_path,
-                            &results.machine_model,
-                            contract_metadata,
-                        );
-                        results.extend(gcx, items, None);
-                        if let Some(assigns_contract) = contract_info {
-                            self.queries.lock().unwrap().register_assigns_contract(
-                                canonical_mangled_name(harness).intern(),
-                                assigns_contract,
+                    for unit in units.iter() {
+                        // We reset the body cache for now because each codegen unit has different
+                        // configurations that affect how we transform the instance body.
+                        let mut transformer = BodyTransformation::new(&queries, tcx, &unit);
+                        for harness in &unit.harnesses {
+                            let model_path = units.harness_model_path(*harness).unwrap();
+                            let contract_metadata =
+                                contract_metadata_for_harness(tcx, harness.def.def_id()).unwrap();
+                            let (gcx, items, contract_info) = self.codegen_items(
+                                tcx,
+                                &[MonoItem::Fn(*harness)],
+                                model_path,
+                                &results.machine_model,
+                                contract_metadata,
+                                transformer,
                             );
+                            transformer = results.extend(gcx, items, None);
+                            if let Some(assigns_contract) = contract_info {
+                                modifies_instances.push((*harness, assigns_contract));
+                            }
                         }
                     }
+                    units.store_modifies(&modifies_instances);
+                    units.write_metadata(&queries, tcx);
                 }
                 ReachabilityType::Tests => {
                     // We're iterating over crate items here, so what we have to codegen is the "test description" containing the
                     // test closure that we want to execute
                     // TODO: Refactor this code so we can guarantee that the pair (test_fn, test_desc) actually match.
+                    let unit = CodegenUnit::default();
+                    let mut transformer = BodyTransformation::new(&queries, tcx, &unit);
                     let mut descriptions = vec![];
-                    let harnesses = filter_const_crate_items(tcx, |_, item| {
+                    let harnesses = filter_const_crate_items(tcx, &mut transformer, |_, item| {
                         if is_test_harness_description(tcx, item.def) {
                             descriptions.push(item.def);
                             true
@@ -283,6 +288,7 @@ impl CodegenBackend for GotocCodegenBackend {
                         &model_path,
                         &results.machine_model,
                         Default::default(),
+                        transformer,
                     );
                     results.extend(gcx, items, None);
 
@@ -304,10 +310,12 @@ impl CodegenBackend for GotocCodegenBackend {
                 }
                 ReachabilityType::None => {}
                 ReachabilityType::PubFns => {
+                    let unit = CodegenUnit::default();
+                    let transformer = BodyTransformation::new(&queries, tcx, &unit);
                     let main_instance =
                         stable_mir::entry_fn().map(|main_fn| Instance::try_from(main_fn).unwrap());
                     let local_reachable = filter_crate_items(tcx, |_, instance| {
-                        let def_id = rustc_internal::internal(instance.def.def_id());
+                        let def_id = rustc_internal::internal(tcx, instance.def.def_id());
                         Some(instance) == main_instance || tcx.is_reachable_non_generic(def_id)
                     })
                     .into_iter()
@@ -320,9 +328,10 @@ impl CodegenBackend for GotocCodegenBackend {
                         &model_path,
                         &results.machine_model,
                         Default::default(),
+                        transformer,
                     );
                     assert!(contract_info.is_none());
-                    results.extend(gcx, items, None);
+                    let _ = results.extend(gcx, items, None);
                 }
             }
 
@@ -353,10 +362,10 @@ impl CodegenBackend for GotocCodegenBackend {
         ongoing_codegen: Box<dyn Any>,
         _sess: &Session,
         _filenames: &OutputFilenames,
-    ) -> Result<(CodegenResults, FxIndexMap<WorkProductId, WorkProduct>), ErrorGuaranteed> {
+    ) -> (CodegenResults, FxIndexMap<WorkProductId, WorkProduct>) {
         match ongoing_codegen.downcast::<(CodegenResults, FxIndexMap<WorkProductId, WorkProduct>)>()
         {
-            Ok(val) => Ok(*val),
+            Ok(val) => *val,
             Err(val) => panic!("unexpected error: {:?}", (*val).type_id()),
         }
     }
@@ -398,7 +407,7 @@ impl CodegenBackend for GotocCodegenBackend {
                 let path = MaybeTempDir::new(tmp_dir, sess.opts.cg.save_temps);
                 let (metadata, _metadata_position) = create_wrapper_file(
                     sess,
-                    b".rmeta".to_vec(),
+                    ".rmeta".to_string(),
                     codegen_results.metadata.raw_data(),
                 );
                 let metadata = emit_wrapper_file(sess, &metadata, &path, METADATA_FILENAME);
@@ -406,7 +415,8 @@ impl CodegenBackend for GotocCodegenBackend {
                 builder.build(&out_path);
             } else {
                 // Write the location of the kani metadata file in the requested compiler output file.
-                let base_filename = outputs.output_path(OutputType::Object);
+                let base_filepath = outputs.path(OutputType::Object);
+                let base_filename = base_filepath.as_path();
                 let content_stub = CompilerArtifactStub {
                     metadata_path: base_filename.with_extension(ArtifactType::Metadata),
                 };
@@ -614,12 +624,18 @@ impl GotoCodegenResults {
         }
     }
 
-    fn extend(&mut self, gcx: GotocCtx, items: Vec<MonoItem>, metadata: Option<HarnessMetadata>) {
+    fn extend(
+        &mut self,
+        gcx: GotocCtx,
+        items: Vec<MonoItem>,
+        metadata: Option<HarnessMetadata>,
+    ) -> BodyTransformation {
         let mut items = items;
         self.harnesses.extend(metadata);
         self.concurrent_constructs.extend(gcx.concurrent_constructs);
         self.unsupported_constructs.extend(gcx.unsupported_constructs);
         self.items.append(&mut items);
+        gcx.transformer
     }
 
     /// Prints a report at the end of the compilation.

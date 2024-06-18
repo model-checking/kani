@@ -2,11 +2,45 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use anyhow::Result;
+use kani_metadata::UnstableFeature;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::session::{lib_folder, KaniSession};
+
+pub struct LibConfig {
+    args: Vec<OsString>,
+}
+
+impl LibConfig {
+    pub fn new(path: PathBuf) -> LibConfig {
+        let sysroot = &path.parent().unwrap();
+        let kani_std_rlib = path.join("libstd.rlib");
+        let kani_std_wrapper = format!("noprelude:std={}", kani_std_rlib.to_str().unwrap());
+        let args = [
+            "--sysroot",
+            sysroot.to_str().unwrap(),
+            "-L",
+            path.to_str().unwrap(),
+            "--extern",
+            "kani",
+            "--extern",
+            kani_std_wrapper.as_str(),
+        ]
+        .map(OsString::from)
+        .to_vec();
+        LibConfig { args }
+    }
+
+    pub fn new_no_core(path: PathBuf) -> LibConfig {
+        LibConfig {
+            args: ["-L", path.to_str().unwrap(), "--extern", "kani_core"]
+                .map(OsString::from)
+                .to_vec(),
+        }
+    }
+}
 
 impl KaniSession {
     /// Used by `kani` and not `cargo-kani` to process a single Rust file into a `.symtab.json`
@@ -20,7 +54,8 @@ impl KaniSession {
         let mut kani_args = self.kani_compiler_flags();
         kani_args.push(format!("--reachability={}", self.reachability_mode()));
 
-        let mut rustc_args = self.kani_rustc_flags();
+        let lib_path = lib_folder().unwrap();
+        let mut rustc_args = self.kani_rustc_flags(LibConfig::new(lib_path));
         rustc_args.push(file.into());
         rustc_args.push("--out-dir".into());
         rustc_args.push(OsString::from(outdir.as_os_str()));
@@ -100,6 +135,18 @@ impl KaniSession {
             flags.push("--coverage-checks".into());
         }
 
+        if self.args.common_args.unstable_features.contains(UnstableFeature::ValidValueChecks) {
+            flags.push("--ub-check=validity".into())
+        }
+
+        if self.args.common_args.unstable_features.contains(UnstableFeature::PtrToRefCastChecks) {
+            flags.push("--ub-check=ptr_to_ref_cast".into())
+        }
+
+        if self.args.ignore_locals_lifetime {
+            flags.push("--ignore-storage-markers".into())
+        }
+
         flags.extend(self.args.common_args.unstable_features.as_arguments().map(str::to_string));
 
         // This argument will select the Kani flavour of the compiler. It will be removed before
@@ -110,9 +157,8 @@ impl KaniSession {
     }
 
     /// This function generates all rustc configurations required by our goto-c codegen.
-    pub fn kani_rustc_flags(&self) -> Vec<OsString> {
-        let lib_path = lib_folder().unwrap();
-        let mut flags: Vec<_> = base_rustc_flags(lib_path);
+    pub fn kani_rustc_flags(&self, lib_config: LibConfig) -> Vec<OsString> {
+        let mut flags: Vec<_> = base_rustc_flags(lib_config);
         // We only use panic abort strategy for verification since we cannot handle unwind logic.
         flags.extend_from_slice(
             &[
@@ -122,6 +168,9 @@ impl KaniSession {
                 "symbol-mangling-version=v0",
                 "-Z",
                 "panic_abort_tests=yes",
+                "-Z",
+                "mir-enable-passes=-RemoveStorageMarkers",
+                "--check-cfg=cfg(kani)",
             ]
             .map(OsString::from),
         );
@@ -135,6 +184,10 @@ impl KaniSession {
             }
         }
 
+        if self.args.coverage {
+            flags.push("-Zmir-enable-passes=-SingleUseConsts".into());
+        }
+
         // This argument will select the Kani flavour of the compiler. It will be removed before
         // rustc driver is invoked.
         flags.push("--kani-compiler".into());
@@ -144,10 +197,7 @@ impl KaniSession {
 }
 
 /// Common flags used for compiling user code for verification and playback flow.
-pub fn base_rustc_flags(lib_path: PathBuf) -> Vec<OsString> {
-    let kani_std_rlib = lib_path.join("libstd.rlib");
-    let kani_std_wrapper = format!("noprelude:std={}", kani_std_rlib.to_str().unwrap());
-    let sysroot = lib_path.parent().unwrap();
+pub fn base_rustc_flags(lib_config: LibConfig) -> Vec<OsString> {
     let mut flags = [
         "-C",
         "overflow-checks=on",
@@ -164,17 +214,11 @@ pub fn base_rustc_flags(lib_path: PathBuf) -> Vec<OsString> {
         "crate-attr=feature(register_tool)",
         "-Z",
         "crate-attr=register_tool(kanitool)",
-        "--sysroot",
-        sysroot.to_str().unwrap(),
-        "-L",
-        lib_path.to_str().unwrap(),
-        "--extern",
-        "kani",
-        "--extern",
-        kani_std_wrapper.as_str(),
     ]
     .map(OsString::from)
     .to_vec();
+
+    flags.extend(lib_config.args);
 
     // e.g. compiletest will set 'compile-flags' here and we should pass those down to rustc
     // and we fail in `tests/kani/Match/match_bool.rs`

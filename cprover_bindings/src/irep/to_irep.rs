@@ -293,10 +293,15 @@ impl ToIrep for ExprValue {
                     Irep::just_bitpattern_id(*i, mm.pointer_width, false)
                 )],
             },
+            ExprValue::ReadOk { ptr, size } => Irep {
+                id: IrepId::ROk,
+                sub: vec![ptr.to_irep(mm), size.to_irep(mm)],
+                named_sub: linear_map![],
+            },
             ExprValue::SelfOp { op, e } => side_effect_irep(op.to_irep_id(), vec![e.to_irep(mm)]),
-            ExprValue::StatementExpression { statements: ops } => side_effect_irep(
+            ExprValue::StatementExpression { statements: ops, location: loc } => side_effect_irep(
                 IrepId::StatementExpression,
-                vec![Stmt::block(ops.to_vec(), Location::none()).to_irep(mm)],
+                vec![Stmt::block(ops.to_vec(), *loc).to_irep(mm)],
             ),
             ExprValue::StringConstant { s } => Irep {
                 id: IrepId::StringConstant,
@@ -433,6 +438,7 @@ impl ToIrep for StmtBody {
             }
             StmtBody::Break => code_irep(IrepId::Break, vec![]),
             StmtBody::Continue => code_irep(IrepId::Continue, vec![]),
+            StmtBody::Dead(symbol) => code_irep(IrepId::Dead, vec![symbol.to_irep(mm)]),
             StmtBody::Decl { lhs, value } => {
                 if value.is_some() {
                     code_irep(

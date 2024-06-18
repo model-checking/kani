@@ -26,12 +26,8 @@ impl<'tcx> GotocCtx<'tcx> {
         )
     }
 
-    pub fn codegen_span_option_stable(&self, sp: Option<SpanStable>) -> Location {
-        sp.map_or(Location::none(), |span| self.codegen_span_stable(span))
-    }
-
     pub fn codegen_caller_span_stable(&self, sp: SpanStable) -> Location {
-        self.codegen_caller_span(&rustc_internal::internal(sp))
+        self.codegen_caller_span(&rustc_internal::internal(self.tcx, sp))
     }
 
     /// Get the location of the caller. This will attempt to reach the macro caller.

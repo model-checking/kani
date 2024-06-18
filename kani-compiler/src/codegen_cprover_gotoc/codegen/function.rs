@@ -3,16 +3,15 @@
 
 //! This file contains functions related to codegenning MIR functions into gotoc
 
+use crate::codegen_cprover_gotoc::codegen::block::reverse_postorder;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::{Expr, Stmt, Symbol};
 use cbmc::InternString;
-use rustc_middle::mir::traversal::reverse_postorder;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{Body, Local};
 use stable_mir::ty::{RigidTy, TyKind};
 use stable_mir::CrateDef;
 use std::collections::BTreeMap;
-use std::iter::FromIterator;
 use tracing::{debug, debug_span};
 
 /// Codegen MIR functions into gotoc
@@ -61,16 +60,14 @@ impl<'tcx> GotocCtx<'tcx> {
             debug!("Double codegen of {:?}", old_sym);
         } else {
             assert!(old_sym.is_function());
-            let body = instance.body().unwrap();
+            let body = self.transformer.body(self.tcx, instance);
             self.set_current_fn(instance, &body);
             self.print_instance(instance, &body);
             self.codegen_function_prelude(&body);
             self.codegen_declare_variables(&body);
 
             // Get the order from internal body for now.
-            let internal_body = self.current_fn().body_internal();
-            reverse_postorder(internal_body)
-                .for_each(|(bb, _)| self.codegen_block(bb.index(), &body.blocks[bb.index()]));
+            reverse_postorder(&body).for_each(|bb| self.codegen_block(bb, &body.blocks[bb]));
 
             let loc = self.codegen_span_stable(instance.def.span());
             let stmts = self.current_fn_mut().extract_block();
@@ -204,13 +201,13 @@ impl<'tcx> GotocCtx<'tcx> {
 
     pub fn declare_function(&mut self, instance: Instance) {
         debug!("declaring {}; {:?}", instance.name(), instance);
-        let body = instance.body().unwrap();
+        let body = self.transformer.body(self.tcx, instance);
         self.set_current_fn(instance, &body);
         debug!(krate=?instance.def.krate(), is_std=self.current_fn().is_std(), "declare_function");
-        self.ensure(&self.symbol_name_stable(instance), |ctx, fname| {
+        self.ensure(self.symbol_name_stable(instance), |ctx, fname| {
             Symbol::function(
                 fname,
-                ctx.fn_typ(&body),
+                ctx.fn_typ(instance, &body),
                 None,
                 instance.name(),
                 ctx.codegen_span_stable(instance.def.span()),

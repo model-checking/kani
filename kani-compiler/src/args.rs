@@ -1,10 +1,10 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use strum_macros::{AsRefStr, EnumString, EnumVariantNames};
+use strum_macros::{AsRefStr, EnumString, VariantNames};
 use tracing_subscriber::filter::Directive;
 
-#[derive(Debug, Default, Clone, Copy, AsRefStr, EnumString, EnumVariantNames, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, AsRefStr, EnumString, VariantNames, PartialEq, Eq)]
 #[strum(serialize_all = "snake_case")]
 pub enum ReachabilityType {
     /// Start the cross-crate reachability analysis from all harnesses in the local crate.
@@ -71,4 +71,21 @@ pub struct Arguments {
     #[clap(long)]
     /// A legacy flag that is now ignored.
     goto_c: bool,
+    /// Enable specific checks.
+    #[clap(long)]
+    pub ub_check: Vec<ExtraChecks>,
+    /// Ignore storage markers.
+    #[clap(long)]
+    pub ignore_storage_markers: bool,
+}
+
+#[derive(Debug, Clone, Copy, AsRefStr, EnumString, VariantNames, PartialEq, Eq)]
+#[strum(serialize_all = "snake_case")]
+pub enum ExtraChecks {
+    /// Check that produced values are valid except for uninitialized values.
+    /// See https://github.com/model-checking/kani/issues/920.
+    Validity,
+    /// Check pointer validity when casting pointers to references.
+    /// See https://github.com/model-checking/kani/issues/2975.
+    PtrToRefCast,
 }

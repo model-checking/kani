@@ -1,5 +1,5 @@
 coverage/unreachable/check_id/main.rs, 5, FULL
-coverage/unreachable/check_id/main.rs, 6, FULL
+coverage/unreachable/check_id/main.rs, 6, PARTIAL
 coverage/unreachable/check_id/main.rs, 8, NONE
 coverage/unreachable/check_id/main.rs, 10, FULL
 coverage/unreachable/check_id/main.rs, 14, FULL
@@ -12,5 +12,5 @@ coverage/unreachable/check_id/main.rs, 20, FULL
 coverage/unreachable/check_id/main.rs, 21, FULL
 coverage/unreachable/check_id/main.rs, 22, FULL
 coverage/unreachable/check_id/main.rs, 23, FULL
-coverage/unreachable/check_id/main.rs, 24, FULL
+coverage/unreachable/check_id/main.rs, 24, PARTIAL
 coverage/unreachable/check_id/main.rs, 25, NONE

@@ -1,31 +1,29 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use crate::codegen_cprover_gotoc::GotocCtx;
-use cbmc::btree_map;
 use cbmc::goto_program::{DatatypeComponent, Expr, Location, Parameter, Symbol, SymbolTable, Type};
 use cbmc::utils::aggr_tag;
 use cbmc::{InternString, InternedString};
 use rustc_ast::ast::Mutability;
-use rustc_hir::{LangItem, Unsafety};
 use rustc_index::IndexVec;
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::print::FmtPrinter;
 use rustc_middle::ty::GenericArgsRef;
 use rustc_middle::ty::{
-    self, AdtDef, Const, CoroutineArgs, FloatTy, Instance, IntTy, PolyFnSig, Ty, TyCtxt, TyKind,
-    UintTy, VariantDef, VtblEntry,
+    self, AdtDef, Const, CoroutineArgs, CoroutineArgsExt, FloatTy, Instance, IntTy, PolyFnSig, Ty,
+    TyCtxt, TyKind, UintTy, VariantDef, VtblEntry,
 };
 use rustc_middle::ty::{List, TypeFoldable};
 use rustc_smir::rustc_internal;
 use rustc_span::def_id::DefId;
 use rustc_target::abi::{
-    Abi::Vector, FieldIdx, FieldsShape, Integer, LayoutS, Primitive, Size, TagEncoding,
+    Abi::Vector, FieldIdx, FieldsShape, Float, Integer, LayoutS, Primitive, Size, TagEncoding,
     TyAndLayout, VariantIdx, Variants,
 };
-use rustc_target::spec::abi::Abi;
+use stable_mir::abi::{ArgAbi, FnAbi, PassMode};
+use stable_mir::mir::mono::Instance as InstanceStable;
 use stable_mir::mir::Body;
-use std::iter;
 use tracing::{debug, trace, warn};
 
 /// Map the unit type to an empty struct
@@ -51,8 +49,6 @@ pub trait TypeExt {
     fn is_rust_fat_ptr(&self, st: &SymbolTable) -> bool;
     fn is_rust_slice_fat_ptr(&self, st: &SymbolTable) -> bool;
     fn is_rust_trait_fat_ptr(&self, st: &SymbolTable) -> bool;
-    fn is_unit(&self) -> bool;
-    fn is_unit_pointer(&self) -> bool;
     fn unit() -> Self;
 }
 
@@ -77,7 +73,7 @@ impl TypeExt for Type {
                     && components.iter().any(|x| x.name() == "vtable" && x.typ().is_pointer())
             }
             Type::StructTag(tag) => {
-                st.lookup(&tag.to_string()).unwrap().typ.is_rust_trait_fat_ptr(st)
+                st.lookup(tag.to_string()).unwrap().typ.is_rust_trait_fat_ptr(st)
             }
             _ => false,
         }
@@ -91,42 +87,6 @@ impl TypeExt for Type {
         // We depend on GotocCtx::codegen_ty_unit() to put the type in the symbol table.
         // We don't have access to the symbol table here to do it ourselves.
         Type::struct_tag(UNIT_TYPE_EMPTY_STRUCT_NAME)
-    }
-
-    fn is_unit(&self) -> bool {
-        match self {
-            Type::StructTag(name) => *name == aggr_tag(UNIT_TYPE_EMPTY_STRUCT_NAME),
-            _ => false,
-        }
-    }
-
-    fn is_unit_pointer(&self) -> bool {
-        match self {
-            Type::Pointer { typ } => typ.is_unit(),
-            _ => false,
-        }
-    }
-}
-
-trait ExprExt {
-    fn unit(symbol_table: &SymbolTable) -> Self;
-
-    fn is_unit(&self) -> bool;
-
-    fn is_unit_pointer(&self) -> bool;
-}
-
-impl ExprExt for Expr {
-    fn unit(symbol_table: &SymbolTable) -> Self {
-        Expr::struct_expr(Type::unit(), btree_map![], symbol_table)
-    }
-
-    fn is_unit(&self) -> bool {
-        self.typ().is_unit()
-    }
-
-    fn is_unit_pointer(&self) -> bool {
-        self.typ().is_unit_pointer()
     }
 }
 
@@ -256,169 +216,6 @@ impl<'tcx> GotocCtx<'tcx> {
         debug_write_type(self, ty, &mut out, 0).unwrap();
         out
     }
-
-    /// Function shims and closures expect their last arg untupled at call site, see comment at
-    /// ty_needs_untupled_args.
-    fn sig_with_untupled_args(&self, sig: ty::PolyFnSig<'tcx>) -> ty::PolyFnSig<'tcx> {
-        debug!("sig_with_closure_untupled sig: {:?}", sig);
-        let fn_sig = sig.skip_binder();
-        if let Some((tupe, prev_args)) = fn_sig.inputs().split_last() {
-            let args = match *tupe.kind() {
-                ty::Tuple(args) => args,
-                _ => unreachable!("the final argument of a closure must be a tuple"),
-            };
-
-            // The leading argument should be exactly the environment
-            assert!(prev_args.len() == 1);
-            let env = prev_args[0];
-
-            // Recombine arguments: environment first, then the flattened tuple elements
-            let recombined_args = iter::once(env).chain(args);
-
-            return ty::Binder::bind_with_vars(
-                self.tcx.mk_fn_sig(
-                    recombined_args,
-                    fn_sig.output(),
-                    fn_sig.c_variadic,
-                    fn_sig.unsafety,
-                    fn_sig.abi,
-                ),
-                sig.bound_vars(),
-            );
-        }
-        sig
-    }
-
-    fn closure_sig(&self, def_id: DefId, args: ty::GenericArgsRef<'tcx>) -> ty::PolyFnSig<'tcx> {
-        let sig = self.monomorphize(args.as_closure().sig());
-
-        // In addition to `def_id` and `args`, we need to provide the kind of region `env_region`
-        // in `closure_env_ty`, which we can build from the bound variables as follows
-        let bound_vars = self.tcx.mk_bound_variable_kinds_from_iter(
-            sig.bound_vars().iter().chain(iter::once(ty::BoundVariableKind::Region(ty::BrEnv))),
-        );
-        let br = ty::BoundRegion {
-            var: ty::BoundVar::from_usize(bound_vars.len() - 1),
-            kind: ty::BoundRegionKind::BrEnv,
-        };
-        let env_region = ty::Region::new_bound(self.tcx, ty::INNERMOST, br);
-        let env_ty = self.tcx.closure_env_ty(
-            Ty::new_closure(self.tcx, def_id, args),
-            args.as_closure().kind(),
-            env_region,
-        );
-
-        let sig = sig.skip_binder();
-
-        // We build a binder from `sig` where:
-        //  * `inputs` contains a sequence with the closure and parameter types
-        //  * the rest of attributes are obtained from `sig`
-        let sig = ty::Binder::bind_with_vars(
-            self.tcx.mk_fn_sig(
-                [env_ty, sig.inputs()[0]],
-                sig.output(),
-                sig.c_variadic,
-                sig.unsafety,
-                sig.abi,
-            ),
-            bound_vars,
-        );
-
-        // The parameter types are tupled, but we want to have them in a vector
-        self.sig_with_untupled_args(sig)
-    }
-
-    // Adapted from `fn_sig_for_fn_abi` in
-    // https://github.com/rust-lang/rust/blob/739d68a76e35b22341d9930bb6338bf202ba05ba/compiler/rustc_ty_utils/src/abi.rs#L88
-    // Code duplication tracked here: https://github.com/model-checking/kani/issues/1365
-    fn coroutine_sig(
-        &self,
-        did: &DefId,
-        ty: Ty<'tcx>,
-        args: ty::GenericArgsRef<'tcx>,
-    ) -> ty::PolyFnSig<'tcx> {
-        let sig = args.as_coroutine().sig();
-
-        let bound_vars = self.tcx.mk_bound_variable_kinds_from_iter(iter::once(
-            ty::BoundVariableKind::Region(ty::BrEnv),
-        ));
-        let br = ty::BoundRegion {
-            var: ty::BoundVar::from_usize(bound_vars.len() - 1),
-            kind: ty::BoundRegionKind::BrEnv,
-        };
-        let env_region = ty::ReBound(ty::INNERMOST, br);
-        let env_ty = Ty::new_mut_ref(self.tcx, ty::Region::new_from_kind(self.tcx, env_region), ty);
-
-        let pin_did = self.tcx.require_lang_item(LangItem::Pin, None);
-        let pin_adt_ref = self.tcx.adt_def(pin_did);
-        let pin_args = self.tcx.mk_args(&[env_ty.into()]);
-        let env_ty = Ty::new_adt(self.tcx, pin_adt_ref, pin_args);
-
-        // The `FnSig` and the `ret_ty` here is for a coroutines main
-        // `coroutine::resume(...) -> CoroutineState` function in case we
-        // have an ordinary coroutine, or the `Future::poll(...) -> Poll`
-        // function in case this is a special coroutine backing an async construct.
-        let tcx = self.tcx;
-        let (resume_ty, ret_ty) = if tcx.coroutine_is_async(*did) {
-            // The signature should be `Future::poll(_, &mut Context<'_>) -> Poll<Output>`
-            let poll_did = tcx.require_lang_item(LangItem::Poll, None);
-            let poll_adt_ref = tcx.adt_def(poll_did);
-            let poll_args = tcx.mk_args(&[sig.return_ty.into()]);
-            // TODO figure out where this one went
-            let ret_ty = Ty::new_adt(tcx, poll_adt_ref, poll_args);
-
-            // We have to replace the `ResumeTy` that is used for type and borrow checking
-            // with `&mut Context<'_>` which is used in codegen.
-            #[cfg(debug_assertions)]
-            {
-                if let ty::Adt(resume_ty_adt, _) = sig.resume_ty.kind() {
-                    let expected_adt = tcx.adt_def(tcx.require_lang_item(LangItem::ResumeTy, None));
-                    assert_eq!(*resume_ty_adt, expected_adt);
-                } else {
-                    panic!("expected `ResumeTy`, found `{:?}`", sig.resume_ty);
-                };
-            }
-            let context_mut_ref = Ty::new_task_context(tcx);
-
-            (context_mut_ref, ret_ty)
-        } else {
-            // The signature should be `Coroutine::resume(_, Resume) -> CoroutineState<Yield, Return>`
-            let state_did = tcx.require_lang_item(LangItem::CoroutineState, None);
-            let state_adt_ref = tcx.adt_def(state_did);
-            let state_args = tcx.mk_args(&[sig.yield_ty.into(), sig.return_ty.into()]);
-            let ret_ty = Ty::new_adt(tcx, state_adt_ref, state_args);
-
-            (sig.resume_ty, ret_ty)
-        };
-
-        ty::Binder::bind_with_vars(
-            tcx.mk_fn_sig(
-                [env_ty, resume_ty],
-                ret_ty,
-                false,
-                Unsafety::Normal,
-                rustc_target::spec::abi::Abi::Rust,
-            ),
-            bound_vars,
-        )
-    }
-
-    pub fn fn_sig_of_instance(&self, instance: Instance<'tcx>) -> ty::PolyFnSig<'tcx> {
-        let fntyp = instance.ty(self.tcx, ty::ParamEnv::reveal_all());
-        self.monomorphize(match fntyp.kind() {
-            ty::Closure(def_id, subst) => self.closure_sig(*def_id, subst),
-            ty::FnPtr(..) | ty::FnDef(..) => {
-                let sig = fntyp.fn_sig(self.tcx);
-                // Calls through vtable or Fn pointer for an ABI that may require untupled arguments.
-                if self.ty_needs_untupled_args(fntyp) {
-                    return self.sig_with_untupled_args(sig);
-                }
-                sig
-            }
-            ty::Coroutine(did, args) => self.coroutine_sig(did, fntyp, args),
-            _ => unreachable!("Can't get function signature of type: {:?}", fntyp),
-        })
-    }
 }
 
 impl<'tcx> GotocCtx<'tcx> {
@@ -463,10 +260,10 @@ impl<'tcx> GotocCtx<'tcx> {
         idx: usize,
     ) -> DatatypeComponent {
         // Gives a binder with function signature
-        let sig = self.fn_sig_of_instance(instance);
+        let instance = rustc_internal::stable(instance);
 
         // Gives an Irep Pointer object for the signature
-        let fn_ty = self.codegen_dynamic_function_sig(sig);
+        let fn_ty = self.codegen_dynamic_function_sig(instance);
         let fn_ptr = fn_ty.to_pointer();
 
         // vtable field name, i.e., 3_vol (idx_method)
@@ -745,6 +542,9 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::Float(k) => match k {
                 FloatTy::F32 => Type::float(),
                 FloatTy::F64 => Type::double(),
+                // `F16` and `F128` are not yet handled.
+                // Tracked here: <https://github.com/model-checking/kani/issues/3069>
+                FloatTy::F16 | FloatTy::F128 => unimplemented!(),
             },
             ty::Adt(def, _) if def.repr().simd() => self.codegen_vector(ty),
             ty::Adt(def, subst) => {
@@ -770,7 +570,7 @@ impl<'tcx> GotocCtx<'tcx> {
             // Note: This is not valid C but CBMC seems to be ok with it.
             ty::Slice(e) => self.codegen_ty(*e).flexible_array_of(),
             ty::Str => Type::unsigned_int(8).flexible_array_of(),
-            ty::Ref(_, t, _) | ty::RawPtr(ty::TypeAndMut { ty: t, .. }) => self.codegen_ty_ref(*t),
+            ty::Ref(_, t, _) | ty::RawPtr(t, _) => self.codegen_ty_ref(*t),
             ty::FnDef(def_id, args) => {
                 let instance =
                     Instance::resolve(self.tcx, ty::ParamEnv::reveal_all(), *def_id, args)
@@ -795,6 +595,13 @@ impl<'tcx> GotocCtx<'tcx> {
                     )
                 }
             }
+            // This object has the same layout as base. For now, translate this into `(base)`.
+            // The only difference is the niche.
+            ty::Pat(base_ty, ..) => {
+                self.ensure_struct(self.ty_mangled_name(ty), self.ty_pretty_name(ty), |tcx, _| {
+                    tcx.codegen_ty_tuple_like(ty, vec![*base_ty])
+                })
+            }
             ty::Alias(..) => {
                 unreachable!("Type should've been normalized already")
             }
@@ -803,7 +610,11 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::Bound(_, _) | ty::Param(_) => unreachable!("monomorphization bug"),
 
             // type checking remnants which shouldn't be reachable
-            ty::CoroutineWitness(_, _) | ty::Infer(_) | ty::Placeholder(_) | ty::Error(_) => {
+            ty::CoroutineWitness(_, _)
+            | ty::CoroutineClosure(_, _)
+            | ty::Infer(_)
+            | ty::Placeholder(_)
+            | ty::Error(_) => {
                 unreachable!("remnants of type checking")
             }
         }
@@ -927,39 +738,6 @@ impl<'tcx> GotocCtx<'tcx> {
             tys.iter().enumerate().map(|(i, t)| (GotocCtx::tuple_fld_name(i), *t)).collect();
         // tuple cannot have other initial offset
         self.codegen_struct_fields(flds, &layout.layout.0, Size::ZERO)
-    }
-
-    /// A closure / some shims in Rust MIR takes two arguments:
-    ///
-    ///    0. a struct representing the environment
-    ///    1. a tuple containing the parameters
-    ///
-    /// However, during codegen/lowering from MIR, the 2nd tuple of parameters
-    /// is flattened into subsequent parameters.
-    ///
-    /// Checking whether the type's kind is a closure is insufficient, because
-    /// a virtual method call through a vtable can have the trait's non-closure
-    /// type. For example:
-    ///
-    /// ```
-    ///         let p: &dyn Fn(i32) = &|x| assert!(x == 1);
-    ///         p(1);
-    /// ```
-    ///
-    /// Here, the call `p(1)` desugars to an MIR trait call `Fn::call(&p, (1,))`,
-    /// where the second argument is a tuple. The instance type kind for
-    /// `Fn::call` is not a closure, because dynamically, the pointer may be to
-    /// a function definition instead. We still need to untuple in this case,
-    /// so we follow the example elsewhere in Rust to use the ABI call type.
-    ///
-    /// See `make_call_args` in `rustc_mir_transform/src/inline.rs`
-    pub fn ty_needs_untupled_args(&self, ty: Ty<'tcx>) -> bool {
-        // Note that [Abi::RustCall] is not [Abi::Rust].
-        // Documentation is sparse, but it does seem to correspond to the need for untupling.
-        match ty.kind() {
-            ty::FnDef(..) | ty::FnPtr(..) => ty.fn_sig(self.tcx).abi() == Abi::RustCall,
-            _ => unreachable!("Can't treat type as a function: {:?}", ty),
-        }
     }
 
     /// A closure is a struct of all its environments. That is, a closure is
@@ -1222,8 +1000,9 @@ impl<'tcx> GotocCtx<'tcx> {
             | ty::Foreign(_)
             | ty::Coroutine(..)
             | ty::Int(_)
-            | ty::RawPtr(_)
+            | ty::RawPtr(_, _)
             | ty::Ref(..)
+            | ty::Pat(..)
             | ty::Tuple(_)
             | ty::Uint(_) => self.codegen_ty(pointee_type).to_pointer(),
 
@@ -1241,6 +1020,7 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::Bound(_, _) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
             ty::Error(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
             ty::CoroutineWitness(_, _) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
+            ty::CoroutineClosure(_, _) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
             ty::Infer(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
             ty::Param(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
             ty::Placeholder(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
@@ -1256,36 +1036,37 @@ impl<'tcx> GotocCtx<'tcx> {
     /// `S = P | Pin<P>`
     ///
     /// See <https://doc.rust-lang.org/reference/items/traits.html#object-safety> for more details.
-    fn codegen_dynamic_function_sig(&mut self, sig: PolyFnSig<'tcx>) -> Type {
-        let sig = self.monomorphize(sig);
-        let sig = self.tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), sig);
+    fn codegen_dynamic_function_sig(&mut self, instance: InstanceStable) -> Type {
         let mut is_first = true;
-        let params = sig
-            .inputs()
-            .iter()
-            .map(|arg_type| {
+        let fn_abi = instance.fn_abi().unwrap();
+        let args = self.codegen_args(instance, &fn_abi);
+        let params = args
+            .map(|(_, arg_abi)| {
+                let arg_ty_stable = arg_abi.ty;
+                let kind = arg_ty_stable.kind();
+                let arg_ty = rustc_internal::internal(self.tcx, arg_ty_stable);
                 if is_first {
                     is_first = false;
-                    debug!(self_type=?arg_type, fn_signature=?sig, "codegen_dynamic_function_sig");
-                    if arg_type.is_ref() {
+                    debug!(self_type=?arg_ty, ?fn_abi, "codegen_dynamic_function_sig");
+                    if kind.is_ref() {
                         // Convert fat pointer to thin pointer to data portion.
-                        let first_ty = pointee_type(*arg_type).unwrap();
+                        let first_ty = pointee_type(arg_ty).unwrap();
                         self.codegen_trait_data_pointer(first_ty)
-                    } else if arg_type.is_trait() {
+                    } else if kind.is_trait() {
                         // Convert dyn T to thin pointer.
-                        self.codegen_trait_data_pointer(*arg_type)
+                        self.codegen_trait_data_pointer(arg_ty)
                     } else {
                         // Codegen type with thin pointer (E.g.: Box<dyn T> -> Box<data_ptr>).
-                        self.codegen_trait_receiver(*arg_type)
+                        self.codegen_trait_receiver(arg_ty)
                     }
                 } else {
-                    debug!("Using type {:?} in function signature", arg_type);
-                    self.codegen_ty(*arg_type)
+                    debug!("Using type {:?} in function signature", arg_ty);
+                    self.codegen_ty(arg_ty)
                 }
             })
             .collect();
 
-        Type::code_with_unnamed_parameters(params, self.codegen_ty(sig.output()))
+        Type::code_with_unnamed_parameters(params, self.codegen_ty_stable(fn_abi.ret.ty))
     }
 
     /// one can only apply this function to a monomorphized signature
@@ -1359,7 +1140,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Mapping enums to CBMC types is rather complicated. There are a few cases to consider:
     /// 1. When there is only 0 or 1 variant, this is straightforward as the code shows
     /// 2. When there are more variants, rust might decides to apply the typical encoding which
-    /// regard enums as tagged union, or an optimized form, called niche encoding.
+    ///    regard enums as tagged union, or an optimized form, called niche encoding.
     ///
     /// The direct encoding is straightforward. Enums are just mapped to C as a struct of union of structs.
     /// e.g.
@@ -1573,13 +1354,18 @@ impl<'tcx> GotocCtx<'tcx> {
                     }
                 }
             },
+            Primitive::Float(f) => self.codegen_float_type(f),
+            Primitive::Pointer(_) => Ty::new_ptr(self.tcx, self.tcx.types.u8, Mutability::Not),
+        }
+    }
 
-            Primitive::F32 => self.tcx.types.f32,
-            Primitive::F64 => self.tcx.types.f64,
-            Primitive::Pointer(_) => Ty::new_ptr(
-                self.tcx,
-                ty::TypeAndMut { ty: self.tcx.types.u8, mutbl: Mutability::Not },
-            ),
+    pub fn codegen_float_type(&self, f: Float) -> Ty<'tcx> {
+        match f {
+            Float::F32 => self.tcx.types.f32,
+            Float::F64 => self.tcx.types.f64,
+            // `F16` and `F128` are not yet handled.
+            // Tracked here: <https://github.com/model-checking/kani/issues/3069>
+            Float::F16 | Float::F128 => unimplemented!(),
         }
     }
 
@@ -1660,18 +1446,14 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// the function type of the current instance
-    pub fn fn_typ(&mut self, body: &Body) -> Type {
-        let sig = self.current_fn().sig().clone();
-        let internal_instance = self.current_fn().instance();
-        let is_vtable_shim = matches!(internal_instance.def, ty::InstanceDef::VTableShim(..));
-        let mut params: Vec<Parameter> = sig
-            .inputs()
-            .iter()
-            .enumerate()
-            .filter_map(|(i, ty)| {
-                debug!(?i, ?ty, "fn_typ");
-                let is_vtable_shim_self = i == 0 && is_vtable_shim;
-                if self.is_zst_stable(*ty) && !is_vtable_shim_self {
+    pub fn fn_typ(&mut self, instance: InstanceStable, body: &Body) -> Type {
+        let fn_abi = instance.fn_abi().unwrap();
+        let params: Vec<Parameter> = self
+            .codegen_args(instance, &fn_abi)
+            .filter_map(|(i, arg_abi)| {
+                let ty = arg_abi.ty;
+                debug!(?i, ?arg_abi, "fn_typ");
+                if arg_abi.mode == PassMode::Ignore {
                     // We ignore zero-sized parameters.
                     // See https://github.com/model-checking/kani/issues/274 for more details.
                     None
@@ -1692,30 +1474,19 @@ impl<'tcx> GotocCtx<'tcx> {
                         }
                     }
                     Some(
-                        self.codegen_ty_stable(*ty)
+                        self.codegen_ty_stable(ty)
                             .as_parameter(Some(ident.clone().into()), Some(ident.into())),
                     )
                 }
             })
             .collect();
 
-        // For vtable shims, we need to modify fn(self, ...) to fn(self: *mut Self, ...),
-        // since the vtable functions expect a pointer as the first argument. See the comment
-        // and similar code in compiler/rustc_mir/src/shim.rs.
-        // TODO(celina): Use fn_abi_of_instance instead of sig so we don't need to do this manually.
-        if is_vtable_shim {
-            if let Some(self_param) = params.first() {
-                let ident = self_param.identifier();
-                let ty = self_param.typ().clone();
-                params[0] = ty.to_pointer().as_parameter(ident, ident);
-            }
-        }
-
-        debug!(?params, signature=?sig, "function_type");
-        if sig.c_variadic {
-            Type::variadic_code(params, self.codegen_ty_stable(sig.output()))
+        debug!(?params, ?fn_abi, "function_type");
+        let ret_type = self.codegen_ty_stable(fn_abi.ret.ty);
+        if fn_abi.c_variadic {
+            Type::variadic_code(params, ret_type)
         } else {
-            Type::code(params, self.codegen_ty_stable(sig.output()))
+            Type::code(params, ret_type)
         }
     }
 
@@ -1852,6 +1623,23 @@ impl<'tcx> GotocCtx<'tcx> {
 
         ReceiverIter { ctx: self, curr: typ }
     }
+
+    /// Allow us to retrieve the instance arguments in a consistent way.
+    /// There are two corner cases that we currently handle:
+    /// 1. In some cases, an argument can be ignored (e.g.: ZST arguments in regular Rust calls).
+    /// 2. We currently don't support `track_caller`, so we ignore the extra argument that is added to support that.
+    ///    Tracked here: <https://github.com/model-checking/kani/issues/374>
+    pub fn codegen_args<'a>(
+        &self,
+        instance: InstanceStable,
+        fn_abi: &'a FnAbi,
+    ) -> impl Iterator<Item = (usize, &'a ArgAbi)> {
+        let requires_caller_location = self.requires_caller_location(instance);
+        let num_args = fn_abi.args.len();
+        fn_abi.args.iter().enumerate().filter(move |(idx, arg_abi)| {
+            arg_abi.mode != PassMode::Ignore && !(requires_caller_location && idx + 1 == num_args)
+        })
+    }
 }
 
 /// Return the datatype components for fields are present in every vtable struct.
@@ -1881,7 +1669,7 @@ fn common_vtable_fields(drop_in_place: Type) -> Vec<DatatypeComponent> {
 pub fn pointee_type(mir_type: Ty) -> Option<Ty> {
     match mir_type.kind() {
         ty::Ref(_, pointee_type, _) => Some(*pointee_type),
-        ty::RawPtr(ty::TypeAndMut { ty: pointee_type, .. }) => Some(*pointee_type),
+        ty::RawPtr(pointee_type, _) => Some(*pointee_type),
         _ => None,
     }
 }
@@ -1889,7 +1677,7 @@ pub fn pointee_type(mir_type: Ty) -> Option<Ty> {
 /// Extracts the pointee type if the given mir type is either a known smart pointer (Box, Rc, ..)
 /// or a regular pointer.
 pub fn std_pointee_type(mir_type: Ty) -> Option<Ty> {
-    mir_type.builtin_deref(true).map(|tm| tm.ty)
+    mir_type.builtin_deref(true)
 }
 
 /// This is a place holder function that should normalize the given type.
@@ -1907,8 +1695,10 @@ impl<'tcx> GotocCtx<'tcx> {
     /// metadata associated with it.
     pub fn use_thin_pointer(&self, mir_type: Ty<'tcx>) -> bool {
         // ptr_metadata_ty is not defined on all types, the projection of an associated type
-        let (metadata, _check_is_sized) = mir_type.ptr_metadata_ty(self.tcx, normalize_type);
-        !self.is_unsized(mir_type) || metadata == self.tcx.types.unit
+        let metadata = mir_type.ptr_metadata_ty_or_tail(self.tcx, normalize_type);
+        !self.is_unsized(mir_type)
+            || metadata.is_err()
+            || (metadata.unwrap() == self.tcx.types.unit)
     }
 
     /// We use fat pointer if not thin pointer.
@@ -1919,14 +1709,14 @@ impl<'tcx> GotocCtx<'tcx> {
     /// A pointer to the mir type should be a slice fat pointer.
     /// We use a slice fat pointer if the metadata is the slice length (type usize).
     pub fn use_slice_fat_pointer(&self, mir_type: Ty<'tcx>) -> bool {
-        let (metadata, _check_is_sized) = mir_type.ptr_metadata_ty(self.tcx, normalize_type);
+        let metadata = mir_type.ptr_metadata_ty(self.tcx, normalize_type);
         metadata == self.tcx.types.usize
     }
     /// A pointer to the mir type should be a vtable fat pointer.
     /// We use a vtable fat pointer if this is a fat pointer to anything that is not a slice ptr.
     /// I.e.: The metadata is not length (type usize).
     pub fn use_vtable_fat_pointer(&self, mir_type: Ty<'tcx>) -> bool {
-        let (metadata, _check_is_sized) = mir_type.ptr_metadata_ty(self.tcx, normalize_type);
+        let metadata = mir_type.ptr_metadata_ty(self.tcx, normalize_type);
         metadata != self.tcx.types.unit && metadata != self.tcx.types.usize
     }
 

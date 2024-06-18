@@ -1,0 +1,16 @@
+SUCCESS\
+address must be a multiple of its type's alignment
+FAILURE\
+unsafe { *raw_ptr } == 10
+SUCCESS\
+pointer NULL
+SUCCESS\
+pointer invalid
+SUCCESS\
+deallocated dynamic object
+FAILURE\
+dead object
+SUCCESS\
+pointer outside object bounds
+SUCCESS\
+invalid integer address

@@ -4,13 +4,16 @@
 // This tests that coroutines work, even with a non-() resume type.
 
 #![feature(coroutines, coroutine_trait)]
+#![feature(stmt_expr_attributes)]
 
 use std::ops::{Coroutine, CoroutineState};
 use std::pin::Pin;
 
 #[kani::proof]
+#[kani::unwind(3)]
 fn main() {
-    let mut add_one = |mut resume: u8| {
+    let mut add_one = #[coroutine]
+    |mut resume: u8| {
         loop {
             resume = yield resume.saturating_add(1);
         }
