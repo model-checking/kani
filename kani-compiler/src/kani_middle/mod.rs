@@ -116,7 +116,8 @@ pub fn dump_mir_items(
         let mut writer = BufWriter::new(out_file);
 
         // For each def_id, dump their MIR
-        for instance in items.iter().filter_map(get_instance) {
+        for instance in items.iter().filter_map(get_instance).filter(|instance| instance.has_body())
+        {
             writeln!(writer, "// Item: {} ({})", instance.name(), instance.mangled_name()).unwrap();
             let body = transformer.body(tcx, instance);
             let _ = body.dump(&mut writer, &instance.name());
