@@ -121,7 +121,6 @@ where
     metadata.is_ptr_aligned(thin_ptr, Internal)
         && is_inbounds(&metadata, thin_ptr)
         && unsafe { has_valid_value(ptr) }
-        && unsafe { is_initialized(ptr) }
 }
 
 /// Checks that pointer `ptr` point to a valid value of type `T`.
@@ -150,7 +149,6 @@ where
     let (thin_ptr, metadata) = ptr.to_raw_parts();
     is_inbounds(&metadata, thin_ptr)
         && unsafe { has_valid_value(ptr) }
-        && unsafe { is_initialized(ptr) }
 }
 
 /// Checks that `data_ptr` points to an allocation that can hold data of size calculated from `T`.
@@ -296,7 +294,7 @@ unsafe fn has_valid_value<T: ?Sized>(_ptr: *const T) -> bool {
 /// Extract the layout of the pointee type.
 #[rustc_diagnostic_item = "KaniIsInitialized"]
 #[inline(never)]
-unsafe fn is_initialized<T: ?Sized>(_ptr: *const T) -> bool {
+pub fn is_initialized<T: ?Sized>(_ptr: *const T) -> bool {
     kani_intrinsic()
 }
 
