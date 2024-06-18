@@ -80,15 +80,13 @@ impl<'a> ContractConditionsHandler<'a> {
                 )
             }
             ContractConditionsData::Ensures { attr } => {
-                let (arg_copies, copy_clean, ensures_clause) =
-                    build_ensures(&self.annotated_fn.sig, attr);
+                let (remembers, ensures_clause) = build_ensures(attr);
                 let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
                 quote!(
-                    #arg_copies
+                    #remembers
                     #(#before)*
                     #(#after)*
                     kani::assume(#ensures_clause);
-                    #copy_clean
                     #result
                 )
             }
@@ -96,7 +94,7 @@ impl<'a> ContractConditionsHandler<'a> {
                 let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
                 quote!(
                     #(#before)*
-                    #(*unsafe { kani::internal::Pointer::assignable(#attr) } = kani::any_modifies();)*
+                    #(*unsafe { kani::internal::Pointer::assignable(kani::internal::untracked_deref(&(#attr))) } = kani::any_modifies();)*
                     #(#after)*
                     #result
                 )
