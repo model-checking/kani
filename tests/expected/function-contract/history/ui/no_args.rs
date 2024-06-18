@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Zfunction-contracts
 
+/// Tests the error message when the number of arguments to
+/// `old` is not equal to 1
 #[kani::ensures(|result| {let x = old(); true})]
 #[kani::requires(*ptr < 100)]
 #[kani::modifies(ptr)]
