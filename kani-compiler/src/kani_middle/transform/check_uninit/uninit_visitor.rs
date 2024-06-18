@@ -239,11 +239,66 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                     match instance.kind {
                         InstanceKind::Intrinsic => {
                             match instance.intrinsic_name().unwrap().as_str() {
-                                "write_bytes" => {
+                                "add_with_overflow"
+                                | "arith_offset"
+                                | "assert_inhabited"
+                                | "assert_mem_uninitialized_valid"
+                                | "assert_zero_valid"
+                                | "assume" => {}
+                                "atomic_and_seqcst"
+                                | "atomic_and_acquire"
+                                | "atomic_and_acqrel"
+                                | "atomic_and_release"
+                                | "atomic_and_relaxed"
+                                | "atomic_max_seqcst"
+                                | "atomic_max_acquire"
+                                | "atomic_max_acqrel"
+                                | "atomic_max_release"
+                                | "atomic_max_relaxed"
+                                | "atomic_min_seqcst"
+                                | "atomic_min_acquire"
+                                | "atomic_min_acqrel"
+                                | "atomic_min_release"
+                                | "atomic_min_relaxed"
+                                | "atomic_nand_seqcst"
+                                | "atomic_nand_acquire"
+                                | "atomic_nand_acqrel"
+                                | "atomic_nand_release"
+                                | "atomic_nand_relaxed"
+                                | "atomic_or_seqcst"
+                                | "atomic_or_acquire"
+                                | "atomic_or_acqrel"
+                                | "atomic_or_release"
+                                | "atomic_or_relaxed"
+                                | "atomic_umax_seqcst"
+                                | "atomic_umax_acquire"
+                                | "atomic_umax_acqrel"
+                                | "atomic_umax_release"
+                                | "atomic_umax_relaxed"
+                                | "atomic_umin_seqcst"
+                                | "atomic_umin_acquire"
+                                | "atomic_umin_acqrel"
+                                | "atomic_umin_release"
+                                | "atomic_umin_relaxed"
+                                | "atomic_xadd_seqcst"
+                                | "atomic_xadd_acquire"
+                                | "atomic_xadd_acqrel"
+                                | "atomic_xadd_release"
+                                | "atomic_xadd_relaxed"
+                                | "atomic_xor_seqcst"
+                                | "atomic_xor_acquire"
+                                | "atomic_xor_acqrel"
+                                | "atomic_xor_release"
+                                | "atomic_xor_relaxed"
+                                | "atomic_xsub_seqcst"
+                                | "atomic_xsub_acquire"
+                                | "atomic_xsub_acqrel"
+                                | "atomic_xsub_release"
+                                | "atomic_xsub_relaxed" => {
                                     assert_eq!(
                                         args.len(),
-                                        3,
-                                        "Unexpected number of arguments for `write_bytes`"
+                                        2,
+                                        "Unexpected number of arguments for `atomic_binop`"
                                     );
                                     assert!(matches!(
                                         args[0].ty(self.locals).unwrap().kind(),
@@ -251,10 +306,73 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                     ));
                                     self.push_target(SourceOp::Set {
                                         place: expect_place(&args[0]).clone(),
-                                        count: args[2].clone(),
+                                        count: mk_const_operand(1, location.span()),
                                         value: true,
-                                    })
+                                    });
                                 }
+                                "atomic_xchg_seqcst"
+                                | "atomic_xchg_acquire"
+                                | "atomic_xchg_acqrel"
+                                | "atomic_xchg_release"
+                                | "atomic_xchg_relaxed"
+                                | "atomic_store_seqcst"
+                                | "atomic_store_release"
+                                | "atomic_store_relaxed"
+                                | "atomic_store_unordered" => {
+                                    assert_eq!(
+                                        args.len(),
+                                        2,
+                                        "Unexpected number of arguments for `atomic_store`"
+                                    );
+                                    assert!(matches!(
+                                        args[0].ty(self.locals).unwrap().kind(),
+                                        TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Mut))
+                                    ));
+                                    self.push_target(SourceOp::Set {
+                                        place: expect_place(&args[0]).clone(),
+                                        count: mk_const_operand(1, location.span()),
+                                        value: true,
+                                    });
+                                }
+                                "atomic_load_seqcst"
+                                | "atomic_load_acquire"
+                                | "atomic_load_relaxed"
+                                | "atomic_load_unordered" => {
+                                    assert_eq!(
+                                        args.len(),
+                                        2,
+                                        "Unexpected number of arguments for `atomic_load`"
+                                    );
+                                    assert!(matches!(
+                                        args[0].ty(self.locals).unwrap().kind(),
+                                        TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Not))
+                                    ));
+                                    self.push_target(SourceOp::Get {
+                                        place: expect_place(&args[0]).clone(),
+                                        count: mk_const_operand(1, location.span()),
+                                    });
+                                }
+                                name if name.starts_with("atomic_cxchg") => {
+                                    assert_eq!(
+                                        args.len(),
+                                        3,
+                                        "Unexpected number of arguments for `atomic_cxchg"
+                                    );
+                                    assert!(matches!(
+                                        args[0].ty(self.locals).unwrap().kind(),
+                                        TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Mut))
+                                    ));
+                                    self.push_target(SourceOp::Get {
+                                        place: expect_place(&args[0]).clone(),
+                                        count: mk_const_operand(1, location.span()),
+                                    });
+                                }
+                                "bitreverse" | "black_box" | "breakpoint" | "bswap"
+                                | "caller_location" => {}
+                                "catch_unwind" => {
+                                    unimplemented!()
+                                }
+                                "ceilf32" | "ceilf64" => {}
                                 "compare_bytes" => {
                                     assert_eq!(
                                         args.len(),
@@ -278,16 +396,231 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                         count: args[2].clone(),
                                     });
                                 }
+                                "copy" => {
+                                    assert_eq!(
+                                        args.len(),
+                                        3,
+                                        "Unexpected number of arguments for `copy`"
+                                    );
+                                    assert!(matches!(
+                                        args[0].ty(self.locals).unwrap().kind(),
+                                        TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Not))
+                                    ));
+                                    assert!(matches!(
+                                        args[1].ty(self.locals).unwrap().kind(),
+                                        TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Mut))
+                                    ));
+                                    self.push_target(SourceOp::Get {
+                                        place: expect_place(&args[0]).clone(),
+                                        count: args[2].clone(),
+                                    });
+                                    self.push_target(SourceOp::Set {
+                                        place: expect_place(&args[1]).clone(),
+                                        count: args[2].clone(),
+                                        value: true,
+                                    });
+                                }
+                                "copy_nonoverlapping" => unreachable!(
+                                    "Expected `core::intrinsics::unreachable` to be handled by `StatementKind::CopyNonOverlapping`"
+                                ),
+                                "copysignf32"
+                                | "copysignf64"
+                                | "cosf32"
+                                | "cosf64"
+                                | "ctlz"
+                                | "ctlz_nonzero"
+                                | "ctpop"
+                                | "cttz"
+                                | "cttz_nonzero"
+                                | "discriminant_value"
+                                | "exact_div"
+                                | "exp2f32"
+                                | "exp2f64"
+                                | "expf32"
+                                | "expf64"
+                                | "fabsf32"
+                                | "fabsf64"
+                                | "fadd_fast"
+                                | "fdiv_fast"
+                                | "floorf32"
+                                | "floorf64"
+                                | "fmaf32"
+                                | "fmaf64"
+                                | "fmul_fast"
+                                | "forget"
+                                | "fsub_fast"
+                                | "is_val_statically_known"
+                                | "likely"
+                                | "log10f32"
+                                | "log10f64"
+                                | "log2f32"
+                                | "log2f64"
+                                | "logf32"
+                                | "logf64"
+                                | "maxnumf32"
+                                | "maxnumf64"
+                                | "min_align_of"
+                                | "min_align_of_val"
+                                | "minnumf32"
+                                | "minnumf64"
+                                | "mul_with_overflow"
+                                | "nearbyintf32"
+                                | "nearbyintf64"
+                                | "needs_drop" => {}
+                                "offset" => unreachable!(
+                                    "Expected `core::intrinsics::unreachable` to be handled by `BinOp::OffSet`"
+                                ),
+                                "powf32" | "powf64" | "powif32" | "powif64" | "pref_align_of" => {}
+                                "ptr_guaranteed_cmp"
+                                | "ptr_offset_from"
+                                | "ptr_offset_from_unsigned" => {
+                                    /* AFAICS from the documentation, none of those require the pointer arguments to be actually initialized. */
+                                }
+                                "raw_eq" | "retag_box_to_raw" => {
+                                    unreachable!("This was removed in the latest Rust version.")
+                                }
+                                "rintf32" | "rintf64" | "rotate_left" | "rotate_right"
+                                | "roundf32" | "roundf64" | "saturating_add" | "saturating_sub"
+                                | "sinf32" | "sinf64" => {}
+                                name if name.starts_with("simd") => { /* SIMD operations */ }
+                                "size_of" => unreachable!(),
+                                "size_of_val" => {
+                                    /* AFAICS from the documentation, this does not require the pointer argument to be initialized. */
+                                }
+                                "sqrtf32" | "sqrtf64" | "sub_with_overflow" => {}
                                 "transmute" | "transmute_copy" => {
                                     unreachable!("Should've been lowered")
                                 }
-                                _ => { /* TODO: add other intrinsics */ }
+                                "truncf32" | "truncf64" | "type_id" | "type_name" => {}
+                                "typed_swap" => {
+                                    assert_eq!(
+                                        args.len(),
+                                        2,
+                                        "Unexpected number of arguments for `typed_swap`"
+                                    );
+                                    assert!(matches!(
+                                        args[0].ty(self.locals).unwrap().kind(),
+                                        TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Mut))
+                                    ));
+                                    assert!(matches!(
+                                        args[1].ty(self.locals).unwrap().kind(),
+                                        TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Mut))
+                                    ));
+                                    self.push_target(SourceOp::Get {
+                                        place: expect_place(&args[0]).clone(),
+                                        count: mk_const_operand(1, location.span()),
+                                    });
+                                    self.push_target(SourceOp::Get {
+                                        place: expect_place(&args[1]).clone(),
+                                        count: mk_const_operand(1, location.span()),
+                                    });
+                                }
+                                "unaligned_volatile_load" => {
+                                    assert_eq!(
+                                        args.len(),
+                                        1,
+                                        "Unexpected number of arguments for `unaligned_volatile_load`"
+                                    );
+                                    assert!(matches!(
+                                        args[0].ty(self.locals).unwrap().kind(),
+                                        TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Not))
+                                    ));
+                                    self.push_target(SourceOp::Get {
+                                        place: expect_place(&args[0]).clone(),
+                                        count: mk_const_operand(1, location.span()),
+                                    });
+                                }
+                                "unchecked_add" | "unchecked_mul" | "unchecked_shl"
+                                | "unchecked_shr" | "unchecked_sub" => {
+                                    unreachable!("Expected intrinsic to be lowered before codegen")
+                                }
+                                "unchecked_div" | "unchecked_rem" | "unlikely" => {}
+                                "unreachable" => unreachable!(
+                                    "Expected `std::intrinsics::unreachable` to be handled by `TerminatorKind::Unreachable`"
+                                ),
+                                "volatile_copy_memory" | "volatile_copy_nonoverlapping_memory" => {
+                                    assert_eq!(
+                                        args.len(),
+                                        3,
+                                        "Unexpected number of arguments for `volatile_copy`"
+                                    );
+                                    assert!(matches!(
+                                        args[0].ty(self.locals).unwrap().kind(),
+                                        TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Not))
+                                    ));
+                                    assert!(matches!(
+                                        args[1].ty(self.locals).unwrap().kind(),
+                                        TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Mut))
+                                    ));
+                                    self.push_target(SourceOp::Get {
+                                        place: expect_place(&args[0]).clone(),
+                                        count: args[2].clone(),
+                                    });
+                                    self.push_target(SourceOp::Set {
+                                        place: expect_place(&args[1]).clone(),
+                                        count: args[2].clone(),
+                                        value: true,
+                                    });
+                                }
+                                "volatile_load" => {
+                                    assert_eq!(
+                                        args.len(),
+                                        1,
+                                        "Unexpected number of arguments for `volatile_load`"
+                                    );
+                                    assert!(matches!(
+                                        args[0].ty(self.locals).unwrap().kind(),
+                                        TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Not))
+                                    ));
+                                    self.push_target(SourceOp::Get {
+                                        place: expect_place(&args[0]).clone(),
+                                        count: mk_const_operand(1, location.span()),
+                                    });
+                                }
+                                "volatile_store" => {
+                                    assert_eq!(
+                                        args.len(),
+                                        2,
+                                        "Unexpected number of arguments for `volatile_store`"
+                                    );
+                                    assert!(matches!(
+                                        args[0].ty(self.locals).unwrap().kind(),
+                                        TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Mut))
+                                    ));
+                                    self.push_target(SourceOp::Set {
+                                        place: expect_place(&args[0]).clone(),
+                                        count: mk_const_operand(1, location.span()),
+                                        value: true,
+                                    });
+                                }
+                                "vtable_size" | "vtable_align" | "wrapping_add"
+                                | "wrapping_mul" | "wrapping_sub" => {}
+                                "write_bytes" => {
+                                    assert_eq!(
+                                        args.len(),
+                                        3,
+                                        "Unexpected number of arguments for `write_bytes`"
+                                    );
+                                    assert!(matches!(
+                                        args[0].ty(self.locals).unwrap().kind(),
+                                        TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Mut))
+                                    ));
+                                    self.push_target(SourceOp::Set {
+                                        place: expect_place(&args[0]).clone(),
+                                        count: args[2].clone(),
+                                        value: true,
+                                    })
+                                }
+                                intrinsic => {
+                                    self.push_target(SourceOp::Unsupported {
+                                    reason: format!("Kani does not support reasoning about memory initialization of intrinsic `{intrinsic}`.")
+                                });
+                                }
                             }
                         }
                         InstanceKind::Item => {
                             if instance.is_foreign_item() {
                                 match instance.name().as_str() {
-                                    /* TODO: implement those */
                                     "alloc::alloc::__rust_alloc"
                                     | "alloc::alloc::__rust_realloc" => {
                                         /* Memory is uninitialized, nothing to do here. */
