@@ -183,7 +183,7 @@ pub fn try_as_result_assign_mut(stmt: &mut syn::Stmt) -> Option<&mut syn::LocalI
 
 /// When a `#[kani::ensures(|result|expr)]` is expanded, this function is called on with `build_ensures(|result|expr)`.
 /// This function goes through the expr and extracts out all the `old` expressions and creates a sequence
-/// of statements that instantiate these expressions as `let remember_kani_internal_x = old_expr;` 
+/// of statements that instantiate these expressions as `let remember_kani_internal_x = old_expr;`
 /// where x is a unique hash. This is returned as the first return parameter along with changing all the
 /// variables to `_renamed`. The second parameter is the closing of all the unsafe argument copies. The third
 /// return parameter is the expression formed by passing in the result variable into the input closure and
