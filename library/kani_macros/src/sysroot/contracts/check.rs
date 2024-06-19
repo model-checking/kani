@@ -34,14 +34,12 @@ impl<'a> ContractConditionsHandler<'a> {
                 )
             }
             ContractConditionsData::Ensures { attr } => {
-                let (arg_copies, copy_clean, ensures_clause) =
-                    build_ensures(&self.annotated_fn.sig, attr);
+                let (remembers, ensures_clause) = build_ensures(attr);
 
                 // The code that enforces the postconditions and cleans up the shallow
                 // argument copies (with `mem::forget`).
                 let exec_postconditions = quote!(
                     kani::assert(#ensures_clause, stringify!(#attr_copy));
-                    #copy_clean
                 );
 
                 assert!(matches!(
@@ -52,7 +50,7 @@ impl<'a> ContractConditionsHandler<'a> {
 
                 let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
                 quote!(
-                    #arg_copies
+                    #remembers
                     #(#inner)*
                     #exec_postconditions
                     #result
