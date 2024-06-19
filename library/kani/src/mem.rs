@@ -293,7 +293,7 @@ unsafe fn has_valid_value<T: ?Sized>(_ptr: *const T) -> bool {
 /// Extract the layout of the pointee type.
 #[rustc_diagnostic_item = "KaniIsInitialized"]
 #[inline(never)]
-pub fn is_initialized<T: ?Sized>(_ptr: *const T) -> bool {
+pub fn is_initialized<T: ?Sized>(_ptr: *const T, _n: usize) -> bool {
     kani_intrinsic()
 }
 

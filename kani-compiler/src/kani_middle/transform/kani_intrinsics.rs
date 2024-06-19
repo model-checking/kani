@@ -23,7 +23,7 @@ use stable_mir::mir::{
     RETURN_LOCAL,
 };
 use stable_mir::target::MachineInfo;
-use stable_mir::ty::{GenericArgKind, GenericArgs, MirConst, RigidTy, Ty, TyConst, TyKind, UintTy};
+use stable_mir::ty::{GenericArgKind, GenericArgs, MirConst, RigidTy, Ty, TyConst, TyKind};
 use std::fmt::Debug;
 use strum_macros::AsRefStr;
 use tracing::trace;
@@ -164,7 +164,7 @@ impl IntrinsicGeneratorPass {
         let stmt = Statement { kind: assign, span };
         new_body.insert_stmt(stmt, &mut terminator, InsertPosition::Before);
 
-        // The first and only argument type.
+        // The first argument type.
         let arg_ty = new_body.locals()[1].ty;
         let TyKind::RigidTy(RigidTy::RawPtr(target_ty, _)) = arg_ty.kind() else { unreachable!() };
         let type_layout = TypeLayout::get_mask(target_ty);
@@ -231,11 +231,7 @@ impl IntrinsicGeneratorPass {
                     vec![
                         Operand::Copy(Place::from(1)),
                         layout_operand,
-                        Operand::Constant(ConstOperand {
-                            span,
-                            user_ty: None,
-                            const_: MirConst::try_from_uint(1, UintTy::Usize).unwrap(),
-                        }),
+                        Operand::Copy(Place::from(2)),
                     ],
                     Place::from(ret_var),
                 );

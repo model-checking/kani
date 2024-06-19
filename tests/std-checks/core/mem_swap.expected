@@ -1,0 +1,22 @@
+Checking harness mem_swap::verify::check_swap_large_adt_no_drop...
+
+Failed Checks: The object size exceeds the maximum size supported by Kani's shadow memory model (64)
+
+Checking harness mem_swap::verify::check_swap_adt_no_drop...
+
+Failed Checks: Kani currently doesn't support checking memory initialization for `*const std::mem::MaybeUninit<mem_swap::verify::CannotDrop<u8>>` due to the following error: `Unsupported Ty { id: 1414, kind: RigidTy(Adt(AdtDef(DefId { id: 187, name: "std::mem::MaybeUninit" }), GenericArgs([Type(Ty { id: 26, kind: RigidTy(Adt(AdtDef(DefId { id: 584, name: "mem_swap::verify::CannotDrop" }), GenericArgs([Type(Ty { id: 6, kind: RigidTy(Uint(U8)) })]))) })]))) }`
+
+Checking harness mem_swap::verify::check_swap_unit...
+
+Failed Checks: ptr NULL or writable up to size
+
+Checking harness mem_swap::verify::check_swap_primitive...
+
+Failed Checks: Kani currently doesn't support checking memory initialization for `*const std::mem::MaybeUninit<u8>` due to the following error: `Unsupported Ty { id: 1402, kind: RigidTy(Adt(AdtDef(DefId { id: 187, name: "std::mem::MaybeUninit" }), GenericArgs([Type(Ty { id: 6, kind: RigidTy(Uint(U8)) })]))) }`
+
+Summary:
+Verification failed for - mem_swap::verify::check_swap_large_adt_no_drop
+Verification failed for - mem_swap::verify::check_swap_adt_no_drop
+Verification failed for - mem_swap::verify::check_swap_unit
+Verification failed for - mem_swap::verify::check_swap_primitive
+Complete - 0 successfully verified harnesses, 4 failures, 4 total.

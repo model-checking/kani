@@ -5,5 +5,7 @@
 
 extern crate kani;
 
-pub mod mem;
+pub mod mem_replace;
+pub mod mem_swap;
 pub mod ptr;
+pub mod slice;
