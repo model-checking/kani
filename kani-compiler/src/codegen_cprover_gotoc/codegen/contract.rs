@@ -144,12 +144,12 @@ impl<'tcx> GotocCtx<'tcx> {
             })
             .chain(
                 shadow_memory_symbol
-                    .and_then(|shadow_memory_symbol| {
-                        Some(vec![Lambda::as_contract_for(
+                    .map(|shadow_memory_symbol| {
+                        vec![Lambda::as_contract_for(
                             &goto_annotated_fn_typ,
                             None,
                             shadow_memory_symbol.to_expr(),
-                        )])
+                        )]
                     })
                     .unwrap_or(vec![]),
             )
