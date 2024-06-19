@@ -130,12 +130,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 .symbol_name(rustc_middle::ty::Instance::mono(self.tcx, *attr_id))
                 .name
                 .to_string();
-            self.symbol_table
-                .lookup(&shadow_memory_table)
-                .unwrap_or_else(|| {
-                    panic!("Static `{shadow_memory_table}` should've been declared before usage")
-                })
-                .clone()
+            self.symbol_table.lookup(&shadow_memory_table).cloned()
         };
 
         let assigns = modified_places
@@ -147,11 +142,17 @@ impl<'tcx> GotocCtx<'tcx> {
                     self.codegen_place_stable(&local.into(), loc).unwrap().goto_expr.dereference(),
                 )
             })
-            .chain([Lambda::as_contract_for(
-                &goto_annotated_fn_typ,
-                None,
-                shadow_memory_symbol.to_expr(),
-            )])
+            .chain(
+                shadow_memory_symbol
+                    .and_then(|shadow_memory_symbol| {
+                        Some(vec![Lambda::as_contract_for(
+                            &goto_annotated_fn_typ,
+                            None,
+                            shadow_memory_symbol.to_expr(),
+                        )])
+                    })
+                    .unwrap_or(vec![]),
+            )
             .collect();
 
         FunctionContract::new(assigns)
