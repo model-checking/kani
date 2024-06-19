@@ -11,3 +11,8 @@ description = "Performance tests for different implementations of arbitrary"
 path = "src/check_arbitrary.rs"
 
 [dependencies]
+
+# We need runtime statistics for performance evaluation
+[kani.flags]
+enable-unstable = true
+cbmc-args = ["--verbosity", "9" ]
