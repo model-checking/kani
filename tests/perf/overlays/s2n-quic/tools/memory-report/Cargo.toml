@@ -1,0 +1,20 @@
+[package]
+name = "memory-report"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+[dependencies]
+dhat = "0.3"
+s2n-quic = { path = "../../quic/s2n-quic" }
+s2n-quic-core = { path = "../../quic/s2n-quic-core", features = ["testing"] }
+tokio = { version = "1", features = ["full"] }
+
+[workspace]
+members = ["."]
+
+# We need runtime statistics for performance evaluation
+[kani.flags]
+enable-unstable = true
+cbmc-args = ["--verbosity", "9" ]

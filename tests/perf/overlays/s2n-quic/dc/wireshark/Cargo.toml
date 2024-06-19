@@ -1,0 +1,37 @@
+[package]
+name = "wireshark_dcquic"
+version = "0.0.0"
+edition = "2021"
+publish = false
+rust-version = "1.77"
+
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+s2n-codec = { path = "../../common/s2n-codec" }
+s2n-quic-core = { path = "../../quic/s2n-quic-core" }
+s2n-quic-dc = { path = "../s2n-quic-dc" }
+
+[dev-dependencies]
+bolero = "0.11"
+s2n-quic-core = { path = "../../quic/s2n-quic-core", features = ["testing", "generator"] }
+s2n-quic-dc = { path = "../s2n-quic-dc", features = ["testing"] }
+
+[workspace]
+members = [".", "xtask"]
+
+[profile.fuzz]
+inherits = "dev"
+opt-level = 3
+incremental = false
+codegen-units = 1
+
+# this is to avoid conflicts with already installed plugins
+[profile.release-test]
+inherits = "release"
+
+# We need runtime statistics for performance evaluation
+[kani.flags]
+enable-unstable = true
+cbmc-args = ["--verbosity", "9" ]

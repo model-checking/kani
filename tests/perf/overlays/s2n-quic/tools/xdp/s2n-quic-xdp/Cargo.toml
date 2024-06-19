@@ -1,0 +1,36 @@
+[package]
+name = "s2n-quic-xdp"
+version = "0.39.0"
+description = "Internal crate used by s2n-quic"
+repository = "https://github.com/aws/s2n-quic"
+authors = ["AWS s2n"]
+edition = "2021"
+rust-version = "1.71"
+license = "Apache-2.0"
+# Exclude corpus files when publishing to crates.io
+exclude = ["corpus.tar.gz"]
+
+[features]
+default = ["tokio"]
+
+[dependencies]
+aya = { version = "0.12", default-features = false }
+bitflags = "2"
+errno = "0.3"
+libc = "0.2"
+s2n-codec = { version = "=0.39.0", path = "../../../common/s2n-codec" }
+s2n-quic-core = { version = "=0.39.0", path = "../../../quic/s2n-quic-core" }
+tokio = { version = "1", features = ["net"], optional = true }
+
+[dev-dependencies]
+bolero = "0.11"
+futures = "0.3"
+pin-project-lite = "0.2"
+rand = "0.8"
+s2n-quic-core = { path = "../../../quic/s2n-quic-core", features = ["testing"] }
+tokio = { version = "1", features = ["full"] }
+
+# We need runtime statistics for performance evaluation
+[kani.flags]
+enable-unstable = true
+cbmc-args = ["--verbosity", "9" ]

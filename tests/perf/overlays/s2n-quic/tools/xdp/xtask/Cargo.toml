@@ -1,0 +1,18 @@
+[package]
+name = "xtask"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1"
+bindgen = "0.69"
+clap = { version = "4.1", features = ["derive"] }
+elf = "0.7"
+env_logger = "0.11"
+rbpf = "0.2"
+similar = "2"
+
+# We need runtime statistics for performance evaluation
+[kani.flags]
+enable-unstable = true
+cbmc-args = ["--verbosity", "9" ]

@@ -1,0 +1,55 @@
+[package]
+name = "s2n-quic-qns"
+# this in an unpublished internal crate so the version should not be changed
+version = "0.1.0"
+authors = ["AWS s2n"]
+edition = "2021"
+rust-version = "1.71"
+license = "Apache-2.0"
+publish = false
+
+[features]
+default = []
+trace = ["s2n-quic-core/branch-tracing", "s2n-quic-core/probe-tracing", "s2n-quic-core/usdt"]
+xdp = ["s2n-quic/unstable-provider-io-xdp", "aya", "aya-log"]
+
+[dependencies]
+aya = { version = "0.12", optional = true }
+aya-log = { version = "0.2", optional = true }
+bytes = { version = "1", default-features = false }
+cfg-if = "1"
+futures = "0.3"
+http = "1.0"
+humansize = "2"
+lru = "0.10"
+rand = "0.8"
+s2n-codec = { path = "../../common/s2n-codec" }
+s2n-quic-core = { path = "../s2n-quic-core", features = ["testing"] }
+s2n-quic-h3 = { path = "../s2n-quic-h3" }
+structopt = "0.3"
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+url = "2"
+
+[target.'cfg(unix)'.dependencies]
+s2n-quic = { path = "../s2n-quic", features = ["provider-event-console-perf", "provider-event-tracing", "provider-tls-rustls", "provider-tls-s2n"] }
+
+[target.'cfg(not(unix))'.dependencies]
+s2n-quic = { path = "../s2n-quic", features = ["provider-event-console-perf", "provider-event-tracing", "provider-tls-rustls"] }
+
+# the mimalloc build is currently broken on android
+[target.'cfg(not(target_os = "android"))'.dependencies]
+mimalloc = { version = "0.1", default-features = false }
+
+# Use unstable s2n-quic features
+# unstable_client_hello and unstable_resumption use s2n-tls, and thus are only enabled for unix platforms
+[target.'cfg(all(s2n_internal_dev, unix))'.dependencies]
+s2n-quic = { path = "../s2n-quic", features = ["unstable_client_hello", "unstable_resumption"] }
+[target.'cfg(s2n_internal_dev)'.dependencies]
+s2n-quic = { path = "../s2n-quic", features = ["unstable-provider-packet-interceptor"] }
+
+# We need runtime statistics for performance evaluation
+[kani.flags]
+enable-unstable = true
+cbmc-args = ["--verbosity", "9" ]

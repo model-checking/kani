@@ -1,0 +1,22 @@
+[package]
+name = "s2n-quic-events"
+# this in an unpublished internal crate so the version should not be changed
+version = "0.1.0"
+authors = ["AWS s2n"]
+edition = "2021"
+rust-version = "1.71"
+license = "Apache-2.0"
+# This is a commit-time crate and should not be published
+publish = false
+
+[dependencies]
+glob = "0.3"
+heck = "0.5"
+proc-macro2 = "1"
+quote = "1"
+syn = { version = "2", features = ["full", "extra-traits"] }
+
+# We need runtime statistics for performance evaluation
+[kani.flags]
+enable-unstable = true
+cbmc-args = ["--verbosity", "9" ]

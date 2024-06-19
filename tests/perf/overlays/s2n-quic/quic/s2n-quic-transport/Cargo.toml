@@ -1,0 +1,40 @@
+[package]
+name = "s2n-quic-transport"
+version = "0.39.0"
+description = "Internal crate used by s2n-quic"
+repository = "https://github.com/aws/s2n-quic"
+authors = ["AWS s2n"]
+edition = "2021"
+rust-version = "1.71"
+license = "Apache-2.0"
+# Exclude corpus files when publishing to crates.io
+exclude = ["corpus.tar.gz"]
+
+[features]
+default = ["std"]
+std = ["futures-channel/std"]
+unstable_resumption = []
+
+[dependencies]
+bytes = { version = "1", default-features = false }
+futures-channel = { version = "0.3", default-features = false, features = ["alloc"] }
+futures-core = { version = "0.3", default-features = false, features = ["alloc"] }
+hashbrown = "0.14"
+intrusive-collections = "0.9"
+once_cell = "1"
+s2n-codec = { version = "=0.39.0", path = "../../common/s2n-codec", features = ["bytes"], default-features = false }
+s2n-quic-core = { version = "=0.39.0", path = "../s2n-quic-core", features = ["alloc"], default-features = false }
+siphasher = "1.0"
+smallvec = { version = "1", default-features = false }
+
+[dev-dependencies]
+bolero = "0.11"
+futures-test = "0.3" # For testing Waker interactions
+insta = { version = "1", features = ["json"] }
+s2n-codec = { path = "../../common/s2n-codec", features = ["testing"] }
+s2n-quic-core = { path = "../s2n-quic-core", features = ["testing"] }
+
+# We need runtime statistics for performance evaluation
+[kani.flags]
+enable-unstable = true
+cbmc-args = ["--verbosity", "9" ]

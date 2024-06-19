@@ -1,0 +1,8 @@
+[workspace]
+members = ["s2n-quic-xdp", "tester", "xtask"]
+resolver = "2"
+
+# We need runtime statistics for performance evaluation
+[kani.flags]
+enable-unstable = true
+cbmc-args = ["--verbosity", "9" ]

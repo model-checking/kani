@@ -1,0 +1,22 @@
+[package]
+name = "s2n-quic-h3"
+# this in an unpublished internal crate so the version should not be changed
+version = "0.1.0"
+authors = ["AWS s2n"]
+edition = "2021"
+rust-version = "1.71"
+license = "Apache-2.0"
+# this contains an http3 implementation for testing purposes and should not be published
+publish = false
+
+[dependencies]
+bytes = { version = "1", default-features = false }
+futures = { version = "0.3", default-features = false }
+h3 = "0.0.5"
+s2n-quic = { path = "../s2n-quic" }
+s2n-quic-core = { path = "../s2n-quic-core" }
+
+# We need runtime statistics for performance evaluation
+[kani.flags]
+enable-unstable = true
+cbmc-args = ["--verbosity", "9" ]

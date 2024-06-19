@@ -1,0 +1,38 @@
+[package]
+name = "s2n-quic-tls-default"
+version = "0.39.0"
+description = "Internal crate used by s2n-quic"
+repository = "https://github.com/aws/s2n-quic"
+authors = ["AWS s2n"]
+edition = "2021"
+rust-version = "1.71"
+license = "Apache-2.0"
+# Exclude corpus files when publishing to crates.io
+exclude = ["corpus.tar.gz"]
+
+[features]
+# The [`?`](https://doc.rust-lang.org/cargo/reference/features.html?highlight=addative#dependency-features)
+# syntax only enables `fips` for `s2n-quic-tls` if something else enables `s2n-quic-tls`. This
+# preserves the selective compilation of the two tls crates.
+fips = ["s2n-quic-tls?/fips"]
+
+# Declare `s2n-quic-tls` as an optional dependency since the `?` syntax for features requires
+# the dependency be optional.
+#
+# It is not possible to enable a feature flag based on target since Cargo currently doesn't
+# support platform specific feature flags: https://github.com/rust-lang/cargo/issues/1197. In
+# order to support the `?` syntax, we declare s2n-quic-tls as an optional dependency.
+# `s2n-quic-tls` only gets enabled based on the target.
+[dependencies]
+s2n-quic-tls = { version = "=0.39.0", path = "../s2n-quic-tls", optional = true }
+
+[target.'cfg(unix)'.dependencies]
+s2n-quic-tls = { version = "=0.39.0", path = "../s2n-quic-tls" }
+
+[target.'cfg(not(unix))'.dependencies]
+s2n-quic-rustls = { version = "=0.39.0", path = "../s2n-quic-rustls" }
+
+# We need runtime statistics for performance evaluation
+[kani.flags]
+enable-unstable = true
+cbmc-args = ["--verbosity", "9" ]

@@ -1,0 +1,13 @@
+[package]
+name = "resumption"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+s2n-quic = { version = "1", path = "../../quic/s2n-quic", features = ["provider-tls-s2n", "unstable_resumption"]}
+tokio = { version = "1", features = ["full"] }
+
+# We need runtime statistics for performance evaluation
+[kani.flags]
+enable-unstable = true
+cbmc-args = ["--verbosity", "9" ]
