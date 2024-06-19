@@ -9,7 +9,7 @@ use syn::{Expr, FnArg, ItemFn, Token};
 
 use super::{
     helpers::*,
-    shared::{make_unsafe_argument_copies, try_as_result_assign_mut},
+    shared::{build_ensures, try_as_result_assign_mut},
     ContractConditionsData, ContractConditionsHandler, INTERNAL_RESULT_IDENT,
 };
 
@@ -33,14 +33,13 @@ impl<'a> ContractConditionsHandler<'a> {
                     #(#inner)*
                 )
             }
-            ContractConditionsData::Ensures { argument_names, attr } => {
-                let (arg_copies, copy_clean) = make_unsafe_argument_copies(&argument_names);
+            ContractConditionsData::Ensures { attr } => {
+                let (remembers, ensures_clause) = build_ensures(attr);
 
                 // The code that enforces the postconditions and cleans up the shallow
                 // argument copies (with `mem::forget`).
                 let exec_postconditions = quote!(
-                    kani::assert(#attr, stringify!(#attr_copy));
-                    #copy_clean
+                    kani::assert(#ensures_clause, stringify!(#attr_copy));
                 );
 
                 assert!(matches!(
@@ -51,7 +50,7 @@ impl<'a> ContractConditionsHandler<'a> {
 
                 let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
                 quote!(
-                    #arg_copies
+                    #remembers
                     #(#inner)*
                     #exec_postconditions
                     #result

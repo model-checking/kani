@@ -8,7 +8,7 @@ use quote::quote;
 
 use super::{
     helpers::*,
-    shared::{make_unsafe_argument_copies, try_as_result_assign},
+    shared::{build_ensures, try_as_result_assign},
     ContractConditionsData, ContractConditionsHandler, INTERNAL_RESULT_IDENT,
 };
 
@@ -79,15 +79,14 @@ impl<'a> ContractConditionsHandler<'a> {
                     #result
                 )
             }
-            ContractConditionsData::Ensures { attr, argument_names } => {
-                let (arg_copies, copy_clean) = make_unsafe_argument_copies(&argument_names);
+            ContractConditionsData::Ensures { attr } => {
+                let (remembers, ensures_clause) = build_ensures(attr);
                 let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
                 quote!(
-                    #arg_copies
+                    #remembers
                     #(#before)*
                     #(#after)*
-                    kani::assume(#attr);
-                    #copy_clean
+                    kani::assume(#ensures_clause);
                     #result
                 )
             }
@@ -95,7 +94,7 @@ impl<'a> ContractConditionsHandler<'a> {
                 let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
                 quote!(
                     #(#before)*
-                    #(*unsafe { kani::internal::Pointer::assignable(#attr) } = kani::any_modifies();)*
+                    #(*unsafe { kani::internal::Pointer::assignable(kani::internal::untracked_deref(&(#attr))) } = kani::any_modifies();)*
                     #(#after)*
                     #result
                 )
