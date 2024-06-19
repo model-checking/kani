@@ -1,0 +1,2 @@
+Failed Checks: |result| old({ *ptr+=1; *ptr }) == _val
+VERIFICATION:- FAILED
