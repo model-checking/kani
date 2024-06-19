@@ -83,6 +83,7 @@ impl<T: Copy> ShadowMem<T> {
 }
 
 /// Global shadow memory object.
+#[rustc_diagnostic_item = "KaniShadowMemory"]
 static mut __KANI_GLOBAL_SM: ShadowMem<bool> = ShadowMem::new(false);
 
 // Get initialization setate of `n` items laid out according to the `layout` starting at address `ptr`.
