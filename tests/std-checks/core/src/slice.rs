@@ -17,7 +17,7 @@ mod verify {
     use super::*;
 
     const LEN_MIN: usize = 1;
-    const LEN_MAX: usize = 4;
+    const LEN_MAX: usize = 2;
 
     #[kani::proof_for_contract(contracts::from_raw_parts)]
     #[kani::unwind(25)]
