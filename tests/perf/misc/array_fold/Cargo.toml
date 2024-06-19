@@ -9,8 +9,3 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-
-# We need runtime statistics for performance evaluation
-[kani.flags]
-enable-unstable = true
-cbmc-args = ["--verbosity", "9" ]

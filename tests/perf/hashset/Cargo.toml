@@ -17,8 +17,3 @@ stubbing = true
 # https://github.com/model-checking/kani/issues/3099 is fixed
 [package.metadata.kani]
 flags = { ignore-locals-lifetime = true, enable-unstable = true }
-
-# We need runtime statistics for performance evaluation
-[kani.flags]
-enable-unstable = true
-cbmc-args = ["--verbosity", "9" ]
