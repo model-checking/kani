@@ -145,6 +145,14 @@ impl IntrinsicGeneratorPass {
         new_body.into()
     }
 
+    /// Generate the body for `is_initialized`, which looks like the following
+    ///
+    /// ```
+    /// pub fn is_initialized<T>(ptr: *const T, len: usize) -> bool {
+    ///     let layout = ... // Byte mask representing the layout of T.
+    ///     __kani_mem_init_sm_get(ptr, layout, len)
+    /// }
+    /// ```
     fn is_initialized_body(&self, tcx: TyCtxt, body: Body) -> Body {
         let mut new_body = MutableBody::from(body);
         new_body.clear_body();

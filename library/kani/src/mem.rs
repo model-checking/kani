@@ -290,10 +290,10 @@ unsafe fn has_valid_value<T: ?Sized>(_ptr: *const T) -> bool {
     kani_intrinsic()
 }
 
-/// Extract the layout of the pointee type.
+/// Check whether `len * size_of::<T>()` bytes are initialized starting from `ptr`.
 #[rustc_diagnostic_item = "KaniIsInitialized"]
 #[inline(never)]
-pub fn is_initialized<T: ?Sized>(_ptr: *const T, _n: usize) -> bool {
+pub fn is_initialized<T: ?Sized>(_ptr: *const T, _len: usize) -> bool {
     kani_intrinsic()
 }
 
