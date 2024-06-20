@@ -18,7 +18,7 @@ use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{AggregateKind, Body, ConstOperand, Mutability, Operand, Place, Rvalue};
 use stable_mir::ty::{FnDef, GenericArgKind, GenericArgs, MirConst, RigidTy, Ty, TyConst, TyKind};
 use stable_mir::CrateDef;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::sync::Mutex;
 use tracing::{debug, trace};
@@ -84,13 +84,23 @@ impl TransformPass for UninitPass {
         let mut new_body = MutableBody::from(body);
         let orig_len = new_body.blocks().len();
 
+        // Set of basic block indices for which analyzing first statement should be skipped.
+        //
+        // This is necessary because some checks are inserted before the source instruction, which, in
+        // turn, gets moved to the next basic block. Hence, we would not need to look at the
+        // instruction again as a part of new basic block. However, if the check is inserted after the
+        // source instruction, we still need to look at the first statement of the new basic block, so
+        // we need to keep track of which basic blocks were created as a part of injecting checks after
+        // the source instruction.
+        let mut skip_first = HashSet::new();
+
         // Do not cache body.blocks().len() since it will change as we add new checks.
         let mut bb_idx = 0;
         while bb_idx < new_body.blocks().len() {
             if let Some(candidate) =
-                CheckUninitVisitor::find_next(&new_body, bb_idx, new_body.skip_first(bb_idx))
+                CheckUninitVisitor::find_next(&new_body, bb_idx, skip_first.contains(&bb_idx))
             {
-                self.build_check_for_instruction(tcx, &mut new_body, candidate);
+                self.build_check_for_instruction(tcx, &mut new_body, candidate, &mut skip_first);
                 bb_idx += 1
             } else {
                 bb_idx += 1;
@@ -106,14 +116,15 @@ impl UninitPass {
         tcx: TyCtxt,
         body: &mut MutableBody,
         instruction: InitRelevantInstruction,
+        skip_first: &mut HashSet<usize>,
     ) {
         debug!(?instruction, "build_check");
         let mut source = instruction.source;
         for operation in instruction.before_instruction {
-            self.build_check_for_operation(tcx, body, &mut source, operation);
+            self.build_check_for_operation(tcx, body, &mut source, operation, skip_first);
         }
         for operation in instruction.after_instruction {
-            self.build_check_for_operation(tcx, body, &mut source, operation);
+            self.build_check_for_operation(tcx, body, &mut source, operation, skip_first);
         }
     }
 
@@ -123,8 +134,10 @@ impl UninitPass {
         body: &mut MutableBody,
         source: &mut SourceInstruction,
         operation: SourceOp,
+        skip_first: &mut HashSet<usize>,
     ) {
         if let SourceOp::Unsupported { reason, position } = &operation {
+            try_mark_new_bb_as_skipped(&operation, body, skip_first);
             self.unsupported_check(tcx, body, source, *position, reason);
             return;
         };
@@ -146,6 +159,7 @@ impl UninitPass {
                     let reason = format!(
                         "Kani currently doesn't support checking memory initialization for pointers to `{pointee_ty}.",
                     );
+                    try_mark_new_bb_as_skipped(&operation, body, skip_first);
                     self.unsupported_check(tcx, body, source, operation.position(), &reason);
                     return;
                 }
@@ -154,10 +168,10 @@ impl UninitPass {
 
         match operation {
             SourceOp::Get { .. } => {
-                self.build_get_and_check(tcx, body, source, operation, pointee_ty_info)
+                self.build_get_and_check(tcx, body, source, operation, pointee_ty_info, skip_first)
             }
-            SourceOp::Set { value, .. } | SourceOp::SetRef { value, .. } => {
-                self.build_set(tcx, body, source, operation, pointee_ty_info, value)
+            SourceOp::Set { .. } | SourceOp::SetRef { .. } => {
+                self.build_set(tcx, body, source, operation, pointee_ty_info, skip_first)
             }
             SourceOp::Unsupported { .. } => {
                 unreachable!()
@@ -172,6 +186,7 @@ impl UninitPass {
         source: &mut SourceInstruction,
         operation: SourceOp,
         pointee_info: PointeeInfo,
+        skip_first: &mut HashSet<usize>,
     ) {
         let ret_place = Place {
             local: body.new_local(Ty::bool_ty(), source.span(body.blocks()), Mutability::Not),
@@ -192,6 +207,7 @@ impl UninitPass {
                 )
                 .unwrap();
                 let layout_operand = mk_layout_operand(body, source, operation.position(), layout);
+                try_mark_new_bb_as_skipped(&operation, body, skip_first);
                 body.add_call(
                     &shadow_memory_get_instance,
                     source,
@@ -216,6 +232,7 @@ impl UninitPass {
                 .unwrap();
                 let layout_operand =
                     mk_layout_operand(body, source, operation.position(), element_layout);
+                try_mark_new_bb_as_skipped(&operation, body, skip_first);
                 body.add_call(
                     &shadow_memory_get_instance,
                     source,
@@ -226,7 +243,9 @@ impl UninitPass {
             }
             PointeeLayout::TraitObject => return,
         };
+
         // Make sure all non-padding bytes are initialized.
+        try_mark_new_bb_as_skipped(&operation, body, skip_first);
         let ptr_operand_ty = ptr_operand.ty(body.locals()).unwrap();
         body.add_check(
             tcx,
@@ -245,13 +264,14 @@ impl UninitPass {
         source: &mut SourceInstruction,
         operation: SourceOp,
         pointee_info: PointeeInfo,
-        value: bool,
+        skip_first: &mut HashSet<usize>,
     ) {
         let ret_place = Place {
             local: body.new_local(Ty::new_tuple(&[]), source.span(body.blocks()), Mutability::Not),
             projection: vec![],
         };
         let ptr_operand = operation.mk_operand(body, source);
+        let value = operation.expect_value();
 
         match pointee_info.layout() {
             PointeeLayout::Static { layout } => {
@@ -267,6 +287,7 @@ impl UninitPass {
                 )
                 .unwrap();
                 let layout_operand = mk_layout_operand(body, source, operation.position(), layout);
+                try_mark_new_bb_as_skipped(&operation, body, skip_first);
                 body.add_call(
                     &shadow_memory_set_instance,
                     source,
@@ -300,6 +321,7 @@ impl UninitPass {
                 .unwrap();
                 let layout_operand =
                     mk_layout_operand(body, source, operation.position(), element_layout);
+                try_mark_new_bb_as_skipped(&operation, body, skip_first);
                 body.add_call(
                     &shadow_memory_set_instance,
                     source,
@@ -366,4 +388,17 @@ pub fn mk_layout_operand(
         ),
         projection: vec![],
     })
+}
+
+/// If injecting a new call to the function before the current statement, need to skip the original
+/// statement when analyzing it as a part of the new basic block.
+fn try_mark_new_bb_as_skipped(
+    operation: &SourceOp,
+    body: &MutableBody,
+    skip_first: &mut HashSet<usize>,
+) {
+    if operation.position() == InsertPosition::Before {
+        let new_bb_idx = body.blocks().len();
+        skip_first.insert(new_bb_idx);
+    }
 }

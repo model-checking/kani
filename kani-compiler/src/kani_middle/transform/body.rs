@@ -8,7 +8,6 @@ use rustc_middle::ty::TyCtxt;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::*;
 use stable_mir::ty::{GenericArgs, MirConst, Span, Ty, UintTy};
-use std::collections::HashSet;
 use std::fmt::Debug;
 use std::mem;
 
@@ -36,16 +35,6 @@ pub struct MutableBody {
 
     /// The span that covers the entire function body.
     span: Span,
-
-    /// Set of basic block indices for which analyzing first statement should be skipped.
-    ///
-    /// This is necessary because some checks are inserted before the source instruction, which,
-    /// in turn, gets moved to the next basic block. Hence, we would not need to look at the
-    /// instruction again as a part of new basic block. However, if the check is inserted after
-    /// the source instruction, we still need to look at the first statement of the new basic block,
-    /// so we need to keep track of which basic blocks were created as a part of injecting checks after
-    /// the source instruction.
-    skip_first: HashSet<usize>,
 }
 
 /// Denotes whether instrumentation should be inserted before or after the statement.
@@ -74,12 +63,7 @@ impl MutableBody {
             blocks: body.blocks,
             var_debug_info: body.var_debug_info,
             span: body.span,
-            skip_first: HashSet::new(),
         }
-    }
-
-    pub fn skip_first(&self, bb_idx: usize) -> bool {
-        self.skip_first.contains(&bb_idx)
     }
 
     /// Create the new body consuming this mutable body.
@@ -272,7 +256,6 @@ impl MutableBody {
                 let remaining = bb_stmts.split_off(idx);
                 let new_bb = BasicBlock { statements: remaining, terminator: old_term };
                 self.blocks.push(new_bb);
-                self.skip_first.insert(new_bb_idx);
             }
             InsertPosition::After => {
                 let span = source.span(&self.blocks);

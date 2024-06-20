@@ -54,6 +54,13 @@ impl SourceOp {
         }
     }
 
+    pub fn expect_value(&self) -> bool {
+        match self {
+            SourceOp::Set { value, .. } | SourceOp::SetRef { value, .. } => *value,
+            SourceOp::Get { .. } | SourceOp::Unsupported { .. } => unreachable!(),
+        }
+    }
+
     pub fn position(&self) -> InsertPosition {
         match self {
             SourceOp::Get { position, .. }
