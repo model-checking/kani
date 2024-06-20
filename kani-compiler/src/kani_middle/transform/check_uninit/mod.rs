@@ -11,13 +11,16 @@ use crate::kani_middle::transform::body::{
 };
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
+use lazy_static::lazy_static;
 use rustc_middle::ty::TyCtxt;
 use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{AggregateKind, Body, ConstOperand, Mutability, Operand, Place, Rvalue};
-use stable_mir::ty::{GenericArgKind, GenericArgs, MirConst, RigidTy, Ty, TyConst, TyKind};
+use stable_mir::ty::{FnDef, GenericArgKind, GenericArgs, MirConst, RigidTy, Ty, TyConst, TyKind};
 use stable_mir::CrateDef;
+use std::collections::HashMap;
 use std::fmt::Debug;
+use std::sync::Mutex;
 use tracing::{debug, trace};
 
 mod ty_layout;
@@ -27,6 +30,19 @@ pub use ty_layout::TypeLayout;
 use uninit_visitor::{CheckUninitVisitor, InitRelevantInstruction, SourceOp};
 
 const SKIPPED_DIAGNOSTIC_ITEMS: &[&str] = &["KaniShadowMemoryGetInner", "KaniShadowMemorySetInner"];
+
+/// Retrieve a function definition by diagnostic string, caching the result.
+fn get_kani_sm_function(tcx: TyCtxt, diagnostic: &'static str) -> FnDef {
+    lazy_static! {
+        static ref KANI_SM_FUNCTIONS: Mutex<HashMap<&'static str, FnDef>> =
+            Mutex::new(HashMap::new());
+    }
+    let mut kani_sm_functions = KANI_SM_FUNCTIONS.lock().unwrap();
+    let entry = kani_sm_functions
+        .entry(diagnostic)
+        .or_insert_with(|| find_fn_def(tcx, diagnostic).unwrap());
+    entry.clone()
+}
 
 /// Instrument the code with checks for uninitialized memory.
 #[derive(Debug)]
@@ -163,7 +179,7 @@ impl UninitPass {
                     let shadow_memory_get = match pointee_ty.kind() {
                         TyKind::RigidTy(RigidTy::Slice(_)) | TyKind::RigidTy(RigidTy::Str) => {
                             Instance::resolve(
-                                find_fn_def(tcx, "KaniShadowMemoryGetSlice").unwrap(),
+                                get_kani_sm_function(tcx, "KaniShadowMemoryGetSlice"),
                                 &GenericArgs(vec![
                                     GenericArgKind::Const(
                                         TyConst::try_from_target_usize(
@@ -178,7 +194,7 @@ impl UninitPass {
                         }
                         TyKind::RigidTy(RigidTy::Dynamic(..)) => continue, // Any layout is valid when dereferencing a pointer to `dyn Trait`.
                         _ => Instance::resolve(
-                            find_fn_def(tcx, "KaniShadowMemoryGet").unwrap(),
+                            get_kani_sm_function(tcx, "KaniShadowMemoryGet"),
                             &GenericArgs(vec![
                                 GenericArgKind::Const(
                                     TyConst::try_from_target_usize(
@@ -225,7 +241,7 @@ impl UninitPass {
                     let shadow_memory_set = match pointee_ty.kind() {
                         TyKind::RigidTy(RigidTy::Slice(_)) | TyKind::RigidTy(RigidTy::Str) => {
                             Instance::resolve(
-                                find_fn_def(tcx, "KaniShadowMemorySetSlice").unwrap(),
+                                get_kani_sm_function(tcx, "KaniShadowMemorySetSlice"),
                                 &GenericArgs(vec![
                                     GenericArgKind::Const(
                                         TyConst::try_from_target_usize(
@@ -240,7 +256,7 @@ impl UninitPass {
                         }
                         TyKind::RigidTy(RigidTy::Dynamic(..)) => continue, // Any layout is valid when dereferencing a pointer to `dyn Trait`.
                         _ => Instance::resolve(
-                            find_fn_def(tcx, "KaniShadowMemorySet").unwrap(),
+                            get_kani_sm_function(tcx, "KaniShadowMemorySet"),
                             &GenericArgs(vec![
                                 GenericArgKind::Const(
                                     TyConst::try_from_target_usize(
