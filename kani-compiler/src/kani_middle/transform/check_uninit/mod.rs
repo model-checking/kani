@@ -16,7 +16,9 @@ use rustc_middle::ty::TyCtxt;
 use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{AggregateKind, Body, ConstOperand, Mutability, Operand, Place, Rvalue};
-use stable_mir::ty::{FnDef, GenericArgKind, GenericArgs, MirConst, RigidTy, Ty, TyConst, TyKind};
+use stable_mir::ty::{
+    FnDef, GenericArgKind, GenericArgs, MirConst, RigidTy, Ty, TyConst, TyKind, UintTy,
+};
 use stable_mir::CrateDef;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
@@ -217,8 +219,18 @@ impl UninitPass {
                 );
             }
             PointeeLayout::Slice { element_layout } => {
+                // Since `str`` is a separate type, need to differentiate between [T] and str.
+                let (slicee_ty, diagnostic) = match pointee_info.ty().kind() {
+                    TyKind::RigidTy(RigidTy::Slice(slicee_ty)) => {
+                        (slicee_ty, "KaniMemInitSMGetSlice")
+                    }
+                    TyKind::RigidTy(RigidTy::Str) => {
+                        (Ty::unsigned_ty(UintTy::U8), "KaniMemInitSMGetStr")
+                    }
+                    _ => unreachable!(),
+                };
                 let shadow_memory_get_instance = Instance::resolve(
-                    get_kani_sm_function(tcx, "KaniMemInitSMGetSlice"),
+                    get_kani_sm_function(tcx, diagnostic),
                     &GenericArgs(vec![
                         GenericArgKind::Const(
                             TyConst::try_from_target_usize(
@@ -226,7 +238,7 @@ impl UninitPass {
                             )
                             .unwrap(),
                         ),
-                        GenericArgKind::Type(*pointee_info.ty()),
+                        GenericArgKind::Type(slicee_ty),
                     ]),
                 )
                 .unwrap();
@@ -306,8 +318,18 @@ impl UninitPass {
                 );
             }
             PointeeLayout::Slice { element_layout } => {
+                // Since `str`` is a separate type, need to differentiate between [T] and str.
+                let (slicee_ty, diagnostic) = match pointee_info.ty().kind() {
+                    TyKind::RigidTy(RigidTy::Slice(slicee_ty)) => {
+                        (slicee_ty, "KaniMemInitSMSetSlice")
+                    }
+                    TyKind::RigidTy(RigidTy::Str) => {
+                        (Ty::unsigned_ty(UintTy::U8), "KaniMemInitSMSetStr")
+                    }
+                    _ => unreachable!(),
+                };
                 let shadow_memory_set_instance = Instance::resolve(
-                    get_kani_sm_function(tcx, "KaniMemInitSMSetSlice"),
+                    get_kani_sm_function(tcx, diagnostic),
                     &GenericArgs(vec![
                         GenericArgKind::Const(
                             TyConst::try_from_target_usize(
@@ -315,7 +337,7 @@ impl UninitPass {
                             )
                             .unwrap(),
                         ),
-                        GenericArgKind::Type(*pointee_info.ty()),
+                        GenericArgKind::Type(slicee_ty),
                     ]),
                 )
                 .unwrap();

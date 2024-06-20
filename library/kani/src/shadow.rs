@@ -82,19 +82,31 @@ impl<T: Copy> ShadowMem<T> {
     }
 }
 
+/// Bytewise mask, representing which bytes of a type are data and which are padding.
+/// For example, for a type like this:
+/// ```
+/// #[repr(C)]
+/// struct Foo {
+///     a: u16,
+///     b: u8,
+/// }
+/// ```
+/// the layout would be [true, true, true, false];
+type Layout<const N: usize> = [bool; N];
+
 /// Global shadow memory object for tracking memory initialization.
 #[rustc_diagnostic_item = "KaniMemInitSM"]
 static mut __KANI_MEM_INIT_SM: ShadowMem<bool> = ShadowMem::new(false);
 
-// Get initialization setate of `n` items laid out according to the `layout` starting at address `ptr`.
+/// Get initialization state of `len` items laid out according to the `layout` starting at address `ptr`.
 #[rustc_diagnostic_item = "KaniMemInitSMGetInner"]
 fn __kani_mem_init_sm_get_inner<const N: usize>(
     ptr: *const (),
-    layout: [bool; N],
-    n: usize,
+    layout: Layout<N>,
+    len: usize,
 ) -> bool {
     let mut count: usize = 0;
-    while count < n {
+    while count < len {
         let mut offset: usize = 0;
         while offset < N {
             unsafe {
@@ -111,16 +123,16 @@ fn __kani_mem_init_sm_get_inner<const N: usize>(
     true
 }
 
-// Set initialization setate to `value` for `n` items laid out according to the `layout` starting at address `ptr`.
+/// Set initialization state to `value` for `len` items laid out according to the `layout` starting at address `ptr`.
 #[rustc_diagnostic_item = "KaniMemInitSMSetInner"]
 fn __kani_mem_init_sm_set_inner<const N: usize>(
     ptr: *const (),
-    layout: [bool; N],
-    n: usize,
+    layout: Layout<N>,
+    len: usize,
     value: bool,
 ) {
     let mut count: usize = 0;
-    while count < n {
+    while count < len {
         let mut offset: usize = 0;
         while offset < N {
             unsafe {
@@ -133,48 +145,53 @@ fn __kani_mem_init_sm_set_inner<const N: usize>(
     }
 }
 
+/// Get initialization state of `len` items laid out according to the `layout` starting at address `ptr`.
 #[rustc_diagnostic_item = "KaniMemInitSMGet"]
-pub fn __kani_mem_init_sm_get<const N: usize, T: Sized>(
-    ptr: *const T,
-    layout: [bool; N],
-    n: usize,
-) -> bool {
+fn __kani_mem_init_sm_get<const N: usize, T>(ptr: *const T, layout: Layout<N>, len: usize) -> bool {
     let (ptr, _) = ptr.to_raw_parts();
-    __kani_mem_init_sm_get_inner(ptr, layout, n)
+    __kani_mem_init_sm_get_inner(ptr, layout, len)
 }
 
+/// Set initialization state to `value` for `len` items laid out according to the `layout` starting at address `ptr`.
 #[rustc_diagnostic_item = "KaniMemInitSMSet"]
-pub fn __kani_mem_init_sm_set<const N: usize, T: Sized>(
+fn __kani_mem_init_sm_set<const N: usize, T>(
     ptr: *const T,
-    layout: [bool; N],
-    n: usize,
+    layout: Layout<N>,
+    len: usize,
     value: bool,
 ) {
     let (ptr, _) = ptr.to_raw_parts();
-    __kani_mem_init_sm_set_inner(ptr, layout, n, value);
+    __kani_mem_init_sm_set_inner(ptr, layout, len, value);
 }
 
-// This method should only be called if T is known to be a slice.
+/// Get initialization state of the slice, items of which are laid out according to the `layout` starting at address `ptr`.
 #[rustc_diagnostic_item = "KaniMemInitSMGetSlice"]
-pub fn __kani_mem_init_sm_get_slice<const N: usize, T: ?Sized>(
-    ptr: *const T,
-    layout: [bool; N],
-) -> bool {
-    let (ptr, meta) = ptr.to_raw_parts();
-    let n: usize = unsafe { std::mem::transmute_copy(&meta) };
-    // The pointee type is a slice, more than `n` objects can be accessed.
-    __kani_mem_init_sm_get_inner(ptr, layout, n)
+fn __kani_mem_init_sm_get_slice<const N: usize, T>(ptr: *const [T], layout: Layout<N>) -> bool {
+    let (ptr, len) = ptr.to_raw_parts();
+    __kani_mem_init_sm_get_inner(ptr, layout, len)
 }
 
-// This method should only be called if T is known to be a slice.
+/// Set initialization state of the slice, items of which are laid out according to the `layout` starting at address `ptr` to `value`.
 #[rustc_diagnostic_item = "KaniMemInitSMSetSlice"]
-pub fn __kani_mem_init_sm_set_slice<const N: usize, T: ?Sized>(
-    ptr: *const T,
-    layout: [bool; N],
+fn __kani_mem_init_sm_set_slice<const N: usize, T>(
+    ptr: *const [T],
+    layout: Layout<N>,
     value: bool,
 ) {
-    let (ptr, meta) = ptr.to_raw_parts();
-    let n: usize = unsafe { std::mem::transmute_copy(&meta) };
-    // The pointee type is a slice, more than `n` objects can be accessed.
-    __kani_mem_init_sm_set_inner(ptr, layout, n, value);
+    let (ptr, len) = ptr.to_raw_parts();
+    __kani_mem_init_sm_set_inner(ptr, layout, len, value);
+}
+
+/// Get initialization state of the string slice, items of which are laid out according to the `layout` starting at address `ptr`.
+#[rustc_diagnostic_item = "KaniMemInitSMGetStr"]
+fn __kani_mem_init_sm_get_str<const N: usize>(ptr: *const str, layout: Layout<N>) -> bool {
+    let (ptr, len) = ptr.to_raw_parts();
+    __kani_mem_init_sm_get_inner(ptr, layout, len)
+}
+
+/// Set initialization state of the string slice, items of which are laid out according to the `layout` starting at address `ptr` to `value`.
+#[rustc_diagnostic_item = "KaniMemInitSMSetStr"]
+fn __kani_mem_init_sm_set_str<const N: usize>(ptr: *const str, layout: Layout<N>, value: bool) {
+    let (ptr, len) = ptr.to_raw_parts();
+    __kani_mem_init_sm_set_inner(ptr, layout, len, value);
 }
