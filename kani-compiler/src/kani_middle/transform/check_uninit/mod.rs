@@ -12,9 +12,11 @@ use crate::kani_middle::transform::body::{
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
 use rustc_middle::ty::TyCtxt;
+use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{AggregateKind, Body, ConstOperand, Mutability, Operand, Place, Rvalue};
 use stable_mir::ty::{GenericArgKind, GenericArgs, MirConst, RigidTy, Ty, TyConst, TyKind};
+use stable_mir::CrateDef;
 use std::fmt::Debug;
 use tracing::{debug, trace};
 
@@ -24,7 +26,7 @@ mod uninit_visitor;
 pub use ty_layout::TypeLayout;
 use uninit_visitor::{CheckUninitVisitor, InitRelevantInstruction, SourceOp};
 
-const KANI_SHADOW_MEMORY_PREFIX: &str = "__kani_global_sm";
+const SKIPPED_DIAGNOSTIC_ITEMS: &[&str] = &["KaniShadowMemoryGetInner", "KaniShadowMemorySetInner"];
 
 /// Instrument the code with checks for uninitialized memory.
 #[derive(Debug)]
@@ -51,8 +53,15 @@ impl TransformPass for UninitPass {
     fn transform(&self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
         trace!(function=?instance.name(), "transform");
 
-        // Need to break infinite recursion when shadow memory checks are inserted.
-        if instance.name().contains(KANI_SHADOW_MEMORY_PREFIX) {
+        // Need to break infinite recursion when shadow memory checks are inserted,
+        // so the internal function responsible for shadow memory checks are skipped.
+        if tcx
+            .get_diagnostic_name(rustc_internal::internal(tcx, instance.def.def_id()))
+            .map(|diagnostic_name| {
+                SKIPPED_DIAGNOSTIC_ITEMS.contains(&diagnostic_name.to_ident_string().as_str())
+            })
+            .unwrap_or(false)
+        {
             return (false, body);
         }
 

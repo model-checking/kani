@@ -87,6 +87,7 @@ impl<T: Copy> ShadowMem<T> {
 static mut __KANI_GLOBAL_SM: ShadowMem<bool> = ShadowMem::new(false);
 
 // Get initialization setate of `n` items laid out according to the `layout` starting at address `ptr`.
+#[rustc_diagnostic_item = "KaniShadowMemoryGetInner"]
 fn __kani_global_sm_get_inner<const N: usize>(ptr: *const (), layout: [bool; N], n: usize) -> bool {
     let mut count: usize = 0;
     while count < n {
@@ -107,6 +108,7 @@ fn __kani_global_sm_get_inner<const N: usize>(ptr: *const (), layout: [bool; N],
 }
 
 // Set initialization setate to `value` for `n` items laid out according to the `layout` starting at address `ptr`.
+#[rustc_diagnostic_item = "KaniShadowMemorySetInner"]
 fn __kani_global_sm_set_inner<const N: usize>(
     ptr: *const (),
     layout: [bool; N],
