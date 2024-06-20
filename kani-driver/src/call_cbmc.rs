@@ -160,6 +160,18 @@ impl KaniSession {
     pub fn cbmc_check_flags(&self) -> Vec<OsString> {
         let mut args = Vec::new();
 
+        // We assume that malloc cannot fail
+        args.push("--no-malloc-may-fail".into());
+
+        // With PR #2630 we generate the appropriate checks directly rather than relying on CBMC's
+        // checks (which are for C semantics).
+        args.push("--no-undefined-shift-check".into());
+        // With PR #647 we use Rust's `-C overflow-checks=on` instead of:
+        // --unsigned-overflow-check
+        // --signed-overflow-check
+        // So these options are deliberately skipped to avoid erroneously re-checking operations.
+        args.push("--no-signed-overflow-check".into());
+
         if !self.args.checks.memory_safety_on() {
             args.push("--no-bounds-check".into());
             args.push("--no-pointer-check".into());
@@ -167,10 +179,6 @@ impl KaniSession {
         if self.args.checks.overflow_on() {
             args.push("--float-overflow-check".into());
             args.push("--nan-check".into());
-            // With PR #647 we use Rust's `-C overflow-checks=on` instead of:
-            // --unsigned-overflow-check
-            // --signed-overflow-check
-            // So these options are deliberately skipped to avoid erroneously re-checking operations.
 
             // TODO: Implement conversion checks as an optional check.
             // They are a well defined operation in rust, but they may yield unexpected results to
@@ -195,7 +203,8 @@ impl KaniSession {
             // still catch any invalid dereference with --pointer-check. Thus, only enable them
             // if the user explicitly request them.
             args.push("--pointer-overflow-check".into());
-            args.push("--pointer-primitive-check".into());
+        } else {
+            args.push("--no-pointer-primitive-check".into());
         }
 
         args

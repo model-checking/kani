@@ -8,7 +8,3 @@ SUCCESS\
 deallocated dynamic object
 FAILURE\
 dead object
-SUCCESS\
-pointer outside object bounds
-SUCCESS\
-invalid integer address
