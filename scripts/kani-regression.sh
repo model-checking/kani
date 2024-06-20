@@ -61,7 +61,7 @@ TESTS=(
     "script-based-pre exec"
     "coverage coverage-based"
     "kani-docs cargo-kani"
-#    "kani-fixme kani-fixme"
+    "kani-fixme kani-fixme"
 )
 
 # Build compiletest and print configuration. We pick suite / mode combo so there's no test.
