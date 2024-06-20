@@ -425,6 +425,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 .branches()
                 .map(|(c, bb)| {
                     Expr::int_constant(c, switch_ty.clone())
+                        .with_location(loc)
                         .switch_case(Stmt::goto(bb_label(bb), loc))
                 })
                 .collect();
