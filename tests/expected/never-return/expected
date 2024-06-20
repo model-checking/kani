@@ -7,7 +7,7 @@ Description: "Found zero"\
 in function found_zero
 
 Status: SUCCESS\
-Description: "unwinding assertion loop 0"\
+Description: "unwinding assertion loop 1"\
 in function check_never_return
 
 Failed Checks: Found one

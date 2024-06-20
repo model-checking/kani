@@ -10,7 +10,7 @@ SUCCESS\
 deallocated dynamic object
 FAILURE\
 dead object
-SUCCESS\
+UNDETERMINED\
 pointer outside object bounds
-SUCCESS\
+UNDETERMINED\
 invalid integer address
