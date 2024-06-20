@@ -38,6 +38,13 @@ pub struct MutableBody {
     span: Span,
 
     /// Set of basic block indices for which analyzing first statement should be skipped.
+    ///
+    /// This is necessary because some checks are inserted before the source instruction, which,
+    /// in turn, gets moved to the next basic block. Hence, we would not need to look at the
+    /// instruction again as a part of new basic block. However, if the check is inserted after
+    /// the source instruction, we still need to look at the first statement of the new basic block,
+    /// so we need to keep track of which basic blocks were created as a part of injecting checks after
+    /// the source instruction.
     skip_first: HashSet<usize>,
 }
 
