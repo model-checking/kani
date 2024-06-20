@@ -1,0 +1,1 @@
+cargo:rustc-env=TARGET=x86_64-unknown-linux-gnu

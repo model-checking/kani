@@ -137,8 +137,12 @@ impl KaniSession {
             // When quiet, we don't want to print anything at all.
             // When output is old, we also don't have real results to print.
             if !self.args.common_args.quiet && self.args.output_format != OutputFormat::Old {
-                let file_name = harness.pretty_name.clone(); // Clone the pretty_name to avoid borrowing issues
-                let file = File::create(&file_name);
+                let file_name = String::from("./kani-harness-result/".to_owned() + &harness.pretty_name.clone()); 
+                let path = Path::new(&file_name);
+                let prefix = path.parent().unwrap();
+                std::fs::create_dir_all(prefix).unwrap();
+
+                let file = File::create(file_name.clone());
 
                 let output = result.render(
                     &self.args.output_format,
@@ -149,16 +153,8 @@ impl KaniSession {
                 if let Err(e) = writeln!(file.unwrap(), "{}", output) {
                     eprintln!("Failed to write to file {}: {}", file_name, e);
                 }
+                println!("{}", output);
 
-                /*
-                println!(
-                    "{}",
-                    result.render(
-                        &self.args.output_format,
-                        harness.attributes.should_panic,
-                        self.args.coverage
-                    )
-                );*/
             }
             self.gen_and_add_concrete_playback(harness, &mut result)?;
             Ok(result)
