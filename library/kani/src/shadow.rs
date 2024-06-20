@@ -82,20 +82,24 @@ impl<T: Copy> ShadowMem<T> {
     }
 }
 
-/// Global shadow memory object.
-#[rustc_diagnostic_item = "KaniShadowMemory"]
-static mut __KANI_GLOBAL_SM: ShadowMem<bool> = ShadowMem::new(false);
+/// Global shadow memory object for tracking memory initialization.
+#[rustc_diagnostic_item = "KaniMemInitSM"]
+static mut __KANI_MEM_INIT_SM: ShadowMem<bool> = ShadowMem::new(false);
 
 // Get initialization setate of `n` items laid out according to the `layout` starting at address `ptr`.
-#[rustc_diagnostic_item = "KaniShadowMemoryGetInner"]
-fn __kani_global_sm_get_inner<const N: usize>(ptr: *const (), layout: [bool; N], n: usize) -> bool {
+#[rustc_diagnostic_item = "KaniMemInitSMGetInner"]
+fn __kani_mem_init_sm_get_inner<const N: usize>(
+    ptr: *const (),
+    layout: [bool; N],
+    n: usize,
+) -> bool {
     let mut count: usize = 0;
     while count < n {
         let mut offset: usize = 0;
         while offset < N {
             unsafe {
                 if layout[offset]
-                    && !__KANI_GLOBAL_SM.get((ptr as *const u8).add(count * N + offset))
+                    && !__KANI_MEM_INIT_SM.get((ptr as *const u8).add(count * N + offset))
                 {
                     return false;
                 }
@@ -108,8 +112,8 @@ fn __kani_global_sm_get_inner<const N: usize>(ptr: *const (), layout: [bool; N],
 }
 
 // Set initialization setate to `value` for `n` items laid out according to the `layout` starting at address `ptr`.
-#[rustc_diagnostic_item = "KaniShadowMemorySetInner"]
-fn __kani_global_sm_set_inner<const N: usize>(
+#[rustc_diagnostic_item = "KaniMemInitSMSetInner"]
+fn __kani_mem_init_sm_set_inner<const N: usize>(
     ptr: *const (),
     layout: [bool; N],
     n: usize,
@@ -120,7 +124,7 @@ fn __kani_global_sm_set_inner<const N: usize>(
         let mut offset: usize = 0;
         while offset < N {
             unsafe {
-                __KANI_GLOBAL_SM
+                __KANI_MEM_INIT_SM
                     .set((ptr as *const u8).add(count * N + offset), value && layout[offset]);
             }
             offset += 1;
@@ -129,52 +133,48 @@ fn __kani_global_sm_set_inner<const N: usize>(
     }
 }
 
-#[rustc_diagnostic_item = "KaniShadowMemoryGet"]
-pub fn __kani_global_sm_get<const N: usize, T: Sized>(
+#[rustc_diagnostic_item = "KaniMemInitSMGet"]
+pub fn __kani_mem_init_sm_get<const N: usize, T: Sized>(
     ptr: *const T,
     layout: [bool; N],
     n: usize,
 ) -> bool {
     let (ptr, _) = ptr.to_raw_parts();
-    __kani_global_sm_get_inner(ptr, layout, n)
+    __kani_mem_init_sm_get_inner(ptr, layout, n)
 }
 
-#[rustc_diagnostic_item = "KaniShadowMemorySet"]
-pub fn __kani_global_sm_set<const N: usize, T: Sized>(
+#[rustc_diagnostic_item = "KaniMemInitSMSet"]
+pub fn __kani_mem_init_sm_set<const N: usize, T: Sized>(
     ptr: *const T,
     layout: [bool; N],
     n: usize,
     value: bool,
 ) {
     let (ptr, _) = ptr.to_raw_parts();
-    __kani_global_sm_set_inner(ptr, layout, n, value);
+    __kani_mem_init_sm_set_inner(ptr, layout, n, value);
 }
 
 // This method should only be called if T is known to be a slice.
-#[rustc_diagnostic_item = "KaniShadowMemoryGetSlice"]
-pub fn __kani_global_sm_get_slice<const N: usize, T: ?Sized>(
+#[rustc_diagnostic_item = "KaniMemInitSMGetSlice"]
+pub fn __kani_mem_init_sm_get_slice<const N: usize, T: ?Sized>(
     ptr: *const T,
     layout: [bool; N],
-    n: usize,
 ) -> bool {
     let (ptr, meta) = ptr.to_raw_parts();
-    let meta: usize = unsafe { std::mem::transmute_copy(&meta) };
+    let n: usize = unsafe { std::mem::transmute_copy(&meta) };
     // The pointee type is a slice, more than `n` objects can be accessed.
-    let n = n * meta;
-    __kani_global_sm_get_inner(ptr, layout, n)
+    __kani_mem_init_sm_get_inner(ptr, layout, n)
 }
 
 // This method should only be called if T is known to be a slice.
-#[rustc_diagnostic_item = "KaniShadowMemorySetSlice"]
-pub fn __kani_global_sm_set_slice<const N: usize, T: ?Sized>(
+#[rustc_diagnostic_item = "KaniMemInitSMSetSlice"]
+pub fn __kani_mem_init_sm_set_slice<const N: usize, T: ?Sized>(
     ptr: *const T,
     layout: [bool; N],
-    n: usize,
     value: bool,
 ) {
     let (ptr, meta) = ptr.to_raw_parts();
-    let meta: usize = unsafe { std::mem::transmute_copy(&meta) };
+    let n: usize = unsafe { std::mem::transmute_copy(&meta) };
     // The pointee type is a slice, more than `n` objects can be accessed.
-    let n = n * meta;
-    __kani_global_sm_set_inner(ptr, layout, n, value);
+    __kani_mem_init_sm_set_inner(ptr, layout, n, value);
 }

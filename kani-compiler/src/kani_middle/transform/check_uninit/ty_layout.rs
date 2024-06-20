@@ -5,7 +5,7 @@
 
 use stable_mir::abi::{FieldsShape, Scalar, TagEncoding, ValueAbi, VariantsShape};
 use stable_mir::target::{MachineInfo, MachineSize};
-use stable_mir::ty::{AdtKind, IndexedVal, RigidTy, Ty, TyKind};
+use stable_mir::ty::{AdtKind, IndexedVal, RigidTy, Ty, TyKind, UintTy};
 use stable_mir::CrateDef;
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
@@ -16,76 +16,89 @@ struct DataBytes {
     size: MachineSize,
 }
 
-pub type ByteLayout = Vec<bool>;
-
-// Depending on whether the type is statically or dynamically sized,
-// the layout of the element or the layout of the actual type is returned.
-pub enum TypeLayout {
-    Static { layout: ByteLayout },
-    Slice { element_layout: ByteLayout },
-    TraitObject,
+pub struct TypeLayout {
+    size_in_bytes: usize,
+    data_chunks: Vec<DataBytes>,
 }
 
 impl TypeLayout {
-    // Convert type layout to a vector of byte flags.
-    pub fn as_byte_layout(&self) -> ByteLayout {
-        match self {
-            TypeLayout::Static { layout } => layout.clone(),
-            TypeLayout::Slice { element_layout } => element_layout.clone(),
-            TypeLayout::TraitObject => vec![],
+    pub fn to_byte_mask(&self) -> Vec<bool> {
+        let mut layout_mask = vec![false; self.size_in_bytes];
+        for data_bytes in self.data_chunks.iter() {
+            for layout_item in
+                layout_mask.iter_mut().skip(data_bytes.offset).take(data_bytes.size.bytes())
+            {
+                *layout_item = true;
+            }
         }
+        layout_mask
     }
 }
 
-pub struct TypeInfo {
-    ty: Ty,
-    data_bytes: Vec<DataBytes>,
+// Depending on whether the type is statically or dynamically sized,
+// the layout of the element or the layout of the actual type is returned.
+pub enum PointeeLayout {
+    Static { layout: TypeLayout },
+    Slice { element_layout: TypeLayout },
+    TraitObject,
 }
 
-impl TypeInfo {
+pub struct PointeeInfo {
+    pointee_ty: Ty,
+    layout: PointeeLayout,
+}
+
+impl PointeeInfo {
     pub fn from_ty(ty: Ty) -> Result<Self, String> {
-        Ok(Self { ty, data_bytes: data_bytes_for_ty(&MachineInfo::target(), ty, 0)? })
+        match ty.kind() {
+            TyKind::RigidTy(rigid_ty) => match rigid_ty {
+                RigidTy::Str => {
+                    let slicee_ty = Ty::unsigned_ty(UintTy::U8);
+                    let size_in_bytes = slicee_ty.layout().unwrap().shape().size.bytes();
+                    let data_chunks = data_bytes_for_ty(&MachineInfo::target(), slicee_ty, 0)?;
+                    let layout = PointeeLayout::Slice {
+                        element_layout: TypeLayout { size_in_bytes, data_chunks },
+                    };
+                    Ok(PointeeInfo { pointee_ty: ty, layout })
+                }
+                RigidTy::Slice(slicee_ty) => {
+                    let size_in_bytes = slicee_ty.layout().unwrap().shape().size.bytes();
+                    let data_chunks = data_bytes_for_ty(&MachineInfo::target(), slicee_ty, 0)?;
+                    let layout = PointeeLayout::Slice {
+                        element_layout: TypeLayout { size_in_bytes, data_chunks },
+                    };
+                    Ok(PointeeInfo { pointee_ty: ty, layout })
+                }
+                RigidTy::Dynamic(..) => {
+                    Ok(PointeeInfo { pointee_ty: ty, layout: PointeeLayout::TraitObject })
+                }
+                _ => {
+                    if ty.layout().unwrap().shape().is_sized() {
+                        let size_in_bytes = ty.layout().unwrap().shape().size.bytes();
+                        let data_chunks = data_bytes_for_ty(&MachineInfo::target(), ty, 0)?;
+                        let layout = PointeeLayout::Static {
+                            layout: TypeLayout { size_in_bytes, data_chunks },
+                        };
+                        Ok(PointeeInfo { pointee_ty: ty, layout })
+                    } else {
+                        Err(
+                            "Can only determine unsized type layout information for slices and trait objects.".to_string(),
+                        )
+                    }
+                }
+            },
+            TyKind::Alias(..) | TyKind::Param(..) | TyKind::Bound(..) => {
+                Err("Can only determine type layout information for RigidTy.".to_string())
+            }
+        }
     }
 
     pub fn ty(&self) -> &Ty {
-        &self.ty
+        &self.pointee_ty
     }
 
-    /// Retrieve data layout for a type.
-    pub fn get_mask(&self) -> TypeLayout {
-        if self.ty.layout().unwrap().shape().is_sized() {
-            let ty_size = self.ty.layout().unwrap().shape().size.bytes();
-            let mut layout_mask = vec![false; ty_size];
-            for data_bytes in self.data_bytes.iter() {
-                for layout_item in
-                    layout_mask.iter_mut().skip(data_bytes.offset).take(data_bytes.size.bytes())
-                {
-                    *layout_item = true;
-                }
-            }
-            TypeLayout::Static { layout: layout_mask }
-        } else {
-            match self.ty.layout().unwrap().shape().fields {
-                FieldsShape::Array { stride, count: 0 } => {
-                    let layout_mask = {
-                        let data_bytes = DataBytes { offset: 0, size: stride };
-                        let ty_size = data_bytes.size.bytes();
-                        let mut layout_mask = vec![false; ty_size];
-                        for layout_item in layout_mask
-                            .iter_mut()
-                            .skip(data_bytes.offset)
-                            .take(data_bytes.size.bytes())
-                        {
-                            *layout_item = true;
-                        }
-                        layout_mask
-                    };
-                    TypeLayout::Slice { element_layout: layout_mask }
-                }
-                FieldsShape::Arbitrary { .. } => TypeLayout::TraitObject,
-                _ => unreachable!(),
-            }
-        }
+    pub fn layout(&self) -> &PointeeLayout {
+        &self.layout
     }
 }
 

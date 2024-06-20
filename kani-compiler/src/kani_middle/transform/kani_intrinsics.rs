@@ -8,25 +8,25 @@
 //! by the transformation.
 
 use crate::kani_middle::attributes::matches_diagnostic;
-use crate::kani_middle::find_fn_def;
 use crate::kani_middle::transform::body::{
     CheckType, InsertPosition, MutableBody, SourceInstruction,
 };
-use crate::kani_middle::transform::check_uninit::TypeInfo;
+use crate::kani_middle::transform::check_uninit::PointeeInfo;
 use crate::kani_middle::transform::check_values::{build_limits, ty_validity_per_offset};
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
 use rustc_middle::ty::TyCtxt;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{
-    AggregateKind, BinOp, Body, ConstOperand, Operand, Place, Rvalue, Statement, StatementKind,
-    RETURN_LOCAL,
+    BinOp, Body, ConstOperand, Operand, Place, Rvalue, Statement, StatementKind, RETURN_LOCAL,
 };
 use stable_mir::target::MachineInfo;
-use stable_mir::ty::{GenericArgKind, GenericArgs, MirConst, RigidTy, Ty, TyConst, TyKind};
+use stable_mir::ty::{GenericArgKind, GenericArgs, MirConst, RigidTy, TyConst, TyKind};
 use std::fmt::Debug;
 use strum_macros::AsRefStr;
 use tracing::trace;
+
+use super::check_uninit::{get_kani_sm_function, mk_layout_operand, PointeeLayout};
 
 /// Generate the body for a few Kani intrinsics.
 #[derive(Debug)]
@@ -167,74 +167,72 @@ impl IntrinsicGeneratorPass {
         // The first argument type.
         let arg_ty = new_body.locals()[1].ty;
         let TyKind::RigidTy(RigidTy::RawPtr(target_ty, _)) = arg_ty.kind() else { unreachable!() };
-        let type_layout = TypeInfo::from_ty(target_ty).map(|type_info| type_info.get_mask());
-        match type_layout {
-            Ok(type_layout) => {
-                // Given the pointer argument, call the shadow memory
-                let layout_operand = Operand::Move(Place {
-                    local: new_body.new_assignment(
-                        Rvalue::Aggregate(
-                            AggregateKind::Array(Ty::bool_ty()),
-                            type_layout
-                                .as_byte_layout()
-                                .iter()
-                                .map(|byte| {
-                                    Operand::Constant(ConstOperand {
-                                        span,
-                                        user_ty: None,
-                                        const_: MirConst::from_bool(*byte),
-                                    })
-                                })
-                                .collect(),
-                        ),
-                        &mut terminator,
-                        InsertPosition::Before,
-                    ),
-                    projection: vec![],
-                });
-                let shadow_memory_get = match target_ty.kind() {
-                    TyKind::RigidTy(RigidTy::Slice(_)) | TyKind::RigidTy(RigidTy::Str) => {
-                        Instance::resolve(
-                            find_fn_def(tcx, "KaniShadowMemoryGetSlice").unwrap(),
+        let pointee_info = PointeeInfo::from_ty(target_ty);
+        match pointee_info {
+            Ok(pointee_info) => {
+                match pointee_info.layout() {
+                    PointeeLayout::Static { layout } => {
+                        let shadow_memory_get_instance = Instance::resolve(
+                            get_kani_sm_function(tcx, "KaniMemInitSMGet"),
                             &GenericArgs(vec![
                                 GenericArgKind::Const(
                                     TyConst::try_from_target_usize(
-                                        type_layout.as_byte_layout().len() as u64,
+                                        layout.to_byte_mask().len() as u64
                                     )
                                     .unwrap(),
                                 ),
-                                GenericArgKind::Type(target_ty),
+                                GenericArgKind::Type(*pointee_info.ty()),
                             ]),
                         )
-                        .unwrap()
+                        .unwrap();
+                        let layout_operand = mk_layout_operand(
+                            &mut new_body,
+                            &mut terminator,
+                            InsertPosition::Before,
+                            layout,
+                        );
+                        new_body.add_call(
+                            &shadow_memory_get_instance,
+                            &mut terminator,
+                            InsertPosition::Before,
+                            vec![
+                                Operand::Copy(Place::from(1)),
+                                layout_operand,
+                                Operand::Copy(Place::from(2)),
+                            ],
+                            Place::from(ret_var),
+                        );
                     }
-                    _ => Instance::resolve(
-                        find_fn_def(tcx, "KaniShadowMemoryGet").unwrap(),
-                        &GenericArgs(vec![
-                            GenericArgKind::Const(
-                                TyConst::try_from_target_usize(
-                                    type_layout.as_byte_layout().len() as u64
-                                )
-                                .unwrap(),
-                            ),
-                            GenericArgKind::Type(target_ty),
-                        ]),
-                    )
-                    .unwrap(),
+                    PointeeLayout::Slice { element_layout } => {
+                        let shadow_memory_get_instance = Instance::resolve(
+                            get_kani_sm_function(tcx, "KaniMemInitSMGetSlice"),
+                            &GenericArgs(vec![
+                                GenericArgKind::Const(
+                                    TyConst::try_from_target_usize(
+                                        element_layout.to_byte_mask().len() as u64,
+                                    )
+                                    .unwrap(),
+                                ),
+                                GenericArgKind::Type(*pointee_info.ty()),
+                            ]),
+                        )
+                        .unwrap();
+                        let layout_operand = mk_layout_operand(
+                            &mut new_body,
+                            &mut terminator,
+                            InsertPosition::Before,
+                            element_layout,
+                        );
+                        new_body.add_call(
+                            &shadow_memory_get_instance,
+                            &mut terminator,
+                            InsertPosition::Before,
+                            vec![Operand::Copy(Place::from(1)), layout_operand],
+                            Place::from(ret_var),
+                        );
+                    }
+                    PointeeLayout::TraitObject => unimplemented!(),
                 };
-
-                // Retrieve current shadow memory info.
-                new_body.add_call(
-                    &shadow_memory_get,
-                    &mut terminator,
-                    InsertPosition::Before,
-                    vec![
-                        Operand::Copy(Place::from(1)),
-                        layout_operand,
-                        Operand::Copy(Place::from(2)),
-                    ],
-                    Place::from(ret_var),
-                );
             }
             Err(msg) => {
                 // We failed to retrieve the type layout.

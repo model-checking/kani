@@ -26,13 +26,13 @@ use tracing::{debug, trace};
 mod ty_layout;
 mod uninit_visitor;
 
-pub use ty_layout::{TypeInfo, TypeLayout};
+pub use ty_layout::{PointeeInfo, PointeeLayout, TypeLayout};
 use uninit_visitor::{CheckUninitVisitor, InitRelevantInstruction, SourceOp};
 
-const SKIPPED_DIAGNOSTIC_ITEMS: &[&str] = &["KaniShadowMemoryGetInner", "KaniShadowMemorySetInner"];
+const SKIPPED_DIAGNOSTIC_ITEMS: &[&str] = &["KaniMemInitSMGetInner", "KaniMemInitSMSetInner"];
 
 /// Retrieve a function definition by diagnostic string, caching the result.
-fn get_kani_sm_function(tcx: TyCtxt, diagnostic: &'static str) -> FnDef {
+pub fn get_kani_sm_function(tcx: TyCtxt, diagnostic: &'static str) -> FnDef {
     lazy_static! {
         static ref KANI_SM_FUNCTIONS: Mutex<HashMap<&'static str, FnDef>> =
             Mutex::new(HashMap::new());
@@ -140,7 +140,7 @@ impl UninitPass {
                     )
                 }
             };
-            match TypeInfo::from_ty(pointee_ty) {
+            match PointeeInfo::from_ty(pointee_ty) {
                 Ok(type_info) => type_info,
                 Err(_) => {
                     let reason = format!(
@@ -171,57 +171,61 @@ impl UninitPass {
         body: &mut MutableBody,
         source: &mut SourceInstruction,
         operation: SourceOp,
-        pointee_info: TypeInfo,
+        pointee_info: PointeeInfo,
     ) {
-        let pointee_ty_layout = pointee_info.get_mask();
-        // Resolve appropriate function depending on the pointer type.
-        let shadow_memory_get = match pointee_info.ty().kind() {
-            TyKind::RigidTy(RigidTy::Slice(_)) | TyKind::RigidTy(RigidTy::Str) => {
-                Instance::resolve(
-                    get_kani_sm_function(tcx, "KaniShadowMemoryGetSlice"),
+        let ret_place = Place {
+            local: body.new_local(Ty::bool_ty(), source.span(body.blocks()), Mutability::Not),
+            projection: vec![],
+        };
+        let ptr_operand = operation.mk_operand(body, source);
+        match pointee_info.layout() {
+            PointeeLayout::Static { layout } => {
+                let shadow_memory_get_instance = Instance::resolve(
+                    get_kani_sm_function(tcx, "KaniMemInitSMGet"),
+                    &GenericArgs(vec![
+                        GenericArgKind::Const(
+                            TyConst::try_from_target_usize(layout.to_byte_mask().len() as u64)
+                                .unwrap(),
+                        ),
+                        GenericArgKind::Type(*pointee_info.ty()),
+                    ]),
+                )
+                .unwrap();
+                let layout_operand = mk_layout_operand(body, source, operation.position(), layout);
+                body.add_call(
+                    &shadow_memory_get_instance,
+                    source,
+                    operation.position(),
+                    vec![ptr_operand.clone(), layout_operand, operation.expect_count()],
+                    ret_place.clone(),
+                );
+            }
+            PointeeLayout::Slice { element_layout } => {
+                let shadow_memory_get_instance = Instance::resolve(
+                    get_kani_sm_function(tcx, "KaniMemInitSMGetSlice"),
                     &GenericArgs(vec![
                         GenericArgKind::Const(
                             TyConst::try_from_target_usize(
-                                pointee_ty_layout.as_byte_layout().len() as u64,
+                                element_layout.to_byte_mask().len() as u64
                             )
                             .unwrap(),
                         ),
                         GenericArgKind::Type(*pointee_info.ty()),
                     ]),
                 )
-                .unwrap()
+                .unwrap();
+                let layout_operand =
+                    mk_layout_operand(body, source, operation.position(), element_layout);
+                body.add_call(
+                    &shadow_memory_get_instance,
+                    source,
+                    operation.position(),
+                    vec![ptr_operand.clone(), layout_operand],
+                    ret_place.clone(),
+                );
             }
-            TyKind::RigidTy(RigidTy::Dynamic(..)) => return, // Any layout is valid when dereferencing a pointer to `dyn Trait`.
-            _ => Instance::resolve(
-                get_kani_sm_function(tcx, "KaniShadowMemoryGet"),
-                &GenericArgs(vec![
-                    GenericArgKind::Const(
-                        TyConst::try_from_target_usize(
-                            pointee_ty_layout.as_byte_layout().len() as u64
-                        )
-                        .unwrap(),
-                    ),
-                    GenericArgKind::Type(*pointee_info.ty()),
-                ]),
-            )
-            .unwrap(),
+            PointeeLayout::TraitObject => return,
         };
-
-        let ret_place = Place {
-            local: body.new_local(Ty::bool_ty(), source.span(body.blocks()), Mutability::Not),
-            projection: vec![],
-        };
-        // Retrieve current shadow memory info.
-        let ptr_operand = operation.mk_operand(body, source);
-        let layout_operand =
-            mk_layout_operand(body, source, operation.position(), pointee_ty_layout);
-        body.add_call(
-            &shadow_memory_get,
-            source,
-            operation.position(),
-            vec![ptr_operand.clone(), layout_operand, operation.expect_count()],
-            ret_place.clone(),
-        );
         // Make sure all non-padding bytes are initialized.
         let ptr_operand_ty = ptr_operand.ty(body.locals()).unwrap();
         body.add_check(
@@ -240,66 +244,80 @@ impl UninitPass {
         body: &mut MutableBody,
         source: &mut SourceInstruction,
         operation: SourceOp,
-        pointee_info: TypeInfo,
+        pointee_info: PointeeInfo,
         value: bool,
     ) {
-        let pointee_ty_layout = pointee_info.get_mask();
-        // Resolve appropriate function depending on the pointer type.
-        let shadow_memory_set = match pointee_info.ty().kind() {
-            TyKind::RigidTy(RigidTy::Slice(_)) | TyKind::RigidTy(RigidTy::Str) => {
-                Instance::resolve(
-                    get_kani_sm_function(tcx, "KaniShadowMemorySetSlice"),
+        let ret_place = Place {
+            local: body.new_local(Ty::new_tuple(&[]), source.span(body.blocks()), Mutability::Not),
+            projection: vec![],
+        };
+        let ptr_operand = operation.mk_operand(body, source);
+
+        match pointee_info.layout() {
+            PointeeLayout::Static { layout } => {
+                let shadow_memory_set_instance = Instance::resolve(
+                    get_kani_sm_function(tcx, "KaniMemInitSMSet"),
+                    &GenericArgs(vec![
+                        GenericArgKind::Const(
+                            TyConst::try_from_target_usize(layout.to_byte_mask().len() as u64)
+                                .unwrap(),
+                        ),
+                        GenericArgKind::Type(*pointee_info.ty()),
+                    ]),
+                )
+                .unwrap();
+                let layout_operand = mk_layout_operand(body, source, operation.position(), layout);
+                body.add_call(
+                    &shadow_memory_set_instance,
+                    source,
+                    operation.position(),
+                    vec![
+                        ptr_operand,
+                        layout_operand,
+                        operation.expect_count(),
+                        Operand::Constant(ConstOperand {
+                            span: source.span(body.blocks()),
+                            user_ty: None,
+                            const_: MirConst::from_bool(value),
+                        }),
+                    ],
+                    ret_place,
+                );
+            }
+            PointeeLayout::Slice { element_layout } => {
+                let shadow_memory_set_instance = Instance::resolve(
+                    get_kani_sm_function(tcx, "KaniMemInitSMSetSlice"),
                     &GenericArgs(vec![
                         GenericArgKind::Const(
                             TyConst::try_from_target_usize(
-                                pointee_ty_layout.as_byte_layout().len() as u64,
+                                element_layout.to_byte_mask().len() as u64
                             )
                             .unwrap(),
                         ),
                         GenericArgKind::Type(*pointee_info.ty()),
                     ]),
                 )
-                .unwrap()
+                .unwrap();
+                let layout_operand =
+                    mk_layout_operand(body, source, operation.position(), element_layout);
+                body.add_call(
+                    &shadow_memory_set_instance,
+                    source,
+                    operation.position(),
+                    vec![
+                        ptr_operand,
+                        layout_operand,
+                        Operand::Constant(ConstOperand {
+                            span: source.span(body.blocks()),
+                            user_ty: None,
+                            const_: MirConst::from_bool(value),
+                        }),
+                    ],
+                    ret_place,
+                );
             }
-            TyKind::RigidTy(RigidTy::Dynamic(..)) => return, // Any layout is valid when dereferencing a pointer to `dyn Trait`.
-            _ => Instance::resolve(
-                get_kani_sm_function(tcx, "KaniShadowMemorySet"),
-                &GenericArgs(vec![
-                    GenericArgKind::Const(
-                        TyConst::try_from_target_usize(
-                            pointee_ty_layout.as_byte_layout().len() as u64
-                        )
-                        .unwrap(),
-                    ),
-                    GenericArgKind::Type(*pointee_info.ty()),
-                ]),
-            )
-            .unwrap(),
+            PointeeLayout::TraitObject => {}
         };
-        let ret_place = Place {
-            local: body.new_local(Ty::new_tuple(&[]), source.span(body.blocks()), Mutability::Not),
-            projection: vec![],
-        };
-        // Initialize all non-padding bytes.
-        let ptr_operand = operation.mk_operand(body, source);
-        let layout_operand =
-            mk_layout_operand(body, source, operation.position(), pointee_ty_layout);
-        body.add_call(
-            &shadow_memory_set,
-            source,
-            operation.position(),
-            vec![
-                ptr_operand,
-                layout_operand,
-                operation.expect_count(),
-                Operand::Constant(ConstOperand {
-                    span: source.span(body.blocks()),
-                    user_ty: None,
-                    const_: MirConst::from_bool(value),
-                }),
-            ],
-            ret_place,
-        );
     }
 
     fn unsupported_check(
@@ -321,18 +339,18 @@ impl UninitPass {
     }
 }
 
-fn mk_layout_operand(
+pub fn mk_layout_operand(
     body: &mut MutableBody,
     source: &mut SourceInstruction,
     position: InsertPosition,
-    layout: TypeLayout,
+    layout: &TypeLayout,
 ) -> Operand {
     Operand::Move(Place {
         local: body.new_assignment(
             Rvalue::Aggregate(
                 AggregateKind::Array(Ty::bool_ty()),
                 layout
-                    .as_byte_layout()
+                    .to_byte_mask()
                     .iter()
                     .map(|byte| {
                         Operand::Constant(ConstOperand {
