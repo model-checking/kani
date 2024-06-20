@@ -17,28 +17,30 @@ use strum_macros::AsRefStr;
 
 #[derive(AsRefStr, Clone, Debug)]
 pub enum SourceOp {
-    Get { place: Place, count: Operand },
-    Set { place: Place, count: Operand, value: bool },
-    BlessConst { constant: ConstOperand, count: Operand, value: bool },
-    BlessRef { place: Place, count: Operand, value: bool },
-    Unsupported { reason: String },
+    Get { operand: Operand, count: Operand, position: InsertPosition },
+    Set { operand: Operand, count: Operand, value: bool, position: InsertPosition },
+    SetRef { operand: Operand, count: Operand, value: bool, position: InsertPosition },
+    Unsupported { reason: String, position: InsertPosition },
 }
 
 impl SourceOp {
     pub fn mk_operand(&self, body: &mut MutableBody, source: &mut SourceInstruction) -> Operand {
         match self {
-            SourceOp::Get { place, .. } | SourceOp::Set { place, .. } => {
-                Operand::Copy(place.clone())
-            }
-            SourceOp::BlessRef { place, .. } => Operand::Copy(Place {
-                local: body.new_assignment(
-                    Rvalue::AddressOf(Mutability::Not, place.clone()),
-                    source,
-                    self.position(),
-                ),
+            SourceOp::Get { operand, .. } | SourceOp::Set { operand, .. } => operand.clone(),
+            SourceOp::SetRef { operand, .. } => Operand::Copy(Place {
+                local: {
+                    let place = match operand {
+                        Operand::Copy(place) | Operand::Move(place) => place,
+                        Operand::Constant(_) => unreachable!(),
+                    };
+                    body.new_assignment(
+                        Rvalue::AddressOf(Mutability::Not, place.clone()),
+                        source,
+                        self.position(),
+                    )
+                },
                 projection: vec![],
             }),
-            SourceOp::BlessConst { constant, .. } => Operand::Constant(constant.clone()),
             SourceOp::Unsupported { .. } => unreachable!(),
         }
     }
@@ -47,24 +49,18 @@ impl SourceOp {
         match self {
             SourceOp::Get { count, .. }
             | SourceOp::Set { count, .. }
-            | SourceOp::BlessConst { count, .. }
-            | SourceOp::BlessRef { count, .. } => count.clone(),
+            | SourceOp::SetRef { count, .. } => count.clone(),
             SourceOp::Unsupported { .. } => unreachable!(),
         }
     }
 
     pub fn position(&self) -> InsertPosition {
         match self {
-            SourceOp::Get { .. }
-            | SourceOp::BlessConst { .. }
-            | SourceOp::BlessRef { .. }
-            | SourceOp::Unsupported { .. } => InsertPosition::Before,
-            SourceOp::Set { .. } => InsertPosition::After,
+            SourceOp::Get { position, .. }
+            | SourceOp::SetRef { position, .. }
+            | SourceOp::Unsupported { position, .. }
+            | SourceOp::Set { position, .. } => *position,
         }
-    }
-
-    pub fn should_be_inserted_before(&self) -> bool {
-        self.position() == InsertPosition::Before
     }
 }
 
@@ -72,8 +68,19 @@ impl SourceOp {
 pub struct InitRelevantInstruction {
     /// The instruction that affects the state of the memory.
     pub source: SourceInstruction,
-    /// All memory-related operations in this instructions.
-    pub operations: Vec<SourceOp>,
+    /// All memory-related operations that should happen after the instruction.
+    pub before_instruction: Vec<SourceOp>,
+    /// All memory-related operations that should happen after the instruction.
+    pub after_instruction: Vec<SourceOp>,
+}
+
+impl InitRelevantInstruction {
+    pub fn push_operation(&mut self, source_op: SourceOp) {
+        match source_op.position() {
+            InsertPosition::Before => self.before_instruction.push(source_op),
+            InsertPosition::After => self.after_instruction.push(source_op),
+        }
+    }
 }
 
 pub struct CheckUninitVisitor<'a> {
@@ -89,13 +96,6 @@ pub struct CheckUninitVisitor<'a> {
     pub target: Option<InitRelevantInstruction>,
     /// The basic block being visited.
     bb: BasicBlockIdx,
-}
-
-fn expect_place(op: &Operand) -> &Place {
-    match op {
-        Operand::Copy(place) | Operand::Move(place) => place,
-        Operand::Constant(_) => unreachable!(),
-    }
 }
 
 fn mk_const_operand(value: usize, span: Span) -> Operand {
@@ -143,12 +143,13 @@ impl<'a> CheckUninitVisitor<'a> {
         visitor.target
     }
 
-    fn push_target(&mut self, op: SourceOp) {
+    fn push_target(&mut self, source_op: SourceOp) {
         let target = self.target.get_or_insert_with(|| InitRelevantInstruction {
             source: self.current,
-            operations: vec![],
+            after_instruction: vec![],
+            before_instruction: vec![],
         });
-        target.operations.push(op);
+        target.push_operation(source_op);
     }
 }
 
@@ -163,14 +164,16 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                     self.super_statement(stmt, location);
                     // Source is a *const T and it must be initialized.
                     self.push_target(SourceOp::Get {
-                        place: expect_place(&copy.src).clone(),
+                        operand: copy.src.clone(),
                         count: copy.count.clone(),
+                        position: InsertPosition::Before,
                     });
                     // Destimation is a *mut T so it gets initialized.
                     self.push_target(SourceOp::Set {
-                        place: expect_place(&copy.dst).clone(),
+                        operand: copy.dst.clone(),
                         count: copy.count.clone(),
                         value: true,
+                        position: InsertPosition::After,
                     });
                 }
                 StatementKind::Assign(place, rvalue) => {
@@ -180,9 +183,10 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                     if let Some(place_without_deref) = try_remove_topmost_deref(place) {
                         if place_without_deref.ty(&self.locals).unwrap().kind().is_raw_ptr() {
                             self.push_target(SourceOp::Set {
-                                place: place_without_deref,
+                                operand: Operand::Copy(place_without_deref),
                                 count: mk_const_operand(1, location.span()),
                                 value: true,
+                                position: InsertPosition::After,
                             });
                         }
                     }
@@ -190,9 +194,10 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                     if place.ty(&self.locals).unwrap().kind().is_raw_ptr() {
                         if let Rvalue::AddressOf(..) = rvalue {
                             self.push_target(SourceOp::Set {
-                                place: place.clone(),
+                                operand: Operand::Copy(place.clone()),
                                 count: mk_const_operand(1, location.span()),
                                 value: true,
+                                position: InsertPosition::After,
                             });
                         }
                     }
@@ -200,9 +205,10 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                 StatementKind::Deinit(place) => {
                     self.super_statement(stmt, location);
                     self.push_target(SourceOp::Set {
-                        place: place.clone(),
+                        operand: Operand::Copy(place.clone()),
                         count: mk_const_operand(1, location.span()),
                         value: false,
+                        position: InsertPosition::After,
                     });
                 }
                 StatementKind::FakeRead(_, _)
@@ -232,7 +238,10 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                         Ok(instance) => instance,
                         Err(reason) => {
                             self.super_terminator(term, location);
-                            self.push_target(SourceOp::Unsupported { reason });
+                            self.push_target(SourceOp::Unsupported {
+                                reason,
+                                position: InsertPosition::Before,
+                            });
                             return;
                         }
                     };
@@ -305,9 +314,10 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                         TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Mut))
                                     ));
                                     self.push_target(SourceOp::Set {
-                                        place: expect_place(&args[0]).clone(),
+                                        operand: args[0].clone(),
                                         count: mk_const_operand(1, location.span()),
                                         value: true,
+                                        position: InsertPosition::After,
                                     });
                                 }
                                 "atomic_xchg_seqcst"
@@ -329,9 +339,10 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                         TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Mut))
                                     ));
                                     self.push_target(SourceOp::Set {
-                                        place: expect_place(&args[0]).clone(),
+                                        operand: args[0].clone(),
                                         count: mk_const_operand(1, location.span()),
                                         value: true,
+                                        position: InsertPosition::After,
                                     });
                                 }
                                 "atomic_load_seqcst"
@@ -348,8 +359,9 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                         TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Not))
                                     ));
                                     self.push_target(SourceOp::Get {
-                                        place: expect_place(&args[0]).clone(),
+                                        operand: args[0].clone(),
                                         count: mk_const_operand(1, location.span()),
+                                        position: InsertPosition::Before,
                                     });
                                 }
                                 name if name.starts_with("atomic_cxchg") => {
@@ -363,8 +375,9 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                         TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Mut))
                                     ));
                                     self.push_target(SourceOp::Get {
-                                        place: expect_place(&args[0]).clone(),
+                                        operand: args[0].clone(),
                                         count: mk_const_operand(1, location.span()),
+                                        position: InsertPosition::Before,
                                     });
                                 }
                                 "bitreverse" | "black_box" | "breakpoint" | "bswap"
@@ -388,12 +401,14 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                         TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Not))
                                     ));
                                     self.push_target(SourceOp::Get {
-                                        place: expect_place(&args[0]).clone(),
+                                        operand: args[0].clone(),
                                         count: args[2].clone(),
+                                        position: InsertPosition::Before,
                                     });
                                     self.push_target(SourceOp::Get {
-                                        place: expect_place(&args[1]).clone(),
+                                        operand: args[1].clone(),
                                         count: args[2].clone(),
+                                        position: InsertPosition::Before,
                                     });
                                 }
                                 "copy" => {
@@ -411,13 +426,15 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                         TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Mut))
                                     ));
                                     self.push_target(SourceOp::Get {
-                                        place: expect_place(&args[0]).clone(),
+                                        operand: args[0].clone(),
                                         count: args[2].clone(),
+                                        position: InsertPosition::Before,
                                     });
                                     self.push_target(SourceOp::Set {
-                                        place: expect_place(&args[1]).clone(),
+                                        operand: args[1].clone(),
                                         count: args[2].clone(),
                                         value: true,
+                                        position: InsertPosition::After,
                                     });
                                 }
                                 "copy_nonoverlapping" => unreachable!(
@@ -507,12 +524,14 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                         TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Mut))
                                     ));
                                     self.push_target(SourceOp::Get {
-                                        place: expect_place(&args[0]).clone(),
+                                        operand: args[0].clone(),
                                         count: mk_const_operand(1, location.span()),
+                                        position: InsertPosition::Before,
                                     });
                                     self.push_target(SourceOp::Get {
-                                        place: expect_place(&args[1]).clone(),
+                                        operand: args[1].clone(),
                                         count: mk_const_operand(1, location.span()),
+                                        position: InsertPosition::Before,
                                     });
                                 }
                                 "unaligned_volatile_load" => {
@@ -526,8 +545,9 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                         TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Not))
                                     ));
                                     self.push_target(SourceOp::Get {
-                                        place: expect_place(&args[0]).clone(),
+                                        operand: args[0].clone(),
                                         count: mk_const_operand(1, location.span()),
+                                        position: InsertPosition::Before,
                                     });
                                 }
                                 "unchecked_add" | "unchecked_mul" | "unchecked_shl"
@@ -553,13 +573,15 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                         TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Mut))
                                     ));
                                     self.push_target(SourceOp::Get {
-                                        place: expect_place(&args[0]).clone(),
+                                        operand: args[0].clone(),
                                         count: args[2].clone(),
+                                        position: InsertPosition::Before,
                                     });
                                     self.push_target(SourceOp::Set {
-                                        place: expect_place(&args[1]).clone(),
+                                        operand: args[1].clone(),
                                         count: args[2].clone(),
                                         value: true,
+                                        position: InsertPosition::After,
                                     });
                                 }
                                 "volatile_load" => {
@@ -573,8 +595,9 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                         TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Not))
                                     ));
                                     self.push_target(SourceOp::Get {
-                                        place: expect_place(&args[0]).clone(),
+                                        operand: args[0].clone(),
                                         count: mk_const_operand(1, location.span()),
+                                        position: InsertPosition::Before,
                                     });
                                 }
                                 "volatile_store" => {
@@ -588,9 +611,10 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                         TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Mut))
                                     ));
                                     self.push_target(SourceOp::Set {
-                                        place: expect_place(&args[0]).clone(),
+                                        operand: args[0].clone(),
                                         count: mk_const_operand(1, location.span()),
                                         value: true,
+                                        position: InsertPosition::After,
                                     });
                                 }
                                 "vtable_size" | "vtable_align" | "wrapping_add"
@@ -606,14 +630,16 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                         TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Mut))
                                     ));
                                     self.push_target(SourceOp::Set {
-                                        place: expect_place(&args[0]).clone(),
+                                        operand: args[0].clone(),
                                         count: args[2].clone(),
                                         value: true,
+                                        position: InsertPosition::After,
                                     })
                                 }
                                 intrinsic => {
                                     self.push_target(SourceOp::Unsupported {
-                                    reason: format!("Kani does not support reasoning about memory initialization of intrinsic `{intrinsic}`.")
+                                    reason: format!("Kani does not support reasoning about memory initialization of intrinsic `{intrinsic}`."),
+                                    position: InsertPosition::Before
                                 });
                                 }
                             }
@@ -628,17 +654,19 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                     "alloc::alloc::__rust_alloc_zeroed" => {
                                         /* Memory is initialized here, need to update shadow memory. */
                                         self.push_target(SourceOp::Set {
-                                            place: destination.clone(),
+                                            operand: Operand::Copy(destination.clone()),
                                             count: args[0].clone(),
                                             value: true,
+                                            position: InsertPosition::After,
                                         });
                                     }
                                     "alloc::alloc::__rust_dealloc" => {
                                         /* Memory is uninitialized here, need to update shadow memory. */
                                         self.push_target(SourceOp::Set {
-                                            place: expect_place(&args[0]).clone(),
+                                            operand: args[0].clone(),
                                             count: args[1].clone(),
                                             value: false,
+                                            position: InsertPosition::After,
                                         });
                                     }
                                     _ => {}
@@ -653,16 +681,18 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                     let place_ty = place.ty(&self.locals).unwrap();
                     // When drop is codegen'ed, a reference is taken to the place which is later implicitly coerced to a pointer.
                     // Hence, we need to bless this pointer as initialized.
-                    self.push_target(SourceOp::BlessRef {
-                        place: place.clone(),
+                    self.push_target(SourceOp::SetRef {
+                        operand: Operand::Copy(place.clone()),
                         count: mk_const_operand(1, location.span()),
                         value: true,
+                        position: InsertPosition::Before,
                     });
                     if place_ty.kind().is_raw_ptr() {
                         self.push_target(SourceOp::Set {
-                            place: place.clone(),
+                            operand: Operand::Copy(place.clone()),
                             count: mk_const_operand(1, location.span()),
                             value: false,
+                            position: InsertPosition::After,
                         });
                     }
                 }
@@ -687,8 +717,9 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                     let ptr_ty = intermediate_place.ty(self.locals).unwrap();
                     if ptr_ty.kind().is_raw_ptr() {
                         self.push_target(SourceOp::Get {
-                            place: intermediate_place.clone(),
+                            operand: Operand::Copy(intermediate_place.clone()),
                             count: mk_const_operand(1, location.span()),
+                            position: InsertPosition::Before,
                         });
                     }
                 }
@@ -698,6 +729,7 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                     {
                         self.push_target(SourceOp::Unsupported {
                             reason: "Kani does not support reasoning about memory initialization of unions.".to_string(),
+                            position: InsertPosition::Before
                         });
                     }
                 }
@@ -719,10 +751,11 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
             if let ConstantKind::Allocated(allocation) = constant.const_.kind() {
                 for (_, prov) in &allocation.provenance.ptrs {
                     if let GlobalAlloc::Static(_) = GlobalAlloc::from(prov.0) {
-                        self.push_target(SourceOp::BlessConst {
-                            constant: constant.clone(),
+                        self.push_target(SourceOp::Set {
+                            operand: Operand::Constant(constant.clone()),
                             count: mk_const_operand(1, location.span()),
                             value: true,
+                            position: InsertPosition::Before,
                         });
                     };
                 }
@@ -735,6 +768,7 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
         if let Rvalue::Cast(CastKind::PointerCoercion(PointerCoercion::Unsize), _, _) = rvalue {
             self.push_target(SourceOp::Unsupported {
                 reason: "Kani does not support reasoning about memory initialization of unsized pointers.".to_string(),
+                position: InsertPosition::Before
             });
         };
         self.super_rvalue(rvalue, location);

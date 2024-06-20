@@ -21,53 +21,70 @@ pub type ByteLayout = Vec<bool>;
 // Depending on whether the type is statically or dynamically sized,
 // the layout of the element or the layout of the actual type is returned.
 pub enum TypeLayout {
-    StaticallySized { layout: ByteLayout },
-    DynamicallySized { element_layout: ByteLayout },
+    Static { layout: ByteLayout },
+    Slice { element_layout: ByteLayout },
+    TraitObject,
 }
 
 impl TypeLayout {
+    // Convert type layout to a vector of byte flags.
+    pub fn as_byte_layout(&self) -> ByteLayout {
+        match self {
+            TypeLayout::Static { layout } => layout.clone(),
+            TypeLayout::Slice { element_layout } => element_layout.clone(),
+            TypeLayout::TraitObject => vec![],
+        }
+    }
+}
+
+pub struct TypeInfo {
+    ty: Ty,
+    data_bytes: Vec<DataBytes>,
+}
+
+impl TypeInfo {
+    pub fn from_ty(ty: Ty) -> Result<Self, String> {
+        Ok(Self { ty, data_bytes: data_bytes_for_ty(&MachineInfo::target(), ty, 0)? })
+    }
+
+    pub fn ty(&self) -> &Ty {
+        &self.ty
+    }
+
     /// Retrieve data layout for a type.
-    pub fn get_mask(ty: Ty) -> Result<Self, String> {
-        if ty.layout().unwrap().shape().is_sized() {
-            let ty_layout = data_bytes_for_ty(&MachineInfo::target(), ty, 0)?;
-            let ty_size = ty.layout().unwrap().shape().size.bytes();
+    pub fn get_mask(&self) -> TypeLayout {
+        if self.ty.layout().unwrap().shape().is_sized() {
+            let ty_size = self.ty.layout().unwrap().shape().size.bytes();
             let mut layout_mask = vec![false; ty_size];
-            for data_bytes in ty_layout.iter() {
+            for data_bytes in self.data_bytes.iter() {
                 for layout_item in
                     layout_mask.iter_mut().skip(data_bytes.offset).take(data_bytes.size.bytes())
                 {
                     *layout_item = true;
                 }
             }
-            Ok(Self::StaticallySized { layout: layout_mask })
+            TypeLayout::Static { layout: layout_mask }
         } else {
-            let layout_mask = {
-                let data_bytes = DataBytes {
-                    offset: 0,
-                    size: match ty.layout().unwrap().shape().fields {
-                        FieldsShape::Array { stride, count: 0 } => stride,
-                        _ => MachineSize::from_bits(0),
-                    },
-                };
-                let ty_size = data_bytes.size.bytes();
-                let mut layout_mask = vec![false; ty_size];
-                for layout_item in
-                    layout_mask.iter_mut().skip(data_bytes.offset).take(data_bytes.size.bytes())
-                {
-                    *layout_item = true;
+            match self.ty.layout().unwrap().shape().fields {
+                FieldsShape::Array { stride, count: 0 } => {
+                    let layout_mask = {
+                        let data_bytes = DataBytes { offset: 0, size: stride };
+                        let ty_size = data_bytes.size.bytes();
+                        let mut layout_mask = vec![false; ty_size];
+                        for layout_item in layout_mask
+                            .iter_mut()
+                            .skip(data_bytes.offset)
+                            .take(data_bytes.size.bytes())
+                        {
+                            *layout_item = true;
+                        }
+                        layout_mask
+                    };
+                    TypeLayout::Slice { element_layout: layout_mask }
                 }
-                layout_mask
-            };
-
-            Ok(Self::DynamicallySized { element_layout: layout_mask })
-        }
-    }
-
-    // Convert type layout to a vector of byte flags.
-    pub fn as_byte_layout(&self) -> &ByteLayout {
-        match self {
-            TypeLayout::StaticallySized { layout } => layout,
-            TypeLayout::DynamicallySized { element_layout } => element_layout,
+                FieldsShape::Arbitrary { .. } => TypeLayout::TraitObject,
+                _ => unreachable!(),
+            }
         }
     }
 }
@@ -240,8 +257,6 @@ fn data_bytes_for_ty(
             }
         }
         FieldsShape::Union(_) => Err(format!("Unsupported {ty:?}")),
-        FieldsShape::Array { .. } => {
-            unreachable!("Expected dynamically sized type for {ty:?}")
-        }
+        FieldsShape::Array { .. } => Ok(vec![]),
     }
 }

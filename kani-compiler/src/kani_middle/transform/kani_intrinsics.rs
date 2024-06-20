@@ -12,7 +12,7 @@ use crate::kani_middle::find_fn_def;
 use crate::kani_middle::transform::body::{
     CheckType, InsertPosition, MutableBody, SourceInstruction,
 };
-use crate::kani_middle::transform::check_uninit::TypeLayout;
+use crate::kani_middle::transform::check_uninit::TypeInfo;
 use crate::kani_middle::transform::check_values::{build_limits, ty_validity_per_offset};
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
@@ -167,7 +167,7 @@ impl IntrinsicGeneratorPass {
         // The first argument type.
         let arg_ty = new_body.locals()[1].ty;
         let TyKind::RigidTy(RigidTy::RawPtr(target_ty, _)) = arg_ty.kind() else { unreachable!() };
-        let type_layout = TypeLayout::get_mask(target_ty);
+        let type_layout = TypeInfo::from_ty(target_ty).map(|type_info| type_info.get_mask());
         match type_layout {
             Ok(type_layout) => {
                 // Given the pointer argument, call the shadow memory
