@@ -51,12 +51,9 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// Return the mangled name to be used in the symbol table.
-    ///
-    /// We special case main function in order to support `--function main`.
-    // TODO: Get rid of this: https://github.com/model-checking/kani/issues/2129
+    #[inline(always)]
     pub fn symbol_name_stable(&self, instance: Instance) -> String {
-        let pretty = instance.name();
-        if pretty == "main" { pretty } else { instance.mangled_name() }
+        instance.mangled_name()
     }
 
     /// The name for a tuple field
