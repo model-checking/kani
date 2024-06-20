@@ -125,6 +125,7 @@ macro_rules! kani_mem {
             let (thin_ptr, metadata) = ptr.to_raw_parts();
             metadata.is_ptr_aligned(thin_ptr, Internal)
                 && is_inbounds(&metadata, thin_ptr)
+                && is_initialized(ptr, 1)
                 && unsafe { has_valid_value(ptr) }
         }
 
@@ -153,7 +154,9 @@ macro_rules! kani_mem {
             <T as Pointee>::Metadata: PtrProperties<T>,
         {
             let (thin_ptr, metadata) = ptr.to_raw_parts();
-            is_inbounds(&metadata, thin_ptr) && unsafe { has_valid_value(ptr) }
+            is_inbounds(&metadata, thin_ptr)
+                && is_initialized(ptr, 1)
+                && unsafe { has_valid_value(ptr) }
         }
 
         /// Checks that `data_ptr` points to an allocation that can hold data of size calculated from `T`.

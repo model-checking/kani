@@ -29,7 +29,6 @@ pub mod contracts {
     /// the pointer points to must not get mutated (except inside UnsafeCell).
     /// Taken from: <https://doc.rust-lang.org/std/ptr/struct.NonNull.html#method.as_ref>
     #[requires(can_dereference(obj.as_ptr()))]
-    #[requires(is_initialized(obj.as_ptr(), 1))]
     pub unsafe fn as_ref<'a, T>(obj: &NonNull<T>) -> &'a T {
         obj.as_ref()
     }
@@ -49,7 +48,6 @@ pub mod contracts {
     ///
     /// Note that even if `T` has size 0, the pointer must be non-null and properly aligned.
     #[requires(can_dereference(dst))]
-    #[requires(is_initialized(dst, 1))]
     #[modifies(dst)]
     pub unsafe fn replace<T>(dst: *mut T, src: T) -> T {
         std::ptr::replace(dst, src)
