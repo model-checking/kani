@@ -160,11 +160,12 @@ impl KaniSession {
     pub fn cbmc_check_flags(&self) -> Vec<OsString> {
         let mut args = Vec::new();
 
-        if !self.args.checks.memory_safety_on() {
-            args.push("--no-bounds-check".into());
-            args.push("--no-pointer-check".into());
+        if self.args.checks.memory_safety_on() {
+            args.push("--bounds-check".into());
+            args.push("--pointer-check".into());
         }
         if self.args.checks.overflow_on() {
+            args.push("--div-by-zero-check".into());
             args.push("--float-overflow-check".into());
             args.push("--nan-check".into());
             // With PR #647 we use Rust's `-C overflow-checks=on` instead of:
@@ -178,15 +179,11 @@ impl KaniSession {
             // We might want to create a transformation pass instead of enabling CBMC since Kani
             // compiler sometimes rely on the bitwise conversion of signed <-> unsigned.
             // args.push("--conversion-check".into());
-        } else {
-            args.push("--no-div-by-zero-check".into());
         }
 
-        if !self.args.checks.unwinding_on() {
-            args.push("--no-unwinding-assertions".into());
-        } else {
-            // TODO: remove once https://github.com/diffblue/cbmc/pull/8343 has been merged and
-            // released.
+        if self.args.checks.unwinding_on() {
+            // TODO: With CBMC v6 the below can be removed as those are defaults.
+            args.push("--unwinding-assertions".into());
             args.push("--no-self-loops-to-assumptions".into());
         }
 

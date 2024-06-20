@@ -329,7 +329,6 @@ pub enum CheckStatus {
     Satisfied, // for `cover` properties only
     Success,
     Undetermined,
-    Unknown,
     Unreachable,
     Uncovered,     // for `code_coverage` properties only
     Unsatisfiable, // for `cover` properties only
@@ -345,9 +344,6 @@ impl std::fmt::Display for CheckStatus {
             CheckStatus::Failure => style("FAILURE").red(),
             CheckStatus::Unreachable => style("UNREACHABLE").yellow(),
             CheckStatus::Undetermined => style("UNDETERMINED").yellow(),
-            // CBMC 6+ uses UNKNOWN when another property of undefined behavior failed, making it
-            // impossible to definitively conclude whether other properties hold or not.
-            CheckStatus::Unknown => style("UNDETERMINED").yellow(),
             CheckStatus::Unsatisfiable => style("UNSATISFIABLE").yellow(),
         };
         write!(f, "{check_str}")
