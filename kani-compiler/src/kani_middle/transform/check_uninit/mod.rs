@@ -113,6 +113,7 @@ impl TransformPass for UninitPass {
 }
 
 impl UninitPass {
+    /// Inject memory initialization checks for each operation in an instruction.
     fn build_check_for_instruction(
         &self,
         tcx: TyCtxt,
@@ -130,6 +131,7 @@ impl UninitPass {
         }
     }
 
+    /// Inject memory initialization check for an operation.
     fn build_check_for_operation(
         &self,
         tcx: TyCtxt,
@@ -181,6 +183,8 @@ impl UninitPass {
         }
     }
 
+    // Inject a load from shadow memory tracking memory initialization and an assertion that all
+    // non-padding bytes are initialized.
     fn build_get_and_check(
         &self,
         tcx: TyCtxt,
@@ -269,6 +273,8 @@ impl UninitPass {
         )
     }
 
+    // Inject a store into shadow memory tracking memory initialization to initialize or
+    // deinitialize all non-padding bytes.
     fn build_set(
         &self,
         tcx: TyCtxt,
@@ -383,6 +389,7 @@ impl UninitPass {
     }
 }
 
+/// Generate a bit array denoting padding vs data bytes for a layout.
 pub fn mk_layout_operand(
     body: &mut MutableBody,
     source: &mut SourceInstruction,
