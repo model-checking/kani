@@ -1,0 +1,7 @@
+error: Cannot derive `Invariant` for `PositivePoint`
+  --> tests/ui/derive-invariant/helper-no-expr/helper-no-expr.rs:11:10
+   |
+11 | #[derive(kani::Invariant)]
+   |          ^^^^^^^^^^^^^^^
+   |
+note: invariant condition in field `x` could not be parsed - `Err("unexpected end of input, expected an expression")`

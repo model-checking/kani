@@ -1,0 +1,7 @@
+error: Cannot derive `Invariant` for `PositivePoint`
+  --> tests/ui/derive-invariant/helper-empty/helper-empty.rs:11:10
+   |
+11 | #[derive(kani::Invariant)]
+   |          ^^^^^^^^^^^^^^^
+   |
+note: invariant condition in field `x` could not be parsed - `Err("expected attribute arguments in parentheses: #[invariant(...)]")`
