@@ -3,20 +3,8 @@
 //! This module defines the structure for a Kani project.
 //! The goal is to provide one project view independent on the build system (cargo / standalone
 //! rustc) and its configuration (e.g.: linker type).
-//!
-//! For `--function`, we still have a hack in-place that merges all the artifacts together.
-//! The reason is the following:
-//!  - For `--function`, the compiler doesn't generate any metadata that indicates which
-//!    functions each goto model includes. Thus, we don't have an easy way to tell which goto
-//!    files are relevant for the function verification. This is also another flag that we don't
-//!    expect to stabilize, so we also opted to use the same hack as implemented before the MIR
-//!    Linker was introduced to merge everything together.
-//!
-//! Note that for `--function` we also inject a mock `HarnessMetadata` to the project. This
-//! allows the rest of the driver to handle a function under verification the same way it handle
-//! other harnesses.
 
-use crate::metadata::{from_json, merge_kani_metadata, mock_proof_harness};
+use crate::metadata::from_json;
 use crate::session::KaniSession;
 use crate::util::crate_name;
 use anyhow::{Context, Result};
@@ -25,8 +13,6 @@ use kani_metadata::{
 };
 use std::env::current_dir;
 use std::fs;
-use std::fs::File;
-use std::io::BufWriter;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use tracing::{debug, trace};
@@ -49,15 +35,6 @@ pub struct Project {
     pub outdir: PathBuf,
     /// The collection of artifacts kept as part of this project.
     artifacts: Vec<Artifact>,
-    /// A flag that indicated whether all artifacts have been merged or not.
-    ///
-    /// This allow us to provide a consistent behavior for `--function`.
-    /// For this option, we still merge all the artifacts together, so the
-    /// `merged_artifacts` flag will be set to `true`.
-    /// When this flag is `true`, there should only be up to one artifact of any given type.
-    /// When this flag is `false`, there may be multiple artifacts for any given type. However,
-    /// only up to one artifact for each
-    pub merged_artifacts: bool,
     /// Records the cargo metadata from the build, if there was any
     pub cargo_metadata: Option<cargo_metadata::Metadata>,
     /// For build `keep_going` mode, we collect the targets that we failed to compile.
@@ -87,14 +64,10 @@ impl Project {
         harness: &HarnessMetadata,
         typ: ArtifactType,
     ) -> Option<&Artifact> {
-        let expected_path = if self.merged_artifacts {
-            None
-        } else {
-            harness
-                .goto_file
-                .as_ref()
-                .and_then(|goto_file| convert_type(goto_file, SymTabGoto, typ).canonicalize().ok())
-        };
+        let expected_path = harness
+            .goto_file
+            .as_ref()
+            .and_then(|goto_file| convert_type(goto_file, SymTabGoto, typ).canonicalize().ok());
         trace!(?harness.goto_file, ?expected_path, ?typ, "get_harness_artifact");
         self.artifacts.iter().find(|artifact| {
             artifact.has_type(typ)
@@ -142,14 +115,7 @@ impl Project {
             }
         }
 
-        Ok(Project {
-            outdir,
-            metadata,
-            artifacts,
-            merged_artifacts: false,
-            cargo_metadata,
-            failed_targets,
-        })
+        Ok(Project { outdir, metadata, artifacts, cargo_metadata, failed_targets })
     }
 }
 
@@ -200,75 +166,22 @@ impl Artifact {
     }
 }
 
-/// Store the KaniMetadata into a file.
-fn dump_metadata(metadata: &KaniMetadata, path: &Path) {
-    let out_file = File::create(path).unwrap();
-    let writer = BufWriter::new(out_file);
-    serde_json::to_writer_pretty(writer, &metadata).unwrap();
-}
-
 /// Generate a project using `cargo`.
 /// Accept a boolean to build as many targets as possible. The number of failures in that case can
 /// be collected from the project.
 pub fn cargo_project(session: &KaniSession, keep_going: bool) -> Result<Project> {
     let outputs = session.cargo_build(keep_going)?;
     let outdir = outputs.outdir.canonicalize()?;
-    if session.args.function.is_some() {
-        let mut artifacts = vec![];
-        // For the `--function` support, we still use a glob to link everything.
-        // Yes, this is broken, but it has been broken for quite some time. :(
-        // Merge goto files.
-        // https://github.com/model-checking/kani/issues/2129
-        let joined_name = "cbmc-linked";
-        let base_name = outdir.join(joined_name);
-        let goto = base_name.with_extension(Goto);
-        let all_gotos = outputs
-            .metadata
-            .iter()
-            .map(|artifact| convert_type(&artifact, Metadata, SymTabGoto))
-            .collect::<Vec<_>>();
-
-        session.link_goto_binary(&all_gotos, &goto)?;
-        let goto_artifact = Artifact::try_new(&goto, Goto)?;
-
-        // Merge metadata files.
-        let per_crate: Vec<_> =
-            outputs.metadata.iter().filter_map(|f| from_json::<KaniMetadata>(f).ok()).collect();
-        let merged_metadata = merge_kani_metadata(per_crate);
-        let metadata = metadata_with_function(
-            session,
-            joined_name,
-            merged_metadata,
-            goto_artifact.with_extension(SymTabGoto),
-        );
-        let metadata_file = base_name.with_extension(Metadata);
-        dump_metadata(&metadata, &metadata_file);
-        artifacts.push(goto_artifact);
-        artifacts.push(Artifact::try_new(&metadata_file, Metadata)?);
-
-        Ok(Project {
-            outdir,
-            artifacts,
-            metadata: vec![metadata],
-            merged_artifacts: true,
-            cargo_metadata: Some(outputs.cargo_metadata),
-            failed_targets: outputs.failed_targets,
-        })
-    } else {
-        // For the MIR Linker we know there is only one metadata per crate. Use that in our favor.
-        let metadata = outputs
-            .metadata
-            .iter()
-            .map(|md_file| from_json(md_file))
-            .collect::<Result<Vec<_>>>()?;
-        Project::try_new(
-            session,
-            outdir,
-            metadata,
-            Some(outputs.cargo_metadata),
-            outputs.failed_targets,
-        )
-    }
+    // For the MIR Linker we know there is only one metadata per crate. Use that in our favor.
+    let metadata =
+        outputs.metadata.iter().map(|md_file| from_json(md_file)).collect::<Result<Vec<_>>>()?;
+    Project::try_new(
+        session,
+        outdir,
+        metadata,
+        Some(outputs.cargo_metadata),
+        outputs.failed_targets,
+    )
 }
 
 /// Generate a project directly using `kani-compiler` on a single crate.
@@ -327,16 +240,7 @@ impl<'a> StandaloneProjectBuilder<'a> {
         debug!(krate=?self.crate_name, input=?self.input, ?rlib_path, "build compile");
         self.session.compile_single_rust_file(&self.input, &self.crate_name, &self.outdir)?;
 
-        let metadata = if let Ok(goto_model) = Artifact::try_from(&self.metadata, SymTabGoto) {
-            metadata_with_function(
-                self.session,
-                &self.crate_name,
-                from_json(&self.metadata)?,
-                goto_model.path,
-            )
-        } else {
-            from_json(&self.metadata)?
-        };
+        let metadata = from_json(&self.metadata)?;
 
         // Create the project with the artifacts built by the compiler.
         let result = Project::try_new(self.session, self.outdir, vec![metadata], None, None);
@@ -356,26 +260,6 @@ impl<'a> StandaloneProjectBuilder<'a> {
 
         basedir.join(rlib_name)
     }
-}
-
-/// Generate a `KaniMetadata` by extending the original metadata to contain the function under
-/// verification, when there is one.
-fn metadata_with_function(
-    session: &KaniSession,
-    crate_name: &str,
-    mut metadata: KaniMetadata,
-    model_file: PathBuf,
-) -> KaniMetadata {
-    if let Some(name) = &session.args.function {
-        // --function is untranslated, create a mock harness
-        metadata.proof_harnesses.push(mock_proof_harness(
-            name,
-            None,
-            Some(crate_name),
-            Some(model_file),
-        ));
-    }
-    metadata
 }
 
 /// Generate the expected path of a standalone artifact of the given type.
