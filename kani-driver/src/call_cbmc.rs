@@ -193,8 +193,6 @@ impl KaniSession {
         if !self.args.checks.unwinding_on() {
             args.push("--no-unwinding-assertions".into());
         } else {
-            // TODO: remove once https://github.com/diffblue/cbmc/pull/8343 has been merged and
-            // released.
             args.push("--no-self-loops-to-assumptions".into());
         }
 
