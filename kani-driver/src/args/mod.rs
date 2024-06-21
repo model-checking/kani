@@ -542,12 +542,16 @@ impl ValidateArgs for VerificationArgs {
             );
         }
 
-        if self.visualize && !self.common_args.enable_unstable {
-            return Err(Error::raw(
-                ErrorKind::MissingRequiredArgument,
-                "Missing argument: --visualize now requires --enable-unstable
+        if self.visualize {
+            if !self.common_args.enable_unstable {
+                return Err(Error::raw(
+                    ErrorKind::MissingRequiredArgument,
+                    "Missing argument: --visualize now requires --enable-unstable
                     due to open issues involving incorrect results.",
-            ));
+                ));
+            } else {
+                print_deprecated(&self.common_args, "--visualize", "--concrete-playback");
+            }
         }
 
         if self.mir_linker {
