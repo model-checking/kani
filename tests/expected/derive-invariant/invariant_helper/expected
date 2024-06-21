@@ -1,0 +1,9 @@
+Check 1: check_invariant_helper_ok.assertion.1\
+         - Status: SUCCESS\
+         - Description: "assertion failed: pos_point.is_safe()"
+
+Check 1: check_invariant_helper_fail.assertion.1\
+         - Status: FAILURE\
+         - Description: "assertion failed: pos_point.is_safe()"
+
+Complete - 2 successfully verified harnesses, 0 failures, 2 total.
