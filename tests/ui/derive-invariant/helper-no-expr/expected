@@ -1,5 +1,4 @@
 error: Cannot derive `Invariant` for `PositivePoint`
-  --> tests/ui/derive-invariant/helper-no-expr/helper-no-expr.rs:11:10
    |
 11 | #[derive(kani::Invariant)]
    |          ^^^^^^^^^^^^^^^

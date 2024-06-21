@@ -1,5 +1,4 @@
 error[E0425]: cannot find value `x` in this scope
-  --> tests/ui/derive-invariant/helper-wrong-expr/helper-wrong-expr.rs:14:17
    |
 14 |     #[invariant(x >= 0)]
    |                 ^ not found in this scope
