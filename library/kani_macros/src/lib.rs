@@ -109,7 +109,7 @@ pub fn derive_arbitrary(item: TokenStream) -> TokenStream {
 
 /// Allow users to auto generate Invariant implementations by using `#[derive(Invariant)]` macro.
 #[proc_macro_error]
-#[proc_macro_derive(Invariant)]
+#[proc_macro_derive(Invariant, attributes(invariant))]
 pub fn derive_invariant(item: TokenStream) -> TokenStream {
     derive::expand_derive_invariant(item)
 }
