@@ -95,7 +95,7 @@ impl<'tcx> GotocCtx<'tcx> {
             vec![]
         });
         self.attach_modifies_contract(instance_of_check, assigns_contract);
-        let wrapper_name = self.symbol_name_stable(instance_of_check);
+        let wrapper_name = instance_of_check.mangled_name();
 
         AssignsContract {
             recursion_tracker: full_recursion_tracker_name,
