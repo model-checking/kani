@@ -233,7 +233,7 @@ impl MutableBody {
         &mut self,
         source: &mut SourceInstruction,
         position: InsertPosition,
-        new_term: Terminator,
+        mut new_term: Terminator,
     ) {
         let new_bb_idx = self.blocks.len();
         match position {
@@ -258,7 +258,6 @@ impl MutableBody {
                 self.blocks.push(new_bb);
             }
             InsertPosition::After => {
-                let span = source.span(&self.blocks);
                 match source {
                     // Split the current block after the statement located at `source`
                     // and move the remaining statements into the new one.
@@ -277,18 +276,19 @@ impl MutableBody {
                     SourceInstruction::Terminator { bb } => {
                         let current_terminator = &mut self.blocks.get_mut(*bb).unwrap().terminator;
                         // Kani can only instrument function calls like this.
-                        match &mut current_terminator.kind {
-                            TerminatorKind::Call { target: Some(target_bb), .. } => {
-                                *bb = new_bb_idx;
-                                let new_bb = BasicBlock {
-                                    statements: vec![],
-                                    terminator: Terminator {
-                                        kind: TerminatorKind::Goto { target: *target_bb },
-                                        span,
-                                    },
-                                };
+                        match (&mut current_terminator.kind, &mut new_term.kind) {
+                            (
+                                TerminatorKind::Call { target: Some(target_bb), .. },
+                                TerminatorKind::Call { target: Some(new_target_bb), .. },
+                            ) => {
+                                // Set the new terminator to point where previous terminator pointed.
+                                *new_target_bb = *target_bb;
+                                // Point the current terminator to the new terminator's basic block.
                                 *target_bb = new_bb_idx;
-                                self.blocks.push(new_bb);
+                                // Update the current poisition.
+                                *bb = new_bb_idx;
+                                self.blocks
+                                    .push(BasicBlock { statements: vec![], terminator: new_term });
                             }
                             _ => unimplemented!("Kani can only split blocks after calls."),
                         };
