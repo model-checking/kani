@@ -15,7 +15,7 @@ fn check_max_objects<const N: usize>() {
     // - the NULL pointer whose object ID is 0, and
     // - the object ID for `i`
     while i < N {
-        let x : Box<usize> = Box::new(i);
+        let x: Box<usize> = Box::new(i);
         assert_eq!(kani::mem::pointer_object(&*x as *const usize), 2 * i + 2);
         i += 1;
     }
