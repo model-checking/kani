@@ -3,14 +3,13 @@
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::kani_middle::attributes::KaniAttributes;
 use cbmc::goto_program::FunctionContract;
-use cbmc::goto_program::{Lambda, Location};
+use cbmc::goto_program::{Expr, Lambda, Location, Type};
 use kani_metadata::AssignsContract;
 use rustc_hir::def_id::DefId as InternalDefId;
 use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::{Instance, MonoItem};
 use stable_mir::mir::Local;
 use stable_mir::CrateDef;
-use tracing::debug;
 
 impl<'tcx> GotocCtx<'tcx> {
     /// Given the `proof_for_contract` target `function_under_contract` and the reachable `items`,
@@ -90,11 +89,10 @@ impl<'tcx> GotocCtx<'tcx> {
             "Only one instance of a checked function may be in scope"
         );
         let attrs_of_wrapped_fn = KaniAttributes::for_item(tcx, wrapped_fn);
-        let assigns_contract = attrs_of_wrapped_fn.modifies_contract().unwrap_or_else(|| {
-            debug!(?instance_of_check, "had no assigns contract specified");
-            vec![]
-        });
-        self.attach_modifies_contract(instance_of_check, assigns_contract);
+        let assigns_contract = attrs_of_wrapped_fn.modifies_contract().unwrap_or_default();
+        let assigns_upto_contract =
+            attrs_of_wrapped_fn.modifies_slice_contract().unwrap_or_default();
+        self.attach_modifies_contract(instance_of_check, assigns_contract, assigns_upto_contract);
         let wrapper_name = self.symbol_name_stable(instance_of_check);
 
         AssignsContract {
@@ -108,6 +106,7 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_modifies_contract(
         &mut self,
         modified_places: Vec<Local>,
+        modified_upto_places: Vec<Local>,
         loc: Location,
     ) -> FunctionContract {
         let goto_annotated_fn_name = self.current_fn().name();
@@ -118,7 +117,7 @@ impl<'tcx> GotocCtx<'tcx> {
             .typ
             .clone();
 
-        let assigns = modified_places
+        let assigns: Vec<Lambda> = modified_places
             .into_iter()
             .map(|local| {
                 Lambda::as_contract_for(
@@ -128,22 +127,63 @@ impl<'tcx> GotocCtx<'tcx> {
                 )
             })
             .collect();
+        let assigns_upto: Vec<Lambda> = modified_upto_places
+            .into_iter()
+            .map(|local| {
+                Lambda::as_contract_for(
+                    &goto_annotated_fn_typ,
+                    None,
+                    Expr::symbol_expression(
+                        "__CPROVER_object_upto",
+                        Type::code(
+                            vec![
+                                Type::signed_int(32)
+                                    .to_unsigned()
+                                    .unwrap()
+                                    .to_pointer()
+                                    .as_parameter(None, Some("ptr".into())),
+                                Type::size_t().as_parameter(None, Some("size".into())),
+                            ],
+                            Type::empty(),
+                        ),
+                    )
+                    .call(vec![
+                        self.codegen_place_stable(&local.into(), loc)
+                            .unwrap()
+                            .goto_expr
+                            .member("data", &self.symbol_table),
+                        self.codegen_place_stable(&local.into(), loc)
+                            .unwrap()
+                            .goto_expr
+                            .member("len", &self.symbol_table),
+                    ]),
+                )
+            })
+            .collect();
 
-        FunctionContract::new(assigns)
+        FunctionContract::new(assigns.into_iter().chain(assigns_upto.into_iter()).collect())
     }
 
     /// Convert the contract to a CBMC contract, then attach it to `instance`.
     /// `instance` must have previously been declared.
     ///
     /// This merges with any previously attached contracts.
-    pub fn attach_modifies_contract(&mut self, instance: Instance, modified_places: Vec<Local>) {
+    pub fn attach_modifies_contract(
+        &mut self,
+        instance: Instance,
+        modified_places: Vec<Local>,
+        modified_upto_places: Vec<Local>,
+    ) {
         // This should be safe, since the contract is pretty much evaluated as
         // though it was the first (or last) assertion in the function.
         assert!(self.current_fn.is_none());
         let body = instance.body().unwrap();
         self.set_current_fn(instance, &body);
-        let goto_contract =
-            self.codegen_modifies_contract(modified_places, self.codegen_span_stable(body.span));
+        let goto_contract = self.codegen_modifies_contract(
+            modified_places,
+            modified_upto_places,
+            self.codegen_span_stable(body.span),
+        );
         let name = self.current_fn().name();
 
         self.symbol_table.attach_contract(name, goto_contract);

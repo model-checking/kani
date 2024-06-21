@@ -84,6 +84,9 @@ impl<'a> ContractConditionsHandler<'a> {
             ContractConditionsType::Modifies => {
                 ContractConditionsData::new_modifies(attr, &mut output)
             }
+            ContractConditionsType::ModifiesSlice => {
+                ContractConditionsData::new_modifies_slice(attr, &mut output)
+            }
         };
 
         Ok(Self { function_state, condition_type, annotated_fn, attr_copy, output, hash })
@@ -106,5 +109,20 @@ impl ContractConditionsData {
             .collect();
 
         ContractConditionsData::Modifies { attr }
+    }
+
+    fn new_modifies_slice(attr: TokenStream, output: &mut TokenStream2) -> Self {
+        let attr = chunks_by(TokenStream2::from(attr), is_token_stream_2_comma)
+            .map(syn::parse2)
+            .filter_map(|expr| match expr {
+                Err(e) => {
+                    output.extend(e.into_compile_error());
+                    None
+                }
+                Ok(expr) => Some(expr),
+            })
+            .collect();
+
+        ContractConditionsData::ModifiesSlice { attr }
     }
 }

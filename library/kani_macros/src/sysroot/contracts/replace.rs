@@ -99,6 +99,15 @@ impl<'a> ContractConditionsHandler<'a> {
                     #result
                 )
             }
+            ContractConditionsData::ModifiesSlice { attr } => {
+                let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
+                quote!(
+                    #(#before)*
+                    #(kani::internal::any_slice(#attr);)*
+                    #(#after)*
+                    #result
+                )
+            }
         }
     }
 

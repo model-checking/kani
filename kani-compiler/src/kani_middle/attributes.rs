@@ -64,6 +64,7 @@ enum KaniAttributeKind {
     ///
     /// Emitted by the expansion of a `modifies` function contract clause.
     Modifies,
+    ModifiesSlice,
     /// A function used as the inner code of a contract check.
     ///
     /// Contains the original body of the contracted function. The signature is
@@ -92,6 +93,7 @@ impl KaniAttributeKind {
             | KaniAttributeKind::ReplacedWith
             | KaniAttributeKind::CheckedWith
             | KaniAttributeKind::Modifies
+            | KaniAttributeKind::ModifiesSlice
             | KaniAttributeKind::InnerCheck
             | KaniAttributeKind::IsContractGenerated => false,
         }
@@ -379,6 +381,9 @@ impl<'tcx> KaniAttributes<'tcx> {
                 KaniAttributeKind::Modifies => {
                     self.modifies_contract();
                 }
+                KaniAttributeKind::ModifiesSlice => {
+                    self.modifies_slice_contract();
+                }
                 KaniAttributeKind::InnerCheck => {
                     self.inner_check();
                 }
@@ -487,6 +492,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                 KaniAttributeKind::CheckedWith
                 | KaniAttributeKind::IsContractGenerated
                 | KaniAttributeKind::Modifies
+                | KaniAttributeKind::ModifiesSlice
                 | KaniAttributeKind::InnerCheck
                 | KaniAttributeKind::ReplacedWith => {
                     self.tcx.dcx().span_err(self.tcx.def_span(self.item), format!("Contracts are not supported on harnesses. (Found the kani-internal contract attribute `{}`)", kind.as_ref()));
@@ -596,6 +602,19 @@ impl<'tcx> KaniAttributes<'tcx> {
     pub fn modifies_contract(&self) -> Option<Vec<Local>> {
         let local_def_id = self.item.expect_local();
         self.map.get(&KaniAttributeKind::Modifies).map(|attr| {
+            attr.iter()
+                .flat_map(|clause| match &clause.get_normal_item().args {
+                    AttrArgs::Delimited(lvals) => {
+                        parse_modify_values(self.tcx, local_def_id, &lvals.tokens)
+                    }
+                    _ => unreachable!(),
+                })
+                .collect()
+        })
+    }
+    pub fn modifies_slice_contract(&self) -> Option<Vec<Local>> {
+        let local_def_id = self.item.expect_local();
+        self.map.get(&KaniAttributeKind::ModifiesSlice).map(|attr| {
             attr.iter()
                 .flat_map(|clause| match &clause.get_normal_item().args {
                     AttrArgs::Delimited(lvals) => {

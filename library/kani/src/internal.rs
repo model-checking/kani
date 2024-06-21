@@ -68,6 +68,10 @@ impl<'a, T> Pointer<'a> for *mut T {
     }
 }
 
+pub fn any_slice<T>(slice: &mut [T]) {
+    slice.fill_with(|| crate::any_modifies::<T>());
+}
+
 /// A way to break the ownerhip rules. Only used by contracts where we can
 /// guarantee it is done safely.
 #[inline(never)]
