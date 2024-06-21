@@ -150,8 +150,7 @@ pub struct VerificationArgs {
 
     /// Generate C file equivalent to inputted program.
     /// This feature is unstable and it requires `--enable-unstable` to be used
-    #[arg(long, hide_short_help = true, requires("enable_unstable"),
-        conflicts_with_all(&["function"]))]
+    #[arg(long, hide_short_help = true, requires("enable_unstable"))]
     pub gen_c: bool,
 
     /// Directory for all generated artifacts.
@@ -169,19 +168,10 @@ pub struct VerificationArgs {
     #[command(flatten)]
     pub checks: CheckArgs,
 
-    /// Entry point for verification (symbol name).
-    /// This is an unstable feature. Consider using --harness instead
-    #[arg(long, hide = true, requires("enable_unstable"))]
-    pub function: Option<String>,
     /// If specified, only run harnesses that match this filter. This option can be provided
     /// multiple times, which will run all tests matching any of the filters.
     /// If used with --exact, the harness filter will only match the exact fully qualified name of a harness.
-    #[arg(
-        long = "harness",
-        conflicts_with = "function",
-        num_args(1),
-        value_name = "HARNESS_FILTER"
-    )]
+    #[arg(long = "harness", num_args(1), value_name = "HARNESS_FILTER")]
     pub harnesses: Vec<String>,
 
     /// When specified, the harness filter will only match the exact fully qualified name of a harness
@@ -573,7 +563,7 @@ impl ValidateArgs for VerificationArgs {
         if self.cbmc_args.contains(&OsString::from("--function")) {
             return Err(Error::raw(
                 ErrorKind::ArgumentConflict,
-                "Invalid flag: --function should be provided to Kani directly, not via --cbmc-args.",
+                "Invalid flag: --function is not supported in Kani.",
             ));
         }
         if self.common_args.quiet && self.concrete_playback == Some(ConcretePlaybackMode::Print) {
