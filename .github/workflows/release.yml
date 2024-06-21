@@ -103,10 +103,14 @@ jobs:
           apt-get install -y software-properties-common apt-utils
           add-apt-repository ppa:git-core/ppa
           add-apt-repository ppa:deadsnakes/ppa
+          add-apt-repository ppa:ubuntu-toolchain-r/test
           apt-get update
           apt-get install -y \
-            build-essential bash-completion curl lsb-release sudo g++ gcc flex \
+            build-essential bash-completion curl lsb-release sudo g++-9 gcc-9 flex \
             bison make patch git python3.7 python3.7-dev python3.7-distutils
+          update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-9 110 \
+            --slave /usr/bin/g++ g++ /usr/bin/g++-9
+          ln -sf cpp-9 /usr/bin/cpp
           update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.7 1
           curl -s https://bootstrap.pypa.io/get-pip.py -o get-pip.py
           python3 get-pip.py --force-reinstall
