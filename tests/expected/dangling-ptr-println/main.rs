@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Z ptr-to-ref-cast-checks
 
-// These tests check that Kani correctly detects dangling pointer dereference inside println macro.
+//! These tests check that Kani correctly detects dangling pointer dereference inside println macro.
+//! Related issue: <https://github.com/model-checking/kani/issues/3235>.
 
 fn reference_dies() -> *mut i32 {
     let mut x: i32 = 2;
