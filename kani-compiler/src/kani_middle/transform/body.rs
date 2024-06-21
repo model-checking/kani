@@ -81,12 +81,12 @@ impl MutableBody {
 
     pub fn new_str_operand(&mut self, msg: &str, span: Span) -> Operand {
         let literal = MirConst::from_str(msg);
-        Operand::Constant(Constant { span, user_ty: None, literal })
+        Operand::Constant(ConstOperand { span, user_ty: None, const_: literal })
     }
 
     pub fn new_const_operand(&mut self, val: u128, uint_ty: UintTy, span: Span) -> Operand {
         let literal = MirConst::try_from_uint(val, uint_ty).unwrap();
-        Operand::Constant(Constant { span, user_ty: None, literal })
+        Operand::Constant(ConstOperand { span, user_ty: None, const_: literal })
     }
 
     /// Create a raw pointer of `*mut type` and return a new local where that value is stored.

@@ -9,7 +9,7 @@ struct S<'a> {
 #[kani::requires(*s.target < 100)]
 #[kani::modifies(s.target)]
 #[kani::ensures(|result| *s.target == prior + 1)]
-fn modify(s: S, prior: u32) {
+fn modify(s: &mut S, prior: u32) {
     *s.target += 1;
 }
 
@@ -20,8 +20,8 @@ fn main() {
     let i_copy = i;
     let mut distraction = kani::any();
     let distraction_copy = distraction;
-    let s = S { distraction: &mut distraction, target: &mut i };
-    modify(s, i_copy);
+    let mut s = S { distraction: &mut distraction, target: &mut i };
+    modify(&mut s, i_copy);
     kani::assert(i == i_copy + 1, "Increment");
     kani::assert(distraction == distraction_copy, "Unchanged");
 }

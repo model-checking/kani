@@ -11,7 +11,7 @@ use rustc_middle::ty::TyCtxt;
 use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::visit::{Location, MirVisitor};
-use stable_mir::mir::{Body, Constant, LocalDecl, Operand, Terminator, TerminatorKind};
+use stable_mir::mir::{Body, ConstOperand, LocalDecl, Operand, Terminator, TerminatorKind};
 use stable_mir::ty::{FnDef, MirConst, RigidTy, TyKind};
 use stable_mir::CrateDef;
 use std::collections::HashMap;
@@ -199,7 +199,7 @@ impl<'a> MutMirVisitor for ExternFnStubVisitor<'a> {
                     let instance = Instance::resolve(*new_def, &args).unwrap();
                     let literal = MirConst::try_new_zero_sized(instance.ty()).unwrap();
                     let span = term.span;
-                    let new_func = Constant { span, user_ty: None, literal };
+                    let new_func = ConstOperand { span, user_ty: None, const_: literal };
                     *func = Operand::Constant(new_func);
                     self.changed = true;
                 }
@@ -212,12 +212,12 @@ impl<'a> MutMirVisitor for ExternFnStubVisitor<'a> {
         let func_ty = operand.ty(&self.locals).unwrap();
         if let TyKind::RigidTy(RigidTy::FnDef(orig_def, args)) = func_ty.kind() {
             if let Some(new_def) = self.stubs.get(&orig_def) {
-                let Operand::Constant(Constant { span, .. }) = operand else {
+                let Operand::Constant(ConstOperand { span, .. }) = operand else {
                     unreachable!();
                 };
                 let instance = Instance::resolve_for_fn_ptr(*new_def, &args).unwrap();
                 let literal = MirConst::try_new_zero_sized(instance.ty()).unwrap();
-                let new_func = Constant { span: *span, user_ty: None, literal };
+                let new_func = ConstOperand { span: *span, user_ty: None, const_: literal };
                 *operand = Operand::Constant(new_func);
                 self.changed = true;
             }

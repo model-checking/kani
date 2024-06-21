@@ -16,7 +16,7 @@ use rustc_middle::ty::{self, EarlyBinder, ParamEnv, TyCtxt, TypeFoldable};
 use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::visit::{Location, MirVisitor};
-use stable_mir::mir::Constant;
+use stable_mir::mir::ConstOperand;
 use stable_mir::ty::{FnDef, RigidTy, TyKind};
 use stable_mir::{CrateDef, CrateItem};
 
@@ -185,8 +185,8 @@ impl<'tcx> StubConstChecker<'tcx> {
 
 impl<'tcx> MirVisitor for StubConstChecker<'tcx> {
     /// Collect constants that are represented as static variables.
-    fn visit_constant(&mut self, constant: &Constant, location: Location) {
-        let const_ = self.monomorphize(rustc_internal::internal(self.tcx, &constant.literal));
+    fn visit_const_operand(&mut self, constant: &ConstOperand, location: Location) {
+        let const_ = self.monomorphize(rustc_internal::internal(self.tcx, &constant.const_));
         debug!(?constant, ?location, ?const_, "visit_constant");
         match const_ {
             Const::Val(..) | Const::Ty(..) => {}

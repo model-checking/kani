@@ -105,7 +105,10 @@ pub fn dump_mir_items(
         match item {
             // Exclude FnShims and others that cannot be dumped.
             MonoItem::Fn(instance) => Some(*instance),
-            MonoItem::Static(def) => Some((*def).into()),
+            MonoItem::Static(def) => {
+                let instance: Instance = (*def).into();
+                instance.has_body().then_some(instance)
+            }
             MonoItem::GlobalAsm(_) => None,
         }
     }

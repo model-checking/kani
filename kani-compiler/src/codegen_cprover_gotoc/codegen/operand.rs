@@ -53,7 +53,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 }
             }
             Operand::Constant(constant) => {
-                self.codegen_const(&constant.literal, self.codegen_span_stable(constant.span))
+                self.codegen_const(&constant.const_, self.codegen_span_stable(constant.span))
             }
         }
     }
