@@ -79,13 +79,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 if !self.current_fn().is_address_taken_local(*var_id) {
                     Stmt::skip(location)
                 } else {
-                    let global_dead_object = self.ensure_global_var(
-                        "__CPROVER_dead_object",
-                        false,
-                        Type::void_pointer(),
-                        Location::none(),
-                        |_, _| None,
-                    );
+                    let global_dead_object = cbmc::global_dead_object(&self.symbol_table);
                     Stmt::assign(
                         global_dead_object.clone(),
                         global_dead_object
@@ -103,13 +97,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 if !self.current_fn().is_address_taken_local(*var_id) {
                     Stmt::skip(location)
                 } else {
-                    let global_dead_object = self.ensure_global_var(
-                        "__CPROVER_dead_object",
-                        false,
-                        Type::void_pointer(),
-                        Location::none(),
-                        |_, _| None,
-                    );
+                    let global_dead_object = cbmc::global_dead_object(&self.symbol_table);
                     Stmt::assign(
                         global_dead_object.clone(),
                         Type::bool().nondet().ternary(
