@@ -49,7 +49,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// handled later.
     pub fn codegen_foreign_fn(&mut self, instance: Instance) -> &Symbol {
         debug!(?instance, "codegen_foreign_function");
-        let fn_name = self.symbol_name_stable(instance).intern();
+        let fn_name = instance.mangled_name().intern();
         let loc = self.codegen_span_stable(instance.def.span());
         if self.symbol_table.contains(fn_name) {
             // Symbol has been added (either a built-in CBMC function or a Rust allocation function).
@@ -134,7 +134,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// Generate type for the given foreign instance.
     fn codegen_ffi_type(&mut self, instance: Instance) -> Type {
-        let fn_name = self.symbol_name_stable(instance);
+        let fn_name = instance.mangled_name();
         let fn_abi = instance.fn_abi().unwrap();
         let loc = self.codegen_span_stable(instance.def.span());
         let params = fn_abi
@@ -166,7 +166,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// This will behave like `codegen_unimplemented_stmt` but print a message that includes
     /// the name of the function not supported and the calling convention.
     fn codegen_ffi_unsupported(&mut self, instance: Instance, loc: Location) -> Stmt {
-        let fn_name = &self.symbol_name_stable(instance);
+        let fn_name = &instance.mangled_name();
         debug!(?fn_name, ?loc, "codegen_ffi_unsupported");
 
         // Save this occurrence so we can emit a warning in the compilation report.

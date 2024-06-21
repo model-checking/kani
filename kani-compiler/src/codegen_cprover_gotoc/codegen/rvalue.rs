@@ -1299,7 +1299,7 @@ impl<'tcx> GotocCtx<'tcx> {
         debug!(?vtable_field_name, ?vtable_type, "codegen_vtable_method_field");
 
         // Lookup in the symbol table using the full symbol table name/key
-        let fn_name = self.symbol_name_stable(instance);
+        let fn_name = instance.mangled_name();
 
         if let Some(fn_symbol) = self.symbol_table.lookup(&fn_name) {
             if self.vtable_ctx.emit_vtable_restrictions {

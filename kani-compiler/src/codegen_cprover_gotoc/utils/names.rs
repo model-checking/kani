@@ -8,7 +8,6 @@ use cbmc::InternedString;
 use rustc_hir::def_id::LOCAL_CRATE;
 use rustc_middle::mir::mono::CodegenUnitNameBuilder;
 use rustc_middle::ty::TyCtxt;
-use stable_mir::mir::mono::Instance;
 use stable_mir::mir::Local;
 
 impl<'tcx> GotocCtx<'tcx> {
@@ -48,15 +47,6 @@ impl<'tcx> GotocCtx<'tcx> {
 
     pub fn initializer_fn_name(var_name: &str) -> String {
         format!("{var_name}_init")
-    }
-
-    /// Return the mangled name to be used in the symbol table.
-    ///
-    /// We special case main function in order to support `--function main`.
-    // TODO: Get rid of this: https://github.com/model-checking/kani/issues/2129
-    pub fn symbol_name_stable(&self, instance: Instance) -> String {
-        let pretty = instance.name();
-        if pretty == "main" { pretty } else { instance.mangled_name() }
     }
 
     /// The name for a tuple field

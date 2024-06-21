@@ -1,9 +1,9 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
-// kani-flags: --enable-unstable --mir-linker --function target_fn
+// kani-flags: --harness target_fn
 //
-//! Checks that we can use --function with the MIR Linker
+//! Checks that we can target the correct harness.
 
 #[kani::proof]
 fn harness() {
@@ -11,7 +11,7 @@ fn harness() {
     assert_eq!(1 + 1, 10);
 }
 
-#[no_mangle]
+#[kani::proof]
 pub fn target_fn() {
     let pos: i32 = kani::any();
     kani::assume(pos > 0);
