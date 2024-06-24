@@ -82,6 +82,7 @@ impl<'tcx> GotocCtx<'tcx> {
             // entails a check that the pointer being dereferenced is not equal to the pointer held
             // in __CPROVER_dead_object. We use this to bridge the difference between Rust and MIR
             // semantics as follows:
+            //
             // 1. (At the time of writing) MIR declares all function-local variables at function
             //    scope, irrespective of the scope/block that Rust code originally used.
             // 2. In MIR, StorageLive and StorageDead markers are inserted at the beginning and end
@@ -99,6 +100,10 @@ impl<'tcx> GotocCtx<'tcx> {
             //    * StorageDead non-deterministically updates (or leaves unchanged)
             //    __CPROVER_dead_object to point to the object going out of scope. (This is the
             //    same update approach as used within CBMC.)
+            //
+            // This approach will also work when there are multiple occurrences of StorageLive (or
+            // StorageDead) on a path, or across control-flow branches, and even when StorageDead
+            // occurs without a preceding StorageLive.
             StatementKind::StorageLive(var_id) => {
                 if !self.current_fn().is_address_taken_local(*var_id) {
                     Stmt::skip(location)
