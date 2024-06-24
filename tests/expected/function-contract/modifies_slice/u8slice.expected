@@ -1,0 +1,5 @@
+assertion\
+- Status: SUCCESS\
+- Description: "|_| x.into_iter().map(|v| *v == 0).fold(true,|a,b|a&b)"\
+
+VERIFICATION:- SUCCESSFUL

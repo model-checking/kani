@@ -157,7 +157,7 @@ impl<'tcx> GotocCtx<'tcx> {
             })
             .collect();
 
-        FunctionContract::new(assigns.into_iter().chain(assigns_upto.into_iter()).collect())
+        FunctionContract::new(assigns.into_iter().chain(assigns_upto).collect())
     }
 
     /// Convert the contract to a CBMC contract, then attach it to `instance`.
