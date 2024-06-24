@@ -72,6 +72,70 @@ pub fn any_slice<T>(slice: &mut [T]) {
     slice.fill_with(|| crate::any_modifies::<T>());
 }
 
+pub trait SlicePointer<'a> {
+    /// Type of the pointed-to data
+    type Inner;
+
+    /// Used for checking assigns contracts where we pass immutable references to the function.
+    ///
+    /// We're using a reference to self here, because the user can use just a plain function
+    /// argument, for instance one of type `&mut _`, in the `modifies` clause which would move it.
+    unsafe fn decouple_lifetime(&self) -> &'a [Self::Inner];
+
+    /// Fill with any_modifies
+    unsafe fn any_slice(self);
+}
+
+impl<'a, 'b, T> SlicePointer<'a> for &'b [T] {
+    type Inner = T;
+    unsafe fn decouple_lifetime(&self) -> &'a [Self::Inner] {
+        std::mem::transmute(*self)
+    }
+
+    #[allow(clippy::transmute_ptr_to_ref)]
+    unsafe fn any_slice(self) {
+        std::mem::transmute::<*const [T], &mut [T]>(self as *const [T])
+            .fill_with(|| crate::any_modifies::<T>());
+    }
+}
+
+impl<'a, 'b, T> SlicePointer<'a> for &'b mut [T] {
+    type Inner = T;
+
+    #[allow(clippy::transmute_ptr_to_ref)]
+    unsafe fn decouple_lifetime(&self) -> &'a [Self::Inner] {
+        std::mem::transmute::<_, &&'a [T]>(self)
+    }
+
+    unsafe fn any_slice(self) {
+        std::mem::transmute::<&mut [T], &mut [T]>(self).fill_with(|| crate::any_modifies::<T>());
+    }
+}
+
+impl<'a, T> SlicePointer<'a> for *const [T] {
+    type Inner = T;
+    unsafe fn decouple_lifetime(&self) -> &'a [Self::Inner] {
+        &**self as &'a [T]
+    }
+
+    #[allow(clippy::transmute_ptr_to_ref)]
+    unsafe fn any_slice(self) {
+        std::mem::transmute::<*const [T], &mut [T]>(self).fill_with(|| crate::any_modifies::<T>());
+    }
+}
+
+impl<'a, T> SlicePointer<'a> for *mut [T] {
+    type Inner = T;
+    unsafe fn decouple_lifetime(&self) -> &'a [Self::Inner] {
+        &**self as &'a [T]
+    }
+
+    #[allow(clippy::transmute_ptr_to_ref)]
+    unsafe fn any_slice(self) {
+        std::mem::transmute::<*mut [T], &mut [T]>(self).fill_with(|| crate::any_modifies::<T>());
+    }
+}
+
 /// A way to break the ownerhip rules. Only used by contracts where we can
 /// guarantee it is done safely.
 #[inline(never)]

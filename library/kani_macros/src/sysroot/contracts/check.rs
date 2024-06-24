@@ -102,7 +102,7 @@ impl<'a> ContractConditionsHandler<'a> {
                 };
 
                 quote!(
-                    #(let #wrapper_args = kani::internal::untracked_deref(&#attr);)*
+                    #(let #wrapper_args = unsafe { kani::internal::SlicePointer::decouple_lifetime(&#attr) };)*
                     #(#inner)*
                 )
             }

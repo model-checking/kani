@@ -94,7 +94,7 @@ impl<'a> ContractConditionsHandler<'a> {
                 let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
                 quote!(
                     #(#before)*
-                    #(*unsafe { kani::internal::Pointer::assignable(kani::internal::untracked_deref(&(#attr))) } = kani::any_modifies();)*
+                    #(*unsafe { kani::internal::Pointer::assignable(kani::internal::untracked_deref(&#attr)) } = kani::any_modifies();)*
                     #(#after)*
                     #result
                 )
@@ -103,7 +103,7 @@ impl<'a> ContractConditionsHandler<'a> {
                 let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
                 quote!(
                     #(#before)*
-                    #(kani::internal::any_slice(#attr);)*
+                    #(unsafe { kani::internal::SlicePointer::any_slice(kani::internal::untracked_deref(&#attr))})*
                     #(#after)*
                     #result
                 )
