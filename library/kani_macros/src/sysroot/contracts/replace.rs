@@ -103,7 +103,7 @@ impl<'a> ContractConditionsHandler<'a> {
                 let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
                 quote!(
                     #(#before)*
-                    #(unsafe { kani::internal::SlicePointer::any_slice(kani::internal::untracked_deref(&#attr))})*
+                    #(unsafe { kani::internal::SlicePointer::any_slice(kani::internal::untracked_deref(&#attr))};)*
                     #(#after)*
                     #result
                 )
