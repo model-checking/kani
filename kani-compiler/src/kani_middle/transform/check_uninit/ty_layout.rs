@@ -196,19 +196,35 @@ fn data_bytes_for_ty(
                                     let enum_data_bytes = ty_size();
                                     let mut fields_data_bytes = vec![];
                                     for (index, variant) in variants.iter().enumerate() {
+                                        let mut field_data_bytes_for_variant = vec![];
                                         let fields = ty_variants[index].fields();
                                         for field_idx in variant.fields.fields_by_offset_order() {
                                             let field_offset = offsets[field_idx].bytes();
                                             let field_ty = fields[field_idx].ty_with_args(&args);
-                                            fields_data_bytes.append(&mut data_bytes_for_ty(
-                                                machine_info,
-                                                field_ty,
-                                                field_offset + current_offset,
-                                            )?);
+                                            field_data_bytes_for_variant.append(
+                                                &mut data_bytes_for_ty(
+                                                    machine_info,
+                                                    field_ty,
+                                                    field_offset + current_offset,
+                                                )?,
+                                            );
                                         }
+                                        fields_data_bytes.push(field_data_bytes_for_variant);
                                     }
+
                                     if fields_data_bytes.is_empty() {
                                         Ok(enum_data_bytes)
+                                    } else if fields_data_bytes.iter().all(
+                                        |data_bytes_for_variant| {
+                                            *data_bytes_for_variant
+                                                == *fields_data_bytes.first().unwrap()
+                                        },
+                                    ) {
+                                        let mut total_data_bytes = enum_data_bytes;
+                                        let mut field_data_bytes =
+                                            fields_data_bytes.first().unwrap().clone();
+                                        total_data_bytes.append(&mut field_data_bytes);
+                                        Ok(total_data_bytes)
                                     } else {
                                         Err(format!(
                                             "Unsupported Enum `{}` check",
