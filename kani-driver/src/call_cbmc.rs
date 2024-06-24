@@ -160,7 +160,7 @@ impl KaniSession {
     pub fn cbmc_check_flags(&self) -> Vec<OsString> {
         let mut args = Vec::new();
 
-        // We assume that malloc cannot fail
+        // We assume that malloc cannot fail, see https://github.com/model-checking/kani/issues/891
         args.push("--no-malloc-may-fail".into());
 
         // With PR #2630 we generate the appropriate checks directly rather than relying on CBMC's
