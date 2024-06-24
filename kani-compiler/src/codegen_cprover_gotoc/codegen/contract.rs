@@ -137,11 +137,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         "__CPROVER_object_upto",
                         Type::code(
                             vec![
-                                Type::signed_int(32)
-                                    .to_unsigned()
-                                    .unwrap()
-                                    .to_pointer()
-                                    .as_parameter(None, Some("ptr".into())),
+                                Type::empty().to_pointer().as_parameter(None, Some("ptr".into())),
                                 Type::size_t().as_parameter(None, Some("size".into())),
                             ],
                             Type::empty(),
@@ -151,7 +147,8 @@ impl<'tcx> GotocCtx<'tcx> {
                         self.codegen_place_stable(&local.into(), loc)
                             .unwrap()
                             .goto_expr
-                            .member("data", &self.symbol_table),
+                            .member("data", &self.symbol_table)
+                            .cast_to(Type::empty().to_pointer()),
                         self.codegen_place_stable(&local.into(), loc)
                             .unwrap()
                             .goto_expr
