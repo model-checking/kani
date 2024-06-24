@@ -38,7 +38,7 @@ fn generate_byte_mask(size_in_bytes: usize, data_chunks: Vec<DataBytes>) -> Vec<
 pub enum PointeeLayout {
     /// Layout of sized objects.
     Sized { layout: Layout },
-    /// Layout of slices, &str is included in this case and treated as &[u8].
+    /// Layout of slices, *const/mut str is included in this case and treated as *const/mut [u8].
     Slice { element_layout: Layout },
     /// Trait objects have an arbitrary layout.
     TraitObject,
