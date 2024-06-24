@@ -198,10 +198,6 @@ impl<'tcx> KaniAttributes<'tcx> {
             .collect()
     }
 
-    pub(crate) fn is_contract_generated(&self) -> bool {
-        self.map.contains_key(&KaniAttributeKind::IsContractGenerated)
-    }
-
     pub(crate) fn has_recursion(&self) -> bool {
         self.map.contains_key(&KaniAttributeKind::Recursion)
     }
@@ -235,6 +231,11 @@ impl<'tcx> KaniAttributes<'tcx> {
     /// indicates a contract does exist but an error occurred during resolution.
     pub fn checked_with(&self) -> Option<Result<Symbol, ErrorGuaranteed>> {
         self.expect_maybe_one(KaniAttributeKind::CheckedWith)
+            .map(|target| expect_key_string_value(self.tcx.sess, target))
+    }
+
+    pub fn proof_for_contract(&self) -> Option<Result<Symbol, ErrorGuaranteed>> {
+        self.expect_maybe_one(KaniAttributeKind::ProofForContract)
             .map(|target| expect_key_string_value(self.tcx.sess, target))
     }
 
@@ -627,12 +628,12 @@ fn parse_modify_values<'a>(
     std::iter::from_fn(move || {
         let tree = iter.next()?;
         let wrong_token_err =
-            || tcx.sess.psess.dcx.span_err(tree.span(), "Unexpected token. Expected identifier.");
+            || tcx.sess.dcx().span_err(tree.span(), "Unexpected token. Expected identifier.");
         let result = match tree {
             TokenTree::Token(token, _) => {
                 if let TokenKind::Ident(id, _) = &token.kind {
                     let hir = tcx.hir();
-                    let bid = hir.body_owned_by(local_def_id);
+                    let bid = hir.body_owned_by(local_def_id).id();
                     Some(
                         hir.body_param_names(bid)
                             .zip(mir.args_iter())
@@ -654,7 +655,7 @@ fn parse_modify_values<'a>(
         match iter.next() {
             None | Some(comma_tok!()) => (),
             Some(not_comma) => {
-                tcx.sess.psess.dcx.span_err(
+                tcx.sess.dcx().span_err(
                     not_comma.span(),
                     "Unexpected token, expected end of attribute or comma",
                 );
@@ -781,10 +782,10 @@ impl<'a> UnstableAttrParseError<'a> {
         tcx.dcx()
             .struct_span_err(
                 self.attr.span,
-                format!("failed to parse `#[kani::unstable]`: {}", self.reason),
+                format!("failed to parse `#[kani::unstable_feature]`: {}", self.reason),
             )
             .with_note(format!(
-                "expected format: #[kani::unstable({}, {}, {})]",
+                "expected format: #[kani::unstable_feature({}, {}, {})]",
                 r#"feature="<IDENTIFIER>""#, r#"issue="<ISSUE>""#, r#"reason="<DESCRIPTION>""#
             ))
             .emit()

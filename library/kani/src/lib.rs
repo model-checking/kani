@@ -323,4 +323,6 @@ pub use core::assert as __kani__workaround_core_assert;
 // Kani proc macros must be in a separate crate
 pub use kani_macros::*;
 
+pub(crate) use kani_macros::unstable_feature as unstable;
+
 pub mod contracts;

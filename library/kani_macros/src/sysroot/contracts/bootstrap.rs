@@ -74,6 +74,8 @@ impl<'a> ContractConditionsHandler<'a> {
 
         let mut wrapper_sig = sig.clone();
         wrapper_sig.ident = recursion_wrapper_name;
+        // We use non-constant functions, thus, the wrapper cannot be constant.
+        wrapper_sig.constness = None;
 
         let args = pats_to_idents(&mut wrapper_sig.inputs).collect::<Vec<_>>();
         let also_args = args.iter();
@@ -85,7 +87,7 @@ impl<'a> ContractConditionsHandler<'a> {
 
         let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
         self.output.extend(quote!(
-            #[allow(dead_code, unused_variables)]
+            #[allow(dead_code, unused_variables, unused_mut)]
             #[kanitool::is_contract_generated(recursion_wrapper)]
             #wrapper_sig {
                 static mut REENTRY: bool = false;

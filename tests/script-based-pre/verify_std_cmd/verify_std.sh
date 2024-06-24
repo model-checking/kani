@@ -23,36 +23,42 @@ cp -r "${STD_PATH}" "${TMP_DIR}"
 # Insert a small harness in one of the standard library modules.
 CORE_CODE='
 #[cfg(kani)]
+kani_core::kani_lib!(core);
+
+#[cfg(kani)]
 #[unstable(feature = "kani", issue = "none")]
-pub mod kani {
-    pub use kani_core::proof;
+pub mod verify {
+    use crate::kani;
 
-    #[rustc_diagnostic_item = "KaniAnyRaw"]
-    #[inline(never)]
-    pub fn any_raw_inner<T>() -> T {
-        loop {}
+    #[kani::proof]
+    pub fn harness() {
+        kani::assert(true, "yay");
     }
 
-    #[inline(never)]
-    #[rustc_diagnostic_item = "KaniAssert"]
-    pub const fn assert(cond: bool, msg: &'\''static str) {
-        let _ = cond;
-        let _ = msg;
+    #[kani::proof_for_contract(fake_function)]
+    fn dummy_proof() {
+        fake_function(true);
     }
 
-    #[kani_core::proof]
-    #[kani_core::should_panic]
-    fn check_panic() {
-        let num: u8 = any_raw_inner();
-        assert!(num != 0, "Found zero");
+    /// Add a `rustc_diagnostic_item` to ensure this works.
+    /// See <https://github.com/model-checking/kani/issues/3251> for more details.
+    #[kani::requires(x == true)]
+    #[rustc_diagnostic_item = "fake_function"]
+    fn fake_function(x: bool) -> bool {
+        x
     }
 
-    #[kani_core::proof]
-    fn check_success() {
-        let orig: u8 = any_raw_inner();
-        let mid = orig as i8;
-        let new = mid as u8;
-        assert!(orig == new, "Conversion round trip works");
+    #[kani::proof_for_contract(dummy_read)]
+    fn check_dummy_read() {
+        let val: char = kani::any();
+        assert_eq!(unsafe { dummy_read(&val) }, val);
+    }
+
+    /// Ensure we can verify constant functions.
+    #[kani::requires(kani::mem::can_dereference(ptr))]
+    #[rustc_diagnostic_item = "dummy_read"]
+    const unsafe fn dummy_read<T: Copy>(ptr: *const T) -> T {
+        *ptr
     }
 }
 '
@@ -85,7 +91,7 @@ cat ${TMP_DIR}/std_lib.rs >> ${TMP_DIR}/library/std/src/lib.rs
 
 echo "[TEST] Run kani verify-std"
 export RUST_BACKTRACE=1
-kani verify-std -Z unstable-options "${TMP_DIR}/library" --target-dir "${TMP_DIR}/target"
+kani verify-std -Z unstable-options "${TMP_DIR}/library" --target-dir "${TMP_DIR}/target" -Z function-contracts -Z stubbing
 
 # Cleanup
 rm -r ${TMP_DIR}

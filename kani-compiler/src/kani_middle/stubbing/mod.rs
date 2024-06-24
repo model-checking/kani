@@ -3,21 +3,21 @@
 //! This module contains code for implementing stubbing.
 
 mod annotations;
-mod transform;
 
+use itertools::Itertools;
 use rustc_span::DUMMY_SP;
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 use tracing::{debug, trace};
 
-pub use self::transform::*;
 use kani_metadata::HarnessMetadata;
-use rustc_hir::definitions::DefPathHash;
+use rustc_hir::def_id::DefId;
 use rustc_middle::mir::Const;
 use rustc_middle::ty::{self, EarlyBinder, ParamEnv, TyCtxt, TypeFoldable};
 use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::visit::{Location, MirVisitor};
-use stable_mir::mir::Constant;
+use stable_mir::mir::ConstOperand;
+use stable_mir::ty::{FnDef, RigidTy, TyKind};
 use stable_mir::{CrateDef, CrateItem};
 
 use self::annotations::update_stub_mapping;
@@ -27,14 +27,116 @@ pub fn harness_stub_map(
     tcx: TyCtxt,
     harness: Instance,
     metadata: &HarnessMetadata,
-) -> BTreeMap<DefPathHash, DefPathHash> {
+) -> HashMap<DefId, DefId> {
     let def_id = rustc_internal::internal(tcx, harness.def.def_id());
     let attrs = &metadata.attributes;
-    let mut stub_pairs = BTreeMap::default();
+    let mut stub_pairs = HashMap::default();
     for stubs in &attrs.stubs {
         update_stub_mapping(tcx, def_id.expect_local(), stubs, &mut stub_pairs);
     }
     stub_pairs
+}
+
+/// Retrieve the index of the host parameter if old definition has one, but not the new definition.
+///
+/// This is to allow constant functions to be stubbed by non-constant functions when the
+/// `effect` feature is on.
+///
+/// Note that the opposite is not supported today, but users should be able to change their stubs.
+///
+/// Note that this has no effect at runtime.
+pub fn contract_host_param(tcx: TyCtxt, old_def: FnDef, new_def: FnDef) -> Option<usize> {
+    let old_generics = tcx.generics_of(rustc_internal::internal(tcx, old_def.def_id()));
+    let new_generics = tcx.generics_of(rustc_internal::internal(tcx, new_def.def_id()));
+    if old_generics.host_effect_index.is_some() && new_generics.host_effect_index.is_none() {
+        old_generics.host_effect_index
+    } else {
+        None
+    }
+}
+
+/// Checks whether the stub is compatible with the original function/method: do
+/// the arities and types (of the parameters and return values) match up? This
+/// does **NOT** check whether the type variables are constrained to implement
+/// the same traits; trait mismatches are checked during monomorphization.
+pub fn check_compatibility(tcx: TyCtxt, old_def: FnDef, new_def: FnDef) -> Result<(), String> {
+    // TODO: Validate stubs that do not have body.
+    // We could potentially look at the function signature to see if they match.
+    // However, they will include region information which can make types different.
+    let Some(old_body) = old_def.body() else { return Ok(()) };
+    let Some(new_body) = new_def.body() else { return Ok(()) };
+    // Check whether the arities match.
+    if old_body.arg_locals().len() != new_body.arg_locals().len() {
+        let msg = format!(
+            "arity mismatch: original function/method `{}` takes {} argument(s), stub `{}` takes {}",
+            old_def.name(),
+            old_body.arg_locals().len(),
+            new_def.name(),
+            new_body.arg_locals().len(),
+        );
+        return Err(msg);
+    }
+    // Check whether the numbers of generic parameters match.
+    let old_def_id = rustc_internal::internal(tcx, old_def.def_id());
+    let new_def_id = rustc_internal::internal(tcx, new_def.def_id());
+    let old_ty = rustc_internal::stable(tcx.type_of(old_def_id)).value;
+    let new_ty = rustc_internal::stable(tcx.type_of(new_def_id)).value;
+    let TyKind::RigidTy(RigidTy::FnDef(_, mut old_args)) = old_ty.kind() else {
+        unreachable!("Expected function, but found {old_ty}")
+    };
+    let TyKind::RigidTy(RigidTy::FnDef(_, new_args)) = new_ty.kind() else {
+        unreachable!("Expected function, but found {new_ty}")
+    };
+    if let Some(idx) = contract_host_param(tcx, old_def, new_def) {
+        old_args.0.remove(idx);
+    }
+
+    // TODO: We should check for the parameter type too or replacement will fail.
+    if old_args.0.len() != new_args.0.len() {
+        let msg = format!(
+            "mismatch in the number of generic parameters: original function/method `{}` takes {} generic parameters(s), stub `{}` takes {}",
+            old_def.name(),
+            old_args.0.len(),
+            new_def.name(),
+            new_args.0.len(),
+        );
+        return Err(msg);
+    }
+    // Check whether the types match. Index 0 refers to the returned value,
+    // indices [1, `arg_count`] refer to the parameters.
+    // TODO: We currently force generic parameters in the stub to have exactly
+    // the same names as their counterparts in the original function/method;
+    // instead, we should be checking for the equivalence of types up to the
+    // renaming of generic parameters.
+    // <https://github.com/model-checking/kani/issues/1953>
+    let old_ret_ty = old_body.ret_local().ty;
+    let new_ret_ty = new_body.ret_local().ty;
+    let mut diff = vec![];
+    if old_ret_ty != new_ret_ty {
+        diff.push(format!("Expected return type `{old_ret_ty}`, but found `{new_ret_ty}`"));
+    }
+    for (i, (old_arg, new_arg)) in
+        old_body.arg_locals().iter().zip(new_body.arg_locals().iter()).enumerate()
+    {
+        if old_arg.ty != new_arg.ty {
+            diff.push(format!(
+                "Expected type `{}` for parameter {}, but found `{}`",
+                old_arg.ty,
+                i + 1,
+                new_arg.ty
+            ));
+        }
+    }
+    if !diff.is_empty() {
+        Err(format!(
+            "Cannot stub `{}` by `{}`.\n - {}",
+            old_def.name(),
+            new_def.name(),
+            diff.iter().join("\n - ")
+        ))
+    } else {
+        Ok(())
+    }
 }
 
 /// Validate that an instance body can be instantiated.
@@ -44,17 +146,13 @@ pub fn harness_stub_map(
 ///
 /// In stable MIR, trying to retrieve an `Instance::body()` will ICE if we cannot evaluate a
 /// constant as expected. For now, use internal APIs to anticipate this issue.
-pub fn validate_instance(tcx: TyCtxt, instance: Instance) -> bool {
+pub fn validate_stub_const(tcx: TyCtxt, instance: Instance) -> bool {
+    debug!(?instance, "validate_instance");
+    let item = CrateItem::try_from(instance).unwrap();
     let internal_instance = rustc_internal::internal(tcx, instance);
-    if get_stub(tcx, internal_instance.def_id()).is_some() {
-        debug!(?instance, "validate_instance");
-        let item = CrateItem::try_from(instance).unwrap();
-        let mut checker = StubConstChecker::new(tcx, internal_instance, item);
-        checker.visit_body(&item.body());
-        checker.is_valid()
-    } else {
-        true
-    }
+    let mut checker = StubConstChecker::new(tcx, internal_instance, item);
+    checker.visit_body(&item.body());
+    checker.is_valid()
 }
 
 struct StubConstChecker<'tcx> {
@@ -87,8 +185,8 @@ impl<'tcx> StubConstChecker<'tcx> {
 
 impl<'tcx> MirVisitor for StubConstChecker<'tcx> {
     /// Collect constants that are represented as static variables.
-    fn visit_constant(&mut self, constant: &Constant, location: Location) {
-        let const_ = self.monomorphize(rustc_internal::internal(self.tcx, &constant.literal));
+    fn visit_const_operand(&mut self, constant: &ConstOperand, location: Location) {
+        let const_ = self.monomorphize(rustc_internal::internal(self.tcx, &constant.const_));
         debug!(?constant, ?location, ?const_, "visit_constant");
         match const_ {
             Const::Val(..) | Const::Ty(..) => {}

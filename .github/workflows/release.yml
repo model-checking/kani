@@ -44,6 +44,32 @@ jobs:
           os: macos-13
           arch: x86_64-apple-darwin
 
+  build_bundle_macos_aarch64:
+    name: BuildBundle-MacOs-ARM
+    runs-on: macos-14
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.bundle.outputs.version }}
+      bundle: ${{ steps.bundle.outputs.bundle }}
+      package: ${{ steps.bundle.outputs.package }}
+      crate_version: ${{ steps.bundle.outputs.crate_version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Kani Dependencies
+        uses: ./.github/actions/setup
+        with:
+          os: macos-14
+
+      - name: Build bundle
+        id: bundle
+        uses: ./.github/actions/build-bundle
+        with:
+          os: macos-14
+          arch: aarch64-apple-darwin
+
   build_bundle_linux:
     name: BuildBundle-Linux
     runs-on: ubuntu-20.04
@@ -82,7 +108,7 @@ jobs:
             build-essential bash-completion curl lsb-release sudo g++ gcc flex \
             bison make patch git python3.7 python3.7-dev python3.7-distutils
           update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.7 1
-          curl -s https://bootstrap.pypa.io/get-pip.py -o get-pip.py
+          curl -s https://bootstrap.pypa.io/pip/3.7/get-pip.py -o get-pip.py
           python3 get-pip.py --force-reinstall
           rm get-pip.py
 
@@ -180,7 +206,7 @@ jobs:
 
       - name: Run cargo-kani tests after moving
         run: |
-          for dir in function multiple-harnesses verbose; do
+          for dir in supported-lib-types/rlib multiple-harnesses verbose; do
             >&2 echo "Running test $dir"
             pushd ${{ github.workspace }}/../post-setup-tests/cargo-ui/$dir
             cargo kani
@@ -384,7 +410,7 @@ jobs:
           OWNER: '${{ github.repository_owner }}'
 
       - name: Build and push
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: scripts/ci/Dockerfile.bundle-release-20-04

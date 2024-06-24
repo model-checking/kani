@@ -49,7 +49,8 @@ impl<'tcx> GotocCtx<'tcx> {
     /// handled later.
     pub fn codegen_foreign_fn(&mut self, instance: Instance) -> &Symbol {
         debug!(?instance, "codegen_foreign_function");
-        let fn_name = self.symbol_name_stable(instance).intern();
+        let fn_name = instance.mangled_name().intern();
+        let loc = self.codegen_span_stable(instance.def.span());
         if self.symbol_table.contains(fn_name) {
             // Symbol has been added (either a built-in CBMC function or a Rust allocation function).
             self.symbol_table.lookup(fn_name).unwrap()
@@ -63,8 +64,7 @@ impl<'tcx> GotocCtx<'tcx> {
             // https://github.com/model-checking/kani/issues/2426
             self.ensure(fn_name, |gcx, _| {
                 let typ = gcx.codegen_ffi_type(instance);
-                Symbol::function(fn_name, typ, None, instance.name(), Location::none())
-                    .with_is_extern(true)
+                Symbol::function(fn_name, typ, None, instance.name(), loc).with_is_extern(true)
             })
         } else {
             let shim_name = format!("{fn_name}_ffi_shim");
@@ -77,7 +77,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     typ,
                     Some(gcx.codegen_ffi_shim(shim_name.as_str().into(), instance)),
                     instance.name(),
-                    Location::none(),
+                    loc,
                 )
             })
         }
@@ -109,7 +109,7 @@ impl<'tcx> GotocCtx<'tcx> {
         } else {
             let ret_expr = unwrap_or_return_codegen_unimplemented_stmt!(
                 self,
-                self.codegen_place_stable(ret_place)
+                self.codegen_place_stable(ret_place, loc)
             )
             .goto_expr;
             let ret_type = ret_expr.typ().clone();
@@ -134,7 +134,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// Generate type for the given foreign instance.
     fn codegen_ffi_type(&mut self, instance: Instance) -> Type {
-        let fn_name = self.symbol_name_stable(instance);
+        let fn_name = instance.mangled_name();
         let fn_abi = instance.fn_abi().unwrap();
         let loc = self.codegen_span_stable(instance.def.span());
         let params = fn_abi
@@ -166,7 +166,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// This will behave like `codegen_unimplemented_stmt` but print a message that includes
     /// the name of the function not supported and the calling convention.
     fn codegen_ffi_unsupported(&mut self, instance: Instance, loc: Location) -> Stmt {
-        let fn_name = &self.symbol_name_stable(instance);
+        let fn_name = &instance.mangled_name();
         debug!(?fn_name, ?loc, "codegen_ffi_unsupported");
 
         // Save this occurrence so we can emit a warning in the compilation report.
