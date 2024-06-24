@@ -183,6 +183,10 @@ impl IntrinsicGeneratorPass {
             Ok(pointee_info) => {
                 match pointee_info.layout() {
                     PointeeLayout::Sized { layout } => {
+                        if layout.is_empty() {
+                            // Encountered a ZST, so we can short-circut here.
+                            return new_body.into();
+                        }
                         let shadow_memory_get_instance = Instance::resolve(
                             get_mem_init_fn(
                                 tcx,
@@ -191,10 +195,7 @@ impl IntrinsicGeneratorPass {
                             ),
                             &GenericArgs(vec![
                                 GenericArgKind::Const(
-                                    TyConst::try_from_target_usize(
-                                        layout.len() as u64
-                                    )
-                                    .unwrap(),
+                                    TyConst::try_from_target_usize(layout.len() as u64).unwrap(),
                                 ),
                                 GenericArgKind::Type(*pointee_info.ty()),
                             ]),
@@ -227,10 +228,8 @@ impl IntrinsicGeneratorPass {
                             ),
                             &GenericArgs(vec![
                                 GenericArgKind::Const(
-                                    TyConst::try_from_target_usize(
-                                        element_layout.len() as u64,
-                                    )
-                                    .unwrap(),
+                                    TyConst::try_from_target_usize(element_layout.len() as u64)
+                                        .unwrap(),
                                 ),
                                 GenericArgKind::Type(*pointee_info.ty()),
                             ]),
@@ -250,7 +249,7 @@ impl IntrinsicGeneratorPass {
                             Place::from(ret_var),
                         );
                     }
-                    PointeeLayout::TraitObject => unimplemented!(),
+                    PointeeLayout::TraitObject => {}
                 };
             }
             Err(msg) => {
