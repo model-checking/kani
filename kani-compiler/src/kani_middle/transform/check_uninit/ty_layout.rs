@@ -82,14 +82,12 @@ impl PointeeInfo {
                         };
                         Ok(PointeeInfo { pointee_ty: ty, layout })
                     } else {
-                        Err(
-                            "Can only determine unsized type layout information for slices and trait objects.".to_string(),
-                        )
+                        Err(format!("Cannot determine type layout for type `{ty}`"))
                     }
                 }
             },
             TyKind::Alias(..) | TyKind::Param(..) | TyKind::Bound(..) => {
-                Err("Can only determine type layout information for RigidTy.".to_string())
+                unreachable!("Should only encounter monomorphized types at this point.")
             }
         }
     }
@@ -107,10 +105,18 @@ impl PointeeInfo {
 fn scalar_ty_size(machine_info: &MachineInfo, ty: Ty) -> Option<DataBytes> {
     let shape = ty.layout().unwrap().shape();
     match shape.abi {
-        ValueAbi::Scalar(Scalar::Initialized { value, .. })
-        | ValueAbi::ScalarPair(Scalar::Initialized { value, .. }, _) => {
+        ValueAbi::Scalar(Scalar::Initialized { value, .. }) => {
             Some(DataBytes { offset: 0, size: value.size(machine_info) })
         }
+        ValueAbi::ScalarPair(
+            Scalar::Initialized { value: value_first, .. },
+            Scalar::Initialized { value: value_second, .. },
+        ) => Some(DataBytes {
+            offset: 0,
+            size: MachineSize::from_bits(
+                value_first.size(machine_info).bits() + value_second.size(machine_info).bits(),
+            ),
+        }),
         ValueAbi::Scalar(_)
         | ValueAbi::ScalarPair(_, _)
         | ValueAbi::Uninhabited
@@ -138,13 +144,13 @@ fn data_bytes_for_ty(
         FieldsShape::Primitive => Ok(ty_size()),
         FieldsShape::Array { stride, count } if count > 0 => {
             let TyKind::RigidTy(RigidTy::Array(elem_ty, _)) = ty.kind() else { unreachable!() };
-            let elem_validity = data_bytes_for_ty(machine_info, elem_ty, current_offset)?;
+            let elem_data_bytes = data_bytes_for_ty(machine_info, elem_ty, current_offset)?;
             let mut result = vec![];
-            if !elem_validity.is_empty() {
+            if !elem_data_bytes.is_empty() {
                 for idx in 0..count {
                     let idx: usize = idx.try_into().unwrap();
                     let elem_offset = idx * stride.bytes();
-                    let mut next_validity = elem_validity
+                    let mut next_data_bytes = elem_data_bytes
                         .iter()
                         .cloned()
                         .map(|mut req| {
@@ -152,7 +158,7 @@ fn data_bytes_for_ty(
                             req
                         })
                         .collect::<Vec<_>>();
-                    result.append(&mut next_validity)
+                    result.append(&mut next_data_bytes)
                 }
             }
             Ok(result)
@@ -168,17 +174,17 @@ fn data_bytes_for_ty(
                                 VariantsShape::Single { index } => {
                                     // Only one variant is reachable. This behaves like a struct.
                                     let fields = ty_variants[index.to_index()].fields();
-                                    let mut fields_validity = vec![];
+                                    let mut fields_data_bytes = vec![];
                                     for idx in layout.fields.fields_by_offset_order() {
                                         let field_offset = offsets[idx].bytes();
                                         let field_ty = fields[idx].ty_with_args(&args);
-                                        fields_validity.append(&mut data_bytes_for_ty(
+                                        fields_data_bytes.append(&mut data_bytes_for_ty(
                                             machine_info,
                                             field_ty,
                                             field_offset + current_offset,
                                         )?);
                                     }
-                                    Ok(fields_validity)
+                                    Ok(fields_data_bytes)
                                 }
                                 VariantsShape::Multiple {
                                     tag_encoding: TagEncoding::Niche { .. },
@@ -187,22 +193,22 @@ fn data_bytes_for_ty(
                                     Err(format!("Unsupported Enum `{}` check", def.trimmed_name()))?
                                 }
                                 VariantsShape::Multiple { variants, .. } => {
-                                    let enum_validity = ty_size();
-                                    let mut fields_validity = vec![];
+                                    let enum_data_bytes = ty_size();
+                                    let mut fields_data_bytes = vec![];
                                     for (index, variant) in variants.iter().enumerate() {
                                         let fields = ty_variants[index].fields();
                                         for field_idx in variant.fields.fields_by_offset_order() {
                                             let field_offset = offsets[field_idx].bytes();
                                             let field_ty = fields[field_idx].ty_with_args(&args);
-                                            fields_validity.append(&mut data_bytes_for_ty(
+                                            fields_data_bytes.append(&mut data_bytes_for_ty(
                                                 machine_info,
                                                 field_ty,
                                                 field_offset + current_offset,
                                             )?);
                                         }
                                     }
-                                    if fields_validity.is_empty() {
-                                        Ok(enum_validity)
+                                    if fields_data_bytes.is_empty() {
+                                        Ok(enum_data_bytes)
                                     } else {
                                         Err(format!(
                                             "Unsupported Enum `{}` check",
@@ -214,40 +220,39 @@ fn data_bytes_for_ty(
                         }
                         AdtKind::Union => unreachable!(),
                         AdtKind::Struct => {
-                            // If the struct range has niche add that.
-                            let mut struct_validity = ty_size();
+                            let mut struct_data_bytes = ty_size();
                             let fields = def.variants_iter().next().unwrap().fields();
                             for idx in layout.fields.fields_by_offset_order() {
                                 let field_offset = offsets[idx].bytes();
                                 let field_ty = fields[idx].ty_with_args(&args);
-                                struct_validity.append(&mut data_bytes_for_ty(
+                                struct_data_bytes.append(&mut data_bytes_for_ty(
                                     machine_info,
                                     field_ty,
                                     field_offset + current_offset,
                                 )?);
                             }
-                            Ok(struct_validity)
+                            Ok(struct_data_bytes)
                         }
                     }
                 }
                 RigidTy::Pat(base_ty, ..) => {
                     // This is similar to a structure with one field and with niche defined.
-                    let mut pat_validity = ty_size();
-                    pat_validity.append(&mut data_bytes_for_ty(machine_info, *base_ty, 0)?);
-                    Ok(pat_validity)
+                    let mut pat_data_bytes = ty_size();
+                    pat_data_bytes.append(&mut data_bytes_for_ty(machine_info, *base_ty, 0)?);
+                    Ok(pat_data_bytes)
                 }
                 RigidTy::Tuple(tys) => {
-                    let mut tuple_validity = vec![];
+                    let mut tuple_data_bytes = vec![];
                     for idx in layout.fields.fields_by_offset_order() {
                         let field_offset = offsets[idx].bytes();
                         let field_ty = tys[idx];
-                        tuple_validity.append(&mut data_bytes_for_ty(
+                        tuple_data_bytes.append(&mut data_bytes_for_ty(
                             machine_info,
                             field_ty,
                             field_offset + current_offset,
                         )?);
                     }
-                    Ok(tuple_validity)
+                    Ok(tuple_data_bytes)
                 }
                 RigidTy::Bool
                 | RigidTy::Char
