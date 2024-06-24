@@ -236,7 +236,7 @@ fn data_bytes_for_ty(
                         }
                         AdtKind::Union => unreachable!(),
                         AdtKind::Struct => {
-                            let mut struct_data_bytes = ty_size();
+                            let mut struct_data_bytes = vec![];
                             let fields = def.variants_iter().next().unwrap().fields();
                             for idx in layout.fields.fields_by_offset_order() {
                                 let field_offset = offsets[idx].bytes();
@@ -253,7 +253,7 @@ fn data_bytes_for_ty(
                 }
                 RigidTy::Pat(base_ty, ..) => {
                     // This is similar to a structure with one field and with niche defined.
-                    let mut pat_data_bytes = ty_size();
+                    let mut pat_data_bytes = vec![];
                     pat_data_bytes.append(&mut data_bytes_for_ty(machine_info, *base_ty, 0)?);
                     Ok(pat_data_bytes)
                 }
