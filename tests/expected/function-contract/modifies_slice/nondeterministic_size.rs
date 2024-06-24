@@ -12,6 +12,6 @@ fn zero(x: &mut [u8]) {
 
 #[kani::proof_for_contract(zero)]
 fn main() {
-    let mut x = [0..kani::any()].map(|_|kani::any());
+    let mut x = [0..kani::any()].map(|_| kani::any());
     zero(&mut x);
 }
