@@ -8,6 +8,7 @@ use stable_mir::target::{MachineInfo, MachineSize};
 use stable_mir::ty::{AdtKind, IndexedVal, RigidTy, Ty, TyKind, UintTy};
 use stable_mir::CrateDef;
 
+/// Represents a chunk of data bytes in a data structure.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 struct DataBytes {
     /// Offset in bytes.
@@ -16,30 +17,30 @@ struct DataBytes {
     size: MachineSize,
 }
 
-pub struct TypeLayout {
-    size_in_bytes: usize,
-    data_chunks: Vec<DataBytes>,
-}
+/// Bytewise mask, representing which bytes of a type are data and which are padding.
+type Layout = Vec<bool>;
 
-impl TypeLayout {
-    pub fn to_byte_mask(&self) -> Vec<bool> {
-        let mut layout_mask = vec![false; self.size_in_bytes];
-        for data_bytes in self.data_chunks.iter() {
-            for layout_item in
-                layout_mask.iter_mut().skip(data_bytes.offset).take(data_bytes.size.bytes())
-            {
-                *layout_item = true;
-            }
+/// Create a byte-wise mask from known chunks of data bytes.
+fn generate_byte_mask(size_in_bytes: usize, data_chunks: Vec<DataBytes>) -> Vec<bool> {
+    let mut layout_mask = vec![false; size_in_bytes];
+    for data_bytes in data_chunks.iter() {
+        for layout_item in
+            layout_mask.iter_mut().skip(data_bytes.offset).take(data_bytes.size.bytes())
+        {
+            *layout_item = true;
         }
-        layout_mask
     }
+    layout_mask
 }
 
 // Depending on whether the type is statically or dynamically sized,
 // the layout of the element or the layout of the actual type is returned.
 pub enum PointeeLayout {
-    Static { layout: TypeLayout },
-    Slice { element_layout: TypeLayout },
+    /// Layout of sized objects.
+    Sized { layout: Layout },
+    /// Layout of slices, &str is included in this case and treated as &[u8].
+    Slice { element_layout: Layout },
+    /// Trait objects have an arbitrary layout.
     TraitObject,
 }
 
@@ -57,7 +58,7 @@ impl PointeeInfo {
                     let size_in_bytes = slicee_ty.layout().unwrap().shape().size.bytes();
                     let data_chunks = data_bytes_for_ty(&MachineInfo::target(), slicee_ty, 0)?;
                     let layout = PointeeLayout::Slice {
-                        element_layout: TypeLayout { size_in_bytes, data_chunks },
+                        element_layout: generate_byte_mask(size_in_bytes, data_chunks),
                     };
                     Ok(PointeeInfo { pointee_ty: ty, layout })
                 }
@@ -65,7 +66,7 @@ impl PointeeInfo {
                     let size_in_bytes = slicee_ty.layout().unwrap().shape().size.bytes();
                     let data_chunks = data_bytes_for_ty(&MachineInfo::target(), slicee_ty, 0)?;
                     let layout = PointeeLayout::Slice {
-                        element_layout: TypeLayout { size_in_bytes, data_chunks },
+                        element_layout: generate_byte_mask(size_in_bytes, data_chunks),
                     };
                     Ok(PointeeInfo { pointee_ty: ty, layout })
                 }
@@ -76,8 +77,8 @@ impl PointeeInfo {
                     if ty.layout().unwrap().shape().is_sized() {
                         let size_in_bytes = ty.layout().unwrap().shape().size.bytes();
                         let data_chunks = data_bytes_for_ty(&MachineInfo::target(), ty, 0)?;
-                        let layout = PointeeLayout::Static {
-                            layout: TypeLayout { size_in_bytes, data_chunks },
+                        let layout = PointeeLayout::Sized {
+                            layout: generate_byte_mask(size_in_bytes, data_chunks),
                         };
                         Ok(PointeeInfo { pointee_ty: ty, layout })
                     } else {

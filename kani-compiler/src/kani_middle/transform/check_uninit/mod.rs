@@ -26,7 +26,7 @@ use tracing::{debug, trace};
 mod ty_layout;
 mod uninit_visitor;
 
-pub use ty_layout::{PointeeInfo, PointeeLayout, TypeLayout};
+pub use ty_layout::{PointeeInfo, PointeeLayout};
 use uninit_visitor::{CheckUninitVisitor, InitRelevantInstruction, SourceOp};
 
 const SKIPPED_DIAGNOSTIC_ITEMS: &[&str] =
@@ -188,19 +188,18 @@ impl UninitPass {
         };
         let ptr_operand = operation.mk_operand(body, source);
         match pointee_info.layout() {
-            PointeeLayout::Static { layout } => {
+            PointeeLayout::Sized { layout } => {
                 let shadow_memory_get_instance = Instance::resolve(
                     get_mem_init_fn(tcx, "KaniIsPtrInitialized", &mut self.mem_init_fn_cache),
                     &GenericArgs(vec![
                         GenericArgKind::Const(
-                            TyConst::try_from_target_usize(layout.to_byte_mask().len() as u64)
-                                .unwrap(),
+                            TyConst::try_from_target_usize(layout.len() as u64).unwrap(),
                         ),
                         GenericArgKind::Type(*pointee_info.ty()),
                     ]),
                 )
                 .unwrap();
-                let layout_operand = mk_layout_operand(body, source, operation.position(), layout);
+                let layout_operand = mk_layout_operand(body, source, operation.position(), &layout);
                 try_mark_new_bb_as_skipped(&operation, body, skip_first);
                 body.add_call(
                     &shadow_memory_get_instance,
@@ -225,17 +224,14 @@ impl UninitPass {
                     get_mem_init_fn(tcx, diagnostic, &mut self.mem_init_fn_cache),
                     &GenericArgs(vec![
                         GenericArgKind::Const(
-                            TyConst::try_from_target_usize(
-                                element_layout.to_byte_mask().len() as u64
-                            )
-                            .unwrap(),
+                            TyConst::try_from_target_usize(element_layout.len() as u64).unwrap(),
                         ),
                         GenericArgKind::Type(slicee_ty),
                     ]),
                 )
                 .unwrap();
                 let layout_operand =
-                    mk_layout_operand(body, source, operation.position(), element_layout);
+                    mk_layout_operand(body, source, operation.position(), &element_layout);
                 try_mark_new_bb_as_skipped(&operation, body, skip_first);
                 body.add_call(
                     &shadow_memory_get_instance,
@@ -280,19 +276,18 @@ impl UninitPass {
         let value = operation.expect_value();
 
         match pointee_info.layout() {
-            PointeeLayout::Static { layout } => {
+            PointeeLayout::Sized { layout } => {
                 let shadow_memory_set_instance = Instance::resolve(
                     get_mem_init_fn(tcx, "KaniSetPtrInitialized", &mut self.mem_init_fn_cache),
                     &GenericArgs(vec![
                         GenericArgKind::Const(
-                            TyConst::try_from_target_usize(layout.to_byte_mask().len() as u64)
-                                .unwrap(),
+                            TyConst::try_from_target_usize(layout.len() as u64).unwrap(),
                         ),
                         GenericArgKind::Type(*pointee_info.ty()),
                     ]),
                 )
                 .unwrap();
-                let layout_operand = mk_layout_operand(body, source, operation.position(), layout);
+                let layout_operand = mk_layout_operand(body, source, operation.position(), &layout);
                 try_mark_new_bb_as_skipped(&operation, body, skip_first);
                 body.add_call(
                     &shadow_memory_set_instance,
@@ -326,17 +321,14 @@ impl UninitPass {
                     get_mem_init_fn(tcx, diagnostic, &mut self.mem_init_fn_cache),
                     &GenericArgs(vec![
                         GenericArgKind::Const(
-                            TyConst::try_from_target_usize(
-                                element_layout.to_byte_mask().len() as u64
-                            )
-                            .unwrap(),
+                            TyConst::try_from_target_usize(element_layout.len() as u64).unwrap(),
                         ),
                         GenericArgKind::Type(slicee_ty),
                     ]),
                 )
                 .unwrap();
                 let layout_operand =
-                    mk_layout_operand(body, source, operation.position(), element_layout);
+                    mk_layout_operand(body, source, operation.position(), &element_layout);
                 try_mark_new_bb_as_skipped(&operation, body, skip_first);
                 body.add_call(
                     &shadow_memory_set_instance,
@@ -382,14 +374,13 @@ pub fn mk_layout_operand(
     body: &mut MutableBody,
     source: &mut SourceInstruction,
     position: InsertPosition,
-    layout: &TypeLayout,
+    layout_byte_mask: &Vec<bool>,
 ) -> Operand {
     Operand::Move(Place {
         local: body.new_assignment(
             Rvalue::Aggregate(
                 AggregateKind::Array(Ty::bool_ty()),
-                layout
-                    .to_byte_mask()
+                layout_byte_mask
                     .iter()
                     .map(|byte| {
                         Operand::Constant(ConstOperand {

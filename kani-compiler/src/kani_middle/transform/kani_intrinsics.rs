@@ -182,7 +182,7 @@ impl IntrinsicGeneratorPass {
         match pointee_info {
             Ok(pointee_info) => {
                 match pointee_info.layout() {
-                    PointeeLayout::Static { layout } => {
+                    PointeeLayout::Sized { layout } => {
                         let shadow_memory_get_instance = Instance::resolve(
                             get_mem_init_fn(
                                 tcx,
@@ -192,7 +192,7 @@ impl IntrinsicGeneratorPass {
                             &GenericArgs(vec![
                                 GenericArgKind::Const(
                                     TyConst::try_from_target_usize(
-                                        layout.to_byte_mask().len() as u64
+                                        layout.len() as u64
                                     )
                                     .unwrap(),
                                 ),
@@ -204,7 +204,7 @@ impl IntrinsicGeneratorPass {
                             &mut new_body,
                             &mut terminator,
                             InsertPosition::Before,
-                            layout,
+                            &layout,
                         );
                         new_body.add_call(
                             &shadow_memory_get_instance,
@@ -228,7 +228,7 @@ impl IntrinsicGeneratorPass {
                             &GenericArgs(vec![
                                 GenericArgKind::Const(
                                     TyConst::try_from_target_usize(
-                                        element_layout.to_byte_mask().len() as u64,
+                                        element_layout.len() as u64,
                                     )
                                     .unwrap(),
                                 ),
@@ -240,7 +240,7 @@ impl IntrinsicGeneratorPass {
                             &mut new_body,
                             &mut terminator,
                             InsertPosition::Before,
-                            element_layout,
+                            &element_layout,
                         );
                         new_body.add_call(
                             &shadow_memory_get_instance,
