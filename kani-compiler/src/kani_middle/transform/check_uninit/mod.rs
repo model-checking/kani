@@ -231,7 +231,12 @@ impl UninitPass {
                     ret_place.clone(),
                 );
             }
-            PointeeLayout::TraitObject => return,
+            PointeeLayout::TraitObject => {
+                try_mark_new_bb_as_skipped(&operation, body, skip_first);
+                let reason = "Kani does not support reasoning about memory initialization of pointers to trait objects.";
+                self.unsupported_check(tcx, body, source, operation.position(), reason);
+                return;
+            }
         };
 
         // Make sure all non-padding bytes are initialized.
@@ -326,7 +331,12 @@ impl UninitPass {
                     ret_place,
                 );
             }
-            PointeeLayout::TraitObject => {}
+            PointeeLayout::TraitObject => {
+                try_mark_new_bb_as_skipped(&operation, body, skip_first);
+                let reason = "Kani does not support reasoning about memory initialization of pointers to trait objects.";
+                self.unsupported_check(tcx, body, source, operation.position(), reason);
+                return;
+            }
         };
     }
 

@@ -246,7 +246,28 @@ impl IntrinsicGeneratorPass {
                             Place::from(ret_var),
                         );
                     }
-                    PointeeLayout::TraitObject => {}
+                    PointeeLayout::TraitObject => {
+                        let rvalue = Rvalue::Use(Operand::Constant(ConstOperand {
+                            const_: MirConst::from_bool(false),
+                            span,
+                            user_ty: None,
+                        }));
+                        let result = new_body.new_assignment(
+                            rvalue,
+                            &mut terminator,
+                            InsertPosition::Before,
+                        );
+                        let reason: &str = "Kani does not support reasoning about memory initialization of pointers to trait objects.";
+
+                        new_body.add_check(
+                            tcx,
+                            &self.check_type,
+                            &mut terminator,
+                            InsertPosition::Before,
+                            result,
+                            &reason,
+                        );
+                    }
                 };
             }
             Err(msg) => {
