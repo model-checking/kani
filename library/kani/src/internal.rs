@@ -68,10 +68,6 @@ impl<'a, T> Pointer<'a> for *mut T {
     }
 }
 
-pub fn any_slice<T>(slice: &mut [T]) {
-    slice.fill_with(|| crate::any_modifies::<T>());
-}
-
 pub trait SlicePointer<'a> {
     /// Type of the pointed-to data
     type Inner;
