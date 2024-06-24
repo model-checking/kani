@@ -189,20 +189,15 @@ impl UninitPass {
         let ptr_operand = operation.mk_operand(body, source);
         match pointee_info.layout() {
             PointeeLayout::Sized { layout } => {
-                let shadow_memory_get_instance = Instance::resolve(
-                    get_mem_init_fn(tcx, "KaniIsPtrInitialized", &mut self.mem_init_fn_cache),
-                    &GenericArgs(vec![
-                        GenericArgKind::Const(
-                            TyConst::try_from_target_usize(layout.len() as u64).unwrap(),
-                        ),
-                        GenericArgKind::Type(*pointee_info.ty()),
-                    ]),
-                )
-                .unwrap();
+                let is_ptr_initialized_instance = resolve_mem_init_fn(
+                    get_mem_init_fn_def(tcx, "KaniIsPtrInitialized", &mut self.mem_init_fn_cache),
+                    layout.len(),
+                    *pointee_info.ty(),
+                );
                 let layout_operand = mk_layout_operand(body, source, operation.position(), &layout);
                 try_mark_new_bb_as_skipped(&operation, body, skip_first);
                 body.add_call(
-                    &shadow_memory_get_instance,
+                    &is_ptr_initialized_instance,
                     source,
                     operation.position(),
                     vec![ptr_operand.clone(), layout_operand, operation.expect_count()],
@@ -220,21 +215,16 @@ impl UninitPass {
                     }
                     _ => unreachable!(),
                 };
-                let shadow_memory_get_instance = Instance::resolve(
-                    get_mem_init_fn(tcx, diagnostic, &mut self.mem_init_fn_cache),
-                    &GenericArgs(vec![
-                        GenericArgKind::Const(
-                            TyConst::try_from_target_usize(element_layout.len() as u64).unwrap(),
-                        ),
-                        GenericArgKind::Type(slicee_ty),
-                    ]),
-                )
-                .unwrap();
+                let is_ptr_initialized_instance = resolve_mem_init_fn(
+                    get_mem_init_fn_def(tcx, diagnostic, &mut self.mem_init_fn_cache),
+                    element_layout.len(),
+                    slicee_ty,
+                );
                 let layout_operand =
                     mk_layout_operand(body, source, operation.position(), &element_layout);
                 try_mark_new_bb_as_skipped(&operation, body, skip_first);
                 body.add_call(
-                    &shadow_memory_get_instance,
+                    &is_ptr_initialized_instance,
                     source,
                     operation.position(),
                     vec![ptr_operand.clone(), layout_operand],
@@ -277,20 +267,15 @@ impl UninitPass {
 
         match pointee_info.layout() {
             PointeeLayout::Sized { layout } => {
-                let shadow_memory_set_instance = Instance::resolve(
-                    get_mem_init_fn(tcx, "KaniSetPtrInitialized", &mut self.mem_init_fn_cache),
-                    &GenericArgs(vec![
-                        GenericArgKind::Const(
-                            TyConst::try_from_target_usize(layout.len() as u64).unwrap(),
-                        ),
-                        GenericArgKind::Type(*pointee_info.ty()),
-                    ]),
-                )
-                .unwrap();
+                let set_ptr_initialized_instance = resolve_mem_init_fn(
+                    get_mem_init_fn_def(tcx, "KaniSetPtrInitialized", &mut self.mem_init_fn_cache),
+                    layout.len(),
+                    *pointee_info.ty(),
+                );
                 let layout_operand = mk_layout_operand(body, source, operation.position(), &layout);
                 try_mark_new_bb_as_skipped(&operation, body, skip_first);
                 body.add_call(
-                    &shadow_memory_set_instance,
+                    &set_ptr_initialized_instance,
                     source,
                     operation.position(),
                     vec![
@@ -317,21 +302,16 @@ impl UninitPass {
                     }
                     _ => unreachable!(),
                 };
-                let shadow_memory_set_instance = Instance::resolve(
-                    get_mem_init_fn(tcx, diagnostic, &mut self.mem_init_fn_cache),
-                    &GenericArgs(vec![
-                        GenericArgKind::Const(
-                            TyConst::try_from_target_usize(element_layout.len() as u64).unwrap(),
-                        ),
-                        GenericArgKind::Type(slicee_ty),
-                    ]),
-                )
-                .unwrap();
+                let set_ptr_initialized_instance = resolve_mem_init_fn(
+                    get_mem_init_fn_def(tcx, diagnostic, &mut self.mem_init_fn_cache),
+                    element_layout.len(),
+                    slicee_ty,
+                );
                 let layout_operand =
                     mk_layout_operand(body, source, operation.position(), &element_layout);
                 try_mark_new_bb_as_skipped(&operation, body, skip_first);
                 body.add_call(
-                    &shadow_memory_set_instance,
+                    &set_ptr_initialized_instance,
                     source,
                     operation.position(),
                     vec![
@@ -412,11 +392,23 @@ fn try_mark_new_bb_as_skipped(
 }
 
 /// Retrieve a function definition by diagnostic string, caching the result.
-pub fn get_mem_init_fn(
+pub fn get_mem_init_fn_def(
     tcx: TyCtxt,
     diagnostic: &'static str,
     cache: &mut HashMap<&'static str, FnDef>,
 ) -> FnDef {
     let entry = cache.entry(diagnostic).or_insert_with(|| find_fn_def(tcx, diagnostic).unwrap());
     *entry
+}
+
+/// Resolves a given memory initialization function with passed type parameters.
+pub fn resolve_mem_init_fn(fn_def: FnDef, layout_size: usize, associated_type: Ty) -> Instance {
+    Instance::resolve(
+        fn_def,
+        &GenericArgs(vec![
+            GenericArgKind::Const(TyConst::try_from_target_usize(layout_size as u64).unwrap()),
+            GenericArgKind::Type(associated_type),
+        ]),
+    )
+    .unwrap()
 }

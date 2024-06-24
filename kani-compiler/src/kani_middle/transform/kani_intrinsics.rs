@@ -21,13 +21,15 @@ use stable_mir::mir::{
     BinOp, Body, ConstOperand, Operand, Place, Rvalue, Statement, StatementKind, RETURN_LOCAL,
 };
 use stable_mir::target::MachineInfo;
-use stable_mir::ty::{FnDef, GenericArgKind, GenericArgs, MirConst, RigidTy, TyConst, TyKind};
+use stable_mir::ty::{FnDef, MirConst, RigidTy, Ty, TyKind, UintTy};
 use std::collections::HashMap;
 use std::fmt::Debug;
 use strum_macros::AsRefStr;
 use tracing::trace;
 
-use super::check_uninit::{get_mem_init_fn, mk_layout_operand, PointeeLayout};
+use super::check_uninit::{
+    get_mem_init_fn_def, mk_layout_operand, resolve_mem_init_fn, PointeeLayout,
+};
 
 /// Generate the body for a few Kani intrinsics.
 #[derive(Debug)]
@@ -187,20 +189,15 @@ impl IntrinsicGeneratorPass {
                             // Encountered a ZST, so we can short-circut here.
                             return new_body.into();
                         }
-                        let shadow_memory_get_instance = Instance::resolve(
-                            get_mem_init_fn(
+                        let is_ptr_initialized_instance = resolve_mem_init_fn(
+                            get_mem_init_fn_def(
                                 tcx,
                                 "KaniIsPtrInitialized",
                                 &mut self.mem_init_fn_cache,
                             ),
-                            &GenericArgs(vec![
-                                GenericArgKind::Const(
-                                    TyConst::try_from_target_usize(layout.len() as u64).unwrap(),
-                                ),
-                                GenericArgKind::Type(*pointee_info.ty()),
-                            ]),
-                        )
-                        .unwrap();
+                            layout.len(),
+                            *pointee_info.ty(),
+                        );
                         let layout_operand = mk_layout_operand(
                             &mut new_body,
                             &mut terminator,
@@ -208,7 +205,7 @@ impl IntrinsicGeneratorPass {
                             &layout,
                         );
                         new_body.add_call(
-                            &shadow_memory_get_instance,
+                            &is_ptr_initialized_instance,
                             &mut terminator,
                             InsertPosition::Before,
                             vec![
@@ -220,21 +217,21 @@ impl IntrinsicGeneratorPass {
                         );
                     }
                     PointeeLayout::Slice { element_layout } => {
-                        let shadow_memory_get_instance = Instance::resolve(
-                            get_mem_init_fn(
-                                tcx,
-                                "KaniIsSlicePtrInitialized",
-                                &mut self.mem_init_fn_cache,
-                            ),
-                            &GenericArgs(vec![
-                                GenericArgKind::Const(
-                                    TyConst::try_from_target_usize(element_layout.len() as u64)
-                                        .unwrap(),
-                                ),
-                                GenericArgKind::Type(*pointee_info.ty()),
-                            ]),
-                        )
-                        .unwrap();
+                        // Since `str`` is a separate type, need to differentiate between [T] and str.
+                        let (slicee_ty, diagnostic) = match pointee_info.ty().kind() {
+                            TyKind::RigidTy(RigidTy::Slice(slicee_ty)) => {
+                                (slicee_ty, "KaniIsSlicePtrInitialized")
+                            }
+                            TyKind::RigidTy(RigidTy::Str) => {
+                                (Ty::unsigned_ty(UintTy::U8), "KaniIsStrPtrInitialized")
+                            }
+                            _ => unreachable!(),
+                        };
+                        let is_ptr_initialized_instance = resolve_mem_init_fn(
+                            get_mem_init_fn_def(tcx, diagnostic, &mut self.mem_init_fn_cache),
+                            element_layout.len(),
+                            slicee_ty,
+                        );
                         let layout_operand = mk_layout_operand(
                             &mut new_body,
                             &mut terminator,
@@ -242,7 +239,7 @@ impl IntrinsicGeneratorPass {
                             &element_layout,
                         );
                         new_body.add_call(
-                            &shadow_memory_get_instance,
+                            &is_ptr_initialized_instance,
                             &mut terminator,
                             InsertPosition::Before,
                             vec![Operand::Copy(Place::from(1)), layout_operand],
