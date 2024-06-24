@@ -93,8 +93,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let assigns_upto_contract =
             attrs_of_wrapped_fn.modifies_slice_contract().unwrap_or_default();
         self.attach_modifies_contract(instance_of_check, assigns_contract, assigns_upto_contract);
-        let wrapper_name = self.symbol_name_stable(instance_of_check);
-
+        let wrapper_name = instance_of_check.mangled_name();
         AssignsContract {
             recursion_tracker: full_recursion_tracker_name,
             contracted_function_name: wrapper_name,

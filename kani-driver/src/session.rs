@@ -82,13 +82,7 @@ impl KaniSession {
     /// Determine which symbols Kani should codegen (i.e. by slicing away symbols
     /// that are considered unreachable.)
     pub fn reachability_mode(&self) -> ReachabilityMode {
-        if self.codegen_tests {
-            ReachabilityMode::Tests
-        } else if self.args.function.is_some() {
-            ReachabilityMode::AllPubFns
-        } else {
-            ReachabilityMode::ProofHarnesses
-        }
+        if self.codegen_tests { ReachabilityMode::Tests } else { ReachabilityMode::ProofHarnesses }
     }
 }
 
@@ -97,8 +91,6 @@ impl KaniSession {
 pub enum ReachabilityMode {
     #[strum(to_string = "harnesses")]
     ProofHarnesses,
-    #[strum(to_string = "pub_fns")]
-    AllPubFns,
     Tests,
 }
 
