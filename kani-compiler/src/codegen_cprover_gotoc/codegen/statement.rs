@@ -75,6 +75,30 @@ impl<'tcx> GotocCtx<'tcx> {
                 .goto_expr;
                 self.codegen_set_discriminant(dest_ty, dest_expr, *variant_index, location)
             }
+            // StorageLive and StorageDead are modelled via CBMC's internal means of detecting
+            // accesses to dangling pointers, which uses demonic non-determinism. That is, CBMC
+            // non-deterministically chooses a single object's address to be tracked in a
+            // pointer-typed global instrumentation variable __CPROVER_dead_object. Any dereference
+            // entails a check that the pointer being dereferenced is not equal to the pointer held
+            // in __CPROVER_dead_object. We use this to bridge the difference between Rust and MIR
+            // semantics as follows:
+            // 1. (At the time of writing) MIR declares all function-local variables at function
+            //    scope, irrespective of the scope/block that Rust code originally used.
+            // 2. In MIR, StorageLive and StorageDead markers are inserted at the beginning and end
+            //    of the Rust block to record the Rust-level lifetime of the object.
+            // 3. We translate MIR declarations into GOTO declarations, implying that we will have
+            //    a single object per function for a local variable, even when Rust had a variable
+            //    declared in a sub-scope of the function where said scope was entered multiple
+            //    times (e.g., a loop body).
+            // 4. To enable detection of use of dangling pointers, we now use
+            //    __CPROVER_dead_object, unless the address of the local object is never taken
+            //    (implying that there cannot be a use of a dangling pointer with respect to said
+            //    object). We update __CPROVER_dead_object as follows:
+            //    * StorageLive is set to NULL when __CPROVER_dead_object pointed to the object
+            //    (re-)entering scope, or else is left unchanged.
+            //    * StorageDead non-deterministically updates (or leaves unchanged)
+            //    __CPROVER_dead_object to point to the object going out of scope. (This is the
+            //    same update approach as used within CBMC.)
             StatementKind::StorageLive(var_id) => {
                 if !self.current_fn().is_address_taken_local(*var_id) {
                     Stmt::skip(location)
