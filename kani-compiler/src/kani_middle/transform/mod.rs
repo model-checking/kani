@@ -66,8 +66,14 @@ impl BodyTransformation {
         // This has to come after stubs since we want this to replace the stubbed body.
         transformer.add_pass(queries, AnyModifiesPass::new(tcx, &unit));
         transformer.add_pass(queries, ValidValuePass { check_type: check_type.clone() });
-        transformer.add_pass(queries, UninitPass { check_type: check_type.clone() });
-        transformer.add_pass(queries, IntrinsicGeneratorPass { check_type });
+        transformer.add_pass(
+            queries,
+            UninitPass { check_type: check_type.clone(), mem_init_fn_cache: HashMap::new() },
+        );
+        transformer.add_pass(
+            queries,
+            IntrinsicGeneratorPass { check_type, mem_init_fn_cache: HashMap::new() },
+        );
         transformer
     }
 
@@ -82,7 +88,7 @@ impl BodyTransformation {
             None => {
                 let mut body = instance.body().unwrap();
                 let mut modified = false;
-                for pass in self.stub_passes.iter().chain(self.inst_passes.iter()) {
+                for pass in self.stub_passes.iter_mut().chain(self.inst_passes.iter_mut()) {
                     let result = pass.transform(tcx, body, instance);
                     modified |= result.0;
                     body = result.1;
@@ -130,7 +136,7 @@ pub(crate) trait TransformPass: Debug {
         Self: Sized;
 
     /// Run a transformation pass in the function body.
-    fn transform(&self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body);
+    fn transform(&mut self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body);
 }
 
 /// The transformation result.

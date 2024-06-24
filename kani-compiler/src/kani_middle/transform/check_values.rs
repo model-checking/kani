@@ -61,7 +61,7 @@ impl TransformPass for ValidValuePass {
 
     /// Transform the function body by inserting checks one-by-one.
     /// For every unsafe dereference or a transmute operation, we check all values are valid.
-    fn transform(&self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
+    fn transform(&mut self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
         trace!(function=?instance.name(), "transform");
         let mut new_body = MutableBody::from(body);
         let orig_len = new_body.blocks().len();

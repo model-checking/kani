@@ -11,7 +11,6 @@ use crate::kani_middle::transform::body::{
 };
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
-use lazy_static::lazy_static;
 use rustc_middle::ty::TyCtxt;
 use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::Instance;
@@ -22,7 +21,6 @@ use stable_mir::ty::{
 use stable_mir::CrateDef;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
-use std::sync::Mutex;
 use tracing::{debug, trace};
 
 mod ty_layout;
@@ -31,25 +29,15 @@ mod uninit_visitor;
 pub use ty_layout::{PointeeInfo, PointeeLayout, TypeLayout};
 use uninit_visitor::{CheckUninitVisitor, InitRelevantInstruction, SourceOp};
 
-const SKIPPED_DIAGNOSTIC_ITEMS: &[&str] = &["KaniIsUnitPtrInitialized", "KaniSetUnitPtrInitialized"];
-
-/// Retrieve a function definition by diagnostic string, caching the result.
-pub fn get_kani_sm_function(tcx: TyCtxt, diagnostic: &'static str) -> FnDef {
-    lazy_static! {
-        static ref KANI_SM_FUNCTIONS: Mutex<HashMap<&'static str, FnDef>> =
-            Mutex::new(HashMap::new());
-    }
-    let mut kani_sm_functions = KANI_SM_FUNCTIONS.lock().unwrap();
-    let entry = kani_sm_functions
-        .entry(diagnostic)
-        .or_insert_with(|| find_fn_def(tcx, diagnostic).unwrap());
-    *entry
-}
+const SKIPPED_DIAGNOSTIC_ITEMS: &[&str] =
+    &["KaniIsUnitPtrInitialized", "KaniSetUnitPtrInitialized"];
 
 /// Instrument the code with checks for uninitialized memory.
 #[derive(Debug)]
 pub struct UninitPass {
     pub check_type: CheckType,
+    /// Used to cache FnDef lookups of injected memory initialization functions.
+    pub mem_init_fn_cache: HashMap<&'static str, FnDef>,
 }
 
 impl TransformPass for UninitPass {
@@ -68,7 +56,7 @@ impl TransformPass for UninitPass {
         args.ub_check.contains(&ExtraChecks::Uninit)
     }
 
-    fn transform(&self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
+    fn transform(&mut self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
         trace!(function=?instance.name(), "transform");
 
         // Need to break infinite recursion when shadow memory checks are inserted,
@@ -115,7 +103,7 @@ impl TransformPass for UninitPass {
 impl UninitPass {
     /// Inject memory initialization checks for each operation in an instruction.
     fn build_check_for_instruction(
-        &self,
+        &mut self,
         tcx: TyCtxt,
         body: &mut MutableBody,
         instruction: InitRelevantInstruction,
@@ -133,7 +121,7 @@ impl UninitPass {
 
     /// Inject memory initialization check for an operation.
     fn build_check_for_operation(
-        &self,
+        &mut self,
         tcx: TyCtxt,
         body: &mut MutableBody,
         source: &mut SourceInstruction,
@@ -186,7 +174,7 @@ impl UninitPass {
     // Inject a load from shadow memory tracking memory initialization and an assertion that all
     // non-padding bytes are initialized.
     fn build_get_and_check(
-        &self,
+        &mut self,
         tcx: TyCtxt,
         body: &mut MutableBody,
         source: &mut SourceInstruction,
@@ -202,7 +190,7 @@ impl UninitPass {
         match pointee_info.layout() {
             PointeeLayout::Static { layout } => {
                 let shadow_memory_get_instance = Instance::resolve(
-                    get_kani_sm_function(tcx, "KaniIsPtrInitialized"),
+                    get_mem_init_fn(tcx, "KaniIsPtrInitialized", &mut self.mem_init_fn_cache),
                     &GenericArgs(vec![
                         GenericArgKind::Const(
                             TyConst::try_from_target_usize(layout.to_byte_mask().len() as u64)
@@ -234,7 +222,7 @@ impl UninitPass {
                     _ => unreachable!(),
                 };
                 let shadow_memory_get_instance = Instance::resolve(
-                    get_kani_sm_function(tcx, diagnostic),
+                    get_mem_init_fn(tcx, diagnostic, &mut self.mem_init_fn_cache),
                     &GenericArgs(vec![
                         GenericArgKind::Const(
                             TyConst::try_from_target_usize(
@@ -276,7 +264,7 @@ impl UninitPass {
     // Inject a store into shadow memory tracking memory initialization to initialize or
     // deinitialize all non-padding bytes.
     fn build_set(
-        &self,
+        &mut self,
         tcx: TyCtxt,
         body: &mut MutableBody,
         source: &mut SourceInstruction,
@@ -294,7 +282,7 @@ impl UninitPass {
         match pointee_info.layout() {
             PointeeLayout::Static { layout } => {
                 let shadow_memory_set_instance = Instance::resolve(
-                    get_kani_sm_function(tcx, "KaniSetPtrInitialized"),
+                    get_mem_init_fn(tcx, "KaniSetPtrInitialized", &mut self.mem_init_fn_cache),
                     &GenericArgs(vec![
                         GenericArgKind::Const(
                             TyConst::try_from_target_usize(layout.to_byte_mask().len() as u64)
@@ -335,7 +323,7 @@ impl UninitPass {
                     _ => unreachable!(),
                 };
                 let shadow_memory_set_instance = Instance::resolve(
-                    get_kani_sm_function(tcx, diagnostic),
+                    get_mem_init_fn(tcx, diagnostic, &mut self.mem_init_fn_cache),
                     &GenericArgs(vec![
                         GenericArgKind::Const(
                             TyConst::try_from_target_usize(
@@ -430,4 +418,14 @@ fn try_mark_new_bb_as_skipped(
         let new_bb_idx = body.blocks().len();
         skip_first.insert(new_bb_idx);
     }
+}
+
+/// Retrieve a function definition by diagnostic string, caching the result.
+pub fn get_mem_init_fn(
+    tcx: TyCtxt,
+    diagnostic: &'static str,
+    cache: &mut HashMap<&'static str, FnDef>,
+) -> FnDef {
+    let entry = cache.entry(diagnostic).or_insert_with(|| find_fn_def(tcx, diagnostic).unwrap());
+    *entry
 }

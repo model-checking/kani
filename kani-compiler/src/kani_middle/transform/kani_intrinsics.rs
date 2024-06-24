@@ -21,17 +21,20 @@ use stable_mir::mir::{
     BinOp, Body, ConstOperand, Operand, Place, Rvalue, Statement, StatementKind, RETURN_LOCAL,
 };
 use stable_mir::target::MachineInfo;
-use stable_mir::ty::{GenericArgKind, GenericArgs, MirConst, RigidTy, TyConst, TyKind};
+use stable_mir::ty::{FnDef, GenericArgKind, GenericArgs, MirConst, RigidTy, TyConst, TyKind};
+use std::collections::HashMap;
 use std::fmt::Debug;
 use strum_macros::AsRefStr;
 use tracing::trace;
 
-use super::check_uninit::{get_kani_sm_function, mk_layout_operand, PointeeLayout};
+use super::check_uninit::{get_mem_init_fn, mk_layout_operand, PointeeLayout};
 
 /// Generate the body for a few Kani intrinsics.
 #[derive(Debug)]
 pub struct IntrinsicGeneratorPass {
     pub check_type: CheckType,
+    /// Used to cache FnDef lookups of injected memory initialization functions.
+    pub mem_init_fn_cache: HashMap<&'static str, FnDef>,
 }
 
 impl TransformPass for IntrinsicGeneratorPass {
@@ -51,7 +54,7 @@ impl TransformPass for IntrinsicGeneratorPass {
 
     /// Transform the function body by inserting checks one-by-one.
     /// For every unsafe dereference or a transmute operation, we check all values are valid.
-    fn transform(&self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
+    fn transform(&mut self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
         trace!(function=?instance.name(), "transform");
         if matches_diagnostic(tcx, instance.def, Intrinsics::KaniValidValue.as_ref()) {
             (true, self.valid_value_body(tcx, body))
@@ -153,7 +156,7 @@ impl IntrinsicGeneratorPass {
     ///     __kani_mem_init_sm_get(ptr, layout, len)
     /// }
     /// ```
-    fn is_initialized_body(&self, tcx: TyCtxt, body: Body) -> Body {
+    fn is_initialized_body(&mut self, tcx: TyCtxt, body: Body) -> Body {
         let mut new_body = MutableBody::from(body);
         new_body.clear_body();
 
@@ -181,7 +184,11 @@ impl IntrinsicGeneratorPass {
                 match pointee_info.layout() {
                     PointeeLayout::Static { layout } => {
                         let shadow_memory_get_instance = Instance::resolve(
-                            get_kani_sm_function(tcx, "KaniIsPtrInitialized"),
+                            get_mem_init_fn(
+                                tcx,
+                                "KaniIsPtrInitialized",
+                                &mut self.mem_init_fn_cache,
+                            ),
                             &GenericArgs(vec![
                                 GenericArgKind::Const(
                                     TyConst::try_from_target_usize(
@@ -213,7 +220,11 @@ impl IntrinsicGeneratorPass {
                     }
                     PointeeLayout::Slice { element_layout } => {
                         let shadow_memory_get_instance = Instance::resolve(
-                            get_kani_sm_function(tcx, "KaniIsSlicePtrInitialized"),
+                            get_mem_init_fn(
+                                tcx,
+                                "KaniIsSlicePtrInitialized",
+                                &mut self.mem_init_fn_cache,
+                            ),
                             &GenericArgs(vec![
                                 GenericArgKind::Const(
                                     TyConst::try_from_target_usize(
