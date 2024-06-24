@@ -133,7 +133,7 @@ impl GotocCodegenBackend {
                                 format!(
                                     "codegen_function: {}\n{}",
                                     instance.name(),
-                                    gcx.symbol_name_stable(instance)
+                                    instance.mangled_name()
                                 ),
                                 instance.def,
                             );

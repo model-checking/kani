@@ -59,8 +59,7 @@ impl<'tcx> CurrentFnCtx<'tcx> {
     pub fn new(instance: Instance, gcx: &GotocCtx<'tcx>, body: &Body) -> Self {
         let instance_internal = rustc_internal::internal(gcx.tcx, instance);
         let readable_name = instance.name();
-        let name =
-            if &readable_name == "main" { readable_name.clone() } else { instance.mangled_name() };
+        let name = instance.mangled_name();
         let locals = body.locals().to_vec();
         let local_names = body
             .var_debug_info

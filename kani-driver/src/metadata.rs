@@ -2,12 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use anyhow::{bail, Result};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use tracing::{debug, trace};
 
 use kani_metadata::{
-    HarnessAttributes, HarnessMetadata, InternedString, KaniMetadata, TraitDefinedMethod,
-    VtableCtxResults,
+    HarnessMetadata, InternedString, KaniMetadata, TraitDefinedMethod, VtableCtxResults,
 };
 use std::collections::{BTreeSet, HashMap};
 use std::fs::File;
@@ -115,12 +114,7 @@ impl KaniSession {
         &self,
         all_harnesses: &[&'a HarnessMetadata],
     ) -> Result<Vec<&'a HarnessMetadata>> {
-        let harnesses = if self.args.harnesses.is_empty() {
-            BTreeSet::from_iter(self.args.function.iter())
-        } else {
-            BTreeSet::from_iter(self.args.harnesses.iter())
-        };
-
+        let harnesses = BTreeSet::from_iter(self.args.harnesses.iter());
         let total_harnesses = harnesses.len();
         let all_targets = &harnesses;
 
@@ -169,25 +163,6 @@ pub fn sort_harnesses_by_loc<'a>(harnesses: &[&'a HarnessMetadata]) -> Vec<&'a H
     harnesses_clone
 }
 
-pub fn mock_proof_harness(
-    name: &str,
-    unwind_value: Option<u32>,
-    krate: Option<&str>,
-    model_file: Option<PathBuf>,
-) -> HarnessMetadata {
-    HarnessMetadata {
-        pretty_name: name.into(),
-        mangled_name: name.into(),
-        crate_name: krate.unwrap_or("<unknown>").into(),
-        original_file: "<unknown>".into(),
-        original_start_line: 0,
-        original_end_line: 0,
-        attributes: HarnessAttributes { unwind_value, proof: true, ..Default::default() },
-        goto_file: model_file,
-        contract: Default::default(),
-    }
-}
-
 /// Search for a proof harness with a particular name.
 /// At the present time, we use `no_mangle` so collisions shouldn't happen,
 /// but this function is written to be robust against that changing in the future.
@@ -223,8 +198,29 @@ fn find_proof_harnesses<'a>(
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::*;
+    use kani_metadata::HarnessAttributes;
+    use std::path::PathBuf;
+
+    pub fn mock_proof_harness(
+        name: &str,
+        unwind_value: Option<u32>,
+        krate: Option<&str>,
+        model_file: Option<PathBuf>,
+    ) -> HarnessMetadata {
+        HarnessMetadata {
+            pretty_name: name.into(),
+            mangled_name: name.into(),
+            crate_name: krate.unwrap_or("<unknown>").into(),
+            original_file: "<unknown>".into(),
+            original_start_line: 0,
+            original_end_line: 0,
+            attributes: HarnessAttributes { unwind_value, proof: true, ..Default::default() },
+            goto_file: model_file,
+            contract: Default::default(),
+        }
+    }
 
     #[test]
     fn check_find_proof_harness_without_exact() {

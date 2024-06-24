@@ -70,14 +70,10 @@ impl KaniSession {
                 rustc_args.push(t);
             }
         } else {
-            // If we specifically request "--function main" then don't override crate type
-            if Some("main".to_string()) != self.args.function {
-                // We only run against proof harnesses normally, and this change
-                // 1. Means we do not require a `fn main` to exist
-                // 2. Don't forget it also changes visibility rules.
-                rustc_args.push("--crate-type".into());
-                rustc_args.push("lib".into());
-            }
+            // We only run against proof harnesses, so always compile as a library.
+            // This ensures compilation passes if the crate does not have a `main` function.
+            rustc_args.push("--crate-type".into());
+            rustc_args.push("lib".into());
         }
 
         // Note that the order of arguments is important. Kani specific flags should precede
