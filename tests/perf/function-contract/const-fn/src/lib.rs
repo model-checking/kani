@@ -1,11 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-flags: -Zfunction-contracts -Zmem-predicates
 
 //! Check that Kani contract can be applied to a constant function.
-//! <https://github.com/model-checking/kani/issues/3258>
-
-#![feature(effects)]
+//! <https://github.com/model-checking/kani/issues/3254>
 
 #[kani::requires(kani::mem::can_dereference(arg))]
 const unsafe fn dummy<T>(arg: *const T) -> T {

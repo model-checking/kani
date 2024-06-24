@@ -1,0 +1,27 @@
+Checking harness invalid_access::check_invalid_slice_len...
+Failed Checks: The object size exceeds the maximum size supported by Kani's shadow memory model (64)
+VERIFICATION:- SUCCESSFUL (encountered one or more panics as expected)
+
+Checking harness invalid_access::check_invalid_slice_ptr...
+Failed Checks: Kani does not support reasoning about memory initialization of unsized pointers.
+VERIFICATION:- SUCCESSFUL (encountered one or more panics as expected)
+
+Checking harness invalid_access::check_invalid_dyn_ptr...
+Failed Checks: Kani does not support reasoning about memory initialization of unsized pointers.
+VERIFICATION:- SUCCESSFUL (encountered one or more panics as expected)
+
+Checking harness valid_access::check_valid_zst...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness valid_access::check_valid_slice_ptr...
+Failed Checks: Kani does not support reasoning about memory initialization of unsized pointers.
+VERIFICATION:- FAILED
+
+Checking harness valid_access::check_valid_dyn_ptr...
+Failed Checks: Kani does not support reasoning about memory initialization of unsized pointers.
+VERIFICATION:- FAILED
+
+Summary:
+Verification failed for - valid_access::check_valid_slice_ptr
+Verification failed for - valid_access::check_valid_dyn_ptr
+Complete - 4 successfully verified harnesses, 2 failures, 6 total.

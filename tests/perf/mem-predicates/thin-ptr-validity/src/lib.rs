@@ -1,6 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-flags: -Z mem-predicates
+
 //! Check that Kani's memory predicates work for thin pointers.
 
 extern crate kani;
