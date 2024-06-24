@@ -181,7 +181,7 @@ impl IntrinsicGeneratorPass {
                 match pointee_info.layout() {
                     PointeeLayout::Static { layout } => {
                         let shadow_memory_get_instance = Instance::resolve(
-                            get_kani_sm_function(tcx, "KaniMemInitSMGet"),
+                            get_kani_sm_function(tcx, "KaniIsPtrInitialized"),
                             &GenericArgs(vec![
                                 GenericArgKind::Const(
                                     TyConst::try_from_target_usize(
@@ -213,7 +213,7 @@ impl IntrinsicGeneratorPass {
                     }
                     PointeeLayout::Slice { element_layout } => {
                         let shadow_memory_get_instance = Instance::resolve(
-                            get_kani_sm_function(tcx, "KaniMemInitSMGetSlice"),
+                            get_kani_sm_function(tcx, "KaniIsSlicePtrInitialized"),
                             &GenericArgs(vec![
                                 GenericArgKind::Const(
                                     TyConst::try_from_target_usize(

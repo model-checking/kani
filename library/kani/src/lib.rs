@@ -33,6 +33,7 @@ pub mod vec;
 #[doc(hidden)]
 pub mod internal;
 
+mod mem_init;
 mod models;
 
 pub use arbitrary::Arbitrary;

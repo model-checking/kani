@@ -122,7 +122,7 @@ impl<'tcx> GotocCtx<'tcx> {
             .tcx
             .all_diagnostic_items(())
             .name_to_id
-            .get(&rustc_span::symbol::Symbol::intern("KaniMemInitSM"))
+            .get(&rustc_span::symbol::Symbol::intern("KaniMemInitShadowMem"))
             .map(|attr_id| {
                 self.tcx
                     .symbol_name(rustc_middle::ty::Instance::mono(self.tcx, *attr_id))

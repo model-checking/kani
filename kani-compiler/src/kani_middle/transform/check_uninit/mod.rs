@@ -31,7 +31,7 @@ mod uninit_visitor;
 pub use ty_layout::{PointeeInfo, PointeeLayout, TypeLayout};
 use uninit_visitor::{CheckUninitVisitor, InitRelevantInstruction, SourceOp};
 
-const SKIPPED_DIAGNOSTIC_ITEMS: &[&str] = &["KaniMemInitSMGetInner", "KaniMemInitSMSetInner"];
+const SKIPPED_DIAGNOSTIC_ITEMS: &[&str] = &["KaniIsUnitPtrInitialized", "KaniSetUnitPtrInitialized"];
 
 /// Retrieve a function definition by diagnostic string, caching the result.
 pub fn get_kani_sm_function(tcx: TyCtxt, diagnostic: &'static str) -> FnDef {
@@ -202,7 +202,7 @@ impl UninitPass {
         match pointee_info.layout() {
             PointeeLayout::Static { layout } => {
                 let shadow_memory_get_instance = Instance::resolve(
-                    get_kani_sm_function(tcx, "KaniMemInitSMGet"),
+                    get_kani_sm_function(tcx, "KaniIsPtrInitialized"),
                     &GenericArgs(vec![
                         GenericArgKind::Const(
                             TyConst::try_from_target_usize(layout.to_byte_mask().len() as u64)
@@ -226,10 +226,10 @@ impl UninitPass {
                 // Since `str`` is a separate type, need to differentiate between [T] and str.
                 let (slicee_ty, diagnostic) = match pointee_info.ty().kind() {
                     TyKind::RigidTy(RigidTy::Slice(slicee_ty)) => {
-                        (slicee_ty, "KaniMemInitSMGetSlice")
+                        (slicee_ty, "KaniIsSlicePtrInitialized")
                     }
                     TyKind::RigidTy(RigidTy::Str) => {
-                        (Ty::unsigned_ty(UintTy::U8), "KaniMemInitSMGetStr")
+                        (Ty::unsigned_ty(UintTy::U8), "KaniIsStrPtrInitialized")
                     }
                     _ => unreachable!(),
                 };
@@ -294,7 +294,7 @@ impl UninitPass {
         match pointee_info.layout() {
             PointeeLayout::Static { layout } => {
                 let shadow_memory_set_instance = Instance::resolve(
-                    get_kani_sm_function(tcx, "KaniMemInitSMSet"),
+                    get_kani_sm_function(tcx, "KaniSetPtrInitialized"),
                     &GenericArgs(vec![
                         GenericArgKind::Const(
                             TyConst::try_from_target_usize(layout.to_byte_mask().len() as u64)
@@ -327,10 +327,10 @@ impl UninitPass {
                 // Since `str`` is a separate type, need to differentiate between [T] and str.
                 let (slicee_ty, diagnostic) = match pointee_info.ty().kind() {
                     TyKind::RigidTy(RigidTy::Slice(slicee_ty)) => {
-                        (slicee_ty, "KaniMemInitSMSetSlice")
+                        (slicee_ty, "KaniSetSlicePtrInitialized")
                     }
                     TyKind::RigidTy(RigidTy::Str) => {
-                        (Ty::unsigned_ty(UintTy::U8), "KaniMemInitSMSetStr")
+                        (Ty::unsigned_ty(UintTy::U8), "KaniSetStrPtrInitialized")
                     }
                     _ => unreachable!(),
                 };
