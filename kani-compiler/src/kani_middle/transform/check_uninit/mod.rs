@@ -335,7 +335,6 @@ impl UninitPass {
                 try_mark_new_bb_as_skipped(&operation, body, skip_first);
                 let reason = "Kani does not support reasoning about memory initialization of pointers to trait objects.";
                 self.unsupported_check(tcx, body, source, operation.position(), reason);
-                return;
             }
         };
     }
@@ -364,7 +363,7 @@ pub fn mk_layout_operand(
     body: &mut MutableBody,
     source: &mut SourceInstruction,
     position: InsertPosition,
-    layout_byte_mask: &Vec<bool>,
+    layout_byte_mask: &[bool],
 ) -> Operand {
     Operand::Move(Place {
         local: body.new_assignment(
