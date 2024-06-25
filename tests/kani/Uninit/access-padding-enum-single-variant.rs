@@ -8,7 +8,7 @@ use std::ptr::addr_of;
 // The layout of this enum is the following (D = data, P = padding):
 //  0  1  2  3  4  5  6  7
 // [D, D, D, D, D, D, D, P]
-//  ----------  ------- 
+//  ----------  -------
 //   \_ tag (i32)  \_ A(u16, u8)
 
 #[repr(C)]

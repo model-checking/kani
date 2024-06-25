@@ -7,6 +7,7 @@
 //! information; thus, they are implemented as a transformation pass where their body get generated
 //! by the transformation.
 
+use crate::args::{Arguments, ExtraChecks};
 use crate::kani_middle::attributes::matches_diagnostic;
 use crate::kani_middle::transform::body::{
     CheckType, InsertPosition, MutableBody, SourceInstruction,
@@ -37,6 +38,8 @@ pub struct IntrinsicGeneratorPass {
     pub check_type: CheckType,
     /// Used to cache FnDef lookups of injected memory initialization functions.
     pub mem_init_fn_cache: HashMap<&'static str, FnDef>,
+    /// Used to enable intrinsics depending on the flags passed.
+    pub arguments: Arguments,
 }
 
 impl TransformPass for IntrinsicGeneratorPass {
@@ -176,6 +179,11 @@ impl IntrinsicGeneratorPass {
         );
         let stmt = Statement { kind: assign, span };
         new_body.insert_stmt(stmt, &mut terminator, InsertPosition::Before);
+
+        if !self.arguments.ub_check.contains(&ExtraChecks::Uninit) {
+            // Short-circut if uninitialized memory checks are not enabled.
+            return new_body.into();
+        }
 
         // The first argument type.
         let arg_ty = new_body.locals()[1].ty;

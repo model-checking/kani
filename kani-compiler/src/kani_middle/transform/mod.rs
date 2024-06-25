@@ -72,7 +72,11 @@ impl BodyTransformation {
         );
         transformer.add_pass(
             queries,
-            IntrinsicGeneratorPass { check_type, mem_init_fn_cache: HashMap::new() },
+            IntrinsicGeneratorPass {
+                check_type,
+                mem_init_fn_cache: HashMap::new(),
+                arguments: queries.args().clone(),
+            },
         );
         transformer
     }
