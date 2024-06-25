@@ -225,77 +225,86 @@ impl MutableBody {
         self.split_bb(source, position, terminator);
     }
 
-    /// Split a basic block right before the source location and use the new terminator
-    /// in the basic block that was split.
+    /// Split a basic block and use the new terminator in the basic block that was split.
     ///
     /// The source is updated to point to the same instruction which is now in the new basic block.
     pub fn split_bb(
         &mut self,
         source: &mut SourceInstruction,
         position: InsertPosition,
-        mut new_term: Terminator,
+        new_term: Terminator,
     ) {
-        let new_bb_idx = self.blocks.len();
         match position {
             InsertPosition::Before => {
-                let (idx, bb) = match source {
-                    SourceInstruction::Statement { idx, bb } => {
-                        let (orig_idx, orig_bb) = (*idx, *bb);
-                        *idx = 0;
-                        *bb = new_bb_idx;
-                        (orig_idx, orig_bb)
-                    }
-                    SourceInstruction::Terminator { bb } => {
-                        let (orig_idx, orig_bb) = (self.blocks[*bb].statements.len(), *bb);
-                        *bb = new_bb_idx;
-                        (orig_idx, orig_bb)
-                    }
-                };
-                let old_term = mem::replace(&mut self.blocks[bb].terminator, new_term);
-                let bb_stmts = &mut self.blocks[bb].statements;
-                let remaining = bb_stmts.split_off(idx);
+                self.split_bb_before(source, new_term);
+            }
+            InsertPosition::After => {
+                self.split_bb_after(source, new_term);
+            }
+        }
+    }
+
+    /// Split a basic block right before the source location.
+    fn split_bb_before(&mut self, source: &mut SourceInstruction, new_term: Terminator) {
+        let new_bb_idx = self.blocks.len();
+        let (idx, bb) = match source {
+            SourceInstruction::Statement { idx, bb } => {
+                let (orig_idx, orig_bb) = (*idx, *bb);
+                *idx = 0;
+                *bb = new_bb_idx;
+                (orig_idx, orig_bb)
+            }
+            SourceInstruction::Terminator { bb } => {
+                let (orig_idx, orig_bb) = (self.blocks[*bb].statements.len(), *bb);
+                *bb = new_bb_idx;
+                (orig_idx, orig_bb)
+            }
+        };
+        let old_term = mem::replace(&mut self.blocks[bb].terminator, new_term);
+        let bb_stmts = &mut self.blocks[bb].statements;
+        let remaining = bb_stmts.split_off(idx);
+        let new_bb = BasicBlock { statements: remaining, terminator: old_term };
+        self.blocks.push(new_bb);
+    }
+
+    /// Split a basic block right after the source location.
+    fn split_bb_after(&mut self, source: &mut SourceInstruction, mut new_term: Terminator) {
+        let new_bb_idx = self.blocks.len();
+        match source {
+            // Split the current block after the statement located at `source`
+            // and move the remaining statements into the new one.
+            SourceInstruction::Statement { idx, bb } => {
+                let (orig_idx, orig_bb) = (*idx, *bb);
+                *idx = 0;
+                *bb = new_bb_idx;
+                let old_term = mem::replace(&mut self.blocks[orig_bb].terminator, new_term);
+                let bb_stmts = &mut self.blocks[orig_bb].statements;
+                let remaining = bb_stmts.split_off(orig_idx + 1);
                 let new_bb = BasicBlock { statements: remaining, terminator: old_term };
                 self.blocks.push(new_bb);
             }
-            InsertPosition::After => {
-                match source {
-                    // Split the current block after the statement located at `source`
-                    // and move the remaining statements into the new one.
-                    SourceInstruction::Statement { idx, bb } => {
-                        let (orig_idx, orig_bb) = (*idx, *bb);
-                        *idx = 0;
+            // Make the terminator at `source` point at the new block,
+            // the terminator of which is a simple Goto instruction.
+            SourceInstruction::Terminator { bb } => {
+                let current_terminator = &mut self.blocks.get_mut(*bb).unwrap().terminator;
+                // Kani can only instrument function calls like this.
+                match (&mut current_terminator.kind, &mut new_term.kind) {
+                    (
+                        TerminatorKind::Call { target: Some(target_bb), .. },
+                        TerminatorKind::Call { target: Some(new_target_bb), .. },
+                    ) => {
+                        // Set the new terminator to point where previous terminator pointed.
+                        *new_target_bb = *target_bb;
+                        // Point the current terminator to the new terminator's basic block.
+                        *target_bb = new_bb_idx;
+                        // Update the current poisition.
                         *bb = new_bb_idx;
-                        let old_term = mem::replace(&mut self.blocks[orig_bb].terminator, new_term);
-                        let bb_stmts = &mut self.blocks[orig_bb].statements;
-                        let remaining = bb_stmts.split_off(orig_idx + 1);
-                        let new_bb = BasicBlock { statements: remaining, terminator: old_term };
-                        self.blocks.push(new_bb);
+                        self.blocks.push(BasicBlock { statements: vec![], terminator: new_term });
                     }
-                    // Make the terminator at `source` point at the new block,
-                    // the terminator of which is a simple Goto instruction.
-                    SourceInstruction::Terminator { bb } => {
-                        let current_terminator = &mut self.blocks.get_mut(*bb).unwrap().terminator;
-                        // Kani can only instrument function calls like this.
-                        match (&mut current_terminator.kind, &mut new_term.kind) {
-                            (
-                                TerminatorKind::Call { target: Some(target_bb), .. },
-                                TerminatorKind::Call { target: Some(new_target_bb), .. },
-                            ) => {
-                                // Set the new terminator to point where previous terminator pointed.
-                                *new_target_bb = *target_bb;
-                                // Point the current terminator to the new terminator's basic block.
-                                *target_bb = new_bb_idx;
-                                // Update the current poisition.
-                                *bb = new_bb_idx;
-                                self.blocks
-                                    .push(BasicBlock { statements: vec![], terminator: new_term });
-                            }
-                            _ => unimplemented!("Kani can only split blocks after calls."),
-                        };
-                    }
+                    _ => unimplemented!("Kani can only split blocks after calls."),
                 };
             }
-        }
+        };
     }
 
     /// Insert statement before or after the source instruction and update the source as needed.
