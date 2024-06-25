@@ -125,7 +125,6 @@ macro_rules! kani_mem {
             let (thin_ptr, metadata) = ptr.to_raw_parts();
             metadata.is_ptr_aligned(thin_ptr, Internal)
                 && is_inbounds(&metadata, thin_ptr)
-                && is_initialized(ptr, 1)
                 && unsafe { has_valid_value(ptr) }
         }
 
@@ -155,7 +154,6 @@ macro_rules! kani_mem {
         {
             let (thin_ptr, metadata) = ptr.to_raw_parts();
             is_inbounds(&metadata, thin_ptr)
-                && is_initialized(ptr, 1)
                 && unsafe { has_valid_value(ptr) }
         }
 
@@ -296,13 +294,6 @@ macro_rules! kani_mem {
         #[rustc_diagnostic_item = "KaniValidValue"]
         #[inline(never)]
         unsafe fn has_valid_value<T: ?Sized>(_ptr: *const T) -> bool {
-            kani_intrinsic()
-        }
-
-        /// Check whether `len * size_of::<T>()` bytes are initialized starting from `ptr`.
-        #[rustc_diagnostic_item = "KaniIsInitialized"]
-        #[inline(never)]
-        pub fn is_initialized<T: ?Sized>(_ptr: *const T, _len: usize) -> bool {
             kani_intrinsic()
         }
 

@@ -1,5 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+// kani-flags: -Zfunction-contracts -Zmem-predicates
 
 //! Test that it is sound to use memory predicates inside a contract pre-condition.
 //! We cannot validate post-condition yet. This can be done once we fix:
