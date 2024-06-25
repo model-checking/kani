@@ -3,7 +3,7 @@
 //
 //! Utility functions that help calculate type layout.
 
-use stable_mir::abi::{FieldsShape, Scalar, TagEncoding, ValueAbi, VariantsShape};
+use stable_mir::abi::{FieldsShape, LayoutShape, Scalar, TagEncoding, ValueAbi, VariantsShape};
 use stable_mir::target::{MachineInfo, MachineSize};
 use stable_mir::ty::{AdtKind, IndexedVal, RigidTy, Ty, TyKind, UintTy};
 use stable_mir::CrateDef;
@@ -102,26 +102,29 @@ impl PointeeInfo {
 }
 
 /// Get a size of an initialized scalar.
-fn scalar_ty_size(machine_info: &MachineInfo, ty: Ty) -> Option<DataBytes> {
-    let shape = ty.layout().unwrap().shape();
-    match shape.abi {
+fn scalar_ty_size(
+    machine_info: &MachineInfo,
+    layout_shape: LayoutShape,
+    current_offset: usize,
+) -> DataBytes {
+    match layout_shape.abi {
         ValueAbi::Scalar(Scalar::Initialized { value, .. }) => {
-            Some(DataBytes { offset: 0, size: value.size(machine_info) })
+            DataBytes { offset: current_offset, size: value.size(machine_info) }
         }
         ValueAbi::ScalarPair(
             Scalar::Initialized { value: value_first, .. },
             Scalar::Initialized { value: value_second, .. },
-        ) => Some(DataBytes {
-            offset: 0,
+        ) => DataBytes {
+            offset: current_offset,
             size: MachineSize::from_bits(
                 value_first.size(machine_info).bits() + value_second.size(machine_info).bits(),
             ),
-        }),
+        },
         ValueAbi::Scalar(_)
         | ValueAbi::ScalarPair(_, _)
         | ValueAbi::Uninhabited
         | ValueAbi::Vector { .. }
-        | ValueAbi::Aggregate { .. } => None,
+        | ValueAbi::Aggregate { .. } => unreachable!(),
     }
 }
 
@@ -132,16 +135,9 @@ fn data_bytes_for_ty(
     current_offset: usize,
 ) -> Result<Vec<DataBytes>, String> {
     let layout = ty.layout().unwrap().shape();
-    let ty_size = || {
-        if let Some(mut size) = scalar_ty_size(machine_info, ty) {
-            size.offset = current_offset;
-            vec![size]
-        } else {
-            vec![]
-        }
-    };
+
     match layout.fields {
-        FieldsShape::Primitive => Ok(ty_size()),
+        FieldsShape::Primitive => Ok(vec![scalar_ty_size(machine_info, layout, current_offset)]),
         FieldsShape::Array { stride, count } if count > 0 => {
             let TyKind::RigidTy(RigidTy::Array(elem_ty, _)) = ty.kind() else { unreachable!() };
             let elem_data_bytes = data_bytes_for_ty(machine_info, elem_ty, current_offset)?;
@@ -192,14 +188,33 @@ fn data_bytes_for_ty(
                                 } => {
                                     Err(format!("Unsupported Enum `{}` check", def.trimmed_name()))?
                                 }
-                                VariantsShape::Multiple { variants, .. } => {
-                                    let enum_data_bytes = ty_size();
+                                VariantsShape::Multiple { variants, tag, .. } => {
+                                    // Retrieve data bytes for the tag.
+                                    let tag_size = match tag {
+                                        Scalar::Initialized { value, .. } => {
+                                            value.size(&machine_info)
+                                        }
+                                        Scalar::Union { .. } => {
+                                            unreachable!("Enum tag should not be a union.")
+                                        }
+                                    };
+                                    let tag_data_bytes =
+                                        vec![DataBytes { offset: current_offset, size: tag_size }];
+
+                                    // Retrieve data bytes for the fields.
                                     let mut fields_data_bytes = vec![];
+                                    // Iterate over all variants for the enum.
                                     for (index, variant) in variants.iter().enumerate() {
                                         let mut field_data_bytes_for_variant = vec![];
                                         let fields = ty_variants[index].fields();
+                                        // Get offsets of all fields in a variant.
+                                        let FieldsShape::Arbitrary { offsets: field_offsets } =
+                                            variant.fields.clone()
+                                        else {
+                                            unreachable!()
+                                        };
                                         for field_idx in variant.fields.fields_by_offset_order() {
-                                            let field_offset = offsets[field_idx].bytes();
+                                            let field_offset = field_offsets[field_idx].bytes();
                                             let field_ty = fields[field_idx].ty_with_args(&args);
                                             field_data_bytes_for_variant.append(
                                                 &mut data_bytes_for_ty(
@@ -213,19 +228,33 @@ fn data_bytes_for_ty(
                                     }
 
                                     if fields_data_bytes.is_empty() {
-                                        Ok(enum_data_bytes)
+                                        // If there are no fields, return the tag data bytes.
+                                        Ok(tag_data_bytes)
                                     } else if fields_data_bytes.iter().all(
                                         |data_bytes_for_variant| {
-                                            *data_bytes_for_variant
-                                                == *fields_data_bytes.first().unwrap()
+                                            // Byte layout for variant N.
+                                            let byte_mask_for_variant = generate_byte_mask(
+                                                layout.size.bytes(),
+                                                data_bytes_for_variant.clone(),
+                                            );
+                                            // Byte layout for variant 0.
+                                            let byte_mask_for_first = generate_byte_mask(
+                                                layout.size.bytes(),
+                                                fields_data_bytes.first().unwrap().clone(),
+                                            );
+                                            byte_mask_for_variant == byte_mask_for_first
                                         },
                                     ) {
-                                        let mut total_data_bytes = enum_data_bytes;
+                                        // If all fields have the same layout, return fields data
+                                        // bytes.
+                                        let mut total_data_bytes = tag_data_bytes;
                                         let mut field_data_bytes =
                                             fields_data_bytes.first().unwrap().clone();
                                         total_data_bytes.append(&mut field_data_bytes);
                                         Ok(total_data_bytes)
                                     } else {
+                                        // Struct has multiple padding variants, Kani cannot
+                                        // differentiate between them.
                                         Err(format!(
                                             "Unsupported Enum `{}` check",
                                             def.trimmed_name()
@@ -281,7 +310,9 @@ fn data_bytes_for_ty(
                 RigidTy::Str | RigidTy::Slice(_) | RigidTy::Array(_, _) => {
                     unreachable!("Expected array layout for {ty:?}")
                 }
-                RigidTy::RawPtr(_, _) | RigidTy::Ref(_, _, _) => Ok(ty_size()),
+                RigidTy::RawPtr(_, _) | RigidTy::Ref(_, _, _) => {
+                    Ok(vec![scalar_ty_size(machine_info, layout, current_offset)])
+                }
                 RigidTy::FnDef(_, _)
                 | RigidTy::FnPtr(_)
                 | RigidTy::Closure(_, _)
