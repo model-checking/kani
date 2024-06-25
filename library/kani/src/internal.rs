@@ -7,7 +7,7 @@
 #[doc(hidden)]
 pub trait Pointer<'a> {
     /// Type of the pointed-to data
-    type Inner;
+    type Inner: ?Sized;
 
     /// Used for checking assigns contracts where we pass immutable references to the function.
     ///
@@ -16,7 +16,7 @@ pub trait Pointer<'a> {
     unsafe fn decouple_lifetime(&self) -> &'a Self::Inner;
 
     /// used for havocking on replecement of a `modifies` clause.
-    unsafe fn assignable(self) -> &'a mut Self::Inner;
+    unsafe fn fill_any(self);
 }
 
 impl<'a, 'b, T> Pointer<'a> for &'b T {
@@ -26,8 +26,8 @@ impl<'a, 'b, T> Pointer<'a> for &'b T {
     }
 
     #[allow(clippy::transmute_ptr_to_ref)]
-    unsafe fn assignable(self) -> &'a mut Self::Inner {
-        std::mem::transmute(self as *const T)
+    unsafe fn fill_any(self) {
+        *std::mem::transmute::<*const T, &mut T>(self as *const T) = crate::any_modifies();
     }
 }
 
@@ -39,8 +39,8 @@ impl<'a, 'b, T> Pointer<'a> for &'b mut T {
         std::mem::transmute::<_, &&'a T>(self)
     }
 
-    unsafe fn assignable(self) -> &'a mut Self::Inner {
-        std::mem::transmute(self)
+    unsafe fn fill_any(self) {
+        *std::mem::transmute::<&mut T, &mut T>(self) = crate::any_modifies();
     }
 }
 
@@ -51,8 +51,8 @@ impl<'a, T> Pointer<'a> for *const T {
     }
 
     #[allow(clippy::transmute_ptr_to_ref)]
-    unsafe fn assignable(self) -> &'a mut Self::Inner {
-        std::mem::transmute(self)
+    unsafe fn fill_any(self) {
+        *std::mem::transmute::<*const T, &mut T>(self) = crate::any_modifies();
     }
 }
 
@@ -63,8 +63,58 @@ impl<'a, T> Pointer<'a> for *mut T {
     }
 
     #[allow(clippy::transmute_ptr_to_ref)]
-    unsafe fn assignable(self) -> &'a mut Self::Inner {
-        std::mem::transmute(self)
+    unsafe fn fill_any(self) {
+        *std::mem::transmute::<*mut T, &mut T>(self) = crate::any_modifies();
+    }
+}
+
+impl<'a, 'b, T> Pointer<'a> for &'b [T] {
+    type Inner = [T];
+    unsafe fn decouple_lifetime(&self) -> &'a Self::Inner {
+        std::mem::transmute(*self)
+    }
+
+    #[allow(clippy::transmute_ptr_to_ref)]
+    unsafe fn fill_any(self) {
+        std::mem::transmute::<*const [T], &mut [T]>(self as *const [T])
+            .fill_with(|| crate::any_modifies::<T>());
+    }
+}
+
+impl<'a, 'b, T> Pointer<'a> for &'b mut [T] {
+    type Inner = [T];
+
+    #[allow(clippy::transmute_ptr_to_ref)]
+    unsafe fn decouple_lifetime(&self) -> &'a Self::Inner {
+        std::mem::transmute::<_, &&'a [T]>(self)
+    }
+
+    unsafe fn fill_any(self) {
+        std::mem::transmute::<&mut [T], &mut [T]>(self).fill_with(|| crate::any_modifies::<T>());
+    }
+}
+
+impl<'a, T> Pointer<'a> for *const [T] {
+    type Inner = [T];
+    unsafe fn decouple_lifetime(&self) -> &'a Self::Inner {
+        &**self as &'a [T]
+    }
+
+    #[allow(clippy::transmute_ptr_to_ref)]
+    unsafe fn fill_any(self) {
+        std::mem::transmute::<*const [T], &mut [T]>(self).fill_with(|| crate::any_modifies::<T>());
+    }
+}
+
+impl<'a, T> Pointer<'a> for *mut [T] {
+    type Inner = [T];
+    unsafe fn decouple_lifetime(&self) -> &'a Self::Inner {
+        &**self as &'a [T]
+    }
+
+    #[allow(clippy::transmute_ptr_to_ref)]
+    unsafe fn fill_any(self) {
+        std::mem::transmute::<*mut [T], &mut [T]>(self).fill_with(|| crate::any_modifies::<T>());
     }
 }
 

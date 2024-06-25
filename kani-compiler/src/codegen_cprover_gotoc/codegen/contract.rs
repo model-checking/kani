@@ -3,7 +3,7 @@
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::kani_middle::attributes::KaniAttributes;
 use cbmc::goto_program::FunctionContract;
-use cbmc::goto_program::{Lambda, Location};
+use cbmc::goto_program::{Expr, Lambda, Location, Type};
 use kani_metadata::AssignsContract;
 use rustc_hir::def_id::DefId as InternalDefId;
 use rustc_smir::rustc_internal;
@@ -121,11 +121,44 @@ impl<'tcx> GotocCtx<'tcx> {
         let assigns = modified_places
             .into_iter()
             .map(|local| {
-                Lambda::as_contract_for(
-                    &goto_annotated_fn_typ,
-                    None,
-                    self.codegen_place_stable(&local.into(), loc).unwrap().goto_expr.dereference(),
-                )
+                if self.is_fat_pointer_stable(self.local_ty_stable(local)) {
+                    Lambda::as_contract_for(
+                        &goto_annotated_fn_typ,
+                        None,
+                        Expr::symbol_expression(
+                            "__CPROVER_object_upto",
+                            Type::code(
+                                vec![
+                                    Type::empty()
+                                        .to_pointer()
+                                        .as_parameter(None, Some("ptr".into())),
+                                    Type::size_t().as_parameter(None, Some("size".into())),
+                                ],
+                                Type::empty(),
+                            ),
+                        )
+                        .call(vec![
+                            self.codegen_place_stable(&local.into(), loc)
+                                .unwrap()
+                                .goto_expr
+                                .member("data", &self.symbol_table)
+                                .cast_to(Type::empty().to_pointer()),
+                            self.codegen_place_stable(&local.into(), loc)
+                                .unwrap()
+                                .goto_expr
+                                .member("len", &self.symbol_table),
+                        ]),
+                    )
+                } else {
+                    Lambda::as_contract_for(
+                        &goto_annotated_fn_typ,
+                        None,
+                        self.codegen_place_stable(&local.into(), loc)
+                            .unwrap()
+                            .goto_expr
+                            .dereference(),
+                    )
+                }
             })
             .collect();
 
