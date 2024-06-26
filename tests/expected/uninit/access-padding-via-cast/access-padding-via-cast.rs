@@ -15,7 +15,6 @@ fn check_uninit_padding_after_cast() {
         let sptr2 = sptr as *mut [u8; 4];
         *sptr2 = [0; 4];
         *sptr = S(0, 0); // should reset the padding
-        let val = *sptr2; // should hence be UB
-        //~^ERROR: encountered uninitialized memory
+        let val = *sptr2; // ~ERROR: encountered uninitialized memory
     }
 }
