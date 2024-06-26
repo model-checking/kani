@@ -8,35 +8,30 @@
 
 ## Summary
 
-Quantifiers are like logic-level loops and a powerful reasoning helper, which allow us to express statements about objects in a domain that satisfy a given condition. There are two primary quantifiers: the existential quantifier (∃) and the universal quantifier (∀).
-
-1. The existential quantifier (∃): represents the statement "there exists." We use to express that there is at least one object in the domain that satisfies a given condition. For example, "∃x P(x)" means "there exists an x such that P(x) is true."
-
-2. The universal quantifier (∀): represents the statement "for all" or "for every." We use it to express that a given condition is true for every object in the domain. For example, "∀x P(x)" means "for every x, P(x) is true."
+Quantifiers are logical operators that allow users to express that a property or condition applies to some or all objects within a given domain.
 
 ## User Impact
 
-Quantifiers enhance users' expressive capabilities, enabling the verification of more intricate properties in a concise manner.
+There are two primary quantifiers: the existential quantifier (∃) and the universal quantifier (∀).
+
+1. The existential quantifier (∃): represents the statement "there exists." We use to express that there is at least one object in the domain that satisfies a given condition. For example, "∃x P(x)" means "there exists a value x such that P(x) is true."
+
+2. The universal quantifier (∀): represents the statement "for all" or "for every." We use it to express that a given condition is true for every object in the domain. For example, "∀x P(x)" means "for every value x, P(x) is true."
+
 Rather than exhaustively listing all elements in a domain, quantifiers enable users to make statements about the entire domain at once. This compact representation is crucial when dealing with large or unbounded inputs. Quantifiers also facilitate abstraction and generalization of properties. Instead of specifying properties for specific instances, quantified properties can capture general patterns and behaviors that hold across different objects in a domain. Additionally, by replacing loops in the specification with quantifiers, Kani can encode the properties more efficiently within the specified bounds, making the verification process more manageable and computationally feasible.
 
 This new feature doesn't introduce any breaking changes to users. It will only allow them to write properites using the existential (∃) and universal (∀) quantifiers.
 
 ## User Experience
 
-We propose a syntax inspired by [Prusti](https://viperproject.github.io/prusti-dev/user-guide/syntax.html?highlight=quanti#quantifiers). Quantifiers must have only one bound variable (restriction imposed today by CBMC). The syntax of existential (i.e., `kani::exists`) and universal (i.e., `kani::forall`) quantifiers are:
+We propose a syntax inspired by ["Pattern Types"](https://github.com/rust-lang/rust/pull/120131). The syntax of existential (i.e., `kani::exists`) and universal (i.e., `kani::forall`) quantifiers are:
 
 ```rust
-kani::exists(|<bound variable>: <bound variable type>| <range> && <Boolean expression>)
-kani::forall(|<bound variable>: <bound variable type>| <range> ==> <Boolean expression>)
+kani::exists(|<var>: <type> is <range-expr> | <boolean-expression>)
+kani::forall(|<var>: <type> is <range-expr> | <boolean-expression>)
 ```
 
-where `<range>` is an expression of the form
-
-```rust
-<lower bound> <= <bound variable> && <bound variable> < <upper bound>
-```
-
-where `lower bound` and `upper bound` are constants. The bound predicates could be strict (e.g., `<lower bound> < <bound variable>`), or non-strict (e.g., `<upper bound> <= <bound variable>`), but both the bounds must be **constants**. CBMC's SAT backend only supports bounded quantification under **constant** lower and upper bounds.
+CBMC's SAT backend only supports bounded quantification under **constant** lower and upper bounds (for more details, see the [documentation for quantifiers in CBMC](https://diffblue.github.io/cbmc/contracts-quantifiers.html)). In contracts, the SMT backend supports arbitrary Boolean expressions.
 
 Consider the following example adapted from the documentation for the [from_raw_parts](https://doc.rust-lang.org/std/vec/struct.Vec.html#method.from_raw_parts) function:
 
@@ -117,7 +112,7 @@ use std::mem;
 fn main() {
     let original_v = vec![kani::any::<usize>(); 3];
     let v = original_v.clone();
-    kani::assume(kani::forall(|i: usize| (i < v.len()) ==> (v[i] < 5)));
+    kani::assume(kani::forall(|i: usize is ..v.len() | v[i] < 5));
 
     // Prevent running `v`'s destructor so we are in complete control
     // of the allocation.
@@ -136,7 +131,7 @@ fn main() {
 
         // Put everything back together into a Vec
         let rebuilt = Vec::from_raw_parts(p, len, cap);
-        assert!(kani::forall(|i: usize| (i < len) ==> (rebuilt[i] == original_v[i]+1)));
+        assert!(kani::forall(|i: usize is ..len | rebuilt[i] == original_v[i]+1));
     }
 }
 ```
@@ -151,7 +146,7 @@ use std::mem;
 fn main() {
     let original_v = vec![kani::any::<usize>(); 3];
     let v = original_v.clone();
-    kani::assume(kani::forall(|i: usize| (i < v.len()) ==> (v[i] < 5)));
+    kani::assume(kani::forall(|i: usize is ..v.len() | v[i] < 5));
 
     // Prevent running `v`'s destructor so we are in complete control
     // of the allocation.
@@ -173,7 +168,7 @@ fn main() {
 
         // Put everything back together into a Vec
         let rebuilt = Vec::from_raw_parts(p, len, cap);
-        assert!(kani::exists(|i: usize| (i < len) && (rebuilt[i] == 0)));
+        assert!(kani::exists(|i: usize is ..len | rebuilt[i] == 0));
     }
 }
 ```
@@ -202,6 +197,6 @@ Kani should have the same support that CBMC has for quantifiers with its SAT bac
 ## Future possibilities
 
 <!-- For Developers -->
-- CBMC has an SMT backend which allow the use of quantifiers with arbitrary Boolean expressions. Kani must include an option for users to experiment with this backend.
+- CBMC has an SMT backend which allows the use of quantifiers with arbitrary Boolean expressions. Kani must include an option for users to experiment with this backend.
 
 ---
