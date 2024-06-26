@@ -12,6 +12,8 @@ use stable_mir::mir::Local;
 use stable_mir::CrateDef;
 use tracing::debug;
 
+use stable_mir::ty::{RigidTy, TyKind};
+
 impl<'tcx> GotocCtx<'tcx> {
     /// Given the `proof_for_contract` target `function_under_contract` and the reachable `items`,
     /// find or create the `AssignsContract` that needs to be enforced and attach it to the symbol
@@ -122,6 +124,21 @@ impl<'tcx> GotocCtx<'tcx> {
             .into_iter()
             .map(|local| {
                 if self.is_fat_pointer_stable(self.local_ty_stable(local)) {
+                    let unref = match self.local_ty_stable(local).kind() {
+                        TyKind::RigidTy(RigidTy::Ref(_, ty, _)) => ty,
+                        kind => unreachable!("{:?} is not a reference", kind),
+                    };
+                    let size = match unref.kind() {
+                        TyKind::RigidTy(RigidTy::Slice(elt_type)) => {
+                            elt_type.layout().unwrap().shape().size.bytes()
+                        }
+                        TyKind::RigidTy(RigidTy::Str) => 8,
+                        // For adt, see https://rust-lang.zulipchat.com/#narrow/stream/182449-t-compiler.2Fhelp
+                        TyKind::RigidTy(RigidTy::Adt(..)) => {
+                            todo!("Adt fat pointers not implemented")
+                        }
+                        kind => unreachable!("Generating a slice fat pointer to {:?}", kind),
+                    };
                     Lambda::as_contract_for(
                         &goto_annotated_fn_typ,
                         None,
@@ -146,7 +163,11 @@ impl<'tcx> GotocCtx<'tcx> {
                             self.codegen_place_stable(&local.into(), loc)
                                 .unwrap()
                                 .goto_expr
-                                .member("len", &self.symbol_table),
+                                .member("len", &self.symbol_table)
+                                .mul(Expr::size_constant(
+                                    size.try_into().unwrap(),
+                                    &self.symbol_table,
+                                )),
                         ]),
                     )
                 } else {
