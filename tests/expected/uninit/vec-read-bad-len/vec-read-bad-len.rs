@@ -4,11 +4,12 @@
 
 use std::ops::Index;
 
+/// Checks that Kani catches an attempt to read uninitialized memory from a vector with bad length.
 #[kani::proof]
-fn main() {
+fn check_vec_read_bad_len() {
     let mut v: Vec<u8> = Vec::with_capacity(10);
     unsafe {
-        v.set_len(5);
+        v.set_len(5); // even though length is now 5, vector is still uninitialized
     }
-    let el = v.index(0);
+    let uninit = v.index(0); // ~ERROR: reading from unitialized memory is UB.
 }
