@@ -64,7 +64,7 @@ fn main() {
 }
 ```
 
-Given the `v` vector has non-deterministic values, there are potential arithmetic overflows that might happen in the for loop. So we need to constrain all values of the array. We may also want to check all values of `rebuilt` after the operation. Without quantifiers, we might be tempt to use loops as follows:
+Given the `v` vector has non-deterministic values, there are potential arithmetic overflows that might happen in the for loop. So we need to constrain all values of the array. We may also want to check all values of `rebuilt` after the operation. Without quantifiers, we might be tempted to use loops as follows:
 
 ```rust
 use std::ptr;
@@ -161,7 +161,7 @@ fn main() {
         // Overwrite memory
         for i in 0..len {
             *p.add(i) += 1;
-            if i == 10 {
+            if i == 1 {
               *p.add(i) = 0;
             }
         }
