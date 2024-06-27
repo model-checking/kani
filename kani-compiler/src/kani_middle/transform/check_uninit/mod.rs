@@ -129,7 +129,7 @@ impl UninitPass {
         skip_first: &mut HashSet<usize>,
     ) {
         if let SourceOp::Unsupported { reason, position } = &operation {
-            try_mark_new_bb_as_skipped(&operation, body, skip_first);
+            collect_skipped(&operation, body, skip_first);
             self.unsupported_check(tcx, body, source, *position, reason);
             return;
         };
@@ -151,7 +151,7 @@ impl UninitPass {
                     let reason = format!(
                         "Kani currently doesn't support checking memory initialization for pointers to `{pointee_ty}.",
                     );
-                    try_mark_new_bb_as_skipped(&operation, body, skip_first);
+                    collect_skipped(&operation, body, skip_first);
                     self.unsupported_check(tcx, body, source, operation.position(), &reason);
                     return;
                 }
@@ -195,7 +195,7 @@ impl UninitPass {
                     *pointee_info.ty(),
                 );
                 let layout_operand = mk_layout_operand(body, source, operation.position(), &layout);
-                try_mark_new_bb_as_skipped(&operation, body, skip_first);
+                collect_skipped(&operation, body, skip_first);
                 body.add_call(
                     &is_ptr_initialized_instance,
                     source,
@@ -222,7 +222,7 @@ impl UninitPass {
                 );
                 let layout_operand =
                     mk_layout_operand(body, source, operation.position(), &element_layout);
-                try_mark_new_bb_as_skipped(&operation, body, skip_first);
+                collect_skipped(&operation, body, skip_first);
                 body.add_call(
                     &is_ptr_initialized_instance,
                     source,
@@ -232,7 +232,7 @@ impl UninitPass {
                 );
             }
             PointeeLayout::TraitObject => {
-                try_mark_new_bb_as_skipped(&operation, body, skip_first);
+                collect_skipped(&operation, body, skip_first);
                 let reason = "Kani does not support reasoning about memory initialization of pointers to trait objects.";
                 self.unsupported_check(tcx, body, source, operation.position(), reason);
                 return;
@@ -240,7 +240,7 @@ impl UninitPass {
         };
 
         // Make sure all non-padding bytes are initialized.
-        try_mark_new_bb_as_skipped(&operation, body, skip_first);
+        collect_skipped(&operation, body, skip_first);
         let ptr_operand_ty = ptr_operand.ty(body.locals()).unwrap();
         body.add_check(
             tcx,
@@ -278,7 +278,7 @@ impl UninitPass {
                     *pointee_info.ty(),
                 );
                 let layout_operand = mk_layout_operand(body, source, operation.position(), &layout);
-                try_mark_new_bb_as_skipped(&operation, body, skip_first);
+                collect_skipped(&operation, body, skip_first);
                 body.add_call(
                     &set_ptr_initialized_instance,
                     source,
@@ -314,7 +314,7 @@ impl UninitPass {
                 );
                 let layout_operand =
                     mk_layout_operand(body, source, operation.position(), &element_layout);
-                try_mark_new_bb_as_skipped(&operation, body, skip_first);
+                collect_skipped(&operation, body, skip_first);
                 body.add_call(
                     &set_ptr_initialized_instance,
                     source,
@@ -332,7 +332,7 @@ impl UninitPass {
                 );
             }
             PointeeLayout::TraitObject => {
-                try_mark_new_bb_as_skipped(&operation, body, skip_first);
+                collect_skipped(&operation, body, skip_first);
                 let reason = "Kani does not support reasoning about memory initialization of pointers to trait objects.";
                 self.unsupported_check(tcx, body, source, operation.position(), reason);
             }
@@ -389,7 +389,7 @@ pub fn mk_layout_operand(
 
 /// If injecting a new call to the function before the current statement, need to skip the original
 /// statement when analyzing it as a part of the new basic block.
-fn try_mark_new_bb_as_skipped(
+fn collect_skipped(
     operation: &SourceOp,
     body: &MutableBody,
     skip_first: &mut HashSet<usize>,
