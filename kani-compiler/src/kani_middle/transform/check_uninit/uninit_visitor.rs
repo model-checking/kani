@@ -259,12 +259,9 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                     match instance.kind {
                         InstanceKind::Intrinsic => {
                             match instance.intrinsic_name().unwrap().as_str() {
-                                "add_with_overflow"
-                                | "arith_offset"
-                                | "assert_inhabited"
-                                | "assert_mem_uninitialized_valid"
-                                | "assert_zero_valid"
-                                | "assume" => {}
+                                intrinsic_name if can_skip_intrinsic(intrinsic_name) => {
+                                    /* Intrinsics that can be safely skipped */
+                                }
                                 "atomic_and_seqcst"
                                 | "atomic_and_acquire"
                                 | "atomic_and_acqrel"
@@ -389,12 +386,6 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                         count: mk_const_operand(1, location.span()),
                                     });
                                 }
-                                "bitreverse" | "black_box" | "breakpoint" | "bswap"
-                                | "caller_location" => {}
-                                "catch_unwind" => {
-                                    unimplemented!()
-                                }
-                                "ceilf32" | "ceilf64" => {}
                                 "compare_bytes" => {
                                     assert_eq!(
                                         args.len(),
@@ -443,78 +434,6 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                         position: InsertPosition::After,
                                     });
                                 }
-                                "copy_nonoverlapping" => unreachable!(
-                                    "Expected `core::intrinsics::unreachable` to be handled by `StatementKind::CopyNonOverlapping`"
-                                ),
-                                "copysignf32"
-                                | "copysignf64"
-                                | "cosf32"
-                                | "cosf64"
-                                | "ctlz"
-                                | "ctlz_nonzero"
-                                | "ctpop"
-                                | "cttz"
-                                | "cttz_nonzero"
-                                | "discriminant_value"
-                                | "exact_div"
-                                | "exp2f32"
-                                | "exp2f64"
-                                | "expf32"
-                                | "expf64"
-                                | "fabsf32"
-                                | "fabsf64"
-                                | "fadd_fast"
-                                | "fdiv_fast"
-                                | "floorf32"
-                                | "floorf64"
-                                | "fmaf32"
-                                | "fmaf64"
-                                | "fmul_fast"
-                                | "forget"
-                                | "fsub_fast"
-                                | "is_val_statically_known"
-                                | "likely"
-                                | "log10f32"
-                                | "log10f64"
-                                | "log2f32"
-                                | "log2f64"
-                                | "logf32"
-                                | "logf64"
-                                | "maxnumf32"
-                                | "maxnumf64"
-                                | "min_align_of"
-                                | "min_align_of_val"
-                                | "minnumf32"
-                                | "minnumf64"
-                                | "mul_with_overflow"
-                                | "nearbyintf32"
-                                | "nearbyintf64"
-                                | "needs_drop" => {}
-                                "offset" => unreachable!(
-                                    "Expected `core::intrinsics::unreachable` to be handled by `BinOp::OffSet`"
-                                ),
-                                "powf32" | "powf64" | "powif32" | "powif64" | "pref_align_of" => {}
-                                "ptr_guaranteed_cmp"
-                                | "ptr_offset_from"
-                                | "ptr_offset_from_unsigned" => {
-                                    /* AFAICS from the documentation, none of those require the pointer arguments to be actually initialized. */
-                                }
-                                "raw_eq" | "retag_box_to_raw" => {
-                                    unreachable!("This was removed in the latest Rust version.")
-                                }
-                                "rintf32" | "rintf64" | "rotate_left" | "rotate_right"
-                                | "roundf32" | "roundf64" | "saturating_add" | "saturating_sub"
-                                | "sinf32" | "sinf64" => {}
-                                name if name.starts_with("simd") => { /* SIMD operations */ }
-                                "size_of" => unreachable!(),
-                                "size_of_val" => {
-                                    /* AFAICS from the documentation, this does not require the pointer argument to be initialized. */
-                                }
-                                "sqrtf32" | "sqrtf64" | "sub_with_overflow" => {}
-                                "transmute" | "transmute_copy" => {
-                                    unreachable!("Should've been lowered")
-                                }
-                                "truncf32" | "truncf64" | "type_id" | "type_name" => {}
                                 "typed_swap" => {
                                     assert_eq!(
                                         args.len(),
@@ -553,14 +472,7 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                         count: mk_const_operand(1, location.span()),
                                     });
                                 }
-                                "unchecked_add" | "unchecked_mul" | "unchecked_shl"
-                                | "unchecked_shr" | "unchecked_sub" => {
-                                    unreachable!("Expected intrinsic to be lowered before codegen")
-                                }
-                                "unchecked_div" | "unchecked_rem" | "unlikely" => {}
-                                "unreachable" => unreachable!(
-                                    "Expected `std::intrinsics::unreachable` to be handled by `TerminatorKind::Unreachable`"
-                                ),
+
                                 "volatile_copy_memory" | "volatile_copy_nonoverlapping_memory" => {
                                     assert_eq!(
                                         args.len(),
@@ -618,8 +530,6 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                         position: InsertPosition::After,
                                     });
                                 }
-                                "vtable_size" | "vtable_align" | "wrapping_add"
-                                | "wrapping_mul" | "wrapping_sub" => {}
                                 "write_bytes" => {
                                     assert_eq!(
                                         args.len(),
@@ -769,5 +679,134 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
             });
         };
         self.super_rvalue(rvalue, location);
+    }
+}
+
+/// Determines if the intrinsic has no memory initialization related function and hence can be
+/// safely skipped.
+fn can_skip_intrinsic(intrinsic_name: &str) -> bool {
+    match intrinsic_name {
+        "add_with_overflow"
+        | "arith_offset"
+        | "assert_inhabited"
+        | "assert_mem_uninitialized_valid"
+        | "assert_zero_valid"
+        | "assume"
+        | "bitreverse"
+        | "black_box"
+        | "breakpoint"
+        | "bswap"
+        | "caller_location"
+        | "ceilf32"
+        | "ceilf64"
+        | "copysignf32"
+        | "copysignf64"
+        | "cosf32"
+        | "cosf64"
+        | "ctlz"
+        | "ctlz_nonzero"
+        | "ctpop"
+        | "cttz"
+        | "cttz_nonzero"
+        | "discriminant_value"
+        | "exact_div"
+        | "exp2f32"
+        | "exp2f64"
+        | "expf32"
+        | "expf64"
+        | "fabsf32"
+        | "fabsf64"
+        | "fadd_fast"
+        | "fdiv_fast"
+        | "floorf32"
+        | "floorf64"
+        | "fmaf32"
+        | "fmaf64"
+        | "fmul_fast"
+        | "forget"
+        | "fsub_fast"
+        | "is_val_statically_known"
+        | "likely"
+        | "log10f32"
+        | "log10f64"
+        | "log2f32"
+        | "log2f64"
+        | "logf32"
+        | "logf64"
+        | "maxnumf32"
+        | "maxnumf64"
+        | "min_align_of"
+        | "min_align_of_val"
+        | "minnumf32"
+        | "minnumf64"
+        | "mul_with_overflow"
+        | "nearbyintf32"
+        | "nearbyintf64"
+        | "needs_drop"
+        | "powf32"
+        | "powf64"
+        | "powif32"
+        | "powif64"
+        | "pref_align_of"
+        | "raw_eq"
+        | "rintf32"
+        | "rintf64"
+        | "rotate_left"
+        | "rotate_right"
+        | "roundf32"
+        | "roundf64"
+        | "saturating_add"
+        | "saturating_sub"
+        | "sinf32"
+        | "sinf64"
+        | "sqrtf32"
+        | "sqrtf64"
+        | "sub_with_overflow"
+        | "truncf32"
+        | "truncf64"
+        | "type_id"
+        | "type_name"
+        | "unchecked_div"
+        | "unchecked_rem"
+        | "unlikely"
+        | "vtable_size"
+        | "vtable_align"
+        | "wrapping_add"
+        | "wrapping_mul"
+        | "wrapping_sub" => {
+            /* Intrinsics that do not interact with memory initialization. */
+            true
+        }
+        "ptr_guaranteed_cmp" | "ptr_offset_from" | "ptr_offset_from_unsigned" | "size_of_val" => {
+            /* AFAICS from the documentation, none of those require the pointer arguments to be actually initialized. */
+            true
+        }
+        name if name.starts_with("simd") => {
+            /* SIMD operations */
+            true
+        }
+        "copy_nonoverlapping" => unreachable!(
+            "Expected `core::intrinsics::unreachable` to be handled by `StatementKind::CopyNonOverlapping`"
+        ),
+        "offset" => unreachable!(
+            "Expected `core::intrinsics::unreachable` to be handled by `BinOp::OffSet`"
+        ),
+        "unreachable" => unreachable!(
+            "Expected `std::intrinsics::unreachable` to be handled by `TerminatorKind::Unreachable`"
+        ),
+        "transmute" | "transmute_copy" | "unchecked_add" | "unchecked_mul" | "unchecked_shl"
+        | "size_of" | "unchecked_shr" | "unchecked_sub" => {
+            unreachable!("Expected intrinsic to be lowered before codegen")
+        }
+        "catch_unwind" => {
+            unimplemented!("")
+        }
+        "retag_box_to_raw" => {
+            unreachable!("This was removed in the latest Rust version.")
+        }
+        _ => {
+            /* Everything else */
+            false
+        }
     }
 }
