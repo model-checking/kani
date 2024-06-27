@@ -356,7 +356,18 @@ impl UninitPass {
     }
 }
 
-/// Generate a bit array denoting padding vs data bytes for a layout.
+/// Create an operand from a bit array that represents a byte mask for a type layout where padding
+/// bytes are marked as `false` and data bytes are marked as `true`. 
+/// 
+/// For example, the layout for:
+/// ```
+/// [repr(C)]
+/// struct {
+///     a: u16,
+///     b: u8
+/// }
+/// ```
+/// will have the following byte mask `[true, true, true, false]`.
 pub fn mk_layout_operand(
     body: &mut MutableBody,
     source: &mut SourceInstruction,
