@@ -57,7 +57,7 @@ impl<'tcx> GotocCtx<'tcx> {
     ) -> Expr {
         debug!(?op, ?left_op, ?right_op, "codegen_comparison_fat_ptr");
         let left_typ = self.operand_ty_stable(left_op);
-        let right_typ = self.operand_ty_stable(left_op);
+        let right_typ = self.operand_ty_stable(right_op);
         assert_eq!(left_typ, right_typ, "Cannot compare pointers of different types");
         assert!(self.is_fat_pointer_stable(left_typ));
 
