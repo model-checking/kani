@@ -199,6 +199,8 @@ fn data_bytes_for_ty(
                                             unreachable!("Enum tag should not be a union.")
                                         }
                                     };
+                                    // For enums, tag is the only field and should have offset of 0.
+                                    assert!(offsets.len() == 1 && offsets[0].bytes() == 0);
                                     let tag_data_bytes =
                                         vec![DataBytes { offset: current_offset, size: tag_size }];
 
