@@ -2,7 +2,7 @@
 - **Feature Request Issue:** [#2546](https://github.com/model-checking/kani/issues/2546) and [#836](https://github.com/model-checking/kani/issues/836)
 - **RFC PR:** [#](https://github.com/model-checking/kani/pull/)
 - **Status:** Unstable
-- **Version:** 1
+- **Version:** 1.0
 
 -------------------
 
@@ -27,11 +27,11 @@ This new feature doesn't introduce any breaking changes to users. It will only a
 We propose a syntax inspired by ["Pattern Types"](https://github.com/rust-lang/rust/pull/120131). The syntax of existential (i.e., `kani::exists`) and universal (i.e., `kani::forall`) quantifiers are:
 
 ```rust
-kani::exists(|<var>: <type> is <range-expr> | <boolean-expression>)
-kani::forall(|<var>: <type> is <range-expr> | <boolean-expression>)
+kani::exists(|<var>: <type> [is <range-expr>] | <boolean-expression>)
+kani::forall(|<var>: <type> [is <range-expr>] | <boolean-expression>)
 ```
 
-CBMC's SAT backend only supports bounded quantification under **constant** lower and upper bounds (for more details, see the [documentation for quantifiers in CBMC](https://diffblue.github.io/cbmc/contracts-quantifiers.html)). In contracts, the SMT backend supports arbitrary Boolean expressions.
+If `<range-expr>` is not provided, we assume `<var>` can range over all possible values of the given `<type>` (i.e., syntactic sugar for full range `|<var>: <type> as .. |`). CBMC's SAT backend only supports bounded quantification under **constant** lower and upper bounds (for more details, see the [documentation for quantifiers in CBMC](https://diffblue.github.io/cbmc/contracts-quantifiers.html)). The SMT backend, on the other hand, supports arbitrary Boolean expressions. In any case, `<boolean-expression>` should not have side effects, as the purpose of quantifiers is to assert a condition over a domain of objects without altering the state.
 
 Consider the following example adapted from the documentation for the [from_raw_parts](https://doc.rust-lang.org/std/vec/struct.Vec.html#method.from_raw_parts) function:
 
@@ -179,7 +179,7 @@ The usage of quantifiers should be valid in any part of the Rust code analysed b
 
 <!-- For the implementors or the hackers -->
 
-Kani should have the same support that CBMC has for quantifiers with its SAT backend. For more details, see [Quantifiers](https://github.com/diffblue/cbmc/blob/0a69a64e4481473d62496f9975730d24f194884a/doc/cprover-manual/contracts-quantifiers.md).
+Kani should have the same support that CBMC has for quantifiers. For more details, see [Quantifiers](https://github.com/diffblue/cbmc/blob/0a69a64e4481473d62496f9975730d24f194884a/doc/cprover-manual/contracts-quantifiers.md).
 
 
 ## Open questions
@@ -192,6 +192,7 @@ Kani should have the same support that CBMC has for quantifiers with its SAT bac
   interface is familiar to developers, but the code generation is tricky, as
   CBMC level quantifiers only allow certain kinds of expressions. This
   necessitates a rewrite of the `Fn` closure to a compliant expression.
+    - Which kind of expressions should be accepted as a "compliant expression"? 
 
 
 ## Future possibilities
