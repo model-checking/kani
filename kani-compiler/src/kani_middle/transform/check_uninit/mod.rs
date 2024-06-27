@@ -332,9 +332,7 @@ impl UninitPass {
                 );
             }
             PointeeLayout::TraitObject => {
-                collect_skipped(&operation, body, skip_first);
-                let reason = "Kani does not support reasoning about memory initialization of pointers to trait objects.";
-                self.unsupported_check(tcx, body, source, operation.position(), reason);
+                unreachable!("Cannot change the initialization state of a trait object directly.");
             }
         };
     }
@@ -389,11 +387,7 @@ pub fn mk_layout_operand(
 
 /// If injecting a new call to the function before the current statement, need to skip the original
 /// statement when analyzing it as a part of the new basic block.
-fn collect_skipped(
-    operation: &SourceOp,
-    body: &MutableBody,
-    skip_first: &mut HashSet<usize>,
-) {
+fn collect_skipped(operation: &SourceOp, body: &MutableBody, skip_first: &mut HashSet<usize>) {
     if operation.position() == InsertPosition::Before {
         let new_bb_idx = body.blocks().len();
         skip_first.insert(new_bb_idx);
