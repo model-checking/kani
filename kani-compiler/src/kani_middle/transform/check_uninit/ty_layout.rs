@@ -17,7 +17,8 @@ struct DataBytes {
     size: MachineSize,
 }
 
-/// Bytewise mask, representing which bytes of a type are data and which are padding.
+/// Bytewise mask, representing which bytes of a type are data and which are padding. Here, `false`
+/// represents padding bytes and `true` represents data bytes.
 type Layout = Vec<bool>;
 
 /// Create a byte-wise mask from known chunks of data bytes.
