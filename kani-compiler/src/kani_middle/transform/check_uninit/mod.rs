@@ -128,9 +128,9 @@ impl UninitPass {
         operation: MemoryInitOp,
         skip_first: &mut HashSet<usize>,
     ) {
-        if let MemoryInitOp::Unsupported { reason, position } = &operation {
+        if let MemoryInitOp::Unsupported { reason } = &operation {
             collect_skipped(&operation, body, skip_first);
-            self.unsupported_check(tcx, body, source, *position, reason);
+            self.unsupported_check(tcx, body, source, operation.position(), reason);
             return;
         };
 

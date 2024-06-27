@@ -20,7 +20,7 @@ use strum_macros::AsRefStr;
 pub enum MemoryInitOp {
     /// Check memory initialization of data bytes in a memory region starting from the pointer
     /// `operand` and of length `count * sizeof(operand)` bytes.
-    Get { operand: Operand, count: Operand, position: InsertPosition },
+    Get { operand: Operand, count: Operand },
     /// Set memory initialization state of data bytes in a memory region starting from the pointer
     /// `operand` and of length `count * sizeof(operand)` bytes.
     Set { operand: Operand, count: Operand, value: bool, position: InsertPosition },
@@ -28,7 +28,7 @@ pub enum MemoryInitOp {
     /// `operand` and of length `count * sizeof(operand)` bytes.
     SetRef { operand: Operand, count: Operand, value: bool, position: InsertPosition },
     /// Unsupported memory initialization operation.
-    Unsupported { reason: String, position: InsertPosition },
+    Unsupported { reason: String },
 }
 
 impl MemoryInitOp {
@@ -73,10 +73,8 @@ impl MemoryInitOp {
 
     pub fn position(&self) -> InsertPosition {
         match self {
-            MemoryInitOp::Get { position, .. }
-            | MemoryInitOp::SetRef { position, .. }
-            | MemoryInitOp::Unsupported { position, .. }
-            | MemoryInitOp::Set { position, .. } => *position,
+            MemoryInitOp::Set { position, .. } | MemoryInitOp::SetRef { position, .. } => *position,
+            MemoryInitOp::Get { .. } | MemoryInitOp::Unsupported { .. } => InsertPosition::Before,
         }
     }
 }
@@ -183,7 +181,6 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                     self.push_target(MemoryInitOp::Get {
                         operand: copy.src.clone(),
                         count: copy.count.clone(),
-                        position: InsertPosition::Before,
                     });
                     // Destimation is a *mut T so it gets initialized.
                     self.push_target(MemoryInitOp::Set {
@@ -255,10 +252,7 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                         Ok(instance) => instance,
                         Err(reason) => {
                             self.super_terminator(term, location);
-                            self.push_target(MemoryInitOp::Unsupported {
-                                reason,
-                                position: InsertPosition::Before,
-                            });
+                            self.push_target(MemoryInitOp::Unsupported { reason });
                             return;
                         }
                     };
@@ -378,7 +372,6 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                     self.push_target(MemoryInitOp::Get {
                                         operand: args[0].clone(),
                                         count: mk_const_operand(1, location.span()),
-                                        position: InsertPosition::Before,
                                     });
                                 }
                                 name if name.starts_with("atomic_cxchg") => {
@@ -394,7 +387,6 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                     self.push_target(MemoryInitOp::Get {
                                         operand: args[0].clone(),
                                         count: mk_const_operand(1, location.span()),
-                                        position: InsertPosition::Before,
                                     });
                                 }
                                 "bitreverse" | "black_box" | "breakpoint" | "bswap"
@@ -420,12 +412,10 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                     self.push_target(MemoryInitOp::Get {
                                         operand: args[0].clone(),
                                         count: args[2].clone(),
-                                        position: InsertPosition::Before,
                                     });
                                     self.push_target(MemoryInitOp::Get {
                                         operand: args[1].clone(),
                                         count: args[2].clone(),
-                                        position: InsertPosition::Before,
                                     });
                                 }
                                 "copy" => {
@@ -445,7 +435,6 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                     self.push_target(MemoryInitOp::Get {
                                         operand: args[0].clone(),
                                         count: args[2].clone(),
-                                        position: InsertPosition::Before,
                                     });
                                     self.push_target(MemoryInitOp::Set {
                                         operand: args[1].clone(),
@@ -543,12 +532,10 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                     self.push_target(MemoryInitOp::Get {
                                         operand: args[0].clone(),
                                         count: mk_const_operand(1, location.span()),
-                                        position: InsertPosition::Before,
                                     });
                                     self.push_target(MemoryInitOp::Get {
                                         operand: args[1].clone(),
                                         count: mk_const_operand(1, location.span()),
-                                        position: InsertPosition::Before,
                                     });
                                 }
                                 "unaligned_volatile_load" => {
@@ -564,7 +551,6 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                     self.push_target(MemoryInitOp::Get {
                                         operand: args[0].clone(),
                                         count: mk_const_operand(1, location.span()),
-                                        position: InsertPosition::Before,
                                     });
                                 }
                                 "unchecked_add" | "unchecked_mul" | "unchecked_shl"
@@ -592,7 +578,6 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                     self.push_target(MemoryInitOp::Get {
                                         operand: args[0].clone(),
                                         count: args[2].clone(),
-                                        position: InsertPosition::Before,
                                     });
                                     self.push_target(MemoryInitOp::Set {
                                         operand: args[1].clone(),
@@ -614,7 +599,6 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                     self.push_target(MemoryInitOp::Get {
                                         operand: args[0].clone(),
                                         count: mk_const_operand(1, location.span()),
-                                        position: InsertPosition::Before,
                                     });
                                 }
                                 "volatile_store" => {
@@ -656,7 +640,6 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                 intrinsic => {
                                     self.push_target(MemoryInitOp::Unsupported {
                                     reason: format!("Kani does not support reasoning about memory initialization of intrinsic `{intrinsic}`."),
-                                    position: InsertPosition::Before
                                 });
                                 }
                             }
@@ -736,7 +719,6 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                         self.push_target(MemoryInitOp::Get {
                             operand: Operand::Copy(intermediate_place.clone()),
                             count: mk_const_operand(1, location.span()),
-                            position: InsertPosition::Before,
                         });
                     }
                 }
@@ -746,7 +728,6 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                     {
                         self.push_target(MemoryInitOp::Unsupported {
                             reason: "Kani does not support reasoning about memory initialization of unions.".to_string(),
-                            position: InsertPosition::Before
                         });
                     }
                 }
@@ -785,7 +766,6 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
         if let Rvalue::Cast(CastKind::PointerCoercion(PointerCoercion::Unsize), _, _) = rvalue {
             self.push_target(MemoryInitOp::Unsupported {
                 reason: "Kani does not support reasoning about memory initialization of unsized pointers.".to_string(),
-                position: InsertPosition::Before
             });
         };
         self.super_rvalue(rvalue, location);
