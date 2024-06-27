@@ -27,7 +27,7 @@ mod ty_layout;
 mod uninit_visitor;
 
 pub use ty_layout::{PointeeInfo, PointeeLayout};
-use uninit_visitor::{CheckUninitVisitor, InitRelevantInstruction, SourceOp};
+use uninit_visitor::{CheckUninitVisitor, InitRelevantInstruction, MemoryInitOp};
 
 const SKIPPED_DIAGNOSTIC_ITEMS: &[&str] =
     &["KaniIsUnitPtrInitialized", "KaniSetUnitPtrInitialized"];
@@ -125,10 +125,10 @@ impl UninitPass {
         tcx: TyCtxt,
         body: &mut MutableBody,
         source: &mut SourceInstruction,
-        operation: SourceOp,
+        operation: MemoryInitOp,
         skip_first: &mut HashSet<usize>,
     ) {
-        if let SourceOp::Unsupported { reason, position } = &operation {
+        if let MemoryInitOp::Unsupported { reason, position } = &operation {
             collect_skipped(&operation, body, skip_first);
             self.unsupported_check(tcx, body, source, *position, reason);
             return;
@@ -159,13 +159,13 @@ impl UninitPass {
         };
 
         match operation {
-            SourceOp::Get { .. } => {
+            MemoryInitOp::Get { .. } => {
                 self.build_get_and_check(tcx, body, source, operation, pointee_ty_info, skip_first)
             }
-            SourceOp::Set { .. } | SourceOp::SetRef { .. } => {
+            MemoryInitOp::Set { .. } | MemoryInitOp::SetRef { .. } => {
                 self.build_set(tcx, body, source, operation, pointee_ty_info, skip_first)
             }
-            SourceOp::Unsupported { .. } => {
+            MemoryInitOp::Unsupported { .. } => {
                 unreachable!()
             }
         }
@@ -178,7 +178,7 @@ impl UninitPass {
         tcx: TyCtxt,
         body: &mut MutableBody,
         source: &mut SourceInstruction,
-        operation: SourceOp,
+        operation: MemoryInitOp,
         pointee_info: PointeeInfo,
         skip_first: &mut HashSet<usize>,
     ) {
@@ -259,7 +259,7 @@ impl UninitPass {
         tcx: TyCtxt,
         body: &mut MutableBody,
         source: &mut SourceInstruction,
-        operation: SourceOp,
+        operation: MemoryInitOp,
         pointee_info: PointeeInfo,
         skip_first: &mut HashSet<usize>,
     ) {
@@ -357,8 +357,8 @@ impl UninitPass {
 }
 
 /// Create an operand from a bit array that represents a byte mask for a type layout where padding
-/// bytes are marked as `false` and data bytes are marked as `true`. 
-/// 
+/// bytes are marked as `false` and data bytes are marked as `true`.
+///
 /// For example, the layout for:
 /// ```
 /// [repr(C)]
@@ -398,7 +398,7 @@ pub fn mk_layout_operand(
 
 /// If injecting a new call to the function before the current statement, need to skip the original
 /// statement when analyzing it as a part of the new basic block.
-fn collect_skipped(operation: &SourceOp, body: &MutableBody, skip_first: &mut HashSet<usize>) {
+fn collect_skipped(operation: &MemoryInitOp, body: &MutableBody, skip_first: &mut HashSet<usize>) {
     if operation.position() == InsertPosition::Before {
         let new_bb_idx = body.blocks().len();
         skip_first.insert(new_bb_idx);
