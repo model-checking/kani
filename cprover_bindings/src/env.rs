@@ -8,7 +8,7 @@
 //! c.f. CBMC code [src/ansi-c/ansi_c_internal_additions.cpp].
 //! One possible invocation of this insertion in CBMC can be found in \[ansi_c_languaget::parse\].
 
-use super::goto_program::{Expr, Location, Symbol, Type};
+use super::goto_program::{Expr, Location, Symbol, SymbolTable, Type};
 use super::MachineModel;
 use num::bigint::BigInt;
 fn int_constant<T>(name: &str, value: T) -> Symbol
@@ -82,5 +82,16 @@ pub fn additional_env_symbols() -> Vec<Symbol> {
             Location::none(),
         )
         .with_is_extern(true),
+        Symbol::static_variable(
+            "__CPROVER_dead_object",
+            "__CPROVER_dead_object",
+            Type::void_pointer(),
+            Location::none(),
+        )
+        .with_is_extern(true),
     ]
+}
+
+pub fn global_dead_object(symbol_table: &SymbolTable) -> Expr {
+    symbol_table.lookup("__CPROVER_dead_object").unwrap().to_expr()
 }

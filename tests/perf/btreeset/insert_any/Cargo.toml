@@ -9,8 +9,3 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-
-# Temporarily ignore the handling of storage markers till
-# https://github.com/model-checking/kani/issues/3099 is fixed
-[package.metadata.kani]
-flags = { ignore-locals-lifetime = true, enable-unstable = true }

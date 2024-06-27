@@ -3,7 +3,7 @@
 // Modifications Copyright Kani Contributors
 // See GitHub history for details.
 
-// Our handling of storage markers causes spurious failures in this test.
+// Our handling of storage markers used to cause spurious failures in this test.
 // https://github.com/model-checking/kani/issues/3099
 // The code is extracted from the implementation of `BTreeMap` which is where we
 // originally saw the spurious failures while trying to enable storage markers

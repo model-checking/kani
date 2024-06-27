@@ -272,14 +272,14 @@ impl<'test> TestCx<'test> {
             .arg("kani")
             .arg("--target-dir")
             .arg(self.output_base_dir().join("target"))
-            .current_dir(parent_dir)
-            .args(&self.config.extra_args);
+            .current_dir(parent_dir);
         if test {
             cargo.arg("--tests");
         }
         if "expected" != self.testpaths.file.file_name().unwrap() {
             cargo.args(["--harness", function_name]);
         }
+        cargo.args(&self.config.extra_args);
 
         let proc_res = self.compose_and_run(cargo);
         self.verify_output(&proc_res, &self.testpaths.file);

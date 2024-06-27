@@ -245,14 +245,6 @@ pub struct VerificationArgs {
     #[arg(long, hide_short_help = true, requires("enable_unstable"))]
     pub ignore_global_asm: bool,
 
-    /// Ignore lifetimes of local variables. This effectively extends their
-    /// lifetimes to the function scope, and hence may cause Kani to miss
-    /// undefined behavior resulting from using the variable after it dies.
-    /// This option may impact the soundness of the analysis and may cause false
-    /// proofs and/or counterexamples
-    #[arg(long, hide_short_help = true, requires("enable_unstable"))]
-    pub ignore_locals_lifetime: bool,
-
     /// Write the GotoC symbol table to a file in JSON format instead of goto binary format.
     #[arg(long, hide_short_help = true)]
     pub write_json_symtab: bool,

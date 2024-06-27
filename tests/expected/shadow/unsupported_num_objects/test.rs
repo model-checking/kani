@@ -15,14 +15,14 @@ fn check_max_objects<const N: usize>() {
     // - the NULL pointer whose object ID is 0, and
     // - the object ID for `i`
     while i < N {
-        let x = i;
-        assert_eq!(kani::mem::pointer_object(&x as *const usize), i + 2);
+        let x: Box<usize> = Box::new(i);
+        assert_eq!(kani::mem::pointer_object(&*x as *const usize), 2 * i + 2);
         i += 1;
     }
 
     // create a new object whose ID is `N` + 2
     let x = 42;
-    assert_eq!(kani::mem::pointer_object(&x as *const i32), N + 2);
+    assert_eq!(kani::mem::pointer_object(&x as *const i32), 2 * N + 2);
     // the following call to `set` would fail if the object ID for `x` exceeds
     // the maximum allowed by Kani's shadow memory model
     unsafe {
@@ -32,10 +32,10 @@ fn check_max_objects<const N: usize>() {
 
 #[kani::proof]
 fn check_max_objects_pass() {
-    check_max_objects::<1021>();
+    check_max_objects::<510>();
 }
 
 #[kani::proof]
 fn check_max_objects_fail() {
-    check_max_objects::<1022>();
+    check_max_objects::<511>();
 }

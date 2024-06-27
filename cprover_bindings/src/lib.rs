@@ -30,6 +30,7 @@
 //! 1. [irep::IrepId::Empty] and [irep::IrepId::Nil] behaves like \[null\].
 
 mod env;
+pub use env::global_dead_object;
 pub mod goto_program;
 pub mod irep;
 mod machine_model;
