@@ -3,7 +3,7 @@
 //
 //! Utility functions that help calculate type layout.
 
-use stable_mir::abi::{FieldsShape, LayoutShape, Scalar, TagEncoding, ValueAbi, VariantsShape};
+use stable_mir::abi::{FieldsShape, Scalar, TagEncoding, ValueAbi, VariantsShape};
 use stable_mir::target::{MachineInfo, MachineSize};
 use stable_mir::ty::{AdtKind, IndexedVal, RigidTy, Ty, TyKind, UintTy};
 use stable_mir::CrateDef;
@@ -102,33 +102,6 @@ impl PointeeInfo {
     }
 }
 
-/// Get a size of an initialized scalar.
-fn scalar_ty_size(
-    machine_info: &MachineInfo,
-    layout_shape: LayoutShape,
-    current_offset: usize,
-) -> DataBytes {
-    match layout_shape.abi {
-        ValueAbi::Scalar(Scalar::Initialized { value, .. }) => {
-            DataBytes { offset: current_offset, size: value.size(machine_info) }
-        }
-        ValueAbi::ScalarPair(
-            Scalar::Initialized { value: value_first, .. },
-            Scalar::Initialized { value: value_second, .. },
-        ) => DataBytes {
-            offset: current_offset,
-            size: MachineSize::from_bits(
-                value_first.size(machine_info).bits() + value_second.size(machine_info).bits(),
-            ),
-        },
-        ValueAbi::Scalar(_)
-        | ValueAbi::ScalarPair(_, _)
-        | ValueAbi::Uninhabited
-        | ValueAbi::Vector { .. }
-        | ValueAbi::Aggregate { .. } => unreachable!(),
-    }
-}
-
 /// Retrieve a set of data bytes with offsets for a type.
 fn data_bytes_for_ty(
     machine_info: &MachineInfo,
@@ -138,7 +111,12 @@ fn data_bytes_for_ty(
     let layout = ty.layout().unwrap().shape();
 
     match layout.fields {
-        FieldsShape::Primitive => Ok(vec![scalar_ty_size(machine_info, layout, current_offset)]),
+        FieldsShape::Primitive => Ok(vec![match layout.abi {
+            ValueAbi::Scalar(Scalar::Initialized { value, .. }) => {
+                DataBytes { offset: current_offset, size: value.size(machine_info) }
+            }
+            _ => unreachable!("FieldsShape::Primitive with a different ABI than ValueAbi::Scalar"),
+        }]),
         FieldsShape::Array { stride, count } if count > 0 => {
             let TyKind::RigidTy(RigidTy::Array(elem_ty, _)) = ty.kind() else { unreachable!() };
             let elem_data_bytes = data_bytes_for_ty(machine_info, elem_ty, current_offset)?;
@@ -313,9 +291,34 @@ fn data_bytes_for_ty(
                 RigidTy::Str | RigidTy::Slice(_) | RigidTy::Array(_, _) => {
                     unreachable!("Expected array layout for {ty:?}")
                 }
-                RigidTy::RawPtr(_, _) | RigidTy::Ref(_, _, _) => {
-                    Ok(vec![scalar_ty_size(machine_info, layout, current_offset)])
-                }
+                RigidTy::RawPtr(_, _) | RigidTy::Ref(_, _, _) => Ok(match layout.abi {
+                    ValueAbi::Scalar(Scalar::Initialized { value, .. }) => {
+                        // Thin pointer, ABI is a single scalar.
+                        vec![DataBytes { offset: current_offset, size: value.size(machine_info) }]
+                    }
+                    ValueAbi::ScalarPair(
+                        Scalar::Initialized { value: value_first, .. },
+                        Scalar::Initialized { value: value_second, .. },
+                    ) => {
+                        // Fat pointer, ABI is a scalar pair.
+                        let FieldsShape::Arbitrary { offsets } = layout.fields else {
+                            unreachable!()
+                        };
+                        // Since this is a scalar pair, only 2 elements are in the offsets vec.
+                        assert!(offsets.len() == 2);
+                        vec![
+                            DataBytes {
+                                offset: current_offset + offsets[0].bytes(),
+                                size: value_first.size(machine_info),
+                            },
+                            DataBytes {
+                                offset: current_offset + offsets[1].bytes(),
+                                size: value_second.size(machine_info),
+                            },
+                        ]
+                    }
+                    _ => unreachable!("RigidTy::RawPtr | RigidTy::Ref with a non-scalar ABI."),
+                }),
                 RigidTy::FnDef(_, _)
                 | RigidTy::FnPtr(_)
                 | RigidTy::Closure(_, _)
