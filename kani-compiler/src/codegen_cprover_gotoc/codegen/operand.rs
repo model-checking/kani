@@ -3,13 +3,13 @@
 use crate::codegen_cprover_gotoc::utils::slice_fat_ptr;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::unwrap_or_return_codegen_unimplemented;
-use cbmc::goto_program::{DatatypeComponent, Expr, ExprValue, Location, Stmt, Symbol, Type};
+use cbmc::goto_program::{DatatypeComponent, Expr, ExprValue, Location, Symbol, Type};
 use rustc_middle::ty::Const as ConstInternal;
 use rustc_smir::rustc_internal;
 use rustc_span::Span as SpanInternal;
 use stable_mir::mir::alloc::{AllocId, GlobalAlloc};
 use stable_mir::mir::mono::{Instance, StaticDef};
-use stable_mir::mir::Operand;
+use stable_mir::mir::{Mutability, Operand};
 use stable_mir::ty::{
     Allocation, ConstantKind, FloatTy, FnDef, GenericArgs, IntTy, MirConst, RigidTy, Size, Ty,
     TyConst, TyConstKind, TyKind, UintTy,
@@ -464,7 +464,7 @@ impl<'tcx> GotocCtx<'tcx> {
         name: Option<String>,
         loc: Location,
     ) -> Expr {
-        debug!(?name, "codegen_const_allocation");
+        debug!(?name, ?alloc, "codegen_const_allocation");
         let alloc_name = match self.alloc_map.get(alloc) {
             None => {
                 let alloc_name = if let Some(name) = name { name } else { self.next_global_name() };
@@ -484,7 +484,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// This function is ultimately responsible for creating new statically initialized global variables
     /// in our goto binaries.
     pub fn codegen_alloc_in_memory(&mut self, alloc: Allocation, name: String, loc: Location) {
-        debug!(?alloc, ?name, "codegen_alloc_in_memory");
+        debug!(?name, ?alloc, "codegen_alloc_in_memory");
         let struct_name = &format!("{name}::struct");
 
         // The declaration of a static variable may have one type and the constant initializer for
@@ -507,50 +507,45 @@ impl<'tcx> GotocCtx<'tcx> {
                 .collect()
         });
 
+        // Create the allocation from an array byte array.
+        let init_fn = |gcx: &mut GotocCtx, var: Expr| {
+            let val = Expr::struct_expr_from_values(
+                alloc_typ_ref.clone(),
+                alloc_data
+                    .iter()
+                    .map(|d| match d {
+                        AllocData::Bytes(bytes) => Expr::array_expr(
+                            Type::unsigned_int(8).array_of(bytes.len()),
+                            bytes
+                                .iter()
+                                // We should consider adding a poison / undet where we have none
+                                // This mimics the behaviour before StableMIR though.
+                                .map(|b| Expr::int_constant(b.unwrap_or(0), Type::unsigned_int(8)))
+                                .collect(),
+                        ),
+                        AllocData::Expr(e) => e.clone(),
+                    })
+                    .collect(),
+                &gcx.symbol_table,
+            );
+            if val.typ() == var.typ() {
+                var.assign(val, loc)
+            } else {
+                let var_typ = var.typ().clone();
+                var.assign(val.transmute_to(var_typ, &gcx.symbol_table), loc)
+            }
+        };
+
         // The global static variable may not be in the symbol table if we are dealing
         // with a literal that can be statically allocated.
-        // We need to make a constructor whether it was in the table or not, so we can't use the
-        // closure argument to ensure_global_var to do that here.
-        let var = self.ensure_global_var(
+        let _var = self.ensure_global_var_init(
             &name,
             false, //TODO is this correct?
+            alloc.mutability == Mutability::Not,
             alloc_typ_ref.clone(),
             loc,
-            |_, _| None,
+            init_fn,
         );
-        let var_typ = var.typ().clone();
-
-        // Assign the initial value `val` to `var` via an intermediate `temp_var` to allow for
-        // transmuting the allocation type to the global static variable type.
-        let val = Expr::struct_expr_from_values(
-            alloc_typ_ref.clone(),
-            alloc_data
-                .iter()
-                .map(|d| match d {
-                    AllocData::Bytes(bytes) => Expr::array_expr(
-                        Type::unsigned_int(8).array_of(bytes.len()),
-                        bytes
-                            .iter()
-                            // We should consider adding a poison / undet where we have none
-                            // This mimics the behaviour before StableMIR though.
-                            .map(|b| Expr::int_constant(b.unwrap_or(0), Type::unsigned_int(8)))
-                            .collect(),
-                    ),
-                    AllocData::Expr(e) => e.clone(),
-                })
-                .collect(),
-            &self.symbol_table,
-        );
-        let fn_name = Self::initializer_fn_name(&name);
-        let temp_var = self.gen_function_local_variable(0, &fn_name, alloc_typ_ref, loc).to_expr();
-        let body = Stmt::block(
-            vec![
-                Stmt::decl(temp_var.clone(), Some(val), loc),
-                var.assign(temp_var.transmute_to(var_typ, &self.symbol_table), loc),
-            ],
-            loc,
-        );
-        self.register_initializer(&name, body);
 
         self.alloc_map.insert(alloc, name);
     }
@@ -657,12 +652,6 @@ impl<'tcx> GotocCtx<'tcx> {
         let fn_item_struct_ty = self.codegen_fndef_type_stable(instance);
         // This zero-sized object that a function name refers to in Rust is globally unique, so we create such a global object.
         let fn_singleton_name = format!("{mangled_name}::FnDefSingleton");
-        self.ensure_global_var(
-            &fn_singleton_name,
-            false,
-            fn_item_struct_ty,
-            loc,
-            |_, _| None, // zero-sized, so no initialization necessary
-        )
+        self.ensure_global_var(&fn_singleton_name, false, fn_item_struct_ty, loc).to_expr()
     }
 }

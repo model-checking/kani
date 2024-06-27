@@ -200,34 +200,49 @@ impl<'tcx> GotocCtx<'tcx> {
         self.symbol_table.lookup(name).unwrap()
     }
 
-    /// Ensures that a global variable `name` appears in the Symbol table.
-    /// If it doesn't, inserts it.
-    /// If `init_fn` returns `Some(body)`, creates an initializer for the variable using `body`.
-    /// Otherwise, leaves the variable uninitialized .
-    pub fn ensure_global_var<
-        F: FnOnce(&mut GotocCtx<'tcx>, Expr) -> Option<Stmt>,
-        T: Into<InternedString>,
+    /// Ensures that a global variable `name` appears in the Symbol table and is initialized.
+    ///
+    /// This will add the symbol to the Symbol Table if not inserted yet.
+    /// This will register the initialization function if not initialized yet.
+    ///   - This case can happen for static variables, since they are declared first.
+    pub fn ensure_global_var_init<
+        F: FnOnce(&mut GotocCtx<'tcx>, Expr) -> Stmt,
+        T: Into<InternedString> + Clone,
     >(
+        &mut self,
+        name: T,
+        is_file_local: bool,
+        is_const: bool,
+        t: Type,
+        loc: Location,
+        init_fn: F,
+    ) -> Expr {
+        let sym = self.ensure_global_var(name, is_file_local, t, loc);
+        self.register_initializer(&sym, init_fn);
+        sym.to_expr()
+    }
+
+    /// Ensures that a global variable `name` appears in the Symbol table.
+    ///
+    /// This will add the symbol to the Symbol Table if not inserted yet.
+    pub fn ensure_global_var<T: Into<InternedString> + Clone>(
         &mut self,
         name: T,
         is_file_local: bool,
         t: Type,
         loc: Location,
-        init_fn: F,
-    ) -> Expr {
-        let name = name.into();
-        if !self.symbol_table.contains(name) {
-            tracing::debug!(?name, "Ensure global variable");
-            let sym = Symbol::static_variable(name, name, t, loc)
+    ) -> Symbol {
+        let sym_name = name.clone().into();
+        if let Some(sym) = self.symbol_table.lookup(sym_name) {
+            sym.clone()
+        } else {
+            tracing::debug!(?sym_name, "ensure_global_var insert");
+            let sym = Symbol::static_variable(sym_name, sym_name, t, loc)
                 .with_is_file_local(is_file_local)
                 .with_is_hidden(false);
-            let var = sym.to_expr();
-            self.symbol_table.insert(sym);
-            if let Some(body) = init_fn(self, var) {
-                self.register_initializer(&name.to_string(), body);
-            }
+            self.symbol_table.insert(sym.clone());
+            sym
         }
-        self.symbol_table.lookup(name).unwrap().to_expr()
     }
 
     /// Ensures that a struct with name `struct_name` appears in the symbol table.
@@ -286,11 +301,16 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// Makes a `__attribute__((constructor)) fnname() {body}` initalizer function
-    pub fn register_initializer(&mut self, var_name: &str, body: Stmt) -> &Symbol {
-        let fn_name = Self::initializer_fn_name(var_name);
+    pub fn register_initializer<F>(&mut self, var: &Symbol, init_fn: F) -> &Symbol
+    where
+        F: FnOnce(&mut GotocCtx<'tcx>, Expr) -> Stmt,
+    {
+        let var_name = var.name.to_string();
+        let fn_name = Self::initializer_fn_name(&var_name);
         let pretty_name = format!("{var_name}::init");
-        let loc = *body.location();
-        self.ensure(&fn_name, |_tcx, _| {
+        self.ensure(&fn_name, |gcx, _| {
+            let body = init_fn(gcx, var.to_expr());
+            let loc = *body.location();
             Symbol::function(
                 &fn_name,
                 Type::code(vec![], Type::constructor()),

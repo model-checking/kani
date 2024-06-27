@@ -118,6 +118,17 @@ pub fn dump_mir_items(
         let out_file = File::create(output).unwrap();
         let mut writer = BufWriter::new(out_file);
 
+        // Dump the static allocations
+        for static_def in items
+            .iter()
+            .filter_map(|item| if let MonoItem::Static(def) = item { Some(def) } else { None })
+        {
+            let symbol_name = Instance::from(*static_def).mangled_name();
+            writeln!(writer, "// Item: {} ({})", static_def.name(), symbol_name).unwrap();
+            let alloc = static_def.eval_initializer().unwrap();
+            writeln!(writer, "{alloc:?}").unwrap();
+        }
+
         // For each def_id, dump their MIR
         for instance in items.iter().filter_map(get_instance) {
             writeln!(writer, "// Item: {} ({})", instance.name(), instance.mangled_name()).unwrap();
