@@ -28,32 +28,34 @@ pub fn expand_derive_arbitrary(item: proc_macro::TokenStream) -> proc_macro::Tok
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
     let body = fn_any_body(&item_name, &derive_item.data);
-    let cond_opt = cond_body(&item_name, &derive_item.data);
-    if let Some(cond) = cond_opt {
+
+    // 
+    let inv_conds_opt = inv_conds(&item_name, &derive_item.data);
+
+    let expanded = if let Some(inv_cond) = inv_conds_opt {
         let field_refs = field_refs(&item_name, &derive_item.data);
-        let expanded = quote! {
+        quote! {
             // The generated implementation.
             impl #impl_generics kani::Arbitrary for #item_name #ty_generics #where_clause {
                 fn any() -> Self {
                     let obj = #body;
                     #field_refs
-                    kani::assume(#cond);
+                    kani::assume(#inv_cond);
                     obj
                 }
             }
-        };
-        proc_macro::TokenStream::from(expanded)
+        }
     } else {
-        let expanded = quote! {
+        quote! {
             // The generated implementation.
             impl #impl_generics kani::Arbitrary for #item_name #ty_generics #where_clause {
                 fn any() -> Self {
                     #body
                 }
             }
-        };
-        proc_macro::TokenStream::from(expanded)
-    }
+        }
+    };
+    proc_macro::TokenStream::from(expanded)
 }
 
 /// Add a bound `T: Arbitrary` to every type parameter T.
@@ -92,7 +94,7 @@ fn fn_any_body(ident: &Ident, data: &Data) -> TokenStream {
     }
 }
 
-fn cond_body(ident: &Ident, data: &Data) -> Option<TokenStream> {
+fn inv_conds(ident: &Ident, data: &Data) -> Option<TokenStream> {
     match data {
         Data::Struct(struct_data) => cond_item(ident, &struct_data.fields),
         Data::Enum(_) => None,
@@ -100,15 +102,38 @@ fn cond_body(ident: &Ident, data: &Data) -> Option<TokenStream> {
     }
 }
 
+/// Generates the sequence of expressions to initialize the variables used as
+/// references to the struct fields.
+///
+/// For example, if we're deriving implementations for the struct
+/// ```
+/// #[derive(Arbitrary)]
+/// #[derive(Invariant)]
+/// struct PositivePoint {
+///     #[invariant(*x >= 0)]
+///     x: i32,
+///     #[invariant(*y >= 0)]
+///     y: i32,
+/// }
+/// ```
+/// this function will generate the `TokenStream`
+/// ```
+/// let x = &obj.x;
+/// let y = &obj.y;
+/// ```
+/// which allows us to refer to the struct fields without using `self`.
+/// Note that the actual stream is generated in the `field_refs_inner` function.
 fn field_refs(ident: &Ident, data: &Data) -> TokenStream {
     match data {
-        Data::Struct(struct_data) => field_refs2(ident, &struct_data.fields),
+        Data::Struct(struct_data) => field_refs_inner(ident, &struct_data.fields),
         Data::Enum(_) => unreachable!(),
         Data::Union(_) => unreachable!(),
     }
 }
 
-fn field_refs2(_ident: &Ident, fields: &Fields) -> TokenStream {
+/// Generates the sequence of expressions to initialize the variables used as
+/// references to the struct fields. See `field_refs` for more details.
+fn field_refs_inner(_ident: &Ident, fields: &Fields) -> TokenStream {
     match fields {
         Fields::Named(ref fields) => {
             let field_refs = fields.named.iter().map(|field| {
