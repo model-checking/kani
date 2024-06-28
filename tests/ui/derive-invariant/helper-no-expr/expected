@@ -1,4 +1,4 @@
-error: Cannot derive `Invariant` for `PositivePoint`
+error: Cannot derive impl for `PositivePoint`
    |
 11 | #[derive(kani::Invariant)]
    |          ^^^^^^^^^^^^^^^

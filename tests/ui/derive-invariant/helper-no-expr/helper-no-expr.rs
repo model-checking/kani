@@ -12,6 +12,6 @@ use kani::Invariant;
 struct PositivePoint {
     #[invariant()]
     x: i32,
-    #[invariant(self.y >= 0)]
+    #[invariant(*y >= 0)]
     y: i32,
 }

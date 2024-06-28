@@ -10,9 +10,9 @@ use kani::Invariant;
 #[derive(kani::Arbitrary)]
 #[derive(kani::Invariant)]
 struct PositivePoint {
-    // Note: `x` is unknown, we should refer to `self.x`
+    // Note: `x` is unknown, we should refer to `*x`
     #[invariant(x >= 0)]
     x: i32,
-    #[invariant(self.y >= 0)]
+    #[invariant(*y >= 0)]
     y: i32,
 }

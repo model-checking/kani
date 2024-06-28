@@ -170,16 +170,24 @@ fn field_refs(ident: &Ident, data: &Data) -> TokenStream {
 fn field_refs_inner(_ident: &Ident, fields: &Fields) -> TokenStream {
     match fields {
         Fields::Named(ref fields) => {
-            let field_refs = fields.named.iter().map(|field| {
-                let name = &field.ident;
-                quote_spanned! {field.span()=>
-                    let #name = &obj.#name;
-                }
-            });
-            quote! { #( #field_refs )* }
+            let field_refs: Vec<TokenStream> = fields
+                .named
+                .iter()
+                .map(|field| {
+                    let name = &field.ident;
+                    quote_spanned! {field.span()=>
+                        let #name = &obj.#name;
+                    }
+                })
+                .collect();
+            if !field_refs.is_empty() {
+                quote! { #( #field_refs )* }
+            } else {
+                quote! {}
+            }
         }
-        Fields::Unnamed(_) => unreachable!(),
-        Fields::Unit => unreachable!(),
+        Fields::Unnamed(_) => quote! {},
+        Fields::Unit => quote! {},
     }
 }
 
@@ -379,13 +387,15 @@ fn struct_invariant_conjunction(ident: &Ident, fields: &Fields) -> TokenStream {
                 .named
                 .iter()
                 .map(|field| {
-                    parse_inv_expr(ident, field).unwrap_or(quote_spanned! {field.span()=>
-                        self.#field.is_safe()
-                    })
+                    let name = &field.ident;
+                    let default_expr = quote_spanned! {field.span()=>
+                        #name.is_safe()
+                    };
+                    parse_inv_expr(ident, field).unwrap_or(default_expr)
                 })
                 .collect();
             // An initial value is required for empty structs
-            inv_conds.into_iter().fold(quote! { true }, |acc, cond| {
+            inv_conds.iter().fold(quote! { true }, |acc, cond| {
                 quote! { #acc && #cond }
             })
         }
