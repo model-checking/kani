@@ -254,7 +254,7 @@ impl ToIrep for ExprValue {
                     )],
                 }
             }
-            ExprValue::HalfFloatConstant(i) => {
+            ExprValue::Float16Constant(i) => {
                 let c: u16 = i.to_bits();
                 Irep {
                     id: IrepId::Constant,
