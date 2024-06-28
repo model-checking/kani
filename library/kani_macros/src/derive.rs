@@ -28,15 +28,33 @@ pub fn expand_derive_arbitrary(item: proc_macro::TokenStream) -> proc_macro::Tok
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
     let body = fn_any_body(&item_name, &derive_item.data);
+    let cond_opt = cond_body(&item_name, &derive_item.data);
+    if let Some(cond) = cond_opt {
+        
+        let field_refs = field_refs(&item_name, &derive_item.data);
     let expanded = quote! {
         // The generated implementation.
         impl #impl_generics kani::Arbitrary for #item_name #ty_generics #where_clause {
             fn any() -> Self {
-                #body
+                let obj = #body;
+                #field_refs
+                kani::assume(#cond);
+                obj
             }
         }
     };
-    proc_macro::TokenStream::from(expanded)
+        proc_macro::TokenStream::from(expanded)
+    } else {
+        let expanded = quote! {
+            // The generated implementation.
+            impl #impl_generics kani::Arbitrary for #item_name #ty_generics #where_clause {
+                fn any() -> Self {
+                    #body
+                }
+            }
+        };
+        proc_macro::TokenStream::from(expanded)
+    }
 }
 
 /// Add a bound `T: Arbitrary` to every type parameter T.
@@ -75,10 +93,40 @@ fn fn_any_body(ident: &Ident, data: &Data) -> TokenStream {
     }
 }
 
-/// Generate an item initialization where an item can be a struct or a variant.
-/// For named fields, this will generate: `Item { field1: kani::any(), field2: kani::any(), .. }`
-/// For unnamed fields, this will generate: `Item (kani::any(), kani::any(), ..)`
-/// For unit field, generate an empty initialization.
+fn cond_body(ident: &Ident, data: &Data) -> Option<TokenStream> {
+    match data {
+        Data::Struct(struct_data) => cond_item(ident, &struct_data.fields),
+        Data::Enum(_) => None,
+        Data::Union(_) => None,
+    }
+}
+
+fn field_refs(ident: &Ident, data: &Data) -> TokenStream {
+    match data {
+        Data::Struct(struct_data) => field_refs2(ident, &struct_data.fields),
+        Data::Enum(_) => unreachable!(),
+        Data::Union(_) => unreachable!(),
+    }
+}
+
+fn field_refs2(_ident: &Ident, fields: &Fields) -> TokenStream {
+    match fields {
+        Fields::Named(ref fields) => {
+            let field_refs = fields.named.iter().map(|field| {
+            let name = &field.ident;
+                quote_spanned! {field.span()=>
+                    let #name = &obj.#name;
+                }
+            });
+            quote!{ #( #field_refs )* }
+        }
+        Fields::Unnamed(_) => unreachable!(),
+        Fields::Unit => unreachable!(),
+    }
+}
+
+
+
 fn init_symbolic_item(ident: &Ident, fields: &Fields) -> TokenStream {
     match fields {
         Fields::Named(ref fields) => {
@@ -112,6 +160,54 @@ fn init_symbolic_item(ident: &Ident, fields: &Fields) -> TokenStream {
                 #ident
             }
         }
+    }
+}
+
+fn extract_expr(ident: &Ident, field: &syn::Field) -> Option<TokenStream> {
+    let name = &field.ident;
+    let mut inv_helper_attr = None;
+    // Keep the helper attribute if we find it
+    for attr in &field.attrs {
+        if attr.path().is_ident("invariant") {
+            inv_helper_attr = Some(attr);
+        }
+    }
+
+    // Parse the arguments in the invariant helper attribute
+    if let Some(attr) = inv_helper_attr {
+        let expr_args: Result<syn::Expr, syn::Error> = attr.parse_args();
+
+        // Check if there was an error parsing the arguments
+        if expr_args.is_err() {
+            abort!(Span::call_site(), "Cannot derive `Invariant` for `{}`", ident;
+            note = attr.span() =>
+            "invariant condition in field `{}` could not be parsed - `{:?}`", name.as_ref().unwrap().to_string(), expr_args.map_err(|e| e.to_string())
+            )
+        }
+        let inv_expr = expr_args.unwrap();
+        Some(quote_spanned! {field.span()=>
+            #inv_expr
+        })
+        // Return the expression for the invariant condition
+    } else { None }
+}
+/// Generate an item initialization where an item can be a struct or a variant.
+/// For named fields, this will generate: `Item { field1: kani::any(), field2: kani::any(), .. }`
+/// For unnamed fields, this will generate: `Item (kani::any(), kani::any(), ..)`
+/// For unit field, generate an empty initialization.
+fn cond_item(ident: &Ident, fields: &Fields) -> Option<TokenStream> {
+    match fields {
+        Fields::Named(ref fields) => {
+            let conds: Vec<TokenStream> = fields.named.iter().filter_map(|field|
+                extract_expr(ident, field)).collect();
+            if !conds.is_empty() {
+                Some(quote! { #(#conds)&&* })
+            } else {
+                None
+            }
+        }
+        Fields::Unnamed(_) => None,
+        Fields::Unit => None,
     }
 }
 
