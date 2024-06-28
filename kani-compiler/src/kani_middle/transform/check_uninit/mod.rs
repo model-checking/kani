@@ -159,7 +159,7 @@ impl UninitPass {
         };
 
         match operation {
-            MemoryInitOp::Get { .. } => {
+            MemoryInitOp::Check { .. } => {
                 self.build_get_and_check(tcx, body, source, operation, pointee_ty_info, skip_first)
             }
             MemoryInitOp::Set { .. } | MemoryInitOp::SetRef { .. } => {

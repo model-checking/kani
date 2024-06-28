@@ -20,7 +20,7 @@ use strum_macros::AsRefStr;
 pub enum MemoryInitOp {
     /// Check memory initialization of data bytes in a memory region starting from the pointer
     /// `operand` and of length `count * sizeof(operand)` bytes.
-    Get { operand: Operand, count: Operand },
+    Check { operand: Operand, count: Operand },
     /// Set memory initialization state of data bytes in a memory region starting from the pointer
     /// `operand` and of length `count * sizeof(operand)` bytes.
     Set { operand: Operand, count: Operand, value: bool, position: InsertPosition },
@@ -37,7 +37,7 @@ impl MemoryInitOp {
     /// `MemoryInitOp::SetRef`.
     pub fn mk_operand(&self, body: &mut MutableBody, source: &mut SourceInstruction) -> Operand {
         match self {
-            MemoryInitOp::Get { operand, .. } | MemoryInitOp::Set { operand, .. } => {
+            MemoryInitOp::Check { operand, .. } | MemoryInitOp::Set { operand, .. } => {
                 operand.clone()
             }
             MemoryInitOp::SetRef { operand, .. } => Operand::Copy(Place {
@@ -60,7 +60,7 @@ impl MemoryInitOp {
 
     pub fn expect_count(&self) -> Operand {
         match self {
-            MemoryInitOp::Get { count, .. }
+            MemoryInitOp::Check { count, .. }
             | MemoryInitOp::Set { count, .. }
             | MemoryInitOp::SetRef { count, .. } => count.clone(),
             MemoryInitOp::Unsupported { .. } => unreachable!(),
@@ -70,14 +70,14 @@ impl MemoryInitOp {
     pub fn expect_value(&self) -> bool {
         match self {
             MemoryInitOp::Set { value, .. } | MemoryInitOp::SetRef { value, .. } => *value,
-            MemoryInitOp::Get { .. } | MemoryInitOp::Unsupported { .. } => unreachable!(),
+            MemoryInitOp::Check { .. } | MemoryInitOp::Unsupported { .. } => unreachable!(),
         }
     }
 
     pub fn position(&self) -> InsertPosition {
         match self {
             MemoryInitOp::Set { position, .. } | MemoryInitOp::SetRef { position, .. } => *position,
-            MemoryInitOp::Get { .. } | MemoryInitOp::Unsupported { .. } => InsertPosition::Before,
+            MemoryInitOp::Check { .. } | MemoryInitOp::Unsupported { .. } => InsertPosition::Before,
         }
     }
 }
@@ -156,7 +156,7 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                 StatementKind::Intrinsic(NonDivergingIntrinsic::CopyNonOverlapping(copy)) => {
                     self.super_statement(stmt, location);
                     // Source is a *const T and it must be initialized.
-                    self.push_target(MemoryInitOp::Get {
+                    self.push_target(MemoryInitOp::Check {
                         operand: copy.src.clone(),
                         count: copy.count.clone(),
                     });
@@ -252,7 +252,7 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                         args[0].ty(self.locals).unwrap().kind(),
                                         TyKind::RigidTy(RigidTy::RawPtr(..))
                                     ));
-                                    self.push_target(MemoryInitOp::Get {
+                                    self.push_target(MemoryInitOp::Check {
                                         operand: args[0].clone(),
                                         count: mk_const_operand(1, location.span()),
                                     });
@@ -271,11 +271,11 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                         args[1].ty(self.locals).unwrap().kind(),
                                         TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Not))
                                     ));
-                                    self.push_target(MemoryInitOp::Get {
+                                    self.push_target(MemoryInitOp::Check {
                                         operand: args[0].clone(),
                                         count: args[2].clone(),
                                     });
-                                    self.push_target(MemoryInitOp::Get {
+                                    self.push_target(MemoryInitOp::Check {
                                         operand: args[1].clone(),
                                         count: args[2].clone(),
                                     });
@@ -296,7 +296,7 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                         args[1].ty(self.locals).unwrap().kind(),
                                         TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Mut))
                                     ));
-                                    self.push_target(MemoryInitOp::Get {
+                                    self.push_target(MemoryInitOp::Check {
                                         operand: args[0].clone(),
                                         count: args[2].clone(),
                                     });
@@ -321,11 +321,11 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                         args[1].ty(self.locals).unwrap().kind(),
                                         TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Mut))
                                     ));
-                                    self.push_target(MemoryInitOp::Get {
+                                    self.push_target(MemoryInitOp::Check {
                                         operand: args[0].clone(),
                                         count: mk_const_operand(1, location.span()),
                                     });
-                                    self.push_target(MemoryInitOp::Get {
+                                    self.push_target(MemoryInitOp::Check {
                                         operand: args[1].clone(),
                                         count: mk_const_operand(1, location.span()),
                                     });
@@ -340,7 +340,7 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                         args[0].ty(self.locals).unwrap().kind(),
                                         TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Not))
                                     ));
-                                    self.push_target(MemoryInitOp::Get {
+                                    self.push_target(MemoryInitOp::Check {
                                         operand: args[0].clone(),
                                         count: mk_const_operand(1, location.span()),
                                     });
@@ -355,7 +355,7 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                         args[0].ty(self.locals).unwrap().kind(),
                                         TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Not))
                                     ));
-                                    self.push_target(MemoryInitOp::Get {
+                                    self.push_target(MemoryInitOp::Check {
                                         operand: args[0].clone(),
                                         count: mk_const_operand(1, location.span()),
                                     });
@@ -473,7 +473,7 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                 ProjectionElem::Deref => {
                     let ptr_ty = intermediate_place.ty(self.locals).unwrap();
                     if ptr_ty.kind().is_raw_ptr() {
-                        self.push_target(MemoryInitOp::Get {
+                        self.push_target(MemoryInitOp::Check {
                             operand: Operand::Copy(intermediate_place.clone()),
                             count: mk_const_operand(1, location.span()),
                         });
