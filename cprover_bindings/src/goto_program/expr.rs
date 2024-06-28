@@ -585,21 +585,23 @@ impl Expr {
         expr!(EmptyUnion, typ)
     }
 
+    /// `3.14f`
     pub fn float16_constant(c: f16) -> Self {
         expr!(HalfConstant(c), Type::float16())
     }
 
+    /// `3.14159265358979323846264338327950288L`
     pub fn float128_constant(c: f128) -> Self {
         expr!(Float128Constant(c), Type::float128())
     }
 
-    /// `union {float f; uint32_t bp} u = {.bp = 0x1234}; >>> u.f <<<`
+    /// `union {_Float16 f; uint16_t bp} u = {.bp = 0x1234}; >>> u.f <<<`
     pub fn float16_constant_from_bitpattern(bp: u16) -> Self {
         let c = f16::from_bits(bp);
         Self::float16_constant(c)
     }
 
-    /// `union {float f; uint32_t bp} u = {.bp = 0x1234}; >>> u.f <<<`
+    /// `union {_Float128 f; __uint128_t bp} u = {.bp = 0x1234}; >>> u.f <<<`
     pub fn float128_constant_from_bitpattern(bp: u128) -> Self {
         let c = f128::from_bits(bp);
         Self::float128_constant(c)

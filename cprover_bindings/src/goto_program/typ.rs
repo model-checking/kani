@@ -41,7 +41,7 @@ pub enum Type {
     FlexibleArray { typ: Box<Type> },
     /// `float`
     Float,
-    /// `Half Float Constant`
+    /// `Half float`
     Float16,
     /// `float 128`
     Float128,

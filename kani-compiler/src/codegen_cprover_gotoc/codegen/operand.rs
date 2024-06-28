@@ -194,7 +194,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         alloc.read_uint().unwrap() as u64,
                     )),
                     FloatTy::F128 => Some(Expr::float128_constant_from_bitpattern(
-                        alloc.read_uint().unwrap() as u128,
+                        alloc.read_uint().unwrap(),
                     )),
                 }
             }
