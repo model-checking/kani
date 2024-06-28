@@ -540,6 +540,22 @@ impl Type {
         }
     }
 
+    pub fn is_float_16(&self) -> bool {
+        let concrete = self.unwrap_typedef();
+        match concrete {
+            Float16 => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_float_128(&self) -> bool {
+        let concrete = self.unwrap_typedef();
+        match concrete {
+            Float128 => true,
+            _ => false,
+        }
+    }
+
     pub fn is_float(&self) -> bool {
         let concrete = self.unwrap_typedef();
         match concrete {
@@ -551,7 +567,7 @@ impl Type {
     pub fn is_floating_point(&self) -> bool {
         let concrete = self.unwrap_typedef();
         match concrete {
-            Double | Float => true,
+            Double | Float | Float16 | Float128 => true,
             _ => false,
         }
     }
@@ -1297,6 +1313,10 @@ impl Type {
             Expr::c_true()
         } else if self.is_float() {
             Expr::float_constant(1.0)
+        } else if self.is_float_16() {
+            Expr::float16_constant(1.0)
+        } else if self.is_float_128() {
+            Expr::float128_constant(1.0)
         } else if self.is_double() {
             Expr::double_constant(1.0)
         } else {
@@ -1313,6 +1333,10 @@ impl Type {
             Expr::c_false()
         } else if self.is_float() {
             Expr::float_constant(0.0)
+        } else if self.is_float_16() {
+            Expr::float16_constant(0.0)
+        } else if self.is_float_128() {
+            Expr::float128_constant(0.0)
         } else if self.is_double() {
             Expr::double_constant(0.0)
         } else if self.is_pointer() {
@@ -1538,6 +1562,8 @@ mod type_tests {
         assert_eq!(type_def.is_unsigned(&mm), src_type.is_unsigned(&mm));
         assert_eq!(type_def.is_scalar(), src_type.is_scalar());
         assert_eq!(type_def.is_float(), src_type.is_float());
+        assert_eq!(type_def.is_float_16(), src_type.is_float_16());
+        assert_eq!(type_def.is_float_128(), src_type.is_float_128());
         assert_eq!(type_def.is_floating_point(), src_type.is_floating_point());
         assert_eq!(type_def.width(), src_type.width());
         assert_eq!(type_def.can_be_lvalue(), src_type.can_be_lvalue());
