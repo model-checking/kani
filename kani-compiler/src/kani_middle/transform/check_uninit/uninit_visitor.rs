@@ -32,6 +32,9 @@ pub enum MemoryInitOp {
 }
 
 impl MemoryInitOp {
+    /// Produce an operand for the relevant memory initialization related operation. This is mostly
+    /// required so that the analysis can create a new local to take a reference in
+    /// `MemoryInitOp::SetRef`.
     pub fn mk_operand(&self, body: &mut MutableBody, source: &mut SourceInstruction) -> Operand {
         match self {
             MemoryInitOp::Get { operand, .. } | MemoryInitOp::Set { operand, .. } => {
@@ -79,6 +82,9 @@ impl MemoryInitOp {
     }
 }
 
+/// Represents an instruction in the source code together with all memory initialization checks/sets
+/// that are connected to the memory used in this instruction and whether they should be inserted
+/// before or after the instruction.
 #[derive(Clone, Debug)]
 pub struct InitRelevantInstruction {
     /// The instruction that affects the state of the memory.
