@@ -119,34 +119,6 @@ pub struct CheckUninitVisitor<'a> {
     bb: BasicBlockIdx,
 }
 
-fn mk_const_operand(value: usize, span: Span) -> Operand {
-    Operand::Constant(ConstOperand {
-        span,
-        user_ty: None,
-        const_: MirConst::try_from_uint(value as u128, UintTy::Usize).unwrap(),
-    })
-}
-
-fn try_remove_topmost_deref(place: &Place) -> Option<Place> {
-    let mut new_place = place.clone();
-    if let Some(ProjectionElem::Deref) = new_place.projection.pop() {
-        Some(new_place)
-    } else {
-        None
-    }
-}
-
-/// Try retrieving instance for the given function operand.
-fn try_resolve_instance(locals: &[LocalDecl], func: &Operand) -> Result<Instance, String> {
-    let ty = func.ty(locals).unwrap();
-    match ty.kind() {
-        TyKind::RigidTy(RigidTy::FnDef(def, args)) => Ok(Instance::resolve(def, &args).unwrap()),
-        _ => Err(format!(
-            "Kani does not support reasoning about memory initialization of arguments to `{ty:?}`."
-        )),
-    }
-}
-
 impl<'a> CheckUninitVisitor<'a> {
     pub fn find_next(
         body: &'a MutableBody,
@@ -814,5 +786,35 @@ fn can_skip_intrinsic(intrinsic_name: &str) -> bool {
             /* Everything else */
             false
         }
+    }
+}
+
+/// Create a constant operand with a given value and span.
+fn mk_const_operand(value: usize, span: Span) -> Operand {
+    Operand::Constant(ConstOperand {
+        span,
+        user_ty: None,
+        const_: MirConst::try_from_uint(value as u128, UintTy::Usize).unwrap(),
+    })
+}
+
+/// Try removing a topmost deref projection from a place if it exists, returning a place without it.
+fn try_remove_topmost_deref(place: &Place) -> Option<Place> {
+    let mut new_place = place.clone();
+    if let Some(ProjectionElem::Deref) = new_place.projection.pop() {
+        Some(new_place)
+    } else {
+        None
+    }
+}
+
+/// Try retrieving instance for the given function operand.
+fn try_resolve_instance(locals: &[LocalDecl], func: &Operand) -> Result<Instance, String> {
+    let ty = func.ty(locals).unwrap();
+    match ty.kind() {
+        TyKind::RigidTy(RigidTy::FnDef(def, args)) => Ok(Instance::resolve(def, &args).unwrap()),
+        _ => Err(format!(
+            "Kani does not support reasoning about memory initialization of arguments to `{ty:?}`."
+        )),
     }
 }
