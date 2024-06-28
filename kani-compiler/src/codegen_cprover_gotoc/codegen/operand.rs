@@ -195,7 +195,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     )),
                     FloatTy::F128 => Some(Expr::float128_constant_from_bitpattern(
                         alloc.read_uint().unwrap() as u128,
-                    ))
+                    )),
                 }
             }
             TyKind::RigidTy(RigidTy::RawPtr(inner_ty, _))
