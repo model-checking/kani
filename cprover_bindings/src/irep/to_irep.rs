@@ -718,7 +718,7 @@ impl ToIrep for Type {
                 id: IrepId::Floatbv,
                 sub: vec![],
                 // Fraction bits: 10
-                // Precision bits: 5
+                // Exponent width bits: 5
                 // Sign bit: 1
                 named_sub: linear_map![
                     (IrepId::F, Irep::just_int_id(10)),
@@ -730,7 +730,7 @@ impl ToIrep for Type {
                 id: IrepId::Floatbv,
                 sub: vec![],
                 // Fraction bits: 112
-                // Precision bits: 52
+                // Exponent width bits: 15
                 // Sign bit: 1
                 named_sub: linear_map![
                     (IrepId::F, Irep::just_int_id(112)),
