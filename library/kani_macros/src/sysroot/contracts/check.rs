@@ -34,8 +34,7 @@ impl<'a> ContractConditionsHandler<'a> {
                 )
             }
             ContractConditionsData::Ensures { attr } => {
-                let (remembers, ensures_clause) =
-                    build_ensures(attr, return_type_to_type(&self.annotated_fn.sig.output));
+                let (remembers, ensures_clause) = build_ensures(attr);
 
                 // The code that enforces the postconditions and cleans up the shallow
                 // argument copies (with `mem::forget`).
