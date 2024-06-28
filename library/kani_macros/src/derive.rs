@@ -122,6 +122,20 @@ fn inv_conds(ident: &Ident, data: &Data) -> Option<TokenStream> {
     }
 }
 
+/// Generates an expression resulting from the conjunction of conditions
+/// specified as invariants for each field. See `inv_conds` for more details.
+fn inv_conds_inner(ident: &Ident, fields: &Fields) -> Option<TokenStream> {
+    match fields {
+        Fields::Named(ref fields) => {
+            let conds: Vec<TokenStream> =
+                fields.named.iter().filter_map(|field| parse_inv_expr(ident, field)).collect();
+            if !conds.is_empty() { Some(quote! { #(#conds)&&* }) } else { None }
+        }
+        Fields::Unnamed(_) => None,
+        Fields::Unit => None,
+    }
+}
+
 /// Generates the sequence of expressions to initialize the variables used as
 /// references to the struct fields.
 ///
@@ -242,20 +256,6 @@ fn parse_inv_expr(ident: &Ident, field: &syn::Field) -> Option<TokenStream> {
         })
     } else {
         None
-    }
-}
-
-/// Generates an expression resulting from the conjunction of conditions
-/// specified as invariants for each field. See `inv_conds` for more details.
-fn inv_conds_inner(ident: &Ident, fields: &Fields) -> Option<TokenStream> {
-    match fields {
-        Fields::Named(ref fields) => {
-            let conds: Vec<TokenStream> =
-                fields.named.iter().filter_map(|field| parse_inv_expr(ident, field)).collect();
-            if !conds.is_empty() { Some(quote! { #(#conds)&&* }) } else { None }
-        }
-        Fields::Unnamed(_) => None,
-        Fields::Unit => None,
     }
 }
 
