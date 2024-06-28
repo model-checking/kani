@@ -6,7 +6,6 @@
 //! Related issue: <https://github.com/model-checking/kani/issues/3228>
 
 extern crate kani;
-use kani::Arbitrary;
 
 #[derive(PartialEq, Eq, kani::Arbitrary)]
 pub struct Foo(u8);
