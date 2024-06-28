@@ -29,7 +29,7 @@ pub fn expand_derive_arbitrary(item: proc_macro::TokenStream) -> proc_macro::Tok
 
     let body = fn_any_body(&item_name, &derive_item.data);
 
-    // 
+    // Get the invariant conditions (if any) to produce type-safe values
     let inv_conds_opt = inv_conds(&item_name, &derive_item.data);
 
     let expanded = if let Some(inv_cond) = inv_conds_opt {
@@ -149,6 +149,10 @@ fn field_refs_inner(_ident: &Ident, fields: &Fields) -> TokenStream {
     }
 }
 
+/// Generate an item initialization where an item can be a struct or a variant.
+/// For named fields, this will generate: `Item { field1: kani::any(), field2: kani::any(), .. }`
+/// For unnamed fields, this will generate: `Item (kani::any(), kani::any(), ..)`
+/// For unit field, generate an empty initialization.
 fn init_symbolic_item(ident: &Ident, fields: &Fields) -> TokenStream {
     match fields {
         Fields::Named(ref fields) => {
@@ -201,25 +205,21 @@ fn extract_expr(ident: &Ident, field: &syn::Field) -> Option<TokenStream> {
 
         // Check if there was an error parsing the arguments
         if expr_args.is_err() {
-            abort!(Span::call_site(), "Cannot derive `Invariant` for `{}`", ident;
+            abort!(Span::call_site(), "Cannot derive impl for `{}`", ident;
             note = attr.span() =>
             "invariant condition in field `{}` could not be parsed - `{:?}`", name.as_ref().unwrap().to_string(), expr_args.map_err(|e| e.to_string())
             )
         }
+        // Return the expression associated to the invariant condition
         let inv_expr = expr_args.unwrap();
         Some(quote_spanned! {field.span()=>
             #inv_expr
         })
-        // Return the expression for the invariant condition
     } else {
         None
     }
 }
 
-/// Generate an item initialization where an item can be a struct or a variant.
-/// For named fields, this will generate: `Item { field1: kani::any(), field2: kani::any(), .. }`
-/// For unnamed fields, this will generate: `Item (kani::any(), kani::any(), ..)`
-/// For unit field, generate an empty initialization.
 fn cond_item(ident: &Ident, fields: &Fields) -> Option<TokenStream> {
     match fields {
         Fields::Named(ref fields) => {
@@ -348,42 +348,17 @@ fn struct_invariant_conjunction(ident: &Ident, fields: &Fields) -> TokenStream {
         // Therefore, if `#[invariant(<cond>)]` isn't specified for any field, this expands to
         // `true && self.field1.is_safe() && self.field2.is_safe() && ..`
         Fields::Named(ref fields) => {
-            let inv_conds = fields.named.iter().map(|field| {
-                let name = &field.ident;
-                let mut inv_helper_attr = None;
-
-                // Keep the helper attribute if we find it
-                for attr in &field.attrs {
-                    if attr.path().is_ident("invariant") {
-                        inv_helper_attr = Some(attr);
-                    }
-                }
-
-                // Parse the arguments in the invariant helper attribute
-                if let Some(attr) = inv_helper_attr {
-                    let expr_args: Result<syn::Expr, syn::Error> = attr.parse_args();
-
-                    // Check if there was an error parsing the arguments
-                    if expr_args.is_err() {
-                        abort!(Span::call_site(), "Cannot derive `Invariant` for `{}`", ident;
-                        note = attr.span() =>
-                        "invariant condition in field `{}` could not be parsed - `{:?}`", name.as_ref().unwrap().to_string(), expr_args.map_err(|e| e.to_string())
-                        )
-                    }
-                    // Return the expression for the invariant condition
-                    let inv_expr = expr_args.unwrap();
-                    quote_spanned! {field.span()=>
-                        #inv_expr
-                    }
-                } else {
-                    // Return call to the field's `is_safe` method
-                    quote_spanned! {field.span()=>
-                        self.#name.is_safe()
-                    }
-                }
-            });
+            let inv_conds: Vec<TokenStream> = fields
+                .named
+                .iter()
+                .map(|field| {
+                    extract_expr(ident, field).unwrap_or(quote_spanned! {field.span()=>
+                        self.#field.is_safe()
+                    })
+                })
+                .collect();
             // An initial value is required for empty structs
-            inv_conds.fold(quote! { true }, |acc, cond| {
+            inv_conds.into_iter().fold(quote! { true }, |acc, cond| {
                 quote! { #acc && #cond }
             })
         }
