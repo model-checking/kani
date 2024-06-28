@@ -240,124 +240,17 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                 intrinsic_name if can_skip_intrinsic(intrinsic_name) => {
                                     /* Intrinsics that can be safely skipped */
                                 }
-                                "atomic_and_seqcst"
-                                | "atomic_and_acquire"
-                                | "atomic_and_acqrel"
-                                | "atomic_and_release"
-                                | "atomic_and_relaxed"
-                                | "atomic_max_seqcst"
-                                | "atomic_max_acquire"
-                                | "atomic_max_acqrel"
-                                | "atomic_max_release"
-                                | "atomic_max_relaxed"
-                                | "atomic_min_seqcst"
-                                | "atomic_min_acquire"
-                                | "atomic_min_acqrel"
-                                | "atomic_min_release"
-                                | "atomic_min_relaxed"
-                                | "atomic_nand_seqcst"
-                                | "atomic_nand_acquire"
-                                | "atomic_nand_acqrel"
-                                | "atomic_nand_release"
-                                | "atomic_nand_relaxed"
-                                | "atomic_or_seqcst"
-                                | "atomic_or_acquire"
-                                | "atomic_or_acqrel"
-                                | "atomic_or_release"
-                                | "atomic_or_relaxed"
-                                | "atomic_umax_seqcst"
-                                | "atomic_umax_acquire"
-                                | "atomic_umax_acqrel"
-                                | "atomic_umax_release"
-                                | "atomic_umax_relaxed"
-                                | "atomic_umin_seqcst"
-                                | "atomic_umin_acquire"
-                                | "atomic_umin_acqrel"
-                                | "atomic_umin_release"
-                                | "atomic_umin_relaxed"
-                                | "atomic_xadd_seqcst"
-                                | "atomic_xadd_acquire"
-                                | "atomic_xadd_acqrel"
-                                | "atomic_xadd_release"
-                                | "atomic_xadd_relaxed"
-                                | "atomic_xor_seqcst"
-                                | "atomic_xor_acquire"
-                                | "atomic_xor_acqrel"
-                                | "atomic_xor_release"
-                                | "atomic_xor_relaxed"
-                                | "atomic_xsub_seqcst"
-                                | "atomic_xsub_acquire"
-                                | "atomic_xsub_acqrel"
-                                | "atomic_xsub_release"
-                                | "atomic_xsub_relaxed" => {
+                                name if name.starts_with("atomic") => {
+                                    let num_args =
+                                        if name.starts_with("atomic_cxchg") { 3 } else { 2 };
                                     assert_eq!(
                                         args.len(),
-                                        2,
-                                        "Unexpected number of arguments for `atomic_binop`"
+                                        num_args,
+                                        "Unexpected number of arguments for `{name}`"
                                     );
                                     assert!(matches!(
                                         args[0].ty(self.locals).unwrap().kind(),
-                                        TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Mut))
-                                    ));
-                                    self.push_target(MemoryInitOp::Set {
-                                        operand: args[0].clone(),
-                                        count: mk_const_operand(1, location.span()),
-                                        value: true,
-                                        position: InsertPosition::After,
-                                    });
-                                }
-                                "atomic_xchg_seqcst"
-                                | "atomic_xchg_acquire"
-                                | "atomic_xchg_acqrel"
-                                | "atomic_xchg_release"
-                                | "atomic_xchg_relaxed"
-                                | "atomic_store_seqcst"
-                                | "atomic_store_release"
-                                | "atomic_store_relaxed"
-                                | "atomic_store_unordered" => {
-                                    assert_eq!(
-                                        args.len(),
-                                        2,
-                                        "Unexpected number of arguments for `atomic_store`"
-                                    );
-                                    assert!(matches!(
-                                        args[0].ty(self.locals).unwrap().kind(),
-                                        TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Mut))
-                                    ));
-                                    self.push_target(MemoryInitOp::Set {
-                                        operand: args[0].clone(),
-                                        count: mk_const_operand(1, location.span()),
-                                        value: true,
-                                        position: InsertPosition::After,
-                                    });
-                                }
-                                "atomic_load_seqcst"
-                                | "atomic_load_acquire"
-                                | "atomic_load_relaxed"
-                                | "atomic_load_unordered" => {
-                                    assert_eq!(
-                                        args.len(),
-                                        2,
-                                        "Unexpected number of arguments for `atomic_load`"
-                                    );
-                                    assert!(matches!(
-                                        args[0].ty(self.locals).unwrap().kind(),
-                                        TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Not))
-                                    ));
-                                    self.push_target(MemoryInitOp::Get {
-                                        operand: args[0].clone(),
-                                        count: mk_const_operand(1, location.span()),
-                                    });
-                                }
-                                name if name.starts_with("atomic_cxchg") => {
-                                    assert_eq!(
-                                        args.len(),
-                                        3,
-                                        "Unexpected number of arguments for `atomic_cxchg"
-                                    );
-                                    assert!(matches!(
-                                        args[0].ty(self.locals).unwrap().kind(),
-                                        TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Mut))
+                                        TyKind::RigidTy(RigidTy::RawPtr(..))
                                     ));
                                     self.push_target(MemoryInitOp::Get {
                                         operand: args[0].clone(),
@@ -387,7 +280,9 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                         count: args[2].clone(),
                                     });
                                 }
-                                "copy" => {
+                                "copy"
+                                | "volatile_copy_memory"
+                                | "volatile_copy_nonoverlapping_memory" => {
                                     assert_eq!(
                                         args.len(),
                                         3,
@@ -448,32 +343,6 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                     self.push_target(MemoryInitOp::Get {
                                         operand: args[0].clone(),
                                         count: mk_const_operand(1, location.span()),
-                                    });
-                                }
-
-                                "volatile_copy_memory" | "volatile_copy_nonoverlapping_memory" => {
-                                    assert_eq!(
-                                        args.len(),
-                                        3,
-                                        "Unexpected number of arguments for `volatile_copy`"
-                                    );
-                                    assert!(matches!(
-                                        args[0].ty(self.locals).unwrap().kind(),
-                                        TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Not))
-                                    ));
-                                    assert!(matches!(
-                                        args[1].ty(self.locals).unwrap().kind(),
-                                        TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Mut))
-                                    ));
-                                    self.push_target(MemoryInitOp::Get {
-                                        operand: args[0].clone(),
-                                        count: args[2].clone(),
-                                    });
-                                    self.push_target(MemoryInitOp::Set {
-                                        operand: args[1].clone(),
-                                        count: args[2].clone(),
-                                        value: true,
-                                        position: InsertPosition::After,
                                     });
                                 }
                                 "volatile_load" => {
