@@ -726,12 +726,12 @@ impl ToIrep for Type {
                     (IrepId::CCType, Irep::just_id(IrepId::Float16)),
                 ],
             },
-            // Fraction bits: 112
-            // Precision bits: 52
-            // Sign bit: 1
             Type::Float128 => Irep {
                 id: IrepId::Floatbv,
                 sub: vec![],
+                // Fraction bits: 112
+                // Precision bits: 52
+                // Sign bit: 1
                 named_sub: linear_map![
                     (IrepId::F, Irep::just_int_id(112)),
                     (IrepId::Width, Irep::just_int_id(128)),

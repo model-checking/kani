@@ -41,9 +41,9 @@ pub enum Type {
     FlexibleArray { typ: Box<Type> },
     /// `float`
     Float,
-    /// `Half float`
+    /// `_Float16`
     Float16,
-    /// `float 128`
+    /// `_Float128`
     Float128,
     /// `struct x {}`
     IncompleteStruct { tag: InternedString },
