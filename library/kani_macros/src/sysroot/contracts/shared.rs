@@ -165,7 +165,7 @@ pub fn try_as_result_assign_mut(stmt: &mut syn::Stmt) -> Option<&mut syn::LocalI
 /// of statements that instantiate these expressions as `let remember_kani_internal_x = old_expr;`
 /// where x is a unique hash. This is returned as the first return parameter. The second
 /// return parameter is the expression formed by passing in the result variable into the input closure.
-pub fn build_ensures<'a>(data: &ExprClosure) -> (TokenStream2, Expr) {
+pub fn build_ensures(data: &ExprClosure) -> (TokenStream2, Expr) {
     let mut remembers_exprs = HashMap::new();
     let mut vis = OldVisitor { t: OldLifter::new(), remembers_exprs: &mut remembers_exprs };
     let mut expr = &mut data.clone();
