@@ -6,7 +6,6 @@
 // There are a fair number of constructs in this module that are better maintained as
 // explicit pattern matching versus using the `matches!` macro.
 #![allow(clippy::match_like_matches_macro)]
-
 mod builtin;
 mod expr;
 mod location;

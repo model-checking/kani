@@ -254,6 +254,28 @@ impl ToIrep for ExprValue {
                     )],
                 }
             }
+            ExprValue::HalfConstant(i) => {
+                let c: u16 = i.to_bits();
+                Irep {
+                    id: IrepId::Constant,
+                    sub: vec![],
+                    named_sub: linear_map![(
+                        IrepId::Value,
+                        Irep::just_bitpattern_id(c, mm.float_width, false)
+                    )],
+                }
+            }
+            ExprValue::Float128Constant(i) => {
+                let c: u128 = i.to_bits();
+                Irep {
+                    id: IrepId::Constant,
+                    sub: vec![],
+                    named_sub: linear_map![(
+                        IrepId::Value,
+                        Irep::just_bitpattern_id(c, mm.float_width, false)
+                    )],
+                }
+            }
             ExprValue::FunctionCall { function, arguments } => side_effect_irep(
                 IrepId::FunctionCall,
                 vec![function.to_irep(mm), arguments_irep(arguments.iter(), mm)],
@@ -693,6 +715,24 @@ impl ToIrep for Type {
                     (IrepId::F, Irep::just_int_id(23)),
                     (IrepId::Width, Irep::just_int_id(32)),
                     (IrepId::CCType, Irep::just_id(IrepId::Float)),
+                ],
+            },
+            Type::Float16 => Irep {
+                id: IrepId::Floatbv,
+                sub: vec![],
+                named_sub: linear_map![
+                    (IrepId::F, Irep::just_int_id(10)),
+                    (IrepId::Width, Irep::just_int_id(16)),
+                    (IrepId::CCType, Irep::just_id(IrepId::Float16)),
+                ],
+            },
+            Type::Float128 => Irep {
+                id: IrepId::Floatbv,
+                sub: vec![],
+                named_sub: linear_map![
+                    (IrepId::F, Irep::just_int_id(112)),
+                    (IrepId::Width, Irep::just_int_id(128)),
+                    (IrepId::CCType, Irep::just_id(IrepId::Float128)),
                 ],
             },
             Type::IncompleteStruct { tag } => Irep {

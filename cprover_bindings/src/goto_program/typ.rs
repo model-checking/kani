@@ -41,6 +41,10 @@ pub enum Type {
     FlexibleArray { typ: Box<Type> },
     /// `float`
     Float,
+    /// `Half Float Constant`
+    Float16,
+    /// `float 128`
+    Float128,
     /// `struct x {}`
     IncompleteStruct { tag: InternedString },
     /// `union x {}`
@@ -166,6 +170,8 @@ impl DatatypeComponent {
             | Double
             | FlexibleArray { .. }
             | Float
+            | Float16
+            | Float128
             | Integer
             | Pointer { .. }
             | Signedbv { .. }
@@ -363,6 +369,8 @@ impl Type {
             Double => st.machine_model().double_width,
             Empty => 0,
             FlexibleArray { .. } => 0,
+            Float16 => 16,
+            Float128 => 128,
             Float => st.machine_model().float_width,
             IncompleteStruct { .. } => unreachable!("IncompleteStruct doesn't have a sizeof"),
             IncompleteUnion { .. } => unreachable!("IncompleteUnion doesn't have a sizeof"),
@@ -577,6 +585,8 @@ impl Type {
             | CInteger(_)
             | Double
             | Float
+            | Float16
+            | Float128
             | Integer
             | Pointer { .. }
             | Signedbv { .. }
@@ -632,6 +642,8 @@ impl Type {
             | Double
             | Empty
             | Float
+            | Float16
+            | Float128
             | Integer
             | Pointer { .. }
             | Signedbv { .. }
@@ -918,6 +930,8 @@ impl Type {
             | CInteger(_)
             | Double
             | Float
+            | Float16
+            | Float128
             | Integer
             | Pointer { .. }
             | Signedbv { .. }
@@ -1040,6 +1054,14 @@ impl Type {
 
     pub fn flexible_array_of(self) -> Self {
         FlexibleArray { typ: Box::new(self) }
+    }
+
+    pub fn float16() -> Self {
+        Float16
+    }
+
+    pub fn float128() -> Self {
+        Float128
     }
 
     pub fn float() -> Self {
@@ -1309,6 +1331,8 @@ impl Type {
             | CInteger(_)
             | Double
             | Float
+            | Float16
+            | Float128
             | Integer
             | Pointer { .. }
             | Signedbv { .. }
@@ -1413,6 +1437,8 @@ impl Type {
             Type::Empty => "empty".to_string(),
             Type::FlexibleArray { typ } => format!("flexarray_of_{}", typ.to_identifier()),
             Type::Float => "float".to_string(),
+            Type::Float16 => "float16".to_string(),
+            Type::Float128 => "float128".to_string(),
             Type::IncompleteStruct { tag } => tag.to_string(),
             Type::IncompleteUnion { tag } => tag.to_string(),
             Type::InfiniteArray { typ } => {

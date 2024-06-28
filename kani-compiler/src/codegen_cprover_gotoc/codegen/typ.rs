@@ -130,6 +130,8 @@ impl<'tcx> GotocCtx<'tcx> {
                 Type::Empty => todo!(),
                 Type::FlexibleArray { .. } => todo!(),
                 Type::Float => write!(out, "f32")?,
+                Type::Float16 => write!(out, "f16")?,
+                Type::Float128 => write!(out, "f128")?,
                 Type::IncompleteStruct { .. } => todo!(),
                 Type::IncompleteUnion { .. } => todo!(),
                 Type::InfiniteArray { .. } => todo!(),
