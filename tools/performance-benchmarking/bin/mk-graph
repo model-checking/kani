@@ -1,0 +1,76 @@
+#!/usr/bin/env python3
+
+import subprocess
+import sys
+
+import jinja2
+import yaml
+
+
+BOXPLOT = """
+$data << EOD
+{% for graph in graphs -%}
+{{ loop.index}} {{ graph["low"] }} {{ graph["bottom"] }} {{ graph["top"] }} {{ graph["high"] }}
+{%- endfor %}
+EOD
+
+set terminal svg noenhanced size 360,120
+
+set border 2 linecolor "#000000"
+set ytics nomirror tc "#000000"
+
+unset key
+
+set ylabel ""
+
+set xtics ({% for graph in graphs %}"{{ graph["title"] }}" {{ loop.index }}{% if not loop.last %}, {% endif %}{% endfor %})
+
+set xrange [0:2]
+
+plot 0 with lines lc -1, \\
+    '$data' using 1:2:3:4:5 with candlesticks whiskerbars lc -1
+"""
+
+
+def get_gnu_file(graphs):
+    templ = jinja2.Environment(
+        loader=jinja2.BaseLoader).from_string(BOXPLOT)
+    return templ.render(graphs=graphs)
+
+
+def render_gnuplot(gnu_file):
+    with open(f"/tmp/gnu.gnu", "w") as handle:
+        print(gnu_file, file=handle)
+
+    proc = subprocess.Popen(
+        ["gnuplot"], stdout=subprocess.PIPE, stdin=subprocess.PIPE,
+        text=True)
+    out, _ = proc.communicate(input=gnu_file)
+    if proc.returncode:
+        print(gnu_file, file=sys.stderr)
+        sys.exit(1)
+    print(gnu_file)
+    return out
+
+
+
+def main():
+    data = yaml.safe_load(sys.stdin)
+
+    gnu_file = get_gnu_file(data["graphs"])
+    svg = render_gnuplot(gnu_file)
+    data["svg"] = "\n".join(
+        [line.strip() for line in svg.splitlines()][1:])
+
+    env = jinja2.Environment(loader=jinja2.FileSystemLoader("templates"))
+    templ = env.get_template("box-whiskers.jinja.html")
+    out = templ.render(data=data)
+
+    out = "\n".join([line.strip() for line in out.splitlines()])
+
+    with open(sys.argv[1], "w") as handle:
+        print(out, file=handle)
+
+
+if __name__ == "__main__":
+    main()
