@@ -254,15 +254,12 @@ impl ToIrep for ExprValue {
                     )],
                 }
             }
-            ExprValue::HalfConstant(i) => {
+            ExprValue::HalfFloatConstant(i) => {
                 let c: u16 = i.to_bits();
                 Irep {
                     id: IrepId::Constant,
                     sub: vec![],
-                    named_sub: linear_map![(
-                        IrepId::Value,
-                        Irep::just_bitpattern_id(c, mm.float_width, false)
-                    )],
+                    named_sub: linear_map![(IrepId::Value, Irep::just_bitpattern_id(c, 16, false))],
                 }
             }
             ExprValue::Float128Constant(i) => {
@@ -272,7 +269,7 @@ impl ToIrep for ExprValue {
                     sub: vec![],
                     named_sub: linear_map![(
                         IrepId::Value,
-                        Irep::just_bitpattern_id(c, mm.float_width, false)
+                        Irep::just_bitpattern_id(c, 128, false)
                     )],
                 }
             }
@@ -720,12 +717,18 @@ impl ToIrep for Type {
             Type::Float16 => Irep {
                 id: IrepId::Floatbv,
                 sub: vec![],
+                // Fraction bits: 10
+                // Precision bits: 5
+                // Sign bit: 1
                 named_sub: linear_map![
                     (IrepId::F, Irep::just_int_id(10)),
                     (IrepId::Width, Irep::just_int_id(16)),
                     (IrepId::CCType, Irep::just_id(IrepId::Float16)),
                 ],
             },
+            // Fraction bits: 112
+            // Precision bits: 52
+            // Sign bit: 1
             Type::Float128 => Irep {
                 id: IrepId::Floatbv,
                 sub: vec![],
