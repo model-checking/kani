@@ -98,7 +98,7 @@ pub enum ExprValue {
     // {}
     EmptyUnion,
     /// `1.0f`
-    HalfConstant(f16),
+    HalfFloatConstant(f16),
     /// `1.0f`
     FloatConstant(f32),
     /// `Float 128 example`
@@ -587,7 +587,7 @@ impl Expr {
 
     /// `3.14f`
     pub fn float16_constant(c: f16) -> Self {
-        expr!(HalfConstant(c), Type::float16())
+        expr!(HalfFloatConstant(c), Type::float16())
     }
 
     /// `3.14159265358979323846264338327950288L`
