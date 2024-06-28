@@ -55,7 +55,18 @@ pub fn expand_derive_arbitrary(item: proc_macro::TokenStream) -> proc_macro::Tok
             }
         }
     };
-    proc_macro::TokenStream::from(expanded)
+        proc_macro::TokenStream::from(expanded)
+    } else {
+        let expanded = quote! {
+            // The generated implementation.
+            impl #impl_generics kani::Arbitrary for #item_name #ty_generics #where_clause {
+                fn any() -> Self {
+                    #body
+                }
+            }
+        };
+        proc_macro::TokenStream::from(expanded)
+    }
 }
 
 /// Add a bound `T: Arbitrary` to every type parameter T.
