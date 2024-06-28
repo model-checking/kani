@@ -94,9 +94,29 @@ fn fn_any_body(ident: &Ident, data: &Data) -> TokenStream {
     }
 }
 
+/// Parse the condition expressions in `#[invariant(<cond>)]` attached to struct
+/// fields and, it at least one was found, generate a conjunction to be assumed.
+///
+/// For example, if we're deriving implementations for the struct
+/// ```
+/// #[derive(Arbitrary)]
+/// #[derive(Invariant)]
+/// struct PositivePoint {
+///     #[invariant(*x >= 0)]
+///     x: i32,
+///     #[invariant(*y >= 0)]
+///     y: i32,
+/// }
+/// ```
+/// this function will generate the `TokenStream`
+/// ```
+/// *x >= 0 && *y >= 0
+/// ```
+/// which can be passed to `kani::assume` to constrain the values generated
+/// through the `Arbitrary` impl so that they are type-safe by construction.
 fn inv_conds(ident: &Ident, data: &Data) -> Option<TokenStream> {
     match data {
-        Data::Struct(struct_data) => cond_item(ident, &struct_data.fields),
+        Data::Struct(struct_data) => inv_conds_inner(ident, &struct_data.fields),
         Data::Enum(_) => None,
         Data::Union(_) => None,
     }
@@ -189,9 +209,13 @@ fn init_symbolic_item(ident: &Ident, fields: &Fields) -> TokenStream {
     }
 }
 
-fn extract_expr(ident: &Ident, field: &syn::Field) -> Option<TokenStream> {
+/// Extract, parse and return the expression `cond` (i.e., `Some(cond)`) in the
+/// `#[invariant(<cond>)]` attribute helper associated with a given field.
+/// Return `None` if the attribute isn't specified.
+fn parse_inv_expr(ident: &Ident, field: &syn::Field) -> Option<TokenStream> {
     let name = &field.ident;
     let mut inv_helper_attr = None;
+
     // Keep the helper attribute if we find it
     for attr in &field.attrs {
         if attr.path().is_ident("invariant") {
@@ -210,6 +234,7 @@ fn extract_expr(ident: &Ident, field: &syn::Field) -> Option<TokenStream> {
             "invariant condition in field `{}` could not be parsed - `{:?}`", name.as_ref().unwrap().to_string(), expr_args.map_err(|e| e.to_string())
             )
         }
+
         // Return the expression associated to the invariant condition
         let inv_expr = expr_args.unwrap();
         Some(quote_spanned! {field.span()=>
@@ -220,11 +245,13 @@ fn extract_expr(ident: &Ident, field: &syn::Field) -> Option<TokenStream> {
     }
 }
 
-fn cond_item(ident: &Ident, fields: &Fields) -> Option<TokenStream> {
+/// Generates an expression resulting from the conjunction of conditions
+/// specified as invariants for each field. See `inv_conds` for more details.
+fn inv_conds_inner(ident: &Ident, fields: &Fields) -> Option<TokenStream> {
     match fields {
         Fields::Named(ref fields) => {
             let conds: Vec<TokenStream> =
-                fields.named.iter().filter_map(|field| extract_expr(ident, field)).collect();
+                fields.named.iter().filter_map(|field| parse_inv_expr(ident, field)).collect();
             if !conds.is_empty() { Some(quote! { #(#conds)&&* }) } else { None }
         }
         Fields::Unnamed(_) => None,
@@ -352,7 +379,7 @@ fn struct_invariant_conjunction(ident: &Ident, fields: &Fields) -> TokenStream {
                 .named
                 .iter()
                 .map(|field| {
-                    extract_expr(ident, field).unwrap_or(quote_spanned! {field.span()=>
+                    parse_inv_expr(ident, field).unwrap_or(quote_spanned! {field.span()=>
                         self.#field.is_safe()
                     })
                 })
