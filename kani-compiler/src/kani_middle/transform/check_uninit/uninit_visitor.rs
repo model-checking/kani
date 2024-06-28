@@ -520,10 +520,14 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
     }
 
     fn visit_rvalue(&mut self, rvalue: &Rvalue, location: Location) {
-        if let Rvalue::Cast(CastKind::PointerCoercion(PointerCoercion::Unsize), _, _) = rvalue {
-            self.push_target(MemoryInitOp::Unsupported {
-                reason: "Kani does not support reasoning about memory initialization of unsized pointers.".to_string(),
-            });
+        if let Rvalue::Cast(CastKind::PointerCoercion(PointerCoercion::Unsize), _, ty) = rvalue {
+            if let TyKind::RigidTy(RigidTy::RawPtr(pointee_ty, _)) = ty.kind() {
+                if pointee_ty.kind().is_trait() {
+                    self.push_target(MemoryInitOp::Unsupported {
+                        reason: "Kani does not support reasoning about memory initialization of unsized pointers.".to_string(),
+                    });
+                }
+            }
         };
         self.super_rvalue(rvalue, location);
     }
