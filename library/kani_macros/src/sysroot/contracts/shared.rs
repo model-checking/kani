@@ -15,7 +15,7 @@ use std::borrow::{Borrow, Cow};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use syn::{
     spanned::Spanned, visit_mut::VisitMut, Attribute, Expr, ExprCall, ExprClosure, ExprPath,
-    PatType, Path, Token, Type, TypeReference,
+    PatParen, PatType, Path, Token, Type, TypeReference,
 };
 
 use super::{ContractConditionsHandler, ContractFunctionState, INTERNAL_RESULT_IDENT};
@@ -183,12 +183,18 @@ pub fn build_ensures<'a>(data: &ExprClosure, return_type: Cow<'a, Type>) -> (Tok
         .expect("Ensures closure should have the output to the function as an argument") =
         syn::Pat::Type(PatType {
             attrs: vec![],
-            pat: Box::new(
-                expr.inputs
-                    .first()
-                    .expect("Ensures closure should have the output to the function as an argument")
-                    .clone(),
-            ),
+            pat: Box::new(syn::Pat::Paren(PatParen {
+                attrs: vec![],
+                paren_token: syn::token::Paren::default(),
+                pat: Box::new(
+                    expr.inputs
+                        .first()
+                        .expect(
+                            "Ensures closure should have the output to the function as an argument",
+                        )
+                        .clone(),
+                ),
+            })),
             colon_token: Token![:](Span::call_site()),
             ty: Box::new(Type::Reference(TypeReference {
                 and_token: Token![&](Span::call_site()),
