@@ -173,6 +173,25 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                     self.visit_rvalue(rvalue, location);
                     // Check whether we are assigning into a dereference (*ptr = _).
                     if let Some(place_without_deref) = try_remove_topmost_deref(place) {
+                        // First, check that we are not dereferencing extra pointers along the way
+                        // (e.g., **ptr = _). If yes, check whether these pointers are initialized.
+                        let mut place_to_add_projections =
+                            Place { local: place_without_deref.local, projection: vec![] };
+                        for projection_elem in place_without_deref.projection.iter() {
+                            // If the projection is Deref and the current type is raw pointer, check
+                            // if it points to initialized memory.
+                            if *projection_elem == ProjectionElem::Deref {
+                                if let TyKind::RigidTy(RigidTy::RawPtr(..)) =
+                                    place_to_add_projections.ty(&self.locals).unwrap().kind()
+                                {
+                                    self.push_target(MemoryInitOp::Check {
+                                        operand: Operand::Copy(place_to_add_projections.clone()),
+                                        count: mk_const_operand(1, location.span()),
+                                    });
+                                };
+                            }
+                            place_to_add_projections.projection.push(projection_elem.clone());
+                        }
                         if place_without_deref.ty(&self.locals).unwrap().kind().is_raw_ptr() {
                             self.push_target(MemoryInitOp::Set {
                                 operand: Operand::Copy(place_without_deref),
