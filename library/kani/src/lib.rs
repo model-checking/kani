@@ -326,7 +326,3 @@ pub use kani_macros::*;
 pub(crate) use kani_macros::unstable_feature as unstable;
 
 pub mod contracts;
-
-pub fn apply_closure<T, U: FnOnce(&T) -> bool>(f: U, x: &T) -> bool {
-    f(x)
-}
