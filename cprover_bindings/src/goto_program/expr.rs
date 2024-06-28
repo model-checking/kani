@@ -140,6 +140,7 @@ pub enum ExprValue {
     /// `({ op1; op2; ...})`
     StatementExpression {
         statements: Vec<Stmt>,
+        location: Location,
     },
     /// A raw string constant. Note that you normally actually want a pointer to the first element.
     /// `"s"`
@@ -389,6 +390,7 @@ impl Expr {
             source.is_integer() || source.is_pointer() || source.is_bool()
         } else if target.is_integer() {
             source.is_c_bool()
+                || source.is_bool()
                 || source.is_integer()
                 || source.is_floating_point()
                 || source.is_pointer()
@@ -738,10 +740,10 @@ impl Expr {
     /// <https://gcc.gnu.org/onlinedocs/gcc/Statement-Exprs.html>
     /// e.g. `({ int y = foo (); int z; if (y > 0) z = y; else z = - y; z; })`
     /// `({ op1; op2; ...})`
-    pub fn statement_expression(ops: Vec<Stmt>, typ: Type) -> Self {
+    pub fn statement_expression(ops: Vec<Stmt>, typ: Type, loc: Location) -> Self {
         assert!(!ops.is_empty());
         assert_eq!(ops.last().unwrap().get_expression().unwrap().typ, typ);
-        expr!(StatementExpression { statements: ops }, typ)
+        expr!(StatementExpression { statements: ops, location: loc }, typ).with_location(loc)
     }
 
     /// Internal helper function for Struct initalizer
@@ -1054,6 +1056,7 @@ impl Expr {
     ///     <https://github.com/rust-lang/rfcs/blob/master/text/1199-simd-infrastructure.md#comparisons>).
     ///     The signedness doesn't matter, as the result for each element is
     ///     either "all ones" (true) or "all zeros" (false).
+    ///
     /// For example, one can use `simd_eq` on two `f64x4` vectors and assign the
     /// result to a `u64x4` vector. But it's not possible to assign it to: (1) a
     /// `u64x2` because they don't have the same length; or (2) another `f64x4`
@@ -1330,11 +1333,11 @@ impl Expr {
     fn unop_return_type(op: UnaryOperator, arg: &Expr) -> Type {
         match op {
             Bitnot | BitReverse | Bswap | UnaryMinus => arg.typ.clone(),
-            CountLeadingZeros { .. } | CountTrailingZeros { .. } => arg.typ.clone(),
+            CountLeadingZeros { .. } | CountTrailingZeros { .. } => Type::unsigned_int(32),
             ObjectSize | PointerObject => Type::size_t(),
             PointerOffset => Type::ssize_t(),
             IsDynamicObject | IsFinite | Not => Type::bool(),
-            Popcount => arg.typ.clone(),
+            Popcount => Type::unsigned_int(32),
         }
     }
     /// Private helper function to make unary operators
@@ -1664,7 +1667,7 @@ impl Expr {
                         continue;
                     }
                     let name = field.name();
-                    exprs.insert(name, self.clone().member(&name.to_string(), symbol_table));
+                    exprs.insert(name, self.clone().member(name.to_string(), symbol_table));
                 }
             }
         }

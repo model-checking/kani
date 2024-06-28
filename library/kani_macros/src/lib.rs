@@ -52,6 +52,16 @@ pub fn should_panic(attr: TokenStream, item: TokenStream) -> TokenStream {
     attr_impl::should_panic(attr, item)
 }
 
+/// Specifies that a function contains recursion for contract instrumentation.**
+///
+/// This attribute is only used for function-contract instrumentation. Kani uses
+/// this annotation to identify recursive functions and properly instantiate
+/// `kani::any_modifies` to check such functions using induction.
+#[proc_macro_attribute]
+pub fn recursion(attr: TokenStream, item: TokenStream) -> TokenStream {
+    attr_impl::recursion(attr, item)
+}
+
 /// Set Loop unwind limit for proof harnesses
 /// The attribute `#[kani::unwind(arg)]` can only be called alongside `#[kani::proof]`.
 /// arg - Takes in a integer value (u32) that represents the unwind value for the harness.
@@ -86,7 +96,7 @@ pub fn solver(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// See https://model-checking.github.io/kani/rfc/rfcs/0006-unstable-api.html for more details.
 #[doc(hidden)]
 #[proc_macro_attribute]
-pub fn unstable(attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn unstable_feature(attr: TokenStream, item: TokenStream) -> TokenStream {
     attr_impl::unstable(attr, item)
 }
 
@@ -95,6 +105,13 @@ pub fn unstable(attr: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro_derive(Arbitrary)]
 pub fn derive_arbitrary(item: TokenStream) -> TokenStream {
     derive::expand_derive_arbitrary(item)
+}
+
+/// Allow users to auto generate Invariant implementations by using `#[derive(Invariant)]` macro.
+#[proc_macro_error]
+#[proc_macro_derive(Invariant)]
+pub fn derive_invariant(item: TokenStream) -> TokenStream {
+    derive::expand_derive_invariant(item)
 }
 
 /// Add a precondition to this function.
@@ -121,11 +138,11 @@ pub fn requires(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// This is part of the function contract API, for more general information see
 /// the [module-level documentation](../kani/contracts/index.html).
 ///
-/// The contents of the attribute is a condition over the input values to the
-/// annotated function *and* its return value, accessible as a variable called
-/// `result`. All Rust syntax is supported, even calling other functions, but
-/// the computations must be side effect free, e.g. it cannot perform I/O or use
-/// mutable memory.
+/// The contents of the attribute is a closure that captures the input values to
+/// the annotated function and the input to the function is the return value of
+/// the function passed by reference. All Rust syntax is supported, even calling
+/// other functions, but the computations must be side effect free, e.g. it
+/// cannot perform I/O or use mutable memory.
 ///
 /// Kani requires each function that uses a contract (this attribute or
 /// [`requires`][macro@requires]) to have at least one designated
@@ -331,6 +348,7 @@ mod sysroot {
     }
 
     kani_attribute!(should_panic, no_args);
+    kani_attribute!(recursion, no_args);
     kani_attribute!(solver);
     kani_attribute!(stub);
     kani_attribute!(unstable);
@@ -363,6 +381,7 @@ mod regular {
     }
 
     no_op!(should_panic);
+    no_op!(recursion);
     no_op!(solver);
     no_op!(stub);
     no_op!(unstable);

@@ -2,20 +2,22 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use crate::args::VerificationArgs;
-use crate::call_single_file::to_rustc_arg;
+use crate::call_single_file::{to_rustc_arg, LibConfig};
 use crate::project::Artifact;
-use crate::session::{setup_cargo_command, KaniSession};
+use crate::session::{lib_folder, lib_no_core_folder, setup_cargo_command, KaniSession};
 use crate::util;
 use anyhow::{bail, Context, Result};
 use cargo_metadata::diagnostic::{Diagnostic, DiagnosticLevel};
-use cargo_metadata::{Message, Metadata, MetadataCommand, Package, Target};
+use cargo_metadata::{
+    Artifact as RustcArtifact, Message, Metadata, MetadataCommand, Package, Target,
+};
 use kani_metadata::{ArtifactType, CompilerArtifactStub};
 use std::ffi::{OsStr, OsString};
 use std::fmt::{self, Display};
 use std::fs::{self, File};
 use std::io::BufReader;
 use std::io::IsTerminal;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use tracing::{debug, trace};
 
@@ -43,6 +45,60 @@ pub struct CargoOutputs {
 }
 
 impl KaniSession {
+    /// Create a new cargo library in the given path.
+    pub fn cargo_init_lib(&self, path: &Path) -> Result<()> {
+        let mut cmd = setup_cargo_command()?;
+        cmd.args(["init", "--lib", path.to_string_lossy().as_ref()]);
+        self.run_terminal(cmd)
+    }
+
+    pub fn cargo_build_std(&self, std_path: &Path, krate_path: &Path) -> Result<Vec<Artifact>> {
+        let lib_path = lib_no_core_folder().unwrap();
+        let mut rustc_args = self.kani_rustc_flags(LibConfig::new_no_core(lib_path));
+        rustc_args.push(to_rustc_arg(self.kani_compiler_flags()).into());
+        rustc_args.push(self.reachability_arg().into());
+        // Ignore global assembly, since `compiler_builtins` has some.
+        rustc_args.push(to_rustc_arg(vec!["--ignore-global-asm".to_string()]).into());
+
+        let mut cargo_args: Vec<OsString> = vec!["build".into()];
+        cargo_args.append(&mut cargo_config_args());
+
+        // Configuration needed to parse cargo compilation status.
+        cargo_args.push("--message-format".into());
+        cargo_args.push("json-diagnostic-rendered-ansi".into());
+        cargo_args.push("-Z".into());
+        cargo_args.push("build-std=panic_abort,core,std".into());
+
+        if self.args.common_args.verbose {
+            cargo_args.push("-v".into());
+        }
+
+        // Since we are verifying the standard library, we set the reachability to all crates.
+        let mut cmd = setup_cargo_command()?;
+        cmd.args(&cargo_args)
+            .current_dir(krate_path)
+            .env("RUSTC", &self.kani_compiler)
+            // Use CARGO_ENCODED_RUSTFLAGS instead of RUSTFLAGS is preferred. See
+            // https://doc.rust-lang.org/cargo/reference/environment-variables.html
+            .env("CARGO_ENCODED_RUSTFLAGS", rustc_args.join(OsStr::new("\x1f")))
+            .env("CARGO_TERM_PROGRESS_WHEN", "never")
+            .env("__CARGO_TESTS_ONLY_SRC_ROOT", std_path.as_os_str());
+
+        Ok(self
+            .run_build(cmd)?
+            .into_iter()
+            .filter_map(|artifact| {
+                if artifact.target.crate_types.contains(&CRATE_TYPE_LIB.to_string())
+                    || artifact.target.crate_types.contains(&CRATE_TYPE_RLIB.to_string())
+                {
+                    map_kani_artifact(artifact)
+                } else {
+                    None
+                }
+            })
+            .collect())
+    }
+
     /// Calls `cargo_build` to generate `*.symtab.json` files in `target_dir`
     pub fn cargo_build(&self, keep_going: bool) -> Result<CargoOutputs> {
         let build_target = env!("TARGET"); // see build.rs
@@ -60,7 +116,8 @@ impl KaniSession {
             fs::remove_dir_all(&target_dir)?;
         }
 
-        let mut rustc_args = self.kani_rustc_flags();
+        let lib_path = lib_folder().unwrap();
+        let mut rustc_args = self.kani_rustc_flags(LibConfig::new(lib_path));
         rustc_args.push(to_rustc_arg(self.kani_compiler_flags()).into());
 
         let mut cargo_args: Vec<OsString> = vec!["rustc".into()];
@@ -112,7 +169,7 @@ impl KaniSession {
                 let mut cmd = setup_cargo_command()?;
                 cmd.args(&cargo_args)
                     .args(vec!["-p", &package.name])
-                    .args(&verification_target.to_args())
+                    .args(verification_target.to_args())
                     .args(&pkg_args)
                     .env("RUSTC", &self.kani_compiler)
                     // Use CARGO_ENCODED_RUSTFLAGS instead of RUSTFLAGS is preferred. See
@@ -120,7 +177,7 @@ impl KaniSession {
                     .env("CARGO_ENCODED_RUSTFLAGS", rustc_args.join(OsStr::new("\x1f")))
                     .env("CARGO_TERM_PROGRESS_WHEN", "never");
 
-                match self.run_cargo(cmd, verification_target.target()) {
+                match self.run_build_target(cmd, verification_target.target()) {
                     Err(err) => {
                         if keep_going {
                             let target_str = format!("{verification_target}");
@@ -179,9 +236,9 @@ impl KaniSession {
 
     /// Run cargo and collect any error found.
     /// We also collect the metadata file generated during compilation if any.
-    fn run_cargo(&self, cargo_cmd: Command, target: &Target) -> Result<Option<Artifact>> {
+    fn run_build(&self, cargo_cmd: Command) -> Result<Vec<RustcArtifact>> {
         let support_color = std::io::stdout().is_terminal();
-        let mut artifact = None;
+        let mut artifacts = vec![];
         if let Some(mut cargo_process) = self.run_piped(cargo_cmd)? {
             let reader = BufReader::new(cargo_process.stdout.take().unwrap());
             let mut error_count = 0;
@@ -211,13 +268,9 @@ impl KaniSession {
                         }
                     },
                     Message::CompilerArtifact(rustc_artifact) => {
-                        if rustc_artifact.target == *target {
-                            debug_assert!(
-                                artifact.is_none(),
-                                "expected only one artifact for `{target:?}`",
-                            );
-                            artifact = Some(rustc_artifact);
-                        }
+                        // Compares two targets, and falls back to a weaker
+                        // comparison where we avoid dashes in their names.
+                        artifacts.push(rustc_artifact)
                     }
                     Message::BuildScriptExecuted(_) | Message::BuildFinished(_) => {
                         // do nothing
@@ -243,11 +296,40 @@ impl KaniSession {
                 );
             }
         }
+        Ok(artifacts)
+    }
+
+    /// Run cargo and collect any error found.
+    /// We also collect the metadata file generated during compilation if any for the given target.
+    fn run_build_target(&self, cargo_cmd: Command, target: &Target) -> Result<Option<Artifact>> {
+        /// This used to be `rustc_artifact == *target`, but it
+        /// started to fail after the `cargo` change in
+        /// <https://github.com/rust-lang/cargo/pull/12783>
+        ///
+        /// We should revisit this check after a while to see if
+        /// it's not needed anymore or it can be restricted to
+        /// certain cases.
+        /// TODO: <https://github.com/model-checking/kani/issues/3111>
+        fn same_target(t1: &Target, t2: &Target) -> bool {
+            (t1 == t2)
+                || (t1.name.replace('-', "_") == t2.name.replace('-', "_")
+                    && t1.kind == t2.kind
+                    && t1.src_path == t2.src_path
+                    && t1.edition == t2.edition
+                    && t1.doctest == t2.doctest
+                    && t1.test == t2.test
+                    && t1.doc == t2.doc)
+        }
+
+        let artifacts = self.run_build(cargo_cmd)?;
+        debug!(?artifacts, "run_build_target");
+
         // We generate kani specific artifacts only for the build target. The build target is
         // always the last artifact generated in a build, and all the other artifacts are related
-        // to dependencies or build scripts. Hence, we need to invoke `map_kani_artifact` only
-        // for the last compiler artifact.
-        Ok(artifact.and_then(map_kani_artifact))
+        // to dependencies or build scripts.
+        Ok(artifacts.into_iter().rev().find_map(|artifact| {
+            if same_target(&artifact.target, target) { map_kani_artifact(artifact) } else { None }
+        }))
     }
 }
 
@@ -255,10 +337,10 @@ pub fn cargo_config_args() -> Vec<OsString> {
     [
         "--target",
         env!("TARGET"),
-        // Propagate `--cfg=kani` to build scripts.
+        // Propagate `--cfg=kani_host` to build scripts.
         "-Zhost-config",
         "-Ztarget-applies-to-host",
-        "--config=host.rustflags=[\"--cfg=kani\"]",
+        "--config=host.rustflags=[\"--cfg=kani_host\"]",
     ]
     .map(OsString::from)
     .to_vec()
@@ -295,13 +377,16 @@ fn validate_package_names(package_names: &[String], packages: &[Package]) -> Res
 }
 
 /// Extract the packages that should be verified.
-/// If `--package <pkg>` is given, return the list of packages selected.
-/// If `--exclude <pkg>` is given, return the list of packages not excluded.
-/// If `--workspace` is given, return the list of workspace members.
-/// If no argument provided, return the root package if there's one or all members.
+///
+/// The result is build following these rules:
+/// - If `--package <pkg>` is given, return the list of packages selected.
+/// - If `--exclude <pkg>` is given, return the list of packages not excluded.
+/// - If `--workspace` is given, return the list of workspace members.
+/// - If no argument provided, return the root package if there's one or all members.
 ///   - I.e.: Do whatever cargo does when there's no `default_members`.
 ///   - This is because `default_members` is not available in cargo metadata.
 ///     See <https://github.com/rust-lang/cargo/issues/8033>.
+///
 /// In addition, if either `--package <pkg>` or `--exclude <pkg>` is given,
 /// validate that `<pkg>` is a package name in the workspace, or return an error
 /// otherwise.
@@ -487,7 +572,7 @@ fn package_targets(args: &VerificationArgs, package: &Package) -> Vec<Verificati
         }
         if !ignored_unsupported.is_empty() {
             println!(
-                "Skipped the following unsupported targets: '{}'.",
+                "Skipped verification of the following unsupported targets: '{}'.",
                 ignored_unsupported.join("', '")
             );
         }

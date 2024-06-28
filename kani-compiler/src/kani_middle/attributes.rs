@@ -70,6 +70,10 @@ enum KaniAttributeKind {
     /// expanded with additional pointer arguments that are not used in the function
     /// but referenced by the `modifies` annotation.
     InnerCheck,
+    /// Attribute used to mark contracts for functions with recursion.
+    /// We use this attribute to properly instantiate `kani::any_modifies` in
+    /// cases when recursion is present given our contracts instrumentation.
+    Recursion,
 }
 
 impl KaniAttributeKind {
@@ -84,6 +88,7 @@ impl KaniAttributeKind {
             | KaniAttributeKind::StubVerified
             | KaniAttributeKind::Unwind => true,
             KaniAttributeKind::Unstable
+            | KaniAttributeKind::Recursion
             | KaniAttributeKind::ReplacedWith
             | KaniAttributeKind::CheckedWith
             | KaniAttributeKind::Modifies
@@ -101,13 +106,6 @@ impl KaniAttributeKind {
     /// because it wouldn't have any effect anyway.
     pub fn demands_function_contract_use(self) -> bool {
         matches!(self, KaniAttributeKind::ProofForContract)
-    }
-
-    /// Would this attribute be placed on a function as part of a function
-    /// contract. E.g. created by `requires`, `ensures`.
-    pub fn is_function_contract(self) -> bool {
-        use KaniAttributeKind::*;
-        matches!(self, CheckedWith | IsContractGenerated)
     }
 }
 
@@ -200,6 +198,10 @@ impl<'tcx> KaniAttributes<'tcx> {
             .collect()
     }
 
+    pub(crate) fn has_recursion(&self) -> bool {
+        self.map.contains_key(&KaniAttributeKind::Recursion)
+    }
+
     /// Parse and extract the `proof_for_contract(TARGET)` attribute. The
     /// returned symbol and DefId are respectively the name and id of `TARGET`,
     /// the span in the span for the attribute (contents).
@@ -229,6 +231,11 @@ impl<'tcx> KaniAttributes<'tcx> {
     /// indicates a contract does exist but an error occurred during resolution.
     pub fn checked_with(&self) -> Option<Result<Symbol, ErrorGuaranteed>> {
         self.expect_maybe_one(KaniAttributeKind::CheckedWith)
+            .map(|target| expect_key_string_value(self.tcx.sess, target))
+    }
+
+    pub fn proof_for_contract(&self) -> Option<Result<Symbol, ErrorGuaranteed>> {
+        self.expect_maybe_one(KaniAttributeKind::ProofForContract)
             .map(|target| expect_key_string_value(self.tcx.sess, target))
     }
 
@@ -311,6 +318,12 @@ impl<'tcx> KaniAttributes<'tcx> {
             }
             match kind {
                 KaniAttributeKind::ShouldPanic => {
+                    expect_single(self.tcx, kind, &attrs);
+                    attrs.iter().for_each(|attr| {
+                        expect_no_args(self.tcx, kind, attr);
+                    })
+                }
+                KaniAttributeKind::Recursion => {
                     expect_single(self.tcx, kind, &attrs);
                     attrs.iter().for_each(|attr| {
                         expect_no_args(self.tcx, kind, attr);
@@ -452,6 +465,9 @@ impl<'tcx> KaniAttributes<'tcx> {
         self.map.iter().fold(HarnessAttributes::default(), |mut harness, (kind, attributes)| {
             match kind {
                 KaniAttributeKind::ShouldPanic => harness.should_panic = true,
+                KaniAttributeKind::Recursion => {
+                    self.tcx.dcx().span_err(self.tcx.def_span(self.item), "The attribute `kani::recursion` should only be used in combination with function contracts.");
+                },
                 KaniAttributeKind::Solver => {
                     harness.solver = parse_solver(self.tcx, attributes[0]);
                 }
@@ -612,12 +628,12 @@ fn parse_modify_values<'a>(
     std::iter::from_fn(move || {
         let tree = iter.next()?;
         let wrong_token_err =
-            || tcx.sess.psess.dcx.span_err(tree.span(), "Unexpected token. Expected identifier.");
+            || tcx.sess.dcx().span_err(tree.span(), "Unexpected token. Expected identifier.");
         let result = match tree {
             TokenTree::Token(token, _) => {
                 if let TokenKind::Ident(id, _) = &token.kind {
                     let hir = tcx.hir();
-                    let bid = hir.body_owned_by(local_def_id);
+                    let bid = hir.body_owned_by(local_def_id).id();
                     Some(
                         hir.body_param_names(bid)
                             .zip(mir.args_iter())
@@ -639,7 +655,7 @@ fn parse_modify_values<'a>(
         match iter.next() {
             None | Some(comma_tok!()) => (),
             Some(not_comma) => {
-                tcx.sess.psess.dcx.span_err(
+                tcx.sess.dcx().span_err(
                     not_comma.span(),
                     "Unexpected token, expected end of attribute or comma",
                 );
@@ -659,12 +675,6 @@ fn has_kani_attribute<F: Fn(KaniAttributeKind) -> bool>(
     predicate: F,
 ) -> bool {
     tcx.get_attrs_unchecked(def_id).iter().filter_map(|a| attr_kind(tcx, a)).any(predicate)
-}
-
-/// Test if this function was generated by expanding a contract attribute like
-/// `requires` and `ensures`.
-pub fn is_function_contract_generated(tcx: TyCtxt, def_id: DefId) -> bool {
-    has_kani_attribute(tcx, def_id, KaniAttributeKind::is_function_contract)
 }
 
 /// Same as [`KaniAttributes::is_harness`] but more efficient because less
@@ -772,10 +782,10 @@ impl<'a> UnstableAttrParseError<'a> {
         tcx.dcx()
             .struct_span_err(
                 self.attr.span,
-                format!("failed to parse `#[kani::unstable]`: {}", self.reason),
+                format!("failed to parse `#[kani::unstable_feature]`: {}", self.reason),
             )
             .with_note(format!(
-                "expected format: #[kani::unstable({}, {}, {})]",
+                "expected format: #[kani::unstable_feature({}, {}, {})]",
                 r#"feature="<IDENTIFIER>""#, r#"issue="<ISSUE>""#, r#"reason="<DESCRIPTION>""#
             ))
             .emit()
@@ -1036,4 +1046,15 @@ fn attr_kind(tcx: TyCtxt, attr: &Attribute) -> Option<KaniAttributeKind> {
         }
         _ => None,
     }
+}
+
+pub fn matches_diagnostic<T: CrateDef>(tcx: TyCtxt, def: T, attr_name: &str) -> bool {
+    let attr_sym = rustc_span::symbol::Symbol::intern(attr_name);
+    if let Some(attr_id) = tcx.all_diagnostic_items(()).name_to_id.get(&attr_sym) {
+        if rustc_internal::internal(tcx, def.def_id()) == *attr_id {
+            debug!("matched: {:?} {:?}", attr_id, attr_sym);
+            return true;
+        }
+    }
+    false
 }

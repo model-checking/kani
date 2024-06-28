@@ -25,9 +25,8 @@ use rustc_middle::ty::{TyCtxt, VtblEntry};
 use rustc_smir::rustc_internal;
 use stable_mir::mir::alloc::{AllocId, GlobalAlloc};
 use stable_mir::mir::mono::{Instance, InstanceKind, MonoItem, StaticDef};
-use stable_mir::mir::pretty::pretty_ty;
 use stable_mir::mir::{
-    visit::Location, Body, CastKind, Constant, MirVisitor, PointerCoercion, Rvalue, Terminator,
+    visit::Location, Body, CastKind, ConstOperand, MirVisitor, PointerCoercion, Rvalue, Terminator,
     TerminatorKind,
 };
 use stable_mir::ty::{Allocation, ClosureKind, ConstantKind, RigidTy, Ty, TyKind};
@@ -36,13 +35,17 @@ use stable_mir::{CrateDef, ItemKind};
 
 use crate::kani_middle::coercion;
 use crate::kani_middle::coercion::CoercionBase;
-use crate::kani_middle::stubbing::{get_stub, validate_instance};
+use crate::kani_middle::transform::BodyTransformation;
 
 /// Collect all reachable items starting from the given starting points.
-pub fn collect_reachable_items(tcx: TyCtxt, starting_points: &[MonoItem]) -> Vec<MonoItem> {
+pub fn collect_reachable_items(
+    tcx: TyCtxt,
+    transformer: &mut BodyTransformation,
+    starting_points: &[MonoItem],
+) -> Vec<MonoItem> {
     // For each harness, collect items using the same collector.
     // I.e.: This will return any item that is reachable from one or more of the starting points.
-    let mut collector = MonoItemsCollector::new(tcx);
+    let mut collector = MonoItemsCollector::new(tcx, transformer);
     for item in starting_points {
         collector.collect(item.clone());
     }
@@ -92,7 +95,11 @@ where
 ///
 /// Probably only specifically useful with a predicate to find `TestDescAndFn` const declarations from
 /// tests and extract the closures from them.
-pub fn filter_const_crate_items<F>(tcx: TyCtxt, mut predicate: F) -> Vec<MonoItem>
+pub fn filter_const_crate_items<F>(
+    tcx: TyCtxt,
+    transformer: &mut BodyTransformation,
+    mut predicate: F,
+) -> Vec<MonoItem>
 where
     F: FnMut(TyCtxt, Instance) -> bool,
 {
@@ -103,13 +110,9 @@ where
         // Only collect monomorphic items.
         if let Ok(instance) = Instance::try_from(item) {
             if predicate(tcx, instance) {
-                let body = instance.body().unwrap();
-                let mut collector = MonoItemsFnCollector {
-                    tcx,
-                    body: &body,
-                    collected: FxHashSet::default(),
-                    instance: &instance,
-                };
+                let body = transformer.body(tcx, instance);
+                let mut collector =
+                    MonoItemsFnCollector { tcx, body: &body, collected: FxHashSet::default() };
                 collector.visit_body(&body);
                 roots.extend(collector.collected.into_iter());
             }
@@ -118,9 +121,11 @@ where
     roots
 }
 
-struct MonoItemsCollector<'tcx> {
+struct MonoItemsCollector<'tcx, 'a> {
     /// The compiler context.
     tcx: TyCtxt<'tcx>,
+    /// The body transformation object used to retrieve a transformed body.
+    transformer: &'a mut BodyTransformation,
     /// Set of collected items used to avoid entering recursion loops.
     collected: FxHashSet<MonoItem>,
     /// Items enqueued for visiting.
@@ -129,14 +134,15 @@ struct MonoItemsCollector<'tcx> {
     call_graph: debug::CallGraph,
 }
 
-impl<'tcx> MonoItemsCollector<'tcx> {
-    pub fn new(tcx: TyCtxt<'tcx>) -> Self {
+impl<'tcx, 'a> MonoItemsCollector<'tcx, 'a> {
+    pub fn new(tcx: TyCtxt<'tcx>, transformer: &'a mut BodyTransformation) -> Self {
         MonoItemsCollector {
             tcx,
             collected: FxHashSet::default(),
             queue: vec![],
             #[cfg(debug_assertions)]
             call_graph: debug::CallGraph::default(),
+            transformer,
         }
     }
 
@@ -173,19 +179,11 @@ impl<'tcx> MonoItemsCollector<'tcx> {
     /// Visit a function and collect all mono-items reachable from its instructions.
     fn visit_fn(&mut self, instance: Instance) -> Vec<MonoItem> {
         let _guard = debug_span!("visit_fn", function=?instance).entered();
-        if validate_instance(self.tcx, instance) {
-            let body = instance.body().unwrap();
-            let mut collector = MonoItemsFnCollector {
-                tcx: self.tcx,
-                collected: FxHashSet::default(),
-                body: &body,
-                instance: &instance,
-            };
-            collector.visit_body(&body);
-            collector.collected.into_iter().collect()
-        } else {
-            vec![]
-        }
+        let body = self.transformer.body(self.tcx, instance);
+        let mut collector =
+            MonoItemsFnCollector { tcx: self.tcx, collected: FxHashSet::default(), body: &body };
+        collector.visit_body(&body);
+        collector.collected.into_iter().collect()
     }
 
     /// Visit a static object and collect drop / initialization functions.
@@ -217,7 +215,6 @@ struct MonoItemsFnCollector<'a, 'tcx> {
     tcx: TyCtxt<'tcx>,
     collected: FxHashSet<MonoItem>,
     body: &'a Body,
-    instance: &'a Instance,
 }
 
 impl<'a, 'tcx> MonoItemsFnCollector<'a, 'tcx> {
@@ -265,10 +262,21 @@ impl<'a, 'tcx> MonoItemsFnCollector<'a, 'tcx> {
     /// Collect an instance depending on how it is used (invoked directly or via fn_ptr).
     fn collect_instance(&mut self, instance: Instance, is_direct_call: bool) {
         let should_collect = match instance.kind {
-            InstanceKind::Virtual { .. } | InstanceKind::Intrinsic => {
+            InstanceKind::Virtual { .. } => {
                 // Instance definition has no body.
                 assert!(is_direct_call, "Expected direct call {instance:?}");
                 false
+            }
+            InstanceKind::Intrinsic => {
+                // Intrinsics may have a fallback body.
+                assert!(is_direct_call, "Expected direct call {instance:?}");
+                let TyKind::RigidTy(RigidTy::FnDef(def, _)) = instance.ty().kind() else {
+                    unreachable!("Expected function type for intrinsic: {instance:?}")
+                };
+                // The compiler is currently transitioning how to handle intrinsic fallback body.
+                // Until https://github.com/rust-lang/project-stable-mir/issues/79 is implemented
+                // we have to check `must_be_overridden` and `has_body`.
+                !def.as_intrinsic().unwrap().must_be_overridden() && instance.has_body()
             }
             InstanceKind::Shim | InstanceKind::Item => true,
         };
@@ -291,7 +299,7 @@ impl<'a, 'tcx> MonoItemsFnCollector<'a, 'tcx> {
 /// 1. Every function / method / closures that may be directly invoked.
 /// 2. Every function / method / closures that may have their address taken.
 /// 3. Every method that compose the impl of a trait for a given type when there's a conversion
-/// from the type to the trait.
+///    from the type to the trait.
 ///    - I.e.: If we visit the following code:
 ///      ```
 ///      let var = MyType::new();
@@ -301,7 +309,8 @@ impl<'a, 'tcx> MonoItemsFnCollector<'a, 'tcx> {
 /// 4. Every Static variable that is referenced in the function or constant used in the function.
 /// 5. Drop glue.
 /// 6. Static Initialization
-/// This code has been mostly taken from `rustc_monomorphize::collector::MirNeighborCollector`.
+///
+/// Remark: This code has been mostly taken from `rustc_monomorphize::collector::MirNeighborCollector`.
 impl<'a, 'tcx> MirVisitor for MonoItemsFnCollector<'a, 'tcx> {
     /// Collect the following:
     /// - Trait implementations when casting from concrete to dyn Trait.
@@ -366,15 +375,19 @@ impl<'a, 'tcx> MirVisitor for MonoItemsFnCollector<'a, 'tcx> {
     }
 
     /// Collect constants that are represented as static variables.
-    fn visit_constant(&mut self, constant: &Constant, location: Location) {
-        debug!(?constant, ?location, literal=?constant.literal, "visit_constant");
-        let allocation = match constant.literal.kind() {
+    fn visit_const_operand(&mut self, constant: &ConstOperand, location: Location) {
+        debug!(?constant, ?location, literal=?constant.const_, "visit_constant");
+        let allocation = match constant.const_.kind() {
             ConstantKind::Allocated(allocation) => allocation,
             ConstantKind::Unevaluated(_) => {
                 unreachable!("Instance with polymorphic constant: `{constant:?}`")
             }
             ConstantKind::Param(_) => unreachable!("Unexpected parameter constant: {constant:?}"),
             ConstantKind::ZeroSized => {
+                // Nothing to do here.
+                return;
+            }
+            ConstantKind::Ty(_) => {
                 // Nothing to do here.
                 return;
             }
@@ -390,50 +403,8 @@ impl<'a, 'tcx> MirVisitor for MonoItemsFnCollector<'a, 'tcx> {
             TerminatorKind::Call { ref func, .. } => {
                 let fn_ty = func.ty(self.body.locals()).unwrap();
                 if let TyKind::RigidTy(RigidTy::FnDef(fn_def, args)) = fn_ty.kind() {
-                    let instance_opt = Instance::resolve(fn_def, &args).ok();
-                    match instance_opt {
-                        None => {
-                            let caller = CrateItem::try_from(*self.instance).unwrap().name();
-                            let callee = fn_def.name();
-                            // Check if the current function has been stubbed.
-                            if let Some(stub) = get_stub(
-                                self.tcx,
-                                rustc_internal::internal(self.tcx, self.instance).def_id(),
-                            ) {
-                                // During the MIR stubbing transformation, we do not
-                                // force type variables in the stub's signature to
-                                // implement the same traits as those in the
-                                // original function/method. A trait mismatch shows
-                                // up here, when we try to resolve a trait method
-
-                                // FIXME: This assumes the type resolving the
-                                // trait is the first argument, but that isn't
-                                // necessarily true. It could be any argument or
-                                // even the return type, for instance for a
-                                // trait like `FromIterator`.
-                                let receiver_ty = args.0[0].expect_ty();
-                                let sep = callee.rfind("::").unwrap();
-                                let trait_ = &callee[..sep];
-                                self.tcx.dcx().span_err(
-                                    rustc_internal::internal(self.tcx, terminator.span),
-                                    format!(
-                                        "`{}` doesn't implement \
-                                        `{}`. The function `{}` \
-                                        cannot be stubbed by `{}` due to \
-                                        generic bounds not being met. Callee: {}",
-                                        pretty_ty(receiver_ty.kind()),
-                                        trait_,
-                                        caller,
-                                        self.tcx.def_path_str(stub),
-                                        callee,
-                                    ),
-                                );
-                            } else {
-                                panic!("unable to resolve call to `{callee}` in `{caller}`")
-                            }
-                        }
-                        Some(instance) => self.collect_instance(instance, true),
-                    };
+                    let instance = Instance::resolve(fn_def, &args).unwrap();
+                    self.collect_instance(instance, true);
                 } else {
                     assert!(
                         matches!(fn_ty.kind().rigid(), Some(RigidTy::FnPtr(..))),
@@ -572,7 +543,8 @@ mod debug {
             if let Ok(target) = std::env::var("KANI_REACH_DEBUG") {
                 debug!(?target, "dump_dot");
                 let outputs = tcx.output_filenames(());
-                let path = outputs.output_path(OutputType::Metadata).with_extension("dot");
+                let base_path = outputs.path(OutputType::Metadata);
+                let path = base_path.as_path().with_extension("dot");
                 let out_file = File::create(path)?;
                 let mut writer = BufWriter::new(out_file);
                 writeln!(writer, "digraph ReachabilityGraph {{")?;

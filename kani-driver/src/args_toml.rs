@@ -90,8 +90,11 @@ fn cargo_locate_project(input_args: &[OsString]) -> Result<PathBuf> {
 /// We currently support the following entries:
 /// - flags: Flags that get directly passed to Kani.
 /// - unstable: Unstable features (it will be passed using `-Z` flag).
+///
 /// The tables supported are:
-/// "workspace.metadata.kani", "package.metadata.kani", "kani"
+/// - "workspace.metadata.kani"
+/// - "package.metadata.kani"
+/// - "kani"
 fn toml_to_args(tomldata: &str) -> Result<(Vec<OsString>, Vec<OsString>)> {
     let config = tomldata.parse::<Value>()?;
     // To make testing easier, our function contract is to produce a stable ordering of flags for a given input.
@@ -312,6 +315,6 @@ mod tests {
     #[test]
     fn check_unstable_entry_invalid() {
         let name = String::from("feature");
-        assert!(matches!(unstable_entry(&name, &Value::String("".to_string())), Err(_)));
+        assert!(unstable_entry(&name, &Value::String("".to_string())).is_err());
     }
 }

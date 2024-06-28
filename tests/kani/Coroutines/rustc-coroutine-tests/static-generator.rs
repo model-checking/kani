@@ -9,13 +9,15 @@
 // run-pass
 
 #![feature(coroutines, coroutine_trait)]
+#![feature(stmt_expr_attributes)]
 
 use std::ops::{Coroutine, CoroutineState};
 use std::pin::Pin;
 
 #[kani::proof]
 fn main() {
-    let mut coroutine = static || {
+    let mut coroutine = #[coroutine]
+    static || {
         let a = true;
         let b = &a;
         yield;

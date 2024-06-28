@@ -13,6 +13,7 @@ import dataclasses
 import logging
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import typing
@@ -53,9 +54,10 @@ class _SingleInvocation:
         else:
             self.working_copy = pathlib.Path(self.directory)
 
+
     def __call__(self):
-        env = dict(os.environ)
-        env.update(self.env)
+        update_environment_with = _EnvironmentUpdater()
+        env = update_environment_with(self.env)
 
         if self.copy_benchmarks_dir:
             shutil.copytree(
@@ -126,6 +128,44 @@ class _Run:
         tmp_symlink.parent.mkdir(exist_ok=True)
         tmp_symlink.symlink_to(out_path)
         tmp_symlink.rename(self.out_symlink)
+
+
+
+@dataclasses.dataclass
+class _EnvironmentUpdater:
+    """Update the OS environment with keys and values containing variables
+
+    When called, this class returns the operating environment updated with new
+    keys and values. The values can contain variables of the form '${var_name}'.
+    The class evaluates those variables using values already in the environment.
+    """
+
+    os_environment: dict = dataclasses.field(
+        default_factory=lambda : dict(os.environ))
+    pattern: re.Pattern = re.compile(r"\$\{(\w+?)\}")
+
+
+    def _evaluate(self, key, value):
+        """Evaluate all ${var} in value using self.os_environment"""
+        old_value = value
+
+        for variable in re.findall(self.pattern, value):
+            if variable not in self.os_environment:
+                logging.error(
+                    "Couldn't evaluate ${%s} in the value '%s' for environment "
+                    "variable '%s'. Ensure the environment variable $%s is set",
+                    variable, old_value, key, variable)
+                sys.exit(1)
+            value = re.sub(
+                r"\$\{" + variable + "\}", self.os_environment[variable], value)
+        return value
+
+
+    def __call__(self, new_environment):
+        ret = dict(self.os_environment)
+        for key, value in new_environment.items():
+            ret[key] = self._evaluate(key, value)
+        return ret
 
 
 def get_default_out_symlink():

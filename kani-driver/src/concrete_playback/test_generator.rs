@@ -588,9 +588,7 @@ mod tests {
                 line: None,
             },
             trace: Some(vec![TraceItem {
-                thread: 0,
                 step_type: "assignment".to_string(),
-                hidden: false,
                 lhs: Some("goto_symex$$return_value".to_string()),
                 source_location: Some(SourceLocation {
                     column: None,
@@ -599,7 +597,6 @@ mod tests {
                     line: None,
                 }),
                 value: Some(TraceValue {
-                    name: "".to_string(),
                     binary: Some("0000001100000001".to_string()),
                     data: Some(TraceData::NonBool("385".to_string())),
                     width: Some(16),

@@ -15,4 +15,5 @@
 - [0007-global-conditions](rfcs/0007-global-conditions.md)
 - [0008-line-coverage](rfcs/0008-line-coverage.md)
 - [0009-function-contracts](rfcs/0009-function-contracts.md)
-- [0010-rust-ub-checks](rfcs/0010-rust-ub-checks.md)
+- [0010-quantifiers](rfcs/0010-quantifiers.md)
+- [0011-rust-ub-checks](rfcs/0011-rust-ub-checks)

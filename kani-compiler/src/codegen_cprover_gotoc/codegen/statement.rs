@@ -42,14 +42,14 @@ impl<'tcx> GotocCtx<'tcx> {
                     // where the reference is implicit.
                     unwrap_or_return_codegen_unimplemented_stmt!(
                         self,
-                        self.codegen_place_stable(lhs)
+                        self.codegen_place_stable(lhs, location)
                     )
                     .goto_expr
                     .assign(self.codegen_rvalue_stable(rhs, location).address_of(), location)
                 } else if rty.kind().is_bool() {
                     unwrap_or_return_codegen_unimplemented_stmt!(
                         self,
-                        self.codegen_place_stable(lhs)
+                        self.codegen_place_stable(lhs, location)
                     )
                     .goto_expr
                     .assign(
@@ -59,7 +59,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 } else {
                     unwrap_or_return_codegen_unimplemented_stmt!(
                         self,
-                        self.codegen_place_stable(lhs)
+                        self.codegen_place_stable(lhs, location)
                     )
                     .goto_expr
                     .assign(self.codegen_rvalue_stable(rhs, location), location)
@@ -70,15 +70,25 @@ impl<'tcx> GotocCtx<'tcx> {
                 let dest_ty = self.place_ty_stable(place);
                 let dest_expr = unwrap_or_return_codegen_unimplemented_stmt!(
                     self,
-                    self.codegen_place_stable(place)
+                    self.codegen_place_stable(place, location)
                 )
                 .goto_expr;
                 self.codegen_set_discriminant(dest_ty, dest_expr, *variant_index, location)
             }
             StatementKind::StorageLive(var_id) => {
-                Stmt::decl(self.codegen_local(*var_id), None, location)
+                if self.queries.args().ignore_storage_markers {
+                    Stmt::skip(location)
+                } else {
+                    Stmt::decl(self.codegen_local(*var_id, location), None, location)
+                }
             }
-            StatementKind::StorageDead(var_id) => Stmt::dead(self.codegen_local(*var_id), location),
+            StatementKind::StorageDead(var_id) => {
+                if self.queries.args().ignore_storage_markers {
+                    Stmt::skip(location)
+                } else {
+                    Stmt::dead(self.codegen_local(*var_id, location), location)
+                }
+            }
             StatementKind::Intrinsic(NonDivergingIntrinsic::CopyNonOverlapping(
                 CopyNonOverlapping { src, dst, count },
             )) => {
@@ -141,12 +151,12 @@ impl<'tcx> GotocCtx<'tcx> {
             TerminatorKind::Return => {
                 let rty = self.current_fn().instance_stable().fn_abi().unwrap().ret.ty;
                 if rty.kind().is_unit() {
-                    self.codegen_ret_unit()
+                    self.codegen_ret_unit(loc)
                 } else {
                     let place = Place::from(RETURN_LOCAL);
                     let place_expr = unwrap_or_return_codegen_unimplemented_stmt!(
                         self,
-                        self.codegen_place_stable(&place)
+                        self.codegen_place_stable(&place, loc)
                     )
                     .goto_expr;
                     assert_eq!(rty, self.place_ty_stable(&place), "Unexpected return type");
@@ -294,24 +304,22 @@ impl<'tcx> GotocCtx<'tcx> {
             // We ignore assignment for all zero size types
             Stmt::skip(loc)
         } else {
-            unwrap_or_return_codegen_unimplemented_stmt!(self, self.codegen_place_stable(place))
-                .goto_expr
-                .deinit(loc)
+            unwrap_or_return_codegen_unimplemented_stmt!(
+                self,
+                self.codegen_place_stable(place, loc)
+            )
+            .goto_expr
+            .deinit(loc)
         }
     }
 
     /// A special case handler to codegen `return ();`
-    fn codegen_ret_unit(&mut self) -> Stmt {
+    fn codegen_ret_unit(&mut self, loc: Location) -> Stmt {
         let is_file_local = false;
         let ty = self.codegen_ty_unit();
-        let var = self.ensure_global_var(
-            FN_RETURN_VOID_VAR_NAME,
-            is_file_local,
-            ty,
-            Location::none(),
-            |_, _| None,
-        );
-        Stmt::ret(Some(var), Location::none())
+        let var =
+            self.ensure_global_var(FN_RETURN_VOID_VAR_NAME, is_file_local, ty, loc, |_, _| None);
+        Stmt::ret(Some(var), loc)
     }
 
     /// Generates Goto-C for MIR [TerminatorKind::Drop] calls. We only handle code _after_ Rust's "drop elaboration"
@@ -332,7 +340,8 @@ impl<'tcx> GotocCtx<'tcx> {
                 Stmt::skip(loc)
             }
             InstanceKind::Shim => {
-                let place_ref = self.codegen_place_ref_stable(place);
+                // Since the reference is used right away here, no need to inject a check for pointer validity.
+                let place_ref = self.codegen_place_ref_stable(place, loc);
                 match place_ty.kind() {
                     TyKind::RigidTy(RigidTy::Dynamic(..)) => {
                         // Virtual drop via a vtable lookup.
@@ -358,7 +367,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         // Non-virtual, direct drop_in_place call
                         assert!(!matches!(drop_instance.kind, InstanceKind::Virtual { .. }));
 
-                        let func = self.codegen_func_expr(drop_instance, None);
+                        let func = self.codegen_func_expr(drop_instance, loc);
                         // The only argument should be a self reference
                         let args = vec![place_ref];
 
@@ -512,13 +521,21 @@ impl<'tcx> GotocCtx<'tcx> {
         if let Some(instance) = instance_opt
             && matches!(instance.kind, InstanceKind::Intrinsic)
         {
-            return self.codegen_funcall_of_intrinsic(
-                instance,
-                &args,
-                &destination,
-                target.map(|bb| bb),
-                span,
-            );
+            let TyKind::RigidTy(RigidTy::FnDef(def, _)) = instance.ty().kind() else {
+                unreachable!("Expected function type for intrinsic: {instance:?}")
+            };
+            // The compiler is currently transitioning how to handle intrinsic fallback body.
+            // Until https://github.com/rust-lang/project-stable-mir/issues/79 is implemented
+            // we have to check `must_be_overridden` and `has_body`.
+            if def.as_intrinsic().unwrap().must_be_overridden() || !instance.has_body() {
+                return self.codegen_funcall_of_intrinsic(
+                    instance,
+                    &args,
+                    &destination,
+                    target.map(|bb| bb),
+                    span,
+                );
+            }
         }
 
         let loc = self.codegen_span_stable(span);
@@ -558,17 +575,15 @@ impl<'tcx> GotocCtx<'tcx> {
                     InstanceKind::Item | InstanceKind::Intrinsic | InstanceKind::Shim => {
                         // We need to handle FnDef items in a special way because `codegen_operand` compiles them to dummy structs.
                         // (cf. the function documentation)
-                        let func_exp = self.codegen_func_expr(instance, None);
+                        let func_exp = self.codegen_func_expr(instance, loc);
                         if instance.is_foreign_item() {
                             vec![self.codegen_foreign_call(func_exp, fargs, destination, loc)]
                         } else {
-                            vec![
-                                self.codegen_expr_to_place_stable(
-                                    destination,
-                                    func_exp.call(fargs),
-                                )
-                                .with_location(loc),
-                            ]
+                            vec![self.codegen_expr_to_place_stable(
+                                destination,
+                                func_exp.call(fargs),
+                                loc,
+                            )]
                         }
                     }
                 };
@@ -590,8 +605,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 // Actually generate the function call and return.
                 Stmt::block(
                     vec![
-                        self.codegen_expr_to_place_stable(destination, func_expr.call(fargs))
-                            .with_location(loc),
+                        self.codegen_expr_to_place_stable(destination, func_expr.call(fargs), loc),
                         Stmt::goto(bb_label(target.unwrap()), loc),
                     ],
                     loc,
@@ -688,7 +702,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
         // Virtual function call and corresponding nonnull assertion.
         let call = fn_ptr.dereference().call(fargs.to_vec());
-        let call_stmt = self.codegen_expr_to_place_stable(place, call).with_location(loc);
+        let call_stmt = self.codegen_expr_to_place_stable(place, call, loc);
         let call_stmt = if self.vtable_ctx.emit_vtable_restrictions {
             self.virtual_call_with_restricted_fn_ptr(trait_fat_ptr.typ().clone(), idx, call_stmt)
         } else {
@@ -703,13 +717,21 @@ impl<'tcx> GotocCtx<'tcx> {
     /// A MIR [Place] is an L-value (i.e. the LHS of an assignment).
     ///
     /// In Kani, we slightly optimize the special case for Unit and don't assign anything.
-    pub(crate) fn codegen_expr_to_place_stable(&mut self, place: &Place, expr: Expr) -> Stmt {
+    pub(crate) fn codegen_expr_to_place_stable(
+        &mut self,
+        place: &Place,
+        expr: Expr,
+        loc: Location,
+    ) -> Stmt {
         if self.place_ty_stable(place).kind().is_unit() {
-            expr.as_stmt(Location::none())
+            expr.as_stmt(loc)
         } else {
-            unwrap_or_return_codegen_unimplemented_stmt!(self, self.codegen_place_stable(place))
-                .goto_expr
-                .assign(expr, Location::none())
+            unwrap_or_return_codegen_unimplemented_stmt!(
+                self,
+                self.codegen_place_stable(place, loc)
+            )
+            .goto_expr
+            .assign(expr, loc)
         }
     }
 }

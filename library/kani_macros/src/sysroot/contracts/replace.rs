@@ -3,13 +3,13 @@
 
 //! Logic used for generating the code that replaces a function with its contract.
 
-use proc_macro2::{Ident, TokenStream as TokenStream2};
+use proc_macro2::{Ident, Span, TokenStream as TokenStream2};
 use quote::quote;
 
 use super::{
     helpers::*,
-    shared::{attach_require_kani_any, make_unsafe_argument_copies, try_as_result_assign},
-    ContractConditionsData, ContractConditionsHandler,
+    shared::{build_ensures, try_as_result_assign},
+    ContractConditionsData, ContractConditionsHandler, INTERNAL_RESULT_IDENT,
 };
 
 impl<'a> ContractConditionsHandler<'a> {
@@ -39,7 +39,8 @@ impl<'a> ContractConditionsHandler<'a> {
     fn ensure_bootstrapped_replace_body(&self) -> (Vec<syn::Stmt>, Vec<syn::Stmt>) {
         if self.is_first_emit() {
             let return_type = return_type_to_type(&self.annotated_fn.sig.output);
-            (vec![syn::parse_quote!(let result : #return_type = kani::any();)], vec![])
+            let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
+            (vec![syn::parse_quote!(let #result : #return_type = kani::any_modifies();)], vec![])
         } else {
             let stmts = &self.annotated_fn.block.stmts;
             let idx = stmts
@@ -70,30 +71,32 @@ impl<'a> ContractConditionsHandler<'a> {
         match &self.condition_type {
             ContractConditionsData::Requires { attr } => {
                 let Self { attr_copy, .. } = self;
+                let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
                 quote!(
                     kani::assert(#attr, stringify!(#attr_copy));
                     #(#before)*
                     #(#after)*
-                    result
+                    #result
                 )
             }
-            ContractConditionsData::Ensures { attr, argument_names } => {
-                let (arg_copies, copy_clean) = make_unsafe_argument_copies(&argument_names);
+            ContractConditionsData::Ensures { attr } => {
+                let (remembers, ensures_clause) = build_ensures(attr);
+                let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
                 quote!(
-                    #arg_copies
+                    #remembers
                     #(#before)*
                     #(#after)*
-                    kani::assume(#attr);
-                    #copy_clean
-                    result
+                    kani::assume(#ensures_clause);
+                    #result
                 )
             }
             ContractConditionsData::Modifies { attr } => {
+                let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
                 quote!(
                     #(#before)*
-                    #(*unsafe { kani::internal::Pointer::assignable(#attr) } = kani::any();)*
+                    #(*unsafe { kani::internal::Pointer::assignable(kani::internal::untracked_deref(&(#attr))) } = kani::any_modifies();)*
                     #(#after)*
-                    result
+                    #result
                 )
             }
         }
@@ -112,9 +115,8 @@ impl<'a> ContractConditionsHandler<'a> {
             self.output.extend(quote!(#[kanitool::is_contract_generated(replace)]));
         }
         let mut sig = self.annotated_fn.sig.clone();
-        if self.is_first_emit() {
-            attach_require_kani_any(&mut sig);
-        }
+        // We use non-constant functions, thus, the wrapper cannot be constant.
+        sig.constness = None;
         let body = self.make_replace_body();
         if let Some(ident) = override_function_ident {
             sig.ident = ident;
@@ -129,7 +131,7 @@ impl<'a> ContractConditionsHandler<'a> {
     }
 }
 
-/// Is this statement `let result : <...> = kani::any();`.
+/// Is this statement `let result_kani_internal : <...> = kani::any_modifies();`.
 fn is_replace_return_havoc(stmt: &syn::Stmt) -> bool {
     let Some(syn::LocalInit { diverge: None, expr: e, .. }) = try_as_result_assign(stmt) else {
         return false;
@@ -152,7 +154,7 @@ fn is_replace_return_havoc(stmt: &syn::Stmt) -> bool {
             })
             if path.segments.len() == 2
             && path.segments[0].ident == "kani"
-            && path.segments[1].ident == "any"
+            && path.segments[1].ident == "any_modifies"
             && attrs.is_empty()
         )
     )

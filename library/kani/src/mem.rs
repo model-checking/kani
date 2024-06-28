@@ -10,8 +10,10 @@
 //!    be dereferenceable: the memory range of the given size starting at the pointer must all be
 //!    within the bounds of a single allocated object. Note that in Rust, every (stack-allocated)
 //!    variable is considered a separate allocated object.
-//!    Even for operations of size zero, the pointer must not be pointing to deallocated memory,
-//!    i.e., deallocation makes pointers invalid even for zero-sized operations.
+//!    ~~Even for operations of size zero, the pointer must not be pointing to deallocated memory,
+//!    i.e., deallocation makes pointers invalid even for zero-sized operations.~~
+//!    ZST access is not OK for any pointer.
+//!    See: <https://github.com/rust-lang/unsafe-code-guidelines/issues/472>
 //! 3. However, casting any non-zero integer literal to a pointer is valid for zero-sized
 //!    accesses, even if some memory happens to exist at that address and gets deallocated.
 //!    This corresponds to writing your own allocator: allocating zero-sized objects is not very
@@ -39,47 +41,138 @@ use crate::mem::private::Internal;
 use std::mem::{align_of, size_of};
 use std::ptr::{DynMetadata, NonNull, Pointee};
 
-/// Assert that the pointer is valid for access according to [crate::mem] conditions 1, 2 and 3.
+/// Check if the pointer is valid for write access according to [crate::mem] conditions 1, 2
+/// and 3.
 ///
-/// Note that an unaligned pointer is still considered valid.
+/// Note this function also checks for pointer alignment. Use [self::can_write_unaligned]
+/// if you don't want to fail for unaligned pointers.
 ///
-/// TODO: Kani should automatically add those checks when a de-reference happens.
-/// https://github.com/model-checking/kani/issues/2975
+/// This function does not check if the value stored is valid for the given type. Use
+/// [self::can_dereference] for that.
 ///
-/// This function will either panic or return `true`. This is to make it easier to use it in
-/// contracts.
+/// This function will panic today if the pointer is not null, and it points to an unallocated or
+/// deallocated memory location. This is an existing Kani limitation.
+/// See <https://github.com/model-checking/kani/issues/2690> for more details.
 #[crate::unstable(
     feature = "mem-predicates",
     issue = 2690,
     reason = "experimental memory predicate API"
 )]
-pub fn assert_valid_ptr<T>(ptr: *const T) -> bool
+pub fn can_write<T>(ptr: *mut T) -> bool
 where
     T: ?Sized,
     <T as Pointee>::Metadata: PtrProperties<T>,
 {
-    crate::assert(!ptr.is_null(), "Expected valid pointer, but found `null`");
-
+    // The interface takes a mutable pointer to improve readability of the signature.
+    // However, using constant pointer avoid unnecessary instrumentation, and it is as powerful.
+    // Hence, cast to `*const T`.
+    let ptr: *const T = ptr;
     let (thin_ptr, metadata) = ptr.to_raw_parts();
-    can_read(&metadata, thin_ptr)
+    metadata.is_ptr_aligned(thin_ptr, Internal) && is_inbounds(&metadata, thin_ptr)
 }
 
-fn can_read<M, T>(metadata: &M, data_ptr: *const ()) -> bool
+/// Check if the pointer is valid for unaligned write access according to [crate::mem] conditions
+/// 1, 2 and 3.
+///
+/// Note this function succeeds for unaligned pointers. See [self::can_write] if you also
+/// want to check pointer alignment.
+///
+/// This function will panic today if the pointer is not null, and it points to an unallocated or
+/// deallocated memory location. This is an existing Kani limitation.
+/// See <https://github.com/model-checking/kani/issues/2690> for more details.
+#[crate::unstable(
+    feature = "mem-predicates",
+    issue = 2690,
+    reason = "experimental memory predicate API"
+)]
+pub fn can_write_unaligned<T>(ptr: *const T) -> bool
+where
+    T: ?Sized,
+    <T as Pointee>::Metadata: PtrProperties<T>,
+{
+    let (thin_ptr, metadata) = ptr.to_raw_parts();
+    is_inbounds(&metadata, thin_ptr)
+}
+
+/// Checks that pointer `ptr` point to a valid value of type `T`.
+///
+/// For that, the pointer has to be a valid pointer according to [crate::mem] conditions 1, 2
+/// and 3,
+/// and the value stored must respect the validity invariants for type `T`.
+///
+/// TODO: Kani should automatically add those checks when a de-reference happens.
+/// <https://github.com/model-checking/kani/issues/2975>
+///
+/// This function will panic today if the pointer is not null, and it points to an unallocated or
+/// deallocated memory location. This is an existing Kani limitation.
+/// See <https://github.com/model-checking/kani/issues/2690> for more details.
+#[crate::unstable(
+    feature = "mem-predicates",
+    issue = 2690,
+    reason = "experimental memory predicate API"
+)]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub fn can_dereference<T>(ptr: *const T) -> bool
+where
+    T: ?Sized,
+    <T as Pointee>::Metadata: PtrProperties<T>,
+{
+    let (thin_ptr, metadata) = ptr.to_raw_parts();
+    metadata.is_ptr_aligned(thin_ptr, Internal)
+        && is_inbounds(&metadata, thin_ptr)
+        && unsafe { has_valid_value(ptr) }
+}
+
+/// Checks that pointer `ptr` point to a valid value of type `T`.
+///
+/// For that, the pointer has to be a valid pointer according to [crate::mem] conditions 1, 2
+/// and 3,
+/// and the value stored must respect the validity invariants for type `T`.
+///
+/// Note this function succeeds for unaligned pointers. See [self::can_dereference] if you also
+/// want to check pointer alignment.
+///
+/// This function will panic today if the pointer is not null, and it points to an unallocated or
+/// deallocated memory location. This is an existing Kani limitation.
+/// See <https://github.com/model-checking/kani/issues/2690> for more details.
+#[crate::unstable(
+    feature = "mem-predicates",
+    issue = 2690,
+    reason = "experimental memory predicate API"
+)]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub fn can_read_unaligned<T>(ptr: *const T) -> bool
+where
+    T: ?Sized,
+    <T as Pointee>::Metadata: PtrProperties<T>,
+{
+    let (thin_ptr, metadata) = ptr.to_raw_parts();
+    is_inbounds(&metadata, thin_ptr) && unsafe { has_valid_value(ptr) }
+}
+
+/// Checks that `data_ptr` points to an allocation that can hold data of size calculated from `T`.
+///
+/// This will panic if `data_ptr` points to an invalid `non_null`
+fn is_inbounds<M, T>(metadata: &M, data_ptr: *const ()) -> bool
 where
     M: PtrProperties<T>,
     T: ?Sized,
 {
-    let marker = Internal;
-    let sz = metadata.pointee_size(marker);
-    if metadata.dangling(marker) as *const _ == data_ptr {
-        crate::assert(sz == 0, "Dangling pointer is only valid for zero-sized access")
+    let sz = metadata.pointee_size(Internal);
+    if sz == 0 {
+        true // ZST pointers are always valid including nullptr.
+    } else if data_ptr.is_null() {
+        false
     } else {
+        // Note that this branch can't be tested in concrete execution as `is_read_ok` needs to be
+        // stubbed.
+        // We first assert that the data_ptr
         crate::assert(
-            is_read_ok(data_ptr, sz),
-            "Expected valid pointer, but found dangling pointer",
+            unsafe { is_allocated(data_ptr, 0) },
+            "Kani does not support reasoning about pointer to unallocated memory",
         );
+        unsafe { is_allocated(data_ptr, sz) }
     }
-    true
 }
 
 mod private {
@@ -92,6 +185,12 @@ mod private {
 #[doc(hidden)]
 pub trait PtrProperties<T: ?Sized> {
     fn pointee_size(&self, _: Internal) -> usize;
+
+    /// A pointer is aligned if its address is a multiple of its minimum alignment.
+    fn is_ptr_aligned(&self, ptr: *const (), internal: Internal) -> bool {
+        let min = self.min_alignment(internal);
+        ptr as usize % min == 0
+    }
 
     fn min_alignment(&self, _: Internal) -> usize;
 
@@ -167,18 +266,47 @@ where
 
 /// Check if the pointer `_ptr` contains an allocated address of size equal or greater than `_size`.
 ///
-/// This function should only be called to ensure a pointer is valid. The opposite isn't true.
+/// # Safety
+///
+/// This function should only be called to ensure a pointer is always valid, i.e., in an assertion
+/// context.
+///
 /// I.e.: This function always returns `true` if the pointer is valid.
 /// Otherwise, it returns non-det boolean.
-#[rustc_diagnostic_item = "KaniIsReadOk"]
+#[rustc_diagnostic_item = "KaniIsAllocated"]
 #[inline(never)]
-fn is_read_ok(_ptr: *const (), _size: usize) -> bool {
+unsafe fn is_allocated(_ptr: *const (), _size: usize) -> bool {
+    kani_intrinsic()
+}
+
+/// Check if the value stored in the given location satisfies type `T` validity requirements.
+///
+/// # Safety
+///
+/// - Users have to ensure that the pointer is aligned the pointed memory is allocated.
+#[rustc_diagnostic_item = "KaniValidValue"]
+#[inline(never)]
+unsafe fn has_valid_value<T: ?Sized>(_ptr: *const T) -> bool {
+    kani_intrinsic()
+}
+
+/// Get the object ID of the given pointer.
+#[rustc_diagnostic_item = "KaniPointerObject"]
+#[inline(never)]
+pub fn pointer_object<T: ?Sized>(_ptr: *const T) -> usize {
+    kani_intrinsic()
+}
+
+/// Get the object offset of the given pointer.
+#[rustc_diagnostic_item = "KaniPointerOffset"]
+#[inline(never)]
+pub fn pointer_offset<T: ?Sized>(_ptr: *const T) -> usize {
     kani_intrinsic()
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{assert_valid_ptr, PtrProperties};
+    use super::{can_dereference, can_write, PtrProperties};
     use crate::mem::private::Internal;
     use std::fmt::Debug;
     use std::intrinsics::size_of;
@@ -232,51 +360,42 @@ mod tests {
 
     #[test]
     pub fn test_empty_slice() {
-        let slice_ptr = Vec::<char>::new().as_slice() as *const [char];
-        assert_valid_ptr(slice_ptr);
+        let slice_ptr = Vec::<char>::new().as_mut_slice() as *mut [char];
+        assert!(can_write(slice_ptr));
     }
 
     #[test]
     pub fn test_empty_str() {
-        let slice_ptr = String::new().as_str() as *const str;
-        assert_valid_ptr(slice_ptr);
+        let slice_ptr = String::new().as_mut_str() as *mut str;
+        assert!(can_write(slice_ptr));
     }
 
     #[test]
     fn test_dangling_zst() {
-        test_dangling_of_t::<()>();
-        test_dangling_of_t::<[(); 10]>();
+        test_dangling_of_zst::<()>();
+        test_dangling_of_zst::<[(); 10]>();
     }
 
-    fn test_dangling_of_t<T>() {
-        let dangling: *const T = NonNull::<T>::dangling().as_ptr();
-        assert_valid_ptr(dangling);
+    fn test_dangling_of_zst<T>() {
+        let dangling: *mut T = NonNull::<T>::dangling().as_ptr();
+        assert!(can_write(dangling));
 
-        let vec_ptr = Vec::<T>::new().as_ptr();
-        assert_valid_ptr(vec_ptr);
-    }
-
-    #[test]
-    #[should_panic(expected = "Dangling pointer is only valid for zero-sized access")]
-    fn test_dangling_char() {
-        test_dangling_of_t::<char>();
+        let vec_ptr = Vec::<T>::new().as_mut_ptr();
+        assert!(can_write(vec_ptr));
     }
 
     #[test]
-    #[should_panic(expected = "Dangling pointer is only valid for zero-sized access")]
-    fn test_dangling_slice() {
-        test_dangling_of_t::<&str>();
-    }
-
-    #[test]
-    #[should_panic(expected = "Expected valid pointer, but found `null`")]
     fn test_null_fat_ptr() {
-        assert_valid_ptr(ptr::null::<char>() as *const dyn Debug);
+        assert!(!can_dereference(ptr::null::<char>() as *const dyn Debug));
     }
 
     #[test]
-    #[should_panic(expected = "Expected valid pointer, but found `null`")]
     fn test_null_char() {
-        assert_valid_ptr(ptr::null::<char>());
+        assert!(!can_dereference(ptr::null::<char>()));
+    }
+
+    #[test]
+    fn test_null_mut() {
+        assert!(!can_write(ptr::null_mut::<String>()));
     }
 }

@@ -5,6 +5,7 @@
 //! Check Kani handling of generics and recursion with function contracts.
 
 #[kani::requires(x != 0)]
+#[kani::recursion]
 fn foo<T: std::cmp::PartialEq<i32>>(x: T) {
     assert_ne!(x, 0);
     foo(x);

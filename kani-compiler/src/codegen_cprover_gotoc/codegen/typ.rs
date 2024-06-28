@@ -11,14 +11,14 @@ use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::print::FmtPrinter;
 use rustc_middle::ty::GenericArgsRef;
 use rustc_middle::ty::{
-    self, AdtDef, Const, CoroutineArgs, FloatTy, Instance, IntTy, PolyFnSig, Ty, TyCtxt, TyKind,
-    UintTy, VariantDef, VtblEntry,
+    self, AdtDef, Const, CoroutineArgs, CoroutineArgsExt, FloatTy, Instance, IntTy, PolyFnSig, Ty,
+    TyCtxt, TyKind, UintTy, VariantDef, VtblEntry,
 };
 use rustc_middle::ty::{List, TypeFoldable};
 use rustc_smir::rustc_internal;
 use rustc_span::def_id::DefId;
 use rustc_target::abi::{
-    Abi::Vector, FieldIdx, FieldsShape, Integer, LayoutS, Primitive, Size, TagEncoding,
+    Abi::Vector, FieldIdx, FieldsShape, Float, Integer, LayoutS, Primitive, Size, TagEncoding,
     TyAndLayout, VariantIdx, Variants,
 };
 use stable_mir::abi::{ArgAbi, FnAbi, PassMode};
@@ -73,7 +73,7 @@ impl TypeExt for Type {
                     && components.iter().any(|x| x.name() == "vtable" && x.typ().is_pointer())
             }
             Type::StructTag(tag) => {
-                st.lookup(&tag.to_string()).unwrap().typ.is_rust_trait_fat_ptr(st)
+                st.lookup(tag.to_string()).unwrap().typ.is_rust_trait_fat_ptr(st)
             }
             _ => false,
         }
@@ -570,7 +570,7 @@ impl<'tcx> GotocCtx<'tcx> {
             // Note: This is not valid C but CBMC seems to be ok with it.
             ty::Slice(e) => self.codegen_ty(*e).flexible_array_of(),
             ty::Str => Type::unsigned_int(8).flexible_array_of(),
-            ty::Ref(_, t, _) | ty::RawPtr(ty::TypeAndMut { ty: t, .. }) => self.codegen_ty_ref(*t),
+            ty::Ref(_, t, _) | ty::RawPtr(t, _) => self.codegen_ty_ref(*t),
             ty::FnDef(def_id, args) => {
                 let instance =
                     Instance::resolve(self.tcx, ty::ParamEnv::reveal_all(), *def_id, args)
@@ -594,6 +594,13 @@ impl<'tcx> GotocCtx<'tcx> {
                         |tcx, _| tcx.codegen_ty_tuple_fields(ty, ts),
                     )
                 }
+            }
+            // This object has the same layout as base. For now, translate this into `(base)`.
+            // The only difference is the niche.
+            ty::Pat(base_ty, ..) => {
+                self.ensure_struct(self.ty_mangled_name(ty), self.ty_pretty_name(ty), |tcx, _| {
+                    tcx.codegen_ty_tuple_like(ty, vec![*base_ty])
+                })
             }
             ty::Alias(..) => {
                 unreachable!("Type should've been normalized already")
@@ -993,8 +1000,9 @@ impl<'tcx> GotocCtx<'tcx> {
             | ty::Foreign(_)
             | ty::Coroutine(..)
             | ty::Int(_)
-            | ty::RawPtr(_)
+            | ty::RawPtr(_, _)
             | ty::Ref(..)
+            | ty::Pat(..)
             | ty::Tuple(_)
             | ty::Uint(_) => self.codegen_ty(pointee_type).to_pointer(),
 
@@ -1132,7 +1140,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Mapping enums to CBMC types is rather complicated. There are a few cases to consider:
     /// 1. When there is only 0 or 1 variant, this is straightforward as the code shows
     /// 2. When there are more variants, rust might decides to apply the typical encoding which
-    /// regard enums as tagged union, or an optimized form, called niche encoding.
+    ///    regard enums as tagged union, or an optimized form, called niche encoding.
     ///
     /// The direct encoding is straightforward. Enums are just mapped to C as a struct of union of structs.
     /// e.g.
@@ -1346,16 +1354,18 @@ impl<'tcx> GotocCtx<'tcx> {
                     }
                 }
             },
+            Primitive::Float(f) => self.codegen_float_type(f),
+            Primitive::Pointer(_) => Ty::new_ptr(self.tcx, self.tcx.types.u8, Mutability::Not),
+        }
+    }
 
-            Primitive::F32 => self.tcx.types.f32,
-            Primitive::F64 => self.tcx.types.f64,
+    pub fn codegen_float_type(&self, f: Float) -> Ty<'tcx> {
+        match f {
+            Float::F32 => self.tcx.types.f32,
+            Float::F64 => self.tcx.types.f64,
             // `F16` and `F128` are not yet handled.
             // Tracked here: <https://github.com/model-checking/kani/issues/3069>
-            Primitive::F16 | Primitive::F128 => unimplemented!(),
-            Primitive::Pointer(_) => Ty::new_ptr(
-                self.tcx,
-                ty::TypeAndMut { ty: self.tcx.types.u8, mutbl: Mutability::Not },
-            ),
+            Float::F16 | Float::F128 => unimplemented!(),
         }
     }
 
@@ -1659,7 +1669,7 @@ fn common_vtable_fields(drop_in_place: Type) -> Vec<DatatypeComponent> {
 pub fn pointee_type(mir_type: Ty) -> Option<Ty> {
     match mir_type.kind() {
         ty::Ref(_, pointee_type, _) => Some(*pointee_type),
-        ty::RawPtr(ty::TypeAndMut { ty: pointee_type, .. }) => Some(*pointee_type),
+        ty::RawPtr(pointee_type, _) => Some(*pointee_type),
         _ => None,
     }
 }
@@ -1667,7 +1677,7 @@ pub fn pointee_type(mir_type: Ty) -> Option<Ty> {
 /// Extracts the pointee type if the given mir type is either a known smart pointer (Box, Rc, ..)
 /// or a regular pointer.
 pub fn std_pointee_type(mir_type: Ty) -> Option<Ty> {
-    mir_type.builtin_deref(true).map(|tm| tm.ty)
+    mir_type.builtin_deref(true)
 }
 
 /// This is a place holder function that should normalize the given type.

@@ -57,7 +57,12 @@ impl<'tcx> ModelIntrinsics<'tcx> {
         let arg_ty = args[0].node.ty(&self.local_decls, tcx);
         if arg_ty.is_simd() {
             // Get the stub definition.
-            let stub_id = tcx.get_diagnostic_item(Symbol::intern("KaniModelSimdBitmask")).unwrap();
+            let Some(stub_id) = tcx.get_diagnostic_item(Symbol::intern("KaniModelSimdBitmask"))
+            else {
+                // This should only happen when verifying the standard library.
+                // We don't need to warn here, since the backend will print unsupported constructs.
+                return;
+            };
             debug!(?func, ?stub_id, "replace_simd_bitmask");
 
             // Get SIMD information from the type.
@@ -72,7 +77,7 @@ impl<'tcx> ModelIntrinsics<'tcx> {
             let Operand::Constant(fn_def) = func else { unreachable!() };
             fn_def.const_ = mirConst::from_value(
                 ConstValue::ZeroSized,
-                tcx.type_of(stub_id).instantiate(tcx, &new_gen_args),
+                tcx.type_of(stub_id).instantiate(tcx, &*new_gen_args),
             );
         } else {
             debug!(?arg_ty, "replace_simd_bitmask failed");

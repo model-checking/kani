@@ -23,7 +23,9 @@ pub mod arbitrary;
 #[cfg(feature = "concrete_playback")]
 mod concrete_playback;
 pub mod futures;
+pub mod invariant;
 pub mod mem;
+pub mod shadow;
 pub mod slice;
 pub mod tuple;
 pub mod vec;
@@ -36,6 +38,7 @@ mod models;
 pub use arbitrary::Arbitrary;
 #[cfg(feature = "concrete_playback")]
 pub use concrete_playback::concrete_playback_run;
+pub use invariant::Invariant;
 
 #[cfg(not(feature = "concrete_playback"))]
 /// NOP `concrete_playback` for type checking during verification mode.
@@ -156,9 +159,25 @@ pub const fn cover(_cond: bool, _msg: &'static str) {}
 /// Note: This is a safe construct and can only be used with types that implement the `Arbitrary`
 /// trait. The Arbitrary trait is used to build a symbolic value that represents all possible
 /// valid values for type `T`.
+#[rustc_diagnostic_item = "KaniAny"]
 #[inline(always)]
 pub fn any<T: Arbitrary>() -> T {
     T::any()
+}
+
+/// This function is only used for function contract instrumentation.
+/// It behaves exaclty like `kani::any<T>()`, except it will check for the trait bounds
+/// at compilation time. It allows us to avoid type checking errors while using function
+/// contracts only for verification.
+#[rustc_diagnostic_item = "KaniAnyModifies"]
+#[inline(never)]
+#[doc(hidden)]
+pub fn any_modifies<T>() -> T {
+    // This function should not be reacheable.
+    // Users must include `#[kani::recursion]` in any function contracts for recursive functions;
+    // otherwise, this might not be properly instantiate. We mark this as unreachable to make
+    // sure Kani doesn't report any false positives.
+    unreachable!()
 }
 
 /// This creates a symbolic *valid* value of type `T`.
@@ -303,5 +322,7 @@ pub use core::assert as __kani__workaround_core_assert;
 
 // Kani proc macros must be in a separate crate
 pub use kani_macros::*;
+
+pub(crate) use kani_macros::unstable_feature as unstable;
 
 pub mod contracts;

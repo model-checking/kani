@@ -28,36 +28,17 @@ else
       curl -sSL -o "$FILE" "$URL"
       echo "$EXPECTED_HASH $FILE" | sha256sum -c -
       tar zxf $FILE
+      MDBOOK=${SCRIPT_DIR}/mdbook
+  else
+      MDBOOK=mdbook
   fi
-  MDBOOK=${SCRIPT_DIR}/mdbook
 fi
 
-# Publish bookrunner report into our documentation
 KANI_DIR=$SCRIPT_DIR/..
 DOCS_DIR=$KANI_DIR/docs
 RFC_DIR=$KANI_DIR/rfc
-HTML_DIR=$KANI_DIR/build/output/latest/html/
 
 cd $DOCS_DIR
-
-if [ -d $HTML_DIR ]; then
-    # Litani run is copied into `src` to avoid deletion by `mdbook`
-    cp -r $HTML_DIR src/bookrunner/
-    # Replace artifacts by examples under test
-    BOOKS_DIR=$KANI_DIR/tests/bookrunner/books
-    rm -r src/bookrunner/artifacts
-    # Remove any json files that Kani might've left behind due to crash or timeout.
-    find $BOOKS_DIR -name '*.json' -exec rm {} \;
-    find $BOOKS_DIR -name '*.out' -exec rm {} \;
-    cp -r $BOOKS_DIR src/bookrunner/artifacts
-    # Update paths in HTML report
-    python $KANI_DIR/scripts/ci/update_bookrunner_report.py src/bookrunner/index.html new_index.html
-    mv new_index.html src/bookrunner/index.html
-
-    # rm src/bookrunner/run.json
-else
-    echo "WARNING: Could not find the latest bookrunner run."
-fi
 
 echo "Building user documentation..."
 # Generate benchcomp documentation from source code

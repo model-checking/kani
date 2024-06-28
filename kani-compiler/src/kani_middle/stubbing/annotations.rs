@@ -2,11 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! This file contains code for extracting stubbing-related attributes.
 
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 
 use kani_metadata::Stub;
 use rustc_hir::def_id::{DefId, LocalDefId};
-use rustc_hir::definitions::DefPathHash;
 use rustc_middle::ty::TyCtxt;
 
 use crate::kani_middle::resolve::resolve_fn;
@@ -42,21 +41,19 @@ pub fn update_stub_mapping(
     tcx: TyCtxt,
     harness: LocalDefId,
     stub: &Stub,
-    stub_pairs: &mut BTreeMap<DefPathHash, DefPathHash>,
+    stub_pairs: &mut HashMap<DefId, DefId>,
 ) {
     if let Some((orig_id, stub_id)) = stub_def_ids(tcx, harness, stub) {
-        let orig_hash = tcx.def_path_hash(orig_id);
-        let stub_hash = tcx.def_path_hash(stub_id);
-        let other_opt = stub_pairs.insert(orig_hash, stub_hash);
+        let other_opt = stub_pairs.insert(orig_id, stub_id);
         if let Some(other) = other_opt {
-            if other != stub_hash {
+            if other != stub_id {
                 tcx.dcx().span_err(
                     tcx.def_span(harness),
                     format!(
                         "duplicate stub mapping: {} mapped to {} and {}",
                         tcx.def_path_str(orig_id),
                         tcx.def_path_str(stub_id),
-                        tcx.def_path_str(tcx.def_path_hash_to_def_id(other, &mut || panic!()))
+                        tcx.def_path_str(other)
                     ),
                 );
             }

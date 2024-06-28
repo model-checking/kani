@@ -76,3 +76,17 @@ impl<'a, T> Pointer<'a> for *mut T {
 pub fn untracked_deref<T>(_: &T) -> T {
     todo!()
 }
+
+/// CBMC contracts currently has a limitation where `free` has to be in scope.
+/// However, if there is no dynamic allocation in the harness, slicing removes `free` from the
+/// scope.
+///
+/// Thus, this function will basically translate into:
+/// ```c
+/// // This is a no-op.
+/// free(NULL);
+/// ```
+#[inline(never)]
+#[doc(hidden)]
+#[rustc_diagnostic_item = "KaniInitContracts"]
+pub fn init_contracts() {}
