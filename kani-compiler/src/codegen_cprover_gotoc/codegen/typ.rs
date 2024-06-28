@@ -544,9 +544,8 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::Float(k) => match k {
                 FloatTy::F32 => Type::float(),
                 FloatTy::F64 => Type::double(),
-                // `F16` and `F128` are not yet handled.
-                // Tracked here: <https://github.com/model-checking/kani/issues/3069>
-                FloatTy::F16 | FloatTy::F128 => unimplemented!(),
+                FloatTy::F16 => Type::float16(),
+                FloatTy::F128 => Type::float128(),
             },
             ty::Adt(def, _) if def.repr().simd() => self.codegen_vector(ty),
             ty::Adt(def, subst) => {
