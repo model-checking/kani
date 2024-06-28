@@ -1,7 +1,7 @@
 - **Feature Name:** Rust UB Checks (`rust-ub-checks`)
 - **Feature Request Issue:** [#3089](https://github.com/model-checking/kani/issues/3089)
-- **RFC PR:** [#XXXX](https://github.com/model-checking/kani/pull/3091)
-- **Status:** Under Review
+- **RFC PR:** [#3091](https://github.com/model-checking/kani/pull/3091)
+- **Status:** Unstable
 - **Version:** 0
 - **Proof-of-concept:**
 
@@ -24,11 +24,21 @@ detected undefined behavior.
 
 For simplicity, we propose that all undefined behavior checks are modelled as assert-assume pairs.
 We propose that the status of all passing assertions that may be affected by this check to be displayed as
-UNDETERMINED if one or more UB checks fail. [^all-passing]
+`UNDETERMINED` if one or more UB checks fail.
+For simplicity, Kani currently over-approximate this set by marking all passing assertions as `UNDETERMINED`.
+Future pruning of this set can be done with further analysis, but it should not affect soundness.
 
-All failing assertions should have their status preserved, unless the UB check is implemented using "demonic"
-non-determinism, such as CBMC's deallocated check.
-See [0010-rust-ub-checks.md#open-questions] for alternatives to be considered.
+All failing assertions will have their status preserved.
+This may create spurious counter examples for cases where the failing UB check is implemented using "demonic"
+non-determinism.[^demonic]
+
+[^demonic]: Some UB checks implementation use one tracker with non-deterministic assignment to track the
+status of different objects.
+This implementation relies on the fact that an assertion will fail if there is at least one possible
+assignment to its tracker that violates the assertion.
+Picking an assignment that fails can be seen as choosing the worst possible action, known as demonic nondeterminism.
+
+See [Open questions section](0010-rust-ub-checks.md#open-questions) for alternatives to be considered.
 
 ### Concrete playback of UB checks
 
@@ -47,11 +57,12 @@ invalid write:
 #[kani::proof]
 fn buggy_code() {
     let mut value: bool = false;
+    let ptr: *mut bool = &mut value as *mut _;
+    let mut_ref = &mut value;
     unsafe {
-        let ptr: *mut u8 = &mut value as *mut _ as *mut u8;
-        *ptr = 8; // This assignment does not cause UB...
+        *ptr = true; // This assignment is safe if `mut_ref` is never used!
     }
-    assert!(value); // ...but this read triggers UB! ⚠️
+    assert!(!*mut_ref); // This triggers UB  ⚠️!
 }
 ```
 
@@ -69,7 +80,7 @@ In those cases, Kani check must be explicit about this failure being an over-app
 For that, we propose that the check message is clear about this limitation, and potentially its status
 (see [0010-rust-ub-checks.md#open-questions]).
 
-### Opt-out a class of UB checks
+### Opt-out of a class of UB checks
 
 Undefined behavior checks that have been stabilized should be added by default by Kani.
 However, Kani should provide a fine-grained control for users to choose which checks to disable.
@@ -91,8 +102,8 @@ fn harness() {}
 
 Where `CHECK_NAMES` is a list of check category names in snake case, such as `memory_safety`, `valid_values`.
 
-For checks that are unstable, Kani should support both opt-out mechanisms.
-These checks shall be included by default if their respective unstable flag are passed, i.e., `-Z[CHECK-NAME]`
+For checks that are unstable, they should only be included if their respective unstable flag are passed, i.e.,
+`-Z [CHECK-NAME]`.
 
 ## Software Design
 
@@ -167,9 +178,10 @@ I.e.: It may impact the status of a previously passing harness if a new check fa
     - Another possibility would be to add a `unreachable!()` statement at the end of the test case with a message
       explaining why the statement should be unreachable.
 - Should we deprecate the `--no-default-checks` and all `--[CHECK-NAME]-checks` checks.
+- Should we add an attribute that allows us to opt-out some UB checks for a function or some code block?
+    - I think we should at least consider adding that option for `kani` library code.
+    - We've been adding more logic that is used by UB checks, and we may want to skip some checks for them.
 
 ## Out of scope / Future Improvements
 
 - **List enabled checks:** Kani could include a command that list all the categories of undefined behaviors supported.
-
-[^all-passing]: For simplicity, we currently over-approximate this by marking all passing assertions as UNDETERMINED.
