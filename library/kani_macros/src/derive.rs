@@ -53,8 +53,7 @@ pub fn expand_derive_arbitrary(item: proc_macro::TokenStream) -> proc_macro::Tok
                     #body
                 }
             }
-        }
-    };
+        };
         proc_macro::TokenStream::from(expanded)
     } else {
         let expanded = quote! {
