@@ -206,7 +206,7 @@ jobs:
 
       - name: Run cargo-kani tests after moving
         run: |
-          for dir in function multiple-harnesses verbose; do
+          for dir in supported-lib-types/rlib multiple-harnesses verbose; do
             >&2 echo "Running test $dir"
             pushd ${{ github.workspace }}/../post-setup-tests/cargo-ui/$dir
             cargo kani
