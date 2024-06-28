@@ -23,7 +23,7 @@ pub struct Inner {
     c: char,
 }
 
-static OUTER: Outer = Outer { data: 'a', inner: Inner {a: 'a', b: 'b', c: 'c' } };
+static OUTER: Outer = Outer { data: 'a', inner: Inner { a: 'a', b: 'b', c: 'c' } };
 
 #[kani::proof]
 fn nested_struct() {

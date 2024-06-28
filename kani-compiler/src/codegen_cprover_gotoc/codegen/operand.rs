@@ -478,11 +478,10 @@ impl<'tcx> GotocCtx<'tcx> {
         mem_place.address_of()
     }
 
-    /// Insert an allocation into the goto symbol table, and generate a goto function that will
-    /// initialize it.
+    /// Insert an allocation into the goto symbol table, and generate an init value.
     ///
-    /// This function is ultimately responsible for creating new statically initialized global variables
-    /// in our goto binaries.
+    /// This function is ultimately responsible for creating new statically initialized global
+    /// variables.
     pub fn codegen_alloc_in_memory(&mut self, alloc: Allocation, name: String, loc: Location) {
         debug!(?name, ?alloc, "codegen_alloc_in_memory");
         let struct_name = &format!("{name}::struct");
@@ -508,7 +507,7 @@ impl<'tcx> GotocCtx<'tcx> {
         });
 
         // Create the allocation from an array byte array.
-        let init_fn = |gcx: &mut GotocCtx, var: Expr| {
+        let init_fn = |gcx: &mut GotocCtx, var: Symbol| {
             let val = Expr::struct_expr_from_values(
                 alloc_typ_ref.clone(),
                 alloc_data
@@ -528,12 +527,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     .collect(),
                 &gcx.symbol_table,
             );
-            if val.typ() == var.typ() {
-                var.assign(val, loc)
-            } else {
-                let var_typ = var.typ().clone();
-                var.assign(val.transmute_to(var_typ, &gcx.symbol_table), loc)
-            }
+            if val.typ() == &var.typ { val } else { val.transmute_to(var.typ, &gcx.symbol_table) }
         };
 
         // The global static variable may not be in the symbol table if we are dealing

@@ -1470,11 +1470,10 @@ impl<'tcx> GotocCtx<'tcx> {
                     vtable_fields,
                     &ctx.symbol_table,
                 );
-                let body = var.assign(vtable, loc);
-                let block = Stmt::block(vec![size_assert, body], loc);
-                block
+                Expr::statement_expression(vec![size_assert, vtable.as_stmt(loc)], var.typ, loc)
             },
         )
+        .to_expr()
     }
 
     /// Cast a pointer to a fat pointer.
