@@ -11,9 +11,11 @@ use std::collections::HashMap;
 
 use proc_macro2::{Ident, Span, TokenStream as TokenStream2};
 use quote::{quote, ToTokens};
+use std::borrow::{Borrow, Cow};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use syn::{
-    spanned::Spanned, visit_mut::VisitMut, Attribute, Expr, ExprCall, ExprClosure, ExprPath, Path,
+    spanned::Spanned, visit_mut::VisitMut, Attribute, Expr, ExprCall, ExprClosure, ExprPath,
+    PatType, Path, Token, Type, TypeReference,
 };
 
 use super::{ContractConditionsHandler, ContractFunctionState, INTERNAL_RESULT_IDENT};
@@ -165,7 +167,7 @@ pub fn try_as_result_assign_mut(stmt: &mut syn::Stmt) -> Option<&mut syn::LocalI
 /// of statements that instantiate these expressions as `let remember_kani_internal_x = old_expr;`
 /// where x is a unique hash. This is returned as the first return parameter. The second
 /// return parameter is the expression formed by passing in the result variable into the input closure.
-pub fn build_ensures(data: &ExprClosure) -> (TokenStream2, Expr) {
+pub fn build_ensures<'a>(data: &ExprClosure, return_type: Cow<'a, Type>) -> (TokenStream2, Expr) {
     let mut remembers_exprs = HashMap::new();
     let mut vis = OldVisitor { t: OldLifter::new(), remembers_exprs: &mut remembers_exprs };
     let mut expr = &mut data.clone();
@@ -174,6 +176,29 @@ pub fn build_ensures(data: &ExprClosure) -> (TokenStream2, Expr) {
     let remembers_stmts: TokenStream2 = remembers_exprs
         .iter()
         .fold(quote!(), |collect, (ident, expr)| quote!(let #ident = #expr; #collect));
+
+    *expr
+        .inputs
+        .first_mut()
+        .expect("Ensures closure should have the output to the function as an argument") =
+        syn::Pat::Type(PatType {
+            attrs: vec![],
+            pat: Box::new(
+                expr.inputs
+                    .first()
+                    .expect("Ensures closure should have the output to the function as an argument")
+                    .clone(),
+            ),
+            colon_token: Token![:](Span::call_site()),
+            ty: Box::new(Type::Reference(TypeReference {
+                and_token: Token![&](Span::call_site()),
+                lifetime: None,
+                mutability: None,
+                elem: Box::new(
+                    <Cow<'a, Type> as Borrow<Type>>::borrow(&return_type.to_owned()).clone(),
+                ),
+            })),
+        });
 
     let result: Ident = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
     (remembers_stmts, Expr::Verbatim(quote!((#expr)(&#result))))

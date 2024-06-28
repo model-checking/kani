@@ -80,7 +80,8 @@ impl<'a> ContractConditionsHandler<'a> {
                 )
             }
             ContractConditionsData::Ensures { attr } => {
-                let (remembers, ensures_clause) = build_ensures(attr);
+                let (remembers, ensures_clause) =
+                    build_ensures(attr, return_type_to_type(&self.annotated_fn.sig.output));
                 let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
                 quote!(
                     #remembers
