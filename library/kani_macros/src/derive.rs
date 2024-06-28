@@ -125,8 +125,6 @@ fn field_refs2(_ident: &Ident, fields: &Fields) -> TokenStream {
     }
 }
 
-
-
 fn init_symbolic_item(ident: &Ident, fields: &Fields) -> TokenStream {
     match fields {
         Fields::Named(ref fields) => {
@@ -191,6 +189,7 @@ fn extract_expr(ident: &Ident, field: &syn::Field) -> Option<TokenStream> {
         // Return the expression for the invariant condition
     } else { None }
 }
+
 /// Generate an item initialization where an item can be a struct or a variant.
 /// For named fields, this will generate: `Item { field1: kani::any(), field2: kani::any(), .. }`
 /// For unnamed fields, this will generate: `Item (kani::any(), kani::any(), ..)`
@@ -272,10 +271,14 @@ pub fn expand_derive_invariant(item: proc_macro::TokenStream) -> proc_macro::Tok
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
     let body = is_safe_body(&item_name, &derive_item.data);
+    let field_refs = field_refs(&item_name, &derive_item.data);
+
     let expanded = quote! {
         // The generated implementation.
         impl #impl_generics kani::Invariant for #item_name #ty_generics #where_clause {
             fn is_safe(&self) -> bool {
+                let obj = self;
+                #field_refs
                 #body
             }
         }
