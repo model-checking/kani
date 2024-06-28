@@ -590,15 +590,15 @@ impl Expr {
         expr!(Float16Constant(c), Type::float16())
     }
 
-    /// `3.14159265358979323846264338327950288L`
-    pub fn float128_constant(c: f128) -> Self {
-        expr!(Float128Constant(c), Type::float128())
-    }
-
     /// `union {_Float16 f; uint16_t bp} u = {.bp = 0x1234}; >>> u.f <<<`
     pub fn float16_constant_from_bitpattern(bp: u16) -> Self {
         let c = f16::from_bits(bp);
         Self::float16_constant(c)
+    }
+
+    /// `3.14159265358979323846264338327950288L`
+    pub fn float128_constant(c: f128) -> Self {
+        expr!(Float128Constant(c), Type::float128())
     }
 
     /// `union {_Float128 f; __uint128_t bp} u = {.bp = 0x1234}; >>> u.f <<<`
