@@ -30,19 +30,18 @@ pub fn expand_derive_arbitrary(item: proc_macro::TokenStream) -> proc_macro::Tok
     let body = fn_any_body(&item_name, &derive_item.data);
     let cond_opt = cond_body(&item_name, &derive_item.data);
     if let Some(cond) = cond_opt {
-        
         let field_refs = field_refs(&item_name, &derive_item.data);
-    let expanded = quote! {
-        // The generated implementation.
-        impl #impl_generics kani::Arbitrary for #item_name #ty_generics #where_clause {
-            fn any() -> Self {
-                let obj = #body;
-                #field_refs
-                kani::assume(#cond);
-                obj
+        let expanded = quote! {
+            // The generated implementation.
+            impl #impl_generics kani::Arbitrary for #item_name #ty_generics #where_clause {
+                fn any() -> Self {
+                    let obj = #body;
+                    #field_refs
+                    kani::assume(#cond);
+                    obj
+                }
             }
-        }
-    };
+        };
         proc_macro::TokenStream::from(expanded)
     } else {
         let expanded = quote! {
@@ -113,12 +112,12 @@ fn field_refs2(_ident: &Ident, fields: &Fields) -> TokenStream {
     match fields {
         Fields::Named(ref fields) => {
             let field_refs = fields.named.iter().map(|field| {
-            let name = &field.ident;
+                let name = &field.ident;
                 quote_spanned! {field.span()=>
                     let #name = &obj.#name;
                 }
             });
-            quote!{ #( #field_refs )* }
+            quote! { #( #field_refs )* }
         }
         Fields::Unnamed(_) => unreachable!(),
         Fields::Unit => unreachable!(),
@@ -187,7 +186,9 @@ fn extract_expr(ident: &Ident, field: &syn::Field) -> Option<TokenStream> {
             #inv_expr
         })
         // Return the expression for the invariant condition
-    } else { None }
+    } else {
+        None
+    }
 }
 
 /// Generate an item initialization where an item can be a struct or a variant.
@@ -197,13 +198,9 @@ fn extract_expr(ident: &Ident, field: &syn::Field) -> Option<TokenStream> {
 fn cond_item(ident: &Ident, fields: &Fields) -> Option<TokenStream> {
     match fields {
         Fields::Named(ref fields) => {
-            let conds: Vec<TokenStream> = fields.named.iter().filter_map(|field|
-                extract_expr(ident, field)).collect();
-            if !conds.is_empty() {
-                Some(quote! { #(#conds)&&* })
-            } else {
-                None
-            }
+            let conds: Vec<TokenStream> =
+                fields.named.iter().filter_map(|field| extract_expr(ident, field)).collect();
+            if !conds.is_empty() { Some(quote! { #(#conds)&&* }) } else { None }
         }
         Fields::Unnamed(_) => None,
         Fields::Unit => None,
