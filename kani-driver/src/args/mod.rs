@@ -282,17 +282,6 @@ pub struct VerificationArgs {
     #[arg(long)]
     pub randomize_layout: Option<Option<u64>>,
 
-    /// Enable the stubbing of functions and methods.
-    // TODO: Stubbing should in principle work with concrete playback.
-    // <https://github.com/model-checking/kani/issues/1842>
-    #[arg(
-        long,
-        hide_short_help = true,
-        requires("enable_unstable"),
-        conflicts_with("concrete_playback")
-    )]
-    enable_stubbing: bool,
-
     /// Enable Kani coverage output alongside verification result
     #[arg(long, hide_short_help = true)]
     pub coverage: bool,
@@ -345,8 +334,7 @@ impl VerificationArgs {
 
     /// Is experimental stubbing enabled?
     pub fn is_stubbing_enabled(&self) -> bool {
-        self.enable_stubbing
-            || self.common_args.unstable_features.contains(UnstableFeature::Stubbing)
+        self.common_args.unstable_features.contains(UnstableFeature::Stubbing)
             || self.is_function_contracts_enabled()
     }
 }
@@ -604,10 +592,6 @@ impl ValidateArgs for VerificationArgs {
                     ),
                 ));
             }
-        }
-
-        if self.enable_stubbing {
-            print_deprecated(&self.common_args, "--enable-stubbing", "-Z stubbing");
         }
 
         if self.concrete_playback.is_some()
@@ -884,10 +868,9 @@ mod tests {
 
         check_unstable_flag!("--enable-stubbing", enable_stubbing);
 
-        // `--enable-stubbing` cannot be called with `--concrete-playback`
-        let err =
-            parse_unstable_enabled("--enable-stubbing --harness foo --concrete-playback=print")
-                .unwrap_err();
+        // `-Z stubbing` cannot be called with `--concrete-playback`
+        let err = parse_unstable_enabled("-Z stubbing --harness foo --concrete-playback=print")
+            .unwrap_err();
         assert_eq!(err.kind(), ErrorKind::ArgumentConflict);
     }
 
