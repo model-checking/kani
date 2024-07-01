@@ -129,19 +129,11 @@ pub struct VerificationArgs {
     #[arg(long, hide = true, requires("enable_unstable"))]
     pub assess: bool,
 
-    /// Generate visualizer report to `<target-dir>/report/html/index.html`
-    #[arg(long)]
-    pub visualize: bool,
     /// Generate concrete playback unit test.
     /// If value supplied is 'print', Kani prints the unit test to stdout.
     /// If value supplied is 'inplace', Kani automatically adds the unit test to your source code.
     /// This option does not work with `--output-format old`.
-    #[arg(
-        long,
-        conflicts_with_all(&["visualize"]),
-        ignore_case = true,
-        value_enum
-    )]
+    #[arg(long, ignore_case = true, value_enum)]
     pub concrete_playback: Option<ConcretePlaybackMode>,
     /// Keep temporary files generated throughout Kani process. This is already the default
     /// behavior for `cargo-kani`.
@@ -315,9 +307,9 @@ impl VerificationArgs {
         // if we flip the default, this will become: !self.no_restrict_vtable
     }
 
-    /// Assertion reachability checks should be disabled when running with --visualize
+    /// Assertion reachability checks should be disabled
     pub fn assertion_reach_checks(&self) -> bool {
-        !self.no_assertion_reach_checks && !self.visualize
+        !self.no_assertion_reach_checks
     }
 
     /// Suppress our default value, if the user has supplied it explicitly in --cbmc-args
@@ -530,18 +522,6 @@ impl ValidateArgs for VerificationArgs {
                 The produced tests will have to be played with the same rustc arguments:\n\
                 -Z randomize-layout{random_seed}"
             );
-        }
-
-        if self.visualize {
-            if !self.common_args.enable_unstable {
-                return Err(Error::raw(
-                    ErrorKind::MissingRequiredArgument,
-                    "Missing argument: --visualize now requires --enable-unstable
-                    due to open issues involving incorrect results.",
-                ));
-            } else {
-                print_deprecated(&self.common_args, "--visualize", "--concrete-playback");
-            }
         }
 
         if self.mir_linker {
