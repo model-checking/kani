@@ -1,0 +1,70 @@
+Checking harness check_typed_swap_safe...
+
+Failed Checks: Kani currently doesn't support checking memory initialization for pointers to `std::mem::MaybeUninit<u8>.
+
+VERIFICATION:- FAILED
+
+Checking harness check_typed_swap...
+
+Failed Checks: Kani currently doesn't support checking memory initialization for pointers to `std::mem::MaybeUninit<u8>.
+
+Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `*mut u8`
+
+Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `*mut u8`
+
+VERIFICATION:- FAILED
+
+Checking harness check_volatile_store_and_load_safe...
+
+VERIFICATION:- SUCCESSFUL
+
+Checking harness check_volatile_load...
+
+Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `*const u8`
+
+VERIFICATION:- FAILED
+
+Checking harness check_write_bytes_safe...
+
+VERIFICATION:- SUCCESSFUL
+
+Checking harness check_compare_bytes_safe...
+
+VERIFICATION:- SUCCESSFUL
+
+Checking harness check_compare_bytes...
+
+Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `*const u8`
+
+Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `*const u8`
+
+VERIFICATION:- FAILED
+
+Checking harness check_copy_safe...
+
+VERIFICATION:- SUCCESSFUL
+
+Checking harness check_copy...
+
+Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `*const u8`
+
+VERIFICATION:- FAILED
+
+Checking harness check_copy_nonoverlapping_safe...
+
+VERIFICATION:- SUCCESSFUL
+
+Checking harness check_copy_nonoverlapping...
+
+Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `*const u8`
+
+VERIFICATION:- FAILED
+
+Summary:
+Verification failed for - check_typed_swap_safe
+Verification failed for - check_typed_swap
+Verification failed for - check_volatile_load
+Verification failed for - check_compare_bytes
+Verification failed for - check_copy
+Verification failed for - check_copy_nonoverlapping
+Complete - 5 successfully verified harnesses, 6 failures, 11 total.

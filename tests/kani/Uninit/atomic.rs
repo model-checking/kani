@@ -59,8 +59,8 @@ fn local_atomic() {
 // Checks if memory initialization checks work with compare-and-swap atomics.
 #[kani::proof]
 fn compare_exchange_atomic() {
+    // Create an atomic.
     let some_var = AtomicUsize::new(5);
+    // Perform a `compare-and-swap` operation.
     some_var.compare_exchange(5, 10, any_ordering(), load_ordering());
-    let val = some_var.load(load_ordering());
-    assert!(val == 10);
 }

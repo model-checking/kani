@@ -353,22 +353,7 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                         count: mk_const_operand(1, location.span()),
                                     });
                                 }
-                                "unaligned_volatile_load" => {
-                                    assert_eq!(
-                                        args.len(),
-                                        1,
-                                        "Unexpected number of arguments for `unaligned_volatile_load`"
-                                    );
-                                    assert!(matches!(
-                                        args[0].ty(self.locals).unwrap().kind(),
-                                        TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Not))
-                                    ));
-                                    self.push_target(MemoryInitOp::Check {
-                                        operand: args[0].clone(),
-                                        count: mk_const_operand(1, location.span()),
-                                    });
-                                }
-                                "volatile_load" => {
+                                "volatile_load" | "unaligned_volatile_load"  => {
                                     assert_eq!(
                                         args.len(),
                                         1,
