@@ -353,7 +353,7 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                         count: mk_const_operand(1, location.span()),
                                     });
                                 }
-                                "volatile_load" | "unaligned_volatile_load"  => {
+                                "volatile_load" | "unaligned_volatile_load" => {
                                     assert_eq!(
                                         args.len(),
                                         1,
