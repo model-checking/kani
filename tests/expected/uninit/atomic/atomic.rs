@@ -14,7 +14,7 @@ fn local_atomic_uninit() {
     // Get a pointer to an uninitialized value
     let layout = Layout::from_size_align(16, 8).unwrap();
     let ptr: *mut u8 = unsafe { alloc(layout) };
-
+    // Try accessing `ptr` via atomic intrinsics, should be UB in each case.
     unsafe {
         match kani::any() {
             0 => {
