@@ -8,10 +8,10 @@
 //! considered uninitialized when read as data bytes. Each type has a type layout to specify which
 //! bytes are considered to be data and which -- padding. This is determined at compile time and
 //! statically injected into the program (see `Layout`).
-//! 
+//!
 //! Compiler automatically inserts calls to `is_xxx_initialized` and `set_xxx_initialized` at
-//! appropriate locations to get or set the initialization status of the memory pointed to. 
-//! 
+//! appropriate locations to get or set the initialization status of the memory pointed to.
+//!
 //! Note that for each harness, tracked object and tracked offset are chosen non-deterministically,
 //! so calls to `is_xxx_initialized` should be only used in assertion contexts.
 
@@ -47,7 +47,7 @@ impl MemoryInitializationState {
     /// Return currently tracked memory initialization state if `ptr` points to the currently
     /// tracked object and the tracked offset lies within `LAYOUT_SIZE * num_elts` bytes of `ptr`.
     /// Return `true` otherwise.
-    /// 
+    ///
     /// Such definition is necessary since both tracked object and tracked offset are chosen
     /// non-deterministically.
     pub fn get<const LAYOUT_SIZE: usize>(
@@ -71,7 +71,7 @@ impl MemoryInitializationState {
     /// Set currently tracked memory initialization state if `ptr` points to the currently tracked
     /// object and the tracked offset lies within `LAYOUT_SIZE * num_elts` bytes of `ptr`. Do
     /// nothing otherwise.
-    /// 
+    ///
     /// Such definition is necessary since both tracked object and tracked offset are chosen
     /// non-deterministically.
     pub fn set<const LAYOUT_SIZE: usize>(

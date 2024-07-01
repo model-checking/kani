@@ -77,7 +77,7 @@ impl TransformPass for UninitPass {
         // Inject a call to set-up memory initialization state if the function is a harness.
         if is_harness(instance, tcx) {
             // First statement or terminator in the harness.
-            let mut source = if new_body.blocks()[0].statements.len() != 0 {
+            let mut source = if !new_body.blocks()[0].statements.is_empty() {
                 SourceInstruction::Statement { idx: 0, bb: 0 }
             } else {
                 SourceInstruction::Terminator { bb: 0 }
@@ -467,17 +467,17 @@ pub fn resolve_mem_init_fn(fn_def: FnDef, layout_size: usize, associated_type: T
 
 /// Checks if the instance is a harness -- an entry point of Kani analysis.
 fn is_harness(instance: Instance, tcx: TyCtxt) -> bool {
-    let harness_identifiers = &[
-        &[
+    let harness_identifiers = [
+        vec![
             rustc_span::symbol::Symbol::intern("kanitool"),
             rustc_span::symbol::Symbol::intern("proof_for_contract"),
         ],
-        &[
+        vec![
             rustc_span::symbol::Symbol::intern("kanitool"),
             rustc_span::symbol::Symbol::intern("proof"),
         ],
     ];
     harness_identifiers.iter().any(|attr_path| {
-        tcx.has_attrs_with_path(rustc_internal::internal(tcx, instance.def.def_id()), *attr_path)
+        tcx.has_attrs_with_path(rustc_internal::internal(tcx, instance.def.def_id()), attr_path)
     })
 }
