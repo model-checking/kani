@@ -7,27 +7,19 @@
 #[doc(hidden)]
 pub trait Pointer<'a> {
     /// Type of the pointed-to data
-    type Inner;
+    type Inner: ?Sized;
 
     /// Used for checking assigns contracts where we pass immutable references to the function.
     ///
     /// We're using a reference to self here, because the user can use just a plain function
     /// argument, for instance one of type `&mut _`, in the `modifies` clause which would move it.
     unsafe fn decouple_lifetime(&self) -> &'a Self::Inner;
-
-    /// used for havocking on replecement of a `modifies` clause.
-    unsafe fn assignable(self) -> &'a mut Self::Inner;
 }
 
 impl<'a, 'b, T> Pointer<'a> for &'b T {
     type Inner = T;
     unsafe fn decouple_lifetime(&self) -> &'a Self::Inner {
         std::mem::transmute(*self)
-    }
-
-    #[allow(clippy::transmute_ptr_to_ref)]
-    unsafe fn assignable(self) -> &'a mut Self::Inner {
-        std::mem::transmute(self as *const T)
     }
 }
 
@@ -38,21 +30,12 @@ impl<'a, 'b, T> Pointer<'a> for &'b mut T {
     unsafe fn decouple_lifetime(&self) -> &'a Self::Inner {
         std::mem::transmute::<_, &&'a T>(self)
     }
-
-    unsafe fn assignable(self) -> &'a mut Self::Inner {
-        std::mem::transmute(self)
-    }
 }
 
 impl<'a, T> Pointer<'a> for *const T {
     type Inner = T;
     unsafe fn decouple_lifetime(&self) -> &'a Self::Inner {
         &**self as &'a T
-    }
-
-    #[allow(clippy::transmute_ptr_to_ref)]
-    unsafe fn assignable(self) -> &'a mut Self::Inner {
-        std::mem::transmute(self)
     }
 }
 
@@ -61,10 +44,35 @@ impl<'a, T> Pointer<'a> for *mut T {
     unsafe fn decouple_lifetime(&self) -> &'a Self::Inner {
         &**self as &'a T
     }
+}
+
+impl<'a, 'b, T> Pointer<'a> for &'b [T] {
+    type Inner = [T];
+    unsafe fn decouple_lifetime(&self) -> &'a Self::Inner {
+        std::mem::transmute(*self)
+    }
+}
+
+impl<'a, 'b, T> Pointer<'a> for &'b mut [T] {
+    type Inner = [T];
 
     #[allow(clippy::transmute_ptr_to_ref)]
-    unsafe fn assignable(self) -> &'a mut Self::Inner {
-        std::mem::transmute(self)
+    unsafe fn decouple_lifetime(&self) -> &'a Self::Inner {
+        std::mem::transmute::<_, &&'a [T]>(self)
+    }
+}
+
+impl<'a, T> Pointer<'a> for *const [T] {
+    type Inner = [T];
+    unsafe fn decouple_lifetime(&self) -> &'a Self::Inner {
+        &**self as &'a [T]
+    }
+}
+
+impl<'a, T> Pointer<'a> for *mut [T] {
+    type Inner = [T];
+    unsafe fn decouple_lifetime(&self) -> &'a Self::Inner {
+        &**self as &'a [T]
     }
 }
 

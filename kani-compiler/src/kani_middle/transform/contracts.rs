@@ -166,3 +166,94 @@ impl AnyModifiesPass {
         }
     }
 }
+
+/// Check if we can replace calls to havoc.
+///
+/// This pass will replace the entire body, and it should only be applied to stubs
+/// that have a body.
+#[derive(Debug)]
+pub struct HavocPass {
+    kani_any_modifies: Option<FnDef>,
+    kani_havoc: Option<FnDef>,
+    stubbed: HashSet<DefId>,
+    target_fn: Option<InternedString>,
+}
+
+impl TransformPass for HavocPass {
+    fn transformation_type() -> TransformationType
+    where
+        Self: Sized,
+    {
+        TransformationType::Stubbing
+    }
+
+    fn is_enabled(&self, query_db: &QueryDb) -> bool
+    where
+        Self: Sized,
+    {
+        // TODO: Check if this is the harness has proof_for_contract
+        query_db.args().unstable_features.contains(&"function-contracts".to_string())
+    }
+
+    /// Transform the function body by replacing it with the stub body.
+    fn transform(&self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
+        trace!(function=?instance.name(), "HavocPass::transform");
+
+        if self.should_apply(tcx, instance) { self.replace_havoc(body) } else { (false, body) }
+    }
+}
+
+impl HavocPass {
+    /// Build the pass with non-extern function stubs.
+    pub fn new(tcx: TyCtxt, unit: &CodegenUnit) -> HavocPass {
+        let item_fn_def = |item| {
+            let TyKind::RigidTy(RigidTy::FnDef(def, _)) =
+                rustc_internal::stable(tcx.type_of(item)).value.kind()
+            else {
+                unreachable!("Expected function, but found `{:?}`", tcx.def_path_str(item))
+            };
+            def
+        };
+        let kani_havoc = tcx
+            .get_diagnostic_item(rustc_span::symbol::Symbol::intern("KaniHavoc"))
+            .map(item_fn_def);
+        let kani_any_modifies = tcx
+            .get_diagnostic_item(rustc_span::symbol::Symbol::intern("KaniAnyModifies"))
+            .map(item_fn_def);
+        let (target_fn, stubbed) = if let Some(harness) = unit.harnesses.first() {
+            let attributes = KaniAttributes::for_instance(tcx, *harness);
+            let target_fn =
+                attributes.proof_for_contract().map(|symbol| symbol.unwrap().as_str().intern());
+            (target_fn, unit.stubs.keys().map(|from| from.def_id()).collect::<HashSet<_>>())
+        } else {
+            (None, HashSet::new())
+        };
+        HavocPass { kani_any_modifies, kani_havoc, target_fn, stubbed }
+    }
+
+    fn should_apply(&self, tcx: TyCtxt, instance: Instance) -> bool {
+        let item_attributes =
+            KaniAttributes::for_item(tcx, rustc_internal::internal(tcx, instance.def.def_id()));
+        self.stubbed.contains(&instance.def.def_id()) || item_attributes.has_recursion()
+    }
+
+    /// Replace calls to `any_modifies` by calls to `any`.
+    fn replace_havoc(&self, mut body: Body) -> (bool, Body) {
+        let mut changed = false;
+        let locals = body.locals().to_vec();
+        for bb in body.blocks.iter_mut() {
+            let TerminatorKind::Call { func, args, .. } = &mut bb.terminator.kind else { continue };
+            if let TyKind::RigidTy(RigidTy::FnDef(def, instance_args)) =
+                func.ty(&locals).unwrap().kind()
+                && Some(def) == self.kani_havoc
+            {
+                if args.len() != 1 {
+                    panic!("kani::havoc should have exactly one arg")
+                }
+                // TODO: create an MIR bb to replace bb with the proper stuff
+                // changed = true;
+            }
+        }
+        (changed, body)
+    }
+}
