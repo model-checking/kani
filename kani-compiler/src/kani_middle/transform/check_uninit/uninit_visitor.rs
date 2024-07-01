@@ -261,8 +261,11 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                     /* Intrinsics that can be safely skipped */
                                 }
                                 name if name.starts_with("atomic") => {
-                                    let num_args =
-                                        if name.starts_with("atomic_cxchg") { 3 } else { 2 };
+                                    let num_args = match name {
+                                        name if name.starts_with("atomic_cxchg") => 3,
+                                        name if name.starts_with("atomic_load") => 1,
+                                        _ => 2,
+                                    };
                                     assert_eq!(
                                         args.len(),
                                         num_args,
@@ -526,12 +529,14 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
             if let ConstantKind::Allocated(allocation) = constant.const_.kind() {
                 for (_, prov) in &allocation.provenance.ptrs {
                     if let GlobalAlloc::Static(_) = GlobalAlloc::from(prov.0) {
-                        self.push_target(MemoryInitOp::Set {
-                            operand: Operand::Constant(constant.clone()),
-                            count: mk_const_operand(1, location.span()),
-                            value: true,
-                            position: InsertPosition::Before,
-                        });
+                        if constant.ty().kind().is_raw_ptr() {
+                            self.push_target(MemoryInitOp::Set {
+                                operand: Operand::Constant(constant.clone()),
+                                count: mk_const_operand(1, location.span()),
+                                value: true,
+                                position: InsertPosition::Before,
+                            });
+                        }
                     };
                 }
             }
@@ -654,6 +659,12 @@ fn can_skip_intrinsic(intrinsic_name: &str) -> bool {
         }
         name if name.starts_with("simd") => {
             /* SIMD operations */
+            true
+        }
+        name if name.starts_with("atomic_fence")
+            || name.starts_with("atomic_singlethreadfence") =>
+        {
+            /* Atomic fences */
             true
         }
         "copy_nonoverlapping" => unreachable!(
