@@ -1,7 +1,30 @@
+Checking harness mem::verify::check_swap_large_adt_no_drop...
+
+Failed Checks: Kani currently doesn't support checking memory initialization for pointers to `std::mem::MaybeUninit<mem::verify::CannotDrop<[u128; 5]>>.
+
+VERIFICATION:- FAILED
+
+Checking harness mem::verify::check_swap_adt_no_drop...
+
+Failed Checks: Kani currently doesn't support checking memory initialization for pointers to `std::mem::MaybeUninit<mem::verify::CannotDrop<u8>>.
+
+VERIFICATION:- FAILED
+
 Checking harness mem::verify::check_swap_unit...
 
 Failed Checks: ptr NULL or writable up to size
 
+VERIFICATION:- FAILED
+
+Checking harness mem::verify::check_swap_primitive...
+
+Failed Checks: Kani currently doesn't support checking memory initialization for pointers to `std::mem::MaybeUninit<u8>.
+
+VERIFICATION:- FAILED
+
 Summary:
+Verification failed for - mem::verify::check_swap_large_adt_no_drop
+Verification failed for - mem::verify::check_swap_adt_no_drop
 Verification failed for - mem::verify::check_swap_unit
-Complete - 6 successfully verified harnesses, 1 failures, 7 total.
+Verification failed for - mem::verify::check_swap_primitive
+Complete - 3 successfully verified harnesses, 4 failures, 7 total.
