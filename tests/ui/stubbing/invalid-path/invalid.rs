@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
-// kani-flags: --harness invalid_stub --enable-unstable --enable-stubbing
+// kani-flags: --harness invalid_stub -Z stubbing
 
 pub mod mod_a {
     use crate::mod_b::noop;
