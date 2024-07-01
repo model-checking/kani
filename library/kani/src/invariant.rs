@@ -96,6 +96,8 @@ trivial_invariant!(isize);
 // invariant that checks for NaN, infinite, or subnormal values.
 trivial_invariant!(f32);
 trivial_invariant!(f64);
+trivial_invariant!(f16);
+trivial_invariant!(f128);
 
 trivial_invariant!(());
 trivial_invariant!(bool);

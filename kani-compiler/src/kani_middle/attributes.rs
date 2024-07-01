@@ -1034,10 +1034,9 @@ fn attr_kind(tcx: TyCtxt, attr: &Attribute) -> Option<KaniAttributeKind> {
                     .intersperse("::")
                     .collect::<String>();
                 KaniAttributeKind::try_from(ident_str.as_str())
-                    .map_err(|err| {
+                    .inspect_err(|&err| {
                         debug!(?err, "attr_kind_failed");
                         tcx.dcx().span_err(attr.span, format!("unknown attribute `{ident_str}`"));
-                        err
                     })
                     .ok()
             } else {

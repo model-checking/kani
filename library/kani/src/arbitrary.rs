@@ -71,6 +71,10 @@ trivial_arbitrary!(isize);
 trivial_arbitrary!(f32);
 trivial_arbitrary!(f64);
 
+// Similarly, we do not constraint values for non-standard floating types.
+trivial_arbitrary!(f16);
+trivial_arbitrary!(f128);
+
 trivial_arbitrary!(());
 
 impl Arbitrary for bool {

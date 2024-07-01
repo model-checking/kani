@@ -88,6 +88,15 @@ macro_rules! generate_arbitrary {
         trivial_arbitrary!(i128);
         trivial_arbitrary!(isize);
 
+        // We do not constrain floating points values per type spec. Users must add assumptions to their
+        // verification code if they want to eliminate NaN, infinite, or subnormal.
+        trivial_arbitrary!(f32);
+        trivial_arbitrary!(f64);
+
+        // Similarly, we do not constraint values for non-standard floating types.
+        trivial_arbitrary!(f16);
+        trivial_arbitrary!(f128);
+
         nonzero_arbitrary!(NonZeroU8, u8);
         nonzero_arbitrary!(NonZeroU16, u16);
         nonzero_arbitrary!(NonZeroU32, u32);
