@@ -1,0 +1,21 @@
+error[E0425]: cannot find value `x` in this scope
+  --> invalid-pred-error.rs:10:19
+   |
+10 | #[kani::invariant(x.is_safe() && y.is_safe())]
+   |                   ^
+   |
+help: you might have meant to use the available field
+   |
+10 | #[kani::invariant(self.x.is_safe() && y.is_safe())]
+   |                   +++++
+
+error[E0425]: cannot find value `y` in this scope
+  --> invalid-pred-error.rs:10:34
+   |
+10 | #[kani::invariant(x.is_safe() && y.is_safe())]
+   |                                  ^
+   |
+help: you might have meant to use the available field
+   |
+10 | #[kani::invariant(x.is_safe() && self.y.is_safe())]
+   |                                  +++++
