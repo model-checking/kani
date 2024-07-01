@@ -90,3 +90,10 @@ pub fn untracked_deref<T>(_: &T) -> T {
 #[doc(hidden)]
 #[rustc_diagnostic_item = "KaniInitContracts"]
 pub fn init_contracts() {}
+
+/// This should only be used within contracts. The intent is to
+/// perform type inference on a closure's argument
+#[doc(hidden)]
+pub fn apply_closure<T, U: Fn(&T) -> bool>(f: U, x: &T) -> bool {
+    f(x)
+}

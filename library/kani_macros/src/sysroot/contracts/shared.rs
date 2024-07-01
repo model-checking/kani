@@ -176,7 +176,7 @@ pub fn build_ensures(data: &ExprClosure) -> (TokenStream2, Expr) {
         .fold(quote!(), |collect, (ident, expr)| quote!(let #ident = #expr; #collect));
 
     let result: Ident = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
-    (remembers_stmts, Expr::Verbatim(quote!((#expr)(&#result))))
+    (remembers_stmts, Expr::Verbatim(quote!(kani::internal::apply_closure(#expr, &#result))))
 }
 
 trait OldTrigger {
