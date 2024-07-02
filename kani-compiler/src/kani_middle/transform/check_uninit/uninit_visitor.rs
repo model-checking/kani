@@ -24,7 +24,7 @@ pub enum MemoryInitOp {
     /// Set memory initialization state of data bytes in a memory region starting from the pointer
     /// `operand` and of length `count * sizeof(operand)` bytes.
     Set { operand: Operand, count: Operand, value: bool, position: InsertPosition },
-    /// Check memory initialization of data bytes in a memory region starting from the reference to
+    /// Set memory initialization of data bytes in a memory region starting from the reference to
     /// `operand` and of length `count * sizeof(operand)` bytes.
     SetRef { operand: Operand, count: Operand, value: bool, position: InsertPosition },
     /// Unsupported memory initialization operation.
