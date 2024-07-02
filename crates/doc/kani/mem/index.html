@@ -1,0 +1,36 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="This module contains functions useful for checking unsafe memory access."><title>kani::mem - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-46f98efaafac5295.ttf.woff2,FiraSans-Regular-018c141bf0843ffd.woff2,FiraSans-Medium-8f9a781e4970d388.woff2,SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2,SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../static.files/rustdoc-dd39b87e5fcfba68.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="kani" data-themes="" data-resource-suffix="" data-rustdoc-version="1.81.0-nightly (6868c831a 2024-06-30)" data-channel="nightly" data-search-js="search-0fe7219eb170c82e.js" data-settings-js="settings-4313503d2e1961c2.js" ><script src="../../static.files/storage-118b08c4c78b968e.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../static.files/main-20a3ad099b048cf2.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-df360f571f6edeae.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc mod"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../kani/index.html">kani</a><span class="version">0.52.0</span></h2></div><h2 class="location"><a href="#">Module mem</a></h2><div class="sidebar-elems"><section><ul class="block"><li><a href="#functions">Functions</a></li></ul></section><h2><a href="../index.html">In crate kani</a></h2></div></nav><div class="sidebar-resizer"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1>Module <a href="../index.html">kani</a>::<wbr><a class="mod" href="#">mem</a><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><span class="out-of-band"><a class="src" href="../../src/kani/mem.rs.html#3-401">source</a> · <button id="toggle-all-docs" title="collapse all docs">[<span>&#x2212;</span>]</button></span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>This module contains functions useful for checking unsafe memory access.</p>
+<p>Given the following validity rules provided in the Rust documentation:
+<a href="https://doc.rust-lang.org/std/ptr/index.html">https://doc.rust-lang.org/std/ptr/index.html</a> (accessed Feb 6th, 2024)</p>
+<ol>
+<li>A null pointer is never valid, not even for accesses of size zero.</li>
+<li>For a pointer to be valid, it is necessary, but not always sufficient, that the pointer
+be dereferenceable: the memory range of the given size starting at the pointer must all be
+within the bounds of a single allocated object. Note that in Rust, every (stack-allocated)
+variable is considered a separate allocated object.
+<del>Even for operations of size zero, the pointer must not be pointing to deallocated memory,
+i.e., deallocation makes pointers invalid even for zero-sized operations.</del>
+ZST access is not OK for any pointer.
+See: <a href="https://github.com/rust-lang/unsafe-code-guidelines/issues/472">https://github.com/rust-lang/unsafe-code-guidelines/issues/472</a></li>
+<li>However, casting any non-zero integer literal to a pointer is valid for zero-sized
+accesses, even if some memory happens to exist at that address and gets deallocated.
+This corresponds to writing your own allocator: allocating zero-sized objects is not very
+hard. The canonical way to obtain a pointer that is valid for zero-sized accesses is
+<code>NonNull::dangling</code>.</li>
+<li>All accesses performed by functions in this module are non-atomic in the sense of atomic
+operations used to synchronize between threads.
+This means it is undefined behavior to perform two concurrent accesses to the same location
+from different threads unless both accesses only read from memory.
+Notice that this explicitly includes <code>read_volatile</code> and <code>write_volatile</code>:
+Volatile accesses cannot be used for inter-thread synchronization.</li>
+<li>The result of casting a reference to a pointer is valid for as long as the underlying
+object is live and no reference (just raw pointers) is used to access the same memory.
+That is, reference and pointer accesses cannot be interleaved.</li>
+</ol>
+<p>Kani is able to verify #1 and #2 today.</p>
+<p>For #3, we are overly cautious, and Kani will only consider zero-sized pointer access safe if
+the address matches <code>NonNull::&lt;()&gt;::dangling()</code>.
+The way Kani tracks provenance is not enough to check if the address was the result of a cast
+from a non-zero integer literal.</p>
+</div></details><h2 id="functions" class="section-header">Functions<a href="#functions" class="anchor">§</a></h2><ul class="item-table"><li><div class="item-name"><a class="fn" href="fn.can_dereference.html" title="fn kani::mem::can_dereference">can_dereference</a></div><div class="desc docblock-short">Checks that pointer <code>ptr</code> point to a valid value of type <code>T</code>.</div></li><li><div class="item-name"><a class="fn" href="fn.can_read_unaligned.html" title="fn kani::mem::can_read_unaligned">can_read_unaligned</a></div><div class="desc docblock-short">Checks that pointer <code>ptr</code> point to a valid value of type <code>T</code>.</div></li><li><div class="item-name"><a class="fn" href="fn.can_write.html" title="fn kani::mem::can_write">can_write</a></div><div class="desc docblock-short">Check if the pointer is valid for write access according to <a href="index.html" title="mod kani::mem">crate::mem</a> conditions 1, 2
+and 3.</div></li><li><div class="item-name"><a class="fn" href="fn.can_write_unaligned.html" title="fn kani::mem::can_write_unaligned">can_write_unaligned</a></div><div class="desc docblock-short">Check if the pointer is valid for unaligned write access according to <a href="index.html" title="mod kani::mem">crate::mem</a> conditions
+1, 2 and 3.</div></li><li><div class="item-name"><a class="fn" href="fn.pointer_object.html" title="fn kani::mem::pointer_object">pointer_object</a></div><div class="desc docblock-short">Get the object ID of the given pointer.</div></li><li><div class="item-name"><a class="fn" href="fn.pointer_offset.html" title="fn kani::mem::pointer_offset">pointer_offset</a></div><div class="desc docblock-short">Get the object offset of the given pointer.</div></li></ul></section></div></main></body></html>

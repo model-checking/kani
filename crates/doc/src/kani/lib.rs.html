@@ -1,0 +1,661 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `library/kani/src/lib.rs`."><title>lib.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-46f98efaafac5295.ttf.woff2,FiraSans-Regular-018c141bf0843ffd.woff2,FiraSans-Medium-8f9a781e4970d388.woff2,SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2,SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../static.files/rustdoc-dd39b87e5fcfba68.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="kani" data-themes="" data-resource-suffix="" data-rustdoc-version="1.81.0-nightly (6868c831a 2024-06-30)" data-channel="nightly" data-search-js="search-0fe7219eb170c82e.js" data-settings-js="settings-4313503d2e1961c2.js" ><script src="../../static.files/storage-118b08c4c78b968e.js"></script><script defer src="../../static.files/src-script-e66d777a5a92e9b2.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-20a3ad099b048cf2.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-df360f571f6edeae.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers"><a href="#1" id="1">1</a>
+<a href="#2" id="2">2</a>
+<a href="#3" id="3">3</a>
+<a href="#4" id="4">4</a>
+<a href="#5" id="5">5</a>
+<a href="#6" id="6">6</a>
+<a href="#7" id="7">7</a>
+<a href="#8" id="8">8</a>
+<a href="#9" id="9">9</a>
+<a href="#10" id="10">10</a>
+<a href="#11" id="11">11</a>
+<a href="#12" id="12">12</a>
+<a href="#13" id="13">13</a>
+<a href="#14" id="14">14</a>
+<a href="#15" id="15">15</a>
+<a href="#16" id="16">16</a>
+<a href="#17" id="17">17</a>
+<a href="#18" id="18">18</a>
+<a href="#19" id="19">19</a>
+<a href="#20" id="20">20</a>
+<a href="#21" id="21">21</a>
+<a href="#22" id="22">22</a>
+<a href="#23" id="23">23</a>
+<a href="#24" id="24">24</a>
+<a href="#25" id="25">25</a>
+<a href="#26" id="26">26</a>
+<a href="#27" id="27">27</a>
+<a href="#28" id="28">28</a>
+<a href="#29" id="29">29</a>
+<a href="#30" id="30">30</a>
+<a href="#31" id="31">31</a>
+<a href="#32" id="32">32</a>
+<a href="#33" id="33">33</a>
+<a href="#34" id="34">34</a>
+<a href="#35" id="35">35</a>
+<a href="#36" id="36">36</a>
+<a href="#37" id="37">37</a>
+<a href="#38" id="38">38</a>
+<a href="#39" id="39">39</a>
+<a href="#40" id="40">40</a>
+<a href="#41" id="41">41</a>
+<a href="#42" id="42">42</a>
+<a href="#43" id="43">43</a>
+<a href="#44" id="44">44</a>
+<a href="#45" id="45">45</a>
+<a href="#46" id="46">46</a>
+<a href="#47" id="47">47</a>
+<a href="#48" id="48">48</a>
+<a href="#49" id="49">49</a>
+<a href="#50" id="50">50</a>
+<a href="#51" id="51">51</a>
+<a href="#52" id="52">52</a>
+<a href="#53" id="53">53</a>
+<a href="#54" id="54">54</a>
+<a href="#55" id="55">55</a>
+<a href="#56" id="56">56</a>
+<a href="#57" id="57">57</a>
+<a href="#58" id="58">58</a>
+<a href="#59" id="59">59</a>
+<a href="#60" id="60">60</a>
+<a href="#61" id="61">61</a>
+<a href="#62" id="62">62</a>
+<a href="#63" id="63">63</a>
+<a href="#64" id="64">64</a>
+<a href="#65" id="65">65</a>
+<a href="#66" id="66">66</a>
+<a href="#67" id="67">67</a>
+<a href="#68" id="68">68</a>
+<a href="#69" id="69">69</a>
+<a href="#70" id="70">70</a>
+<a href="#71" id="71">71</a>
+<a href="#72" id="72">72</a>
+<a href="#73" id="73">73</a>
+<a href="#74" id="74">74</a>
+<a href="#75" id="75">75</a>
+<a href="#76" id="76">76</a>
+<a href="#77" id="77">77</a>
+<a href="#78" id="78">78</a>
+<a href="#79" id="79">79</a>
+<a href="#80" id="80">80</a>
+<a href="#81" id="81">81</a>
+<a href="#82" id="82">82</a>
+<a href="#83" id="83">83</a>
+<a href="#84" id="84">84</a>
+<a href="#85" id="85">85</a>
+<a href="#86" id="86">86</a>
+<a href="#87" id="87">87</a>
+<a href="#88" id="88">88</a>
+<a href="#89" id="89">89</a>
+<a href="#90" id="90">90</a>
+<a href="#91" id="91">91</a>
+<a href="#92" id="92">92</a>
+<a href="#93" id="93">93</a>
+<a href="#94" id="94">94</a>
+<a href="#95" id="95">95</a>
+<a href="#96" id="96">96</a>
+<a href="#97" id="97">97</a>
+<a href="#98" id="98">98</a>
+<a href="#99" id="99">99</a>
+<a href="#100" id="100">100</a>
+<a href="#101" id="101">101</a>
+<a href="#102" id="102">102</a>
+<a href="#103" id="103">103</a>
+<a href="#104" id="104">104</a>
+<a href="#105" id="105">105</a>
+<a href="#106" id="106">106</a>
+<a href="#107" id="107">107</a>
+<a href="#108" id="108">108</a>
+<a href="#109" id="109">109</a>
+<a href="#110" id="110">110</a>
+<a href="#111" id="111">111</a>
+<a href="#112" id="112">112</a>
+<a href="#113" id="113">113</a>
+<a href="#114" id="114">114</a>
+<a href="#115" id="115">115</a>
+<a href="#116" id="116">116</a>
+<a href="#117" id="117">117</a>
+<a href="#118" id="118">118</a>
+<a href="#119" id="119">119</a>
+<a href="#120" id="120">120</a>
+<a href="#121" id="121">121</a>
+<a href="#122" id="122">122</a>
+<a href="#123" id="123">123</a>
+<a href="#124" id="124">124</a>
+<a href="#125" id="125">125</a>
+<a href="#126" id="126">126</a>
+<a href="#127" id="127">127</a>
+<a href="#128" id="128">128</a>
+<a href="#129" id="129">129</a>
+<a href="#130" id="130">130</a>
+<a href="#131" id="131">131</a>
+<a href="#132" id="132">132</a>
+<a href="#133" id="133">133</a>
+<a href="#134" id="134">134</a>
+<a href="#135" id="135">135</a>
+<a href="#136" id="136">136</a>
+<a href="#137" id="137">137</a>
+<a href="#138" id="138">138</a>
+<a href="#139" id="139">139</a>
+<a href="#140" id="140">140</a>
+<a href="#141" id="141">141</a>
+<a href="#142" id="142">142</a>
+<a href="#143" id="143">143</a>
+<a href="#144" id="144">144</a>
+<a href="#145" id="145">145</a>
+<a href="#146" id="146">146</a>
+<a href="#147" id="147">147</a>
+<a href="#148" id="148">148</a>
+<a href="#149" id="149">149</a>
+<a href="#150" id="150">150</a>
+<a href="#151" id="151">151</a>
+<a href="#152" id="152">152</a>
+<a href="#153" id="153">153</a>
+<a href="#154" id="154">154</a>
+<a href="#155" id="155">155</a>
+<a href="#156" id="156">156</a>
+<a href="#157" id="157">157</a>
+<a href="#158" id="158">158</a>
+<a href="#159" id="159">159</a>
+<a href="#160" id="160">160</a>
+<a href="#161" id="161">161</a>
+<a href="#162" id="162">162</a>
+<a href="#163" id="163">163</a>
+<a href="#164" id="164">164</a>
+<a href="#165" id="165">165</a>
+<a href="#166" id="166">166</a>
+<a href="#167" id="167">167</a>
+<a href="#168" id="168">168</a>
+<a href="#169" id="169">169</a>
+<a href="#170" id="170">170</a>
+<a href="#171" id="171">171</a>
+<a href="#172" id="172">172</a>
+<a href="#173" id="173">173</a>
+<a href="#174" id="174">174</a>
+<a href="#175" id="175">175</a>
+<a href="#176" id="176">176</a>
+<a href="#177" id="177">177</a>
+<a href="#178" id="178">178</a>
+<a href="#179" id="179">179</a>
+<a href="#180" id="180">180</a>
+<a href="#181" id="181">181</a>
+<a href="#182" id="182">182</a>
+<a href="#183" id="183">183</a>
+<a href="#184" id="184">184</a>
+<a href="#185" id="185">185</a>
+<a href="#186" id="186">186</a>
+<a href="#187" id="187">187</a>
+<a href="#188" id="188">188</a>
+<a href="#189" id="189">189</a>
+<a href="#190" id="190">190</a>
+<a href="#191" id="191">191</a>
+<a href="#192" id="192">192</a>
+<a href="#193" id="193">193</a>
+<a href="#194" id="194">194</a>
+<a href="#195" id="195">195</a>
+<a href="#196" id="196">196</a>
+<a href="#197" id="197">197</a>
+<a href="#198" id="198">198</a>
+<a href="#199" id="199">199</a>
+<a href="#200" id="200">200</a>
+<a href="#201" id="201">201</a>
+<a href="#202" id="202">202</a>
+<a href="#203" id="203">203</a>
+<a href="#204" id="204">204</a>
+<a href="#205" id="205">205</a>
+<a href="#206" id="206">206</a>
+<a href="#207" id="207">207</a>
+<a href="#208" id="208">208</a>
+<a href="#209" id="209">209</a>
+<a href="#210" id="210">210</a>
+<a href="#211" id="211">211</a>
+<a href="#212" id="212">212</a>
+<a href="#213" id="213">213</a>
+<a href="#214" id="214">214</a>
+<a href="#215" id="215">215</a>
+<a href="#216" id="216">216</a>
+<a href="#217" id="217">217</a>
+<a href="#218" id="218">218</a>
+<a href="#219" id="219">219</a>
+<a href="#220" id="220">220</a>
+<a href="#221" id="221">221</a>
+<a href="#222" id="222">222</a>
+<a href="#223" id="223">223</a>
+<a href="#224" id="224">224</a>
+<a href="#225" id="225">225</a>
+<a href="#226" id="226">226</a>
+<a href="#227" id="227">227</a>
+<a href="#228" id="228">228</a>
+<a href="#229" id="229">229</a>
+<a href="#230" id="230">230</a>
+<a href="#231" id="231">231</a>
+<a href="#232" id="232">232</a>
+<a href="#233" id="233">233</a>
+<a href="#234" id="234">234</a>
+<a href="#235" id="235">235</a>
+<a href="#236" id="236">236</a>
+<a href="#237" id="237">237</a>
+<a href="#238" id="238">238</a>
+<a href="#239" id="239">239</a>
+<a href="#240" id="240">240</a>
+<a href="#241" id="241">241</a>
+<a href="#242" id="242">242</a>
+<a href="#243" id="243">243</a>
+<a href="#244" id="244">244</a>
+<a href="#245" id="245">245</a>
+<a href="#246" id="246">246</a>
+<a href="#247" id="247">247</a>
+<a href="#248" id="248">248</a>
+<a href="#249" id="249">249</a>
+<a href="#250" id="250">250</a>
+<a href="#251" id="251">251</a>
+<a href="#252" id="252">252</a>
+<a href="#253" id="253">253</a>
+<a href="#254" id="254">254</a>
+<a href="#255" id="255">255</a>
+<a href="#256" id="256">256</a>
+<a href="#257" id="257">257</a>
+<a href="#258" id="258">258</a>
+<a href="#259" id="259">259</a>
+<a href="#260" id="260">260</a>
+<a href="#261" id="261">261</a>
+<a href="#262" id="262">262</a>
+<a href="#263" id="263">263</a>
+<a href="#264" id="264">264</a>
+<a href="#265" id="265">265</a>
+<a href="#266" id="266">266</a>
+<a href="#267" id="267">267</a>
+<a href="#268" id="268">268</a>
+<a href="#269" id="269">269</a>
+<a href="#270" id="270">270</a>
+<a href="#271" id="271">271</a>
+<a href="#272" id="272">272</a>
+<a href="#273" id="273">273</a>
+<a href="#274" id="274">274</a>
+<a href="#275" id="275">275</a>
+<a href="#276" id="276">276</a>
+<a href="#277" id="277">277</a>
+<a href="#278" id="278">278</a>
+<a href="#279" id="279">279</a>
+<a href="#280" id="280">280</a>
+<a href="#281" id="281">281</a>
+<a href="#282" id="282">282</a>
+<a href="#283" id="283">283</a>
+<a href="#284" id="284">284</a>
+<a href="#285" id="285">285</a>
+<a href="#286" id="286">286</a>
+<a href="#287" id="287">287</a>
+<a href="#288" id="288">288</a>
+<a href="#289" id="289">289</a>
+<a href="#290" id="290">290</a>
+<a href="#291" id="291">291</a>
+<a href="#292" id="292">292</a>
+<a href="#293" id="293">293</a>
+<a href="#294" id="294">294</a>
+<a href="#295" id="295">295</a>
+<a href="#296" id="296">296</a>
+<a href="#297" id="297">297</a>
+<a href="#298" id="298">298</a>
+<a href="#299" id="299">299</a>
+<a href="#300" id="300">300</a>
+<a href="#301" id="301">301</a>
+<a href="#302" id="302">302</a>
+<a href="#303" id="303">303</a>
+<a href="#304" id="304">304</a>
+<a href="#305" id="305">305</a>
+<a href="#306" id="306">306</a>
+<a href="#307" id="307">307</a>
+<a href="#308" id="308">308</a>
+<a href="#309" id="309">309</a>
+<a href="#310" id="310">310</a>
+<a href="#311" id="311">311</a>
+<a href="#312" id="312">312</a>
+<a href="#313" id="313">313</a>
+<a href="#314" id="314">314</a>
+<a href="#315" id="315">315</a>
+<a href="#316" id="316">316</a>
+<a href="#317" id="317">317</a>
+<a href="#318" id="318">318</a>
+<a href="#319" id="319">319</a>
+<a href="#320" id="320">320</a>
+<a href="#321" id="321">321</a>
+<a href="#322" id="322">322</a>
+<a href="#323" id="323">323</a>
+<a href="#324" id="324">324</a>
+<a href="#325" id="325">325</a>
+<a href="#326" id="326">326</a>
+<a href="#327" id="327">327</a>
+<a href="#328" id="328">328</a>
+<a href="#329" id="329">329</a>
+<a href="#330" id="330">330</a>
+</pre></div><pre class="rust"><code><span class="comment">// Copyright Kani Contributors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+// Required so we can use kani_macros attributes.
+</span><span class="attr">#![feature(register_tool)]
+#![register_tool(kanitool)]
+</span><span class="comment">// Used for rustc_diagnostic_item.
+// Note: We could use a kanitool attribute instead.
+</span><span class="attr">#![feature(rustc_attrs)]
+</span><span class="comment">// This is required for the optimized version of `any_array()`
+</span><span class="attr">#![feature(generic_const_exprs)]
+#![allow(incomplete_features)]
+</span><span class="comment">// Used to model simd.
+</span><span class="attr">#![feature(repr_simd)]
+</span><span class="comment">// Features used for tests only.
+</span><span class="attr">#![cfg_attr(test, feature(core_intrinsics, portable_simd))]
+</span><span class="comment">// Required for `rustc_diagnostic_item` and `core_intrinsics`
+</span><span class="attr">#![allow(internal_features)]
+</span><span class="comment">// Required for implementing memory predicates.
+</span><span class="attr">#![feature(ptr_metadata)]
+#![feature(f16)]
+#![feature(f128)]
+
+</span><span class="kw">pub mod </span>arbitrary;
+<span class="attr">#[cfg(feature = <span class="string">"concrete_playback"</span>)]
+</span><span class="kw">mod </span>concrete_playback;
+<span class="kw">pub mod </span>futures;
+<span class="kw">pub mod </span>invariant;
+<span class="kw">pub mod </span>mem;
+<span class="kw">pub mod </span>shadow;
+<span class="kw">pub mod </span>slice;
+<span class="kw">pub mod </span>tuple;
+<span class="kw">pub mod </span>vec;
+
+<span class="attr">#[doc(hidden)]
+</span><span class="kw">pub mod </span>internal;
+
+<span class="kw">mod </span>models;
+
+<span class="kw">pub use </span>arbitrary::Arbitrary;
+<span class="attr">#[cfg(feature = <span class="string">"concrete_playback"</span>)]
+</span><span class="kw">pub use </span>concrete_playback::concrete_playback_run;
+<span class="kw">pub use </span>invariant::Invariant;
+
+<span class="attr">#[cfg(not(feature = <span class="string">"concrete_playback"</span>))]
+</span><span class="doccomment">/// NOP `concrete_playback` for type checking during verification mode.
+</span><span class="kw">pub fn </span>concrete_playback_run&lt;F: Fn()&gt;(<span class="kw">_</span>: Vec&lt;Vec&lt;u8&gt;&gt;, <span class="kw">_</span>: F) {
+    <span class="macro">unreachable!</span>(<span class="string">"Concrete playback does not work during verification"</span>)
+}
+<span class="kw">pub use </span>futures::{block_on, block_on_with_spawn, spawn, yield_now, RoundRobin};
+
+<span class="doccomment">/// Creates an assumption that will be valid after this statement run. Note that the assumption
+/// will only be applied for paths that follow the assumption. If the assumption doesn't hold, the
+/// program will exit successfully.
+///
+/// # Example:
+///
+/// The code snippet below should never panic.
+///
+/// ```rust
+/// let i : i32 = kani::any();
+/// kani::assume(i &gt; 10);
+/// if i &lt; 0 {
+///   panic!("This will never panic");
+/// }
+/// ```
+///
+/// The following code may panic though:
+///
+/// ```rust
+/// let i : i32 = kani::any();
+/// assert!(i &lt; 0, "This may panic and verification should fail.");
+/// kani::assume(i &gt; 10);
+/// ```
+</span><span class="attr">#[inline(never)]
+#[rustc_diagnostic_item = <span class="string">"KaniAssume"</span>]
+#[cfg(not(feature = <span class="string">"concrete_playback"</span>))]
+</span><span class="kw">pub fn </span>assume(cond: bool) {
+    <span class="kw">let _ </span>= cond;
+}
+
+<span class="attr">#[inline(never)]
+#[rustc_diagnostic_item = <span class="string">"KaniAssume"</span>]
+#[cfg(feature = <span class="string">"concrete_playback"</span>)]
+</span><span class="kw">pub fn </span>assume(cond: bool) {
+    <span class="macro">assert!</span>(cond, <span class="string">"`kani::assume` should always hold"</span>);
+}
+
+<span class="doccomment">/// `implies!(premise =&gt; conclusion)` means that if the `premise` is true, so
+/// must be the `conclusion`.
+///
+/// This simply expands to `!premise || conclusion` and is intended to make checks more readable,
+/// as the concept of an implication is more natural to think about than its expansion.
+</span><span class="attr">#[macro_export]
+</span><span class="macro">macro_rules!</span> implies {
+    (<span class="macro-nonterminal">$premise</span>:expr =&gt; <span class="macro-nonterminal">$conclusion</span>:expr) =&gt; {
+        !(<span class="macro-nonterminal">$premise</span>) || (<span class="macro-nonterminal">$conclusion</span>)
+    };
+}
+
+<span class="doccomment">/// Creates an assertion of the specified condition and message.
+///
+/// # Example:
+///
+/// ```rust
+/// let x: bool = kani::any();
+/// let y = !x;
+/// kani::assert(x || y, "ORing a boolean variable with its negation must be true")
+/// ```
+</span><span class="attr">#[cfg(not(feature = <span class="string">"concrete_playback"</span>))]
+#[inline(never)]
+#[rustc_diagnostic_item = <span class="string">"KaniAssert"</span>]
+</span><span class="kw">pub const fn </span>assert(cond: bool, msg: <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str) {
+    <span class="kw">let _ </span>= cond;
+    <span class="kw">let _ </span>= msg;
+}
+
+<span class="attr">#[cfg(feature = <span class="string">"concrete_playback"</span>)]
+#[inline(never)]
+#[rustc_diagnostic_item = <span class="string">"KaniAssert"</span>]
+</span><span class="kw">pub const fn </span>assert(cond: bool, msg: <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str) {
+    <span class="macro">assert!</span>(cond, <span class="string">"{}"</span>, msg);
+}
+
+<span class="doccomment">/// Creates a cover property with the specified condition and message.
+///
+/// # Example:
+///
+/// ```rust
+/// kani::cover(slice.len() == 0, "The slice may have a length of 0");
+/// ```
+///
+/// A cover property checks if there is at least one execution that satisfies
+/// the specified condition at the location in which the function is called.
+///
+/// Cover properties are reported as:
+///  - SATISFIED: if Kani found an execution that satisfies the condition
+///  - UNSATISFIABLE: if Kani proved that the condition cannot be satisfied
+///  - UNREACHABLE: if Kani proved that the cover property itself is unreachable (i.e. it is vacuously UNSATISFIABLE)
+///
+/// This function is called by the [`cover!`] macro. The macro is more
+/// convenient to use.
+///
+</span><span class="attr">#[inline(never)]
+#[rustc_diagnostic_item = <span class="string">"KaniCover"</span>]
+</span><span class="kw">pub const fn </span>cover(_cond: bool, _msg: <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str) {}
+
+<span class="doccomment">/// This creates an symbolic *valid* value of type `T`. You can assign the return value of this
+/// function to a variable that you want to make symbolic.
+///
+/// # Example:
+///
+/// In the snippet below, we are verifying the behavior of the function `fn_under_verification`
+/// under all possible `NonZeroU8` input values, i.e., all possible `u8` values except zero.
+///
+/// ```rust
+/// let inputA = kani::any::&lt;std::num::NonZeroU8&gt;();
+/// fn_under_verification(inputA);
+/// ```
+///
+/// Note: This is a safe construct and can only be used with types that implement the `Arbitrary`
+/// trait. The Arbitrary trait is used to build a symbolic value that represents all possible
+/// valid values for type `T`.
+</span><span class="attr">#[rustc_diagnostic_item = <span class="string">"KaniAny"</span>]
+#[inline(always)]
+</span><span class="kw">pub fn </span>any&lt;T: Arbitrary&gt;() -&gt; T {
+    T::any()
+}
+
+<span class="doccomment">/// This function is only used for function contract instrumentation.
+/// It behaves exaclty like `kani::any&lt;T&gt;()`, except it will check for the trait bounds
+/// at compilation time. It allows us to avoid type checking errors while using function
+/// contracts only for verification.
+</span><span class="attr">#[rustc_diagnostic_item = <span class="string">"KaniAnyModifies"</span>]
+#[inline(never)]
+#[doc(hidden)]
+</span><span class="kw">pub fn </span>any_modifies&lt;T&gt;() -&gt; T {
+    <span class="comment">// This function should not be reacheable.
+    // Users must include `#[kani::recursion]` in any function contracts for recursive functions;
+    // otherwise, this might not be properly instantiate. We mark this as unreachable to make
+    // sure Kani doesn't report any false positives.
+    </span><span class="macro">unreachable!</span>()
+}
+
+<span class="doccomment">/// This creates a symbolic *valid* value of type `T`.
+/// The value is constrained to be a value accepted by the predicate passed to the filter.
+/// You can assign the return value of this function to a variable that you want to make symbolic.
+///
+/// # Example:
+///
+/// In the snippet below, we are verifying the behavior of the function `fn_under_verification`
+/// under all possible `u8` input values between 0 and 12.
+///
+/// ```rust
+/// let inputA: u8 = kani::any_where(|x| *x &lt; 12);
+/// fn_under_verification(inputA);
+/// ```
+///
+/// Note: This is a safe construct and can only be used with types that implement the `Arbitrary`
+/// trait. The Arbitrary trait is used to build a symbolic value that represents all possible
+/// valid values for type `T`.
+</span><span class="attr">#[inline(always)]
+</span><span class="kw">pub fn </span>any_where&lt;T: Arbitrary, F: FnOnce(<span class="kw-2">&amp;</span>T) -&gt; bool&gt;(f: F) -&gt; T {
+    <span class="kw">let </span>result = T::any();
+    assume(f(<span class="kw-2">&amp;</span>result));
+    result
+}
+
+<span class="doccomment">/// This function creates a symbolic value of type `T`. This may result in an invalid value.
+///
+/// # Safety
+///
+/// This function is unsafe and it may represent invalid `T` values which can lead to many
+/// undesirable undefined behaviors. Because of that, this function can only be used
+/// internally when we can guarantee that the type T has no restriction regarding its bit level
+/// representation.
+///
+/// This function is also used to find concrete values in the CBMC output trace
+/// and return those concrete values in concrete playback mode.
+///
+/// Note that SIZE_T must be equal the size of type T in bytes.
+</span><span class="attr">#[inline(never)]
+#[cfg(not(feature = <span class="string">"concrete_playback"</span>))]
+</span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">unsafe fn </span>any_raw_internal&lt;T, <span class="kw">const </span>SIZE_T: usize&gt;() -&gt; T {
+    any_raw_inner::&lt;T&gt;()
+}
+
+<span class="attr">#[inline(never)]
+#[cfg(feature = <span class="string">"concrete_playback"</span>)]
+</span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">unsafe fn </span>any_raw_internal&lt;T, <span class="kw">const </span>SIZE_T: usize&gt;() -&gt; T {
+    concrete_playback::any_raw_internal::&lt;T, SIZE_T&gt;()
+}
+
+<span class="doccomment">/// This low-level function returns nondet bytes of size T.
+</span><span class="attr">#[rustc_diagnostic_item = <span class="string">"KaniAnyRaw"</span>]
+#[inline(never)]
+#[allow(dead_code)]
+</span><span class="kw">fn </span>any_raw_inner&lt;T&gt;() -&gt; T {
+    kani_intrinsic()
+}
+
+<span class="doccomment">/// Function used to generate panic with a static message as this is the only one currently
+/// supported by Kani display.
+///
+/// During verification this will get replaced by `assert(false)`. For concrete executions, we just
+/// invoke the regular `std::panic!()` function. This function is used by our standard library
+/// overrides, but not the other way around.
+</span><span class="attr">#[inline(never)]
+#[rustc_diagnostic_item = <span class="string">"KaniPanic"</span>]
+#[doc(hidden)]
+</span><span class="kw">pub const fn </span>panic(message: <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str) -&gt; ! {
+    <span class="macro">panic!</span>(<span class="string">"{}"</span>, message)
+}
+
+<span class="doccomment">/// An empty body that can be used to define Kani intrinsic functions.
+///
+/// A Kani intrinsic is a function that is interpreted by Kani compiler.
+/// While we could use `unreachable!()` or `panic!()` as the body of a kani intrinsic
+/// function, both cause Kani to produce a warning since we don't support caller location.
+/// (see https://github.com/model-checking/kani/issues/2010).
+///
+/// This function is dead, since its caller is always  handled via a hook anyway,
+/// so we just need to put a body that rustc does not complain about.
+/// An infinite loop works out nicely.
+</span><span class="kw">fn </span>kani_intrinsic&lt;T&gt;() -&gt; T {
+    <span class="attr">#[allow(clippy::empty_loop)]
+    </span><span class="kw">loop </span>{}
+}
+<span class="doccomment">/// A macro to check if a condition is satisfiable at a specific location in the
+/// code.
+///
+/// # Example 1:
+///
+/// ```rust
+/// let mut set: BTreeSet&lt;i32&gt; = BTreeSet::new();
+/// set.insert(kani::any());
+/// set.insert(kani::any());
+/// // check if the set can end up with a single element (if both elements
+/// // inserted were the same)
+/// kani::cover!(set.len() == 1);
+/// ```
+/// The macro can also be called without any arguments to check if a location is
+/// reachable.
+///
+/// # Example 2:
+///
+/// ```rust
+/// match e {
+///     MyEnum::A =&gt; { /* .. */ }
+///     MyEnum::B =&gt; {
+///         // make sure the `MyEnum::B` variant is possible
+///         kani::cover!();
+///         // ..
+///     }
+/// }
+/// ```
+///
+/// A custom message can also be passed to the macro.
+///
+/// # Example 3:
+///
+/// ```rust
+/// kani::cover!(x &gt; y, "x can be greater than y")
+/// ```
+</span><span class="attr">#[macro_export]
+</span><span class="macro">macro_rules!</span> cover {
+    () =&gt; {
+        kani::cover(<span class="bool-val">true</span>, <span class="string">"cover location"</span>);
+    };
+    (<span class="macro-nonterminal">$cond</span>:expr $(,)<span class="question-mark">?</span>) =&gt; {
+        kani::cover(<span class="macro-nonterminal">$cond</span>, <span class="macro">concat!</span>(<span class="string">"cover condition: "</span>, <span class="macro">stringify!</span>(<span class="macro-nonterminal">$cond</span>)));
+    };
+    (<span class="macro-nonterminal">$cond</span>:expr, <span class="macro-nonterminal">$msg</span>:literal) =&gt; {
+        kani::cover(<span class="macro-nonterminal">$cond</span>, <span class="macro-nonterminal">$msg</span>);
+    };
+}
+
+<span class="comment">// Used to bind `core::assert` to a different name to avoid possible name conflicts if a
+// crate uses `extern crate std as core`. See
+// https://github.com/model-checking/kani/issues/1949 and https://github.com/model-checking/kani/issues/2187
+</span><span class="attr">#[doc(hidden)]
+#[cfg(not(feature = <span class="string">"concrete_playback"</span>))]
+</span><span class="kw">pub use </span>core::assert <span class="kw">as </span>__kani__workaround_core_assert;
+
+<span class="comment">// Kani proc macros must be in a separate crate
+</span><span class="kw">pub use </span>kani_macros::<span class="kw-2">*</span>;
+
+<span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">use </span>kani_macros::unstable_feature <span class="kw">as </span>unstable;
+
+<span class="kw">pub mod </span>contracts;
+</code></pre></div></section></main></body></html>
