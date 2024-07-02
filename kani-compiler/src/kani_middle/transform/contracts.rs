@@ -47,7 +47,7 @@ impl TransformPass for AnyModifiesPass {
     }
 
     /// Transform the function body by replacing it with the stub body.
-    fn transform(&self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
+    fn transform(&mut self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
         trace!(function=?instance.name(), "AnyModifiesPass::transform");
 
         if instance.def.def_id() == self.kani_any.unwrap().def_id() {
