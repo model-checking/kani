@@ -28,11 +28,30 @@ pub fn expand_derive_arbitrary(item: proc_macro::TokenStream) -> proc_macro::Tok
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
     let body = fn_any_body(&item_name, &derive_item.data);
-    let expanded = quote! {
-        // The generated implementation.
-        impl #impl_generics kani::Arbitrary for #item_name #ty_generics #where_clause {
-            fn any() -> Self {
-                #body
+
+    // Get the invariant conditions (if any) to produce type-safe values
+    let inv_conds_opt = inv_conds(&item_name, &derive_item.data);
+
+    let expanded = if let Some(inv_cond) = inv_conds_opt {
+        let field_refs = field_refs(&item_name, &derive_item.data);
+        quote! {
+            // The generated implementation.
+            impl #impl_generics kani::Arbitrary for #item_name #ty_generics #where_clause {
+                fn any() -> Self {
+                    let obj = #body;
+                    #field_refs
+                    kani::assume(#inv_cond);
+                    obj
+                }
+            }
+        }
+    } else {
+        quote! {
+            // The generated implementation.
+            impl #impl_generics kani::Arbitrary for #item_name #ty_generics #where_clause {
+                fn any() -> Self {
+                    #body
+                }
             }
         }
     };
@@ -75,6 +94,103 @@ fn fn_any_body(ident: &Ident, data: &Data) -> TokenStream {
     }
 }
 
+/// Parse the condition expressions in `#[invariant(<cond>)]` attached to struct
+/// fields and, it at least one was found, generate a conjunction to be assumed.
+///
+/// For example, if we're deriving implementations for the struct
+/// ```
+/// #[derive(Arbitrary)]
+/// #[derive(Invariant)]
+/// struct PositivePoint {
+///     #[invariant(*x >= 0)]
+///     x: i32,
+///     #[invariant(*y >= 0)]
+///     y: i32,
+/// }
+/// ```
+/// this function will generate the `TokenStream`
+/// ```
+/// *x >= 0 && *y >= 0
+/// ```
+/// which can be passed to `kani::assume` to constrain the values generated
+/// through the `Arbitrary` impl so that they are type-safe by construction.
+fn inv_conds(ident: &Ident, data: &Data) -> Option<TokenStream> {
+    match data {
+        Data::Struct(struct_data) => inv_conds_inner(ident, &struct_data.fields),
+        Data::Enum(_) => None,
+        Data::Union(_) => None,
+    }
+}
+
+/// Generates an expression resulting from the conjunction of conditions
+/// specified as invariants for each field. See `inv_conds` for more details.
+fn inv_conds_inner(ident: &Ident, fields: &Fields) -> Option<TokenStream> {
+    match fields {
+        Fields::Named(ref fields) => {
+            let conds: Vec<TokenStream> =
+                fields.named.iter().filter_map(|field| parse_inv_expr(ident, field)).collect();
+            if !conds.is_empty() { Some(quote! { #(#conds)&&* }) } else { None }
+        }
+        Fields::Unnamed(_) => None,
+        Fields::Unit => None,
+    }
+}
+
+/// Generates the sequence of expressions to initialize the variables used as
+/// references to the struct fields.
+///
+/// For example, if we're deriving implementations for the struct
+/// ```
+/// #[derive(Arbitrary)]
+/// #[derive(Invariant)]
+/// struct PositivePoint {
+///     #[invariant(*x >= 0)]
+///     x: i32,
+///     #[invariant(*y >= 0)]
+///     y: i32,
+/// }
+/// ```
+/// this function will generate the `TokenStream`
+/// ```
+/// let x = &obj.x;
+/// let y = &obj.y;
+/// ```
+/// which allows us to refer to the struct fields without using `self`.
+/// Note that the actual stream is generated in the `field_refs_inner` function.
+fn field_refs(ident: &Ident, data: &Data) -> TokenStream {
+    match data {
+        Data::Struct(struct_data) => field_refs_inner(ident, &struct_data.fields),
+        Data::Enum(_) => unreachable!(),
+        Data::Union(_) => unreachable!(),
+    }
+}
+
+/// Generates the sequence of expressions to initialize the variables used as
+/// references to the struct fields. See `field_refs` for more details.
+fn field_refs_inner(_ident: &Ident, fields: &Fields) -> TokenStream {
+    match fields {
+        Fields::Named(ref fields) => {
+            let field_refs: Vec<TokenStream> = fields
+                .named
+                .iter()
+                .map(|field| {
+                    let name = &field.ident;
+                    quote_spanned! {field.span()=>
+                        let #name = &obj.#name;
+                    }
+                })
+                .collect();
+            if !field_refs.is_empty() {
+                quote! { #( #field_refs )* }
+            } else {
+                quote! {}
+            }
+        }
+        Fields::Unnamed(_) => quote! {},
+        Fields::Unit => quote! {},
+    }
+}
+
 /// Generate an item initialization where an item can be a struct or a variant.
 /// For named fields, this will generate: `Item { field1: kani::any(), field2: kani::any(), .. }`
 /// For unnamed fields, this will generate: `Item (kani::any(), kani::any(), ..)`
@@ -112,6 +228,42 @@ fn init_symbolic_item(ident: &Ident, fields: &Fields) -> TokenStream {
                 #ident
             }
         }
+    }
+}
+
+/// Extract, parse and return the expression `cond` (i.e., `Some(cond)`) in the
+/// `#[invariant(<cond>)]` attribute helper associated with a given field.
+/// Return `None` if the attribute isn't specified.
+fn parse_inv_expr(ident: &Ident, field: &syn::Field) -> Option<TokenStream> {
+    let name = &field.ident;
+    let mut inv_helper_attr = None;
+
+    // Keep the helper attribute if we find it
+    for attr in &field.attrs {
+        if attr.path().is_ident("invariant") {
+            inv_helper_attr = Some(attr);
+        }
+    }
+
+    // Parse the arguments in the invariant helper attribute
+    if let Some(attr) = inv_helper_attr {
+        let expr_args: Result<syn::Expr, syn::Error> = attr.parse_args();
+
+        // Check if there was an error parsing the arguments
+        if expr_args.is_err() {
+            abort!(Span::call_site(), "Cannot derive impl for `{}`", ident;
+            note = attr.span() =>
+            "invariant condition in field `{}` could not be parsed - `{:?}`", name.as_ref().unwrap().to_string(), expr_args.map_err(|e| e.to_string())
+            )
+        }
+
+        // Return the expression associated to the invariant condition
+        let inv_expr = expr_args.unwrap();
+        Some(quote_spanned! {field.span()=>
+            #inv_expr
+        })
+    } else {
+        None
     }
 }
 
@@ -176,10 +328,14 @@ pub fn expand_derive_invariant(item: proc_macro::TokenStream) -> proc_macro::Tok
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
     let body = is_safe_body(&item_name, &derive_item.data);
+    let field_refs = field_refs(&item_name, &derive_item.data);
+
     let expanded = quote! {
         // The generated implementation.
         impl #impl_generics kani::Invariant for #item_name #ty_generics #where_clause {
             fn is_safe(&self) -> bool {
+                let obj = self;
+                #field_refs
                 #body
             }
         }
@@ -199,7 +355,7 @@ fn add_trait_bound_invariant(mut generics: Generics) -> Generics {
 
 fn is_safe_body(ident: &Ident, data: &Data) -> TokenStream {
     match data {
-        Data::Struct(struct_data) => struct_safe_conjunction(ident, &struct_data.fields),
+        Data::Struct(struct_data) => struct_invariant_conjunction(ident, &struct_data.fields),
         Data::Enum(_) => {
             abort!(Span::call_site(), "Cannot derive `Invariant` for `{}` enum", ident;
                 note = ident.span() =>
@@ -215,21 +371,32 @@ fn is_safe_body(ident: &Ident, data: &Data) -> TokenStream {
     }
 }
 
-/// Generates an expression that is the conjunction of `is_safe` calls for each field in the struct.
-fn struct_safe_conjunction(_ident: &Ident, fields: &Fields) -> TokenStream {
+/// Generates an expression that is the conjunction of invariant conditions for each field in the struct.
+fn struct_invariant_conjunction(ident: &Ident, fields: &Fields) -> TokenStream {
     match fields {
         // Expands to the expression
+        // `true && <inv_cond1> && <inv_cond2> && ..`
+        // where `inv_condN` is either
+        //  * the condition `<cond>` specified through the `#[invariant(<cond>)]` helper attribute, or
+        //  * the call `self.fieldN.is_safe()`
+        //
+        // Therefore, if `#[invariant(<cond>)]` isn't specified for any field, this expands to
         // `true && self.field1.is_safe() && self.field2.is_safe() && ..`
         Fields::Named(ref fields) => {
-            let safe_calls = fields.named.iter().map(|field| {
-                let name = &field.ident;
-                quote_spanned! {field.span()=>
-                    self.#name.is_safe()
-                }
-            });
+            let inv_conds: Vec<TokenStream> = fields
+                .named
+                .iter()
+                .map(|field| {
+                    let name = &field.ident;
+                    let default_expr = quote_spanned! {field.span()=>
+                        #name.is_safe()
+                    };
+                    parse_inv_expr(ident, field).unwrap_or(default_expr)
+                })
+                .collect();
             // An initial value is required for empty structs
-            safe_calls.fold(quote! { true }, |acc, call| {
-                quote! { #acc && #call }
+            inv_conds.iter().fold(quote! { true }, |acc, cond| {
+                quote! { #acc && #cond }
             })
         }
         Fields::Unnamed(ref fields) => {

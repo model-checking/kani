@@ -1,0 +1,17 @@
+Check 1: check_invariant_helper_ok.assertion.1\
+         - Status: SUCCESS\
+         - Description: "assertion failed: pos_point.x >= 0"
+
+Check 2: check_invariant_helper_ok.assertion.2\
+         - Status: SUCCESS\
+         - Description: "assertion failed: pos_point.y >= 0"
+
+Check 1: check_invariant_helper_fail.assertion.1\
+         - Status: FAILURE\
+         - Description: "assertion failed: pos_point.x >= 0"
+
+Check 2: check_invariant_helper_fail.assertion.2\
+         - Status: FAILURE\
+         - Description: "assertion failed: pos_point.y >= 0"
+
+Complete - 2 successfully verified harnesses, 0 failures, 2 total.
