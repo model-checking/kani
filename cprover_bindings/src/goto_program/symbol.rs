@@ -8,6 +8,8 @@ use std::fmt::Display;
 
 /// Based off the CBMC symbol implementation here:
 /// <https://github.com/diffblue/cbmc/blob/develop/src/util/symbol.h>
+///
+/// TODO: We should consider using BitFlags for all the boolean flags.
 #[derive(Clone, Debug)]
 pub struct Symbol {
     /// Unique identifier. Mangled name from compiler `foo12_bar17_x@1`
@@ -46,6 +48,14 @@ pub struct Symbol {
     pub is_thread_local: bool,
     pub is_volatile: bool,
     pub is_weak: bool,
+
+    /// This flag marks a variable as constant (IrepId: `ID_C_constant`).
+    ///
+    /// In CBMC, this is a property of the type or expression. However, we keep it here to avoid
+    /// having to propagate the attribute to all variants of `Type` and `Expr`.
+    ///
+    /// During contract verification, CBMC will not havoc static variables marked as constant.
+    pub is_static_const: bool,
 }
 
 /// The equivalent of a "mathematical function" in CBMC. Semantically this is an
@@ -157,6 +167,7 @@ impl Symbol {
             is_lvalue: false,
             is_parameter: false,
             is_static_lifetime: false,
+            is_static_const: false,
             is_thread_local: false,
             is_volatile: false,
             is_weak: false,
@@ -363,6 +374,11 @@ impl Symbol {
         self
     }
 
+    pub fn set_is_static_const(&mut self, v: bool) -> &mut Symbol {
+        self.is_static_const = v;
+        self
+    }
+
     pub fn with_is_state_var(mut self, v: bool) -> Symbol {
         self.is_state_var = v;
         self
@@ -383,7 +399,17 @@ impl Symbol {
         self
     }
 
+    pub fn set_pretty_name<T: Into<InternedString>>(&mut self, pretty_name: T) -> &mut Symbol {
+        self.pretty_name = Some(pretty_name.into());
+        self
+    }
+
     pub fn with_is_hidden(mut self, hidden: bool) -> Symbol {
+        self.is_auxiliary = hidden;
+        self
+    }
+
+    pub fn set_is_hidden(&mut self, hidden: bool) -> &mut Symbol {
         self.is_auxiliary = hidden;
         self
     }

@@ -4,7 +4,6 @@
 //! This file contains functions related to codegenning MIR static variables into gotoc
 
 use crate::codegen_cprover_gotoc::GotocCtx;
-use cbmc::goto_program::Symbol;
 use stable_mir::mir::mono::{Instance, StaticDef};
 use stable_mir::CrateDef;
 use tracing::debug;
@@ -37,9 +36,8 @@ impl<'tcx> GotocCtx<'tcx> {
         // havoc static variables. Kani uses the location and pretty name to identify
         // the correct variables. If the wrong name is used, CBMC may fail silently.
         // More details at https://github.com/diffblue/cbmc/issues/8225.
-        let symbol = Symbol::static_variable(symbol_name.clone(), symbol_name, typ, location)
-            .with_is_hidden(false) // Static items are always user defined.
-            .with_pretty_name(pretty_name);
-        self.symbol_table.insert(symbol);
+        self.ensure_global_var(symbol_name, false, typ, location)
+            .set_is_hidden(false) // Static items are always user defined.
+            .set_pretty_name(pretty_name);
     }
 }
