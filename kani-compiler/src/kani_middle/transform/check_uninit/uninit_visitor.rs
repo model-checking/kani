@@ -238,6 +238,7 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
         let SourceInstruction::Statement { idx, bb } = self.current else { unreachable!() };
         self.current = SourceInstruction::Statement { idx: idx + 1, bb };
     }
+
     fn visit_terminator(&mut self, term: &Terminator, location: Location) {
         if !(self.skip_next || self.target.is_some()) {
             self.current = SourceInstruction::Terminator { bb: self.bb };
