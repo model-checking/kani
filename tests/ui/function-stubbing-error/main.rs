@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
-// kani-flags: --harness main --enable-unstable --enable-stubbing
+// kani-flags: --harness main -Z stubbing
 //
 //! This tests whether we detect syntactically misformed `kani::stub` annotations.
 
