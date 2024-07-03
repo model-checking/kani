@@ -22,7 +22,6 @@ mod args_toml;
 mod assess;
 mod call_cargo;
 mod call_cbmc;
-mod call_cbmc_viewer;
 mod call_goto_cc;
 mod call_goto_instrument;
 mod call_goto_synthesizer;

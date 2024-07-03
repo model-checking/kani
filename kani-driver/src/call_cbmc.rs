@@ -75,7 +75,8 @@ impl KaniSession {
             }
         } else {
             // Add extra argument to receive the output in JSON format.
-            // Done here because `--visualize` uses the XML format instead.
+            // Done here because now removed `--visualize` used the XML format instead.
+            // TODO: move this now that we don't use --visualize
             cmd.arg("--json-ui");
 
             // Spawn the CBMC process and process its output below
@@ -138,10 +139,7 @@ impl KaniSession {
             args.push("--validate-ssa-equation".into());
         }
 
-        if !self.args.visualize
-            && self.args.concrete_playback.is_none()
-            && !self.args.no_slice_formula
-        {
+        if self.args.concrete_playback.is_none() && !self.args.no_slice_formula {
             args.push("--slice-formula".into());
         }
 

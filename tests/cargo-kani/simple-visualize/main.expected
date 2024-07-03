@@ -1,2 +1,0 @@
-warning: The `--visualize` option is deprecated. This option will be removed soon. Consider using `--concrete-playback` instead
-report-main/html/index.html
