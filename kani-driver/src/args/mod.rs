@@ -181,7 +181,7 @@ pub enum CargoKaniSubcommand {
 pub struct VerificationArgs {
     /// Temporary option to trigger assess mode for out test suite
     /// where we are able to add options but not subcommands
-    #[arg(long, hide = true, requires("enable_unstable"))]
+    #[arg(long, hide = true)]
     pub assess: bool,
 
     /// Generate concrete playback unit test.
@@ -195,9 +195,9 @@ pub struct VerificationArgs {
     #[arg(long, hide_short_help = true)]
     pub keep_temps: bool,
 
-    /// Generate C file equivalent to inputted program.
-    /// This feature is unstable and it requires `--enable-unstable` to be used
-    #[arg(long, hide_short_help = true, requires("enable_unstable"))]
+    /// Generate C file equivalent to inputted program for debug purpose.
+    /// This feature is unstable, and it requires `-Z unstable-options` to be used
+    #[arg(long, hide_short_help = true)]
     pub gen_c: bool,
 
     /// Directory for all generated artifacts.
@@ -247,11 +247,10 @@ pub struct VerificationArgs {
     #[arg(long, value_parser = CbmcSolverValueParser::new(CbmcSolver::VARIANTS))]
     pub solver: Option<CbmcSolver>,
     /// Pass through directly to CBMC; must be the last flag.
-    /// This feature is unstable and it requires `--enable_unstable` to be used
+    /// This feature is unstable and it requires `-Z unstable-options` to be used
     #[arg(
         long,
         allow_hyphen_values = true,
-        requires("enable_unstable"),
         num_args(0..)
     )]
     // consumes everything
@@ -261,19 +260,19 @@ pub struct VerificationArgs {
     /// Omit the flag entirely to run sequentially (i.e. one thread).
     /// Pass -j to run with the thread pool's default number of threads.
     /// Pass -j <N> to specify N threads.
-    #[arg(short, long, hide_short_help = true, requires("enable_unstable"))]
+    #[arg(short, long, hide_short_help = true)]
     pub jobs: Option<Option<usize>>,
 
     /// Enable extra pointer checks such as invalid pointers in relation operations and pointer
     /// arithmetic overflow.
     /// This feature is unstable and it may yield false counter examples. It requires
-    /// `--enable-unstable` to be used
-    #[arg(long, hide_short_help = true, requires("enable_unstable"))]
+    /// `-Z unstable-options` to be used
+    #[arg(long, hide_short_help = true)]
     pub extra_pointer_checks: bool,
 
     /// Restrict the targets of virtual table function pointer calls.
-    /// This feature is unstable and it requires `--enable-unstable` to be used
-    #[arg(long, hide_short_help = true, requires("enable_unstable"))]
+    /// This feature is unstable and it requires `-Z restrict-vtable` to be used
+    #[arg(long, hide_short_help = true, conflicts_with = "no_restrict_vtable")]
     pub restrict_vtable: bool,
     /// Disable restricting the targets of virtual table function pointer calls
     #[arg(long, hide_short_help = true)]
@@ -284,7 +283,7 @@ pub struct VerificationArgs {
 
     /// Do not error out for crates containing `global_asm!`.
     /// This option may impact the soundness of the analysis and may cause false proofs and/or counterexamples
-    #[arg(long, hide_short_help = true, requires("enable_unstable"))]
+    #[arg(long, hide_short_help = true)]
     pub ignore_global_asm: bool,
 
     /// Write the GotoC symbol table to a file in JSON format instead of goto binary format.
@@ -292,18 +291,17 @@ pub struct VerificationArgs {
     pub write_json_symtab: bool,
 
     /// Execute CBMC's sanity checks to ensure the goto-program we generate is correct.
-    #[arg(long, hide_short_help = true, requires("enable_unstable"))]
+    #[arg(long, hide_short_help = true)]
     pub run_sanity_checks: bool,
 
     /// Disable CBMC's slice formula which prevents values from being assigned to redundant variables in traces.
-    #[arg(long, hide_short_help = true, requires("enable_unstable"))]
+    #[arg(long, hide_short_help = true)]
     pub no_slice_formula: bool,
 
     /// Synthesize loop contracts for all loops.
     #[arg(
         long,
         hide_short_help = true,
-        requires("enable_unstable"),
         conflicts_with("unwind"),
         conflicts_with("default_unwind")
     )]
@@ -351,6 +349,8 @@ pub struct VerificationArgs {
 impl VerificationArgs {
     pub fn restrict_vtable(&self) -> bool {
         self.restrict_vtable
+            || (self.common_args.unstable_features.contains(UnstableFeature::RestrictVtable)
+                && !self.no_restrict_vtable)
         // if we flip the default, this will become: !self.no_restrict_vtable
     }
 
@@ -538,16 +538,14 @@ impl ValidateArgs for CargoKaniArgs {
     fn validate(&self) -> Result<(), Error> {
         self.verify_opts.validate()?;
         self.command.validate()?;
-        // --assess requires --enable-unstable, but the subcommand needs manual checking
-        if (matches!(self.command, Some(CargoKaniSubcommand::Assess(_))) || self.verify_opts.assess)
-            && !self.verify_opts.common_args.enable_unstable
-        {
-            return Err(Error::raw(
-                ErrorKind::MissingRequiredArgument,
-                "Assess is unstable and requires 'cargo kani --enable-unstable assess'",
-            ));
-        }
-        Ok(())
+
+        // --assess requires -Z unstable-options, but the subcommand needs manual checking
+        self.verify_opts.common_args.check_unstable(
+            (matches!(self.command, Some(CargoKaniSubcommand::Assess(_)))
+                || self.verify_opts.assess),
+            "assess",
+            UnstableFeature::UnstableOptions,
+        )
     }
 }
 
@@ -630,19 +628,77 @@ impl ValidateArgs for VerificationArgs {
             }
         }
 
-        if self.concrete_playback.is_some()
-            && !self.common_args.unstable_features.contains(UnstableFeature::ConcretePlayback)
-        {
-            if self.common_args.enable_unstable {
-                print_deprecated(&self.common_args, "--enable-unstable", "-Z concrete-playback");
-            } else {
-                return Err(Error::raw(
-                    ErrorKind::MissingRequiredArgument,
-                    "The `--concrete-playback` argument is unstable and requires `-Z \
-                concrete-playback` to be used.",
-                ));
-            }
+        self.common_args.check_unstable(
+            self.concrete_playback.is_some(),
+            "--concrete-playback",
+            UnstableFeature::ConcretePlayback,
+        )?;
+
+        self.common_args.check_unstable(
+            !self.c_lib.is_empty(),
+            "--c-lib",
+            UnstableFeature::CFfi,
+        )?;
+
+        self.common_args.check_unstable(self.gen_c, "--gen-c", UnstableFeature::UnstableOptions)?;
+
+        self.common_args.check_unstable(
+            !self.cbmc_args.is_empty(),
+            "--cbmc-args",
+            UnstableFeature::UnstableOptions,
+        )?;
+
+        self.common_args.check_unstable(
+            self.jobs.is_some(),
+            "--jobs",
+            UnstableFeature::UnstableOptions,
+        )?;
+
+        self.common_args.check_unstable(
+            self.extra_pointer_checks,
+            "--extra-pointer-checks",
+            UnstableFeature::UnstableOptions,
+        )?;
+
+        self.common_args.check_unstable(
+            self.ignore_global_asm,
+            "--ignore-global-asm",
+            UnstableFeature::UnstableOptions,
+        )?;
+
+        self.common_args.check_unstable(
+            self.run_sanity_checks,
+            "--run-sanity-checks",
+            UnstableFeature::UnstableOptions,
+        )?;
+
+        self.common_args.check_unstable(
+            self.no_slice_formula,
+            "--no-slice-formula",
+            UnstableFeature::UnstableOptions,
+        )?;
+
+        self.common_args.check_unstable(
+            self.synthesize_loop_contracts,
+            "--synthesize-loop-contracts",
+            UnstableFeature::UnstableOptions,
+        )?;
+
+        if self.restrict_vtable {
+            // Deprecated `--restrict-vtable` in favor our `-Z restrict-vtable`.
+            print_deprecated(&self.common_args, "--restrict-vtable", "-Z restrict-vtable");
+            self.common_args.check_unstable(
+                true,
+                "--restrict-vtable",
+                UnstableFeature::RestrictVtable,
+            )?;
         }
+
+        self.common_args.check_unstable(
+            self.no_restrict_vtable,
+            "--no-restrict-vtable",
+            UnstableFeature::RestrictVtable,
+        )?;
 
         if !self.c_lib.is_empty()
             && !self.common_args.unstable_features.contains(UnstableFeature::CFfi)
@@ -787,7 +843,7 @@ mod tests {
         let a = StandaloneArgs::try_parse_from(vec![
             "kani",
             "file.rs",
-            "--enable-unstable",
+            "-Zunstable-options",
             "--cbmc-args",
             "--multiple",
             "args",
@@ -798,7 +854,7 @@ mod tests {
         let _b = StandaloneArgs::try_parse_from(vec![
             "kani",
             "file.rs",
-            "--enable-unstable",
+            "-Zunstable-options",
             "--cbmc-args",
         ])
         .unwrap();
@@ -840,13 +896,13 @@ mod tests {
         assert!(b.is_ok());
     }
 
-    fn check(args: &str, require_unstable: bool, pred: fn(StandaloneArgs) -> bool) {
+    fn check(args: &str, feature: Option<UnstableFeature>, pred: fn(StandaloneArgs) -> bool) {
         let mut res = parse_unstable_disabled(&args);
-        if require_unstable {
-            // Should fail without --enable-unstable.
+        if let Some(unstable) = feature {
+            // Should fail without -Z unstable-options.
             assert_eq!(res.unwrap_err().kind(), ErrorKind::MissingRequiredArgument);
-            // Should succeed with --enable-unstable.
-            res = parse_unstable_enabled(&args);
+            // Should succeed with -Z unstable-options.
+            res = parse_unstable_enabled(&args, unstable);
         }
         assert!(res.is_ok());
         assert!(pred(res.unwrap()));
@@ -854,7 +910,7 @@ mod tests {
 
     macro_rules! check_unstable_flag {
         ($args:expr, $name:ident) => {
-            check($args, true, |p| p.verify_opts.$name)
+            check($args, Some(UnstableFeature::UnstableOptions), |p| p.verify_opts.$name)
         };
     }
 
@@ -891,22 +947,35 @@ mod tests {
 
     fn parse_unstable_disabled(args: &str) -> Result<StandaloneArgs, Error> {
         let args = format!("kani file.rs {args}");
-        StandaloneArgs::try_parse_from(args.split(' '))
+        let parse_res = StandaloneArgs::try_parse_from(args.split(' '))?;
+        parse_res.verify_opts.validate()?;
+        Ok(parse_res)
     }
 
-    fn parse_unstable_enabled(args: &str) -> Result<StandaloneArgs, Error> {
-        let args = format!("kani --enable-unstable file.rs {args}");
-        StandaloneArgs::try_parse_from(args.split(' '))
+    fn parse_unstable_enabled(
+        args: &str,
+        unstable: UnstableFeature,
+    ) -> Result<StandaloneArgs, Error> {
+        let args = format!("kani -Z {} file.rs {args}", unstable);
+        let parse_res = StandaloneArgs::try_parse_from(args.split(' '))?;
+        parse_res.verify_opts.validate()?;
+        Ok(parse_res)
     }
 
     #[test]
     fn check_restrict_vtable_unstable() {
-        check_unstable_flag!("--restrict-vtable", restrict_vtable);
+        let restrict_vtable = |args: StandaloneArgs| args.verify_opts.restrict_vtable();
+        check("--restrict-vtable", Some(UnstableFeature::RestrictVtable), restrict_vtable);
     }
 
     #[test]
     fn check_restrict_cbmc_args() {
-        check_opt!("--cbmc-args --json-ui", true, cbmc_args, vec!["--json-ui"]);
+        check_opt!(
+            "--cbmc-args --json-ui",
+            Some(UnstableFeature::UnstableOptions),
+            cbmc_args,
+            vec!["--json-ui"]
+        );
     }
 
     #[test]
@@ -938,11 +1007,11 @@ mod tests {
     #[test]
     fn check_concrete_playback_conflicts() {
         expect_validation_error(
-            "kani --concrete-playback=print --quiet --enable-unstable test.rs",
+            "kani --concrete-playback=print --quiet -Z concrete-playback test.rs",
             ErrorKind::ArgumentConflict,
         );
         expect_validation_error(
-            "kani --concrete-playback=inplace --output-format=old --enable-unstable test.rs",
+            "kani --concrete-playback=inplace --output-format=old -Z concrete-playback test.rs",
             ErrorKind::ArgumentConflict,
         );
     }
@@ -1010,7 +1079,7 @@ mod tests {
 
     #[test]
     fn check_cbmc_args_lean_backend() {
-        let args = "kani input.rs -Z lean --enable-unstable --cbmc-args --object-bits 10"
+        let args = "kani input.rs -Z lean -Z unstable-options --cbmc-args --object-bits 10"
             .split_whitespace();
         let err = StandaloneArgs::try_parse_from(args).unwrap().validate().unwrap_err();
         assert_eq!(err.kind(), ErrorKind::ArgumentConflict);

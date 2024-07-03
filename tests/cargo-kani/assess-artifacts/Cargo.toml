@@ -9,4 +9,5 @@ edition = "2021"
 # See src/lib.rs for a comment on this tests's purpose
 
 [package.metadata.kani]
-flags = { assess=true, enable-unstable=true }
+flags = { assess = true }
+unstable = { unstable-options = true }
