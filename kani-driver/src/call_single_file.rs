@@ -139,6 +139,10 @@ impl KaniSession {
             flags.push("--ub-check=ptr_to_ref_cast".into())
         }
 
+        if self.args.common_args.unstable_features.contains(UnstableFeature::UninitChecks) {
+            flags.push("--ub-check=uninit".into())
+        }
+
         if self.args.ignore_locals_lifetime {
             flags.push("--ignore-storage-markers".into())
         }
