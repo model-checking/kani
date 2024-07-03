@@ -262,8 +262,11 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                 }
                                 name if name.starts_with("atomic") => {
                                     let num_args = match name {
+                                        // All `atomic_cxchg` intrinsics take `dst, old, src` as arguments.
                                         name if name.starts_with("atomic_cxchg") => 3,
+                                        // All `atomic_load` intrinsics take `src` as an argument.
                                         name if name.starts_with("atomic_load") => 1,
+                                        // All other `atomic` intrinsics take `dst, src` as arguments.
                                         _ => 2,
                                     };
                                     assert_eq!(
@@ -529,6 +532,7 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                 for (_, prov) in &allocation.provenance.ptrs {
                     if let GlobalAlloc::Static(_) = GlobalAlloc::from(prov.0) {
                         if constant.ty().kind().is_raw_ptr() {
+                            // If a static is a raw pointer, need to mark it as initialized.
                             self.push_target(MemoryInitOp::Set {
                                 operand: Operand::Constant(constant.clone()),
                                 count: mk_const_operand(1, location.span()),

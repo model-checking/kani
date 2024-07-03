@@ -30,7 +30,7 @@ pub use ty_layout::{PointeeInfo, PointeeLayout};
 use uninit_visitor::{CheckUninitVisitor, InitRelevantInstruction, MemoryInitOp};
 
 const SKIPPED_DIAGNOSTIC_ITEMS: &[&str] =
-    &["KaniIsUnitPtrInitialized", "KaniSetUnitPtrInitialized", "KaniContractsApplyClosure"];
+    &["KaniIsUnitPtrInitialized", "KaniSetUnitPtrInitialized"];
 
 /// Instrument the code with checks for uninitialized memory.
 #[derive(Debug)]
