@@ -32,8 +32,8 @@ pub use kani_macros::*;
 /// - `core`: Define a `kani` module inside `core` crate.
 /// - `std`: TODO: Define a `kani` module inside `std` crate. Users must define kani inside core.
 #[macro_export]
-macro_rules! kani_lib {
-    (core) => {
+macro_rules! kani_lib_core {
+    () => {
         #[cfg(kani)]
         #[unstable(feature = "kani", issue = "none")]
         pub mod kani {
@@ -47,14 +47,16 @@ macro_rules! kani_lib {
             }
         }
     };
+}
 
-    (kani) => {
+#[macro_export]
+macro_rules! kani_lib_internal {
+    () => {
         pub use kani_core::*;
         kani_core::kani_intrinsics!(std);
         kani_core::generate_arbitrary!(std);
     };
 }
-
 /// Kani intrinsics contains the public APIs used by users to verify their harnesses.
 /// This macro is a part of kani_core as that allows us to verify even libraries that are no_core
 /// such as core in rust's std library itself.
@@ -269,6 +271,7 @@ macro_rules! kani_intrinsics {
             loop {}
         }
 
+        #[doc(hidden)]
         pub mod internal {
 
             /// Helper trait for code generation for `modifies` contracts.
@@ -360,6 +363,13 @@ macro_rules! kani_intrinsics {
             #[doc(hidden)]
             #[rustc_diagnostic_item = "KaniInitContracts"]
             pub fn init_contracts() {}
+
+            /// This should only be used within contracts. The intent is to
+            /// perform type inference on a closure's argument
+            #[doc(hidden)]
+            pub fn apply_closure<T, U: Fn(&T) -> bool>(f: U, x: &T) -> bool {
+                f(x)
+            }
         }
     };
 }

@@ -3,6 +3,7 @@
 use crate::{any, any_where, Arbitrary};
 
 /// Generates an arbitrary vector whose length is at most MAX_LENGTH.
+#[cfg(kani_sysroot)]
 pub fn any_vec<T, const MAX_LENGTH: usize>() -> Vec<T>
 where
     T: Arbitrary,
@@ -23,6 +24,7 @@ where
 }
 
 /// Generates an arbitrary vector that is exactly EXACT_LENGTH long.
+#[cfg(kani_sysroot)]
 pub fn exact_vec<T, const EXACT_LENGTH: usize>() -> Vec<T>
 where
     T: Arbitrary,

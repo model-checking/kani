@@ -23,7 +23,7 @@ cp -r "${STD_PATH}" "${TMP_DIR}"
 # Insert a small harness in one of the standard library modules.
 CORE_CODE='
 #[cfg(kani)]
-kani_core::kani_lib!(core);
+kani_core::kani_lib_core!();
 
 #[cfg(kani)]
 #[unstable(feature = "kani", issue = "none")]
