@@ -444,14 +444,28 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                 TerminatorKind::Drop { place, .. } => {
                     self.super_terminator(term, location);
                     let place_ty = place.ty(&self.locals).unwrap();
-                    // When drop is codegen'ed, a reference is taken to the place which is later implicitly coerced to a pointer.
-                    // Hence, we need to bless this pointer as initialized.
-                    self.push_target(MemoryInitOp::SetRef {
-                        operand: Operand::Copy(place.clone()),
-                        count: mk_const_operand(1, location.span()),
-                        value: true,
-                        position: InsertPosition::Before,
-                    });
+
+                    // When drop is codegen'ed for types that could define their own dropping
+                    // behavior, a reference is taken to the place which is later implicitly coerced
+                    // to a pointer. Hence, we need to bless this pointer as initialized.
+                    match place
+                        .ty(&self.locals)
+                        .unwrap()
+                        .kind()
+                        .rigid()
+                        .expect("should be working with monomorphized code")
+                    {
+                        RigidTy::Adt(..) | RigidTy::Dynamic(_, _, _) => {
+                            self.push_target(MemoryInitOp::SetRef {
+                                operand: Operand::Copy(place.clone()),
+                                count: mk_const_operand(1, location.span()),
+                                value: true,
+                                position: InsertPosition::Before,
+                            });
+                        }
+                        _ => {}
+                    }
+
                     if place_ty.kind().is_raw_ptr() {
                         self.push_target(MemoryInitOp::Set {
                             operand: Operand::Copy(place.clone()),
