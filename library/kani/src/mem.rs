@@ -120,9 +120,15 @@ where
     let (thin_ptr, metadata) = ptr.to_raw_parts();
     // Need to assert `is_initialized` because non-determinism is used under the hood, so it does
     // not make sense to use it inside assumption context.
-    assert!(is_initialized(ptr, 1));
     metadata.is_ptr_aligned(thin_ptr, Internal)
         && is_inbounds(&metadata, thin_ptr)
+        && {
+            crate::assert(
+                is_initialized(ptr, 1),
+                "Undefined Behavior: Reading from an uninitialized pointer",
+            );
+            true
+        }
         && unsafe { has_valid_value(ptr) }
 }
 
@@ -152,8 +158,15 @@ where
     let (thin_ptr, metadata) = ptr.to_raw_parts();
     // Need to assert `is_initialized` because non-determinism is used under the hood, so it does
     // not make sense to use it inside assumption context.
-    assert!(is_initialized(ptr, 1));
-    is_inbounds(&metadata, thin_ptr) && unsafe { has_valid_value(ptr) }
+    is_inbounds(&metadata, thin_ptr)
+        && {
+            crate::assert(
+                is_initialized(ptr, 1),
+                "Undefined Behavior: Reading from an uninitialized pointer",
+            );
+            true
+        }
+        && unsafe { has_valid_value(ptr) }
 }
 
 /// Checks that `data_ptr` points to an allocation that can hold data of size calculated from `T`.
