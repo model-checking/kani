@@ -128,7 +128,7 @@ macro_rules! kani_mem {
             metadata.is_ptr_aligned(thin_ptr, Internal)
                 && is_inbounds(&metadata, thin_ptr)
                 && {
-                    crate::assert(
+                    assert!(
                         is_initialized(ptr, 1),
                         "Undefined Behavior: Reading from an uninitialized pointer",
                     );
@@ -166,7 +166,7 @@ macro_rules! kani_mem {
             // does not make sense to use it inside assumption context.
             is_inbounds(&metadata, thin_ptr)
                 && {
-                    crate::assert(
+                    assert!(
                         is_initialized(ptr, 1),
                         "Undefined Behavior: Reading from an uninitialized pointer",
                     );
