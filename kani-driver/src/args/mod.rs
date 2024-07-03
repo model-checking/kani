@@ -567,6 +567,13 @@ impl ValidateArgs for VerificationArgs {
                 --output-format=old.",
             ));
         }
+        if self.concrete_playback.is_some() && self.is_stubbing_enabled() {
+            // Concrete playback currently does not work with contracts or stubbing.
+            return Err(Error::raw(
+                ErrorKind::ArgumentConflict,
+                "Conflicting options: --concrete-playback isn't compatible with stubbing.",
+            ));
+        }
         if self.concrete_playback.is_some() && self.jobs() != Some(1) {
             // Concrete playback currently embeds a lot of assumptions about the order in which harnesses get called.
             return Err(Error::raw(
@@ -864,13 +871,18 @@ mod tests {
 
     #[test]
     fn check_enable_stubbing() {
-        check_unstable_flag!("--enable-stubbing --harness foo", enable_stubbing);
+        let res = parse_unstable_disabled("--harness foo").unwrap();
+        assert!(!res.verify_opts.is_stubbing_enabled());
 
-        check_unstable_flag!("--enable-stubbing", enable_stubbing);
+        let res = parse_unstable_disabled("--harness foo -Z stubbing").unwrap();
+        assert!(res.verify_opts.is_stubbing_enabled());
 
         // `-Z stubbing` cannot be called with `--concrete-playback`
-        let err = parse_unstable_enabled("-Z stubbing --harness foo --concrete-playback=print")
-            .unwrap_err();
+        let res = parse_unstable_disabled(
+            "--harness foo --concrete-playback=print -Z concrete-playback -Z stubbing",
+        )
+        .unwrap();
+        let err = res.validate().unwrap_err();
         assert_eq!(err.kind(), ErrorKind::ArgumentConflict);
     }
 
