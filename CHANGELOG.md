@@ -13,6 +13,7 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 
 ### Breaking Changes
 * Remove support for the unstable argument `--function` by @celinval in https://github.com/model-checking/kani/pull/3278
+* Remove deprecated `--enable-stubbing` by @celinval in https://github.com/model-checking/kani/pull/3309
 
 ### What's Changed
 
