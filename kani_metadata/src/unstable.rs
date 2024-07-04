@@ -91,6 +91,8 @@ pub enum UnstableFeature {
     GhostState,
     /// Automatically check that pointers are valid when casting them to references.
     PtrToRefCastChecks,
+    /// Automatically check that uninitialized memory is not used.
+    UninitChecks,
     /// Enable an unstable option or subcommand.
     UnstableOptions,
 }

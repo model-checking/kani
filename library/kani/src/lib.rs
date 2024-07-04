@@ -18,6 +18,8 @@
 #![allow(internal_features)]
 // Required for implementing memory predicates.
 #![feature(ptr_metadata)]
+#![feature(f16)]
+#![feature(f128)]
 
 pub mod arbitrary;
 #[cfg(feature = "concrete_playback")]
@@ -33,6 +35,7 @@ pub mod vec;
 #[doc(hidden)]
 pub mod internal;
 
+mod mem_init;
 mod models;
 
 pub use arbitrary::Arbitrary;
