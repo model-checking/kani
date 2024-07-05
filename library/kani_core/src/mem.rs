@@ -127,13 +127,7 @@ macro_rules! kani_mem {
             // does not make sense to use it inside assumption context.
             metadata.is_ptr_aligned(thin_ptr, Internal)
                 && is_inbounds(&metadata, thin_ptr)
-                && {
-                    assert!(
-                        is_initialized(ptr, 1),
-                        "Undefined Behavior: Reading from an uninitialized pointer",
-                    );
-                    true
-                }
+                && assert_is_initialized(ptr)
                 && unsafe { has_valid_value(ptr) }
         }
 
@@ -165,13 +159,7 @@ macro_rules! kani_mem {
             // Need to assert `is_initialized` because non-determinism is used under the hood, so it
             // does not make sense to use it inside assumption context.
             is_inbounds(&metadata, thin_ptr)
-                && {
-                    assert!(
-                        is_initialized(ptr, 1),
-                        "Undefined Behavior: Reading from an uninitialized pointer",
-                    );
-                    true
-                }
+                && assert_is_initialized(ptr)
                 && unsafe { has_valid_value(ptr) }
         }
 
@@ -320,6 +308,15 @@ macro_rules! kani_mem {
         #[inline(never)]
         pub fn is_initialized<T: ?Sized>(_ptr: *const T, _len: usize) -> bool {
             kani_intrinsic()
+        }
+
+        /// A helper to to assert `is_initialized` to use it as a part of other predicates.
+        fn assert_is_initialized<T: ?Sized>(ptr: *const T) -> bool {
+            assert!(
+                is_initialized(ptr, 1),
+                "Undefined Behavior: Reading from an uninitialized pointer",
+            );
+            true
         }
 
         /// Get the object ID of the given pointer.
