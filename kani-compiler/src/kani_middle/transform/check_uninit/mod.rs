@@ -76,40 +76,7 @@ impl TransformPass for UninitPass {
 
         // Inject a call to set-up memory initialization state if the function is a harness.
         if is_harness(instance, tcx) {
-            // First statement or terminator in the harness.
-            let mut source = if !new_body.blocks()[0].statements.is_empty() {
-                SourceInstruction::Statement { idx: 0, bb: 0 }
-            } else {
-                SourceInstruction::Terminator { bb: 0 }
-            };
-
-            // Dummy return place.
-            let ret_place = Place {
-                local: new_body.new_local(
-                    Ty::new_tuple(&[]),
-                    source.span(new_body.blocks()),
-                    Mutability::Not,
-                ),
-                projection: vec![],
-            };
-
-            // Resolve the instance and inject a call to set-up the memory initialization state.
-            let memory_initialization_init = Instance::resolve(
-                get_mem_init_fn_def(
-                    tcx,
-                    "KaniInitializeMemoryInitializationState",
-                    &mut self.mem_init_fn_cache,
-                ),
-                &GenericArgs(vec![]),
-            )
-            .unwrap();
-            new_body.add_call(
-                &memory_initialization_init,
-                &mut source,
-                InsertPosition::Before,
-                vec![],
-                ret_place,
-            );
+            inject_memory_init_setup(&mut new_body, tcx, &mut self.mem_init_fn_cache);
         }
 
         // Set of basic block indices for which analyzing first statement should be skipped.
@@ -480,4 +447,43 @@ fn is_harness(instance: Instance, tcx: TyCtxt) -> bool {
     harness_identifiers.iter().any(|attr_path| {
         tcx.has_attrs_with_path(rustc_internal::internal(tcx, instance.def.def_id()), attr_path)
     })
+}
+
+/// Inject an initial call to set-up memory initialization tracking.
+fn inject_memory_init_setup(
+    new_body: &mut MutableBody,
+    tcx: TyCtxt,
+    mem_init_fn_cache: &mut HashMap<&'static str, FnDef>,
+) {
+    // First statement or terminator in the harness.
+    let mut source = if !new_body.blocks()[0].statements.is_empty() {
+        SourceInstruction::Statement { idx: 0, bb: 0 }
+    } else {
+        SourceInstruction::Terminator { bb: 0 }
+    };
+
+    // Dummy return place.
+    let ret_place = Place {
+        local: new_body.new_local(
+            Ty::new_tuple(&[]),
+            source.span(new_body.blocks()),
+            Mutability::Not,
+        ),
+        projection: vec![],
+    };
+
+    // Resolve the instance and inject a call to set-up the memory initialization state.
+    let memory_initialization_init = Instance::resolve(
+        get_mem_init_fn_def(tcx, "KaniInitializeMemoryInitializationState", mem_init_fn_cache),
+        &GenericArgs(vec![]),
+    )
+    .unwrap();
+
+    new_body.add_call(
+        &memory_initialization_init,
+        &mut source,
+        InsertPosition::Before,
+        vec![],
+        ret_place,
+    );
 }
