@@ -302,21 +302,21 @@ macro_rules! kani_mem {
         /// Check whether `len * size_of::<T>()` bytes are initialized starting from `ptr`.
         #[rustc_diagnostic_item = "KaniIsInitialized"]
         #[inline(never)]
-        pub fn is_initialized<T: ?Sized>(_ptr: *const T, _len: usize) -> bool {
+        pub(crate) fn is_initialized<T: ?Sized>(_ptr: *const T, _len: usize) -> bool {
             kani_intrinsic()
         }
 
         /// Get the object ID of the given pointer.
         #[rustc_diagnostic_item = "KaniPointerObject"]
         #[inline(never)]
-        pub fn pointer_object<T: ?Sized>(_ptr: *const T) -> usize {
+        pub(crate) fn pointer_object<T: ?Sized>(_ptr: *const T) -> usize {
             kani_intrinsic()
         }
 
         /// Get the object offset of the given pointer.
         #[rustc_diagnostic_item = "KaniPointerOffset"]
         #[inline(never)]
-        pub fn pointer_offset<T: ?Sized>(_ptr: *const T) -> usize {
+        pub(crate) fn pointer_offset<T: ?Sized>(_ptr: *const T) -> usize {
             kani_intrinsic()
         }
     };
