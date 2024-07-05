@@ -108,7 +108,7 @@ impl TransformPass for UninitPass {
                 &mut source,
                 InsertPosition::Before,
                 vec![],
-                ret_place.clone(),
+                ret_place,
             );
         }
 
