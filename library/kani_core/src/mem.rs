@@ -307,16 +307,28 @@ macro_rules! kani_mem {
         }
 
         /// Get the object ID of the given pointer.
+        #[doc(hidden)]
+        #[crate::unstable(
+            feature = "ghost-state",
+            issue = 3184,
+            reason = "experimental ghost state/shadow memory API"
+        )]
         #[rustc_diagnostic_item = "KaniPointerObject"]
         #[inline(never)]
-        pub(crate) fn pointer_object<T: ?Sized>(_ptr: *const T) -> usize {
+        pub fn pointer_object<T: ?Sized>(_ptr: *const T) -> usize {
             kani_intrinsic()
         }
 
         /// Get the object offset of the given pointer.
+        #[doc(hidden)]
+        #[crate::unstable(
+            feature = "ghost-state",
+            issue = 3184,
+            reason = "experimental ghost state/shadow memory API"
+        )]
         #[rustc_diagnostic_item = "KaniPointerOffset"]
         #[inline(never)]
-        pub(crate) fn pointer_offset<T: ?Sized>(_ptr: *const T) -> usize {
+        pub fn pointer_offset<T: ?Sized>(_ptr: *const T) -> usize {
             kani_intrinsic()
         }
     };
