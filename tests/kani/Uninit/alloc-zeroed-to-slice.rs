@@ -1,6 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-flags: -Z ghost-state -Z uninit-checks
+// kani-flags: -Z uninit-checks
 
 use std::alloc::{alloc_zeroed, Layout};
 use std::slice::from_raw_parts;

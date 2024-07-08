@@ -1,6 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-flags: -Z ghost-state -Z uninit-checks
+// kani-flags: -Z uninit-checks
 //! Checks that Kani supports memory initialization checks via intrinsics.
 
 #![feature(core_intrinsics)]
