@@ -17,6 +17,8 @@
 
 #![feature(no_core)]
 #![no_core]
+#![feature(f16)]
+#![feature(f128)]
 
 mod arbitrary;
 mod mem;

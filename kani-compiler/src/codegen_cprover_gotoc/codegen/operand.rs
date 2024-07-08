@@ -184,12 +184,18 @@ impl<'tcx> GotocCtx<'tcx> {
             // Instead, we use integers with the right width to represent the bit pattern.
             {
                 match k {
+                    FloatTy::F16 => Some(Expr::float16_constant_from_bitpattern(
+                        alloc.read_uint().unwrap() as u16,
+                    )),
                     FloatTy::F32 => Some(Expr::float_constant_from_bitpattern(
                         alloc.read_uint().unwrap() as u32,
                     )),
                     FloatTy::F64 => Some(Expr::double_constant_from_bitpattern(
                         alloc.read_uint().unwrap() as u64,
                     )),
+                    FloatTy::F128 => {
+                        Some(Expr::float128_constant_from_bitpattern(alloc.read_uint().unwrap()))
+                    }
                 }
             }
             TyKind::RigidTy(RigidTy::RawPtr(inner_ty, _))
