@@ -1,9 +1,12 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
-// Ensure that kani::any and kani::any_raw can be used with floats.
+// Ensure that kani::any and kani::any_raw can be used with standard floats i.e f32 and f64.
 
-macro_rules! test {
+#![feature(f16)]
+#![feature(f128)]
+
+macro_rules! test_standard_floats {
     ( $type: ty ) => {{
         let v1 = kani::any::<$type>();
         let v2 = kani::any::<$type>();
@@ -18,10 +21,10 @@ macro_rules! test {
 
 #[kani::proof]
 fn check_f32() {
-    test!(f32);
+    test_standard_floats!(f32);
 }
 
 #[kani::proof]
 fn check_f64() {
-    test!(f64);
+    test_standard_floats!(f64);
 }
