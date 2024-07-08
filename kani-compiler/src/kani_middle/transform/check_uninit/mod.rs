@@ -29,8 +29,17 @@ mod uninit_visitor;
 pub use ty_layout::{PointeeInfo, PointeeLayout};
 use uninit_visitor::{CheckUninitVisitor, InitRelevantInstruction, MemoryInitOp};
 
-const SKIPPED_DIAGNOSTIC_ITEMS: &[&str] =
-    &["KaniIsUnitPtrInitialized", "KaniSetUnitPtrInitialized"];
+// Function bodies of those functions will not be instrumented as not to cause infinite recursion.
+const SKIPPED_DIAGNOSTIC_ITEMS: &[&str] = &[
+    "KaniIsPtrInitialized",
+    "KaniSetPtrInitialized",
+    "KaniIsSliceChunkPtrInitialized",
+    "KaniSetSliceChunkPtrInitialized",
+    "KaniIsSlicePtrInitialized",
+    "KaniSetSlicePtrInitialized",
+    "KaniIsStrPtrInitialized",
+    "KaniSetStrPtrInitialized",
+];
 
 /// Instrument the code with checks for uninitialized memory.
 #[derive(Debug)]
@@ -164,10 +173,12 @@ impl UninitPass {
         };
 
         match operation {
-            MemoryInitOp::Check { .. } => {
+            MemoryInitOp::CheckSliceChunk { .. } | MemoryInitOp::Check { .. } => {
                 self.build_get_and_check(tcx, body, source, operation, pointee_ty_info, skip_first)
             }
-            MemoryInitOp::Set { .. } | MemoryInitOp::SetRef { .. } => {
+            MemoryInitOp::SetSliceChunk { .. }
+            | MemoryInitOp::Set { .. }
+            | MemoryInitOp::SetRef { .. } => {
                 self.build_set(tcx, body, source, operation, pointee_ty_info, skip_first)
             }
             MemoryInitOp::Unsupported { .. } => {
@@ -194,18 +205,34 @@ impl UninitPass {
         let ptr_operand = operation.mk_operand(body, source);
         match pointee_info.layout() {
             PointeeLayout::Sized { layout } => {
+                let layout_operand = mk_layout_operand(body, source, operation.position(), &layout);
+                // Depending on whether accessing the known number of elements in the slice, need to
+                // pass is as an argument.
+                let (diagnostic, args) = match &operation {
+                    MemoryInitOp::Check { .. } => {
+                        let diagnostic = "KaniIsPtrInitialized";
+                        let args = vec![ptr_operand.clone(), layout_operand];
+                        (diagnostic, args)
+                    }
+                    MemoryInitOp::CheckSliceChunk { .. } => {
+                        let diagnostic = "KaniIsSliceChunkPtrInitialized";
+                        let args =
+                            vec![ptr_operand.clone(), layout_operand, operation.expect_count()];
+                        (diagnostic, args)
+                    }
+                    _ => unreachable!(),
+                };
                 let is_ptr_initialized_instance = resolve_mem_init_fn(
-                    get_mem_init_fn_def(tcx, "KaniIsPtrInitialized", &mut self.mem_init_fn_cache),
+                    get_mem_init_fn_def(tcx, diagnostic, &mut self.mem_init_fn_cache),
                     layout.len(),
                     *pointee_info.ty(),
                 );
-                let layout_operand = mk_layout_operand(body, source, operation.position(), &layout);
                 collect_skipped(&operation, body, skip_first);
                 body.add_call(
                     &is_ptr_initialized_instance,
                     source,
                     operation.position(),
-                    vec![ptr_operand.clone(), layout_operand, operation.expect_count()],
+                    args,
                     ret_place.clone(),
                 );
             }
@@ -277,27 +304,50 @@ impl UninitPass {
 
         match pointee_info.layout() {
             PointeeLayout::Sized { layout } => {
+                let layout_operand = mk_layout_operand(body, source, operation.position(), &layout);
+                // Depending on whether writing to the known number of elements in the slice, need to
+                // pass is as an argument.
+                let (diagnostic, args) = match &operation {
+                    MemoryInitOp::Set { .. } | MemoryInitOp::SetRef { .. } => {
+                        let diagnostic = "KaniSetPtrInitialized";
+                        let args = vec![
+                            ptr_operand,
+                            layout_operand,
+                            Operand::Constant(ConstOperand {
+                                span: source.span(body.blocks()),
+                                user_ty: None,
+                                const_: MirConst::from_bool(value),
+                            }),
+                        ];
+                        (diagnostic, args)
+                    }
+                    MemoryInitOp::SetSliceChunk { .. } => {
+                        let diagnostic = "KaniSetSliceChunkPtrInitialized";
+                        let args = vec![
+                            ptr_operand,
+                            layout_operand,
+                            operation.expect_count(),
+                            Operand::Constant(ConstOperand {
+                                span: source.span(body.blocks()),
+                                user_ty: None,
+                                const_: MirConst::from_bool(value),
+                            }),
+                        ];
+                        (diagnostic, args)
+                    }
+                    _ => unreachable!(),
+                };
                 let set_ptr_initialized_instance = resolve_mem_init_fn(
-                    get_mem_init_fn_def(tcx, "KaniSetPtrInitialized", &mut self.mem_init_fn_cache),
+                    get_mem_init_fn_def(tcx, diagnostic, &mut self.mem_init_fn_cache),
                     layout.len(),
                     *pointee_info.ty(),
                 );
-                let layout_operand = mk_layout_operand(body, source, operation.position(), &layout);
                 collect_skipped(&operation, body, skip_first);
                 body.add_call(
                     &set_ptr_initialized_instance,
                     source,
                     operation.position(),
-                    vec![
-                        ptr_operand,
-                        layout_operand,
-                        operation.expect_count(),
-                        Operand::Constant(ConstOperand {
-                            span: source.span(body.blocks()),
-                            user_ty: None,
-                            const_: MirConst::from_bool(value),
-                        }),
-                    ],
+                    args,
                     ret_place,
                 );
             }

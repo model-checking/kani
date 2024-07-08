@@ -306,14 +306,14 @@ macro_rules! kani_mem {
         /// Check whether `len * size_of::<T>()` bytes are initialized starting from `ptr`.
         #[rustc_diagnostic_item = "KaniIsInitialized"]
         #[inline(never)]
-        pub fn is_initialized<T: ?Sized>(_ptr: *const T, _len: usize) -> bool {
+        pub fn is_initialized<T: ?Sized>(_ptr: *const T) -> bool {
             kani_intrinsic()
         }
 
         /// A helper to to assert `is_initialized` to use it as a part of other predicates.
         fn assert_is_initialized<T: ?Sized>(ptr: *const T) -> bool {
             assert!(
-                is_initialized(ptr, 1),
+                is_initialized(ptr),
                 "Undefined Behavior: Reading from an uninitialized pointer",
             );
             true
