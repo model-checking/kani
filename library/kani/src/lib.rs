@@ -186,12 +186,30 @@ pub fn any_modifies<T>() -> T {
 #[rustc_diagnostic_item = "KaniHavoc"]
 #[inline(never)]
 #[doc(hidden)]
-pub fn havoc<T>(_pointer: &T) {
+pub fn havoc<T: ?Sized>(_pointer: &T) {
     // This function should not be reacheable.
     // Users must include `#[kani::recursion]` in any function contracts for recursive functions;
     // otherwise, this might not be properly instantiate. We mark this as unreachable to make
     // sure Kani doesn't report any false positives.
     unreachable!()
+}
+
+#[rustc_diagnostic_item = "KaniHavocSlice"]
+#[inline(always)]
+pub fn havoc_slice<T: Arbitrary>(slice: &mut [T]) {
+    slice.fill_with(|| T::any())
+}
+
+#[rustc_diagnostic_item = "KaniHavocSlim"]
+#[inline(always)]
+pub fn havoc_slim<T: Arbitrary>(pointer: &mut T) {
+    *pointer = T::any()
+}
+
+#[rustc_diagnostic_item = "KaniHavocStr"]
+#[inline(always)]
+pub fn havoc_str(s: &mut str) {
+    todo!()
 }
 
 /// This creates a symbolic *valid* value of type `T`.
