@@ -3,7 +3,7 @@
 
 //! Logic used for generating the code that replaces a function with its contract.
 
-use proc_macro2::{Ident, Span, TokenStream as TokenStream2};
+use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 
 use super::{
@@ -65,7 +65,7 @@ impl<'a> ContractConditionsHandler<'a> {
     ///
     /// `use_nondet_result` will only be true if this is the first time we are
     /// generating a replace function.
-    fn make_replace_body(&self) -> TokenStream2 {
+    fn make_replace_body(&self) -> TokenStream {
         let (before, after) = self.ensure_bootstrapped_replace_body();
 
         match &self.condition_type {
@@ -106,28 +106,20 @@ impl<'a> ContractConditionsHandler<'a> {
     ///
     /// See [`Self::make_replace_body`] for the most interesting parts of this
     /// function.
-    pub fn emit_replace_function(&mut self, override_function_ident: Option<Ident>) {
-        self.emit_common_header();
-
-        if self.function_state.emit_tag_attr() {
-            // If it's the first time we also emit this marker. Again, order is
-            // important so this happens as the last emitted attribute.
-            self.output.extend(quote!(#[kanitool::is_contract_generated(replace)]));
-        }
-        let mut sig = self.annotated_fn.sig.clone();
-        // We use non-constant functions, thus, the wrapper cannot be constant.
-        sig.constness = None;
+    pub fn replace_closure(&self) -> TokenStream {
+        let replace_ident = Ident::new(&self.replace_name, Span::call_site());
+        let sig = &self.annotated_fn.sig;
+        let (inputs, _args) = closure_args(&sig.inputs);
+        let output = &sig.output;
         let body = self.make_replace_body();
-        if let Some(ident) = override_function_ident {
-            sig.ident = ident;
-        }
 
-        // Finally emit the check function itself.
-        self.output.extend(quote!(
-            #sig {
+        quote!(
+            #[kanitool::is_contract_generated(replace)]
+            #[allow(dead_code, unused_variables, unused_mut)]
+            let mut #replace_ident = |#inputs| #output {
                 #body
-            }
-        ));
+            };
+        )
     }
 }
 

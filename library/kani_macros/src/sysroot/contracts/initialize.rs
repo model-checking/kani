@@ -19,24 +19,9 @@ impl<'a> TryFrom<&'a syn::Attribute> for ContractFunctionState {
     /// Find out if this attribute could be describing a "contract handling"
     /// state and if so return it.
     fn try_from(attribute: &'a syn::Attribute) -> Result<Self, Self::Error> {
-        if let syn::Meta::List(lst) = &attribute.meta {
-            if matches_path(&lst.path, &["kanitool", "is_contract_generated"]) {
-                let ident = syn::parse2::<Ident>(lst.tokens.clone())
-                    .map_err(|e| Some(lst.span().unwrap().error(format!("{e}"))))?;
-                let ident_str = ident.to_string();
-                return match ident_str.as_str() {
-                    "check" => Ok(Self::Check),
-                    "replace" => Ok(Self::Replace),
-                    "wrapper" => Ok(Self::ModifiesWrapper),
-                    _ => {
-                        Err(Some(lst.span().unwrap().error("Expected `check` or `replace` ident")))
-                    }
-                };
-            }
-        }
         if let syn::Meta::NameValue(nv) = &attribute.meta {
             if matches_path(&nv.path, &["kanitool", "checked_with"]) {
-                return Ok(ContractFunctionState::Original);
+                return Ok(ContractFunctionState::Expanded);
             }
         }
         Err(None)
@@ -71,7 +56,6 @@ impl<'a> ContractConditionsHandler<'a> {
         attr: TokenStream,
         annotated_fn: &'a mut ItemFn,
         attr_copy: TokenStream2,
-        hash: Option<u64>,
     ) -> Result<Self, syn::Error> {
         let mut output = TokenStream2::new();
         let condition_type = match is_requires {
@@ -86,7 +70,24 @@ impl<'a> ContractConditionsHandler<'a> {
             }
         };
 
-        Ok(Self { function_state, condition_type, annotated_fn, attr_copy, output, hash })
+        let fn_name = &annotated_fn.sig.ident;
+        let generate_name = |purpose| format!("__kani_{purpose}_{fn_name}");
+        let check_name = generate_name("check");
+        let replace_name = generate_name("replace");
+        let recursion_name = generate_name("recursion_check");
+        let modifies_name = generate_name("modifies");
+
+        Ok(Self {
+            function_state,
+            condition_type,
+            annotated_fn,
+            attr_copy,
+            output,
+            check_name,
+            replace_name,
+            recursion_name,
+            modify_name: modifies_name,
+        })
     }
 }
 impl ContractConditionsData {

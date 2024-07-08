@@ -26,26 +26,23 @@
 //! instead of throwing a hard error but this means we cannot detect if a given
 //! function has further contract attributes placed on it during any given
 //! expansion. As a result every expansion needs to leave the code in a valid
-//! state that could be used for all contract functionality but it must alow
+//! state that could be used for all contract functionality, but it must allow
 //! further contract attributes to compose with what was already generated. In
-//! addition we also want to make sure to support non-contract attributes on
+//! addition, we also want to make sure to support non-contract attributes on
 //! functions with contracts.
 //!
 //! To this end we use a state machine. The initial state is an "untouched"
 //! function with possibly multiple contract attributes, none of which have been
 //! expanded. When we expand the first (outermost) `requires` or `ensures`
-//! attribute on such a function we re-emit the function unchanged but we also
-//! generate fresh "check" and "replace" functions that enforce the condition
+//! attribute on such a function we re-emit the function with a few closures defined
+//! in their body, which correspond to the "check" and "replace" that enforce the condition
 //! carried by the attribute currently being expanded.
 //!
-//! We don't copy all attributes from the original function since they may have
-//! unintended consequences for the stubs, such as `inline` or `rustc_diagnostic_item`.
-//!
-//! We also add new marker attributes to
-//! advance the state machine. The "check" function gets a
+//! We also add new marker attributes to the original function to
+//! advance the state machine. The "check" closure gets a
 //! `kanitool::is_contract_generated(check)` attributes and analogous for
 //! replace. The re-emitted original meanwhile is decorated with
-//! `kanitool::checked_with(name_of_generated_check_function)` and an analogous
+//! `kanitool::checked_with(name_of_generated_check_variable)` and an analogous
 //! `kanittool::replaced_with` attribute also. The next contract attribute that
 //! is expanded will detect the presence of these markers in the attributes of
 //! the item and be able to determine their position in the state machine this
@@ -67,42 +64,24 @@
 //!                     │ Function  │
 //!                     └─────┬─────┘
 //!                           │
-//!            Emit           │  Generate      + Copy Attributes
-//!         ┌─────────────────┴─────┬──────────┬─────────────────┐
-//!         │                       │          │                 │
-//!         │                       │          │                 │
-//!         ▼                       ▼          ▼                 ▼
-//!  ┌──────────┐           ┌───────────┐  ┌───────┐        ┌─────────┐
-//!  │ Original │◄─┐        │ Recursion │  │ Check │◄─┐     │ Replace │◄─┐
-//!  └──┬───────┘  │        │ Wrapper   │  └───┬───┘  │     └────┬────┘  │
-//!     │          │ Ignore └───────────┘      │      │ Augment  │       │ Augment
-//!     └──────────┘                           └──────┘          └───────┘
-//!
-//! │               │       │                                             │
-//! └───────────────┘       └─────────────────────────────────────────────┘
-//!
-//!     Presence of                            Presence of
-//!    "checked_with"                    "is_contract_generated"
-//!
-//!                        State is detected via
+//!                           │  Annotate original + generate closures
+//!                           │
+//!                           ▼
+//!                    ┌──────────┐
+//!                    │ Original │◄─┐
+//!                    └──┬───────┘  │
+//!                       │          │ Expand
+//!                       └──────────┘ closures
 //! ```
 //!
-//! All named arguments of the annotated function are unsafely shallow-copied
-//! with the `kani::internal::untracked_deref` function to circumvent the borrow checker
-//! for postconditions. The case where this is relevant is if you want to return
-//! a mutable borrow from the function which means any immutable borrow in the
-//! postcondition would be illegal. We must ensure that those copies are not
-//! dropped (causing a double-free) so after the postconditions we call
-//! `mem::forget` on each copy.
+//! ## Check closure
 //!
-//! ## Check function
-//!
-//! Generates a `<fn_name>_check_<fn_hash>` function that assumes preconditions
-//! and asserts postconditions. The check function is also marked as generated
+//! Generates a `__kani_<fn_name>_check` closure that assumes preconditions
+//! and asserts postconditions. The check closure is also marked as generated
 //! with the `#[kanitool::is_contract_generated(check)]` attribute.
 //!
 //! Decorates the original function with `#[kanitool::checked_by =
-//! "<fn_name>_check_<fn_hash>"]`.
+//! "__kani_check_<fn_name>"]`.
 //!
 //! The check function is a copy of the original function with preconditions
 //! added before the body and postconditions after as well as injected before
@@ -111,16 +90,16 @@
 //!
 //! ## Replace Function
 //!
-//! As the mirror to that also generates a `<fn_name>_replace_<fn_hash>`
-//! function that asserts preconditions and assumes postconditions. The replace
+//! As the mirror to that also generates a `__kani_replace_<fn_name>`
+//! closure that asserts preconditions and assumes postconditions. The replace
 //! function is also marked as generated with the
 //! `#[kanitool::is_contract_generated(replace)]` attribute.
 //!
 //! Decorates the original function with `#[kanitool::replaced_by =
-//! "<fn_name>_replace_<fn_hash>"]`.
+//! "__kani_replace_<fn_name>"]`.
 //!
-//! The replace function has the same signature as the original function but its
-//! body is replaced by `kani::any()`, which generates a non-deterministic
+//! The replace closure has the same signature as the original function but its
+//! body is replaced by `kani::any_modifies()`, which generates a non-deterministic
 //! value.
 //!
 //! ## Inductive Verification
@@ -148,11 +127,11 @@
 //! flip the tracker variable back to `false` in case the function is called
 //! more than once in its harness.
 //!
-//! To facilitate all this we generate a `<fn_name>_recursion_wrapper_<fn_hash>`
+//! To facilitate all this we generate a `__kani_recursion_check_<fn_name>`
 //! function with the following shape:
 //!
 //! ```ignored
-//! fn recursion_wrapper_...(fn args ...) {
+//! let __kani_recursion_check_func = |(args ...)| {
 //!     static mut REENTRY: bool = false;
 //!
 //!     if unsafe { REENTRY } {
@@ -163,11 +142,11 @@
 //!         unsafe { reentry = false };
 //!         result_kani_internal
 //!     }
-//! }
+//! };
 //! ```
 //!
-//! We register this function as `#[kanitool::checked_with =
-//! "recursion_wrapper_..."]` instead of the check function.
+//! We register this closure as `#[kanitool::checked_with = "__kani_recursion_..."]` instead of the
+//! check function.
 //!
 //! # Complete example
 //!
@@ -180,9 +159,9 @@
 //! ```
 //!
 //! Turns into
-//!
+//! TODO: Update this
 //! ```
-//! #[kanitool::checked_with = "div_recursion_wrapper_965916"]
+//! #[kanitool::checked_with = "div_recursion_check_965916"]
 //! #[kanitool::replaced_with = "div_replace_965916"]
 //! fn div(dividend: u32, divisor: u32) -> u32 { dividend / divisor }
 //!
@@ -219,8 +198,8 @@
 //!
 //! #[allow(dead_code)]
 //! #[allow(unused_variables)]
-//! #[kanitool::is_contract_generated(recursion_wrapper)]
-//! fn div_recursion_wrapper_965916(dividend: u32, divisor: u32) -> u32 {
+//! #[kanitool::is_contract_generated(recursion_check)]
+//! fn div_recursion_check_965916(dividend: u32, divisor: u32) -> u32 {
 //!     static mut REENTRY: bool = false;
 //!
 //!     if unsafe { REENTRY } {
@@ -262,15 +241,16 @@
 //! ```
 //!
 //! This expands to
+//! TODO: Update this
 //!
 //! ```
-//! #[kanitool::checked_with = "modify_recursion_wrapper_633496"]
+//! #[kanitool::checked_with = "modify_recursion_check_633496"]
 //! #[kanitool::replaced_with = "modify_replace_633496"]
 //! #[kanitool::inner_check = "modify_wrapper_633496"]
 //! fn modify(ptr: &mut u32) { { *ptr += 1; } }
 //! #[allow(dead_code, unused_variables, unused_mut)]
-//! #[kanitool::is_contract_generated(recursion_wrapper)]
-//! fn modify_recursion_wrapper_633496(arg0: &mut u32) {
+//! #[kanitool::is_contract_generated(recursion_check)]
+//! fn modify_recursion_check_633496(arg0: &mut u32) {
 //!     static mut REENTRY: bool = false;
 //!     if unsafe { REENTRY } {
 //!             modify_replace_633496(arg0)
@@ -403,18 +383,11 @@ pub fn proof_for_contract(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// Classifies the state a function is in in the contract handling pipeline.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum ContractFunctionState {
-    /// This is the original code, re-emitted from a contract attribute.
-    Original,
+    /// This is the function already expanded with the closures.
+    Expanded,
     /// This is the first time a contract attribute is evaluated on this
     /// function.
     Untouched,
-    /// This is a check function that was generated from a previous evaluation
-    /// of a contract attribute.
-    Check,
-    /// This is a replace function that was generated from a previous evaluation
-    /// of a contract attribute.
-    Replace,
-    ModifiesWrapper,
 }
 
 /// The information needed to generate the bodies of check and replacement
@@ -424,12 +397,19 @@ struct ContractConditionsHandler<'a> {
     /// Information specific to the type of contract attribute we're expanding.
     condition_type: ContractConditionsData,
     /// Body of the function this attribute was found on.
-    annotated_fn: &'a mut ItemFn,
+    annotated_fn: &'a ItemFn,
     /// An unparsed, unmodified copy of `attr`, used in the error messages.
     attr_copy: TokenStream2,
     /// The stream to which we should write the generated code.
     output: TokenStream2,
-    hash: Option<u64>,
+    /// The name of the check closure.
+    check_name: String,
+    /// The name of the replace closure.
+    replace_name: String,
+    /// The name of the recursion closure.
+    recursion_name: String,
+    /// The name of the modifies closure.
+    modify_name: String,
 }
 
 /// Which kind of contract attribute are we dealing with?
@@ -463,22 +443,9 @@ impl<'a> ContractConditionsHandler<'a> {
     /// Handle the contract state and return the generated code
     fn dispatch_on(mut self, state: ContractFunctionState) -> TokenStream2 {
         match state {
-            ContractFunctionState::ModifiesWrapper => self.emit_augmented_modifies_wrapper(),
-            ContractFunctionState::Check => {
-                // The easy cases first: If we are on a check or replace function
-                // emit them again but with additional conditions layered on.
-                //
-                // Since we are already on the check function, it will have an
-                // appropriate, unique generated name which we are just going to
-                // pass on.
-                self.emit_check_function(None);
-            }
-            ContractFunctionState::Replace => {
-                // Analogous to above
-                self.emit_replace_function(None);
-            }
-            ContractFunctionState::Original => {
-                unreachable!("Impossible: This is handled via short circuiting earlier.")
+            ContractFunctionState::Expanded => {
+                // We are on the already expanded function.
+                todo!("Expand closures")
             }
             ContractFunctionState::Untouched => self.handle_untouched(),
         }
@@ -501,29 +468,12 @@ fn contract_main(
     let mut item_fn = parse_macro_input!(item as ItemFn);
 
     let function_state = ContractFunctionState::from_attributes(&item_fn.attrs);
-
-    if matches!(function_state, ContractFunctionState::Original) {
-        // If we're the original function that means we're *not* the first time
-        // that a contract attribute is handled on this function. This means
-        // there must exist a generated check function somewhere onto which the
-        // attributes have been copied and where they will be expanded into more
-        // checks. So we just return ourselves unchanged.
-        //
-        // Since this is the only function state case that doesn't need a
-        // handler to be constructed, we do this match early, separately.
-        return item_fn.into_token_stream().into();
-    }
-
-    let hash = matches!(function_state, ContractFunctionState::Untouched)
-        .then(|| helpers::short_hash_of_token_stream(&item_stream_clone));
-
     let handler = match ContractConditionsHandler::new(
         function_state,
         is_requires,
         attr,
         &mut item_fn,
         attr_copy,
-        hash,
     ) {
         Ok(handler) => handler,
         Err(e) => return e.into_compile_error().into(),

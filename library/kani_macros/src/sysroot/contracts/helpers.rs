@@ -7,7 +7,9 @@
 use proc_macro2::{Ident, Span};
 use quote::{quote, ToTokens};
 use std::borrow::Cow;
-use syn::{spanned::Spanned, visit::Visit, Expr, FnArg, ItemFn};
+use syn::punctuated::Punctuated;
+use syn::token::Comma;
+use syn::{spanned::Spanned, visit::Visit, Expr, FnArg, ItemFn, Pat};
 
 /// If an explicit return type was provided it is returned, otherwise `()`.
 pub fn return_type_to_type(return_type: &syn::ReturnType) -> Cow<syn::Type> {
@@ -175,25 +177,20 @@ pub fn is_probably_impl_fn(fun: &ItemFn) -> bool {
     self_detector.0
 }
 
-/// Convert every use of a pattern in this signature to a simple, fresh, binding-only
-/// argument ([`syn::PatIdent`]) and return the [`Ident`] that was generated.
-pub fn pats_to_idents<P>(
-    sig: &mut syn::punctuated::Punctuated<syn::FnArg, P>,
-) -> impl Iterator<Item = Ident> + '_ {
-    sig.iter_mut().enumerate().map(|(i, arg)| match arg {
-        syn::FnArg::Receiver(_) => Ident::from(syn::Token![self](Span::call_site())),
-        syn::FnArg::Typed(syn::PatType { pat, .. }) => {
-            let ident = Ident::new(&format!("arg{i}"), Span::mixed_site());
-            *pat.as_mut() = syn::Pat::Ident(syn::PatIdent {
-                attrs: vec![],
-                by_ref: None,
-                mutability: None,
-                ident: ident.clone(),
-                subpat: None,
-            });
-            ident
-        }
-    })
+/// Extract the closure arguments which should skip `self`.
+///
+/// Return the declaration form as well as just a plain list of idents for each.
+pub fn closure_args(
+    inputs: &Punctuated<syn::FnArg, Comma>,
+) -> (Punctuated<&syn::FnArg, Comma>, Vec<&Ident>) {
+    inputs
+        .iter()
+        .filter_map(|arg| {
+            let FnArg::Typed(syn::PatType { pat, .. }) = arg else { return None };
+            let Pat::Ident(pat_ident) = pat.as_ref() else { return None };
+            Some((arg, &pat_ident.ident))
+        })
+        .collect()
 }
 
 /// Does the provided path have the same chain of identifiers as `mtch` (match)

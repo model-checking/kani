@@ -4,106 +4,79 @@
 //! Special way we handle the first time we encounter a contract attribute on a
 //! function.
 
-use proc_macro2::{Ident, Span};
+use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
-use syn::ItemFn;
+use syn::{ExprClosure, FnArg, ItemFn, Signature};
 
-use super::{
-    helpers::*, shared::identifier_for_generated_function, ContractConditionsHandler,
-    INTERNAL_RESULT_IDENT,
-};
+use super::{helpers::*, ContractConditionsHandler, INTERNAL_RESULT_IDENT};
 
 impl<'a> ContractConditionsHandler<'a> {
-    /// The complex case. We are the first time a contract is handled on this function, so
-    /// we're responsible for
+    /// Generate initial contract.
     ///
-    /// 1. Generating a name for the check function
-    /// 2. Emitting the original, unchanged item and register the check
-    ///    function on it via attribute
-    /// 3. Renaming our item to the new name
-    /// 4. And (minor point) adding #[allow(dead_code)] and
-    ///    #[allow(unused_variables)] to the check function attributes
+    /// 1. Generating the body for all the closures used by contracts.
+    ///    - The recursion closure body is always the same, and it is generated in this stage.
+    ///    - The other closures body will depend on which annotation is being processed.
+    /// 2. Emitting the extended function with the new closures and the new contract attributes
     pub fn handle_untouched(&mut self) {
-        // We'll be using this to postfix the generated names for the "check"
-        // and "replace" functions.
-        let item_hash = self.hash.unwrap();
+        let replace_name = &self.replace_name;
+        let modifies_name = &self.modify_name;
+        let recursion_name = &self.recursion_name;
 
-        let original_function_name = self.annotated_fn.sig.ident.clone();
-
-        let check_fn_name =
-            identifier_for_generated_function(&original_function_name, "check", item_hash);
-        let replace_fn_name =
-            identifier_for_generated_function(&original_function_name, "replace", item_hash);
-        let recursion_wrapper_name = identifier_for_generated_function(
-            &original_function_name,
-            "recursion_wrapper",
-            item_hash,
-        );
-
-        // Constructing string literals explicitly here, because `stringify!`
-        // doesn't work. Let's say we have an identifier `check_fn` and we were
-        // to do `quote!(stringify!(check_fn))` to try to have it expand to
-        // `"check_fn"` in the generated code. Then when the next macro parses
-        // this it will *not* see the literal `"check_fn"` as you may expect but
-        // instead the *expression* `stringify!(check_fn)`.
-        let replace_fn_name_str = syn::LitStr::new(&replace_fn_name.to_string(), Span::call_site());
-        let wrapper_fn_name_str =
-            syn::LitStr::new(&self.make_wrapper_name().to_string(), Span::call_site());
-        let recursion_wrapper_name_str =
-            syn::LitStr::new(&recursion_wrapper_name.to_string(), Span::call_site());
+        let recursion_closure = self.recursion_closure();
+        let replace_closure = self.replace_closure();
+        println!("{recursion_closure}");
 
         // The order of `attrs` and `kanitool::{checked_with,
         // is_contract_generated}` is important here, because macros are
         // expanded outside in. This way other contract annotations in `attrs`
         // sees those attributes and can use them to determine
         // `function_state`.
-        //
-        // The same care is taken when we emit check and replace functions.
-        // emit the check function.
-        let is_impl_fn = is_probably_impl_fn(&self.annotated_fn);
         let ItemFn { attrs, vis, sig, block } = &self.annotated_fn;
         self.output.extend(quote!(
             #(#attrs)*
-            #[kanitool::checked_with = #recursion_wrapper_name_str]
-            #[kanitool::replaced_with = #replace_fn_name_str]
-            #[kanitool::inner_check = #wrapper_fn_name_str]
+            #[kanitool::checked_with = #recursion_name]
+            #[kanitool::replaced_with = #replace_name]
+            #[kanitool::inner_check = #modifies_name]
             #vis #sig {
+                #replace_closure
+                #recursion_closure
+                // -- Now emit the original code.
                 #block
             }
         ));
+    }
 
-        let mut wrapper_sig = sig.clone();
-        wrapper_sig.ident = recursion_wrapper_name;
-        // We use non-constant functions, thus, the wrapper cannot be constant.
-        wrapper_sig.constness = None;
+    /// Generate the tokens for the recursion closure.
+    fn recursion_closure(&self) -> TokenStream {
+        let ItemFn { ref sig, .. } = self.annotated_fn;
+        let (inputs, args) = closure_args(&sig.inputs);
+        let output = &sig.output;
+        let span = Span::call_site();
+        let result = Ident::new(INTERNAL_RESULT_IDENT, span);
+        let replace_ident = Ident::new(&self.replace_name, span);
+        let check_ident = Ident::new(&self.check_name, span);
+        let recursion_ident = Ident::new(&self.recursion_name, span);
 
-        let args = pats_to_idents(&mut wrapper_sig.inputs).collect::<Vec<_>>();
-        let also_args = args.iter();
-        let (call_check, call_replace) = if is_impl_fn {
-            (quote!(Self::#check_fn_name), quote!(Self::#replace_fn_name))
-        } else {
-            (quote!(#check_fn_name), quote!(#replace_fn_name))
-        };
+        let replace_closure = self.replace_closure();
+        let check_closure = self.check_closure();
 
-        let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
-        self.output.extend(quote!(
+        quote!(
+            #[kanitool::is_contract_generated(recursion_check)]
             #[allow(dead_code, unused_variables, unused_mut)]
-            #[kanitool::is_contract_generated(recursion_wrapper)]
-            #wrapper_sig {
+            let mut #recursion_ident = |#inputs| #output
+            {
                 static mut REENTRY: bool = false;
                 if unsafe { REENTRY } {
-                    #call_replace(#(#args),*)
+                    #replace_closure
+                    #replace_ident(#(#args),*)
                 } else {
+                    #check_closure
                     unsafe { REENTRY = true };
-                    let #result = #call_check(#(#also_args),*);
+                    let #result = #check_ident(#(#args),*);
                     unsafe { REENTRY = false };
                     #result
                 }
-            }
-        ));
-
-        self.emit_check_function(Some(check_fn_name));
-        self.emit_replace_function(Some(replace_fn_name));
-        self.emit_augmented_modifies_wrapper();
+            };
+        )
     }
 }

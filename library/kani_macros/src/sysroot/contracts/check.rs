@@ -5,7 +5,7 @@
 
 use proc_macro2::{Ident, Span, TokenStream as TokenStream2};
 use quote::quote;
-use syn::{Expr, FnArg, ItemFn, Token};
+use syn::{parse_quote, Expr, FnArg, ItemFn, Token};
 
 use super::{
     helpers::*,
@@ -22,15 +22,15 @@ impl<'a> ContractConditionsHandler<'a> {
     ///
     /// Mutable because a `modifies` clause may need to extend the inner call to
     /// the wrapper with new arguments.
-    pub fn make_check_body(&mut self) -> TokenStream2 {
-        let mut inner = self.ensure_bootstrapped_check_body();
+    pub fn make_check_body(&self) -> TokenStream2 {
+        let mut body_stmts = self.get_check_body();
         let Self { attr_copy, .. } = self;
 
         match &self.condition_type {
             ContractConditionsData::Requires { attr } => {
                 quote!(
                     kani::assume(#attr);
-                    #(#inner)*
+                    #(#body_stmts)*
                 )
             }
             ContractConditionsData::Ensures { attr } => {
@@ -42,25 +42,20 @@ impl<'a> ContractConditionsHandler<'a> {
                     kani::assert(#ensures_clause, stringify!(#attr_copy));
                 );
 
-                assert!(matches!(
-                    inner.pop(),
-                    Some(syn::Stmt::Expr(syn::Expr::Path(pexpr), None))
-                        if pexpr.path.get_ident().map_or(false, |id| id == INTERNAL_RESULT_IDENT)
-                ));
-
-                let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
+                let return_expr = body_stmts.pop();
                 quote!(
                     #remembers
-                    #(#inner)*
+                    #(#body_stmts)*
                     #exec_postconditions
-                    #result
+                    #return_expr
                 )
             }
             ContractConditionsData::Modifies { attr } => {
-                let wrapper_name = self.make_wrapper_name().to_string();
+                let wrapper_name = &self.modify_name;
 
-                let wrapper_args = if let Some(wrapper_call_args) =
-                    inner.iter_mut().find_map(|stmt| try_as_wrapper_call_args(stmt, &wrapper_name))
+                let wrapper_args = if let Some(wrapper_call_args) = body_stmts
+                    .iter_mut()
+                    .find_map(|stmt| try_as_wrapper_call_args(stmt, &wrapper_name))
                 {
                     let wrapper_args = make_wrapper_idents(
                         wrapper_call_args.len(),
@@ -71,64 +66,55 @@ impl<'a> ContractConditionsHandler<'a> {
                         .extend(wrapper_args.clone().map(|a| Expr::Verbatim(quote!(#a))));
                     wrapper_args
                 } else {
-                    unreachable!(
-                        "Invariant broken, check function did not contain a call to the wrapper function"
-                    )
+                    unreachable!("Expected check function to call to the modifies wrapper function")
                 };
 
                 quote!(
-                    #(let #wrapper_args = unsafe { kani::internal::Pointer::decouple_lifetime(&#attr) };)*
-                    #(#inner)*
+                    // Cast to *const () since we only care about the address.
+                    #(let #wrapper_args = #attr as *const _ as *const ();)*
+                    #(#body_stmts)*
                 )
             }
         }
     }
 
-    /// Get the sequence of statements of the previous check body or create the default one.
-    fn ensure_bootstrapped_check_body(&self) -> Vec<syn::Stmt> {
-        let wrapper_name = self.make_wrapper_name();
+    /// Get the body of the previous check closure.
+    fn get_check_body(&self) -> Vec<syn::Stmt> {
+        let modifies_ident = Ident::new(&self.modify_name, Span::call_site());
         let return_type = return_type_to_type(&self.annotated_fn.sig.output);
+        let modifies_closure = self.modifies_closure();
         if self.is_first_emit() {
-            let args = exprs_for_args(&self.annotated_fn.sig.inputs);
-            let wrapper_call = if is_probably_impl_fn(self.annotated_fn) {
-                quote!(Self::#wrapper_name)
-            } else {
-                quote!(#wrapper_name)
-            };
+            let (_, args) = closure_args(&self.annotated_fn.sig.inputs);
             let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
-            syn::parse_quote!(
-                let #result : #return_type = #wrapper_call(#(#args),*);
+            parse_quote!(
+                #modifies_closure
+                let #result : #return_type = #modifies_ident(#(#args),*);
                 #result
             )
         } else {
-            self.annotated_fn.block.stmts.clone()
+            todo!("Find old body");
+            //  self.annotated_fn.block.stmts.clone()
         }
     }
 
-    /// Emit the check function into the output stream.
+    /// Generate a token stream that represents the check closure.
     ///
     /// See [`Self::make_check_body`] for the most interesting parts of this
     /// function.
-    pub fn emit_check_function(&mut self, override_function_dent: Option<Ident>) {
-        self.emit_common_header();
-
-        if self.function_state.emit_tag_attr() {
-            // If it's the first time we also emit this marker. Again, order is
-            // important so this happens as the last emitted attribute.
-            self.output.extend(quote!(#[kanitool::is_contract_generated(check)]));
-        }
+    pub fn check_closure(&self) -> TokenStream2 {
+        let check_ident = Ident::new(&self.check_name, Span::call_site());
+        let sig = &self.annotated_fn.sig;
+        let (inputs, _args) = closure_args(&sig.inputs);
+        let output = &sig.output;
         let body = self.make_check_body();
-        let mut sig = self.annotated_fn.sig.clone();
-        // We use non-constant functions, thus, the wrapper cannot be constant.
-        sig.constness = None;
-        if let Some(ident) = override_function_dent {
-            sig.ident = ident;
-        }
-        self.output.extend(quote!(
-            #sig {
+
+        quote!(
+            #[kanitool::is_contract_generated(replace)]
+            #[allow(dead_code, unused_variables, unused_mut)]
+            let mut #check_ident = |#inputs| #output {
                 #body
-            }
-        ))
+            };
+        )
     }
 
     /// Emit a modifies wrapper, possibly augmenting a prior, existing one.
@@ -140,63 +126,27 @@ impl<'a> ContractConditionsHandler<'a> {
     /// implement `kani::Arbitrary` for checking. Now, we annotate each
     /// argument with a generic type parameter, so the compiler can
     /// continue inferring the correct types.
-    pub fn emit_augmented_modifies_wrapper(&mut self) {
-        if let ContractConditionsData::Modifies { attr } = &self.condition_type {
-            let wrapper_args = make_wrapper_idents(
-                self.annotated_fn.sig.inputs.len(),
-                attr.len(),
-                WRAPPER_ARG_PREFIX,
-            );
-            // Generate a unique type parameter identifier
-            let type_params = make_wrapper_idents(
-                self.annotated_fn.sig.inputs.len(),
-                attr.len(),
-                "WrapperArgType",
-            );
-            let sig = &mut self.annotated_fn.sig;
-            for (arg, arg_type) in wrapper_args.clone().zip(type_params) {
-                // Add the type parameter to the function signature's generic parameters list
-                sig.generics.params.push(syn::GenericParam::Type(syn::TypeParam {
-                    attrs: vec![],
-                    ident: arg_type.clone(),
-                    colon_token: None,
-                    bounds: Default::default(),
-                    eq_token: None,
-                    default: None,
-                }));
-                let lifetime = syn::Lifetime { apostrophe: Span::call_site(), ident: arg.clone() };
-                sig.inputs.push(FnArg::Typed(syn::PatType {
-                    attrs: vec![],
-                    colon_token: Token![:](Span::call_site()),
-                    pat: Box::new(syn::Pat::Verbatim(quote!(#arg))),
-                    ty: Box::new(syn::parse_quote! { &#arg_type }),
-                }));
-                sig.generics.params.push(syn::GenericParam::Lifetime(syn::LifetimeParam {
-                    lifetime,
-                    colon_token: None,
-                    bounds: Default::default(),
-                    attrs: vec![],
-                }));
-            }
-
-            self.output.extend(quote!(#[kanitool::modifies(#(#wrapper_args),*)]))
-        }
-        self.emit_common_header();
-
-        if self.function_state.emit_tag_attr() {
-            // If it's the first time we also emit this marker. Again, order is
-            // important so this happens as the last emitted attribute.
-            self.output.extend(quote!(#[kanitool::is_contract_generated(wrapper)]));
-        }
-
-        let name = self.make_wrapper_name();
-        let ItemFn { vis, sig, block, .. } = self.annotated_fn;
-
-        let mut sig = sig.clone();
-        sig.ident = name;
-        self.output.extend(quote!(
-            #vis #sig #block
-        ));
+    pub fn modifies_closure(&self) -> TokenStream2 {
+        // TODO: Get existing signature.
+        let sig = &self.annotated_fn.sig;
+        let wrapper_args: Vec<_> =
+            if let ContractConditionsData::Modifies { attr } = &self.condition_type {
+                make_wrapper_idents(sig.inputs.len(), attr.len(), WRAPPER_ARG_PREFIX).collect()
+            } else {
+                make_wrapper_idents(sig.inputs.len(), 0, WRAPPER_ARG_PREFIX).collect()
+            };
+        let modifies_ident = Ident::new(&self.modify_name, Span::call_site());
+        let (inputs, _args) = closure_args(&sig.inputs);
+        let output = &sig.output;
+        let body = &self.annotated_fn.block;
+        quote!(
+            #[kanitool::is_contract_generated(wrapper)]
+            #(#[kanitool::modifies(#wrapper_args)])*
+            #[allow(dead_code, unused_variables, unused_mut)]
+            let mut #modifies_ident = |#inputs #(, #wrapper_args: *const ())*| #output {
+                #body
+            };
+        )
     }
 }
 
@@ -232,59 +182,4 @@ fn make_wrapper_idents(
     prefix: &'static str,
 ) -> impl Iterator<Item = syn::Ident> + Clone + 'static {
     (low..).map(move |i| Ident::new(&format!("{prefix}{i}"), Span::mixed_site())).take(num)
-}
-
-#[cfg(test)]
-mod test {
-    macro_rules! detect_impl_fn {
-        ($expect_pass:expr, $($tt:tt)*) => {{
-            let syntax = stringify!($($tt)*);
-            let ast = syn::parse_str(syntax).unwrap();
-            assert!($expect_pass == super::is_probably_impl_fn(&ast),
-                "Incorrect detection.\nExpected is_impl_fun: {}\nInput Expr; {}\nParsed: {:?}",
-                $expect_pass,
-                syntax,
-                ast
-            );
-        }}
-    }
-
-    #[test]
-    fn detect_impl_fn_by_receiver() {
-        detect_impl_fn!(true, fn self_by_ref(&self, u: usize) -> bool {});
-
-        detect_impl_fn!(true, fn self_by_self(self, u: usize) -> bool {});
-    }
-
-    #[test]
-    fn detect_impl_fn_by_self_ty() {
-        detect_impl_fn!(true, fn self_by_construct(u: usize) -> Self {});
-        detect_impl_fn!(true, fn self_by_wrapped_construct(u: usize) -> Arc<Self> {});
-
-        detect_impl_fn!(true, fn self_by_other_arg(u: usize, slf: Self) {});
-
-        detect_impl_fn!(true, fn self_by_other_wrapped_arg(u: usize, slf: Vec<Self>) {})
-    }
-
-    #[test]
-    fn detect_impl_fn_by_qself() {
-        detect_impl_fn!(
-            true,
-            fn self_by_mention(u: usize) {
-                Self::other(u)
-            }
-        );
-    }
-
-    #[test]
-    fn detect_no_impl_fn() {
-        detect_impl_fn!(
-            false,
-            fn self_by_mention(u: usize) {
-                let self_name = 18;
-                let self_lit = "self";
-                let self_lit = "Self";
-            }
-        );
-    }
 }
