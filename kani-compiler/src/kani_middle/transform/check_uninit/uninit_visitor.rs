@@ -739,8 +739,8 @@ fn try_resolve_instance(locals: &[LocalDecl], func: &Operand) -> Result<Instance
 /// its size.
 fn tys_layout_compatible(from_ty: &Ty, to_ty: &Ty) -> bool {
     // Retrieve layouts to assess compatibility.
-    let from_ty_info = PointeeInfo::from_ty(from_ty.clone());
-    let to_ty_info = PointeeInfo::from_ty(to_ty.clone());
+    let from_ty_info = PointeeInfo::from_ty(*from_ty);
+    let to_ty_info = PointeeInfo::from_ty(*to_ty);
     if let (Ok(from_ty_info), Ok(to_ty_info)) = (from_ty_info, to_ty_info) {
         let from_ty_layout = match from_ty_info.layout() {
             PointeeLayout::Sized { layout } => layout,
