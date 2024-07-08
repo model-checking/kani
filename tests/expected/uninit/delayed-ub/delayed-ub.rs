@@ -1,3 +1,7 @@
+// Copyright Kani Contributors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+// kani-flags: -Z ghost-state -Z uninit-checks
+
 /// Checks that Kani rejects mutable pointer casts between types of different padding.
 #[kani::proof]
 fn invalid_value() {
