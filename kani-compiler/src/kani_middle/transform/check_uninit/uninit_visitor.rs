@@ -548,32 +548,13 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
     }
 
     fn visit_rvalue(&mut self, rvalue: &Rvalue, location: Location) {
-        if let Rvalue::Cast(cast_kind, operand, ty) = rvalue {
-            match cast_kind {
-                CastKind::PointerCoercion(PointerCoercion::Unsize) => {
-                    if let TyKind::RigidTy(RigidTy::RawPtr(pointee_ty, _)) = ty.kind() {
-                        if pointee_ty.kind().is_trait() {
-                            self.push_target(MemoryInitOp::Unsupported {
-                                reason: "Kani does not support reasoning about memory initialization of unsized pointers.".to_string(),
-                            });
-                        }
-                    }
+        if let Rvalue::Cast(CastKind::PointerCoercion(PointerCoercion::Unsize), _, ty) = rvalue {
+            if let TyKind::RigidTy(RigidTy::RawPtr(pointee_ty, _)) = ty.kind() {
+                if pointee_ty.kind().is_trait() {
+                    self.push_target(MemoryInitOp::Unsupported {
+                        reason: "Kani does not support reasoning about memory initialization of unsized pointers.".to_string(),
+                    });
                 }
-                CastKind::PtrToPtr => {
-                    let operand_ty = operand.ty(&self.locals).unwrap();
-                    if let (
-                        RigidTy::RawPtr(_, Mutability::Mut),
-                        RigidTy::RawPtr(_, Mutability::Mut),
-                    ) = (operand_ty.kind().rigid().unwrap(), ty.kind().rigid().unwrap())
-                    {
-                        // If casting from a mutable pointer to a mutable pointer, delayed UB could
-                        // occur, which we do not support.
-                        self.push_target(MemoryInitOp::Unsupported {
-                            reason: "Kani does not support reasoning about memory initialization in presence of mutable raw pointer casts.".to_string(),
-                        });
-                    }
-                }
-                _ => {}
             }
         };
         self.super_rvalue(rvalue, location);
