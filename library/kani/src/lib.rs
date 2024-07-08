@@ -212,7 +212,7 @@ pub fn havoc_slim<T: Arbitrary>(pointer: &mut T) {
 #[rustc_diagnostic_item = "KaniHavocStr"]
 #[inline(always)]
 pub fn havoc_str(s: &mut str) {
-    unsafe{s.as_bytes_mut()}.fill_with(|| u8::any())
+    unsafe { s.as_bytes_mut() }.fill_with(|| u8::any())
     //TODO: String validation
 }
 
