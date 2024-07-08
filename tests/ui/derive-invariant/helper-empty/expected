@@ -3,4 +3,4 @@ error: Cannot derive impl for `PositivePoint`
 11 | #[derive(kani::Invariant)]
    |          ^^^^^^^^^^^^^^^
    |
-note: invariant condition in field `x` could not be parsed - `Err("expected attribute arguments in parentheses: #[invariant(...)]")`
+note: invariant condition in field `x` could not be parsed: expected attribute arguments in parentheses: #[invariant(...)]

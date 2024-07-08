@@ -3,4 +3,4 @@ error: Cannot derive impl for `PositivePoint`
 11 | #[derive(kani::Invariant)]
    |          ^^^^^^^^^^^^^^^
    |
-note: invariant condition in field `x` could not be parsed - `Err("unexpected end of input, expected an expression")`
+note: invariant condition in field `x` could not be parsed: unexpected end of input, expected an expression

@@ -250,10 +250,10 @@ fn parse_inv_expr(ident: &Ident, field: &syn::Field) -> Option<TokenStream> {
         let expr_args: Result<syn::Expr, syn::Error> = attr.parse_args();
 
         // Check if there was an error parsing the arguments
-        if expr_args.is_err() {
+        if let Err(err) = expr_args {
             abort!(Span::call_site(), "Cannot derive impl for `{}`", ident;
             note = attr.span() =>
-            "invariant condition in field `{}` could not be parsed - `{:?}`", name.as_ref().unwrap().to_string(), expr_args.map_err(|e| e.to_string())
+            "invariant condition in field `{}` could not be parsed: {}", name.as_ref().unwrap().to_string(), err
             )
         }
 
