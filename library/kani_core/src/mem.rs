@@ -308,7 +308,7 @@ macro_rules! kani_mem {
 
         /// Get the object ID of the given pointer.
         #[doc(hidden)]
-        #[crate::unstable(
+        #[$crate::unstable(
             feature = "ghost-state",
             issue = 3184,
             reason = "experimental ghost state/shadow memory API"
@@ -321,7 +321,7 @@ macro_rules! kani_mem {
 
         /// Get the object offset of the given pointer.
         #[doc(hidden)]
-        #[crate::unstable(
+        #[$crate::unstable(
             feature = "ghost-state",
             issue = 3184,
             reason = "experimental ghost state/shadow memory API"
