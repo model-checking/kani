@@ -32,8 +32,8 @@ pub use kani_macros::*;
 /// - `core`: Define a `kani` module inside `core` crate.
 /// - `std`: TODO: Define a `kani` module inside `std` crate. Users must define kani inside core.
 #[macro_export]
-macro_rules! kani_lib_core {
-    () => {
+macro_rules! kani_lib {
+    (core) => {
         #[cfg(kani)]
         #[unstable(feature = "kani", issue = "none")]
         pub mod kani {
@@ -47,11 +47,8 @@ macro_rules! kani_lib_core {
             }
         }
     };
-}
 
-#[macro_export]
-macro_rules! kani_lib_internal {
-    () => {
+    (kani) => {
         pub use kani_core::*;
         kani_core::kani_intrinsics!(std);
         kani_core::generate_arbitrary!(std);

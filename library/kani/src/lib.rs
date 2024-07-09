@@ -57,7 +57,7 @@ macro_rules! implies {
 }
 
 // Declare common Kani API such as assume, assert
-kani_core::kani_lib_internal!();
+kani_core::kani_lib!(kani);
 /// A macro to check if a condition is satisfiable at a specific location in the
 /// code.
 ///
