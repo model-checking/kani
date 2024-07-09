@@ -12,8 +12,11 @@
 mod derive;
 
 // proc_macro::quote is nightly-only, so we'll cobble things together instead
+use derive::{add_trait_bound_invariant, field_refs};
 use proc_macro::TokenStream;
-use proc_macro_error::proc_macro_error;
+use proc_macro2::{Span, TokenStream as TokenStream2};
+use proc_macro_error::{abort, proc_macro_error};
+use quote::quote;
 
 #[cfg(kani_sysroot)]
 use sysroot as attr_impl;
@@ -95,7 +98,7 @@ pub fn solver(attr: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 #[proc_macro_error]
 pub fn invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
-    derive::attr_custom_invariant(attr.into(), item)
+    attr_custom_invariant(attr.into(), item)
 }
 
 /// Mark an API as unstable. This should only be used inside the Kani sysroot.
@@ -501,4 +504,47 @@ mod regular {
     no_op!(modifies);
     no_op!(proof_for_contract);
     no_op!(stub_verified);
+}
+
+/// Generates an `Invariant` implementation where the `is_safe` function body is
+/// the `attr` expression passed to the attribute macro.
+/// Only available for structs.
+fn attr_custom_invariant(
+    attr: TokenStream2,
+    item: proc_macro::TokenStream,
+) -> proc_macro::TokenStream {
+    let derive_item = syn::parse_macro_input!(item as syn::DeriveInput);
+    let item_name = &derive_item.ident;
+
+    if !matches!(derive_item.data, syn::Data::Struct(..)) {
+        abort!(Span::call_site(), "Cannot define invariant for `{}`", item_name;
+            note = item_name.span() =>
+            "`#[kani::invariant(..)]` is only available for structs"
+        )
+    }
+
+    // Keep a copy of the original item to re-emit it later.
+    // Note that this isn't a derive macro
+    let original_item = derive_item.clone();
+
+    // Add a bound `T: Invariant` to every type parameter T.
+    let generics = add_trait_bound_invariant(derive_item.generics);
+    // Generate an expression to sum up the heap size of each field.
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+
+    let field_refs = field_refs(&item_name, &derive_item.data);
+    let expanded = quote! {
+        // Re-emit the original item
+        #original_item
+
+        // The generated implementation.
+        impl #impl_generics kani::Invariant for #item_name #ty_generics #where_clause {
+            fn is_safe(&self) -> bool {
+                let obj = self;
+                #field_refs
+                #attr
+            }
+        }
+    };
+    TokenStream::from(expanded)
 }

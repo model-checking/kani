@@ -8,7 +8,7 @@ extern crate kani;
 use kani::Invariant;
 
 #[derive(kani::Arbitrary)]
-#[kani::invariant(self.x.is_safe() && self.y.is_safe())]
+#[kani::invariant(x.is_safe() && y.is_safe())]
 struct Point {
     x: i32,
     y: i32,

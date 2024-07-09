@@ -167,7 +167,7 @@ fn safety_conds_inner(ident: &Ident, fields: &Fields) -> Option<TokenStream> {
 /// ```
 /// which allows us to refer to the struct fields without using `self`.
 /// Note that the actual stream is generated in the `field_refs_inner` function.
-fn field_refs(ident: &Ident, data: &Data) -> TokenStream {
+pub fn field_refs(ident: &Ident, data: &Data) -> TokenStream {
     match data {
         Data::Struct(struct_data) => field_refs_inner(ident, &struct_data.fields),
         Data::Enum(_) => unreachable!(),
@@ -354,7 +354,7 @@ pub fn expand_derive_invariant(item: proc_macro::TokenStream) -> proc_macro::Tok
 }
 
 /// Add a bound `T: Invariant` to every type parameter T.
-fn add_trait_bound_invariant(mut generics: Generics) -> Generics {
+pub fn add_trait_bound_invariant(mut generics: Generics) -> Generics {
     generics.params.iter_mut().for_each(|param| {
         if let GenericParam::Type(type_param) = param {
             type_param.bounds.push(parse_quote!(kani::Invariant));
@@ -434,44 +434,4 @@ fn struct_invariant_conjunction(ident: &Ident, fields: &Fields) -> TokenStream {
             }
         }
     }
-}
-
-/// Generates an `Invariant` implementation where the `is_safe` function body is
-/// the `attr` expression passed to the attribute macro.
-/// Only available for structs.
-pub fn attr_custom_invariant(
-    attr: TokenStream,
-    item: proc_macro::TokenStream,
-) -> proc_macro::TokenStream {
-    let derive_item = parse_macro_input!(item as DeriveInput);
-    let item_name = &derive_item.ident;
-
-    if !matches!(derive_item.data, Data::Struct(..)) {
-        abort!(Span::call_site(), "Cannot define invariant for `{}`", item_name;
-            note = item_name.span() =>
-            "`#[kani::invariant(..)]` is only available for structs"
-        )
-    }
-
-    // Keep a copy of the original item to re-emit it later.
-    // Note that this isn't a derive macro
-    let original_item = derive_item.clone();
-
-    // Add a bound `T: Invariant` to every type parameter T.
-    let generics = add_trait_bound_invariant(derive_item.generics);
-    // Generate an expression to sum up the heap size of each field.
-    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
-
-    let expanded = quote! {
-        // Re-emit the original item
-        #original_item
-
-        // The generated implementation.
-        impl #impl_generics kani::Invariant for #item_name #ty_generics #where_clause {
-            fn is_safe(&self) -> bool {
-                #attr
-            }
-        }
-    };
-    proc_macro::TokenStream::from(expanded)
 }
