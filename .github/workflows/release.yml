@@ -323,7 +323,7 @@ jobs:
     if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/kani-') }}
     name: Release
     runs-on: ubuntu-20.04
-    needs: [build_bundle_macos, build_bundle_linux, test_bundle, test_alt_platform]
+    needs: [build_bundle_macos, build_bundle_macos_aarch64, build_bundle_linux, test_bundle, test_alt_platform]
     permissions:
       contents: write
     outputs:
@@ -355,6 +355,11 @@ jobs:
         with:
           name: ${{ needs.build_bundle_macos.outputs.bundle }}
 
+      - name: Download MacOS ARM bundle
+        uses: actions/download-artifact@v3
+        with:
+          name: ${{ needs.build_bundle_macos_aarch64.outputs.bundle }}
+
       - name: Download Linux bundle
         uses: actions/download-artifact@v3
         with:
@@ -368,7 +373,7 @@ jobs:
         with:
           name: kani-${{ env.TAG_VERSION }}
           tag: kani-${{ env.TAG_VERSION }}
-          artifacts: "${{ needs.build_bundle_linux.outputs.bundle }},${{ needs.build_bundle_macos.outputs.bundle }}"
+          artifacts: "${{ needs.build_bundle_linux.outputs.bundle }},${{ needs.build_bundle_macos.outputs.bundle }},${{ needs.build_bundle_macos_aarch64.outputs.bundle }}"
           body: |
             Kani Rust verifier release bundle version ${{ env.TAG_VERSION }}.
           draft: true
