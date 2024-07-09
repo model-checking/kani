@@ -12,7 +12,7 @@ use stable_mir::mir::{
     Place, PointerCoercion, ProjectionElem, Rvalue, Statement, StatementKind, Terminator,
     TerminatorKind,
 };
-use stable_mir::ty::{ConstantKind, MirConst, RigidTy, Span, Ty, TyKind, UintTy};
+use stable_mir::ty::{ConstantKind, RigidTy, Ty, TyKind};
 use strum_macros::AsRefStr;
 
 use super::{PointeeInfo, PointeeLayout};
