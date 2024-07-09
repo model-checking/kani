@@ -1,5 +1,4 @@
 error: Cannot define invariant for `MyEnum`
-  --> no-struct-error.rs:9:1
    |
 9  | #[kani::invariant(true)]
    | ^^^^^^^^^^^^^^^^^^^^^^^^
