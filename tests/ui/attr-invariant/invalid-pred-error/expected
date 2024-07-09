@@ -1,21 +1,19 @@
-error[E0425]: cannot find value `x` in this scope
-  --> invalid-pred-error.rs:10:19
+error[E0308]: mismatched types
    |
-10 | #[kani::invariant(x.is_safe() && y.is_safe())]
-   |                   ^
+13 | #[kani::invariant(x >= 0 && y >= 0)]
+   |                        ^ expected `&i32`, found integer
    |
-help: you might have meant to use the available field
+help: consider dereferencing the borrow
    |
-10 | #[kani::invariant(self.x.is_safe() && y.is_safe())]
-   |                   +++++
+13 | #[kani::invariant(*x >= 0 && y >= 0)]
+   |                   +
 
-error[E0425]: cannot find value `y` in this scope
-  --> invalid-pred-error.rs:10:34
+error[E0308]: mismatched types
    |
-10 | #[kani::invariant(x.is_safe() && y.is_safe())]
-   |                                  ^
+13 | #[kani::invariant(x >= 0 && y >= 0)]
+   |                                  ^ expected `&i32`, found integer
    |
-help: you might have meant to use the available field
+help: consider dereferencing the borrow
    |
-10 | #[kani::invariant(x.is_safe() && self.y.is_safe())]
-   |                                  +++++
+13 | #[kani::invariant(x >= 0 && *y >= 0)]
+   |

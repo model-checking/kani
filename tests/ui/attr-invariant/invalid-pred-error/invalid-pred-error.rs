@@ -7,10 +7,10 @@
 extern crate kani;
 use kani::Invariant;
 
-// Note: The `x.is_safe() && y.is_safe()` requires `self` before each struct
-// field to be evaluated in the `is_safe` function body.
+// Note: The struct fields `x` and `y` are references in this context, we should
+// refer to `*x` and `*y` instead.
 #[derive(kani::Arbitrary)]
-#[kani::invariant(x.is_safe() && y.is_safe())]
+#[kani::invariant(x >= 0 && y >= 0)]
 struct Point {
     x: i32,
     y: i32,
