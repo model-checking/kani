@@ -43,7 +43,7 @@ impl TransformPass for FnStubPass {
     }
 
     /// Transform the function body by replacing it with the stub body.
-    fn transform(&self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
+    fn transform(&mut self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
         trace!(function=?instance.name(), "transform");
         let ty = instance.ty();
         if let TyKind::RigidTy(RigidTy::FnDef(fn_def, mut args)) = ty.kind() {
@@ -103,7 +103,7 @@ impl TransformPass for ExternFnStubPass {
     ///
     /// We need to find function calls and function pointers.
     /// We should replace this with a visitor once StableMIR includes a mutable one.
-    fn transform(&self, _tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
+    fn transform(&mut self, _tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
         trace!(function=?instance.name(), "transform");
         let mut new_body = MutableBody::from(body);
         let changed = false;
