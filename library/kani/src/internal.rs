@@ -70,6 +70,8 @@ impl<'a, T> Pointer<'a> for *mut T {
 
 /// A way to break the ownerhip rules. Only used by contracts where we can
 /// guarantee it is done safely.
+/// TODO: Remove this! This is not safe. Users should be able to use `ptr::read` and `old` if
+/// they really need to.
 #[inline(never)]
 #[doc(hidden)]
 #[rustc_diagnostic_item = "KaniUntrackedDeref"]

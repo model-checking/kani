@@ -7,6 +7,11 @@
 //! Check that we can add contract to a trait implementation.
 //! Original code taken from:
 //! <https://github.com/rust-lang/rust/blob/c4225812/library/core/src/ops/arith.rs#L1-L35>
+//!
+//! TODO: Add the following tests
+//! Multiple annotations and:
+//!  - mut args
+//!  - inner functions
 
 use std::ops::Add;
 
@@ -28,8 +33,18 @@ impl Add for Point {
     }
 }
 
+impl Point {
+    #[kani::modifies(&mut self.x)]
+    #[kani::requires(!self.x.overflowing_add(val).1)]
+    #[kani::ensures(|_| val > 0 || self.x < old(self.x))]
+    #[kani::ensures(|_| val < 0 || self.x > old(self.x))]
+    pub fn add_x(&mut self, val: i32) {
+        self.x += val;
+    }
+}
+
 #[kani::proof_for_contract(add)]
 fn check_add() {
     let (p1, p2): (Point, Point) = kani::any();
-    p1.add(p2);
+    let _ = p1.add(p2);
 }

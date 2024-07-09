@@ -9,28 +9,12 @@
 
 use std::collections::HashMap;
 
-use proc_macro2::{Ident, Span, TokenStream as TokenStream2, TokenStream};
-use quote::{quote, ToTokens};
+use proc_macro2::{Ident, Span, TokenStream as TokenStream2};
+use quote::quote;
 use std::hash::{DefaultHasher, Hash, Hasher};
-use syn::{
-    spanned::Spanned, visit_mut::VisitMut, Attribute, Expr, ExprCall, ExprClosure, ExprPath, Path,
-};
+use syn::{spanned::Spanned, visit_mut::VisitMut, Expr, ExprCall, ExprClosure, ExprPath, Path};
 
-use super::{ContractConditionsHandler, ContractFunctionState, INTERNAL_RESULT_IDENT};
-
-impl ContractFunctionState {
-    /// Do we need to emit the `is_contract_generated` tag attribute on the
-    /// generated function(s)?
-    pub fn emit_tag_attr(self) -> bool {
-        matches!(self, ContractFunctionState::Untouched)
-    }
-}
-
-impl<'a> ContractConditionsHandler<'a> {
-    pub fn is_first_emit(&self) -> bool {
-        matches!(self.function_state, ContractFunctionState::Untouched)
-    }
-}
+use super::INTERNAL_RESULT_IDENT;
 
 /// Used as the "single source of truth" for [`try_as_result_assign`] and [`try_as_result_assign_mut`]
 /// since we can't abstract over mutability. Input is the object to match on and the name of the

@@ -33,7 +33,7 @@
 //!
 //! To this end we use a state machine. The initial state is an "untouched"
 //! function with possibly multiple contract attributes, none of which have been
-//! expanded. When we expand the first (outermost) `requires` or `ensures`
+//! expanded. When we expand the first (outermost) contract
 //! attribute on such a function we re-emit the function with a few closures defined
 //! in their body, which correspond to the "check" and "replace" that enforce the condition
 //! carried by the attribute currently being expanded.
@@ -315,7 +315,7 @@
 
 use proc_macro::TokenStream;
 use proc_macro2::{Ident, TokenStream as TokenStream2};
-use quote::{quote, ToTokens};
+use quote::quote;
 use syn::{parse_macro_input, Expr, ExprClosure, ItemFn};
 
 mod bootstrap;
@@ -380,7 +380,7 @@ pub fn proof_for_contract(attr: TokenStream, item: TokenStream) -> TokenStream {
     .into()
 }
 
-/// Classifies the state a function is in in the contract handling pipeline.
+/// Classifies the state a function is in the contract handling pipeline.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum ContractFunctionState {
     /// This is the function already expanded with the closures.
@@ -393,7 +393,6 @@ enum ContractFunctionState {
 /// The information needed to generate the bodies of check and replacement
 /// functions that integrate the conditions from this contract attribute.
 struct ContractConditionsHandler<'a> {
-    function_state: ContractFunctionState,
     /// Information specific to the type of contract attribute we're expanding.
     condition_type: ContractConditionsData,
     /// Body of the function this attribute was found on.
@@ -443,10 +442,8 @@ impl<'a> ContractConditionsHandler<'a> {
     /// Handle the contract state and return the generated code
     fn dispatch_on(mut self, state: ContractFunctionState) -> TokenStream2 {
         match state {
-            ContractFunctionState::Expanded => {
-                // We are on the already expanded function.
-                todo!("Expand closures")
-            }
+            // We are on the already expanded function.
+            ContractFunctionState::Expanded => self.handle_expanded(),
             ContractFunctionState::Untouched => self.handle_untouched(),
         }
         self.output
@@ -463,18 +460,9 @@ fn contract_main(
     is_requires: ContractConditionsType,
 ) -> TokenStream {
     let attr_copy = TokenStream2::from(attr.clone());
-
-    let item_stream_clone = item.clone();
     let mut item_fn = parse_macro_input!(item as ItemFn);
-
     let function_state = ContractFunctionState::from_attributes(&item_fn.attrs);
-    let handler = match ContractConditionsHandler::new(
-        function_state,
-        is_requires,
-        attr,
-        &mut item_fn,
-        attr_copy,
-    ) {
+    let handler = match ContractConditionsHandler::new(is_requires, attr, &mut item_fn, attr_copy) {
         Ok(handler) => handler,
         Err(e) => return e.into_compile_error().into(),
     };

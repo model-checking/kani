@@ -4,8 +4,8 @@
 //! Initialization routine for the contract handler
 
 use proc_macro::{Diagnostic, TokenStream};
-use proc_macro2::{Ident, TokenStream as TokenStream2};
-use syn::{spanned::Spanned, ItemFn};
+use proc_macro2::TokenStream as TokenStream2;
+use syn::ItemFn;
 
 use super::{
     helpers::{chunks_by, is_token_stream_2_comma, matches_path},
@@ -51,7 +51,6 @@ impl<'a> ContractConditionsHandler<'a> {
     /// Initialize the handler. Constructs the required
     /// [`ContractConditionsType`] depending on `is_requires`.
     pub fn new(
-        function_state: ContractFunctionState,
         is_requires: ContractConditionsType,
         attr: TokenStream,
         annotated_fn: &'a mut ItemFn,
@@ -78,7 +77,6 @@ impl<'a> ContractConditionsHandler<'a> {
         let modifies_name = generate_name("modifies");
 
         Ok(Self {
-            function_state,
             condition_type,
             annotated_fn,
             attr_copy,
