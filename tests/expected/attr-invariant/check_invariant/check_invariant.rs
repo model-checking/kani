@@ -5,6 +5,7 @@
 //! `Arbitrary` and `Invariant` implementations for the annotated type.
 
 extern crate kani;
+use kani::Invariant;
 
 #[kani::invariant(x.is_safe() && y.is_safe())]
 struct Point {
