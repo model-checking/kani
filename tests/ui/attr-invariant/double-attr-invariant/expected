@@ -1,0 +1,6 @@
+error[E0119]: conflicting implementations of trait `kani::Invariant` for type `Point`
+   |
+12 | #[kani::invariant(*x >= 0)]
+   | --------------------------- first implementation here
+13 | #[kani::invariant(*y >= 0)]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^ conflicting implementation for `Point`
