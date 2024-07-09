@@ -25,10 +25,10 @@ use tracing::{debug, trace};
 pub struct AnyModifiesPass {
     kani_any: Option<FnDef>,
     kani_any_modifies: Option<FnDef>,
-    kani_havoc: Option<FnDef>,
-    kani_havoc_slim: Option<FnDef>,
-    kani_havoc_slice: Option<FnDef>,
-    kani_havoc_str: Option<FnDef>,
+    kani_write_any: Option<FnDef>,
+    kani_write_any_slim: Option<FnDef>,
+    kani_write_any_slice: Option<FnDef>,
+    kani_write_any_str: Option<FnDef>,
     stubbed: HashSet<DefId>,
     target_fn: Option<InternedString>,
 }
@@ -82,17 +82,17 @@ impl AnyModifiesPass {
         let kani_any_modifies = tcx
             .get_diagnostic_item(rustc_span::symbol::Symbol::intern("KaniAnyModifies"))
             .map(item_fn_def);
-        let kani_havoc = tcx
-            .get_diagnostic_item(rustc_span::symbol::Symbol::intern("KaniHavoc"))
+        let kani_write_any = tcx
+            .get_diagnostic_item(rustc_span::symbol::Symbol::intern("KaniWriteAny"))
             .map(item_fn_def);
-        let kani_havoc_slim = tcx
-            .get_diagnostic_item(rustc_span::symbol::Symbol::intern("KaniHavocSlim"))
+        let kani_write_any_slim = tcx
+            .get_diagnostic_item(rustc_span::symbol::Symbol::intern("KaniWriteAnySlim"))
             .map(item_fn_def);
-        let kani_havoc_slice = tcx
-            .get_diagnostic_item(rustc_span::symbol::Symbol::intern("KaniHavocSlice"))
+        let kani_write_any_slice = tcx
+            .get_diagnostic_item(rustc_span::symbol::Symbol::intern("KaniWriteAnySlice"))
             .map(item_fn_def);
-        let kani_havoc_str = tcx
-            .get_diagnostic_item(rustc_span::symbol::Symbol::intern("KaniHavocStr"))
+        let kani_write_any_str = tcx
+            .get_diagnostic_item(rustc_span::symbol::Symbol::intern("KaniWriteAnyStr"))
             .map(item_fn_def);
         let (target_fn, stubbed) = if let Some(harness) = unit.harnesses.first() {
             let attributes = KaniAttributes::for_instance(tcx, *harness);
@@ -105,10 +105,10 @@ impl AnyModifiesPass {
         AnyModifiesPass {
             kani_any,
             kani_any_modifies,
-            kani_havoc,
-            kani_havoc_slim,
-            kani_havoc_slice,
-            kani_havoc_str,
+            kani_write_any,
+            kani_write_any_slim,
+            kani_write_any_slice,
+            kani_write_any_str,
             target_fn,
             stubbed,
         }
@@ -145,7 +145,7 @@ impl AnyModifiesPass {
 
             if let TyKind::RigidTy(RigidTy::FnDef(def, instance_args)) =
                 func.ty(&locals).unwrap().kind()
-                && Some(def) == self.kani_havoc
+                && Some(def) == self.kani_write_any
                 && args.len() == 1
                 && let Some(fn_sig) = func.ty(&locals).unwrap().kind().fn_sig()
                 && let Some(TypeAndMut { ty: internal_type, mutability: _ }) =
@@ -153,21 +153,24 @@ impl AnyModifiesPass {
             {
                 if let TyKind::RigidTy(RigidTy::Slice(_)) = internal_type.kind() {
                     let instance =
-                        Instance::resolve(self.kani_havoc_slice.unwrap(), &instance_args).unwrap();
+                        Instance::resolve(self.kani_write_any_slice.unwrap(), &instance_args)
+                            .unwrap();
                     let literal = MirConst::try_new_zero_sized(instance.ty()).unwrap();
                     let span = bb.terminator.span;
                     let new_func = ConstOperand { span, user_ty: None, const_: literal };
                     *func = Operand::Constant(new_func);
                 } else if let TyKind::RigidTy(RigidTy::Str) = internal_type.kind() {
                     let instance =
-                        Instance::resolve(self.kani_havoc_str.unwrap(), &instance_args).unwrap();
+                        Instance::resolve(self.kani_write_any_str.unwrap(), &instance_args)
+                            .unwrap();
                     let literal = MirConst::try_new_zero_sized(instance.ty()).unwrap();
                     let span = bb.terminator.span;
                     let new_func = ConstOperand { span, user_ty: None, const_: literal };
                     *func = Operand::Constant(new_func);
                 } else {
                     let instance =
-                        Instance::resolve(self.kani_havoc_slim.unwrap(), &instance_args).unwrap();
+                        Instance::resolve(self.kani_write_any_slim.unwrap(), &instance_args)
+                            .unwrap();
                     let literal = MirConst::try_new_zero_sized(instance.ty()).unwrap();
                     let span = bb.terminator.span;
                     let new_func = ConstOperand { span, user_ty: None, const_: literal };

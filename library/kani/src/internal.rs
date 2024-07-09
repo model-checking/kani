@@ -1,6 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+use crate::arbitrary::Arbitrary;
+
 /// Helper trait for code generation for `modifies` contracts.
 ///
 /// We allow the user to provide us with a pointer-like object that we convert as needed.
@@ -95,4 +97,57 @@ pub fn init_contracts() {}
 #[doc(hidden)]
 pub fn apply_closure<T, U: Fn(&T) -> bool>(f: U, x: &T) -> bool {
     f(x)
+}
+
+/// This function is only used for function contract instrumentation.
+/// It behaves exaclty like `kani::any<T>()`, except it will check for the trait bounds
+/// at compilation time. It allows us to avoid type checking errors while using function
+/// contracts only for verification.
+#[crate::unstable(feature="function-contracts", issue="none", reason="function-contracts")]
+#[rustc_diagnostic_item = "KaniAnyModifies"]
+#[inline(never)]
+#[doc(hidden)]
+pub fn any_modifies<T>() -> T {
+    // This function should not be reacheable.
+    // Users must include `#[kani::recursion]` in any function contracts for recursive functions;
+    // otherwise, this might not be properly instantiate. We mark this as unreachable to make
+    // sure Kani doesn't report any false positives.
+    unreachable!()
+}
+
+/// Recieves a reference to a pointer-like object and assigns kani::any_modifies to that object.
+/// Only for use within function contracts and will not be replaced if the recursive or function stub
+/// replace contracts are not used.
+#[crate::unstable(feature="function-contracts", issue="none", reason="function-contracts")]
+#[rustc_diagnostic_item = "KaniWriteAny"]
+#[inline(never)]
+#[doc(hidden)]
+pub fn write_any<T: ?Sized>(_pointer: &T) {
+    // This function should not be reacheable.
+    // Users must include `#[kani::recursion]` in any function contracts for recursive functions;
+    // otherwise, this might not be properly instantiate. We mark this as unreachable to make
+    // sure Kani doesn't report any false positives.
+    unreachable!()
+}
+
+#[crate::unstable(feature="function-contracts", issue="none", reason="function-contracts")]
+#[rustc_diagnostic_item = "KaniWriteAnySlice"]
+#[inline(always)]
+pub fn write_any_slice<T: Arbitrary>(slice: &mut [T]) {
+    slice.fill_with(T::any)
+}
+
+#[crate::unstable(feature="function-contracts", issue="none", reason="function-contracts")]
+#[rustc_diagnostic_item = "KaniWriteAnySlim"]
+#[inline(always)]
+pub fn write_any_slim<T: Arbitrary>(pointer: &mut T) {
+    *pointer = T::any()
+}
+
+#[crate::unstable(feature="function-contracts", issue="none", reason="function-contracts")]
+#[rustc_diagnostic_item = "KaniWriteAnyStr"]
+#[inline(always)]
+pub fn write_any_str(s: &mut str) {
+    unsafe { s.as_bytes_mut() }.fill_with(u8::any)
+    //TODO: String validation
 }
