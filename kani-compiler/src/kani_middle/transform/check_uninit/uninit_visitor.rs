@@ -12,8 +12,10 @@ use stable_mir::mir::{
     Place, PointerCoercion, ProjectionElem, Rvalue, Statement, StatementKind, Terminator,
     TerminatorKind,
 };
-use stable_mir::ty::{ConstantKind, RigidTy, TyKind};
+use stable_mir::ty::{ConstantKind, MirConst, RigidTy, Span, Ty, TyKind, UintTy};
 use strum_macros::AsRefStr;
+
+use super::{PointeeInfo, PointeeLayout};
 
 /// Memory initialization operations: set or get memory initialization state for a given pointer.
 #[derive(AsRefStr, Clone, Debug)]
@@ -552,13 +554,34 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
     }
 
     fn visit_rvalue(&mut self, rvalue: &Rvalue, location: Location) {
-        if let Rvalue::Cast(CastKind::PointerCoercion(PointerCoercion::Unsize), _, ty) = rvalue {
-            if let TyKind::RigidTy(RigidTy::RawPtr(pointee_ty, _)) = ty.kind() {
-                if pointee_ty.kind().is_trait() {
-                    self.push_target(MemoryInitOp::Unsupported {
-                        reason: "Kani does not support reasoning about memory initialization of unsized pointers.".to_string(),
-                    });
+        if let Rvalue::Cast(cast_kind, operand, ty) = rvalue {
+            match cast_kind {
+                CastKind::PointerCoercion(PointerCoercion::Unsize) => {
+                    if let TyKind::RigidTy(RigidTy::RawPtr(pointee_ty, _)) = ty.kind() {
+                        if pointee_ty.kind().is_trait() {
+                            self.push_target(MemoryInitOp::Unsupported {
+                                reason: "Kani does not support reasoning about memory initialization of unsized pointers.".to_string(),
+                            });
+                        }
+                    }
                 }
+                CastKind::PtrToPtr => {
+                    let operand_ty = operand.ty(&self.locals).unwrap();
+                    if let (
+                        RigidTy::RawPtr(from_ty, Mutability::Mut),
+                        RigidTy::RawPtr(to_ty, Mutability::Mut),
+                    ) = (operand_ty.kind().rigid().unwrap(), ty.kind().rigid().unwrap())
+                    {
+                        if !tys_layout_compatible(from_ty, to_ty) {
+                            // If casting from a mutable pointer to a mutable pointer with
+                            // different layouts, delayed UB could occur.
+                            self.push_target(MemoryInitOp::Unsupported {
+                                reason: "Kani does not support reasoning about memory initialization in presence of mutable raw pointer casts that could cause delayed UB.".to_string(),
+                            });
+                        }
+                    }
+                }
+                _ => {}
             }
         };
         self.super_rvalue(rvalue, location);
@@ -719,4 +742,37 @@ fn try_resolve_instance(locals: &[LocalDecl], func: &Operand) -> Result<Instance
             "Kani does not support reasoning about memory initialization of arguments to `{ty:?}`."
         )),
     }
+}
+
+/// Returns true if `to_ty` has a smaller or equal size and the same padding bytes as `from_ty` up until
+/// its size.
+fn tys_layout_compatible(from_ty: &Ty, to_ty: &Ty) -> bool {
+    // Retrieve layouts to assess compatibility.
+    let from_ty_info = PointeeInfo::from_ty(*from_ty);
+    let to_ty_info = PointeeInfo::from_ty(*to_ty);
+    if let (Ok(from_ty_info), Ok(to_ty_info)) = (from_ty_info, to_ty_info) {
+        let from_ty_layout = match from_ty_info.layout() {
+            PointeeLayout::Sized { layout } => layout,
+            PointeeLayout::Slice { element_layout } => element_layout,
+            PointeeLayout::TraitObject => return false,
+        };
+        let to_ty_layout = match to_ty_info.layout() {
+            PointeeLayout::Sized { layout } => layout,
+            PointeeLayout::Slice { element_layout } => element_layout,
+            PointeeLayout::TraitObject => return false,
+        };
+        // Ensure `to_ty_layout` does not have a larger size.
+        if to_ty_layout.len() <= from_ty_layout.len() {
+            // Check data and padding bytes pair-wise.
+            if from_ty_layout.iter().zip(to_ty_layout.iter()).all(
+                |(from_ty_layout_byte, to_ty_layout_byte)| {
+                    // Make sure all data and padding bytes match.
+                    from_ty_layout_byte == to_ty_layout_byte
+                },
+            ) {
+                return true;
+            }
+        }
+    };
+    false
 }
