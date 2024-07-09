@@ -1,13 +1,11 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-//! Check that the `kani::invariant` attribute is applied and the associated
-//! invariant can be checked through an `is_safe` call.
+//! Check that the `kani::invariant` attribute automatically generates the
+//! `Arbitrary` and `Invariant` implementations for the annotated type.
 
 extern crate kani;
-use kani::Invariant;
 
-#[derive(kani::Arbitrary)]
 #[kani::invariant(x.is_safe() && y.is_safe())]
 struct Point {
     x: i32,

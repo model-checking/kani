@@ -5,11 +5,9 @@
 //! `kani::invariant` attribute would result in a compiler error.
 
 extern crate kani;
-use kani::Invariant;
 
 // Note: The struct fields `x` and `y` are references in this context, we should
 // refer to `*x` and `*y` instead.
-#[derive(kani::Arbitrary)]
 #[kani::invariant(x >= 0 && y >= 0)]
 struct Point {
     x: i32,

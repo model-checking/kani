@@ -5,7 +5,6 @@
 //! applied to items which is not a struct.
 
 extern crate kani;
-use kani::Invariant;
 
 #[kani::invariant(true)]
 enum MyEnum {

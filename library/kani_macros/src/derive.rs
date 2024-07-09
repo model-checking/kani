@@ -91,7 +91,7 @@ fn add_trait_bound_arbitrary(mut generics: Generics) -> Generics {
 ///    Self { x: kani::any(), y: kani::any() }
 /// }
 /// ```
-fn fn_any_body(ident: &Ident, data: &Data) -> TokenStream {
+pub fn fn_any_body(ident: &Ident, data: &Data) -> TokenStream {
     match data {
         Data::Struct(struct_data) => init_symbolic_item(ident, &struct_data.fields),
         Data::Enum(enum_data) => fn_any_enum(ident, enum_data),
