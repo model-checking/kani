@@ -1,5 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+#[allow(unused_imports)]
 use crate::{any, any_where, Arbitrary};
 
 /// Generates an arbitrary vector whose length is at most MAX_LENGTH.

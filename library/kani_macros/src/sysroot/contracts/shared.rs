@@ -66,9 +66,6 @@ impl<'a> ContractConditionsHandler<'a> {
         // We should consider a better strategy than just duplicating all attributes.
         #[cfg(feature = "no_core")]
         {
-            self.output.extend(quote!(
-                #[unstable(feature="kani", issue="none")]
-            ));
             self.output.extend(
                 self.annotated_fn
                     .attrs

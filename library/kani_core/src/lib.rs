@@ -55,8 +55,13 @@ macro_rules! kani_lib_internal {
         pub use kani_core::*;
         kani_core::kani_intrinsics!(std);
         kani_core::generate_arbitrary!(std);
+
+        pub mod mem {
+            kani_core::kani_mem!(std);
+        }
     };
 }
+
 /// Kani intrinsics contains the public APIs used by users to verify their harnesses.
 /// This macro is a part of kani_core as that allows us to verify even libraries that are no_core
 /// such as core in rust's std library itself.

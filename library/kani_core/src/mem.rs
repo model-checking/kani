@@ -176,7 +176,7 @@ macro_rules! kani_mem {
                 // Note that this branch can't be tested in concrete execution as `is_read_ok` needs to be
                 // stubbed.
                 // We first assert that the data_ptr
-                assert!(
+                crate::assert(
                     unsafe { is_allocated(data_ptr, 0) },
                     "Kani does not support reasoning about pointer to unallocated memory",
                 );

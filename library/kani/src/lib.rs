@@ -21,24 +21,18 @@
 #![feature(f16)]
 #![feature(f128)]
 
-// pub mod arbitrary;
 #[cfg(feature = "concrete_playback")]
 mod concrete_playback;
 pub mod futures;
 pub mod invariant;
-pub mod mem;
 pub mod shadow;
 pub mod slice;
 pub mod tuple;
 pub mod vec;
 
-// #[doc(hidden)]
-// pub mod internal;
-
 mod mem_init;
 mod models;
 
-// pub use arbitrary::Arbitrary;
 #[cfg(feature = "concrete_playback")]
 pub use concrete_playback::concrete_playback_run;
 pub use invariant::Invariant;
