@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use crate::arbitrary::Arbitrary;
+use std::ptr;
 
 /// Helper trait for code generation for `modifies` contracts.
 ///
@@ -17,7 +18,7 @@ pub trait Pointer<'a> {
     /// argument, for instance one of type `&mut _`, in the `modifies` clause which would move it.
     unsafe fn decouple_lifetime(&self) -> &'a Self::Inner;
 
-    unsafe fn assignable(self) -> &'a mut Self::Inner;
+    unsafe fn assignable(self) -> *mut Self::Inner;
 }
 
 impl<'a, 'b, T: ?Sized> Pointer<'a> for &'b T {
@@ -27,7 +28,7 @@ impl<'a, 'b, T: ?Sized> Pointer<'a> for &'b T {
     }
 
     #[allow(clippy::transmute_ptr_to_ref)]
-    unsafe fn assignable(self) -> &'a mut Self::Inner {
+    unsafe fn assignable(self) -> *mut Self::Inner {
         std::mem::transmute(self as *const T)
     }
 }
@@ -40,7 +41,7 @@ impl<'a, 'b, T: ?Sized> Pointer<'a> for &'b mut T {
         std::mem::transmute::<_, &&'a T>(self)
     }
 
-    unsafe fn assignable(self) -> &'a mut Self::Inner {
+    unsafe fn assignable(self) -> *mut Self::Inner {
         std::mem::transmute(self)
     }
 }
@@ -52,7 +53,7 @@ impl<'a, T: ?Sized> Pointer<'a> for *const T {
     }
 
     #[allow(clippy::transmute_ptr_to_ref)]
-    unsafe fn assignable(self) -> &'a mut Self::Inner {
+    unsafe fn assignable(self) -> *mut Self::Inner {
         std::mem::transmute(self)
     }
 }
@@ -64,7 +65,7 @@ impl<'a, T: ?Sized> Pointer<'a> for *mut T {
     }
 
     #[allow(clippy::transmute_ptr_to_ref)]
-    unsafe fn assignable(self) -> &'a mut Self::Inner {
+    unsafe fn assignable(self) -> *mut Self::Inner {
         std::mem::transmute(self)
     }
 }
@@ -122,7 +123,7 @@ pub fn any_modifies<T>() -> T {
 #[rustc_diagnostic_item = "KaniWriteAny"]
 #[inline(never)]
 #[doc(hidden)]
-pub fn write_any<T: ?Sized>(_pointer: &T) {
+pub fn write_any<T: ?Sized>(_pointer: *mut T) {
     // This function should not be reacheable.
     // Users must include `#[kani::recursion]` in any function contracts for recursive functions;
     // otherwise, this might not be properly instantiate. We mark this as unreachable to make
@@ -133,21 +134,21 @@ pub fn write_any<T: ?Sized>(_pointer: &T) {
 #[crate::unstable(feature = "function-contracts", issue = "none", reason = "function-contracts")]
 #[rustc_diagnostic_item = "KaniWriteAnySlice"]
 #[inline(always)]
-pub fn write_any_slice<T: Arbitrary>(slice: &mut [T]) {
-    slice.fill_with(T::any)
+pub fn write_any_slice<T: Arbitrary>(slice: *mut [T]) {
+    unsafe { (*slice).fill_with(T::any) }
 }
 
 #[crate::unstable(feature = "function-contracts", issue = "none", reason = "function-contracts")]
 #[rustc_diagnostic_item = "KaniWriteAnySlim"]
 #[inline(always)]
-pub fn write_any_slim<T: Arbitrary>(pointer: &mut T) {
-    *pointer = T::any()
+pub fn write_any_slim<T: Arbitrary>(pointer: *mut T) {
+    unsafe { ptr::write(pointer, T::any()) }
 }
 
 #[crate::unstable(feature = "function-contracts", issue = "none", reason = "function-contracts")]
 #[rustc_diagnostic_item = "KaniWriteAnyStr"]
 #[inline(always)]
-pub fn write_any_str(s: &mut str) {
-    unsafe { s.as_bytes_mut() }.fill_with(u8::any)
+pub fn write_any_str(s: *mut str) {
+    unsafe { (*s).as_bytes_mut() }.fill_with(u8::any)
     //TODO: String validation
 }
