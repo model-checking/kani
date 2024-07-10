@@ -1,32 +1,7 @@
-Checking harness mem::verify::check_swap_large_adt_no_drop...
-
-Failed Checks: Kani does not support reasoning about memory initialization in presence of mutable raw pointer casts that could cause delayed UB.
-
-VERIFICATION:- FAILED
-
-Checking harness mem::verify::check_swap_adt_no_drop...
-
-Failed Checks: Kani does not support reasoning about memory initialization in presence of mutable raw pointer casts that could cause delayed UB.
-
-VERIFICATION:- FAILED
-
 Checking harness mem::verify::check_swap_unit...
-
-Failed Checks: Kani does not support reasoning about memory initialization in presence of mutable raw pointer casts that could cause delayed UB.
 
 Failed Checks: ptr NULL or writable up to size
 
-VERIFICATION:- FAILED
-
-Checking harness mem::verify::check_swap_primitive...
-
-Failed Checks: Kani does not support reasoning about memory initialization in presence of mutable raw pointer casts that could cause delayed UB.
-
-VERIFICATION:- FAILED
-
 Summary:
-Verification failed for - mem::verify::check_swap_large_adt_no_drop
-Verification failed for - mem::verify::check_swap_adt_no_drop
 Verification failed for - mem::verify::check_swap_unit
-Verification failed for - mem::verify::check_swap_primitive
-Complete - 3 successfully verified harnesses, 4 failures, 7 total.
+Complete - 6 successfully verified harnesses, 1 failures, 7 total.

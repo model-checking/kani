@@ -1,18 +1,4 @@
-Checking harness ptr::verify::check_new_unchecked...
-
-Failed Checks: Kani does not support reasoning about memory initialization in presence of mutable raw pointer casts that could cause delayed UB.
-
-VERIFICATION:- FAILED
-
-Checking harness ptr::verify::check_new...
-
-Failed Checks: Kani does not support reasoning about memory initialization in presence of mutable raw pointer casts that could cause delayed UB.
-
-VERIFICATION:- FAILED
-
 Summary:
 Verification failed for - ptr::verify::check_replace_unit
 Verification failed for - ptr::verify::check_as_ref_dangling
-Verification failed for - ptr::verify::check_new_unchecked
-Verification failed for - ptr::verify::check_new
-Complete - 2 successfully verified harnesses, 4 failures, 6 total.
+Complete - 4 successfully verified harnesses, 2 failures, 6 total.
