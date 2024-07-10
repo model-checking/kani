@@ -168,6 +168,21 @@ pub fn any<T: Arbitrary>() -> T {
     T::any()
 }
 
+/// This function is only used for function contract instrumentation.
+/// It behaves exaclty like `kani::any<T>()`, except it will check for the trait bounds
+/// at compilation time. It allows us to avoid type checking errors while using function
+/// contracts only for verification.
+#[rustc_diagnostic_item = "KaniAnyModifies"]
+#[inline(never)]
+#[doc(hidden)]
+pub fn any_modifies<T>() -> T {
+    // This function should not be reacheable.
+    // Users must include `#[kani::recursion]` in any function contracts for recursive functions;
+    // otherwise, this might not be properly instantiate. We mark this as unreachable to make
+    // sure Kani doesn't report any false positives.
+    unreachable!()
+}
+
 /// This creates a symbolic *valid* value of type `T`.
 /// The value is constrained to be a value accepted by the predicate passed to the filter.
 /// You can assign the return value of this function to a variable that you want to make symbolic.

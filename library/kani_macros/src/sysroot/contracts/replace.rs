@@ -40,12 +40,7 @@ impl<'a> ContractConditionsHandler<'a> {
         if self.is_first_emit() {
             let return_type = return_type_to_type(&self.annotated_fn.sig.output);
             let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
-            (
-                vec![
-                    syn::parse_quote!(let #result : #return_type = kani::internal::any_modifies();),
-                ],
-                vec![],
-            )
+            (vec![syn::parse_quote!(let #result : #return_type = kani::any_modifies();)], vec![])
         } else {
             let stmts = &self.annotated_fn.block.stmts;
             let idx = stmts
@@ -157,9 +152,8 @@ fn is_replace_return_havoc(stmt: &syn::Stmt) -> bool {
                 path,
                 attrs,
             })
-            if path.segments.len() == 3
+            if path.segments.len() == 2
             && path.segments[0].ident == "kani"
-            && path.segments[1].ident == "internal"
             && path.segments[2].ident == "any_modifies"
             && attrs.is_empty()
         )

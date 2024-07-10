@@ -97,22 +97,6 @@ pub fn apply_closure<T, U: Fn(&T) -> bool>(f: U, x: &T) -> bool {
     f(x)
 }
 
-/// This function is only used for function contract instrumentation.
-/// It behaves exaclty like `kani::any<T>()`, except it will check for the trait bounds
-/// at compilation time. It allows us to avoid type checking errors while using function
-/// contracts only for verification.
-#[crate::unstable(feature = "function-contracts", issue = "none", reason = "function-contracts")]
-#[rustc_diagnostic_item = "KaniAnyModifies"]
-#[inline(never)]
-#[doc(hidden)]
-pub fn any_modifies<T>() -> T {
-    // This function should not be reacheable.
-    // Users must include `#[kani::recursion]` in any function contracts for recursive functions;
-    // otherwise, this might not be properly instantiate. We mark this as unreachable to make
-    // sure Kani doesn't report any false positives.
-    unreachable!()
-}
-
 /// Recieves a reference to a pointer-like object and assigns kani::any_modifies to that object.
 /// Only for use within function contracts and will not be replaced if the recursive or function stub
 /// replace contracts are not used.
