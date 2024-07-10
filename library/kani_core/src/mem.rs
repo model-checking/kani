@@ -310,7 +310,7 @@ macro_rules! kani_mem {
             kani_intrinsic()
         }
 
-        /// A helper to to assert `is_initialized` to use it as a part of other predicates.
+        /// A helper to assert `is_initialized` to use it as a part of other predicates.
         fn assert_is_initialized<T: ?Sized>(ptr: *const T) -> bool {
             assert!(
                 is_initialized(ptr),
