@@ -19,8 +19,11 @@ impl<'a> ContractConditionsHandler<'a> {
         let replace_name = &self.replace_name;
         let modifies_name = &self.modify_name;
         let recursion_name = &self.recursion_name;
+        let check_name = &self.check_name;
 
-        let recursion_closure = self.new_recursion_closure();
+        let replace_closure = self.replace_closure();
+        let check_closure = self.check_closure();
+        let recursion_closure = self.new_recursion_closure(&replace_closure, &check_closure);
 
         // The order of `attrs` and `kanitool::{checked_with,
         // is_contract_generated}` is important here, because macros are
@@ -30,11 +33,15 @@ impl<'a> ContractConditionsHandler<'a> {
         let ItemFn { attrs, vis, sig, block } = &self.annotated_fn;
         self.output.extend(quote!(
             #(#attrs)*
-            #[kanitool::checked_with = #recursion_name]
+            #[kanitool::recursion_check = #recursion_name]
+            #[kanitool::checked_with = #check_name]
             #[kanitool::replaced_with = #replace_name]
             #[kanitool::inner_check = #modifies_name]
             #vis #sig {
+                // The order doesn't matter since we replicate the logic inside recursion closure.
                 #recursion_closure
+                #replace_closure
+                #check_closure
                 // -- Now emit the original code.
                 #block
             }
@@ -49,13 +56,23 @@ impl<'a> ContractConditionsHandler<'a> {
         let mut annotated_fn = self.annotated_fn.clone();
         let ItemFn { block, .. } = &mut annotated_fn;
         let recursion_closure = find_contract_closure(&mut block.stmts, "recursion_check");
-
         self.expand_recursion(recursion_closure);
+
+        let replace_closure = find_contract_closure(&mut block.stmts, "replace");
+        self.expand_replace(replace_closure);
+
+        let check_closure = find_contract_closure(&mut block.stmts, "check");
+        self.expand_check(check_closure);
+
         self.output.extend(quote!(#annotated_fn));
     }
 
     /// Generate the tokens for the recursion closure.
-    fn new_recursion_closure(&self) -> TokenStream {
+    fn new_recursion_closure(
+        &self,
+        replace_closure: &TokenStream,
+        check_closure: &TokenStream,
+    ) -> TokenStream {
         let ItemFn { ref sig, .. } = self.annotated_fn;
         let (inputs, args) = closure_args(&sig.inputs);
         let output = &sig.output;
@@ -64,9 +81,6 @@ impl<'a> ContractConditionsHandler<'a> {
         let replace_ident = Ident::new(&self.replace_name, span);
         let check_ident = Ident::new(&self.check_name, span);
         let recursion_ident = Ident::new(&self.recursion_name, span);
-
-        let replace_closure = self.replace_closure();
-        let check_closure = self.check_closure();
 
         quote!(
             #[kanitool::is_contract_generated(recursion_check)]
