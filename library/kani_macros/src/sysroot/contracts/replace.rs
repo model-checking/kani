@@ -154,7 +154,7 @@ fn is_replace_return_havoc(stmt: &syn::Stmt) -> bool {
             })
             if path.segments.len() == 2
             && path.segments[0].ident == "kani"
-            && path.segments[2].ident == "any_modifies"
+            && path.segments[1].ident == "any_modifies"
             && attrs.is_empty()
         )
     )
