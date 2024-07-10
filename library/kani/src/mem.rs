@@ -306,7 +306,7 @@ pub fn is_initialized<T: ?Sized>(_ptr: *const T) -> bool {
 
 /// A helper to assert `is_initialized` to use it as a part of other predicates.
 fn assert_is_initialized<T: ?Sized>(ptr: *const T) -> bool {
-    crate::assert(is_initialized(ptr), "Undefined Behavior: Reading from an uninitialized pointer");
+    crate::check(is_initialized(ptr), "Undefined Behavior: Reading from an uninitialized pointer");
     true
 }
 
