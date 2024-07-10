@@ -27,7 +27,6 @@ impl<'a, 'b, T: ?Sized> Pointer<'a> for &'b T {
         std::mem::transmute(*self)
     }
 
-    #[allow(clippy::transmute_ptr_to_ref)]
     unsafe fn assignable(self) -> *mut Self::Inner {
         std::mem::transmute(self as *const T)
     }
@@ -42,7 +41,7 @@ impl<'a, 'b, T: ?Sized> Pointer<'a> for &'b mut T {
     }
 
     unsafe fn assignable(self) -> *mut Self::Inner {
-        std::mem::transmute(self)
+        self as *mut T
     }
 }
 
@@ -52,7 +51,6 @@ impl<'a, T: ?Sized> Pointer<'a> for *const T {
         &**self as &'a T
     }
 
-    #[allow(clippy::transmute_ptr_to_ref)]
     unsafe fn assignable(self) -> *mut Self::Inner {
         std::mem::transmute(self)
     }
@@ -64,9 +62,8 @@ impl<'a, T: ?Sized> Pointer<'a> for *mut T {
         &**self as &'a T
     }
 
-    #[allow(clippy::transmute_ptr_to_ref)]
     unsafe fn assignable(self) -> *mut Self::Inner {
-        std::mem::transmute(self)
+        self
     }
 }
 
@@ -123,7 +120,7 @@ pub fn any_modifies<T>() -> T {
 #[rustc_diagnostic_item = "KaniWriteAny"]
 #[inline(never)]
 #[doc(hidden)]
-pub fn write_any<T: ?Sized>(_pointer: *mut T) {
+pub unsafe fn write_any<T: ?Sized>(_pointer: *mut T) {
     // This function should not be reacheable.
     // Users must include `#[kani::recursion]` in any function contracts for recursive functions;
     // otherwise, this might not be properly instantiate. We mark this as unreachable to make
@@ -134,21 +131,21 @@ pub fn write_any<T: ?Sized>(_pointer: *mut T) {
 #[crate::unstable(feature = "function-contracts", issue = "none", reason = "function-contracts")]
 #[rustc_diagnostic_item = "KaniWriteAnySlice"]
 #[inline(always)]
-pub fn write_any_slice<T: Arbitrary>(slice: *mut [T]) {
-    unsafe { (*slice).fill_with(T::any) }
+pub unsafe fn write_any_slice<T: Arbitrary>(slice: *mut [T]) {
+    (*slice).fill_with(T::any)
 }
 
 #[crate::unstable(feature = "function-contracts", issue = "none", reason = "function-contracts")]
 #[rustc_diagnostic_item = "KaniWriteAnySlim"]
 #[inline(always)]
-pub fn write_any_slim<T: Arbitrary>(pointer: *mut T) {
-    unsafe { ptr::write(pointer, T::any()) }
+pub unsafe fn write_any_slim<T: Arbitrary>(pointer: *mut T) {
+    ptr::write(pointer, T::any())
 }
 
 #[crate::unstable(feature = "function-contracts", issue = "none", reason = "function-contracts")]
 #[rustc_diagnostic_item = "KaniWriteAnyStr"]
 #[inline(always)]
-pub fn write_any_str(s: *mut str) {
-    unsafe { (*s).as_bytes_mut() }.fill_with(u8::any)
+pub unsafe fn write_any_str(s: *mut str) {
+    (*s).as_bytes_mut().fill_with(u8::any)
     //TODO: String validation
 }
