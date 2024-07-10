@@ -6,7 +6,6 @@ pub mod contracts {
     use kani::{mem::*, requires};
 
     #[requires(can_dereference(std::ptr::slice_from_raw_parts(data, len)))]
-    #[requires(is_initialized(data, len))]
     pub unsafe fn from_raw_parts<'a, T>(data: *const T, len: usize) -> &'a [T] {
         std::slice::from_raw_parts(data, len)
     }
