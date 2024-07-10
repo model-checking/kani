@@ -1,12 +1,12 @@
 Checking harness check_typed_swap_safe...
 
-Failed Checks: Kani currently doesn't support checking memory initialization for pointers to `std::mem::MaybeUninit<u8>.
+Failed Checks: Kani does not support reasoning about memory initialization in presence of mutable raw pointer casts that could cause delayed UB.
 
 VERIFICATION:- FAILED
 
 Checking harness check_typed_swap...
 
-Failed Checks: Kani currently doesn't support checking memory initialization for pointers to `std::mem::MaybeUninit<u8>.
+Failed Checks: Kani does not support reasoning about memory initialization in presence of mutable raw pointer casts that could cause delayed UB.
 
 Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `*mut u8`
 

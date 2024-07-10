@@ -1,16 +1,18 @@
 Checking harness mem::verify::check_swap_large_adt_no_drop...
 
-Failed Checks: Kani currently doesn't support checking memory initialization for pointers to `std::mem::MaybeUninit<mem::verify::CannotDrop<[u128; 5]>>.
+Failed Checks: Kani does not support reasoning about memory initialization in presence of mutable raw pointer casts that could cause delayed UB.
 
 VERIFICATION:- FAILED
 
 Checking harness mem::verify::check_swap_adt_no_drop...
 
-Failed Checks: Kani currently doesn't support checking memory initialization for pointers to `std::mem::MaybeUninit<mem::verify::CannotDrop<u8>>.
+Failed Checks: Kani does not support reasoning about memory initialization in presence of mutable raw pointer casts that could cause delayed UB.
 
 VERIFICATION:- FAILED
 
 Checking harness mem::verify::check_swap_unit...
+
+Failed Checks: Kani does not support reasoning about memory initialization in presence of mutable raw pointer casts that could cause delayed UB.
 
 Failed Checks: ptr NULL or writable up to size
 
@@ -18,7 +20,7 @@ VERIFICATION:- FAILED
 
 Checking harness mem::verify::check_swap_primitive...
 
-Failed Checks: Kani currently doesn't support checking memory initialization for pointers to `std::mem::MaybeUninit<u8>.
+Failed Checks: Kani does not support reasoning about memory initialization in presence of mutable raw pointer casts that could cause delayed UB.
 
 VERIFICATION:- FAILED
 
