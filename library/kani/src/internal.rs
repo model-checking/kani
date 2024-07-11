@@ -130,6 +130,8 @@ pub unsafe fn write_any_slim<T: Arbitrary>(pointer: *mut T) {
 #[rustc_diagnostic_item = "KaniWriteAnyStr"]
 #[inline(always)]
 pub unsafe fn write_any_str(s: *mut str) {
-    (*s).as_bytes_mut().fill_with(u8::any)
+    //TODO: strings introduce new UB
+    //(*s).as_bytes_mut().fill_with(u8::any)
     //TODO: String validation
+    unreachable!("strings are not yet implemented")
 }
