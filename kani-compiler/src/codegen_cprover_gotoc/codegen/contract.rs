@@ -2,13 +2,16 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::kani_middle::attributes::KaniAttributes;
+use crate::kani_middle::transform::BodyTransformation;
 use cbmc::goto_program::FunctionContract;
 use cbmc::goto_program::{Lambda, Location};
+use cbmc::irep::Symbol;
 use kani_metadata::AssignsContract;
 use rustc_hir::def_id::DefId as InternalDefId;
 use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::{Instance, MonoItem};
-use stable_mir::mir::Local;
+use stable_mir::mir::{Body, Local, VarDebugInfoContents};
+use stable_mir::ty::{ClosureKind, FnDef, RigidTy, TyKind};
 use stable_mir::CrateDef;
 use tracing::debug;
 
@@ -34,73 +37,91 @@ impl<'tcx> GotocCtx<'tcx> {
         items: &[MonoItem],
     ) -> AssignsContract {
         let tcx = self.tcx;
-        let function_under_contract_attrs = KaniAttributes::for_item(tcx, function_under_contract);
+        let modify_instance = items
+            .iter()
+            .find_map(|item| {
+                // Find the instance under contract
+                let MonoItem::Fn(instance) = *item else { return None };
+                if rustc_internal::internal(tcx, instance.def.def_id()) == function_under_contract {
+                    tracing::error!(name=?instance.name(), "------ here");
+                    self.find_modifies_closure(instance)
+                } else {
+                    None
+                }
+            })
+            .unwrap();
 
-        let recursion_wrapper_id =
-            function_under_contract_attrs.checked_with_id().unwrap().unwrap();
-        let expected_name = format!("{}::REENTRY", tcx.item_name(recursion_wrapper_id));
-        let mut recursion_tracker = items.iter().filter_map(|i| match i {
-            MonoItem::Static(recursion_tracker)
-                if (*recursion_tracker).name().contains(expected_name.as_str()) =>
-            {
-                Some(*recursion_tracker)
-            }
-            _ => None,
-        });
-
-        let recursion_tracker_def = recursion_tracker
-            .next()
-            .expect("There should be at least one recursion tracker (REENTRY) in scope");
-        assert!(
-            recursion_tracker.next().is_none(),
-            "Only one recursion tracker (REENTRY) may be in scope"
-        );
-
-        let span_of_recursion_wrapper = tcx.def_span(recursion_wrapper_id);
-        let location_of_recursion_wrapper = self.codegen_span(&span_of_recursion_wrapper);
-        // The name and location for the recursion tracker should match the exact information added
-        // to the symbol table, otherwise our contract instrumentation will silently failed.
-        // This happens because Kani relies on `--nondet-static-exclude` from CBMC to properly
-        // handle this tracker. CBMC silently fails if there is no match in the symbol table
-        // that correspond to the argument of this flag.
-        // More details at https://github.com/model-checking/kani/pull/3045.
-        let full_recursion_tracker_name = format!(
-            "{}:{}",
-            location_of_recursion_wrapper
-                .filename()
-                .expect("recursion location wrapper should have a file name"),
-            // We must use the pretty name of the tracker instead of the mangled name.
-            // This restrictions comes from `--nondet-static-exclude` in CBMC.
-            // Mode details at https://github.com/diffblue/cbmc/issues/8225.
-            recursion_tracker_def.name(),
-        );
-
-        let wrapped_fn = function_under_contract_attrs.inner_check().unwrap().unwrap();
-        let mut instance_under_contract = items.iter().filter_map(|i| match i {
-            MonoItem::Fn(instance @ Instance { def, .. })
-                if wrapped_fn == rustc_internal::internal(tcx, def.def_id()) =>
-            {
-                Some(*instance)
-            }
-            _ => None,
-        });
-        let instance_of_check = instance_under_contract.next().unwrap();
-        assert!(
-            instance_under_contract.next().is_none(),
-            "Only one instance of a checked function may be in scope"
-        );
-        let attrs_of_wrapped_fn = KaniAttributes::for_item(tcx, wrapped_fn);
-        let assigns_contract = attrs_of_wrapped_fn.modifies_contract().unwrap_or_else(|| {
-            debug!(?instance_of_check, "had no assigns contract specified");
-            vec![]
-        });
-        self.attach_modifies_contract(instance_of_check, assigns_contract);
-        let wrapper_name = instance_of_check.mangled_name();
-
+        let recursion_tracker = self.find_recursion_tracker(items);
         AssignsContract {
-            recursion_tracker: full_recursion_tracker_name,
-            contracted_function_name: wrapper_name,
+            recursion_tracker,
+            contracted_function_name: modify_instance.mangled_name(),
         }
+    }
+
+    /// The name and location for the recursion tracker should match the exact information added
+    /// to the symbol table, otherwise our contract instrumentation will silently failed.
+    /// This happens because Kani relies on `--nondet-static-exclude` from CBMC to properly
+    /// handle this tracker. CBMC silently fails if there is no match in the symbol table
+    /// that correspond to the argument of this flag.
+    /// More details at https://github.com/model-checking/kani/pull/3045.
+    ///
+    /// We must use the pretty name of the tracker instead of the mangled name.
+    /// This restriction comes from `--nondet-static-exclude` in CBMC.
+    /// Mode details at https://github.com/diffblue/cbmc/issues/8225.
+    fn find_recursion_tracker(&mut self, items: &[MonoItem]) -> Option<String> {
+        // Return item tagged with `#[kanitool::recursion_tracker]`
+        let mut recursion_trackers = items.iter().filter_map(|item| {
+            let MonoItem::Static(static_item) = item else { return None };
+            if !static_item
+                .attrs_by_path(&["kanitool".into(), "recursion_tracker".into()])
+                .is_empty()
+            {
+                let span = static_item.span();
+                let loc = self.codegen_span_stable(span);
+                Some(format!(
+                    "{}:{}",
+                    loc.filename().expect("recursion location wrapper should have a file name"),
+                    static_item.name(),
+                ))
+            } else {
+                None
+            }
+        });
+
+        let recursion_tracker = recursion_trackers.next();
+        assert!(
+            recursion_trackers.next().is_none(),
+            "Expected up to one recursion tracker (`REENTRY`) in scope"
+        );
+        recursion_tracker
+    }
+
+    /// Find the modifies closure recursively since it can be inside check or recursion closure.
+    fn find_modifies_closure(&mut self, instance: Instance) -> Option<Instance> {
+        let contract_attrs =
+            KaniAttributes::for_instance(self.tcx, instance).contract_attributes()?;
+        let mut find_closure = |inside: Instance, name: &str| {
+            let body = self.transformer.body(self.tcx, inside);
+            body.var_debug_info.iter().find_map(|var_info| {
+                if var_info.name.as_str() == name {
+                    let ty = match &var_info.value {
+                        VarDebugInfoContents::Place(place) => place.ty(body.locals()).unwrap(),
+                        VarDebugInfoContents::Const(const_op) => const_op.ty(),
+                    };
+                    if let TyKind::RigidTy(RigidTy::Closure(def, args)) = ty.kind() {
+                        return Some(Instance::resolve(FnDef(def.def_id()), &args).unwrap());
+                    }
+                }
+                None
+            })
+        };
+        let outside_check = if contract_attrs.has_recursion {
+            find_closure(instance, contract_attrs.recursion_check.as_str())?
+        } else {
+            instance
+        };
+        let check = find_closure(outside_check, contract_attrs.checked_with.as_str())?;
+        find_closure(check, contract_attrs.inner_check.as_str())
     }
 
     /// Convert the Kani level contract into a CBMC level contract by creating a

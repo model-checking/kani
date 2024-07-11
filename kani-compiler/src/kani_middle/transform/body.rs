@@ -7,9 +7,13 @@ use crate::kani_middle::find_fn_def;
 use rustc_middle::ty::TyCtxt;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::*;
-use stable_mir::ty::{GenericArgs, MirConst, Span, Ty, UintTy};
+use stable_mir::ty::{GenericArgs, MirConst, Region, RegionKind, Span, Ty, UintTy};
 use std::fmt::Debug;
 use std::mem;
+
+pub const fn re_erased() -> Region {
+    Region { kind: RegionKind::ReErased }
+}
 
 /// This structure mimics a Body that can actually be modified.
 pub struct MutableBody {
@@ -52,6 +56,10 @@ impl MutableBody {
 
     pub fn locals(&self) -> &[LocalDecl] {
         &self.locals
+    }
+
+    pub fn arg_count(&self) -> usize {
+        self.arg_count
     }
 
     /// Create a mutable body from the original MIR body.
@@ -367,10 +375,10 @@ impl MutableBody {
     /// by the compiler. This function allow us to delete the dummy body before
     /// creating a new one.
     ///
-    /// Note: We do not prune the local variables today for simplicity.
-    pub fn clear_body(&mut self) {
+    /// Keep all the locals untouched, so they can be reused by the passes if needed.
+    pub fn clear_body(&mut self, kind: TerminatorKind) {
         self.blocks.clear();
-        let terminator = Terminator { kind: TerminatorKind::Return, span: self.span };
+        let terminator = Terminator { kind, span: self.span };
         self.blocks.push(BasicBlock { statements: Vec::default(), terminator })
     }
 }
@@ -417,6 +425,11 @@ impl SourceInstruction {
             SourceInstruction::Terminator { bb } => blocks[bb].terminator.span,
         }
     }
+}
+
+/// Create a new operand that moves local.
+pub fn new_move_operand(local: Local) -> Operand {
+    Operand::Move(Place::from(Local::from(local)))
 }
 
 fn find_instance(tcx: TyCtxt, diagnostic: &str) -> Option<Instance> {

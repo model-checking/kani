@@ -19,7 +19,8 @@ use crate::kani_queries::QueryDb;
 use rustc_middle::ty::TyCtxt;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{
-    BinOp, Body, ConstOperand, Operand, Place, Rvalue, Statement, StatementKind, RETURN_LOCAL,
+    BinOp, Body, ConstOperand, Operand, Place, Rvalue, Statement, StatementKind, TerminatorKind,
+    RETURN_LOCAL,
 };
 use stable_mir::target::MachineInfo;
 use stable_mir::ty::{FnDef, MirConst, RigidTy, Ty, TyKind, UintTy};
@@ -86,7 +87,7 @@ impl IntrinsicGeneratorPass {
     /// ```
     fn valid_value_body(&self, tcx: TyCtxt, body: Body) -> Body {
         let mut new_body = MutableBody::from(body);
-        new_body.clear_body();
+        new_body.clear_body(TerminatorKind::Return);
 
         // Initialize return variable with True.
         let ret_var = RETURN_LOCAL;
@@ -163,7 +164,7 @@ impl IntrinsicGeneratorPass {
     /// ```
     fn is_initialized_body(&mut self, tcx: TyCtxt, body: Body) -> Body {
         let mut new_body = MutableBody::from(body);
-        new_body.clear_body();
+        new_body.clear_body(TerminatorKind::Return);
 
         // Initialize return variable with True.
         let ret_var = RETURN_LOCAL;

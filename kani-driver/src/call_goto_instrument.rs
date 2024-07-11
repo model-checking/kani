@@ -166,17 +166,19 @@ impl KaniSession {
     pub fn instrument_contracts(&self, harness: &HarnessMetadata, file: &Path) -> Result<()> {
         let Some(assigns) = harness.contract.as_ref() else { return Ok(()) };
 
-        let args: &[std::ffi::OsString] = &[
+        let mut args: Vec<OsString> = vec![
             "--dfcc".into(),
             (&harness.mangled_name).into(),
             "--enforce-contract".into(),
             assigns.contracted_function_name.as_str().into(),
-            "--nondet-static-exclude".into(),
-            assigns.recursion_tracker.as_str().into(),
             file.into(),
             file.into(),
         ];
-        self.call_goto_instrument(args)
+        if let Some(tracker) = &assigns.recursion_tracker {
+            args.push("--nondet-static-exclude".into());
+            args.push(tracker.as_str().into());
+        }
+        self.call_goto_instrument(&args)
     }
 
     /// Generate a .demangled.c file from the .c file using the `prettyName`s from the symbol table

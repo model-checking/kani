@@ -244,7 +244,7 @@ impl CodegenBackend for GotocCodegenBackend {
                         for harness in &unit.harnesses {
                             let model_path = units.harness_model_path(*harness).unwrap();
                             let contract_metadata =
-                                contract_metadata_for_harness(tcx, harness.def.def_id()).unwrap();
+                                contract_metadata_for_harness(tcx, harness.def.def_id());
                             let (gcx, items, contract_info) = self.codegen_items(
                                 tcx,
                                 &[MonoItem::Fn(*harness)],
@@ -428,12 +428,9 @@ impl CodegenBackend for GotocCodegenBackend {
     }
 }
 
-fn contract_metadata_for_harness(
-    tcx: TyCtxt,
-    def_id: DefId,
-) -> Result<Option<InternalDefId>, ErrorGuaranteed> {
+fn contract_metadata_for_harness(tcx: TyCtxt, def_id: DefId) -> Option<InternalDefId> {
     let attrs = KaniAttributes::for_def_id(tcx, def_id);
-    Ok(attrs.interpret_the_for_contract_attribute().transpose()?.map(|(_, id, _)| id))
+    attrs.interpret_for_contract_attribute().map(|(_, id, _)| id)
 }
 
 fn check_target(session: &Session) {

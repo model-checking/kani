@@ -87,6 +87,7 @@ impl<'a> ContractConditionsHandler<'a> {
             #[allow(dead_code, unused_variables, unused_mut)]
             let mut #recursion_ident = |#inputs| #output
             {
+                #[kanitool::recursion_tracker]
                 static mut REENTRY: bool = false;
                 if unsafe { REENTRY } {
                     #replace_closure

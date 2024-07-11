@@ -11,7 +11,8 @@ pub struct AssignsContract {
     /// The target of the contract
     pub contracted_function_name: String,
     /// A static global variable used to track recursion that must not be havocked.
-    pub recursion_tracker: String,
+    /// This is only needed if the function is tagged with `#[kani::recursive]`
+    pub recursion_tracker: Option<String>,
 }
 
 /// We emit this structure for each annotated proof harness (`#[kani::proof]`) we find.
@@ -50,6 +51,11 @@ pub struct HarnessAttributes {
     pub unwind_value: Option<u32>,
     /// The stubs used in this harness.
     pub stubs: Vec<Stub>,
+    /// The name of the function with contract that is being verified if this is a proof for
+    /// contract.
+    pub for_contract: Option<String>,
+    /// The name of the functions being stubbed by their contract.
+    pub verified_stubs: Vec<String>,
 }
 
 /// The stubbing type.
