@@ -129,7 +129,7 @@ pub unsafe fn write_any_slim<T: Arbitrary>(pointer: *mut T) {
 #[crate::unstable(feature = "function-contracts", issue = "none", reason = "function-contracts")]
 #[rustc_diagnostic_item = "KaniWriteAnyStr"]
 #[inline(always)]
-pub unsafe fn write_any_str(s: *mut str) {
+pub unsafe fn write_any_str(_s: *mut str) {
     //TODO: strings introduce new UB
     //(*s).as_bytes_mut().fill_with(u8::any)
     //TODO: String validation
