@@ -1,5 +1,4 @@
 error: `&str` doesn't implement `kani::Arbitrary`.
-  -->
 |
 | kani_core::kani_lib!(kani);
 | ^^^^^^^^^^^^^^^^^^^^^^^^^^
