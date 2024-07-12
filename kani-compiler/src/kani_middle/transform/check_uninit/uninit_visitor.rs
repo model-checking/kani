@@ -595,15 +595,13 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                 reason: "Kani does not support reasoning about memory initialization in presence of mutable raw pointer casts that could cause delayed UB.".to_string(),
                             });
                         }
-                    } else {
-                        if !tys_layout_compatible(&operand_ty, &ty) {
-                            // If transmuting between two types of incompatible layouts, padding
-                            // bytes are exposed, which is UB.
-                            self.push_target(MemoryInitOp::Unsupported {
-                                reason: "Transmuting between types of incompatible layouts."
-                                    .to_string(),
-                            });
-                        }
+                    } else if !tys_layout_compatible(&operand_ty, &ty) {
+                        // If transmuting between two types of incompatible layouts, padding
+                        // bytes are exposed, which is UB.
+                        self.push_target(MemoryInitOp::Unsupported {
+                            reason: "Transmuting between types of incompatible layouts."
+                                .to_string(),
+                        });
                     }
                 }
                 _ => {}
