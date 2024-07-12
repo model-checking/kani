@@ -7,7 +7,7 @@
 #[derive(kani::Arbitrary)]
 struct S(u32, u8);
 
-/// Checks that Kani catches an attempt to access padding of a struct using raw pointers.
+/// Checks that Kani catches an attempt to access padding of a struct using transmute.
 #[kani::proof]
 fn check_uninit_padding() {
     let s = kani::any();
