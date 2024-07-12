@@ -1,9 +1,10 @@
+use std::io::stdout;
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::kani_middle::attributes::KaniAttributes;
 use crate::kani_middle::transform::BodyTransformation;
-use cbmc::goto_program::FunctionContract;
+use cbmc::goto_program::{DatatypeComponent, FunctionContract, Type};
 use cbmc::goto_program::{Lambda, Location};
 use cbmc::irep::Symbol;
 use kani_metadata::AssignsContract;
@@ -22,14 +23,12 @@ impl<'tcx> GotocCtx<'tcx> {
     ///
     /// 1. Gets the `#[kanitool::inner_check = "..."]` target, then resolves exactly one instance
     ///    of it. Panics if there are more or less than one instance.
-    /// 2. Expects that a `#[kanitool::modifies(...)]` is placed on the `inner_check` function,
-    ///    turns it into a CBMC contract and attaches it to the symbol for the previously resolved
-    ///    instance.
+    /// 2. The additional arguments for the inner checks are locations that may be modified.
+    ///    Add them to the list of CBMC's assigns.
     /// 3. Returns the mangled name of the symbol it attached the contract to.
-    /// 4. Resolves the `#[kanitool::checked_with = "..."]` target from `function_under_contract`
-    ///    which has `static mut REENTRY : bool` declared inside.
-    /// 5. Returns the full path to this constant that `--nondet-static-exclude` expects which is
-    ///    comprised of the file path that `checked_with` is located in, the name of the
+    /// 4. Returns the full path to the static marked with `#[kanitool::recursion_tracker]` which
+    ///    is passed to the `--nondet-static-exclude` argument.
+    ///    This flag expects the file path that `checked_with` is located in, the name of the
     ///    `checked_with` function and the name of the constant (`REENTRY`).
     pub fn handle_check_contract(
         &mut self,
@@ -37,25 +36,22 @@ impl<'tcx> GotocCtx<'tcx> {
         items: &[MonoItem],
     ) -> AssignsContract {
         let tcx = self.tcx;
-        let modify_instance = items
+        let (check, modify) = items
             .iter()
             .find_map(|item| {
                 // Find the instance under contract
                 let MonoItem::Fn(instance) = *item else { return None };
                 if rustc_internal::internal(tcx, instance.def.def_id()) == function_under_contract {
                     tracing::error!(name=?instance.name(), "------ here");
-                    self.find_modifies_closure(instance)
+                    self.find_check_and_modifies(instance)
                 } else {
                     None
                 }
             })
             .unwrap();
-
+        self.attach_modifies_contract(modify);
         let recursion_tracker = self.find_recursion_tracker(items);
-        AssignsContract {
-            recursion_tracker,
-            contracted_function_name: modify_instance.mangled_name(),
-        }
+        AssignsContract { recursion_tracker, contracted_function_name: modify.mangled_name() }
     }
 
     /// The name and location for the recursion tracker should match the exact information added
@@ -96,8 +92,8 @@ impl<'tcx> GotocCtx<'tcx> {
         recursion_tracker
     }
 
-    /// Find the modifies closure recursively since it can be inside check or recursion closure.
-    fn find_modifies_closure(&mut self, instance: Instance) -> Option<Instance> {
+    /// Find the modifies and the check closure recursively since we may have a recursion wrapper.
+    fn find_check_and_modifies(&mut self, instance: Instance) -> Option<(Instance, Instance)> {
         let contract_attrs =
             KaniAttributes::for_instance(self.tcx, instance).contract_attributes()?;
         let mut find_closure = |inside: Instance, name: &str| {
@@ -121,20 +117,20 @@ impl<'tcx> GotocCtx<'tcx> {
             instance
         };
         let check = find_closure(outside_check, contract_attrs.checked_with.as_str())?;
-        find_closure(check, contract_attrs.inner_check.as_str())
+        Some((check, find_closure(check, contract_attrs.inner_check.as_str())?))
     }
 
     /// Convert the Kani level contract into a CBMC level contract by creating a
     /// CBMC lambda.
     fn codegen_modifies_contract(
         &mut self,
-        modified_places: Vec<Local>,
+        goto_annotated_fn_name: &str,
+        modifies: Instance,
         loc: Location,
     ) -> FunctionContract {
-        let goto_annotated_fn_name = self.current_fn().name();
         let goto_annotated_fn_typ = self
             .symbol_table
-            .lookup(&goto_annotated_fn_name)
+            .lookup(goto_annotated_fn_name)
             .unwrap_or_else(|| panic!("Function '{goto_annotated_fn_name}' is not declared"))
             .typ
             .clone();
@@ -160,14 +156,29 @@ impl<'tcx> GotocCtx<'tcx> {
             })
             .unwrap_or_default();
 
-        let assigns = modified_places
+        // The last argument is a tuple with addresses that can be modified.
+        let capture_local = Local::from(modifies.fn_abi().unwrap().args.len());
+        let capture_ty = self.local_ty_stable(capture_local);
+        let captured_args =
+            self.codegen_place_stable(&capture_local.into(), loc).unwrap().goto_expr;
+        let TyKind::RigidTy(RigidTy::Tuple(capture_tys)) = capture_ty.kind() else {
+            unreachable!("found {:?}", capture_ty.kind())
+        };
+        let assigns = capture_tys
             .into_iter()
-            .map(|local| {
-                Lambda::as_contract_for(
-                    &goto_annotated_fn_typ,
-                    None,
-                    self.codegen_place_stable(&local.into(), loc).unwrap().goto_expr.dereference(),
-                )
+            .enumerate()
+            .filter_map(|(idx, ty)| {
+                let kind = ty.kind();
+                kind.is_raw_ptr().then(|| {
+                    Lambda::as_contract_for(
+                        &goto_annotated_fn_typ,
+                        None,
+                        captured_args
+                            .clone()
+                            .member(idx.to_string(), &self.symbol_table)
+                            .dereference(),
+                    )
+                })
             })
             .chain(shadow_memory_assign)
             .collect();
@@ -179,17 +190,19 @@ impl<'tcx> GotocCtx<'tcx> {
     /// `instance` must have previously been declared.
     ///
     /// This merges with any previously attached contracts.
-    pub fn attach_modifies_contract(&mut self, instance: Instance, modified_places: Vec<Local>) {
+    pub fn attach_modifies_contract(&mut self, instance: Instance) {
         // This should be safe, since the contract is pretty much evaluated as
         // though it was the first (or last) assertion in the function.
         assert!(self.current_fn.is_none());
-        let body = instance.body().unwrap();
+        let body = self.transformer.body(self.tcx, instance);
         self.set_current_fn(instance, &body);
-        let goto_contract =
-            self.codegen_modifies_contract(modified_places, self.codegen_span_stable(body.span));
-        let name = self.current_fn().name();
-
-        self.symbol_table.attach_contract(name, goto_contract);
-        self.reset_current_fn()
+        let mangled_name = instance.mangled_name();
+        let goto_contract = self.codegen_modifies_contract(
+            &mangled_name,
+            instance,
+            self.codegen_span_stable(instance.def.span()),
+        );
+        self.symbol_table.attach_contract(&mangled_name, goto_contract);
+        self.reset_current_fn();
     }
 }

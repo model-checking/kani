@@ -9,14 +9,18 @@
 //!
 //! Note that glob use statements can form loops. The paths can also walk through the loop.
 
+use rustc_smir::rustc_internal;
 use std::collections::HashSet;
 use std::fmt;
 use std::iter::Peekable;
 
+use rustc_errors::ErrorGuaranteed;
 use rustc_hir::def::{DefKind, Res};
 use rustc_hir::def_id::{DefId, LocalDefId, LocalModDefId, CRATE_DEF_INDEX, LOCAL_CRATE};
 use rustc_hir::{ItemKind, UseKind};
 use rustc_middle::ty::TyCtxt;
+use stable_mir::ty::{FnDef, RigidTy, TyKind};
+use stable_mir::{CrateDef, DefId as StableDefId};
 use tracing::debug;
 
 /// Attempts to resolve a simple path (in the form of a string) to a function / method `DefId`.
@@ -44,6 +48,33 @@ pub fn resolve_fn<'tcx>(
             }
         }
         err => err,
+    }
+}
+
+/// Resolve the name of a function from the context of the definition provided.
+///
+/// Ideally this should pass a more precise span, but we don't keep them around.
+pub fn expect_resolve_fn<T: CrateDef>(
+    tcx: TyCtxt,
+    res_cx: T,
+    name: &str,
+    reason: &str,
+) -> Result<FnDef, ErrorGuaranteed> {
+    let internal_def_id = rustc_internal::internal(tcx, res_cx.def_id());
+    let current_module = tcx.parent_module_from_def_id(internal_def_id.as_local().unwrap());
+    let maybe_resolved = resolve_fn(tcx, current_module.to_local_def_id(), name);
+    let resolved = maybe_resolved.map_err(|err| {
+        tcx.dcx().span_err(
+            rustc_internal::internal(tcx, res_cx.span()),
+            format!("Failed to resolve `{name}` for `{reason}`: {err}"),
+        )
+    })?;
+    let ty_internal = tcx.type_of(resolved).instantiate_identity();
+    let ty = rustc_internal::stable(ty_internal);
+    if let TyKind::RigidTy(RigidTy::FnDef(def, _)) = ty.kind() {
+        Ok(def)
+    } else {
+        unreachable!("Expected function for `{name}`, but found: {ty}")
     }
 }
 

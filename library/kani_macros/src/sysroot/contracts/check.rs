@@ -4,11 +4,11 @@
 //! Logic used for generating the code that checks a contract.
 
 use proc_macro2::{Ident, Span, TokenStream as TokenStream2};
-use quote::quote;
+use quote::{quote, ToTokens};
 use std::mem;
 use syn::punctuated::Punctuated;
 use syn::token::Comma;
-use syn::{parse_quote, Block, Expr, FnArg, Local, LocalInit, Pat, ReturnType, Stmt};
+use syn::{parse_quote, Block, Expr, FnArg, Local, LocalInit, Pat, PatIdent, ReturnType, Stmt};
 
 use super::{
     helpers::*,
@@ -16,18 +16,14 @@ use super::{
     ContractConditionsData, ContractConditionsHandler, INTERNAL_RESULT_IDENT,
 };
 
-const WRAPPER_ARG_PREFIX: &str = "_wrapper_arg_";
+const WRAPPER_ARG: &str = "_wrapper_arg";
 
 impl<'a> ContractConditionsHandler<'a> {
     /// Create the body of a check function.
     ///
     /// Wraps the conditions from this attribute around `self.body`.
-    ///
-    /// Mutable because a `modifies` clause may need to extend the inner call to
-    /// the wrapper with new arguments.
     pub fn make_check_body(&self, mut body_stmts: Vec<Stmt>) -> TokenStream2 {
         let Self { attr_copy, .. } = self;
-
         match &self.condition_type {
             ContractConditionsData::Requires { attr } => {
                 quote!({
@@ -53,29 +49,29 @@ impl<'a> ContractConditionsHandler<'a> {
                 })
             }
             ContractConditionsData::Modifies { attr } => {
-                let wrapper_name = &self.modify_name;
-
-                let wrapper_args = if let Some(wrapper_call_args) = body_stmts
-                    .iter_mut()
-                    .find_map(|stmt| try_as_wrapper_call_args(stmt, &wrapper_name))
-                {
-                    let wrapper_args = make_wrapper_idents(
-                        wrapper_call_args.len(),
-                        attr.len(),
-                        WRAPPER_ARG_PREFIX,
-                    );
-                    wrapper_call_args
-                        .extend(wrapper_args.clone().map(|a| Expr::Verbatim(quote!(#a))));
-                    wrapper_args
+                let wrapper_arg_ident = Ident::new(WRAPPER_ARG, Span::call_site());
+                let wrapper_tuple = body_stmts.iter_mut().find_map(|stmt| {
+                    if let Stmt::Local(Local {
+                        pat: Pat::Ident(PatIdent { ident, .. }),
+                        init: Some(LocalInit { expr, .. }),
+                        ..
+                    }) = stmt
+                    {
+                        (ident == &wrapper_arg_ident).then_some(expr.as_mut())
+                    } else {
+                        None
+                    }
+                });
+                if let Some(Expr::Tuple(values)) = wrapper_tuple {
+                    values.elems.extend(attr.iter().map(|attr| {
+                        let expr: Expr = parse_quote!(#attr
+                        as *const _);
+                        expr
+                    }));
                 } else {
-                    unreachable!("Expected check function to call to the modifies wrapper function")
-                };
-
-                quote!({
-                    // Cast to *const () since we only care about the address.
-                    #(let #wrapper_args = #attr as *const _ as *const ();)*
-                    #(#body_stmts)*
-                })
+                    unreachable!("Expected tuple but found `{wrapper_tuple:?}`")
+                }
+                quote!({#(#body_stmts)*})
             }
         }
     }
@@ -83,17 +79,21 @@ impl<'a> ContractConditionsHandler<'a> {
     /// Initialize the list of statements for the check closure body.
     fn initial_check_stmts(&self) -> Vec<syn::Stmt> {
         let modifies_ident = Ident::new(&self.modify_name, Span::call_site());
+        let wrapper_arg_ident = Ident::new(WRAPPER_ARG, Span::call_site());
         let return_type = return_type_to_type(&self.annotated_fn.sig.output);
+        let (inputs, _) = closure_args(&self.annotated_fn.sig.inputs);
         let modifies_closure = self.modifies_closure(
-            &self.annotated_fn.sig.inputs,
+            &inputs,
             &self.annotated_fn.sig.output,
             &self.annotated_fn.block,
+            true,
         );
         let (_, args) = closure_args(&self.annotated_fn.sig.inputs);
         let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
         parse_quote!(
+            let #wrapper_arg_ident = ();
             #modifies_closure
-            let #result : #return_type = #modifies_ident(#(#args),*);
+            let #result : #return_type = #modifies_ident(#(#args,)* #wrapper_arg_ident);
             #result
         )
     }
@@ -126,37 +126,25 @@ impl<'a> ContractConditionsHandler<'a> {
         *body = syn::parse2(self.make_check_body(mem::take(&mut body.block.stmts))).unwrap();
     }
 
-    /// Emit a modifies wrapper, possibly augmenting a prior, existing one.
-    ///
-    /// We only augment if this clause is a `modifies` clause. Before,
-    /// we annotated the wrapper arguments with `impl kani::Arbitrary`,
-    /// so Rust would infer the proper types for each argument.
-    /// We want to remove the restriction that these arguments must
-    /// implement `kani::Arbitrary` for checking. Now, we annotate each
-    /// argument with a generic type parameter, so the compiler can
-    /// continue inferring the correct types.
-    pub fn modifies_closure(
+    /// Emit a modifies wrapper. The first time, we augment the list of inputs to track modifies.
+    pub fn modifies_closure<T: ToTokens>(
         &self,
-        inputs: &Punctuated<FnArg, Comma>,
+        inputs: &Punctuated<T, Comma>,
         output: &ReturnType,
         body: &Block,
+        include_modifies: bool,
     ) -> TokenStream2 {
         // Filter receiver
-        let (inputs, _args) = closure_args(inputs);
-        let wrapper_args: Vec<_> =
-            if let ContractConditionsData::Modifies { attr } = &self.condition_type {
-                make_wrapper_idents(inputs.len(), attr.len(), WRAPPER_ARG_PREFIX).collect()
-            } else {
-                make_wrapper_idents(inputs.len(), 0, WRAPPER_ARG_PREFIX).collect()
-            };
+        let wrapper_ident = if include_modifies {
+            vec![Ident::new(WRAPPER_ARG, Span::call_site())]
+        } else {
+            vec![]
+        };
         let modifies_ident = Ident::new(&self.modify_name, Span::call_site());
         quote!(
             #[kanitool::is_contract_generated(wrapper)]
-            #(#[kanitool::modifies(#wrapper_args)])*
             #[allow(dead_code, unused_variables, unused_mut)]
-            let mut #modifies_ident = |#inputs #(, #wrapper_args: *const ())*| #output {
-                #body
-            };
+            let mut #modifies_ident = |#inputs #(, #wrapper_ident: _)*| #output #body;
         )
     }
 
@@ -168,19 +156,11 @@ impl<'a> ContractConditionsHandler<'a> {
             };
             let Expr::Closure(closure) = expr.as_ref() else { unreachable!() };
             let Expr::Block(body) = closure.body.as_ref() else { unreachable!() };
-            let inputs = closure
-                .inputs
-                .iter()
-                .map(|pat| {
-                    if let Pat::Type(pat_type) = pat {
-                        FnArg::Typed(pat_type.clone())
-                    } else {
-                        panic!("Expected closure argument, but found: {pat:?}")
-                    }
-                })
-                .collect();
-            let stream = self.modifies_closure(&inputs, &closure.output, &body.block);
+            let stream =
+                self.modifies_closure(&closure.inputs, &closure.output, &body.block, false);
+            println!("---- here:\n{stream}\n");
             *closure_stmt = syn::parse2(stream).unwrap();
+            println!("---- there");
         }
     }
 }
@@ -207,14 +187,4 @@ fn try_as_wrapper_call_args<'a>(
         },
         _ => None,
     }
-}
-
-/// Make `num` [`Ident`]s with the names `prefix{i}` with `i` starting at `low` and
-/// increasing by one each time.
-fn make_wrapper_idents(
-    low: usize,
-    num: usize,
-    prefix: &'static str,
-) -> impl Iterator<Item = syn::Ident> + Clone + 'static {
-    (low..).map(move |i| Ident::new(&format!("{prefix}{i}"), Span::mixed_site())).take(num)
 }

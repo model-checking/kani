@@ -11,6 +11,7 @@ use crate::args::ReachabilityType;
 use crate::kani_middle::attributes::is_proof_harness;
 use crate::kani_middle::metadata::gen_proof_metadata;
 use crate::kani_middle::reachability::filter_crate_items;
+use crate::kani_middle::resolve::{expect_resolve_fn, resolve_fn};
 use crate::kani_middle::stubbing::{check_compatibility, harness_stub_map};
 use crate::kani_queries::QueryDb;
 use kani_metadata::{ArtifactType, AssignsContract, HarnessMetadata, KaniMetadata};
@@ -19,15 +20,15 @@ use rustc_middle::ty::TyCtxt;
 use rustc_session::config::OutputType;
 use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::Instance;
-use stable_mir::ty::{FnDef, RigidTy, TyKind};
+use stable_mir::ty::{FnDef, IndexedVal, RigidTy, TyKind};
 use stable_mir::CrateDef;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs::File;
 use std::io::BufWriter;
 use std::path::{Path, PathBuf};
 use tracing::debug;
 
-/// A stable (across compilation sessions) identifier for the harness function.
+/// An identifier for the harness function.
 type Harness = Instance;
 
 /// A set of stubs.
@@ -124,20 +125,21 @@ fn stub_def(tcx: TyCtxt, def_id: DefId) -> FnDef {
     }
 }
 
-/// Group the harnesses by their stubs.
+/// Group the harnesses by their stubs and contract usage.
 fn group_by_stubs(
     tcx: TyCtxt,
     all_harnesses: &HashMap<Harness, HarnessMetadata>,
 ) -> Vec<CodegenUnit> {
-    let mut per_stubs: HashMap<BTreeMap<DefPathHash, DefPathHash>, CodegenUnit> =
-        HashMap::default();
+    let mut per_stubs: HashMap<_, CodegenUnit> = HashMap::default();
     for (harness, metadata) in all_harnesses {
         let stub_ids = harness_stub_map(tcx, *harness, metadata);
+        let contracts = extract_contracts(tcx, *harness, metadata);
         let stub_map = stub_ids
             .iter()
             .map(|(k, v)| (tcx.def_path_hash(*k), tcx.def_path_hash(*v)))
             .collect::<BTreeMap<_, _>>();
-        if let Some(unit) = per_stubs.get_mut(&stub_map) {
+        let key = (contracts, stub_map);
+        if let Some(unit) = per_stubs.get_mut(&key) {
             unit.harnesses.push(*harness);
         } else {
             let stubs = stub_ids
@@ -145,10 +147,41 @@ fn group_by_stubs(
                 .map(|(from, to)| (stub_def(tcx, *from), stub_def(tcx, *to)))
                 .collect::<HashMap<_, _>>();
             let stubs = apply_transitivity(tcx, *harness, stubs);
-            per_stubs.insert(stub_map, CodegenUnit { stubs, harnesses: vec![*harness] });
+            per_stubs.insert(key, CodegenUnit { stubs, harnesses: vec![*harness] });
         }
     }
     per_stubs.into_values().collect()
+}
+
+#[derive(Copy, Clone, Debug, Ord, PartialOrd, PartialEq, Eq, Hash)]
+enum ContractUsage {
+    Stub(usize),
+    Check(usize),
+}
+
+/// Extract the contract related usages.
+///
+/// Note that any error interpreting the result is emitted, but we delay aborting, so we emit as
+/// many errors as possible.
+fn extract_contracts(
+    tcx: TyCtxt,
+    harness: Harness,
+    metadata: &HarnessMetadata,
+) -> BTreeSet<ContractUsage> {
+    let def = harness.def;
+    let mut result = BTreeSet::new();
+    if let Some(check) = &metadata.attributes.for_contract {
+        if let Ok(check_def) = expect_resolve_fn(tcx, def, check, "proof_for_contract") {
+            result.insert(ContractUsage::Check(check_def.def_id().to_index()));
+        }
+    }
+
+    for stub in &metadata.attributes.verified_stubs {
+        let Ok(stub_def) = expect_resolve_fn(tcx, def, stub, "stub_verified") else { continue };
+        result.insert(ContractUsage::Stub(stub_def.def_id().to_index()));
+    }
+
+    result
 }
 
 /// Extract the filename for the metadata file.

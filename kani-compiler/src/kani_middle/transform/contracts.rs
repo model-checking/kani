@@ -23,6 +23,7 @@ use stable_mir::ty::{
 use stable_mir::{CrateDef, DefId};
 use std::collections::HashSet;
 use std::fmt::Debug;
+use std::io::{stdout, Stdout};
 use tracing::{debug, trace};
 
 /// Check if we can replace calls to any_modifies.
@@ -61,8 +62,8 @@ impl TransformPass for AnyModifiesPass {
         if instance.def.def_id() == self.kani_any.unwrap().def_id() {
             // Ensure kani::any is valid.
             self.any_body(tcx, body)
-        } else if self.should_apply(tcx, instance) {
-            // Replace any modifies occurrences.
+        } else if instance.ty().kind().is_closure() {
+            // Replace any modifies occurrences. They should only happen in the contract closures.
             self.replace_any_modifies(body)
         } else {
             (false, body)
@@ -95,17 +96,6 @@ impl AnyModifiesPass {
             (None, HashSet::new())
         };
         AnyModifiesPass { kani_any, kani_any_modifies, target_fn, stubbed }
-    }
-
-    /// If we apply `transform_any_modifies` in all contract-generated items,
-    /// we will end up instantiating `kani::any_modifies` for the replace function
-    /// every time, even if we are only checking the contract, because the function
-    /// is always included during contract instrumentation. Thus, we must only apply
-    /// the transformation if we are using a verified stub or in the presence of recursion.
-    fn should_apply(&self, tcx: TyCtxt, instance: Instance) -> bool {
-        let item_attributes =
-            KaniAttributes::for_item(tcx, rustc_internal::internal(tcx, instance.def.def_id()));
-        self.stubbed.contains(&instance.def.def_id()) || item_attributes.has_recursion()
     }
 
     /// Replace calls to `any_modifies` by calls to `any`.
@@ -211,6 +201,7 @@ impl TransformPass for FunctionWithContractPass {
     /// Transform the function body by replacing it with the stub body.
     fn transform(&mut self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
         trace!(function=?instance.name(), "FunctionWithContractPass::transform");
+        tracing::error!(function=?instance.name(), "FunctionWithContractPass::transform");
         let _ =
             tracing::error_span!("FunctionWithContractPass::transform {}", name = instance.name())
                 .entered();
@@ -218,7 +209,10 @@ impl TransformPass for FunctionWithContractPass {
             RigidTy::FnDef(def, _args) => {
                 if let Some(target_closure) = self.select_closure(tcx, *def, &body) {
                     tracing::error!(?target_closure, "FunctionWithContractPass::transform");
-                    (true, self.replace_by_closure(body, target_closure))
+                    let _ = body.dump(&mut stdout(), &instance.name());
+                    let new_body = self.replace_by_closure(body, target_closure);
+                    let _ = new_body.dump(&mut stdout(), &instance.name());
+                    (true, new_body)
                 } else {
                     // Not a contract annotated function
                     (false, body)
@@ -374,15 +368,11 @@ fn find_closure(tcx: TyCtxt, fn_def: FnDef, body: &Body, name: &str) -> ClosureI
     body.var_debug_info
         .iter()
         .find_map(|var_info| {
-            tracing::error!(name=?var_info.name, target=?var_info,
-                    "find_closure");
             if var_info.name.as_str() == name {
                 let ty = match &var_info.value {
                     VarDebugInfoContents::Place(place) => place.ty(body.locals()).unwrap(),
                     VarDebugInfoContents::Const(const_op) => const_op.ty(),
                 };
-                tracing::error!(name=?var_info.name, ty=?ty,
-                    "find_closure");
                 if let TyKind::RigidTy(RigidTy::Closure(def, args)) = ty.kind() {
                     return Some(ClosureInfo { ty, def, args });
                 }

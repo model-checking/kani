@@ -62,11 +62,6 @@ enum KaniAttributeKind {
     /// Attribute on a function that was auto-generated from expanding a
     /// function contract.
     IsContractGenerated,
-    /// Identifies a set of pointer arguments that should be added to the write
-    /// set when checking a function contract. Placed on the inner check function.
-    ///
-    /// Emitted by the expansion of a `modifies` function contract clause.
-    Modifies,
     /// A function used as the inner code of a contract check.
     ///
     /// Contains the original body of the contracted function. The signature is
@@ -98,7 +93,6 @@ impl KaniAttributeKind {
             | KaniAttributeKind::ReplacedWith
             | KaniAttributeKind::RecursionCheck
             | KaniAttributeKind::CheckedWith
-            | KaniAttributeKind::Modifies
             | KaniAttributeKind::InnerCheck
             | KaniAttributeKind::IsContractGenerated => false,
         }
@@ -385,9 +379,6 @@ impl<'tcx> KaniAttributes<'tcx> {
                     // to communicate with one another. So by the time it gets
                     // here we don't care if it's valid or not.
                 }
-                KaniAttributeKind::Modifies => {
-                    self.modifies_contract();
-                }
                 KaniAttributeKind::RecursionTracker => {
                     // Nothing to do here. This is used by contract instrumentation.
                 }
@@ -507,7 +498,6 @@ impl<'tcx> KaniAttributes<'tcx> {
                 }
                 KaniAttributeKind::CheckedWith
                 | KaniAttributeKind::IsContractGenerated
-                | KaniAttributeKind::Modifies
                 | KaniAttributeKind::InnerCheck
                 | KaniAttributeKind::RecursionCheck
                 | KaniAttributeKind::RecursionTracker
@@ -585,22 +575,6 @@ impl<'tcx> KaniAttributes<'tcx> {
                 tcx.dcx().span_err(span, "functions used as harnesses cannot have any arguments");
             }
         }
-    }
-
-    /// Parse and interpret the `kanitool::modifies(var1, var2, ...)` annotation into the vector
-    /// `[var1, var2, ...]`.
-    pub fn modifies_contract(&self) -> Option<Vec<Local>> {
-        let local_def_id = self.item.expect_local();
-        self.map.get(&KaniAttributeKind::Modifies).map(|attr| {
-            attr.iter()
-                .flat_map(|clause| match &clause.get_normal_item().args {
-                    AttrArgs::Delimited(lvals) => {
-                        parse_modify_values(self.tcx, local_def_id, &lvals.tokens)
-                    }
-                    _ => unreachable!(),
-                })
-                .collect()
-        })
     }
 }
 
