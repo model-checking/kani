@@ -133,5 +133,5 @@ pub unsafe fn write_any_str(_s: *mut str) {
     //TODO: strings introduce new UB
     //(*s).as_bytes_mut().fill_with(u8::any)
     //TODO: String validation
-    unreachable!("strings are not yet implemented")
+    unimplemented!("Kani does not support creating arbitrary `str`")
 }
