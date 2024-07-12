@@ -216,11 +216,7 @@ impl IntrinsicGeneratorPass {
                             &is_ptr_initialized_instance,
                             &mut terminator,
                             InsertPosition::Before,
-                            vec![
-                                Operand::Copy(Place::from(1)),
-                                layout_operand,
-                                Operand::Copy(Place::from(2)),
-                            ],
+                            vec![Operand::Copy(Place::from(1)), layout_operand],
                             Place::from(ret_var),
                         );
                     }
