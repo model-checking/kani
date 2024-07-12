@@ -29,8 +29,17 @@ mod uninit_visitor;
 pub use ty_layout::{PointeeInfo, PointeeLayout};
 use uninit_visitor::{CheckUninitVisitor, InitRelevantInstruction, MemoryInitOp};
 
-const SKIPPED_DIAGNOSTIC_ITEMS: &[&str] =
-    &["KaniIsUnitPtrInitialized", "KaniSetUnitPtrInitialized"];
+// Function bodies of those functions will not be instrumented as not to cause infinite recursion.
+const SKIPPED_DIAGNOSTIC_ITEMS: &[&str] = &[
+    "KaniIsPtrInitialized",
+    "KaniSetPtrInitialized",
+    "KaniIsSliceChunkPtrInitialized",
+    "KaniSetSliceChunkPtrInitialized",
+    "KaniIsSlicePtrInitialized",
+    "KaniSetSlicePtrInitialized",
+    "KaniIsStrPtrInitialized",
+    "KaniSetStrPtrInitialized",
+];
 
 /// Instrument the code with checks for uninitialized memory.
 #[derive(Debug)]
@@ -59,8 +68,8 @@ impl TransformPass for UninitPass {
     fn transform(&mut self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
         trace!(function=?instance.name(), "transform");
 
-        // Need to break infinite recursion when shadow memory checks are inserted,
-        // so the internal function responsible for shadow memory checks are skipped.
+        // Need to break infinite recursion when memory initialization checks are inserted, so the
+        // internal functions responsible for memory initialization are skipped.
         if tcx
             .get_diagnostic_name(rustc_internal::internal(tcx, instance.def.def_id()))
             .map(|diagnostic_name| {
@@ -73,6 +82,11 @@ impl TransformPass for UninitPass {
 
         let mut new_body = MutableBody::from(body);
         let orig_len = new_body.blocks().len();
+
+        // Inject a call to set-up memory initialization state if the function is a harness.
+        if is_harness(instance, tcx) {
+            inject_memory_init_setup(&mut new_body, tcx, &mut self.mem_init_fn_cache);
+        }
 
         // Set of basic block indices for which analyzing first statement should be skipped.
         //
@@ -159,10 +173,12 @@ impl UninitPass {
         };
 
         match operation {
-            MemoryInitOp::Check { .. } => {
+            MemoryInitOp::CheckSliceChunk { .. } | MemoryInitOp::Check { .. } => {
                 self.build_get_and_check(tcx, body, source, operation, pointee_ty_info, skip_first)
             }
-            MemoryInitOp::Set { .. } | MemoryInitOp::SetRef { .. } => {
+            MemoryInitOp::SetSliceChunk { .. }
+            | MemoryInitOp::Set { .. }
+            | MemoryInitOp::SetRef { .. } => {
                 self.build_set(tcx, body, source, operation, pointee_ty_info, skip_first)
             }
             MemoryInitOp::Unsupported { .. } => {
@@ -171,8 +187,8 @@ impl UninitPass {
         }
     }
 
-    /// Inject a load from shadow memory tracking memory initialization and an assertion that all
-    /// non-padding bytes are initialized.
+    /// Inject a load from memory initialization state and an assertion that all non-padding bytes
+    /// are initialized.
     fn build_get_and_check(
         &mut self,
         tcx: TyCtxt,
@@ -189,18 +205,34 @@ impl UninitPass {
         let ptr_operand = operation.mk_operand(body, source);
         match pointee_info.layout() {
             PointeeLayout::Sized { layout } => {
+                let layout_operand = mk_layout_operand(body, source, operation.position(), &layout);
+                // Depending on whether accessing the known number of elements in the slice, need to
+                // pass is as an argument.
+                let (diagnostic, args) = match &operation {
+                    MemoryInitOp::Check { .. } => {
+                        let diagnostic = "KaniIsPtrInitialized";
+                        let args = vec![ptr_operand.clone(), layout_operand];
+                        (diagnostic, args)
+                    }
+                    MemoryInitOp::CheckSliceChunk { .. } => {
+                        let diagnostic = "KaniIsSliceChunkPtrInitialized";
+                        let args =
+                            vec![ptr_operand.clone(), layout_operand, operation.expect_count()];
+                        (diagnostic, args)
+                    }
+                    _ => unreachable!(),
+                };
                 let is_ptr_initialized_instance = resolve_mem_init_fn(
-                    get_mem_init_fn_def(tcx, "KaniIsPtrInitialized", &mut self.mem_init_fn_cache),
+                    get_mem_init_fn_def(tcx, diagnostic, &mut self.mem_init_fn_cache),
                     layout.len(),
                     *pointee_info.ty(),
                 );
-                let layout_operand = mk_layout_operand(body, source, operation.position(), &layout);
                 collect_skipped(&operation, body, skip_first);
                 body.add_call(
                     &is_ptr_initialized_instance,
                     source,
                     operation.position(),
-                    vec![ptr_operand.clone(), layout_operand, operation.expect_count()],
+                    args,
                     ret_place.clone(),
                 );
             }
@@ -252,8 +284,8 @@ impl UninitPass {
         )
     }
 
-    /// Inject a store into shadow memory tracking memory initialization to initialize or
-    /// deinitialize all non-padding bytes.
+    /// Inject a store into memory initialization state to initialize or deinitialize all
+    /// non-padding bytes.
     fn build_set(
         &mut self,
         tcx: TyCtxt,
@@ -272,27 +304,50 @@ impl UninitPass {
 
         match pointee_info.layout() {
             PointeeLayout::Sized { layout } => {
+                let layout_operand = mk_layout_operand(body, source, operation.position(), &layout);
+                // Depending on whether writing to the known number of elements in the slice, need to
+                // pass is as an argument.
+                let (diagnostic, args) = match &operation {
+                    MemoryInitOp::Set { .. } | MemoryInitOp::SetRef { .. } => {
+                        let diagnostic = "KaniSetPtrInitialized";
+                        let args = vec![
+                            ptr_operand,
+                            layout_operand,
+                            Operand::Constant(ConstOperand {
+                                span: source.span(body.blocks()),
+                                user_ty: None,
+                                const_: MirConst::from_bool(value),
+                            }),
+                        ];
+                        (diagnostic, args)
+                    }
+                    MemoryInitOp::SetSliceChunk { .. } => {
+                        let diagnostic = "KaniSetSliceChunkPtrInitialized";
+                        let args = vec![
+                            ptr_operand,
+                            layout_operand,
+                            operation.expect_count(),
+                            Operand::Constant(ConstOperand {
+                                span: source.span(body.blocks()),
+                                user_ty: None,
+                                const_: MirConst::from_bool(value),
+                            }),
+                        ];
+                        (diagnostic, args)
+                    }
+                    _ => unreachable!(),
+                };
                 let set_ptr_initialized_instance = resolve_mem_init_fn(
-                    get_mem_init_fn_def(tcx, "KaniSetPtrInitialized", &mut self.mem_init_fn_cache),
+                    get_mem_init_fn_def(tcx, diagnostic, &mut self.mem_init_fn_cache),
                     layout.len(),
                     *pointee_info.ty(),
                 );
-                let layout_operand = mk_layout_operand(body, source, operation.position(), &layout);
                 collect_skipped(&operation, body, skip_first);
                 body.add_call(
                     &set_ptr_initialized_instance,
                     source,
                     operation.position(),
-                    vec![
-                        ptr_operand,
-                        layout_operand,
-                        operation.expect_count(),
-                        Operand::Constant(ConstOperand {
-                            span: source.span(body.blocks()),
-                            user_ty: None,
-                            const_: MirConst::from_bool(value),
-                        }),
-                    ],
+                    args,
                     ret_place,
                 );
             }
@@ -425,4 +480,60 @@ pub fn resolve_mem_init_fn(fn_def: FnDef, layout_size: usize, associated_type: T
         ]),
     )
     .unwrap()
+}
+
+/// Checks if the instance is a harness -- an entry point of Kani analysis.
+fn is_harness(instance: Instance, tcx: TyCtxt) -> bool {
+    let harness_identifiers = [
+        vec![
+            rustc_span::symbol::Symbol::intern("kanitool"),
+            rustc_span::symbol::Symbol::intern("proof_for_contract"),
+        ],
+        vec![
+            rustc_span::symbol::Symbol::intern("kanitool"),
+            rustc_span::symbol::Symbol::intern("proof"),
+        ],
+    ];
+    harness_identifiers.iter().any(|attr_path| {
+        tcx.has_attrs_with_path(rustc_internal::internal(tcx, instance.def.def_id()), attr_path)
+    })
+}
+
+/// Inject an initial call to set-up memory initialization tracking.
+fn inject_memory_init_setup(
+    new_body: &mut MutableBody,
+    tcx: TyCtxt,
+    mem_init_fn_cache: &mut HashMap<&'static str, FnDef>,
+) {
+    // First statement or terminator in the harness.
+    let mut source = if !new_body.blocks()[0].statements.is_empty() {
+        SourceInstruction::Statement { idx: 0, bb: 0 }
+    } else {
+        SourceInstruction::Terminator { bb: 0 }
+    };
+
+    // Dummy return place.
+    let ret_place = Place {
+        local: new_body.new_local(
+            Ty::new_tuple(&[]),
+            source.span(new_body.blocks()),
+            Mutability::Not,
+        ),
+        projection: vec![],
+    };
+
+    // Resolve the instance and inject a call to set-up the memory initialization state.
+    let memory_initialization_init = Instance::resolve(
+        get_mem_init_fn_def(tcx, "KaniInitializeMemoryInitializationState", mem_init_fn_cache),
+        &GenericArgs(vec![]),
+    )
+    .unwrap();
+
+    new_body.add_call(
+        &memory_initialization_init,
+        &mut source,
+        InsertPosition::Before,
+        vec![],
+        ret_place,
+    );
 }
