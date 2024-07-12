@@ -167,15 +167,10 @@ impl GotocHook for Check {
 
         let (msg, reach_stmt) = gcx.codegen_reachability_check(msg, span);
 
-        // Since `cond` might have side effects, assign it to a temporary
-        // variable so that it's evaluated once, then assert it
-        // TODO: I don't think `cond` can have side effects, this is MIR, it's going to be temps
-        let (tmp, decl) = gcx.decl_temp_variable(cond.typ().clone(), Some(cond), caller_loc);
         Stmt::block(
             vec![
                 reach_stmt,
-                decl,
-                gcx.codegen_assert(tmp, PropertyClass::Assertion, &msg, caller_loc),
+                gcx.codegen_assert(cond, PropertyClass::Assertion, &msg, caller_loc),
                 Stmt::goto(bb_label(target), caller_loc),
             ],
             caller_loc,
