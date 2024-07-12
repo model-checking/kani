@@ -6,14 +6,11 @@
 use proc_macro2::{Ident, Span, TokenStream as TokenStream2};
 use quote::{quote, ToTokens};
 use std::mem;
-use syn::punctuated::Punctuated;
-use syn::token::Comma;
-use syn::{parse_quote, Block, Expr, FnArg, Local, LocalInit, Pat, PatIdent, ReturnType, Stmt};
+use syn::{parse_quote, Block, Expr, Local, LocalInit, Pat, PatIdent, ReturnType, Stmt};
 
 use super::{
-    helpers::*,
-    shared::{build_ensures, try_as_result_assign_mut},
-    ContractConditionsData, ContractConditionsHandler, INTERNAL_RESULT_IDENT,
+    helpers::*, shared::build_ensures, ContractConditionsData, ContractConditionsHandler,
+    INTERNAL_RESULT_IDENT,
 };
 
 const WRAPPER_ARG: &str = "_wrapper_arg";
@@ -81,14 +78,14 @@ impl<'a> ContractConditionsHandler<'a> {
         let modifies_ident = Ident::new(&self.modify_name, Span::call_site());
         let wrapper_arg_ident = Ident::new(WRAPPER_ARG, Span::call_site());
         let return_type = return_type_to_type(&self.annotated_fn.sig.output);
-        let (inputs, _) = closure_args(&self.annotated_fn.sig.inputs);
+        let inputs = closure_params(&self.annotated_fn.sig.inputs);
         let modifies_closure = self.modifies_closure(
-            &inputs,
+            inputs,
             &self.annotated_fn.sig.output,
             &self.annotated_fn.block,
             true,
         );
-        let (_, args) = closure_args(&self.annotated_fn.sig.inputs);
+        let args = closure_args(&self.annotated_fn.sig.inputs);
         let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
         parse_quote!(
             let #wrapper_arg_ident = ();
@@ -105,7 +102,7 @@ impl<'a> ContractConditionsHandler<'a> {
     pub fn check_closure(&self) -> TokenStream2 {
         let check_ident = Ident::new(&self.check_name, Span::call_site());
         let sig = &self.annotated_fn.sig;
-        let (inputs, _args) = closure_args(&sig.inputs);
+        let inputs = closure_params(&sig.inputs);
         let output = &sig.output;
         let body_stmts = self.initial_check_stmts();
         let body = self.make_check_body(body_stmts);
@@ -113,7 +110,7 @@ impl<'a> ContractConditionsHandler<'a> {
         quote!(
             #[kanitool::is_contract_generated(check)]
             #[allow(dead_code, unused_variables, unused_mut)]
-            let mut #check_ident = |#inputs| #output #body;
+            let mut #check_ident = |#(#inputs),*| #output #body;
         )
     }
 
@@ -127,24 +124,22 @@ impl<'a> ContractConditionsHandler<'a> {
     }
 
     /// Emit a modifies wrapper. The first time, we augment the list of inputs to track modifies.
-    pub fn modifies_closure<T: ToTokens>(
+    pub fn modifies_closure<T: ToTokens, I: IntoIterator<Item = T>>(
         &self,
-        inputs: &Punctuated<T, Comma>,
+        inputs: I,
         output: &ReturnType,
         body: &Block,
         include_modifies: bool,
     ) -> TokenStream2 {
         // Filter receiver
-        let wrapper_ident = if include_modifies {
-            vec![Ident::new(WRAPPER_ARG, Span::call_site())]
-        } else {
-            vec![]
-        };
+        let wrapper_ident = include_modifies.then_some(Ident::new(WRAPPER_ARG, Span::call_site()));
+        let wrapper_it = wrapper_ident.iter();
         let modifies_ident = Ident::new(&self.modify_name, Span::call_site());
+        let inputs = inputs.into_iter();
         quote!(
             #[kanitool::is_contract_generated(wrapper)]
             #[allow(dead_code, unused_variables, unused_mut)]
-            let mut #modifies_ident = |#inputs #(, #wrapper_ident: _)*| #output #body;
+            let mut #modifies_ident = |#(#inputs,)* #(#wrapper_it: _,)*| #output #body;
         )
     }
 
@@ -158,33 +153,7 @@ impl<'a> ContractConditionsHandler<'a> {
             let Expr::Block(body) = closure.body.as_ref() else { unreachable!() };
             let stream =
                 self.modifies_closure(&closure.inputs, &closure.output, &body.block, false);
-            println!("---- here:\n{stream}\n");
             *closure_stmt = syn::parse2(stream).unwrap();
-            println!("---- there");
         }
-    }
-}
-
-/// Try to interpret this statement as `let result : <...> = <wrapper_fn_name>(args ...);` and
-/// return a mutable reference to the parameter list.
-fn try_as_wrapper_call_args<'a>(
-    stmt: &'a mut syn::Stmt,
-    wrapper_fn_name: &str,
-) -> Option<&'a mut syn::punctuated::Punctuated<syn::Expr, syn::token::Comma>> {
-    let syn::LocalInit { diverge: None, expr: init_expr, .. } = try_as_result_assign_mut(stmt)?
-    else {
-        return None;
-    };
-
-    match init_expr.as_mut() {
-        Expr::Call(syn::ExprCall { func: box_func, args, .. }) => match box_func.as_ref() {
-            syn::Expr::Path(syn::ExprPath { qself: None, path, .. })
-                if path.get_ident().map_or(false, |id| id == wrapper_fn_name) =>
-            {
-                Some(args)
-            }
-            _ => None,
-        },
-        _ => None,
     }
 }

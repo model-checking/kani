@@ -111,7 +111,7 @@ impl<'a> ContractConditionsHandler<'a> {
     pub fn replace_closure(&self) -> TokenStream {
         let replace_ident = Ident::new(&self.replace_name, Span::call_site());
         let sig = &self.annotated_fn.sig;
-        let (inputs, _args) = closure_args(&sig.inputs);
+        let inputs = closure_params(&sig.inputs);
         let output = &sig.output;
         let before = self.initial_replace_stmts();
         let body = self.expand_replace_body(&before, &vec![]);
@@ -119,7 +119,7 @@ impl<'a> ContractConditionsHandler<'a> {
         quote!(
             #[kanitool::is_contract_generated(replace)]
             #[allow(dead_code, unused_variables, unused_mut)]
-            let mut #replace_ident = |#inputs| #output #body;
+            let mut #replace_ident = |#(#inputs),*| #output #body;
         )
     }
 

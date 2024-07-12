@@ -74,7 +74,8 @@ impl<'a> ContractConditionsHandler<'a> {
         check_closure: &TokenStream,
     ) -> TokenStream {
         let ItemFn { ref sig, .. } = self.annotated_fn;
-        let (inputs, args) = closure_args(&sig.inputs);
+        let inputs = closure_params(&sig.inputs);
+        let args = closure_args(&sig.inputs);
         let output = &sig.output;
         let span = Span::call_site();
         let result = Ident::new(INTERNAL_RESULT_IDENT, span);
@@ -85,7 +86,7 @@ impl<'a> ContractConditionsHandler<'a> {
         quote!(
             #[kanitool::is_contract_generated(recursion_check)]
             #[allow(dead_code, unused_variables, unused_mut)]
-            let mut #recursion_ident = |#inputs| #output
+            let mut #recursion_ident = |#(#inputs),*| #output
             {
                 #[kanitool::recursion_tracker]
                 static mut REENTRY: bool = false;

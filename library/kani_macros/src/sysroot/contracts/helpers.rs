@@ -5,10 +5,12 @@
 //! specific to Kani and contracts.
 
 use proc_macro2::{Ident, Span};
+use quote::ToTokens;
 use std::borrow::Cow;
 use syn::punctuated::Punctuated;
+use syn::spanned::Spanned;
 use syn::token::Comma;
-use syn::{parse_quote, Attribute, Expr, ExprBlock, FnArg, Local, LocalInit, Pat, Stmt};
+use syn::{parse_quote, Attribute, Expr, ExprBlock, FnArg, Local, LocalInit, Stmt};
 
 /// If an explicit return type was provided it is returned, otherwise `()`.
 pub fn return_type_to_type(return_type: &syn::ReturnType) -> Cow<syn::Type> {
@@ -20,21 +22,100 @@ pub fn return_type_to_type(return_type: &syn::ReturnType) -> Cow<syn::Type> {
         syn::ReturnType::Type(_, typ) => Cow::Borrowed(typ.as_ref()),
     }
 }
+/// Create an expression that reconstructs a struct that was matched in a pattern.
+///
+/// Does not support enums, wildcards, pattern alternatives (`|`), range patterns, or verbatim.
+pub fn pat_to_expr(pat: &syn::Pat) -> Expr {
+    use syn::Pat;
+    let mk_err = |typ| {
+        pat.span()
+            .unwrap()
+            .error(format!("`{typ}` patterns are not supported for functions with contracts"))
+            .emit();
+        unreachable!()
+    };
+    match pat {
+        Pat::Const(c) => Expr::Const(c.clone()),
+        Pat::Ident(id) => Expr::Verbatim(id.ident.to_token_stream()),
+        Pat::Lit(lit) => Expr::Lit(lit.clone()),
+        Pat::Reference(rf) => Expr::Reference(syn::ExprReference {
+            attrs: vec![],
+            and_token: rf.and_token,
+            mutability: rf.mutability,
+            expr: Box::new(pat_to_expr(&rf.pat)),
+        }),
+        Pat::Tuple(tup) => Expr::Tuple(syn::ExprTuple {
+            attrs: vec![],
+            paren_token: tup.paren_token,
+            elems: tup.elems.iter().map(pat_to_expr).collect(),
+        }),
+        Pat::Slice(slice) => Expr::Reference(syn::ExprReference {
+            attrs: vec![],
+            and_token: syn::Token!(&)(Span::call_site()),
+            mutability: None,
+            expr: Box::new(Expr::Array(syn::ExprArray {
+                attrs: vec![],
+                bracket_token: slice.bracket_token,
+                elems: slice.elems.iter().map(pat_to_expr).collect(),
+            })),
+        }),
+        Pat::Path(pth) => Expr::Path(pth.clone()),
+        Pat::Or(_) => mk_err("or"),
+        Pat::Rest(_) => mk_err("rest"),
+        Pat::Wild(_) => mk_err("wildcard"),
+        Pat::Paren(inner) => pat_to_expr(&inner.pat),
+        Pat::Range(_) => mk_err("range"),
+        Pat::Struct(strct) => {
+            if strct.rest.is_some() {
+                mk_err("..");
+            }
+            Expr::Struct(syn::ExprStruct {
+                attrs: vec![],
+                path: strct.path.clone(),
+                brace_token: strct.brace_token,
+                dot2_token: None,
+                rest: None,
+                qself: strct.qself.clone(),
+                fields: strct
+                    .fields
+                    .iter()
+                    .map(|field_pat| syn::FieldValue {
+                        attrs: vec![],
+                        member: field_pat.member.clone(),
+                        colon_token: field_pat.colon_token,
+                        expr: pat_to_expr(&field_pat.pat),
+                    })
+                    .collect(),
+            })
+        }
+        Pat::Verbatim(_) => mk_err("verbatim"),
+        Pat::Type(pt) => pat_to_expr(pt.pat.as_ref()),
+        Pat::TupleStruct(_) => mk_err("tuple struct"),
+        _ => mk_err("unknown"),
+    }
+}
 
 /// Extract the closure arguments which should skip `self`.
 ///
 /// Return the declaration form as well as just a plain list of idents for each.
-pub fn closure_args(
-    inputs: &Punctuated<syn::FnArg, Comma>,
-) -> (Punctuated<&syn::FnArg, Comma>, Vec<&Ident>) {
-    inputs
-        .iter()
-        .filter_map(|arg| {
-            let FnArg::Typed(syn::PatType { pat, .. }) = arg else { return None };
-            let Pat::Ident(pat_ident) = pat.as_ref() else { return None };
-            Some((arg, &pat_ident.ident))
+/// TODO: Handle `mut` arguments.
+pub fn closure_args(inputs: &Punctuated<syn::FnArg, Comma>) -> Vec<Expr> {
+    closure_params(inputs)
+        .map(|arg| {
+            if let FnArg::Typed(typed) = arg {
+                pat_to_expr(&typed.pat)
+            } else {
+                unreachable!("Receiver should've been filtered")
+            }
         })
         .collect()
+}
+
+/// Extract the closure parameters by excluding any receiver.
+pub fn closure_params(
+    inputs: &Punctuated<syn::FnArg, Comma>,
+) -> impl Iterator<Item = &syn::FnArg> + '_ {
+    inputs.iter().filter(|arg| matches!(arg, FnArg::Typed(_)))
 }
 
 /// Find a closure statement attached with `kanitool::is_contract_generated` attribute.

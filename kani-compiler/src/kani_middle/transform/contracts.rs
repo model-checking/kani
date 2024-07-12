@@ -230,7 +230,10 @@ impl TransformPass for FunctionWithContractPass {
                     (false, body)
                 }
             }
-            other => unreachable!("Unexpected instance type: `{other:?}`"),
+            other => {
+                /* static variables case */
+                (false, body)
+            }
         }
     }
 }

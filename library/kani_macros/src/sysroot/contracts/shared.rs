@@ -62,19 +62,6 @@ pub fn try_as_result_assign(stmt: &syn::Stmt) -> Option<&syn::LocalInit> {
     try_as_result_assign_pat!(stmt, as_ref)
 }
 
-/// Try to parse this statement as `let result : <...> = <init>;` and return a mutable reference to
-/// `init`.
-///
-/// This is the shape of statement we create in check functions (with `init` being a call to check
-/// function with additional pointer arguments for the `modifies` clause) and we need to recognize
-/// it to then edit this call if we find another `modifies` clause and add its additional arguments.
-/// additional conditions.
-///
-/// It's a thin wrapper around [`try_as_result_assign_pat!`] to create a mutable match.
-pub fn try_as_result_assign_mut(stmt: &mut syn::Stmt) -> Option<&mut syn::LocalInit> {
-    try_as_result_assign_pat!(stmt, as_mut)
-}
-
 /// When a `#[kani::ensures(|result|expr)]` is expanded, this function is called on with `build_ensures(|result|expr)`.
 /// This function goes through the expr and extracts out all the `old` expressions and creates a sequence
 /// of statements that instantiate these expressions as `let remember_kani_internal_x = old_expr;`
