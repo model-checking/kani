@@ -50,6 +50,7 @@ impl MemoryInitializationState {
     ///
     /// Such definition is necessary since both tracked object and tracked offset are chosen
     /// non-deterministically.
+    #[kanitool::skip_ptr_checks]
     pub fn get<const LAYOUT_SIZE: usize>(
         &mut self,
         ptr: *const u8,
@@ -61,7 +62,7 @@ impl MemoryInitializationState {
             && self.tracked_offset >= offset
             && self.tracked_offset < offset + LAYOUT_SIZE
         {
-            !layout[(self.tracked_offset - offset) % LAYOUT_SIZE] || self.value
+            !layout[self.tracked_offset - offset] || self.value
         } else {
             true
         }
@@ -73,6 +74,7 @@ impl MemoryInitializationState {
     ///
     /// Such definition is necessary since both tracked object and tracked offset are chosen
     /// non-deterministically.
+    #[kanitool::skip_ptr_checks]
     pub fn set<const LAYOUT_SIZE: usize>(
         &mut self,
         ptr: *const u8,
@@ -85,7 +87,7 @@ impl MemoryInitializationState {
             && self.tracked_offset >= offset
             && self.tracked_offset < offset + LAYOUT_SIZE
         {
-            self.value = layout[(self.tracked_offset - offset) % LAYOUT_SIZE] && value;
+            self.value = layout[self.tracked_offset - offset] && value;
         }
     }
 
@@ -95,6 +97,7 @@ impl MemoryInitializationState {
     ///
     /// Such definition is necessary since both tracked object and tracked offset are chosen
     /// non-deterministically.
+    #[kanitool::skip_ptr_checks]
     pub fn get_slice<const LAYOUT_SIZE: usize>(
         &mut self,
         ptr: *const u8,
@@ -119,6 +122,7 @@ impl MemoryInitializationState {
     ///
     /// Such definition is necessary since both tracked object and tracked offset are chosen
     /// non-deterministically.
+    #[kanitool::skip_ptr_checks]
     pub fn set_slice<const LAYOUT_SIZE: usize>(
         &mut self,
         ptr: *const u8,
@@ -142,6 +146,7 @@ impl MemoryInitializationState {
 static mut MEM_INIT_STATE: MemoryInitializationState = MemoryInitializationState::new();
 
 /// Set tracked object and tracked offset to a non-deterministic value.
+#[kanitool::skip_ptr_checks]
 #[rustc_diagnostic_item = "KaniInitializeMemoryInitializationState"]
 fn initialize_memory_initialization_state() {
     unsafe {
@@ -152,6 +157,7 @@ fn initialize_memory_initialization_state() {
 }
 
 /// Get initialization state of `num_elts` items laid out according to the `layout` starting at address `ptr`.
+#[kanitool::skip_ptr_checks]
 #[rustc_diagnostic_item = "KaniIsPtrInitialized"]
 fn is_ptr_initialized<const LAYOUT_SIZE: usize, T>(
     ptr: *const T,
@@ -165,6 +171,7 @@ fn is_ptr_initialized<const LAYOUT_SIZE: usize, T>(
 }
 
 /// Set initialization state to `value` for `num_elts` items laid out according to the `layout` starting at address `ptr`.
+#[kanitool::skip_ptr_checks]
 #[rustc_diagnostic_item = "KaniSetPtrInitialized"]
 fn set_ptr_initialized<const LAYOUT_SIZE: usize, T>(
     ptr: *const T,
@@ -181,6 +188,7 @@ fn set_ptr_initialized<const LAYOUT_SIZE: usize, T>(
 }
 
 /// Get initialization state of `num_elts` items laid out according to the `layout` starting at address `ptr`.
+#[kanitool::skip_ptr_checks]
 #[rustc_diagnostic_item = "KaniIsSliceChunkPtrInitialized"]
 fn is_slice_chunk_ptr_initialized<const LAYOUT_SIZE: usize, T>(
     ptr: *const T,
@@ -195,6 +203,7 @@ fn is_slice_chunk_ptr_initialized<const LAYOUT_SIZE: usize, T>(
 }
 
 /// Set initialization state to `value` for `num_elts` items laid out according to the `layout` starting at address `ptr`.
+#[kanitool::skip_ptr_checks]
 #[rustc_diagnostic_item = "KaniSetSliceChunkPtrInitialized"]
 fn set_slice_chunk_ptr_initialized<const LAYOUT_SIZE: usize, T>(
     ptr: *const T,
@@ -212,6 +221,7 @@ fn set_slice_chunk_ptr_initialized<const LAYOUT_SIZE: usize, T>(
 }
 
 /// Get initialization state of the slice, items of which are laid out according to the `layout` starting at address `ptr`.
+#[kanitool::skip_ptr_checks]
 #[rustc_diagnostic_item = "KaniIsSlicePtrInitialized"]
 fn is_slice_ptr_initialized<const LAYOUT_SIZE: usize, T>(
     ptr: *const [T],
@@ -225,6 +235,7 @@ fn is_slice_ptr_initialized<const LAYOUT_SIZE: usize, T>(
 }
 
 /// Set initialization state of the slice, items of which are laid out according to the `layout` starting at address `ptr` to `value`.
+#[kanitool::skip_ptr_checks]
 #[rustc_diagnostic_item = "KaniSetSlicePtrInitialized"]
 fn set_slice_ptr_initialized<const LAYOUT_SIZE: usize, T>(
     ptr: *const [T],
@@ -241,6 +252,7 @@ fn set_slice_ptr_initialized<const LAYOUT_SIZE: usize, T>(
 }
 
 /// Get initialization state of the string slice, items of which are laid out according to the `layout` starting at address `ptr`.
+#[kanitool::skip_ptr_checks]
 #[rustc_diagnostic_item = "KaniIsStrPtrInitialized"]
 fn is_str_ptr_initialized<const LAYOUT_SIZE: usize>(
     ptr: *const str,
@@ -254,6 +266,7 @@ fn is_str_ptr_initialized<const LAYOUT_SIZE: usize>(
 }
 
 /// Set initialization state of the string slice, items of which are laid out according to the `layout` starting at address `ptr` to `value`.
+#[kanitool::skip_ptr_checks]
 #[rustc_diagnostic_item = "KaniSetStrPtrInitialized"]
 fn set_str_ptr_initialized<const LAYOUT_SIZE: usize>(
     ptr: *const str,
