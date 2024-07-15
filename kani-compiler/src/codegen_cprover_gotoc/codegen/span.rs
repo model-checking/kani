@@ -29,7 +29,8 @@ impl<'tcx> GotocCtx<'tcx> {
                 .as_ref()
                 .map(|current_fn| {
                     let instance = current_fn.instance();
-                    self.tcx.has_attrs_with_path(instance.def.def_id(), &should_skip_ptr_checks_attr)
+                    self.tcx
+                        .has_attrs_with_path(instance.def.def_id(), &should_skip_ptr_checks_attr)
                 })
                 .unwrap_or(false);
             if should_skip_ptr_checks { &[DISABLE_PTR_CHECK_PRAGMA] } else { &[] }
