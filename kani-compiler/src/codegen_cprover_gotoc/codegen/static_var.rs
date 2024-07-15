@@ -4,6 +4,7 @@
 //! This file contains functions related to codegenning MIR static variables into gotoc
 
 use crate::codegen_cprover_gotoc::GotocCtx;
+use crate::kani_middle::is_interior_mut;
 use stable_mir::mir::mono::{Instance, StaticDef};
 use stable_mir::CrateDef;
 use tracing::debug;
@@ -18,7 +19,12 @@ impl<'tcx> GotocCtx<'tcx> {
         debug!("codegen_static");
         let alloc = def.eval_initializer().unwrap();
         let symbol_name = Instance::from(def).mangled_name();
-        self.codegen_alloc_in_memory(alloc, symbol_name, self.codegen_span_stable(def.span()));
+        self.codegen_alloc_in_memory(
+            alloc,
+            symbol_name,
+            self.codegen_span_stable(def.span()),
+            is_interior_mut(self.tcx, def.ty()),
+        );
     }
 
     /// Mutates the Goto-C symbol table to add a forward-declaration of the static variable.

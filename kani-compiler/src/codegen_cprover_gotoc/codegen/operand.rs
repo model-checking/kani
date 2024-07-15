@@ -474,7 +474,13 @@ impl<'tcx> GotocCtx<'tcx> {
         let alloc_name = match self.alloc_map.get(alloc) {
             None => {
                 let alloc_name = if let Some(name) = name { name } else { self.next_global_name() };
-                self.codegen_alloc_in_memory(alloc.clone(), alloc_name.clone(), loc);
+                let has_interior_mutabity = false; // Constants cannot be mutated.
+                self.codegen_alloc_in_memory(
+                    alloc.clone(),
+                    alloc_name.clone(),
+                    loc,
+                    has_interior_mutabity,
+                );
                 alloc_name
             }
             Some(name) => name.clone(),
@@ -488,7 +494,13 @@ impl<'tcx> GotocCtx<'tcx> {
     ///
     /// This function is ultimately responsible for creating new statically initialized global
     /// variables.
-    pub fn codegen_alloc_in_memory(&mut self, alloc: Allocation, name: String, loc: Location) {
+    pub fn codegen_alloc_in_memory(
+        &mut self,
+        alloc: Allocation,
+        name: String,
+        loc: Location,
+        has_interior_mutabity: bool,
+    ) {
         debug!(?name, ?alloc, "codegen_alloc_in_memory");
         let struct_name = &format!("{name}::struct");
 
@@ -512,7 +524,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 .collect()
         });
 
-        // Create the allocation from an array byte array.
+        // Create the allocation from a byte array.
         let init_fn = |gcx: &mut GotocCtx, var: Symbol| {
             let val = Expr::struct_expr_from_values(
                 alloc_typ_ref.clone(),
@@ -537,11 +549,11 @@ impl<'tcx> GotocCtx<'tcx> {
         };
 
         // The global static variable may not be in the symbol table if we are dealing
-        // with a literal that can be statically allocated.
+        // with a promoted constant.
         let _var = self.ensure_global_var_init(
             &name,
             false, //TODO is this correct?
-            alloc.mutability == Mutability::Not,
+            alloc.mutability == Mutability::Not && !has_interior_mutabity,
             alloc_typ_ref.clone(),
             loc,
             init_fn,
