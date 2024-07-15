@@ -839,8 +839,21 @@ pub fn ty_validity_per_offset(
     ty: Ty,
     current_offset: usize,
 ) -> Result<Vec<ValidValueReq>, String> {
+    debug!(typ=?ty, kind=?ty.kind(), "ty_validity_per_offset");
     let layout = ty.layout().unwrap().shape();
     let ty_req = || {
+        if ty.kind() == TyKind::RigidTy(RigidTy::Char) {
+            let shape = ty.layout().unwrap().shape();
+            let value_size = match shape.abi {
+                ValueAbi::Scalar(Scalar::Initialized { value, .. })
+                | ValueAbi::ScalarPair(Scalar::Initialized { value, .. }, _) => {
+                    Some(value.size(machine_info))
+                }
+                _ => None,
+            };
+            return vec![ValidValueReq { offset: 0, size: value_size.unwrap(), valid_range: WrappingRange { start: 0, end: 0xD7FF }},
+            ValidValueReq { offset: 0, size: value_size.unwrap(), valid_range: WrappingRange { start: 0xE000, end: 0x10FFFF }}]
+        };
         if let Some(mut req) = ValidValueReq::try_from_ty(machine_info, ty)
             && !req.is_full()
         {
