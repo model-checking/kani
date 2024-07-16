@@ -17,6 +17,7 @@
 //! For all instrumentation passes, always use exhaustive matches to ensure soundness in case a new
 //! case is added.
 use crate::kani_middle::codegen_units::CodegenUnit;
+use crate::kani_middle::reachability::CallGraph;
 use crate::kani_middle::transform::body::CheckType;
 use crate::kani_middle::transform::check_uninit::UninitPass;
 use crate::kani_middle::transform::check_values::ValidValuePass;
@@ -24,8 +25,9 @@ use crate::kani_middle::transform::contracts::AnyModifiesPass;
 use crate::kani_middle::transform::kani_intrinsics::IntrinsicGeneratorPass;
 use crate::kani_middle::transform::stubs::{ExternFnStubPass, FnStubPass};
 use crate::kani_queries::QueryDb;
+use dump_mir_pass::DumpMirPass;
 use rustc_middle::ty::TyCtxt;
-use stable_mir::mir::mono::Instance;
+use stable_mir::mir::mono::{Instance, MonoItem};
 use stable_mir::mir::Body;
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -34,6 +36,7 @@ pub(crate) mod body;
 mod check_uninit;
 mod check_values;
 mod contracts;
+mod dump_mir_pass;
 mod kani_intrinsics;
 mod stubs;
 
@@ -49,6 +52,9 @@ pub struct BodyTransformation {
     stub_passes: Vec<Box<dyn TransformPass>>,
     /// The passes that may add safety checks to the function body.
     inst_passes: Vec<Box<dyn TransformPass>>,
+    /// The passes that operate on the whole codegen unit, they run after all previous passes are
+    /// done.
+    global_passes: Vec<Box<dyn GlobalPass>>,
     /// Cache transformation results.
     cache: HashMap<Instance, TransformationResult>,
 }
@@ -58,6 +64,7 @@ impl BodyTransformation {
         let mut transformer = BodyTransformation {
             stub_passes: vec![],
             inst_passes: vec![],
+            global_passes: vec![],
             cache: Default::default(),
         };
         let check_type = CheckType::new_assert_assume(tcx);
@@ -87,10 +94,13 @@ impl BodyTransformation {
                 arguments: queries.args().clone(),
             },
         );
+        transformer.add_global_pass(queries, DumpMirPass::new(tcx));
+
         transformer
     }
 
-    /// Retrieve the body of an instance.
+    /// Retrieve the body of an instance. This does not apply global passes, but will retrieve the
+    /// body after global passes running if they were previously applied.
     ///
     /// Note that this assumes that the instance does have a body since existing consumers already
     /// assume that. Use `instance.has_body()` to check if an instance has a body.
@@ -118,12 +128,39 @@ impl BodyTransformation {
         }
     }
 
+    /// Apply all per-body pass followed by the global passes and store the results in cache that
+    /// can later be queried by `body`.
+    pub fn apply_passes(
+        &mut self,
+        tcx: TyCtxt,
+        starting_items: &[MonoItem],
+        instances: Vec<Instance>,
+        call_graph: CallGraph,
+    ) {
+        let bodies: Vec<_> =
+            instances.into_iter().map(|instance| (self.body(tcx, instance), instance)).collect();
+        for global_pass in self.global_passes.iter_mut() {
+            let results = global_pass.transform(tcx, starting_items, bodies.clone(), &call_graph);
+            for (modified, body, instance) in results {
+                if modified {
+                    self.cache.insert(instance, TransformationResult::Modified(body));
+                }
+            }
+        }
+    }
+
     fn add_pass<P: TransformPass + 'static>(&mut self, query_db: &QueryDb, pass: P) {
         if pass.is_enabled(&query_db) {
             match P::transformation_type() {
                 TransformationType::Instrumentation => self.inst_passes.push(Box::new(pass)),
                 TransformationType::Stubbing => self.stub_passes.push(Box::new(pass)),
             }
+        }
+    }
+
+    fn add_global_pass<P: GlobalPass + 'static>(&mut self, query_db: &QueryDb, pass: P) {
+        if pass.is_enabled(&query_db) {
+            self.global_passes.push(Box::new(pass))
         }
     }
 }
@@ -150,6 +187,22 @@ pub(crate) trait TransformPass: Debug {
 
     /// Run a transformation pass in the function body.
     fn transform(&mut self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body);
+}
+
+/// A trait to represent transformation passes that operate on the whole codegen unit.
+pub(crate) trait GlobalPass: Debug {
+    fn is_enabled(&self, query_db: &QueryDb) -> bool
+    where
+        Self: Sized;
+
+    /// Run a transformation pass on the whole codegen unit.
+    fn transform(
+        &mut self,
+        tcx: TyCtxt,
+        starting_items: &[MonoItem],
+        bodies: Vec<(Body, Instance)>,
+        call_graph: &CallGraph,
+    ) -> Vec<(bool, Body, Instance)>;
 }
 
 /// The transformation result.

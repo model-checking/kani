@@ -22,6 +22,7 @@ use rustc_data_structures::fingerprint::Fingerprint;
 use rustc_data_structures::fx::FxHashSet;
 use rustc_data_structures::stable_hasher::{HashStable, StableHasher};
 use rustc_middle::ty::{TyCtxt, VtblEntry};
+use rustc_session::config::OutputType;
 use rustc_smir::rustc_internal;
 use stable_mir::mir::alloc::{AllocId, GlobalAlloc};
 use stable_mir::mir::mono::{Instance, InstanceKind, MonoItem, StaticDef};
@@ -32,6 +33,12 @@ use stable_mir::mir::{
 use stable_mir::ty::{Allocation, ClosureKind, ConstantKind, RigidTy, Ty, TyKind};
 use stable_mir::CrateItem;
 use stable_mir::{CrateDef, ItemKind};
+use std::fmt::{Display, Formatter};
+use std::{
+    collections::{HashMap, HashSet},
+    fs::File,
+    io::{BufWriter, Write},
+};
 
 use crate::kani_middle::coercion;
 use crate::kani_middle::coercion::CoercionBase;
@@ -42,7 +49,7 @@ pub fn collect_reachable_items(
     tcx: TyCtxt,
     transformer: &mut BodyTransformation,
     starting_points: &[MonoItem],
-) -> Vec<MonoItem> {
+) -> (Vec<MonoItem>, CallGraph) {
     // For each harness, collect items using the same collector.
     // I.e.: This will return any item that is reachable from one or more of the starting points.
     let mut collector = MonoItemsCollector::new(tcx, transformer);
@@ -62,7 +69,7 @@ pub fn collect_reachable_items(
     // order of the errors and warnings is stable.
     let mut sorted_items: Vec<_> = collector.collected.into_iter().collect();
     sorted_items.sort_by_cached_key(|item| to_fingerprint(tcx, item));
-    sorted_items
+    (sorted_items, collector.call_graph)
 }
 
 /// Collect all (top-level) items in the crate that matches the given predicate.
@@ -118,7 +125,24 @@ where
             }
         }
     }
-    roots
+    roots.into_iter().map(|root| root.item).collect()
+}
+
+/// Reason for introducing an edge in the call graph.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+enum CollectionReason {
+    DirectCall,
+    IndirectCall,
+    VTableMethod,
+    Static,
+    StaticDrop,
+}
+
+/// A destination of the edge in the call graph.
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+struct CollectedItem {
+    item: MonoItem,
+    reason: CollectionReason,
 }
 
 struct MonoItemsCollector<'tcx, 'a> {
@@ -130,8 +154,8 @@ struct MonoItemsCollector<'tcx, 'a> {
     collected: FxHashSet<MonoItem>,
     /// Items enqueued for visiting.
     queue: Vec<MonoItem>,
-    #[cfg(debug_assertions)]
-    call_graph: debug::CallGraph,
+    /// Call graph used for dataflow analysis.
+    call_graph: CallGraph,
 }
 
 impl<'tcx, 'a> MonoItemsCollector<'tcx, 'a> {
@@ -140,8 +164,7 @@ impl<'tcx, 'a> MonoItemsCollector<'tcx, 'a> {
             tcx,
             collected: FxHashSet::default(),
             queue: vec![],
-            #[cfg(debug_assertions)]
-            call_graph: debug::CallGraph::default(),
+            call_graph: CallGraph::default(),
             transformer,
         }
     }
@@ -167,17 +190,19 @@ impl<'tcx, 'a> MonoItemsCollector<'tcx, 'a> {
                         vec![]
                     }
                 };
-                #[cfg(debug_assertions)]
                 self.call_graph.add_edges(to_visit, &next_items);
 
-                self.queue
-                    .extend(next_items.into_iter().filter(|item| !self.collected.contains(item)));
+                self.queue.extend(next_items.into_iter().filter_map(
+                    |CollectedItem { item, .. }| {
+                        if !self.collected.contains(&item) { Some(item) } else { None }
+                    },
+                ));
             }
         }
     }
 
     /// Visit a function and collect all mono-items reachable from its instructions.
-    fn visit_fn(&mut self, instance: Instance) -> Vec<MonoItem> {
+    fn visit_fn(&mut self, instance: Instance) -> Vec<CollectedItem> {
         let _guard = debug_span!("visit_fn", function=?instance).entered();
         let body = self.transformer.body(self.tcx, instance);
         let mut collector =
@@ -187,19 +212,24 @@ impl<'tcx, 'a> MonoItemsCollector<'tcx, 'a> {
     }
 
     /// Visit a static object and collect drop / initialization functions.
-    fn visit_static(&mut self, def: StaticDef) -> Vec<MonoItem> {
+    fn visit_static(&mut self, def: StaticDef) -> Vec<CollectedItem> {
         let _guard = debug_span!("visit_static", ?def).entered();
         let mut next_items = vec![];
 
         // Collect drop function.
         let static_ty = def.ty();
         let instance = Instance::resolve_drop_in_place(static_ty);
-        next_items.push(instance.into());
+        next_items
+            .push(CollectedItem { item: instance.into(), reason: CollectionReason::StaticDrop });
 
         // Collect initialization.
         let alloc = def.eval_initializer().unwrap();
         for (_, prov) in alloc.provenance.ptrs {
-            next_items.extend(collect_alloc_items(prov.0).into_iter());
+            next_items.extend(
+                collect_alloc_items(prov.0)
+                    .into_iter()
+                    .map(|item| CollectedItem { item, reason: CollectionReason::Static }),
+            );
         }
 
         next_items
@@ -213,7 +243,7 @@ impl<'tcx, 'a> MonoItemsCollector<'tcx, 'a> {
 
 struct MonoItemsFnCollector<'a, 'tcx> {
     tcx: TyCtxt<'tcx>,
-    collected: FxHashSet<MonoItem>,
+    collected: FxHashSet<CollectedItem>,
     body: &'a Body,
 }
 
@@ -251,7 +281,9 @@ impl<'a, 'tcx> MonoItemsFnCollector<'a, 'tcx> {
                 }
             });
             trace!(methods=?methods.clone().collect::<Vec<_>>(), "collect_vtable_methods");
-            self.collected.extend(methods);
+            self.collected.extend(
+                methods.map(|item| CollectedItem { item, reason: CollectionReason::VTableMethod }),
+            );
         }
 
         // Add the destructor for the concrete type.
@@ -282,7 +314,12 @@ impl<'a, 'tcx> MonoItemsFnCollector<'a, 'tcx> {
         };
         if should_collect && should_codegen_locally(&instance) {
             trace!(?instance, "collect_instance");
-            self.collected.insert(instance.into());
+            let reason = if is_direct_call {
+                CollectionReason::DirectCall
+            } else {
+                CollectionReason::IndirectCall
+            };
+            self.collected.insert(CollectedItem { item: instance.into(), reason });
         }
     }
 
@@ -290,7 +327,11 @@ impl<'a, 'tcx> MonoItemsFnCollector<'a, 'tcx> {
     fn collect_allocation(&mut self, alloc: &Allocation) {
         debug!(?alloc, "collect_allocation");
         for (_, id) in &alloc.provenance.ptrs {
-            self.collected.extend(collect_alloc_items(id.0).into_iter())
+            self.collected.extend(
+                collect_alloc_items(id.0)
+                    .into_iter()
+                    .map(|item| CollectedItem { item, reason: CollectionReason::Static }),
+            )
         }
     }
 }
@@ -366,7 +407,8 @@ impl<'a, 'tcx> MirVisitor for MonoItemsFnCollector<'a, 'tcx> {
             }
             Rvalue::ThreadLocalRef(item) => {
                 trace!(?item, "visit_rvalue thread_local");
-                self.collected.insert(MonoItem::Static(StaticDef::try_from(item).unwrap()));
+                let item = MonoItem::Static(StaticDef::try_from(item).unwrap());
+                self.collected.insert(CollectedItem { item, reason: CollectionReason::Static });
             }
             _ => { /* not interesting */ }
         }
@@ -485,128 +527,148 @@ fn collect_alloc_items(alloc_id: AllocId) -> Vec<MonoItem> {
     items
 }
 
-#[cfg(debug_assertions)]
-#[allow(dead_code)]
-mod debug {
+/// Call graph with edges annotated with the reason why they were added to the graph.
+#[derive(Debug, Default)]
+pub struct CallGraph {
+    /// Nodes of the graph.
+    nodes: HashSet<Node>,
+    /// Edges of the graph.
+    edges: HashMap<Node, Vec<CollectedNode>>,
+    /// Since the graph is directed, we also store back edges.
+    back_edges: HashMap<Node, Vec<CollectedNode>>,
+}
 
-    use std::fmt::{Display, Formatter};
-    use std::{
-        collections::{HashMap, HashSet},
-        fs::File,
-        io::{BufWriter, Write},
-    };
+/// Newtype around MonoItem.
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+struct Node(pub MonoItem);
 
-    use rustc_session::config::OutputType;
+/// Newtype around CollectedItem.
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+struct CollectedNode(pub CollectedItem);
 
-    use super::*;
-
-    #[derive(Debug, Default)]
-    pub struct CallGraph {
-        // Nodes of the graph.
-        nodes: HashSet<Node>,
-        edges: HashMap<Node, Vec<Node>>,
-        back_edges: HashMap<Node, Vec<Node>>,
+impl CallGraph {
+    /// Add a new node into a graph.
+    fn add_node(&mut self, item: MonoItem) {
+        let node = Node(item);
+        self.nodes.insert(node.clone());
+        self.edges.entry(node.clone()).or_default();
+        self.back_edges.entry(node).or_default();
     }
 
-    #[derive(Clone, Debug, Eq, PartialEq, Hash)]
-    struct Node(pub MonoItem);
+    /// Add a new edge "from" -> "to".
+    fn add_edge(&mut self, from: MonoItem, to: MonoItem, collection_reason: CollectionReason) {
+        let from_node = Node(from.clone());
+        let to_node = Node(to.clone());
+        self.add_node(from.clone());
+        self.add_node(to.clone());
+        self.edges
+            .get_mut(&from_node)
+            .unwrap()
+            .push(CollectedNode(CollectedItem { item: to, reason: collection_reason }));
+        self.back_edges
+            .get_mut(&to_node)
+            .unwrap()
+            .push(CollectedNode(CollectedItem { item: from, reason: collection_reason }));
+    }
 
-    impl CallGraph {
-        pub fn add_node(&mut self, item: MonoItem) {
-            let node = Node(item);
-            self.nodes.insert(node.clone());
-            self.edges.entry(node.clone()).or_default();
-            self.back_edges.entry(node).or_default();
+    /// Add multiple new edges for the "from" node.
+    fn add_edges(&mut self, from: MonoItem, to: &[CollectedItem]) {
+        self.add_node(from.clone());
+        for CollectedItem { item, reason } in to {
+            self.add_edge(from.clone(), item.clone(), *reason);
+        }
+    }
+
+    /// Print the graph in DOT format to a file.
+    /// See <https://graphviz.org/doc/info/lang.html> for more information.
+    fn dump_dot(&self, tcx: TyCtxt) -> std::io::Result<()> {
+        if let Ok(target) = std::env::var("KANI_REACH_DEBUG") {
+            debug!(?target, "dump_dot");
+            let outputs = tcx.output_filenames(());
+            let base_path = outputs.path(OutputType::Metadata);
+            let path = base_path.as_path().with_extension("dot");
+            let out_file = File::create(path)?;
+            let mut writer = BufWriter::new(out_file);
+            writeln!(writer, "digraph ReachabilityGraph {{")?;
+            if target.is_empty() {
+                self.dump_all(&mut writer)?;
+            } else {
+                // Only dump nodes that led the reachability analysis to the target node.
+                self.dump_reason(&mut writer, &target)?;
+            }
+            writeln!(writer, "}}")?;
         }
 
-        /// Add a new edge "from" -> "to".
-        pub fn add_edge(&mut self, from: MonoItem, to: MonoItem) {
-            let from_node = Node(from.clone());
-            let to_node = Node(to.clone());
-            self.add_node(from);
-            self.add_node(to);
-            self.edges.get_mut(&from_node).unwrap().push(to_node.clone());
-            self.back_edges.get_mut(&to_node).unwrap().push(from_node);
-        }
+        Ok(())
+    }
 
-        /// Add multiple new edges for the "from" node.
-        pub fn add_edges(&mut self, from: MonoItem, to: &[MonoItem]) {
-            self.add_node(from.clone());
-            for item in to {
-                self.add_edge(from.clone(), item.clone());
+    /// Write all notes to the given writer.
+    fn dump_all<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
+        tracing::info!(nodes=?self.nodes.len(), edges=?self.edges.len(), "dump_all");
+        for node in &self.nodes {
+            writeln!(writer, r#""{node}""#)?;
+            for succ in self.edges.get(node).unwrap() {
+                let reason = succ.0.reason;
+                writeln!(writer, r#""{node}" -> "{succ}" [label={reason:?}] "#)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Write all notes that may have led to the discovery of the given target.
+    fn dump_reason<W: Write>(&self, writer: &mut W, target: &str) -> std::io::Result<()> {
+        let mut queue: Vec<Node> =
+            self.nodes.iter().filter(|item| item.to_string().contains(target)).cloned().collect();
+        let mut visited: HashSet<Node> = HashSet::default();
+        tracing::info!(target=?queue, nodes=?self.nodes.len(), edges=?self.edges.len(), "dump_reason");
+        while let Some(to_visit) = queue.pop() {
+            if !visited.contains(&to_visit) {
+                visited.insert(to_visit.clone());
+                queue.extend(
+                    self.back_edges.get(&to_visit).unwrap().iter().map(|item| item.as_node()),
+                );
             }
         }
 
-        /// Print the graph in DOT format to a file.
-        /// See <https://graphviz.org/doc/info/lang.html> for more information.
-        pub fn dump_dot(&self, tcx: TyCtxt) -> std::io::Result<()> {
-            if let Ok(target) = std::env::var("KANI_REACH_DEBUG") {
-                debug!(?target, "dump_dot");
-                let outputs = tcx.output_filenames(());
-                let base_path = outputs.path(OutputType::Metadata);
-                let path = base_path.as_path().with_extension("dot");
-                let out_file = File::create(path)?;
-                let mut writer = BufWriter::new(out_file);
-                writeln!(writer, "digraph ReachabilityGraph {{")?;
-                if target.is_empty() {
-                    self.dump_all(&mut writer)?;
-                } else {
-                    // Only dump nodes that led the reachability analysis to the target node.
-                    self.dump_reason(&mut writer, &target)?;
-                }
-                writeln!(writer, "}}")?;
-            }
-
-            Ok(())
-        }
-
-        /// Write all notes to the given writer.
-        fn dump_all<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
-            tracing::info!(nodes=?self.nodes.len(), edges=?self.edges.len(), "dump_all");
-            for node in &self.nodes {
-                writeln!(writer, r#""{node}""#)?;
-                for succ in self.edges.get(node).unwrap() {
-                    writeln!(writer, r#""{node}" -> "{succ}" "#)?;
-                }
-            }
-            Ok(())
-        }
-
-        /// Write all notes that may have led to the discovery of the given target.
-        fn dump_reason<W: Write>(&self, writer: &mut W, target: &str) -> std::io::Result<()> {
-            let mut queue = self
-                .nodes
+        for node in &visited {
+            writeln!(writer, r#""{node}""#)?;
+            for succ in self
+                .edges
+                .get(node)
+                .unwrap()
                 .iter()
-                .filter(|item| item.to_string().contains(target))
-                .collect::<Vec<_>>();
-            let mut visited: HashSet<&Node> = HashSet::default();
-            tracing::info!(target=?queue, nodes=?self.nodes.len(), edges=?self.edges.len(), "dump_reason");
-            while let Some(to_visit) = queue.pop() {
-                if !visited.contains(to_visit) {
-                    visited.insert(to_visit);
-                    queue.extend(self.back_edges.get(to_visit).unwrap());
-                }
+                .filter(|item| visited.contains(&item.as_node()))
+            {
+                let reason = succ.0.reason;
+                writeln!(writer, r#""{node}" -> "{succ}" [label={reason:?}] "#)?;
             }
+        }
+        Ok(())
+    }
+}
 
-            for node in &visited {
-                writeln!(writer, r#""{node}""#)?;
-                for succ in
-                    self.edges.get(node).unwrap().iter().filter(|item| visited.contains(item))
-                {
-                    writeln!(writer, r#""{node}" -> "{succ}" "#)?;
-                }
-            }
-            Ok(())
+impl Display for Node {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match &self.0 {
+            MonoItem::Fn(instance) => write!(f, "{}", instance.name()),
+            MonoItem::Static(def) => write!(f, "{}", def.name()),
+            MonoItem::GlobalAsm(asm) => write!(f, "{asm:?}"),
         }
     }
+}
 
-    impl Display for Node {
-        fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-            match &self.0 {
-                MonoItem::Fn(instance) => write!(f, "{}", instance.name()),
-                MonoItem::Static(def) => write!(f, "{}", def.name()),
-                MonoItem::GlobalAsm(asm) => write!(f, "{asm:?}"),
-            }
+impl Display for CollectedNode {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match &self.0.item {
+            MonoItem::Fn(instance) => write!(f, "{}", instance.name()),
+            MonoItem::Static(def) => write!(f, "{}", def.name()),
+            MonoItem::GlobalAsm(asm) => write!(f, "{asm:?}"),
         }
+    }
+}
+
+impl CollectedNode {
+    pub fn as_node(&self) -> Node {
+        Node(self.0.item.clone())
     }
 }
