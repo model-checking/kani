@@ -70,14 +70,10 @@ impl KaniSession {
                 rustc_args.push(t);
             }
         } else {
-            // If we specifically request "--function main" then don't override crate type
-            if Some("main".to_string()) != self.args.function {
-                // We only run against proof harnesses normally, and this change
-                // 1. Means we do not require a `fn main` to exist
-                // 2. Don't forget it also changes visibility rules.
-                rustc_args.push("--crate-type".into());
-                rustc_args.push("lib".into());
-            }
+            // We only run against proof harnesses, so always compile as a library.
+            // This ensures compilation passes if the crate does not have a `main` function.
+            rustc_args.push("--crate-type".into());
+            rustc_args.push("lib".into());
         }
 
         // Note that the order of arguments is important. Kani specific flags should precede
@@ -139,6 +135,17 @@ impl KaniSession {
             flags.push("--ub-check=validity".into())
         }
 
+        if self.args.common_args.unstable_features.contains(UnstableFeature::PtrToRefCastChecks) {
+            flags.push("--ub-check=ptr_to_ref_cast".into())
+        }
+
+        if self.args.common_args.unstable_features.contains(UnstableFeature::UninitChecks) {
+            // Automatically enable shadow memory, since the version of uninitialized memory checks
+            // without non-determinism depends on it.
+            flags.push("-Z ghost-state".into());
+            flags.push("--ub-check=uninit".into());
+        }
+
         if self.args.ignore_locals_lifetime {
             flags.push("--ignore-storage-markers".into())
         }
@@ -178,6 +185,10 @@ impl KaniSession {
                 flags.push("-Z".into());
                 flags.push(format!("layout-seed={seed}").into());
             }
+        }
+
+        if self.args.coverage {
+            flags.push("-Zmir-enable-passes=-SingleUseConsts".into());
         }
 
         // This argument will select the Kani flavour of the compiler. It will be removed before

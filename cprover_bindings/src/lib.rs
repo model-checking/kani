@@ -29,6 +29,9 @@
 //! Speical [irep::Irep::id]s include:
 //! 1. [irep::IrepId::Empty] and [irep::IrepId::Nil] behaves like \[null\].
 
+#![feature(f128)]
+#![feature(f16)]
+
 mod env;
 pub mod goto_program;
 pub mod irep;

@@ -14,21 +14,24 @@
 //!   1. We could merge the invalid values by the offset.
 //!   2. We could avoid checking places that have been checked before.
 use crate::args::ExtraChecks;
-use crate::kani_middle::transform::body::{CheckType, MutableBody, SourceInstruction};
+use crate::kani_middle::transform::body::{
+    CheckType, InsertPosition, MutableBody, SourceInstruction,
+};
 use crate::kani_middle::transform::check_values::SourceOp::UnsupportedCheck;
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
-use rustc_middle::ty::TyCtxt;
+use rustc_middle::ty::{Const, TyCtxt};
+use rustc_smir::rustc_internal;
 use stable_mir::abi::{FieldsShape, Scalar, TagEncoding, ValueAbi, VariantsShape, WrappingRange};
 use stable_mir::mir::mono::{Instance, InstanceKind};
 use stable_mir::mir::visit::{Location, PlaceContext, PlaceRef};
 use stable_mir::mir::{
-    AggregateKind, BasicBlockIdx, BinOp, Body, CastKind, Constant, FieldIdx, Local, LocalDecl,
+    AggregateKind, BasicBlockIdx, BinOp, Body, CastKind, ConstOperand, FieldIdx, Local, LocalDecl,
     MirVisitor, Mutability, NonDivergingIntrinsic, Operand, Place, ProjectionElem, Rvalue,
     Statement, StatementKind, Terminator, TerminatorKind,
 };
 use stable_mir::target::{MachineInfo, MachineSize};
-use stable_mir::ty::{AdtKind, Const, IndexedVal, RigidTy, Ty, TyKind, UintTy};
+use stable_mir::ty::{AdtKind, IndexedVal, MirConst, RigidTy, Ty, TyKind, UintTy};
 use stable_mir::CrateDef;
 use std::fmt::Debug;
 use strum_macros::AsRefStr;
@@ -58,14 +61,14 @@ impl TransformPass for ValidValuePass {
 
     /// Transform the function body by inserting checks one-by-one.
     /// For every unsafe dereference or a transmute operation, we check all values are valid.
-    fn transform(&self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
+    fn transform(&mut self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
         trace!(function=?instance.name(), "transform");
         let mut new_body = MutableBody::from(body);
         let orig_len = new_body.blocks().len();
         // Do not cache body.blocks().len() since it will change as we add new checks.
         for bb_idx in 0..new_body.blocks().len() {
             let Some(candidate) =
-                CheckValueVisitor::find_next(&new_body, bb_idx, bb_idx >= orig_len)
+                CheckValueVisitor::find_next(tcx, &new_body, bb_idx, bb_idx >= orig_len)
             else {
                 continue;
             };
@@ -82,13 +85,20 @@ impl ValidValuePass {
         for operation in instruction.operations {
             match operation {
                 SourceOp::BytesValidity { ranges, target_ty, rvalue } => {
-                    let value = body.new_assignment(rvalue, &mut source);
+                    let value = body.new_assignment(rvalue, &mut source, InsertPosition::Before);
                     let rvalue_ptr = Rvalue::AddressOf(Mutability::Not, Place::from(value));
                     for range in ranges {
                         let result = build_limits(body, &range, rvalue_ptr.clone(), &mut source);
                         let msg =
                             format!("Undefined Behavior: Invalid value of type `{target_ty}`",);
-                        body.add_check(tcx, &self.check_type, &mut source, result, &msg);
+                        body.add_check(
+                            tcx,
+                            &self.check_type,
+                            &mut source,
+                            InsertPosition::Before,
+                            result,
+                            &msg,
+                        );
                     }
                 }
                 SourceOp::DerefValidity { pointee_ty, rvalue, ranges } => {
@@ -96,7 +106,14 @@ impl ValidValuePass {
                         let result = build_limits(body, &range, rvalue.clone(), &mut source);
                         let msg =
                             format!("Undefined Behavior: Invalid value of type `{pointee_ty}`",);
-                        body.add_check(tcx, &self.check_type, &mut source, result, &msg);
+                        body.add_check(
+                            tcx,
+                            &self.check_type,
+                            &mut source,
+                            InsertPosition::Before,
+                            result,
+                            &msg,
+                        );
                     }
                 }
                 SourceOp::UnsupportedCheck { check, ty } => {
@@ -117,13 +134,13 @@ impl ValidValuePass {
         reason: &str,
     ) {
         let span = source.span(body.blocks());
-        let rvalue = Rvalue::Use(Operand::Constant(Constant {
-            literal: Const::from_bool(false),
+        let rvalue = Rvalue::Use(Operand::Constant(ConstOperand {
+            const_: MirConst::from_bool(false),
             span,
             user_ty: None,
         }));
-        let result = body.new_assignment(rvalue, source);
-        body.add_check(tcx, &self.check_type, source, result, reason);
+        let result = body.new_assignment(rvalue, source, InsertPosition::Before);
+        body.add_check(tcx, &self.check_type, source, InsertPosition::Before, result, reason);
     }
 }
 
@@ -262,7 +279,8 @@ struct UnsafeInstruction {
 ///   - Transmute
 ///   - MemCopy
 ///   - Cast
-struct CheckValueVisitor<'a> {
+struct CheckValueVisitor<'a, 'b> {
+    tcx: TyCtxt<'b>,
     locals: &'a [LocalDecl],
     /// Whether we should skip the next instruction, since it might've been instrumented already.
     /// When we instrument an instruction, we partition the basic block, and the instruction that
@@ -279,13 +297,15 @@ struct CheckValueVisitor<'a> {
     machine: MachineInfo,
 }
 
-impl<'a> CheckValueVisitor<'a> {
+impl<'a, 'b> CheckValueVisitor<'a, 'b> {
     fn find_next(
+        tcx: TyCtxt<'b>,
         body: &'a MutableBody,
         bb: BasicBlockIdx,
         skip_first: bool,
     ) -> Option<UnsafeInstruction> {
         let mut visitor = CheckValueVisitor {
+            tcx,
             locals: body.locals(),
             skip_next: skip_first,
             current: SourceInstruction::Statement { idx: 0, bb },
@@ -305,7 +325,7 @@ impl<'a> CheckValueVisitor<'a> {
     }
 }
 
-impl<'a> MirVisitor for CheckValueVisitor<'a> {
+impl<'a, 'b> MirVisitor for CheckValueVisitor<'a, 'b> {
     fn visit_statement(&mut self, stmt: &Statement, location: Location) {
         if self.skip_next {
             self.skip_next = false;
@@ -388,12 +408,10 @@ impl<'a> MirVisitor for CheckValueVisitor<'a> {
                                 match validity {
                                     Ok(ranges) if ranges.is_empty() => {}
                                     Ok(ranges) => {
-                                        let sz = Const::try_from_uint(
-                                            target_ty.layout().unwrap().shape().size.bytes()
-                                                as u128,
-                                            UintTy::Usize,
-                                        )
-                                        .unwrap();
+                                        let sz = rustc_internal::stable(Const::from_target_usize(
+                                            self.tcx,
+                                            target_ty.layout().unwrap().shape().size.bytes() as u64,
+                                        ));
                                         self.push_target(SourceOp::BytesValidity {
                                             target_ty,
                                             rvalue: Rvalue::Repeat(args[1].clone(), sz),
@@ -730,7 +748,8 @@ fn expect_instance(locals: &[LocalDecl], func: &Operand) -> Instance {
     let ty = func.ty(locals).unwrap();
     match ty.kind() {
         TyKind::RigidTy(RigidTy::FnDef(def, args)) => Instance::resolve(def, &args).unwrap(),
-        _ => unreachable!(),
+        TyKind::RigidTy(RigidTy::FnPtr(sig)) => todo!("Add support to FnPtr: {sig:?}"),
+        _ => unreachable!("Found: {func:?}"),
     }
 }
 
@@ -755,30 +774,60 @@ pub fn build_limits(
     let start_const = body.new_const_operand(req.valid_range.start, primitive_ty, span);
     let end_const = body.new_const_operand(req.valid_range.end, primitive_ty, span);
     let orig_ptr = if req.offset != 0 {
-        let start_ptr = move_local(body.new_assignment(rvalue_ptr, source));
+        let start_ptr = move_local(body.new_assignment(rvalue_ptr, source, InsertPosition::Before));
         let byte_ptr = move_local(body.new_cast_ptr(
             start_ptr,
             Ty::unsigned_ty(UintTy::U8),
             Mutability::Not,
             source,
+            InsertPosition::Before,
         ));
         let offset_const = body.new_const_operand(req.offset as _, UintTy::Usize, span);
-        let offset = move_local(body.new_assignment(Rvalue::Use(offset_const), source));
-        move_local(body.new_binary_op(BinOp::Offset, byte_ptr, offset, source))
+        let offset = move_local(body.new_assignment(
+            Rvalue::Use(offset_const),
+            source,
+            InsertPosition::Before,
+        ));
+        move_local(body.new_binary_op(
+            BinOp::Offset,
+            byte_ptr,
+            offset,
+            source,
+            InsertPosition::Before,
+        ))
     } else {
-        move_local(body.new_assignment(rvalue_ptr, source))
+        move_local(body.new_assignment(rvalue_ptr, source, InsertPosition::Before))
     };
-    let value_ptr =
-        body.new_cast_ptr(orig_ptr, Ty::unsigned_ty(primitive_ty), Mutability::Not, source);
+    let value_ptr = body.new_cast_ptr(
+        orig_ptr,
+        Ty::unsigned_ty(primitive_ty),
+        Mutability::Not,
+        source,
+        InsertPosition::Before,
+    );
     let value = Operand::Copy(Place { local: value_ptr, projection: vec![ProjectionElem::Deref] });
-    let start_result = body.new_binary_op(BinOp::Ge, value.clone(), start_const, source);
-    let end_result = body.new_binary_op(BinOp::Le, value, end_const, source);
+    let start_result =
+        body.new_binary_op(BinOp::Ge, value.clone(), start_const, source, InsertPosition::Before);
+    let end_result =
+        body.new_binary_op(BinOp::Le, value, end_const, source, InsertPosition::Before);
     if req.valid_range.wraps_around() {
         // valid >= start || valid <= end
-        body.new_binary_op(BinOp::BitOr, move_local(start_result), move_local(end_result), source)
+        body.new_binary_op(
+            BinOp::BitOr,
+            move_local(start_result),
+            move_local(end_result),
+            source,
+            InsertPosition::Before,
+        )
     } else {
         // valid >= start && valid <= end
-        body.new_binary_op(BinOp::BitAnd, move_local(start_result), move_local(end_result), source)
+        body.new_binary_op(
+            BinOp::BitAnd,
+            move_local(start_result),
+            move_local(end_result),
+            source,
+            InsertPosition::Before,
+        )
     }
 }
 

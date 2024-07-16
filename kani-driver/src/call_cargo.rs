@@ -57,6 +57,8 @@ impl KaniSession {
         let mut rustc_args = self.kani_rustc_flags(LibConfig::new_no_core(lib_path));
         rustc_args.push(to_rustc_arg(self.kani_compiler_flags()).into());
         rustc_args.push(self.reachability_arg().into());
+        // Ignore global assembly, since `compiler_builtins` has some.
+        rustc_args.push(to_rustc_arg(vec!["--ignore-global-asm".to_string()]).into());
 
         let mut cargo_args: Vec<OsString> = vec!["build".into()];
         cargo_args.append(&mut cargo_config_args());
@@ -82,8 +84,19 @@ impl KaniSession {
             .env("CARGO_TERM_PROGRESS_WHEN", "never")
             .env("__CARGO_TESTS_ONLY_SRC_ROOT", std_path.as_os_str());
 
-        let build_artifacts = self.run_build(cmd)?;
-        Ok(build_artifacts.into_iter().filter_map(map_kani_artifact).collect())
+        Ok(self
+            .run_build(cmd)?
+            .into_iter()
+            .filter_map(|artifact| {
+                if artifact.target.crate_types.contains(&CRATE_TYPE_LIB.to_string())
+                    || artifact.target.crate_types.contains(&CRATE_TYPE_RLIB.to_string())
+                {
+                    map_kani_artifact(artifact)
+                } else {
+                    None
+                }
+            })
+            .collect())
     }
 
     /// Calls `cargo_build` to generate `*.symtab.json` files in `target_dir`
@@ -324,10 +337,10 @@ pub fn cargo_config_args() -> Vec<OsString> {
     [
         "--target",
         env!("TARGET"),
-        // Propagate `--cfg=kani` to build scripts.
+        // Propagate `--cfg=kani_host` to build scripts.
         "-Zhost-config",
         "-Ztarget-applies-to-host",
-        "--config=host.rustflags=[\"--cfg=kani\"]",
+        "--config=host.rustflags=[\"--cfg=kani_host\"]",
     ]
     .map(OsString::from)
     .to_vec()
@@ -559,7 +572,7 @@ fn package_targets(args: &VerificationArgs, package: &Package) -> Vec<Verificati
         }
         if !ignored_unsupported.is_empty() {
             println!(
-                "Skipped the following unsupported targets: '{}'.",
+                "Skipped verification of the following unsupported targets: '{}'.",
                 ignored_unsupported.join("', '")
             );
         }

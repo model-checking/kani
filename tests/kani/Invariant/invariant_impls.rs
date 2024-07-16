@@ -3,6 +3,10 @@
 
 //! Check the `Invariant` implementations that we include in the Kani library
 //! with respect to the underlying type invariants.
+
+#![feature(f16)]
+#![feature(f128)]
+
 extern crate kani;
 use kani::Invariant;
 
@@ -28,6 +32,9 @@ fn check_safe_impls() {
     check_safe_type!(i64);
     check_safe_type!(i128);
     check_safe_type!(isize);
+
+    check_safe_type!(f16);
+    check_safe_type!(f128);
 
     check_safe_type!(f32);
     check_safe_type!(f64);

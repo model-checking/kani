@@ -143,6 +143,41 @@ impl GotocHook for Assert {
     }
 }
 
+struct Check;
+impl GotocHook for Check {
+    fn hook_applies(&self, tcx: TyCtxt, instance: Instance) -> bool {
+        matches_function(tcx, instance.def, "KaniCheck")
+    }
+
+    fn handle(
+        &self,
+        gcx: &mut GotocCtx,
+        _instance: Instance,
+        mut fargs: Vec<Expr>,
+        _assign_to: &Place,
+        target: Option<BasicBlockIdx>,
+        span: Span,
+    ) -> Stmt {
+        assert_eq!(fargs.len(), 2);
+        let cond = fargs.remove(0).cast_to(Type::bool());
+        let msg = fargs.remove(0);
+        let msg = gcx.extract_const_message(&msg).unwrap();
+        let target = target.unwrap();
+        let caller_loc = gcx.codegen_caller_span_stable(span);
+
+        let (msg, reach_stmt) = gcx.codegen_reachability_check(msg, span);
+
+        Stmt::block(
+            vec![
+                reach_stmt,
+                gcx.codegen_assert(cond, PropertyClass::Assertion, &msg, caller_loc),
+                Stmt::goto(bb_label(target), caller_loc),
+            ],
+            caller_loc,
+        )
+    }
+}
+
 struct Nondet;
 
 impl GotocHook for Nondet {
@@ -168,7 +203,7 @@ impl GotocHook for Nondet {
         } else {
             let pe = unwrap_or_return_codegen_unimplemented_stmt!(
                 gcx,
-                gcx.codegen_place_stable(assign_to)
+                gcx.codegen_place_stable(assign_to, loc)
             )
             .goto_expr;
             Stmt::block(
@@ -228,8 +263,10 @@ impl GotocHook for IsAllocated {
         let ptr = fargs.pop().unwrap().cast_to(Type::void_pointer());
         let target = target.unwrap();
         let loc = gcx.codegen_caller_span_stable(span);
-        let ret_place =
-            unwrap_or_return_codegen_unimplemented_stmt!(gcx, gcx.codegen_place_stable(assign_to));
+        let ret_place = unwrap_or_return_codegen_unimplemented_stmt!(
+            gcx,
+            gcx.codegen_place_stable(assign_to, loc)
+        );
         let ret_type = ret_place.goto_expr.typ().clone();
 
         Stmt::block(
@@ -262,8 +299,10 @@ impl GotocHook for PointerObject {
         let ptr = fargs.pop().unwrap().cast_to(Type::void_pointer());
         let target = target.unwrap();
         let loc = gcx.codegen_caller_span_stable(span);
-        let ret_place =
-            unwrap_or_return_codegen_unimplemented_stmt!(gcx, gcx.codegen_place_stable(assign_to));
+        let ret_place = unwrap_or_return_codegen_unimplemented_stmt!(
+            gcx,
+            gcx.codegen_place_stable(assign_to, loc)
+        );
         let ret_type = ret_place.goto_expr.typ().clone();
 
         Stmt::block(
@@ -296,8 +335,10 @@ impl GotocHook for PointerOffset {
         let ptr = fargs.pop().unwrap().cast_to(Type::void_pointer());
         let target = target.unwrap();
         let loc = gcx.codegen_caller_span_stable(span);
-        let ret_place =
-            unwrap_or_return_codegen_unimplemented_stmt!(gcx, gcx.codegen_place_stable(assign_to));
+        let ret_place = unwrap_or_return_codegen_unimplemented_stmt!(
+            gcx,
+            gcx.codegen_place_stable(assign_to, loc)
+        );
         let ret_type = ret_place.goto_expr.typ().clone();
 
         Stmt::block(
@@ -336,7 +377,7 @@ impl GotocHook for RustAlloc {
             vec![
                 unwrap_or_return_codegen_unimplemented_stmt!(
                     gcx,
-                    gcx.codegen_place_stable(assign_to)
+                    gcx.codegen_place_stable(assign_to, loc)
                 )
                 .goto_expr
                 .assign(
@@ -396,13 +437,14 @@ impl GotocHook for MemCmp {
         let is_first_ok = first_var.clone().is_nonnull();
         let is_second_ok = second_var.clone().is_nonnull();
         let should_skip_pointer_checks = is_count_zero.and(is_first_ok).and(is_second_ok);
-        let place_expr =
-            unwrap_or_return_codegen_unimplemented_stmt!(gcx, gcx.codegen_place_stable(assign_to))
-                .goto_expr;
+        let place_expr = unwrap_or_return_codegen_unimplemented_stmt!(
+            gcx,
+            gcx.codegen_place_stable(assign_to, loc)
+        )
+        .goto_expr;
         let rhs = should_skip_pointer_checks.ternary(
             Expr::int_constant(0, place_expr.typ().clone()), // zero bytes are always equal (as long as pointers are nonnull and aligned)
-            gcx.codegen_func_expr(instance, Some(span))
-                .call(vec![first_var, second_var, count_var]),
+            gcx.codegen_func_expr(instance, loc).call(vec![first_var, second_var, count_var]),
         );
         let code = place_expr.assign(rhs, loc).with_location(loc);
         Stmt::block(
@@ -447,7 +489,7 @@ impl GotocHook for UntrackedDeref {
             vec![Stmt::assign(
                 unwrap_or_return_codegen_unimplemented_stmt!(
                     gcx,
-                    gcx.codegen_place_stable(assign_to)
+                    gcx.codegen_place_stable(assign_to, loc)
                 )
                 .goto_expr,
                 fargs.pop().unwrap().dereference(),
@@ -503,6 +545,7 @@ pub fn fn_hooks() -> GotocHooks {
             Rc::new(Panic),
             Rc::new(Assume),
             Rc::new(Assert),
+            Rc::new(Check),
             Rc::new(Cover),
             Rc::new(Nondet),
             Rc::new(IsAllocated),

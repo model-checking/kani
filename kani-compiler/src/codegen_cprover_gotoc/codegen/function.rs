@@ -52,7 +52,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     pub fn codegen_function(&mut self, instance: Instance) {
-        let name = self.symbol_name_stable(instance);
+        let name = instance.mangled_name();
         let old_sym = self.symbol_table.lookup(&name).unwrap();
 
         let _trace_span = debug_span!("CodegenFunction", name = instance.name()).entered();
@@ -204,7 +204,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let body = self.transformer.body(self.tcx, instance);
         self.set_current_fn(instance, &body);
         debug!(krate=?instance.def.krate(), is_std=self.current_fn().is_std(), "declare_function");
-        self.ensure(self.symbol_name_stable(instance), |ctx, fname| {
+        self.ensure(instance.mangled_name(), |ctx, fname| {
             Symbol::function(
                 fname,
                 ctx.fn_typ(instance, &body),

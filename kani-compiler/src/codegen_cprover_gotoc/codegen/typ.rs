@@ -11,8 +11,8 @@ use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::print::FmtPrinter;
 use rustc_middle::ty::GenericArgsRef;
 use rustc_middle::ty::{
-    self, AdtDef, Const, CoroutineArgs, FloatTy, Instance, IntTy, PolyFnSig, Ty, TyCtxt, TyKind,
-    UintTy, VariantDef, VtblEntry,
+    self, AdtDef, Const, CoroutineArgs, CoroutineArgsExt, FloatTy, Instance, IntTy, PolyFnSig, Ty,
+    TyCtxt, TyKind, UintTy, VariantDef, VtblEntry,
 };
 use rustc_middle::ty::{List, TypeFoldable};
 use rustc_smir::rustc_internal;
@@ -130,6 +130,8 @@ impl<'tcx> GotocCtx<'tcx> {
                 Type::Empty => todo!(),
                 Type::FlexibleArray { .. } => todo!(),
                 Type::Float => write!(out, "f32")?,
+                Type::Float16 => write!(out, "f16")?,
+                Type::Float128 => write!(out, "f128")?,
                 Type::IncompleteStruct { .. } => todo!(),
                 Type::IncompleteUnion { .. } => todo!(),
                 Type::InfiniteArray { .. } => todo!(),
@@ -542,9 +544,8 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::Float(k) => match k {
                 FloatTy::F32 => Type::float(),
                 FloatTy::F64 => Type::double(),
-                // `F16` and `F128` are not yet handled.
-                // Tracked here: <https://github.com/model-checking/kani/issues/3069>
-                FloatTy::F16 | FloatTy::F128 => unimplemented!(),
+                FloatTy::F16 => Type::float16(),
+                FloatTy::F128 => Type::float128(),
             },
             ty::Adt(def, _) if def.repr().simd() => self.codegen_vector(ty),
             ty::Adt(def, subst) => {
@@ -573,7 +574,7 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::Ref(_, t, _) | ty::RawPtr(t, _) => self.codegen_ty_ref(*t),
             ty::FnDef(def_id, args) => {
                 let instance =
-                    Instance::resolve(self.tcx, ty::ParamEnv::reveal_all(), *def_id, args)
+                    Instance::try_resolve(self.tcx, ty::ParamEnv::reveal_all(), *def_id, args)
                         .unwrap()
                         .unwrap();
                 self.codegen_fndef_type(instance)

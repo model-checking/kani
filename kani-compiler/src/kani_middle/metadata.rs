@@ -13,19 +13,12 @@ use stable_mir::CrateDef;
 
 use super::{attributes::KaniAttributes, SourceLocation};
 
-pub fn canonical_mangled_name(instance: Instance) -> String {
-    let pretty_name = instance.name();
-    // Main function a special case in order to support `--function main`
-    // TODO: Get rid of this: https://github.com/model-checking/kani/issues/2129
-    if pretty_name == "main" { pretty_name } else { instance.mangled_name() }
-}
-
 /// Create the harness metadata for a proof harness for a given function.
 pub fn gen_proof_metadata(tcx: TyCtxt, instance: Instance, base_name: &Path) -> HarnessMetadata {
     let def = instance.def;
-    let attributes = KaniAttributes::for_instance(tcx, instance).harness_attributes();
+    let kani_attributes = KaniAttributes::for_instance(tcx, instance);
     let pretty_name = instance.name();
-    let mangled_name = canonical_mangled_name(instance);
+    let mangled_name = instance.mangled_name();
 
     // We get the body span to include the entire function definition.
     // This is required for concrete playback to properly position the generated test.
@@ -40,7 +33,7 @@ pub fn gen_proof_metadata(tcx: TyCtxt, instance: Instance, base_name: &Path) -> 
         original_file: loc.filename,
         original_start_line: loc.start_line,
         original_end_line: loc.end_line,
-        attributes,
+        attributes: kani_attributes.harness_attributes(),
         // TODO: This no longer needs to be an Option.
         goto_file: Some(model_file),
         contract: Default::default(),

@@ -3,7 +3,7 @@
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::kani_middle::attributes::KaniAttributes;
 use cbmc::goto_program::FunctionContract;
-use cbmc::goto_program::Lambda;
+use cbmc::goto_program::{Lambda, Location};
 use kani_metadata::AssignsContract;
 use rustc_hir::def_id::DefId as InternalDefId;
 use rustc_smir::rustc_internal;
@@ -47,6 +47,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             _ => None,
         });
+
         let recursion_tracker_def = recursion_tracker
             .next()
             .expect("There should be at least one recursion tracker (REENTRY) in scope");
@@ -94,7 +95,7 @@ impl<'tcx> GotocCtx<'tcx> {
             vec![]
         });
         self.attach_modifies_contract(instance_of_check, assigns_contract);
-        let wrapper_name = self.symbol_name_stable(instance_of_check);
+        let wrapper_name = instance_of_check.mangled_name();
 
         AssignsContract {
             recursion_tracker: full_recursion_tracker_name,
@@ -104,7 +105,11 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// Convert the Kani level contract into a CBMC level contract by creating a
     /// CBMC lambda.
-    fn codegen_modifies_contract(&mut self, modified_places: Vec<Local>) -> FunctionContract {
+    fn codegen_modifies_contract(
+        &mut self,
+        modified_places: Vec<Local>,
+        loc: Location,
+    ) -> FunctionContract {
         let goto_annotated_fn_name = self.current_fn().name();
         let goto_annotated_fn_typ = self
             .symbol_table
@@ -113,15 +118,37 @@ impl<'tcx> GotocCtx<'tcx> {
             .typ
             .clone();
 
+        let shadow_memory_assign = self
+            .tcx
+            .all_diagnostic_items(())
+            .name_to_id
+            .get(&rustc_span::symbol::Symbol::intern("KaniMemoryInitializationState"))
+            .map(|attr_id| {
+                self.tcx
+                    .symbol_name(rustc_middle::ty::Instance::mono(self.tcx, *attr_id))
+                    .name
+                    .to_string()
+            })
+            .and_then(|shadow_memory_table| self.symbol_table.lookup(&shadow_memory_table).cloned())
+            .map(|shadow_memory_symbol| {
+                vec![Lambda::as_contract_for(
+                    &goto_annotated_fn_typ,
+                    None,
+                    shadow_memory_symbol.to_expr(),
+                )]
+            })
+            .unwrap_or_default();
+
         let assigns = modified_places
             .into_iter()
             .map(|local| {
                 Lambda::as_contract_for(
                     &goto_annotated_fn_typ,
                     None,
-                    self.codegen_place_stable(&local.into()).unwrap().goto_expr.dereference(),
+                    self.codegen_place_stable(&local.into(), loc).unwrap().goto_expr.dereference(),
                 )
             })
+            .chain(shadow_memory_assign)
             .collect();
 
         FunctionContract::new(assigns)
@@ -137,7 +164,8 @@ impl<'tcx> GotocCtx<'tcx> {
         assert!(self.current_fn.is_none());
         let body = instance.body().unwrap();
         self.set_current_fn(instance, &body);
-        let goto_contract = self.codegen_modifies_contract(modified_places);
+        let goto_contract =
+            self.codegen_modifies_contract(modified_places, self.codegen_span_stable(body.span));
         let name = self.current_fn().name();
 
         self.symbol_table.attach_contract(name, goto_contract);
