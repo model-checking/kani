@@ -142,9 +142,11 @@ impl UninitPass {
         operation: MemoryInitOp,
         skip_first: &mut HashSet<usize>,
     ) {
-        if let MemoryInitOp::Unsupported { reason } = &operation {
+        if let MemoryInitOp::Unsupported { reason } | MemoryInitOp::TriviallyUnsafe { reason } =
+            &operation
+        {
             collect_skipped(&operation, body, skip_first);
-            self.unsupported_check(tcx, body, source, operation.position(), reason);
+            self.inject_assert_false(tcx, body, source, operation.position(), reason);
             return;
         };
 
@@ -166,7 +168,7 @@ impl UninitPass {
                         "Kani currently doesn't support checking memory initialization for pointers to `{pointee_ty}.",
                     );
                     collect_skipped(&operation, body, skip_first);
-                    self.unsupported_check(tcx, body, source, operation.position(), &reason);
+                    self.inject_assert_false(tcx, body, source, operation.position(), &reason);
                     return;
                 }
             }
@@ -181,7 +183,7 @@ impl UninitPass {
             | MemoryInitOp::SetRef { .. } => {
                 self.build_set(tcx, body, source, operation, pointee_ty_info, skip_first)
             }
-            MemoryInitOp::Unsupported { .. } => {
+            MemoryInitOp::Unsupported { .. } | MemoryInitOp::TriviallyUnsafe { .. } => {
                 unreachable!()
             }
         }
@@ -266,7 +268,7 @@ impl UninitPass {
             PointeeLayout::TraitObject => {
                 collect_skipped(&operation, body, skip_first);
                 let reason = "Kani does not support reasoning about memory initialization of pointers to trait objects.";
-                self.unsupported_check(tcx, body, source, operation.position(), reason);
+                self.inject_assert_false(tcx, body, source, operation.position(), reason);
                 return;
             }
         };
@@ -392,7 +394,7 @@ impl UninitPass {
         };
     }
 
-    fn unsupported_check(
+    fn inject_assert_false(
         &self,
         tcx: TyCtxt,
         body: &mut MutableBody,
