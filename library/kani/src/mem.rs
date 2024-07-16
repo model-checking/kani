@@ -300,7 +300,7 @@ unsafe fn has_valid_value<T: ?Sized>(_ptr: *const T) -> bool {
 /// Check whether `len * size_of::<T>()` bytes are initialized starting from `ptr`.
 #[rustc_diagnostic_item = "KaniIsInitialized"]
 #[inline(never)]
-pub fn is_initialized<T: ?Sized>(_ptr: *const T) -> bool {
+pub(crate) fn is_initialized<T: ?Sized>(_ptr: *const T) -> bool {
     kani_intrinsic()
 }
 
@@ -311,6 +311,12 @@ fn assert_is_initialized<T: ?Sized>(ptr: *const T) -> bool {
 }
 
 /// Get the object ID of the given pointer.
+#[doc(hidden)]
+#[crate::unstable(
+    feature = "ghost-state",
+    issue = 3184,
+    reason = "experimental ghost state/shadow memory API"
+)]
 #[rustc_diagnostic_item = "KaniPointerObject"]
 #[inline(never)]
 pub fn pointer_object<T: ?Sized>(_ptr: *const T) -> usize {
@@ -318,6 +324,12 @@ pub fn pointer_object<T: ?Sized>(_ptr: *const T) -> usize {
 }
 
 /// Get the object offset of the given pointer.
+#[doc(hidden)]
+#[crate::unstable(
+    feature = "ghost-state",
+    issue = 3184,
+    reason = "experimental ghost state/shadow memory API"
+)]
 #[rustc_diagnostic_item = "KaniPointerOffset"]
 #[inline(never)]
 pub fn pointer_offset<T: ?Sized>(_ptr: *const T) -> usize {
