@@ -2,7 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Zghost-state
 
-// Check that every element of a slice split into two is initialized
+// This test demonstrates a possible usage of the shadow memory API to check that
+// every element of an array split into two slices is initialized.
+// Since the instrumentation is done manually in the harness only but not inside
+// the `split_at_checked` function, the test only verifies that the resulting
+// slices occupy the same memory as the original array.
 
 const N: usize = 16;
 

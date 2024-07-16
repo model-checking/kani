@@ -2,7 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Zghost-state
 
-// Check that every element of a reversed slice are initialized
+// This test demonstrates a possible usage of the shadow memory API to check that
+// every element of a reversed array is initialized.
+// Since the instrumentation is done manually in the harness only but not inside
+// the `reverse` function, the test only verifies that the resulting array
+// occupies the same memory as the original one.
 
 const N: usize = 32;
 

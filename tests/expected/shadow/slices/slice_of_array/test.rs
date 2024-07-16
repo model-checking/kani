@@ -2,7 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Zghost-state
 
-// Check that every element of an arbitrary slice of an array is initialized
+// This test demonstrates a possible usage of the shadow memory API to check that
+// every element of an arbitrary slice of an array is initialized.
+// Since the instrumentation is done manually in the harness only but not inside
+// the library functions, the test only verifies that the slices point to memory
+// that is within the original array.
 
 const N: usize = 16;
 
