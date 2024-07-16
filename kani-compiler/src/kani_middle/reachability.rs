@@ -625,20 +625,22 @@ impl CallGraph {
             if !visited.contains(&to_visit) {
                 visited.insert(to_visit.clone());
                 queue.extend(
-                    self.back_edges.get(&to_visit).unwrap().iter().map(|item| item.as_node()),
+                    self.back_edges
+                        .get(&to_visit)
+                        .unwrap()
+                        .iter()
+                        .map(|item| Node::from(item.clone())),
                 );
             }
         }
 
         for node in &visited {
             writeln!(writer, r#""{node}""#)?;
-            for succ in self
-                .edges
-                .get(node)
-                .unwrap()
-                .iter()
-                .filter(|item| visited.contains(&item.as_node()))
-            {
+            let edges = self.edges.get(node).unwrap();
+            for succ in edges.iter().filter(|item| {
+                let node = Node::from((*item).clone());
+                visited.contains(&node)
+            }) {
                 let reason = succ.0.reason;
                 writeln!(writer, r#""{node}" -> "{succ}" [label={reason:?}] "#)?;
             }
@@ -667,8 +669,8 @@ impl Display for CollectedNode {
     }
 }
 
-impl CollectedNode {
-    pub fn as_node(&self) -> Node {
-        Node(self.0.item.clone())
+impl From<CollectedNode> for Node {
+    fn from(value: CollectedNode) -> Self {
+        Node(value.0.item)
     }
 }

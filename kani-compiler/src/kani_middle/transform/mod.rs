@@ -128,25 +128,19 @@ impl BodyTransformation {
         }
     }
 
-    /// Apply all per-body pass followed by the global passes and store the results in cache that
-    /// can later be queried by `body`.
-    pub fn apply_passes(
+    /// Run all global passes and store the results in a cache that can later be queried by `body`.
+    pub fn run_global_passes(
         &mut self,
         tcx: TyCtxt,
         starting_items: &[MonoItem],
         instances: Vec<Instance>,
         call_graph: CallGraph,
     ) {
-        let bodies: Vec<_> =
-            instances.into_iter().map(|instance| (self.body(tcx, instance), instance)).collect();
-        for global_pass in self.global_passes.iter_mut() {
-            let results = global_pass.transform(tcx, starting_items, bodies.clone(), &call_graph);
-            for (modified, body, instance) in results {
-                if modified {
-                    self.cache.insert(instance, TransformationResult::Modified(body));
-                }
-            }
+        let mut global_passes: Vec<_> = self.global_passes.drain(0..).collect();
+        for global_pass in global_passes.iter_mut() {
+            global_pass.transform(tcx, &call_graph, starting_items, instances.clone(), self);
         }
+        self.global_passes.extend(global_passes);
     }
 
     fn add_pass<P: TransformPass + 'static>(&mut self, query_db: &QueryDb, pass: P) {
@@ -199,10 +193,11 @@ pub(crate) trait GlobalPass: Debug {
     fn transform(
         &mut self,
         tcx: TyCtxt,
-        starting_items: &[MonoItem],
-        bodies: Vec<(Body, Instance)>,
         call_graph: &CallGraph,
-    ) -> Vec<(bool, Body, Instance)>;
+        starting_items: &[MonoItem],
+        instances: Vec<Instance>,
+        transformer: &mut BodyTransformation,
+    );
 }
 
 /// The transformation result.

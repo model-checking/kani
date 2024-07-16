@@ -108,7 +108,7 @@ impl GotocCodegenBackend {
             .collect();
 
         // Apply all transformation passes, including global passes.
-        transformer.apply_passes(tcx, starting_items, instances, call_graph);
+        transformer.run_global_passes(tcx, starting_items, instances, call_graph);
 
         // Follow rustc naming convention (cx is abbrev for context).
         // https://rustc-dev-guide.rust-lang.org/conventions.html#naming-conventions
