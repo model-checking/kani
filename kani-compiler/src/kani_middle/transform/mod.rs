@@ -136,11 +136,11 @@ impl BodyTransformation {
         instances: Vec<Instance>,
         call_graph: CallGraph,
     ) {
-        let mut global_passes: Vec<_> = self.global_passes.drain(0..).collect();
+        let mut global_passes = std::mem::take(&mut self.global_passes);
         for global_pass in global_passes.iter_mut() {
             global_pass.transform(tcx, &call_graph, starting_items, instances.clone(), self);
         }
-        self.global_passes.extend(global_passes);
+        std::mem::swap(&mut self.global_passes, &mut global_passes);
     }
 
     fn add_pass<P: TransformPass + 'static>(&mut self, query_db: &QueryDb, pass: P) {

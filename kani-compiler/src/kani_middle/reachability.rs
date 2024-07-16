@@ -193,9 +193,7 @@ impl<'tcx, 'a> MonoItemsCollector<'tcx, 'a> {
                 self.call_graph.add_edges(to_visit, &next_items);
 
                 self.queue.extend(next_items.into_iter().filter_map(
-                    |CollectedItem { item, .. }| {
-     (!self.collected.contains(&item)).then_some(item)
-                    },
+                    |CollectedItem { item, .. }| (!self.collected.contains(&item)).then_some(item),
                 ));
             }
         }
