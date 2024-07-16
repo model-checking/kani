@@ -194,7 +194,7 @@ impl<'tcx, 'a> MonoItemsCollector<'tcx, 'a> {
 
                 self.queue.extend(next_items.into_iter().filter_map(
                     |CollectedItem { item, .. }| {
-                        if !self.collected.contains(&item) { Some(item) } else { None }
+     (!self.collected.contains(&item)).then_some(item)
                     },
                 ));
             }
