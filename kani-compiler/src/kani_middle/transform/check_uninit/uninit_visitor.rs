@@ -37,6 +37,8 @@ pub enum MemoryInitOp {
     SetRef { operand: Operand, value: bool, position: InsertPosition },
     /// Unsupported memory initialization operation.
     Unsupported { reason: String },
+    /// Operation that trivially accesses uninitialized memory, results in injecting `assert!(false)`.
+    TriviallyUnsafe { reason: String },
 }
 
 impl MemoryInitOp {
@@ -63,7 +65,9 @@ impl MemoryInitOp {
                 },
                 projection: vec![],
             }),
-            MemoryInitOp::Unsupported { .. } => unreachable!(),
+            MemoryInitOp::Unsupported { .. } | MemoryInitOp::TriviallyUnsafe { .. } => {
+                unreachable!()
+            }
         }
     }
 
@@ -74,7 +78,8 @@ impl MemoryInitOp {
             MemoryInitOp::Check { .. }
             | MemoryInitOp::Set { .. }
             | MemoryInitOp::SetRef { .. }
-            | MemoryInitOp::Unsupported { .. } => unreachable!(),
+            | MemoryInitOp::Unsupported { .. }
+            | MemoryInitOp::TriviallyUnsafe { .. } => unreachable!(),
         }
     }
 
@@ -85,7 +90,8 @@ impl MemoryInitOp {
             | MemoryInitOp::SetRef { value, .. } => *value,
             MemoryInitOp::Check { .. }
             | MemoryInitOp::CheckSliceChunk { .. }
-            | MemoryInitOp::Unsupported { .. } => unreachable!(),
+            | MemoryInitOp::Unsupported { .. }
+            | MemoryInitOp::TriviallyUnsafe { .. } => unreachable!(),
         }
     }
 
@@ -96,7 +102,8 @@ impl MemoryInitOp {
             | MemoryInitOp::SetRef { position, .. } => *position,
             MemoryInitOp::Check { .. }
             | MemoryInitOp::CheckSliceChunk { .. }
-            | MemoryInitOp::Unsupported { .. } => InsertPosition::Before,
+            | MemoryInitOp::Unsupported { .. }
+            | MemoryInitOp::TriviallyUnsafe { .. } => InsertPosition::Before,
         }
     }
 }
@@ -598,7 +605,7 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                     } else if !tys_layout_compatible(&operand_ty, &ty) {
                         // If transmuting between two types of incompatible layouts, padding
                         // bytes are exposed, which is UB.
-                        self.push_target(MemoryInitOp::Unsupported {
+                        self.push_target(MemoryInitOp::TriviallyUnsafe {
                             reason: "Transmuting between types of incompatible layouts."
                                 .to_string(),
                         });
