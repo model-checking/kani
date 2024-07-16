@@ -17,10 +17,15 @@ use std::collections::HashSet;
 use std::fmt::Debug;
 use tracing::{debug, trace};
 
-/// Check if we can replace calls to any_modifies.
+/// Check if we can replace calls to any_modifies or write_any.
 ///
 /// This pass will replace the entire body, and it should only be applied to stubs
 /// that have a body.
+///
+/// write_any is replaced with one of write_any_slim, write_any_slice, or write_any_str
+/// depending on what the type of the input it
+///
+/// any_modifies is replaced with any
 #[derive(Debug)]
 pub struct AnyModifiesPass {
     kani_any: Option<FnDef>,
@@ -143,6 +148,7 @@ impl AnyModifiesPass {
                 changed = true;
             }
 
+            // if this is a valid kani::write_any function
             if let TyKind::RigidTy(RigidTy::FnDef(def, instance_args)) =
                 func.ty(&locals).unwrap().kind()
                 && Some(def) == self.kani_write_any
@@ -151,7 +157,9 @@ impl AnyModifiesPass {
                 && let Some(TypeAndMut { ty: internal_type, mutability: _ }) =
                     fn_sig.skip_binder().inputs()[0].kind().builtin_deref(true)
             {
+                // case on the type of the input
                 if let TyKind::RigidTy(RigidTy::Slice(_)) = internal_type.kind() {
+                    //if the input is a slice, use write_any_slice
                     let instance =
                         Instance::resolve(self.kani_write_any_slice.unwrap(), &instance_args)
                             .unwrap();
@@ -160,6 +168,7 @@ impl AnyModifiesPass {
                     let new_func = ConstOperand { span, user_ty: None, const_: literal };
                     *func = Operand::Constant(new_func);
                 } else if let TyKind::RigidTy(RigidTy::Str) = internal_type.kind() {
+                    //if the input is a str, use write_any_str
                     let instance =
                         Instance::resolve(self.kani_write_any_str.unwrap(), &instance_args)
                             .unwrap();
@@ -168,6 +177,7 @@ impl AnyModifiesPass {
                     let new_func = ConstOperand { span, user_ty: None, const_: literal };
                     *func = Operand::Constant(new_func);
                 } else {
+                    //otherwise, use write_any_slim
                     let instance =
                         Instance::resolve(self.kani_write_any_slim.unwrap(), &instance_args)
                             .unwrap();

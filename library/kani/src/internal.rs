@@ -112,6 +112,8 @@ pub unsafe fn write_any<T: ?Sized>(_pointer: *mut T) {
     unreachable!()
 }
 
+/// Fill in a slice with kani::any.
+/// Intended as a post compilation replacement for write_any
 #[crate::unstable(feature = "function-contracts", issue = "none", reason = "function-contracts")]
 #[rustc_diagnostic_item = "KaniWriteAnySlice"]
 #[inline(always)]
@@ -119,6 +121,8 @@ pub unsafe fn write_any_slice<T: Arbitrary>(slice: *mut [T]) {
     (*slice).fill_with(T::any)
 }
 
+/// Fill in a pointer with kani::any.
+/// Intended as a post compilation replacement for write_any
 #[crate::unstable(feature = "function-contracts", issue = "none", reason = "function-contracts")]
 #[rustc_diagnostic_item = "KaniWriteAnySlim"]
 #[inline(always)]
@@ -126,6 +130,9 @@ pub unsafe fn write_any_slim<T: Arbitrary>(pointer: *mut T) {
     ptr::write(pointer, T::any())
 }
 
+/// Fill in a str with kani::any.
+/// Intended as a post compilation replacement for write_any.
+/// Not yet implemented
 #[crate::unstable(feature = "function-contracts", issue = "none", reason = "function-contracts")]
 #[rustc_diagnostic_item = "KaniWriteAnyStr"]
 #[inline(always)]
