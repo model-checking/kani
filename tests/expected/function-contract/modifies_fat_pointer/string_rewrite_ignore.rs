@@ -14,6 +14,6 @@ fn to_upper(x: &mut str) {
 #[kani::proof_for_contract(to_upper)]
 fn harness() {
     let mut s = String::from("aaa");
-    let x : &mut str = s.as_mut_str();
+    let x: &mut str = s.as_mut_str();
     to_upper(x);
 }
