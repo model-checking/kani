@@ -153,7 +153,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         TyKind::RigidTy(RigidTy::Slice(elt_type)) => {
                             elt_type.layout().unwrap().shape().size.bytes()
                         }
-                        TyKind::RigidTy(RigidTy::Str) => 8,
+                        TyKind::RigidTy(RigidTy::Str) => 1,
                         // For adt, see https://rust-lang.zulipchat.com/#narrow/stream/182449-t-compiler.2Fhelp
                         TyKind::RigidTy(RigidTy::Adt(..)) => {
                             todo!("Adt fat pointers not implemented")

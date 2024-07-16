@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Zfunction-contracts
 
-// Test that modifies a slice containing bytesize data
+// Test that modifies a slice containing u32 size data
 
 #[kani::modifies(x)]
 #[kani::ensures(|_| x.iter().map(|v| *v == 0).fold(true,|a,b|a&b))]
