@@ -35,6 +35,7 @@ struct FutureBreakageItem {
 }
 
 #[derive(Deserialize, Clone)]
+#[allow(dead_code)]
 struct DiagnosticSpanMacroExpansion {
     /// name of macro that was applied (e.g., "foo!" or "#[derive(Eq)]")
     _macro_decl_name: String,
