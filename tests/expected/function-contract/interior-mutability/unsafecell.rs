@@ -5,17 +5,17 @@
 use std::cell::{Cell, UnsafeCell};
 use std::mem::transmute;
 
-trait ToHack<T : ?Sized> {
+trait ToHack<T: ?Sized> {
     unsafe fn hack(&self) -> &T;
 }
 
-impl<T : ?Sized> ToHack<T> for UnsafeCell<T> {
+impl<T: ?Sized> ToHack<T> for UnsafeCell<T> {
     unsafe fn hack(&self) -> &T {
         transmute(self)
     }
 }
 
-impl<T : ?Sized> ToHack<T> for Cell<T> {
+impl<T: ?Sized> ToHack<T> for Cell<T> {
     unsafe fn hack(&self) -> &T {
         transmute(self)
     }
