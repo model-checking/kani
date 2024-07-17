@@ -1,0 +1,31 @@
+Checking harness read_after_copy...
+
+Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `*const u64`
+
+VERIFICATION:- FAILED
+
+Checking harness non_byte_copy_without_padding...
+
+VERIFICATION:- SUCCESSFUL
+
+Checking harness copy_without_padding...
+
+VERIFICATION:- SUCCESSFUL
+
+Checking harness expose_padding_via_non_byte_copy...
+
+Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `*const u64`
+
+VERIFICATION:- FAILED
+
+Checking harness expose_padding_via_copy...
+
+Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `*const u64`
+
+VERIFICATION:- FAILED
+
+Summary:
+Verification failed for - read_after_copy
+Verification failed for - expose_padding_via_non_byte_copy
+Verification failed for - expose_padding_via_copy
+Complete - 2 successfully verified harnesses, 3 failures, 5 total.
