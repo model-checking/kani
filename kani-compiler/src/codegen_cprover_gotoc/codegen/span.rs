@@ -14,8 +14,21 @@ use std::collections::HashMap;
 
 lazy_static! {
     /// Pragmas key-value store to prevent CBMC from generating automatic checks.
+    /// This list is taken from https://github.com/diffblue/cbmc/blob/develop/regression/cbmc/pragma_cprover_enable_all/main.c.
     static ref PRAGMAS: HashMap<&'static str, &'static str> =
-        [("pointer", "disable:pointer-check")].iter().copied().collect();
+        [("bounds", "disable:bounds-check"),
+         ("pointer", "disable:pointer-check"),
+         ("div-by-zero", "disable:div-by-zero-check"),
+         ("float-div-by-zero", "disable:float-div-by-zero-check"),
+         ("enum-range", "disable:enum-range-check"),
+         ("signed-overflow", "disable:signed-overflow-check"),
+         ("unsigned-overflow", "disable:unsigned-overflow-check"),
+         ("pointer-overflow", "disable:pointer-overflow-check"),
+         ("float-overflow", "disable:float-overflow-check"),
+         ("conversion", "disable:conversion-check"),
+         ("undefined-shift", "disable:undefined-shift-check"),
+         ("nan", "disable:nan-check"),
+         ("pointer-primitive", "disable:pointer-primitive-check")].iter().copied().collect();
 }
 
 impl<'tcx> GotocCtx<'tcx> {
