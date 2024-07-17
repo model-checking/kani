@@ -156,11 +156,19 @@ impl<'a> ContractConditionsHandler<'a> {
             let sig = &mut self.annotated_fn.sig;
             for (arg, arg_type) in wrapper_args.clone().zip(type_params) {
                 // Add the type parameter to the function signature's generic parameters list
+                let mut bounds: syn::punctuated::Punctuated<syn::TypeParamBound, syn::token::Plus> =
+                    syn::punctuated::Punctuated::new();
+                bounds.push(syn::TypeParamBound::Trait(syn::TraitBound {
+                    paren_token: None,
+                    modifier: syn::TraitBoundModifier::Maybe(Token![?](Span::call_site())),
+                    lifetimes: None,
+                    path: syn::Ident::new("Sized", Span::call_site()).into(),
+                }));
                 sig.generics.params.push(syn::GenericParam::Type(syn::TypeParam {
                     attrs: vec![],
                     ident: arg_type.clone(),
-                    colon_token: None,
-                    bounds: Default::default(),
+                    colon_token: Some(Token![:](Span::call_site())),
+                    bounds: bounds,
                     eq_token: None,
                     default: None,
                 }));
