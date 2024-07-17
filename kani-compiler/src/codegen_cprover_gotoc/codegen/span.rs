@@ -52,7 +52,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     ).as_str())
                 })
                 .collect::<Vec<_>>()
-                .leak()
+                .leak() // This is to preserve `Location` being Copy, but could blow up the memory utilization of compiler. 
         };
         let loc = sp.get_lines();
         Location::new(
