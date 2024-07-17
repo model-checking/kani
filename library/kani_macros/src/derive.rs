@@ -376,9 +376,10 @@ fn struct_invariant_conjunction(ident: &Ident, fields: &Fields) -> TokenStream {
     match fields {
         // Expands to the expression
         // `true && <inv_cond1> && <inv_cond2> && ..`
-        // where `inv_condN` is either
-        //  * the condition `<cond>` specified through the `#[invariant(<cond>)]` helper attribute, or
-        //  * the call `self.fieldN.is_safe()`
+        // where `inv_condN` is
+        //  - `self.fieldN.is_safe() && <cond>` if a condition `<cond>` was
+        //    specified through the `#[invariant(<cond>)]` helper attribute, or
+        //  - `self.fieldN.is_safe()` otherwise
         //
         // Therefore, if `#[invariant(<cond>)]` isn't specified for any field, this expands to
         // `true && self.field1.is_safe() && self.field2.is_safe() && ..`
@@ -391,7 +392,9 @@ fn struct_invariant_conjunction(ident: &Ident, fields: &Fields) -> TokenStream {
                     let default_expr = quote_spanned! {field.span()=>
                         #name.is_safe()
                     };
-                    parse_inv_expr(ident, field).unwrap_or(default_expr)
+                    parse_inv_expr(ident, field)
+                        .map(|expr| quote! { #expr && #default_expr})
+                        .unwrap_or(default_expr)
                 })
                 .collect();
             // An initial value is required for empty structs
