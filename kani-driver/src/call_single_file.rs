@@ -140,7 +140,10 @@ impl KaniSession {
         }
 
         if self.args.common_args.unstable_features.contains(UnstableFeature::UninitChecks) {
-            flags.push("--ub-check=uninit".into())
+            // Automatically enable shadow memory, since the version of uninitialized memory checks
+            // without non-determinism depends on it.
+            flags.push("-Z ghost-state".into());
+            flags.push("--ub-check=uninit".into());
         }
 
         if self.args.ignore_locals_lifetime {

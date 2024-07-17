@@ -143,6 +143,41 @@ impl GotocHook for Assert {
     }
 }
 
+struct Check;
+impl GotocHook for Check {
+    fn hook_applies(&self, tcx: TyCtxt, instance: Instance) -> bool {
+        matches_function(tcx, instance.def, "KaniCheck")
+    }
+
+    fn handle(
+        &self,
+        gcx: &mut GotocCtx,
+        _instance: Instance,
+        mut fargs: Vec<Expr>,
+        _assign_to: &Place,
+        target: Option<BasicBlockIdx>,
+        span: Span,
+    ) -> Stmt {
+        assert_eq!(fargs.len(), 2);
+        let cond = fargs.remove(0).cast_to(Type::bool());
+        let msg = fargs.remove(0);
+        let msg = gcx.extract_const_message(&msg).unwrap();
+        let target = target.unwrap();
+        let caller_loc = gcx.codegen_caller_span_stable(span);
+
+        let (msg, reach_stmt) = gcx.codegen_reachability_check(msg, span);
+
+        Stmt::block(
+            vec![
+                reach_stmt,
+                gcx.codegen_assert(cond, PropertyClass::Assertion, &msg, caller_loc),
+                Stmt::goto(bb_label(target), caller_loc),
+            ],
+            caller_loc,
+        )
+    }
+}
+
 struct Nondet;
 
 impl GotocHook for Nondet {
@@ -510,6 +545,7 @@ pub fn fn_hooks() -> GotocHooks {
             Rc::new(Panic),
             Rc::new(Assume),
             Rc::new(Assert),
+            Rc::new(Check),
             Rc::new(Cover),
             Rc::new(Nondet),
             Rc::new(IsAllocated),

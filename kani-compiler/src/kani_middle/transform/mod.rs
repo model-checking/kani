@@ -60,7 +60,7 @@ impl BodyTransformation {
             inst_passes: vec![],
             cache: Default::default(),
         };
-        let check_type = CheckType::new(tcx);
+        let check_type = CheckType::new_assert_assume(tcx);
         transformer.add_pass(queries, FnStubPass::new(&unit.stubs));
         transformer.add_pass(queries, ExternFnStubPass::new(&unit.stubs));
         // This has to come after stubs since we want this to replace the stubbed body.
@@ -73,7 +73,11 @@ impl BodyTransformation {
         // generated code for future instrumentation passes.
         transformer.add_pass(
             queries,
-            UninitPass { check_type: check_type.clone(), mem_init_fn_cache: HashMap::new() },
+            UninitPass {
+                // Since this uses demonic non-determinism under the hood, should not assume the assertion.
+                check_type: CheckType::new_assert(tcx),
+                mem_init_fn_cache: HashMap::new(),
+            },
         );
         transformer.add_pass(
             queries,

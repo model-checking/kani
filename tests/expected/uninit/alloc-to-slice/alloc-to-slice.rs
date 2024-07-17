@@ -1,8 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-flags: -Z ghost-state -Z uninit-checks
+// kani-flags: -Z uninit-checks
 
-use std::alloc::{alloc, dealloc, Layout};
+use std::alloc::{alloc, Layout};
 use std::slice::from_raw_parts;
 
 /// Checks that Kani catches an attempt to form a slice from uninitialized memory.
