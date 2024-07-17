@@ -43,7 +43,7 @@ impl<'tcx> GotocCtx<'tcx> {
             rustc_span::symbol::Symbol::intern("disable_checks"),
         ];
         let pragmas: &'static [&str] = {
-            let disabled_checks = self
+            let disabled_checks: Vec<_> = self
                 .current_fn
                 .as_ref()
                 .map(|current_fn| {
@@ -52,7 +52,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         .get_attrs_by_path(instance.def.def_id(), &should_skip_ptr_checks_attr)
                         .collect()
                 })
-                .unwrap_or(vec![]);
+                .unwrap_or_default();
             disabled_checks
                 .iter()
                 .map(|attr| {
