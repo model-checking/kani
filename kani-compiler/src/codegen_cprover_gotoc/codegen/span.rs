@@ -5,12 +5,18 @@
 
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::Location;
+use lazy_static::lazy_static;
+use rustc_ast::Attribute;
 use rustc_smir::rustc_internal;
 use rustc_span::Span;
 use stable_mir::ty::Span as SpanStable;
+use std::collections::HashMap;
 
-/// Pragma to prevent CBMC from generating automatic pointer checks.
-const DISABLE_PTR_CHECK_PRAGMA: &str = "disable:pointer-check";
+lazy_static! {
+    /// Pragmas key-value store to prevent CBMC from generating automatic checks.
+    static ref PRAGMAS: HashMap<&'static str, &'static str> =
+        [("pointer", "disable:pointer-check")].iter().copied().collect();
+}
 
 impl<'tcx> GotocCtx<'tcx> {
     pub fn codegen_span(&self, sp: &Span) -> Location {
@@ -21,19 +27,32 @@ impl<'tcx> GotocCtx<'tcx> {
         // Attribute to mark functions as where automatic pointer checks should not be generated.
         let should_skip_ptr_checks_attr = vec![
             rustc_span::symbol::Symbol::intern("kanitool"),
-            rustc_span::symbol::Symbol::intern("skip_ptr_checks"),
+            rustc_span::symbol::Symbol::intern("disable_checks"),
         ];
-        let pragmas: &[&str] = {
-            let should_skip_ptr_checks = self
+        let pragmas: &'static [&str] = {
+            let disabled_checks = self
                 .current_fn
                 .as_ref()
                 .map(|current_fn| {
                     let instance = current_fn.instance();
                     self.tcx
-                        .has_attrs_with_path(instance.def.def_id(), &should_skip_ptr_checks_attr)
+                        .get_attrs_by_path(instance.def.def_id(), &should_skip_ptr_checks_attr)
+                        .collect()
                 })
-                .unwrap_or(false);
-            if should_skip_ptr_checks { &[DISABLE_PTR_CHECK_PRAGMA] } else { &[] }
+                .unwrap_or(vec![]);
+            disabled_checks
+                .iter()
+                .map(|attr| {
+                    let arg = parse_word(attr).expect(
+                        "incorrect value passed to `disable_checks`, expected a single identifier",
+                    );
+                    *PRAGMAS.get(arg.as_str()).expect(format!(
+                        "attempting to disable an unexisting check, the possible options are {:?}",
+                        PRAGMAS.keys()
+                    ).as_str())
+                })
+                .collect::<Vec<_>>()
+                .leak()
         };
         let loc = sp.get_lines();
         Location::new(
@@ -58,5 +77,20 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn codegen_caller_span(&self, span: &Span) -> Location {
         let topmost = span.ctxt().outer_expn().expansion_cause().unwrap_or(*span);
         self.codegen_span(&topmost)
+    }
+}
+
+/// Extracts the single argument from the attribute provided as a string.
+/// For example, `disable_checks(foo)` return `Some("foo")`
+fn parse_word(attr: &Attribute) -> Option<String> {
+    // Vector of meta items , that contain the arguments given the attribute
+    let attr_args = attr.meta_item_list()?;
+    // Only extracts one string ident as a string
+    if attr_args.len() == 1 {
+        attr_args[0].ident().map(|ident| ident.to_string())
+    }
+    // Return none if there are no attributes or if there's too many attributes
+    else {
+        None
     }
 }

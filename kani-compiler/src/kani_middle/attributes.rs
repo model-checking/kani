@@ -76,7 +76,7 @@ enum KaniAttributeKind {
     Recursion,
     /// Used to mark functions where generating automatic pointer checks should be disabled. This is
     /// used later to automatically attach pragma statements to locations.
-    SkipPtrChecks,
+    DisableChecks,
 }
 
 impl KaniAttributeKind {
@@ -97,7 +97,7 @@ impl KaniAttributeKind {
             | KaniAttributeKind::Modifies
             | KaniAttributeKind::InnerCheck
             | KaniAttributeKind::IsContractGenerated
-            | KaniAttributeKind::SkipPtrChecks => false,
+            | KaniAttributeKind::DisableChecks => false,
         }
     }
 
@@ -386,11 +386,9 @@ impl<'tcx> KaniAttributes<'tcx> {
                 KaniAttributeKind::InnerCheck => {
                     self.inner_check();
                 }
-                KaniAttributeKind::SkipPtrChecks => {
-                    expect_single(self.tcx, kind, &attrs);
-                    attrs.iter().for_each(|attr| {
-                        expect_no_args(self.tcx, kind, attr);
-                    })
+                KaniAttributeKind::DisableChecks => {
+                    // Ignored here, because it should be an internal attribute. Actual validation
+                    // happens when pragmas are generated.
                 }
             }
         }
@@ -501,7 +499,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                 | KaniAttributeKind::ReplacedWith => {
                     self.tcx.dcx().span_err(self.tcx.def_span(self.item), format!("Contracts are not supported on harnesses. (Found the kani-internal contract attribute `{}`)", kind.as_ref()));
                 },
-                KaniAttributeKind::SkipPtrChecks => {
+                KaniAttributeKind::DisableChecks => {
                     // Internal attribute which shouldn't exist here.
                     unreachable!()
                 }
