@@ -1,0 +1,6 @@
+assertion\
+- Status: SUCCESS\
+- Description: "|_| unsafe{x.x.hack()}.value.value < 101"\
+in function max
+
+VERIFICATION:- SUCCESSFUL
