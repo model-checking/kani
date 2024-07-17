@@ -94,7 +94,7 @@ fn fn_any_body(ident: &Ident, data: &Data) -> TokenStream {
     }
 }
 
-/// Parse the condition expressions in `#[invariant(<cond>)]` attached to struct
+/// Parse the condition expressions in `#[safety_constraint(<cond>)]` attached to struct
 /// fields and, it at least one was found, generate a conjunction to be assumed.
 ///
 /// For example, if we're deriving implementations for the struct
@@ -102,9 +102,9 @@ fn fn_any_body(ident: &Ident, data: &Data) -> TokenStream {
 /// #[derive(Arbitrary)]
 /// #[derive(Invariant)]
 /// struct PositivePoint {
-///     #[invariant(*x >= 0)]
+///     #[safety_constraint(*x >= 0)]
 ///     x: i32,
-///     #[invariant(*y >= 0)]
+///     #[safety_constraint(*y >= 0)]
 ///     y: i32,
 /// }
 /// ```
@@ -144,9 +144,9 @@ fn inv_conds_inner(ident: &Ident, fields: &Fields) -> Option<TokenStream> {
 /// #[derive(Arbitrary)]
 /// #[derive(Invariant)]
 /// struct PositivePoint {
-///     #[invariant(*x >= 0)]
+///     #[safety_constraint(*x >= 0)]
 ///     x: i32,
-///     #[invariant(*y >= 0)]
+///     #[safety_constraint(*y >= 0)]
 ///     y: i32,
 /// }
 /// ```
@@ -232,7 +232,7 @@ fn init_symbolic_item(ident: &Ident, fields: &Fields) -> TokenStream {
 }
 
 /// Extract, parse and return the expression `cond` (i.e., `Some(cond)`) in the
-/// `#[invariant(<cond>)]` attribute helper associated with a given field.
+/// `#[safety_constraint(<cond>)]` attribute helper associated with a given field.
 /// Return `None` if the attribute isn't specified.
 fn parse_inv_expr(ident: &Ident, field: &syn::Field) -> Option<TokenStream> {
     let name = &field.ident;
@@ -378,10 +378,10 @@ fn struct_invariant_conjunction(ident: &Ident, fields: &Fields) -> TokenStream {
         // `true && <inv_cond1> && <inv_cond2> && ..`
         // where `inv_condN` is
         //  - `self.fieldN.is_safe() && <cond>` if a condition `<cond>` was
-        //    specified through the `#[invariant(<cond>)]` helper attribute, or
+        //    specified through the `#[safety_constraint(<cond>)]` helper attribute, or
         //  - `self.fieldN.is_safe()` otherwise
         //
-        // Therefore, if `#[invariant(<cond>)]` isn't specified for any field, this expands to
+        // Therefore, if `#[safety_constraint(<cond>)]` isn't specified for any field, this expands to
         // `true && self.field1.is_safe() && self.field2.is_safe() && ..`
         Fields::Named(ref fields) => {
             let inv_conds: Vec<TokenStream> = fields

@@ -9,9 +9,9 @@ use kani::Invariant;
 
 #[derive(kani::Arbitrary)]
 struct PositivePoint {
-    #[invariant(*x >= 0)]
+    #[safety_constraint(*x >= 0)]
     x: i32,
-    #[invariant(*y >= 0)]
+    #[safety_constraint(*y >= 0)]
     y: i32,
 }
 

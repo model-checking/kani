@@ -11,8 +11,8 @@ use kani::Invariant;
 #[derive(kani::Invariant)]
 struct PositivePoint {
     // Note: `x` is a reference in this context, we should refer to `*x`
-    #[invariant(x >= 0)]
+    #[safety_constraint(x >= 0)]
     x: i32,
-    #[invariant(*y >= 0)]
+    #[safety_constraint(*y >= 0)]
     y: i32,
 }

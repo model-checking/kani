@@ -11,9 +11,9 @@ use kani::Invariant;
 #[derive(kani::Arbitrary)]
 #[derive(kani::Invariant)]
 struct PositivePoint {
-    #[invariant(is_coordinate_safe(x))]
+    #[safety_constraint(is_coordinate_safe(x))]
     x: i32,
-    #[invariant(is_coordinate_safe(y))]
+    #[safety_constraint(is_coordinate_safe(y))]
     y: i32,
 }
 
