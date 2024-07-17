@@ -46,6 +46,10 @@ VERIFICATION:- SUCCESSFUL
 
 Checking harness check_copy...
 
+VERIFICATION:- SUCCESSFUL
+
+Checking harness check_copy_read...
+
 Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `*const u8`
 
 VERIFICATION:- FAILED
@@ -56,6 +60,10 @@ VERIFICATION:- SUCCESSFUL
 
 Checking harness check_copy_nonoverlapping...
 
+VERIFICATION:- SUCCESSFUL
+
+Checking harness check_copy_nonoverlapping_read...
+
 Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `*const u8`
 
 VERIFICATION:- FAILED
@@ -65,6 +73,6 @@ Verification failed for - check_typed_swap_safe
 Verification failed for - check_typed_swap
 Verification failed for - check_volatile_load
 Verification failed for - check_compare_bytes
-Verification failed for - check_copy
-Verification failed for - check_copy_nonoverlapping
-Complete - 5 successfully verified harnesses, 6 failures, 11 total.
+Verification failed for - check_copy_read
+Verification failed for - check_copy_nonoverlapping_read
+Complete - 7 successfully verified harnesses, 6 failures, 13 total.
