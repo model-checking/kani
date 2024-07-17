@@ -16,7 +16,7 @@ unsafe fn expose_padding_via_copy() {
     let to_ptr = &mut to as *mut u64;
 
     // This should not cause UB since `copy` is untyped.
-    std::ptr::copy(from_ptr as *const u8, to_ptr as *mut u8, std::mem::size_of::<S>()); 
+    std::ptr::copy(from_ptr as *const u8, to_ptr as *mut u8, std::mem::size_of::<S>());
 
     // This reads uninitialized bytes, which is UB.
     let padding: u64 = std::ptr::read(to_ptr);
@@ -32,7 +32,7 @@ unsafe fn expose_padding_via_non_byte_copy() {
     let to_ptr = &mut to as *mut u64;
 
     // This should not cause UB since `copy` is untyped.
-    std::ptr::copy(from_ptr as *const u64, to_ptr as *mut u64, 1); 
+    std::ptr::copy(from_ptr as *const u64, to_ptr as *mut u64, 1);
 
     // This reads uninitialized bytes, which is UB.
     let padding: u64 = std::ptr::read(to_ptr);
@@ -51,7 +51,7 @@ unsafe fn copy_without_padding() {
     std::ptr::copy(from_ptr as *const u8, to_ptr as *mut u8, std::mem::size_of::<u32>());
 
     // Since the previous copy only copied 4 bytes, no padding was copied, so no padding is read.
-    let data: u64 = std::ptr::read(to_ptr); 
+    let data: u64 = std::ptr::read(to_ptr);
 }
 
 #[kani::proof]
@@ -67,7 +67,7 @@ unsafe fn non_byte_copy_without_padding() {
     std::ptr::copy(from_ptr as *const u32, to_ptr as *mut u32, 1);
 
     // Since the previous copy only copied 4 bytes, no padding was copied, so no padding is read.
-    let data: u64 = std::ptr::read(to_ptr); 
+    let data: u64 = std::ptr::read(to_ptr);
 }
 
 #[kani::proof]
@@ -83,5 +83,5 @@ unsafe fn read_after_copy() {
     std::ptr::copy(from_ptr as *const u8, to_ptr as *mut u8, std::mem::size_of::<u64>());
 
     // Reading padding from the previous place should be UB even after copy.
-    let data: u64 = std::ptr::read(from_ptr as *const u64); 
+    let data: u64 = std::ptr::read(from_ptr as *const u64);
 }
