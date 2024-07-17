@@ -159,7 +159,7 @@ pub fn unstable_feature(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// `kani::cover!(...)` checks and watching out for unreachable assertions in
 /// their project's code.
 #[proc_macro_error]
-#[proc_macro_derive(Arbitrary, attributes(invariant))]
+#[proc_macro_derive(Arbitrary, attributes(safety_constraint))]
 pub fn derive_arbitrary(item: TokenStream) -> TokenStream {
     derive::expand_derive_arbitrary(item)
 }
@@ -213,7 +213,7 @@ pub fn derive_arbitrary(item: TokenStream) -> TokenStream {
 /// Note: the assignments to `obj` and `inner` are made so that we can treat the
 /// fields as if they were references.
 #[proc_macro_error]
-#[proc_macro_derive(Invariant, attributes(invariant))]
+#[proc_macro_derive(Invariant, attributes(safety_constraint))]
 pub fn derive_invariant(item: TokenStream) -> TokenStream {
     derive::expand_derive_invariant(item)
 }
