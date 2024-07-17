@@ -1,0 +1,6 @@
+assertion\
+- Status: SUCCESS\
+- Description: "|_| unsafe{ x.x.hack() }.is_some()"\
+in function modify
+
+VERIFICATION:- SUCCESSFUL

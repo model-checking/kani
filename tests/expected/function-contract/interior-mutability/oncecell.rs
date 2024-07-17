@@ -30,18 +30,18 @@ impl<T> ToHack<Option<T>> for OnceCell<T> {
 // ---------------------------------------------------
 
 struct InteriorMutability {
-    x: Cell<u32>,
+    x: OnceCell<u32>,
 }
 
-#[kani::requires(*unsafe{x.x.hack()} < 100)]
+#[kani::requires(unsafe{x.x.hack()}.is_none())]
 #[kani::modifies(x.x.hack())]
-#[kani::ensures(|_| *unsafe{x.x.hack()} < 101)]
+#[kani::ensures(|_| unsafe{x.x.hack()}.is_some())]
 fn modify(x: &InteriorMutability) {
-    x.x.set(x.x.get() + 1)
+    x.x.set(5).expect("")
 }
 
 #[kani::proof_for_contract(modify)]
 fn main() {
-    let x: InteriorMutability = InteriorMutability { x: Cell::new(kani::any()) };
+    let x: InteriorMutability = InteriorMutability { x: OnceCell::new() };
     modify(&x)
 }

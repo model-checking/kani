@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Zfunction-contracts
 
-use std::cell::{Cell, UnsafeCell};
+use std::cell::{Cell, OnceCell, UnsafeCell};
 use std::mem::transmute;
 
 trait ToHack<T: ?Sized> {
@@ -17,6 +17,12 @@ impl<T: ?Sized> ToHack<T> for UnsafeCell<T> {
 
 impl<T: ?Sized> ToHack<T> for Cell<T> {
     unsafe fn hack(&self) -> &T {
+        transmute(self)
+    }
+}
+
+impl<T> ToHack<Option<T>> for OnceCell<T> {
+    unsafe fn hack(&self) -> &Option<T> {
         transmute(self)
     }
 }
