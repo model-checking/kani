@@ -24,9 +24,7 @@ use kani_metadata::artifact::convert_type;
 use kani_metadata::UnsupportedFeature;
 use kani_metadata::{ArtifactType, HarnessMetadata, KaniMetadata};
 use kani_metadata::{AssignsContract, CompilerArtifactStub};
-use rustc_codegen_ssa::back::archive::{
-    DEFAULT_OBJECT_READER, ArArchiveBuilder, ArchiveBuilder,
-};
+use rustc_codegen_ssa::back::archive::{ArArchiveBuilder, ArchiveBuilder, DEFAULT_OBJECT_READER};
 use rustc_codegen_ssa::back::metadata::create_wrapper_file;
 use rustc_codegen_ssa::traits::CodegenBackend;
 use rustc_codegen_ssa::{CodegenResults, CrateInfo};
