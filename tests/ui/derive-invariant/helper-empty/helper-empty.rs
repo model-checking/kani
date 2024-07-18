@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-//! Check the compilation error for the invariant attribute helper when an
+//! Check the compilation error for the `#[safety_constraint(...)]` attribute helper when an
 //! argument isn't provided.
 
 extern crate kani;

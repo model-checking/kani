@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-//! Check that the invariant attribute helper adds the conditions provided to
+//! Check that the `#[safety_constraint(...)]` attribute helper adds the conditions provided to
 //! the attribute to the derived `Arbitrary` implementation.
 
 extern crate kani;

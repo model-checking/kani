@@ -240,12 +240,12 @@ fn parse_inv_expr(ident: &Ident, field: &syn::Field) -> Option<TokenStream> {
 
     // Keep the helper attribute if we find it
     for attr in &field.attrs {
-        if attr.path().is_ident("invariant") {
+        if attr.path().is_ident("safety_constraint") {
             inv_helper_attr = Some(attr);
         }
     }
 
-    // Parse the arguments in the invariant helper attribute
+    // Parse the arguments in the `#[safety_constraint(...)]` attribute
     if let Some(attr) = inv_helper_attr {
         let expr_args: Result<syn::Expr, syn::Error> = attr.parse_args();
 

@@ -1,8 +1,9 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-//! Check that the invariant attribute helper adds the conditions provided to
-//! the attribute to the derived `Invariant` implementation.
+//! Check that functions can be called in the `#[safety_constraint(...)]` attribute helpers.
+//! This is like the `invariant_helper` test but using a function instead
+//! of passing in a predicate.
 
 extern crate kani;
 use kani::Invariant;
@@ -10,10 +11,14 @@ use kani::Invariant;
 #[derive(kani::Arbitrary)]
 #[derive(kani::Invariant)]
 struct PositivePoint {
-    #[safety_constraint(*x >= 0)]
+    #[safety_constraint(is_coordinate_safe(x))]
     x: i32,
-    #[safety_constraint(*y >= 0)]
+    #[safety_constraint(is_coordinate_safe(y))]
     y: i32,
+}
+
+fn is_coordinate_safe(val: &i32) -> bool {
+    *val >= 0
 }
 
 #[kani::proof]
