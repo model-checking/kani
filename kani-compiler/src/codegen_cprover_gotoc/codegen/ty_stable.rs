@@ -44,7 +44,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     pub fn codegen_fndef_type_stable(&mut self, instance: Instance) -> Type {
-        let func = self.symbol_name_stable(instance);
+        let func = instance.mangled_name();
         self.ensure_struct(
             format!("{func}::FnDefStruct"),
             format!("{}::FnDefStruct", instance.name()),

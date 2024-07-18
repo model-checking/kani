@@ -11,7 +11,7 @@ use rustc_middle::ty::TyCtxt;
 use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::visit::{Location, MirVisitor};
-use stable_mir::mir::{Body, Constant, LocalDecl, Operand, Terminator, TerminatorKind};
+use stable_mir::mir::{Body, ConstOperand, LocalDecl, Operand, Terminator, TerminatorKind};
 use stable_mir::ty::{FnDef, MirConst, RigidTy, TyKind};
 use stable_mir::CrateDef;
 use std::collections::HashMap;
@@ -43,7 +43,7 @@ impl TransformPass for FnStubPass {
     }
 
     /// Transform the function body by replacing it with the stub body.
-    fn transform(&self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
+    fn transform(&mut self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
         trace!(function=?instance.name(), "transform");
         let ty = instance.ty();
         if let TyKind::RigidTy(RigidTy::FnDef(fn_def, mut args)) = ty.kind() {
@@ -103,7 +103,7 @@ impl TransformPass for ExternFnStubPass {
     ///
     /// We need to find function calls and function pointers.
     /// We should replace this with a visitor once StableMIR includes a mutable one.
-    fn transform(&self, _tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
+    fn transform(&mut self, _tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
         trace!(function=?instance.name(), "transform");
         let mut new_body = MutableBody::from(body);
         let changed = false;
@@ -199,7 +199,7 @@ impl<'a> MutMirVisitor for ExternFnStubVisitor<'a> {
                     let instance = Instance::resolve(*new_def, &args).unwrap();
                     let literal = MirConst::try_new_zero_sized(instance.ty()).unwrap();
                     let span = term.span;
-                    let new_func = Constant { span, user_ty: None, literal };
+                    let new_func = ConstOperand { span, user_ty: None, const_: literal };
                     *func = Operand::Constant(new_func);
                     self.changed = true;
                 }
@@ -212,12 +212,12 @@ impl<'a> MutMirVisitor for ExternFnStubVisitor<'a> {
         let func_ty = operand.ty(&self.locals).unwrap();
         if let TyKind::RigidTy(RigidTy::FnDef(orig_def, args)) = func_ty.kind() {
             if let Some(new_def) = self.stubs.get(&orig_def) {
-                let Operand::Constant(Constant { span, .. }) = operand else {
+                let Operand::Constant(ConstOperand { span, .. }) = operand else {
                     unreachable!();
                 };
                 let instance = Instance::resolve_for_fn_ptr(*new_def, &args).unwrap();
                 let literal = MirConst::try_new_zero_sized(instance.ty()).unwrap();
-                let new_func = Constant { span: *span, user_ty: None, literal };
+                let new_func = ConstOperand { span: *span, user_ty: None, const_: literal };
                 *operand = Operand::Constant(new_func);
                 self.changed = true;
             }

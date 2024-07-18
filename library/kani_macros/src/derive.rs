@@ -23,7 +23,7 @@ pub fn expand_derive_arbitrary(item: proc_macro::TokenStream) -> proc_macro::Tok
     let item_name = &derive_item.ident;
 
     // Add a bound `T: Arbitrary` to every type parameter T.
-    let generics = add_trait_bound(derive_item.generics);
+    let generics = add_trait_bound_arbitrary(derive_item.generics);
     // Generate an expression to sum up the heap size of each field.
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
@@ -40,7 +40,7 @@ pub fn expand_derive_arbitrary(item: proc_macro::TokenStream) -> proc_macro::Tok
 }
 
 /// Add a bound `T: Arbitrary` to every type parameter T.
-fn add_trait_bound(mut generics: Generics) -> Generics {
+fn add_trait_bound_arbitrary(mut generics: Generics) -> Generics {
     generics.params.iter_mut().for_each(|param| {
         if let GenericParam::Type(type_param) = param {
             type_param.bounds.push(parse_quote!(kani::Arbitrary));
@@ -161,6 +161,96 @@ fn fn_any_enum(ident: &Ident, data: &DataEnum) -> TokenStream {
         quote! {
             match kani::any() {
                 #(#arms)*
+            }
+        }
+    }
+}
+
+pub fn expand_derive_invariant(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let derive_item = parse_macro_input!(item as DeriveInput);
+    let item_name = &derive_item.ident;
+
+    // Add a bound `T: Invariant` to every type parameter T.
+    let generics = add_trait_bound_invariant(derive_item.generics);
+    // Generate an expression to sum up the heap size of each field.
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+
+    let body = is_safe_body(&item_name, &derive_item.data);
+    let expanded = quote! {
+        // The generated implementation.
+        impl #impl_generics kani::Invariant for #item_name #ty_generics #where_clause {
+            fn is_safe(&self) -> bool {
+                #body
+            }
+        }
+    };
+    proc_macro::TokenStream::from(expanded)
+}
+
+/// Add a bound `T: Invariant` to every type parameter T.
+fn add_trait_bound_invariant(mut generics: Generics) -> Generics {
+    generics.params.iter_mut().for_each(|param| {
+        if let GenericParam::Type(type_param) = param {
+            type_param.bounds.push(parse_quote!(kani::Invariant));
+        }
+    });
+    generics
+}
+
+fn is_safe_body(ident: &Ident, data: &Data) -> TokenStream {
+    match data {
+        Data::Struct(struct_data) => struct_safe_conjunction(ident, &struct_data.fields),
+        Data::Enum(_) => {
+            abort!(Span::call_site(), "Cannot derive `Invariant` for `{}` enum", ident;
+                note = ident.span() =>
+                "`#[derive(Invariant)]` cannot be used for enums such as `{}`", ident
+            )
+        }
+        Data::Union(_) => {
+            abort!(Span::call_site(), "Cannot derive `Invariant` for `{}` union", ident;
+                note = ident.span() =>
+                "`#[derive(Invariant)]` cannot be used for unions such as `{}`", ident
+            )
+        }
+    }
+}
+
+/// Generates an expression that is the conjunction of `is_safe` calls for each field in the struct.
+fn struct_safe_conjunction(_ident: &Ident, fields: &Fields) -> TokenStream {
+    match fields {
+        // Expands to the expression
+        // `true && self.field1.is_safe() && self.field2.is_safe() && ..`
+        Fields::Named(ref fields) => {
+            let safe_calls = fields.named.iter().map(|field| {
+                let name = &field.ident;
+                quote_spanned! {field.span()=>
+                    self.#name.is_safe()
+                }
+            });
+            // An initial value is required for empty structs
+            safe_calls.fold(quote! { true }, |acc, call| {
+                quote! { #acc && #call }
+            })
+        }
+        Fields::Unnamed(ref fields) => {
+            // Expands to the expression
+            // `true && self.0.is_safe() && self.1.is_safe() && ..`
+            let safe_calls = fields.unnamed.iter().enumerate().map(|(i, field)| {
+                let idx = syn::Index::from(i);
+                quote_spanned! {field.span()=>
+                    self.#idx.is_safe()
+                }
+            });
+            // An initial value is required for empty structs
+            safe_calls.fold(quote! { true }, |acc, call| {
+                quote! { #acc && #call }
+            })
+        }
+        // Expands to the expression
+        // `true`
+        Fields::Unit => {
+            quote! {
+                true
             }
         }
     }

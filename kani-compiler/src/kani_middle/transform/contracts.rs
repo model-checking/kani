@@ -10,7 +10,7 @@ use cbmc::{InternString, InternedString};
 use rustc_middle::ty::TyCtxt;
 use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::Instance;
-use stable_mir::mir::{Body, Constant, Operand, TerminatorKind};
+use stable_mir::mir::{Body, ConstOperand, Operand, TerminatorKind};
 use stable_mir::ty::{FnDef, MirConst, RigidTy, TyKind};
 use stable_mir::{CrateDef, DefId};
 use std::collections::HashSet;
@@ -47,7 +47,7 @@ impl TransformPass for AnyModifiesPass {
     }
 
     /// Transform the function body by replacing it with the stub body.
-    fn transform(&self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
+    fn transform(&mut self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
         trace!(function=?instance.name(), "AnyModifiesPass::transform");
 
         if instance.def.def_id() == self.kani_any.unwrap().def_id() {
@@ -113,7 +113,7 @@ impl AnyModifiesPass {
                 let instance = Instance::resolve(self.kani_any.unwrap(), &instance_args).unwrap();
                 let literal = MirConst::try_new_zero_sized(instance.ty()).unwrap();
                 let span = bb.terminator.span;
-                let new_func = Constant { span, user_ty: None, literal };
+                let new_func = ConstOperand { span, user_ty: None, const_: literal };
                 *func = Operand::Constant(new_func);
                 changed = true;
             }

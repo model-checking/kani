@@ -18,6 +18,8 @@
 #![allow(internal_features)]
 // Required for implementing memory predicates.
 #![feature(ptr_metadata)]
+#![feature(f16)]
+#![feature(f128)]
 
 pub mod arbitrary;
 #[cfg(feature = "concrete_playback")]
@@ -33,6 +35,7 @@ pub mod vec;
 #[doc(hidden)]
 pub mod internal;
 
+mod mem_init;
 mod models;
 
 pub use arbitrary::Arbitrary;
@@ -117,6 +120,30 @@ pub const fn assert(cond: bool, msg: &'static str) {
 #[inline(never)]
 #[rustc_diagnostic_item = "KaniAssert"]
 pub const fn assert(cond: bool, msg: &'static str) {
+    assert!(cond, "{}", msg);
+}
+
+/// Creates an assertion of the specified condition, but does not assume it afterwards.
+///
+/// # Example:
+///
+/// ```rust
+/// let x: bool = kani::any();
+/// let y = !x;
+/// kani::check(x || y, "ORing a boolean variable with its negation must be true")
+/// ```
+#[cfg(not(feature = "concrete_playback"))]
+#[inline(never)]
+#[rustc_diagnostic_item = "KaniCheck"]
+pub const fn check(cond: bool, msg: &'static str) {
+    let _ = cond;
+    let _ = msg;
+}
+
+#[cfg(feature = "concrete_playback")]
+#[inline(never)]
+#[rustc_diagnostic_item = "KaniCheck"]
+pub const fn check(cond: bool, msg: &'static str) {
     assert!(cond, "{}", msg);
 }
 

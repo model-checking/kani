@@ -57,7 +57,7 @@ impl<'tcx> GotocCtx<'tcx> {
     ) -> Expr {
         debug!(?op, ?left_op, ?right_op, "codegen_comparison_fat_ptr");
         let left_typ = self.operand_ty_stable(left_op);
-        let right_typ = self.operand_ty_stable(left_op);
+        let right_typ = self.operand_ty_stable(right_op);
         assert_eq!(left_typ, right_typ, "Cannot compare pointers of different types");
         assert!(self.is_fat_pointer_stable(left_typ));
 
@@ -1299,7 +1299,7 @@ impl<'tcx> GotocCtx<'tcx> {
         debug!(?vtable_field_name, ?vtable_type, "codegen_vtable_method_field");
 
         // Lookup in the symbol table using the full symbol table name/key
-        let fn_name = self.symbol_name_stable(instance);
+        let fn_name = instance.mangled_name();
 
         if let Some(fn_symbol) = self.symbol_table.lookup(&fn_name) {
             if self.vtable_ctx.emit_vtable_restrictions {

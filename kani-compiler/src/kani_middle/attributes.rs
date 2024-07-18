@@ -628,7 +628,7 @@ fn parse_modify_values<'a>(
     std::iter::from_fn(move || {
         let tree = iter.next()?;
         let wrong_token_err =
-            || tcx.sess.psess.dcx.span_err(tree.span(), "Unexpected token. Expected identifier.");
+            || tcx.sess.dcx().span_err(tree.span(), "Unexpected token. Expected identifier.");
         let result = match tree {
             TokenTree::Token(token, _) => {
                 if let TokenKind::Ident(id, _) = &token.kind {
@@ -655,7 +655,7 @@ fn parse_modify_values<'a>(
         match iter.next() {
             None | Some(comma_tok!()) => (),
             Some(not_comma) => {
-                tcx.sess.psess.dcx.span_err(
+                tcx.sess.dcx().span_err(
                     not_comma.span(),
                     "Unexpected token, expected end of attribute or comma",
                 );
@@ -1034,10 +1034,9 @@ fn attr_kind(tcx: TyCtxt, attr: &Attribute) -> Option<KaniAttributeKind> {
                     .intersperse("::")
                     .collect::<String>();
                 KaniAttributeKind::try_from(ident_str.as_str())
-                    .map_err(|err| {
+                    .inspect_err(|&err| {
                         debug!(?err, "attr_kind_failed");
                         tcx.dcx().span_err(attr.span, format!("unknown attribute `{ident_str}`"));
-                        err
                     })
                     .ok()
             } else {

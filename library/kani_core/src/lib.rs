@@ -17,6 +17,8 @@
 
 #![feature(no_core)]
 #![no_core]
+#![feature(f16)]
+#![feature(f128)]
 
 mod arbitrary;
 mod mem;
@@ -119,6 +121,30 @@ macro_rules! kani_intrinsics {
         #[inline(never)]
         #[rustc_diagnostic_item = "KaniAssert"]
         pub const fn assert(cond: bool, msg: &'static str) {
+            assert!(cond, "{}", msg);
+        }
+
+        /// Creates an assertion of the specified condition and message, but does not assume it afterwards.
+        ///
+        /// # Example:
+        ///
+        /// ```rust
+        /// let x: bool = kani::any();
+        /// let y = !x;
+        /// kani::check(x || y, "ORing a boolean variable with its negation must be true")
+        /// ```
+        #[cfg(not(feature = "concrete_playback"))]
+        #[inline(never)]
+        #[rustc_diagnostic_item = "KaniCheck"]
+        pub const fn check(cond: bool, msg: &'static str) {
+            let _ = cond;
+            let _ = msg;
+        }
+
+        #[cfg(feature = "concrete_playback")]
+        #[inline(never)]
+        #[rustc_diagnostic_item = "KaniCheck"]
+        pub const fn check(cond: bool, msg: &'static str) {
             assert!(cond, "{}", msg);
         }
 
