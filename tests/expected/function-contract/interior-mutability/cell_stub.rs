@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Zfunction-contracts
 
+// The objective of this test is to show that the contracts for double can be replaced as a stub within the contracts for quadruple.
+// This shows that we can generate kani::any() for Cell safely by breaking encapsulation
+
 // ---------------------------------------------------
 //        Abstraction Breaking Functionality
 // ---------------------------------------------------

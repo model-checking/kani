@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Zfunction-contracts
 
+// The objective of this test is to check the modification of a Cell used as interior mutability in an immutable struct
+
 // ---------------------------------------------------
 //        Abstraction Breaking Functionality
 // ---------------------------------------------------
