@@ -29,10 +29,10 @@ pub fn expand_derive_arbitrary(item: proc_macro::TokenStream) -> proc_macro::Tok
 
     let body = fn_any_body(&item_name, &derive_item.data);
 
-    // Get the invariant conditions (if any) to produce type-safe values
-    let inv_conds_opt = inv_conds(&item_name, &derive_item.data);
+    // Get the safety constraints (if any) to produce type-safe values
+    let safety_conds_opt = safety_conds(&item_name, &derive_item.data);
 
-    let expanded = if let Some(inv_cond) = inv_conds_opt {
+    let expanded = if let Some(safety_cond) = safety_conds_opt {
         let field_refs = field_refs(&item_name, &derive_item.data);
         quote! {
             // The generated implementation.
@@ -40,7 +40,7 @@ pub fn expand_derive_arbitrary(item: proc_macro::TokenStream) -> proc_macro::Tok
                 fn any() -> Self {
                     let obj = #body;
                     #field_refs
-                    kani::assume(#inv_cond);
+                    kani::assume(#safety_cond);
                     obj
                 }
             }
@@ -114,21 +114,21 @@ fn fn_any_body(ident: &Ident, data: &Data) -> TokenStream {
 /// ```
 /// which can be passed to `kani::assume` to constrain the values generated
 /// through the `Arbitrary` impl so that they are type-safe by construction.
-fn inv_conds(ident: &Ident, data: &Data) -> Option<TokenStream> {
+fn safety_conds(ident: &Ident, data: &Data) -> Option<TokenStream> {
     match data {
-        Data::Struct(struct_data) => inv_conds_inner(ident, &struct_data.fields),
+        Data::Struct(struct_data) => safety_conds_inner(ident, &struct_data.fields),
         Data::Enum(_) => None,
         Data::Union(_) => None,
     }
 }
 
 /// Generates an expression resulting from the conjunction of conditions
-/// specified as invariants for each field. See `inv_conds` for more details.
-fn inv_conds_inner(ident: &Ident, fields: &Fields) -> Option<TokenStream> {
+/// specified as safety constraints for each field. See `safety_conds` for more details.
+fn safety_conds_inner(ident: &Ident, fields: &Fields) -> Option<TokenStream> {
     match fields {
         Fields::Named(ref fields) => {
             let conds: Vec<TokenStream> =
-                fields.named.iter().filter_map(|field| parse_inv_expr(ident, field)).collect();
+                fields.named.iter().filter_map(|field| parse_safety_expr(ident, field)).collect();
             if !conds.is_empty() { Some(quote! { #(#conds)&&* }) } else { None }
         }
         Fields::Unnamed(_) => None,
@@ -234,33 +234,33 @@ fn init_symbolic_item(ident: &Ident, fields: &Fields) -> TokenStream {
 /// Extract, parse and return the expression `cond` (i.e., `Some(cond)`) in the
 /// `#[safety_constraint(<cond>)]` attribute helper associated with a given field.
 /// Return `None` if the attribute isn't specified.
-fn parse_inv_expr(ident: &Ident, field: &syn::Field) -> Option<TokenStream> {
+fn parse_safety_expr(ident: &Ident, field: &syn::Field) -> Option<TokenStream> {
     let name = &field.ident;
-    let mut inv_helper_attr = None;
+    let mut safety_helper_attr = None;
 
     // Keep the helper attribute if we find it
     for attr in &field.attrs {
         if attr.path().is_ident("safety_constraint") {
-            inv_helper_attr = Some(attr);
+            safety_helper_attr = Some(attr);
         }
     }
 
     // Parse the arguments in the `#[safety_constraint(...)]` attribute
-    if let Some(attr) = inv_helper_attr {
+    if let Some(attr) = safety_helper_attr {
         let expr_args: Result<syn::Expr, syn::Error> = attr.parse_args();
 
         // Check if there was an error parsing the arguments
         if let Err(err) = expr_args {
             abort!(Span::call_site(), "Cannot derive impl for `{}`", ident;
             note = attr.span() =>
-            "invariant condition in field `{}` could not be parsed: {}", name.as_ref().unwrap().to_string(), err
+            "safety constraint in field `{}` could not be parsed: {}", name.as_ref().unwrap().to_string(), err
             )
         }
 
-        // Return the expression associated to the invariant condition
-        let inv_expr = expr_args.unwrap();
+        // Return the expression associated to the safety constraint
+        let safety_expr = expr_args.unwrap();
         Some(quote_spanned! {field.span()=>
-            #inv_expr
+            #safety_expr
         })
     } else {
         None
@@ -371,12 +371,12 @@ fn is_safe_body(ident: &Ident, data: &Data) -> TokenStream {
     }
 }
 
-/// Generates an expression that is the conjunction of invariant conditions for each field in the struct.
+/// Generates an expression that is the conjunction of safety constraints for each field in the struct.
 fn struct_invariant_conjunction(ident: &Ident, fields: &Fields) -> TokenStream {
     match fields {
         // Expands to the expression
-        // `true && <inv_cond1> && <inv_cond2> && ..`
-        // where `inv_condN` is
+        // `true && <safety_cond1> && <safety_cond2> && ..`
+        // where `safety_condN` is
         //  - `self.fieldN.is_safe() && <cond>` if a condition `<cond>` was
         //    specified through the `#[safety_constraint(<cond>)]` helper attribute, or
         //  - `self.fieldN.is_safe()` otherwise
@@ -384,7 +384,7 @@ fn struct_invariant_conjunction(ident: &Ident, fields: &Fields) -> TokenStream {
         // Therefore, if `#[safety_constraint(<cond>)]` isn't specified for any field, this expands to
         // `true && self.field1.is_safe() && self.field2.is_safe() && ..`
         Fields::Named(ref fields) => {
-            let inv_conds: Vec<TokenStream> = fields
+            let safety_conds: Vec<TokenStream> = fields
                 .named
                 .iter()
                 .map(|field| {
@@ -392,13 +392,13 @@ fn struct_invariant_conjunction(ident: &Ident, fields: &Fields) -> TokenStream {
                     let default_expr = quote_spanned! {field.span()=>
                         #name.is_safe()
                     };
-                    parse_inv_expr(ident, field)
+                    parse_safety_expr(ident, field)
                         .map(|expr| quote! { #expr && #default_expr})
                         .unwrap_or(default_expr)
                 })
                 .collect();
             // An initial value is required for empty structs
-            inv_conds.iter().fold(quote! { true }, |acc, cond| {
+            safety_conds.iter().fold(quote! { true }, |acc, cond| {
                 quote! { #acc && #cond }
             })
         }
