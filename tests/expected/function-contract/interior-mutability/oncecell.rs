@@ -2,46 +2,45 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Zfunction-contracts
 
-use std::cell::{Cell, OnceCell, UnsafeCell};
+// ---------------------------------------------------
+//        Abstraction Breaking Functionality
+// ---------------------------------------------------
+
+use std::cell::OnceCell;
 use std::mem::transmute;
 
-trait ToHack<T: ?Sized> {
-    unsafe fn hack(&self) -> &T;
+/// This exposes the underlying representation so that it can be added into a modifies clause within kani
+trait Exposeable<T: ?Sized> {
+    unsafe fn expose(&self) -> &T;
 }
 
-impl<T: ?Sized> ToHack<T> for UnsafeCell<T> {
-    unsafe fn hack(&self) -> &T {
-        transmute(self)
-    }
-}
-
-impl<T: ?Sized> ToHack<T> for Cell<T> {
-    unsafe fn hack(&self) -> &T {
-        transmute(self)
-    }
-}
-
-impl<T> ToHack<Option<T>> for OnceCell<T> {
-    unsafe fn hack(&self) -> &Option<T> {
+// While this is not explicitly labeled as safe in the Rust documentation, it works due to OnceCell having a single field in its struct definition
+impl<T> Exposeable<Option<T>> for OnceCell<T> {
+    unsafe fn expose(&self) -> &Option<T> {
         transmute(self)
     }
 }
 
 // ---------------------------------------------------
+//                      Test Case
+// ---------------------------------------------------
 
+// This struct is contains OnceCell which can be mutated
 struct InteriorMutability {
     x: OnceCell<u32>,
 }
 
-#[kani::requires(unsafe{x.x.hack()}.is_none())]
-#[kani::modifies(x.x.hack())]
-#[kani::ensures(|_| unsafe{x.x.hack()}.is_some())]
-fn modify(x: &InteriorMutability) {
-    x.x.set(5).expect("")
+// contracts need to access im.x internal data through the unsafe function im.x.expose()
+#[kani::requires(unsafe{im.x.expose()}.is_none())]
+#[kani::modifies(im.x.expose())]
+#[kani::ensures(|_| unsafe{im.x.expose()}.is_some())]
+fn modify(im: &InteriorMutability) {
+    // method for setting value in OnceCell without breaking encapsulation
+    im.x.set(5).expect("")
 }
 
 #[kani::proof_for_contract(modify)]
-fn main() {
-    let x: InteriorMutability = InteriorMutability { x: OnceCell::new() };
-    modify(&x)
+fn harness_for_modify() {
+    let im: InteriorMutability = InteriorMutability { x: OnceCell::new() };
+    modify(&im)
 }

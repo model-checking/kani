@@ -2,46 +2,46 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Zfunction-contracts
 
-use std::cell::{Cell, OnceCell, UnsafeCell};
+// ---------------------------------------------------
+//        Abstraction Breaking Functionality
+// ---------------------------------------------------
+
+use std::cell::Cell;
 use std::mem::transmute;
 
-trait ToHack<T: ?Sized> {
-    unsafe fn hack(&self) -> &T;
+/// This exposes the underlying representation so that it can be added into a modifies clause within kani
+trait Exposeable<T: ?Sized> {
+    unsafe fn expose(&self) -> &T;
 }
 
-impl<T: ?Sized> ToHack<T> for UnsafeCell<T> {
-    unsafe fn hack(&self) -> &T {
-        transmute(self)
-    }
-}
-
-impl<T: ?Sized> ToHack<T> for Cell<T> {
-    unsafe fn hack(&self) -> &T {
-        transmute(self)
-    }
-}
-
-impl<T> ToHack<Option<T>> for OnceCell<T> {
-    unsafe fn hack(&self) -> &Option<T> {
+// This unsafe manipulation is valid due to Cell having the same underlying data layout as its internal T as explained here: https://doc.rust-lang.org/stable/std/cell/struct.Cell.html#memory-layout
+impl<T: ?Sized> Exposeable<T> for Cell<T> {
+    unsafe fn expose(&self) -> &T {
         transmute(self)
     }
 }
 
 // ---------------------------------------------------
+//                      Test Case
+// ---------------------------------------------------
 
+// This struct is contains Cell which can be mutated
 struct InteriorMutability {
     x: Cell<u32>,
 }
 
-#[kani::requires(*unsafe{x.x.hack()} < 100)]
-#[kani::modifies(x.x.hack())]
-#[kani::ensures(|_| *unsafe{x.x.hack()} < 101)]
-fn modify(x: &InteriorMutability) {
-    x.x.set(x.x.get() + 1)
+// contracts need to access im.x internal data through the unsafe function im.x.expose()
+#[kani::requires(*unsafe{im.x.expose()} < 100)]
+#[kani::modifies(im.x.expose())]
+#[kani::ensures(|_| *unsafe{im.x.expose()} < 101)]
+fn modify(im: &InteriorMutability) {
+    //im is an immutable reference with interior mutability
+    // valid rust methodology for getting and setting value without breaking encapsulation
+    im.x.set(im.x.get() + 1)
 }
 
 #[kani::proof_for_contract(modify)]
-fn main() {
-    let x: InteriorMutability = InteriorMutability { x: Cell::new(kani::any()) };
-    modify(&x)
+fn harness_for_modify() {
+    let im: InteriorMutability = InteriorMutability { x: Cell::new(kani::any()) };
+    modify(&im)
 }
