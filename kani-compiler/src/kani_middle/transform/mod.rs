@@ -52,9 +52,6 @@ pub struct BodyTransformation {
     stub_passes: Vec<Box<dyn TransformPass>>,
     /// The passes that may add safety checks to the function body.
     inst_passes: Vec<Box<dyn TransformPass>>,
-    /// The passes that operate on the whole codegen unit, they run after all previous passes are
-    /// done.
-    global_passes: Vec<Box<dyn GlobalPass>>,
     /// Cache transformation results.
     cache: HashMap<Instance, TransformationResult>,
 }
@@ -64,7 +61,6 @@ impl BodyTransformation {
         let mut transformer = BodyTransformation {
             stub_passes: vec![],
             inst_passes: vec![],
-            global_passes: vec![],
             cache: Default::default(),
         };
         let check_type = CheckType::new_assert_assume(tcx);
@@ -94,8 +90,6 @@ impl BodyTransformation {
                 arguments: queries.args().clone(),
             },
         );
-        transformer.add_global_pass(queries, DumpMirPass::new(tcx));
-
         transformer
     }
 
@@ -128,33 +122,12 @@ impl BodyTransformation {
         }
     }
 
-    /// Run all global passes and store the results in a cache that can later be queried by `body`.
-    pub fn run_global_passes(
-        &mut self,
-        tcx: TyCtxt,
-        starting_items: &[MonoItem],
-        instances: Vec<Instance>,
-        call_graph: CallGraph,
-    ) {
-        let mut global_passes = std::mem::take(&mut self.global_passes);
-        for global_pass in global_passes.iter_mut() {
-            global_pass.transform(tcx, &call_graph, starting_items, instances.clone(), self);
-        }
-        std::mem::swap(&mut self.global_passes, &mut global_passes);
-    }
-
     fn add_pass<P: TransformPass + 'static>(&mut self, query_db: &QueryDb, pass: P) {
         if pass.is_enabled(&query_db) {
             match P::transformation_type() {
                 TransformationType::Instrumentation => self.inst_passes.push(Box::new(pass)),
                 TransformationType::Stubbing => self.stub_passes.push(Box::new(pass)),
             }
-        }
-    }
-
-    fn add_global_pass<P: GlobalPass + 'static>(&mut self, query_db: &QueryDb, pass: P) {
-        if pass.is_enabled(&query_db) {
-            self.global_passes.push(Box::new(pass))
         }
     }
 }
@@ -206,4 +179,38 @@ pub(crate) trait GlobalPass: Debug {
 enum TransformationResult {
     Modified(Body),
     NotModified,
+}
+
+pub struct GlobalPasses {
+    /// The passes that operate on the whole codegen unit, they run after all previous passes are
+    /// done.
+    global_passes: Vec<Box<dyn GlobalPass>>,
+}
+
+impl GlobalPasses {
+    pub fn new(queries: &QueryDb, tcx: TyCtxt) -> Self {
+        let mut global_passes = GlobalPasses { global_passes: vec![] };
+        global_passes.add_global_pass(queries, DumpMirPass::new(tcx));
+        global_passes
+    }
+
+    fn add_global_pass<P: GlobalPass + 'static>(&mut self, query_db: &QueryDb, pass: P) {
+        if pass.is_enabled(&query_db) {
+            self.global_passes.push(Box::new(pass))
+        }
+    }
+
+    /// Run all global passes and store the results in a cache that can later be queried by `body`.
+    pub fn run_global_passes(
+        &mut self,
+        transformer: &mut BodyTransformation,
+        tcx: TyCtxt,
+        starting_items: &[MonoItem],
+        instances: Vec<Instance>,
+        call_graph: CallGraph,
+    ) {
+        for global_pass in self.global_passes.iter_mut() {
+            global_pass.transform(tcx, &call_graph, starting_items, instances.clone(), transformer);
+        }
+    }
 }
