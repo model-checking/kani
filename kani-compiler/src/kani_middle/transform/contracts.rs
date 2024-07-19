@@ -3,6 +3,7 @@
 //! This module contains code related to the MIR-to-MIR pass to enable contracts.
 use crate::kani_middle::attributes::KaniAttributes;
 use crate::kani_middle::codegen_units::CodegenUnit;
+use crate::kani_middle::find_fn_def;
 use crate::kani_middle::transform::body::{
     new_move_operand, re_erased, CheckType, InsertPosition, MutableBody, SourceInstruction,
 };
@@ -12,13 +13,14 @@ use cbmc::{InternString, InternedString};
 use rustc_hir::def_id::DefId as InternalDefId;
 use rustc_middle::ty::TyCtxt;
 use rustc_smir::rustc_internal;
+use rustc_span::Symbol;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{
     AggregateKind, Body, BorrowKind, ConstOperand, Local, Mutability, Operand, Place, Rvalue,
-    TerminatorKind, VarDebugInfo, VarDebugInfoContents,
+    Terminator, TerminatorKind, UnwindAction, VarDebugInfo, VarDebugInfoContents,
 };
 use stable_mir::ty::{
-    ClosureDef, ClosureKind, FnDef, GenericArgs, MirConst, Region, RigidTy, Ty, TyKind,
+    ClosureDef, ClosureKind, FnDef, GenericArgs, MirConst, Region, RigidTy, Ty, TyKind, UintTy,
 };
 use stable_mir::{CrateDef, DefId};
 use std::collections::HashSet;
@@ -201,18 +203,18 @@ impl TransformPass for FunctionWithContractPass {
     /// Transform the function body by replacing it with the stub body.
     fn transform(&mut self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
         trace!(function=?instance.name(), "FunctionWithContractPass::transform");
-        tracing::error!(function=?instance.name(), "FunctionWithContractPass::transform");
-        let _ =
-            tracing::error_span!("FunctionWithContractPass::transform {}", name = instance.name())
-                .entered();
         match instance.ty().kind().rigid().unwrap() {
-            RigidTy::FnDef(def, _args) => {
-                if let Some(target_closure) = self.select_closure(tcx, *def, &body) {
-                    tracing::error!(?target_closure, "FunctionWithContractPass::transform");
-                    let _ = body.dump(&mut stdout(), &instance.name());
-                    let new_body = self.replace_by_closure(body, target_closure);
-                    let _ = new_body.dump(&mut stdout(), &instance.name());
+            RigidTy::FnDef(def, args) => {
+                if let Some(mode) = self.contract_mode(tcx, *def) {
+                    self.mark_unused(tcx, *def, &body, mode);
+                    let new_body = self.set_mode(tcx, body, mode);
                     (true, new_body)
+                } else if KaniAttributes::for_instance(tcx, instance).fn_marker()
+                    == Some(Symbol::intern("kani_register_contract"))
+                {
+                    let run = Instance::resolve(find_fn_def(tcx, "KaniRunContract").unwrap(), args)
+                        .unwrap();
+                    (true, run.body().unwrap())
                 } else {
                     // Not a contract annotated function
                     (false, body)
@@ -220,7 +222,6 @@ impl TransformPass for FunctionWithContractPass {
             }
             RigidTy::Closure(def, _args) => {
                 if self.unused_closures.contains(def) {
-                    tracing::error!("FunctionWithContractPass::transform delete");
                     // Delete body and mark it as unreachable.
                     let mut new_body = MutableBody::from(body);
                     new_body.clear_body(TerminatorKind::Unreachable);
@@ -253,113 +254,142 @@ impl FunctionWithContractPass {
         FunctionWithContractPass { check_fn, replace_fns, unused_closures: Default::default() }
     }
 
-    /// Create the following body:
-    ///
+    /// Functions with contract have the following structure:
+    /// ```ignore
     /// fn original([self], args*) {
-    ///  bb0: {
-    //     _3 = {closure@span} { self: _1 }; # If receiver. Otherwise, skip.
-    //     _4 = &_3;     # Closure reference is the first argument of the closure.
-    //     _5 = (args*); # Closure arguments tupled is the second argument.
-    //     _0 = <{closure@span} as Fn<(u32,)>>::call(move _4, move _5) -> [return: bb1];
-    //   }
-    //
-    //   bb1: {
-    //     return;
-    //   }
+    ///    let kani_contract_mode = kani::internal::mode(); // ** Replace this call
+    ///    match kani_contract_mode {
+    ///        kani::internal::RECURSION_CHECK => {
+    ///            let closure = |/*args*/|{ /*body*/};
+    ///            kani_register_contract(closure) // ** Replace this call
+    ///        }
+    ///        kani::internal::REPLACE => {
+    ///            // same as above
+    ///        }
+    ///        kani::internal::SIMPLE_CHECK => {
+    ///            // same as above
+    ///        }
+    ///        _ => { /* original code */}
+    ///    }
     /// }
-    fn replace_by_closure(&self, body: Body, closure: ClosureInfo) -> Body {
-        tracing::error!(?closure, "replace_by_closure");
+    /// ```
+    /// See function `handle_untouched` inside `kani_macros`.
+    ///
+    /// Thus, we need to:
+    /// 1. Initialize `kani_contract_mode` variable to the value corresponding to the mode.
+    ///
+    /// Thus replace this call:
+    /// ```ignore
+    ///    let kani_contract_mode = kani::internal::mode(); // ** Replace this call
+    /// ```
+    /// by:
+    /// ```ignore
+    ///    let kani_contract_mode = mode_const;
+    ///    goto bbX;
+    /// ```
+    /// 2. Replace `kani_register_contract` by the call to the closure.
+    fn set_mode(&self, tcx: TyCtxt, body: Body, mode: ContractMode) -> Body {
+        debug!(?mode, "set_mode");
+        let mode_fn = find_fn_def(tcx, "KaniContractMode").unwrap();
         let mut new_body = MutableBody::from(body);
-        new_body.clear_body(TerminatorKind::Return);
-        let mut source = SourceInstruction::Terminator { bb: 0 };
+        let (mut mode_call, ret, target) = new_body
+            .blocks()
+            .iter()
+            .enumerate()
+            .find_map(|(bb_idx, bb)| {
+                if let TerminatorKind::Call { func, target, destination, .. } = &bb.terminator.kind
+                {
+                    let (callee, _) = func.ty(new_body.locals()).unwrap().kind().fn_def()?;
+                    (callee == mode_fn).then(|| {
+                        (
+                            SourceInstruction::Terminator { bb: bb_idx },
+                            destination.clone(),
+                            target.unwrap(),
+                        )
+                    })
+                } else {
+                    None
+                }
+            })
+            .unwrap();
 
-        // 1- Create the closure structure if needed, i.e., if it captures the receiver.
-        let closure_ty = closure.ty;
-        let captures = !closure_ty.layout().unwrap().shape().is_1zst();
-        let closure_local = if captures {
-            // This closure captures the receiver.
-            let capture = Rvalue::Aggregate(
-                AggregateKind::Closure(closure.def, closure.args.clone()),
-                vec![new_move_operand(Local::from(1usize))],
-            );
-            assert_eq!(capture.ty(new_body.locals()), Ok(closure_ty), "Expected to capture `self`");
-
-            new_body.new_assignment(capture, &mut source, InsertPosition::Before)
-        } else {
-            new_body.new_local(closure_ty, source.span(new_body.blocks()), Mutability::Not)
-        };
-
-        // 2- Take the structure address.
-        let capture_addr = new_body.new_assignment(
-            Rvalue::Ref(re_erased(), BorrowKind::Shared, Place::from(closure_local)),
-            &mut source,
+        let span = mode_call.span(new_body.blocks());
+        let mode_const = new_body.new_const_operand(mode as _, UintTy::U8, span);
+        new_body.assign_to(
+            ret.clone(),
+            Rvalue::Use(mode_const),
+            &mut mode_call,
             InsertPosition::Before,
         );
-
-        // 3- Create tuple with arguments.
-        let arg_start = if captures { 2 } else { 1 };
-        let arg_locals: Vec<_> =
-            (arg_start..=new_body.arg_count()).map(|l| new_move_operand(l)).collect();
-        let tupled_args = new_body.new_assignment(
-            Rvalue::Aggregate(AggregateKind::Tuple, arg_locals),
-            &mut source,
-            InsertPosition::Before,
-        );
-
-        // 4- Call closure and store result into `_0`
-        let closure_args = vec![new_move_operand(capture_addr), new_move_operand(tupled_args)];
-        let closure_instance =
-            Instance::resolve_closure(closure.def, &closure.args, ClosureKind::FnOnce).unwrap();
-        tracing::error!(mangled=?closure_instance.mangled_name(), "replace_by_closure");
-        new_body.add_call(
-            &closure_instance,
-            &mut source,
-            InsertPosition::Before,
-            closure_args,
-            Place::from(Local::from(0usize)),
+        new_body.replace_terminator(
+            &mode_call,
+            Terminator { kind: TerminatorKind::Goto { target }, span },
         );
 
         new_body.into()
     }
 
-    /// Select which contract closure to keep, if any, and mark the rest as unused.
-    fn select_closure(&mut self, tcx: TyCtxt, fn_def: FnDef, body: &Body) -> Option<ClosureInfo> {
+    /// Return which contract mode to use for this function if any.
+    fn contract_mode(&self, tcx: TyCtxt, fn_def: FnDef) -> Option<ContractMode> {
         let kani_attributes = KaniAttributes::for_def_id(tcx, fn_def.def_id());
-        if let Some(contract) = kani_attributes.contract_attributes() {
-            let recursion_closure =
-                find_closure(tcx, fn_def, &body, contract.recursion_check.as_str());
-            let check_closure = find_closure(tcx, fn_def, &body, contract.checked_with.as_str());
-            let replace_closure = find_closure(tcx, fn_def, &body, contract.replaced_with.as_str());
+        kani_attributes.has_contract().then(|| {
             let fn_def_id = rustc_internal::internal(tcx, fn_def.def_id());
             if self.check_fn == Some(fn_def_id) {
-                // Delete replace closure and one check closure depending on the type.
-                self.unused_closures.insert(replace_closure.def);
-                if contract.has_recursion {
-                    self.unused_closures.insert(check_closure.def);
-                    Some(recursion_closure)
+                if kani_attributes.has_recursion() {
+                    ContractMode::RecursiveCheck
                 } else {
-                    self.unused_closures.insert(recursion_closure.def);
-                    Some(check_closure)
+                    ContractMode::SimpleCheck
                 }
             } else if self.replace_fns.contains(&fn_def_id) {
-                // Delete the check closures.
-                self.unused_closures.insert(recursion_closure.def);
-                self.unused_closures.insert(check_closure.def);
-                Some(replace_closure)
+                ContractMode::Replace
             } else {
+                ContractMode::Original
+            }
+        })
+    }
+
+    /// Select any unused closure for body deletion.
+    fn mark_unused(&mut self, tcx: TyCtxt, fn_def: FnDef, body: &Body, mode: ContractMode) {
+        let contract =
+            KaniAttributes::for_def_id(tcx, fn_def.def_id()).contract_attributes().unwrap();
+        let recursion_closure = find_closure(tcx, fn_def, &body, contract.recursion_check.as_str());
+        let check_closure = find_closure(tcx, fn_def, &body, contract.checked_with.as_str());
+        let replace_closure = find_closure(tcx, fn_def, &body, contract.replaced_with.as_str());
+        match mode {
+            ContractMode::Original => {
                 // No contract instrumentation needed. Add all closures to the list of unused.
                 self.unused_closures.insert(recursion_closure.def);
                 self.unused_closures.insert(check_closure.def);
                 self.unused_closures.insert(replace_closure.def);
-                None
             }
-        } else {
-            // Nothing to do
-            None
+            ContractMode::RecursiveCheck => {
+                self.unused_closures.insert(replace_closure.def);
+                self.unused_closures.insert(check_closure.def);
+            }
+            ContractMode::SimpleCheck => {
+                self.unused_closures.insert(replace_closure.def);
+                self.unused_closures.insert(recursion_closure.def);
+            }
+            ContractMode::Replace => {
+                self.unused_closures.insert(recursion_closure.def);
+                self.unused_closures.insert(check_closure.def);
+            }
         }
     }
 }
 
+/// Enumeration that store the value of which implementation should be selected.
+///
+/// Keep the discriminant values in sync with [kani::internal::mode].
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+enum ContractMode {
+    Original = 0,
+    RecursiveCheck = 1,
+    SimpleCheck = 2,
+    Replace = 3,
+}
+
+/// Information about a closure.
 #[derive(Clone, Debug)]
 struct ClosureInfo {
     ty: Ty,

@@ -4,9 +4,13 @@
 //! Logic used for generating the code that checks a contract.
 
 use proc_macro2::{Ident, Span, TokenStream as TokenStream2};
-use quote::{quote, ToTokens};
+use quote::quote;
 use std::mem;
-use syn::{parse_quote, Block, Expr, Local, LocalInit, Pat, PatIdent, ReturnType, Stmt};
+use syn::punctuated::Punctuated;
+use syn::token::{Comma, SelfValue};
+use syn::{
+    parse_quote, Block, Expr, FnArg, Local, LocalInit, Pat, PatIdent, PatType, ReturnType, Stmt,
+};
 
 use super::{
     helpers::*, shared::build_ensures, ContractConditionsData, ContractConditionsHandler,
@@ -78,19 +82,15 @@ impl<'a> ContractConditionsHandler<'a> {
         let modifies_ident = Ident::new(&self.modify_name, Span::call_site());
         let wrapper_arg_ident = Ident::new(WRAPPER_ARG, Span::call_site());
         let return_type = return_type_to_type(&self.annotated_fn.sig.output);
-        let inputs = closure_params(&self.annotated_fn.sig.inputs);
-        let modifies_closure = self.modifies_closure(
-            inputs,
-            &self.annotated_fn.sig.output,
-            &self.annotated_fn.block,
-            true,
-        );
-        let args = closure_args(&self.annotated_fn.sig.inputs);
+        let mut_recv = self.has_mutable_receiver().then(|| quote!(core::ptr::addr_of!(self),));
+        let redefs = self.arg_redefinitions();
+        let modifies_closure =
+            self.modifies_closure(&self.annotated_fn.sig.output, &self.annotated_fn.block, redefs);
         let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
         parse_quote!(
-            let #wrapper_arg_ident = ();
+            let #wrapper_arg_ident = (#mut_recv);
             #modifies_closure
-            let #result : #return_type = #modifies_ident(#(#args,)* #wrapper_arg_ident);
+            let #result : #return_type = #modifies_ident(#wrapper_arg_ident);
             #result
         )
     }
@@ -102,7 +102,6 @@ impl<'a> ContractConditionsHandler<'a> {
     pub fn check_closure(&self) -> TokenStream2 {
         let check_ident = Ident::new(&self.check_name, Span::call_site());
         let sig = &self.annotated_fn.sig;
-        let inputs = closure_params(&sig.inputs);
         let output = &sig.output;
         let body_stmts = self.initial_check_stmts();
         let body = self.make_check_body(body_stmts);
@@ -110,7 +109,7 @@ impl<'a> ContractConditionsHandler<'a> {
         quote!(
             #[kanitool::is_contract_generated(check)]
             #[allow(dead_code, unused_variables, unused_mut)]
-            let mut #check_ident = |#(#inputs),*| #output #body;
+            let mut #check_ident = || #output #body;
         )
     }
 
@@ -119,27 +118,30 @@ impl<'a> ContractConditionsHandler<'a> {
     /// First find the modifies body and expand that. Then expand the rest of the body.
     pub fn expand_check(&self, closure: &mut Stmt) {
         let body = closure_body(closure);
-        self.expand_modifies(find_contract_closure(&mut body.block.stmts, "wrapper"));
+        self.expand_modifies(find_contract_closure(&mut body.block.stmts, "wrapper").expect(
+            &format!("Internal Failure: Expected to find `wrapper` closure, but found none"),
+        ));
         *body = syn::parse2(self.make_check_body(mem::take(&mut body.block.stmts))).unwrap();
     }
 
-    /// Emit a modifies wrapper. The first time, we augment the list of inputs to track modifies.
-    pub fn modifies_closure<T: ToTokens, I: IntoIterator<Item = T>>(
+    /// Emit a modifies wrapper. It's only argument is the list of addresses that may be modified.
+    pub fn modifies_closure(
         &self,
-        inputs: I,
         output: &ReturnType,
         body: &Block,
-        include_modifies: bool,
+        redefs: TokenStream2,
     ) -> TokenStream2 {
         // Filter receiver
-        let wrapper_ident = include_modifies.then_some(Ident::new(WRAPPER_ARG, Span::call_site()));
-        let wrapper_it = wrapper_ident.iter();
+        let wrapper_ident = Ident::new(WRAPPER_ARG, Span::call_site());
         let modifies_ident = Ident::new(&self.modify_name, Span::call_site());
-        let inputs = inputs.into_iter();
+        let stmts = &body.stmts;
         quote!(
             #[kanitool::is_contract_generated(wrapper)]
             #[allow(dead_code, unused_variables, unused_mut)]
-            let mut #modifies_ident = |#(#inputs,)* #(#wrapper_it: _,)*| #output #body;
+            let mut #modifies_ident = |#wrapper_ident: _| #output {
+                #redefs
+                #(#stmts)*
+            };
         )
     }
 
@@ -151,9 +153,45 @@ impl<'a> ContractConditionsHandler<'a> {
             };
             let Expr::Closure(closure) = expr.as_ref() else { unreachable!() };
             let Expr::Block(body) = closure.body.as_ref() else { unreachable!() };
-            let stream =
-                self.modifies_closure(&closure.inputs, &closure.output, &body.block, false);
+            let stream = self.modifies_closure(&closure.output, &body.block, TokenStream2::new());
             *closure_stmt = syn::parse2(stream).unwrap();
         }
+    }
+
+    /// Return whether the original function has a mutable receiver.
+    fn has_mutable_receiver(&self) -> bool {
+        let first_arg = self.annotated_fn.sig.inputs.first();
+        first_arg
+            .map(|arg| {
+                matches!(
+                    arg,
+                    FnArg::Receiver(syn::Receiver { mutability: Some(_), reference: None, .. },)
+                )
+            })
+            .unwrap_or(false)
+    }
+
+    /// Generate argument re-definitions for mutable arguments.
+    ///
+    /// This is used so Kani doesn't think that modifying a local argument value is a side effect.
+    fn arg_redefinitions(&self) -> TokenStream2 {
+        let mut result = TokenStream2::new();
+        for (mutability, ident) in self.arg_bindings() {
+            if mutability == MutBinding::Mut {
+                result.extend(quote!(let mut #ident = #ident;))
+            } else {
+                // This would make some replace some temporary variables from error messages.
+                //result.extend(quote!(let #ident = #ident; ))
+            }
+        }
+        result
+    }
+
+    /// Extract all arguments bindings and their mutability.
+    fn arg_bindings(&self) -> impl Iterator<Item = (MutBinding, &Ident)> {
+        self.annotated_fn.sig.inputs.iter().flat_map(|arg| match arg {
+            FnArg::Receiver(_) => vec![],
+            FnArg::Typed(typed) => pat_to_bindings(typed.pat.as_ref()),
+        })
     }
 }

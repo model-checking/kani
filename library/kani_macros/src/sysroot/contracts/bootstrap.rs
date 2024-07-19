@@ -25,6 +25,11 @@ impl<'a> ContractConditionsHandler<'a> {
         let check_closure = self.check_closure();
         let recursion_closure = self.new_recursion_closure(&replace_closure, &check_closure);
 
+        let span = Span::call_site();
+        let replace_ident = Ident::new(&self.replace_name, span);
+        let check_ident = Ident::new(&self.check_name, span);
+        let recursion_ident = Ident::new(&self.recursion_name, span);
+
         // The order of `attrs` and `kanitool::{checked_with,
         // is_contract_generated}` is important here, because macros are
         // expanded outside in. This way other contract annotations in `attrs`
@@ -38,12 +43,30 @@ impl<'a> ContractConditionsHandler<'a> {
             #[kanitool::replaced_with = #replace_name]
             #[kanitool::inner_check = #modifies_name]
             #vis #sig {
-                // The order doesn't matter since we replicate the logic inside recursion closure.
-                #recursion_closure
-                #replace_closure
-                #check_closure
-                // -- Now emit the original code.
-                #block
+                // Dummy function used to force the compiler to capture the environment.
+                // We cannot call closures inside constant functions.
+                // This function gets replaced by `kani::internal::call_closure`.
+                #[inline(never)]
+                #[kanitool::fn_marker = "kani_register_contract"]
+                pub const fn kani_register_contract<T, F: FnOnce() -> T>(f: F) -> T {
+                    unreachable!()
+                }
+                let kani_contract_mode = kani::internal::mode();
+                match kani_contract_mode {
+                    kani::internal::RECURSION_CHECK => {
+                        #recursion_closure;
+                        kani_register_contract(#recursion_ident)
+                    }
+                    kani::internal::REPLACE => {
+                        #replace_closure;
+                        kani_register_contract(#replace_ident)
+                    }
+                    kani::internal::SIMPLE_CHECK => {
+                        #check_closure;
+                        kani_register_contract(#check_ident)
+                    }
+                    _ => #block
+                }
             }
         ));
     }
@@ -55,13 +78,13 @@ impl<'a> ContractConditionsHandler<'a> {
     pub fn handle_expanded(&mut self) {
         let mut annotated_fn = self.annotated_fn.clone();
         let ItemFn { block, .. } = &mut annotated_fn;
-        let recursion_closure = find_contract_closure(&mut block.stmts, "recursion_check");
+        let recursion_closure = expect_closure_in_match(&mut block.stmts, "recursion_check");
         self.expand_recursion(recursion_closure);
 
-        let replace_closure = find_contract_closure(&mut block.stmts, "replace");
+        let replace_closure = expect_closure_in_match(&mut block.stmts, "replace");
         self.expand_replace(replace_closure);
 
-        let check_closure = find_contract_closure(&mut block.stmts, "check");
+        let check_closure = expect_closure_in_match(&mut block.stmts, "check");
         self.expand_check(check_closure);
 
         self.output.extend(quote!(#annotated_fn));
@@ -74,8 +97,6 @@ impl<'a> ContractConditionsHandler<'a> {
         check_closure: &TokenStream,
     ) -> TokenStream {
         let ItemFn { ref sig, .. } = self.annotated_fn;
-        let inputs = closure_params(&sig.inputs);
-        let args = closure_args(&sig.inputs);
         let output = &sig.output;
         let span = Span::call_site();
         let result = Ident::new(INTERNAL_RESULT_IDENT, span);
@@ -86,17 +107,17 @@ impl<'a> ContractConditionsHandler<'a> {
         quote!(
             #[kanitool::is_contract_generated(recursion_check)]
             #[allow(dead_code, unused_variables, unused_mut)]
-            let mut #recursion_ident = |#(#inputs),*| #output
+            let mut #recursion_ident = || #output
             {
                 #[kanitool::recursion_tracker]
                 static mut REENTRY: bool = false;
                 if unsafe { REENTRY } {
                     #replace_closure
-                    #replace_ident(#(#args),*)
+                    #replace_ident()
                 } else {
                     unsafe { REENTRY = true };
                     #check_closure
-                    let #result = #check_ident(#(#args),*);
+                    let #result = #check_ident();
                     unsafe { REENTRY = false };
                     #result
                 }
@@ -116,12 +137,12 @@ impl<'a> ContractConditionsHandler<'a> {
             })
             .unwrap();
 
-        let replace_closure = find_contract_closure(&mut if_reentry.then_branch.stmts, "replace");
+        let replace_closure = expect_closure(&mut if_reentry.then_branch.stmts, "replace");
         self.expand_replace(replace_closure);
 
         let else_branch = if_reentry.else_branch.as_mut().unwrap();
         let Expr::Block(else_block) = else_branch.1.as_mut() else { unreachable!() };
-        let check_closure = find_contract_closure(&mut else_block.block.stmts, "check");
+        let check_closure = expect_closure(&mut else_block.block.stmts, "check");
         self.expand_check(check_closure);
     }
 }

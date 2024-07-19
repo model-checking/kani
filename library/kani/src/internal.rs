@@ -95,7 +95,53 @@ pub fn init_contracts() {}
 
 /// This should only be used within contracts. The intent is to
 /// perform type inference on a closure's argument
+/// TODO: This should be generated inside the function that has contract. This is used for
+/// remembers.
 #[doc(hidden)]
 pub fn apply_closure<T, U: Fn(&T) -> bool>(f: U, x: &T) -> bool {
     f(x)
+}
+
+/// Function that calls a closure used to implement contracts.
+///
+/// In contracts, we cannot invoke the generated closures directly, instead, we call register
+/// contract. This function is a no-op. However, in the reality, we do want to call the closure,
+/// so we swap the register body by this function body.
+#[doc(hidden)]
+#[allow(dead_code)]
+#[rustc_diagnostic_item = "KaniRunContract"]
+fn run_contract_fn<T, F: FnOnce() -> T>(func: F) -> T {
+    func()
+}
+
+/// This is used for documentation's sake of which implementation to keep during contract verification.
+#[doc(hidden)]
+type Mode = u8;
+
+/// Keep the original body.
+pub const ORIGINAL: Mode = 0;
+
+/// Run the check with recursion support.
+pub const RECURSION_CHECK: Mode = 1;
+
+/// Run the simple check with no recursion support.
+pub const SIMPLE_CHECK: Mode = 2;
+
+/// Stub the body with its contract.
+pub const REPLACE: Mode = 3;
+
+/// This function is only used to help with contract instrumentation.
+///
+/// It should be removed from the end user code during contract transformation.
+/// By default, return the original code (used in concrete playback).
+#[doc(hidden)]
+#[inline(never)]
+#[crate::unstable(
+    feature = "function-contracts",
+    issue = 2652,
+    reason = "experimental support for function contracts"
+)]
+#[rustc_diagnostic_item = "KaniContractMode"]
+pub const fn mode() -> Mode {
+    ORIGINAL
 }

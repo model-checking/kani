@@ -151,6 +151,19 @@ impl MutableBody {
         result
     }
 
+    /// Add a new assignment to an existing place.
+    pub fn assign_to(
+        &mut self,
+        place: Place,
+        rvalue: Rvalue,
+        source: &mut SourceInstruction,
+        position: InsertPosition,
+    ) {
+        let span = source.span(&self.blocks);
+        let stmt = Statement { kind: StatementKind::Assign(place, rvalue), span };
+        self.insert_stmt(stmt, source, position);
+    }
+
     /// Add a new assert to the basic block indicated by the given index.
     ///
     /// The new assertion will have the same span as the source instruction, and the basic block
@@ -381,6 +394,15 @@ impl MutableBody {
         let terminator = Terminator { kind, span: self.span };
         self.blocks.push(BasicBlock { statements: Vec::default(), terminator })
     }
+
+    /// Replace a terminator from the given basic block
+    pub fn replace_terminator(
+        &mut self,
+        source_instruction: &SourceInstruction,
+        new_term: Terminator,
+    ) {
+        self.blocks.get_mut(source_instruction.bb()).unwrap().terminator = new_term;
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -423,6 +445,12 @@ impl SourceInstruction {
         match *self {
             SourceInstruction::Statement { idx, bb } => blocks[bb].statements[idx].span,
             SourceInstruction::Terminator { bb } => blocks[bb].terminator.span,
+        }
+    }
+
+    pub fn bb(&self) -> BasicBlockIdx {
+        match *self {
+            SourceInstruction::Statement { bb, .. } | SourceInstruction::Terminator { bb } => bb,
         }
     }
 }

@@ -74,6 +74,9 @@ enum KaniAttributeKind {
     Recursion,
     /// Attribute used to mark the static variable used for tracking recursion check.
     RecursionTracker,
+    /// Generic marker that can be used to mark functions so this list doesn't have to keep growing.
+    /// This takes a key which is the marker.
+    FnMarker,
 }
 
 impl KaniAttributeKind {
@@ -88,6 +91,7 @@ impl KaniAttributeKind {
             | KaniAttributeKind::StubVerified
             | KaniAttributeKind::Unwind => true,
             KaniAttributeKind::Unstable
+            | KaniAttributeKind::FnMarker
             | KaniAttributeKind::Recursion
             | KaniAttributeKind::RecursionTracker
             | KaniAttributeKind::ReplacedWith
@@ -288,9 +292,14 @@ impl<'tcx> KaniAttributes<'tcx> {
         })
     }
 
-    /// Retrieves the global, static recursion tracker variable.
-    pub fn checked_with_id(&self) -> Option<Result<DefId, ErrorGuaranteed>> {
-        todo!("Delete-me")
+    /// Return a function marker if any.
+    pub fn fn_marker(&self) -> Option<Symbol> {
+        self.attribute_value(KaniAttributeKind::FnMarker)
+    }
+
+    /// Check if function is annotated with any contract attribute.
+    pub fn has_contract(&self) -> bool {
+        self.map.contains_key(&KaniAttributeKind::CheckedWith)
     }
 
     /// Resolve a path starting from this item's module context.
@@ -368,7 +377,8 @@ impl<'tcx> KaniAttributes<'tcx> {
                 KaniAttributeKind::StubVerified => {
                     expect_single(self.tcx, kind, &attrs);
                 }
-                KaniAttributeKind::CheckedWith
+                KaniAttributeKind::FnMarker
+                | KaniAttributeKind::CheckedWith
                 | KaniAttributeKind::InnerCheck
                 | KaniAttributeKind::RecursionCheck
                 | KaniAttributeKind::ReplacedWith => {
@@ -503,6 +513,9 @@ impl<'tcx> KaniAttributes<'tcx> {
                 | KaniAttributeKind::RecursionTracker
                 | KaniAttributeKind::ReplacedWith => {
                     self.tcx.dcx().span_err(self.tcx.def_span(self.item), format!("Contracts are not supported on harnesses. (Found the kani-internal contract attribute `{}`)", kind.as_ref()));
+                }
+                KaniAttributeKind::FnMarker => {
+                    /* no-op */
                 }
             };
             harness

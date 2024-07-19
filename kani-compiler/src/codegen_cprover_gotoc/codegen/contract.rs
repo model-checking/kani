@@ -42,7 +42,6 @@ impl<'tcx> GotocCtx<'tcx> {
                 // Find the instance under contract
                 let MonoItem::Fn(instance) = *item else { return None };
                 if rustc_internal::internal(tcx, instance.def.def_id()) == function_under_contract {
-                    tracing::error!(name=?instance.name(), "------ here");
                     self.find_check_and_modifies(instance)
                 } else {
                     None
@@ -157,14 +156,14 @@ impl<'tcx> GotocCtx<'tcx> {
             .unwrap_or_default();
 
         // The last argument is a tuple with addresses that can be modified.
-        let capture_local = Local::from(modifies.fn_abi().unwrap().args.len());
-        let capture_ty = self.local_ty_stable(capture_local);
-        let captured_args =
-            self.codegen_place_stable(&capture_local.into(), loc).unwrap().goto_expr;
-        let TyKind::RigidTy(RigidTy::Tuple(capture_tys)) = capture_ty.kind() else {
-            unreachable!("found {:?}", capture_ty.kind())
+        let modifies_local = Local::from(modifies.fn_abi().unwrap().args.len());
+        let modifies_ty = self.local_ty_stable(modifies_local);
+        let modifies_args =
+            self.codegen_place_stable(&modifies_local.into(), loc).unwrap().goto_expr;
+        let TyKind::RigidTy(RigidTy::Tuple(modifies_tys)) = modifies_ty.kind() else {
+            unreachable!("found {:?}", modifies_ty.kind())
         };
-        let assigns = capture_tys
+        let assigns: Vec<_> = modifies_tys
             .into_iter()
             .enumerate()
             .filter_map(|(idx, ty)| {
@@ -173,7 +172,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     Lambda::as_contract_for(
                         &goto_annotated_fn_typ,
                         None,
-                        captured_args
+                        modifies_args
                             .clone()
                             .member(idx.to_string(), &self.symbol_table)
                             .dereference(),
