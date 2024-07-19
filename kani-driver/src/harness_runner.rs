@@ -11,6 +11,9 @@ use crate::call_cbmc::{VerificationResult, VerificationStatus};
 use crate::project::Project;
 use crate::session::KaniSession;
 
+use std::fs::File;
+use std::io::Write;
+
 /// A HarnessRunner is responsible for checking all proof harnesses. The data in this structure represents
 /// "background information" that the controlling driver (e.g. cargo-kani or kani) computed.
 ///
@@ -122,14 +125,52 @@ impl KaniSession {
             // When quiet, we don't want to print anything at all.
             // When output is old, we also don't have real results to print.
             if !self.args.common_args.quiet && self.args.output_format != OutputFormat::Old {
-                println!(
-                    "{}",
-                    result.render(
+                let file_output: String = Default::default();
+                if self.args.output_into_files {
+
+                    //target_dir might fail if not UTF-8 Encoded path
+                    let targ_dir = self.args.target_dir.clone();
+                    let dir_str;
+                    //This is to ensure that null won't brake, might be a better way to do this
+                    if targ_dir != None {
+                        dir_str = String::from(targ_dir.unwrap().into_os_string().into_string().unwrap().to_owned() + "/");
+                    } else {
+                        dir_str = String::from("./test/");
+                    }
+                    let file_name = String::from(dir_str.to_owned() + &harness.pretty_name.clone()); 
+                    let path = Path::new(&file_name);
+                    let prefix = path.parent().unwrap();
+                    std::fs::create_dir_all(prefix).unwrap();
+
+                    let file = File::create(&harness.pretty_name.clone());
+
+                    let file_output = result.render(
+                        &OutputFormat::Regular,
+                        harness.attributes.should_panic,
+                        self.args.coverage,
+                        );
+
+
+
+                    if let Err(e) = writeln!(file.unwrap(), "{}", file_output) {
+                        eprintln!("Failed to write to file {}: {}", file_name, e);
+                    }
+
+
+                }
+                let output;
+                //Only render clone if Terse format
+                if !self.args.output_into_files || self.args.output_format == OutputFormat::Terse {
+                    output = result.render(
                         &self.args.output_format,
                         harness.attributes.should_panic,
-                        self.args.coverage
-                    )
-                );
+                        self.args.coverage,
+                    );
+                } else {
+                    output = file_output.clone();
+                }
+
+                println!("{}", output);
             }
             self.gen_and_add_concrete_playback(harness, &mut result)?;
             Ok(result)

@@ -275,6 +275,10 @@ pub struct VerificationArgs {
     )]
     pub synthesize_loop_contracts: bool,
 
+    //Harness Output into individual files
+    #[arg(long, hide_short_help = true, requires("enable_unstable"))]
+    pub output_into_files: bool,
+
     /// Randomize the layout of structures. This option can help catching code that relies on
     /// a specific layout chosen by the compiler that is not guaranteed to be stable in the future.
     /// If a value is given, it will be used as the seed for randomization
