@@ -87,34 +87,32 @@ impl ValidValuePass {
                 SourceOp::BytesValidity { ranges, target_ty, rvalue } => {
                     let value = body.new_assignment(rvalue, &mut source, InsertPosition::Before);
                     let rvalue_ptr = Rvalue::AddressOf(Mutability::Not, Place::from(value));
-                    for range in ranges {
-                        let result = build_limits(body, &range, rvalue_ptr.clone(), &mut source);
-                        let msg =
-                            format!("Undefined Behavior: Invalid value of type `{target_ty}`",);
-                        body.add_check(
-                            tcx,
-                            &self.check_type,
-                            &mut source,
-                            InsertPosition::Before,
-                            result,
-                            &msg,
-                        );
-                    }
+                    // for range in ranges {
+                    let result = build_limits(body, &ranges, rvalue_ptr.clone(), &mut source);
+                    let msg = format!("Undefined Behavior: Invalid value of type `{target_ty}`",);
+                    body.add_check(
+                        tcx,
+                        &self.check_type,
+                        &mut source,
+                        InsertPosition::Before,
+                        result,
+                        &msg,
+                    );
+                    // }
                 }
                 SourceOp::DerefValidity { pointee_ty, rvalue, ranges } => {
-                    for range in ranges {
-                        let result = build_limits(body, &range, rvalue.clone(), &mut source);
-                        let msg =
-                            format!("Undefined Behavior: Invalid value of type `{pointee_ty}`",);
-                        body.add_check(
-                            tcx,
-                            &self.check_type,
-                            &mut source,
-                            InsertPosition::Before,
-                            result,
-                            &msg,
-                        );
-                    }
+                    // for range in ranges {
+                    let result = build_limits(body, &ranges, rvalue.clone(), &mut source);
+                    let msg = format!("Undefined Behavior: Invalid value of type `{pointee_ty}`",);
+                    body.add_check(
+                        tcx,
+                        &self.check_type,
+                        &mut source,
+                        InsertPosition::Before,
+                        result,
+                        &msg,
+                    );
+                    // }
                 }
                 SourceOp::UnsupportedCheck { check, ty } => {
                     let reason = format!(
@@ -764,16 +762,14 @@ fn expect_instance(locals: &[LocalDecl], func: &Operand) -> Instance {
 /// ```
 pub fn build_limits(
     body: &mut MutableBody,
-    req: &ValidValueReq,
+    reqs: &Vec<ValidValueReq>,
     rvalue_ptr: Rvalue,
     source: &mut SourceInstruction,
 ) -> Local {
     let span = source.span(body.blocks());
-    debug!(?req, ?rvalue_ptr, ?span, "build_limits");
-    let primitive_ty = uint_ty(req.size.bytes());
-    let start_const = body.new_const_operand(req.valid_range.start, primitive_ty, span);
-    let end_const = body.new_const_operand(req.valid_range.end, primitive_ty, span);
-    let orig_ptr = if req.offset != 0 {
+    debug!(?reqs, ?rvalue_ptr, ?span, "build_limits");
+    let primitive_ty = uint_ty(reqs[0].size.bytes());
+    let orig_ptr = if reqs[0].offset != 0 {
         let start_ptr = move_local(body.new_assignment(rvalue_ptr, source, InsertPosition::Before));
         let byte_ptr = move_local(body.new_cast_ptr(
             start_ptr,
@@ -782,7 +778,7 @@ pub fn build_limits(
             source,
             InsertPosition::Before,
         ));
-        let offset_const = body.new_const_operand(req.offset as _, UintTy::Usize, span);
+        let offset_const = body.new_const_operand(reqs[0].offset as _, UintTy::Usize, span);
         let offset = move_local(body.new_assignment(
             Rvalue::Use(offset_const),
             source,
@@ -806,29 +802,52 @@ pub fn build_limits(
         InsertPosition::Before,
     );
     let value = Operand::Copy(Place { local: value_ptr, projection: vec![ProjectionElem::Deref] });
-    let start_result =
-        body.new_binary_op(BinOp::Ge, value.clone(), start_const, source, InsertPosition::Before);
-    let end_result =
-        body.new_binary_op(BinOp::Le, value, end_const, source, InsertPosition::Before);
-    if req.valid_range.wraps_around() {
-        // valid >= start || valid <= end
-        body.new_binary_op(
-            BinOp::BitOr,
-            move_local(start_result),
-            move_local(end_result),
+    let mut prev_local = None;
+    for req in reqs {
+        let start_const = body.new_const_operand(req.valid_range.start, primitive_ty, span);
+        let end_const = body.new_const_operand(req.valid_range.end, primitive_ty, span);
+        let start_result = body.new_binary_op(
+            BinOp::Ge,
+            value.clone(),
+            start_const,
             source,
             InsertPosition::Before,
-        )
-    } else {
-        // valid >= start && valid <= end
-        body.new_binary_op(
-            BinOp::BitAnd,
-            move_local(start_result),
-            move_local(end_result),
-            source,
-            InsertPosition::Before,
-        )
+        );
+        let end_result =
+            body.new_binary_op(BinOp::Le, value.clone(), end_const, source, InsertPosition::Before);
+        let range_check = if req.valid_range.wraps_around() {
+            // valid >= start || valid <= end
+            body.new_binary_op(
+                BinOp::BitOr,
+                move_local(start_result),
+                move_local(end_result),
+                source,
+                InsertPosition::Before,
+            )
+        } else {
+            // valid >= start && valid <= end
+            body.new_binary_op(
+                BinOp::BitAnd,
+                move_local(start_result),
+                move_local(end_result),
+                source,
+                InsertPosition::Before,
+            )
+        };
+        if prev_local.is_none() {
+            prev_local = Some(range_check);
+        } else {
+            let record_local = prev_local.unwrap();
+            prev_local = Some(body.new_binary_op(
+                BinOp::BitOr,
+                move_local(record_local),
+                move_local(range_check),
+                source,
+                InsertPosition::Before,
+            ));
+        };
     }
+    prev_local.unwrap()
 }
 
 /// Traverse the type and find all invalid values and their location in memory.
@@ -851,8 +870,18 @@ pub fn ty_validity_per_offset(
                 }
                 _ => None,
             };
-            return vec![ValidValueReq { offset: 0, size: value_size.unwrap(), valid_range: WrappingRange { start: 0, end: 0xD7FF }},
-            ValidValueReq { offset: 0, size: value_size.unwrap(), valid_range: WrappingRange { start: 0xE000, end: 0x10FFFF }}]
+            return vec![
+                ValidValueReq {
+                    offset: 0,
+                    size: value_size.unwrap(),
+                    valid_range: WrappingRange { start: 0, end: 0xD7FF },
+                },
+                ValidValueReq {
+                    offset: 0,
+                    size: value_size.unwrap(),
+                    valid_range: WrappingRange { start: 0xE000, end: 0x10FFFF },
+                },
+            ];
         };
         if let Some(mut req) = ValidValueReq::try_from_ty(machine_info, ty)
             && !req.is_full()
