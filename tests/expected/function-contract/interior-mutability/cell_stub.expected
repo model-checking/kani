@@ -1,9 +1,13 @@
 assertion\
 - Status: SUCCESS\
-- Description: "|_| old(*unsafe{ im.x.expose() } + *unsafe{ im.x.expose() }) == *unsafe{ im.x.expose() }"\
+- Description: "|_| old(*unsafe{ im.x.expose() } + *unsafe{ im.x.expose() }) ==\
+*unsafe{ im.x.expose() }"\
 
 assertion\
 - Status: SUCCESS\
-- Description: "|_| old(*unsafe{ im.x.expose() } + *unsafe{ im.x.expose() } + *unsafe{ im.x.expose() } + *unsafe{ im.x.expose() }) == *unsafe{ im.x.expose() }"\
+- Description: "|_|
+old(*unsafe{ im.x.expose() } + *unsafe{ im.x.expose() } +\
+*unsafe{ im.x.expose() } + *unsafe{ im.x.expose() }) ==\
+*unsafe{ im.x.expose() }"\
 
 VERIFICATION:- SUCCESSFUL
