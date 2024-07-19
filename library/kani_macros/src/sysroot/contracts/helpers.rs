@@ -5,12 +5,9 @@
 //! specific to Kani and contracts.
 
 use proc_macro2::{Ident, Span};
-use quote::ToTokens;
 use std::borrow::Cow;
-use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
-use syn::token::Comma;
-use syn::{parse_quote, Attribute, Expr, ExprBlock, FnArg, Local, LocalInit, PatIdent, Stmt};
+use syn::{parse_quote, Attribute, Expr, ExprBlock, Local, LocalInit, PatIdent, Stmt};
 
 /// If an explicit return type was provided it is returned, otherwise `()`.
 pub fn return_type_to_type(return_type: &syn::ReturnType) -> Cow<syn::Type> {
@@ -21,20 +18,6 @@ pub fn return_type_to_type(return_type: &syn::ReturnType) -> Cow<syn::Type> {
         })),
         syn::ReturnType::Type(_, typ) => Cow::Borrowed(typ.as_ref()),
     }
-}
-
-/// Extract the closure parameters by excluding the receiver if one exists.
-pub fn closure_inputs(inputs: &Punctuated<syn::FnArg, Comma>) -> Punctuated<syn::Pat, Comma> {
-    inputs
-        .iter()
-        .filter_map(|arg| {
-            if let FnArg::Typed(typed_pat) = arg {
-                Some(syn::Pat::Type(typed_pat.clone()))
-            } else {
-                None
-            }
-        })
-        .collect()
 }
 
 #[derive(Copy, Clone, Eq, PartialEq)]
@@ -56,7 +39,7 @@ pub fn pat_to_bindings(pat: &syn::Pat) -> Vec<(MutBinding, &Ident)> {
         unreachable!()
     };
     match pat {
-        Pat::Const(c) => vec![],
+        Pat::Const(_) => vec![],
         Pat::Ident(PatIdent { ident, subpat: Some(subpat), mutability, .. }) => {
             let mut idents = pat_to_bindings(subpat.1.as_ref());
             idents.push((mutability.map_or(MutBinding::NotMut, |_| MutBinding::Mut), ident));
@@ -65,11 +48,11 @@ pub fn pat_to_bindings(pat: &syn::Pat) -> Vec<(MutBinding, &Ident)> {
         Pat::Ident(PatIdent { ident, mutability, .. }) => {
             vec![(mutability.map_or(MutBinding::NotMut, |_| MutBinding::Mut), ident)]
         }
-        Pat::Lit(lit) => vec![],
-        Pat::Reference(rf) => vec![],
+        Pat::Lit(_) => vec![],
+        Pat::Reference(_) => vec![],
         Pat::Tuple(tup) => tup.elems.iter().flat_map(pat_to_bindings).collect(),
         Pat::Slice(slice) => slice.elems.iter().flat_map(pat_to_bindings).collect(),
-        Pat::Path(pth) => {
+        Pat::Path(_) => {
             vec![]
         }
         Pat::Or(pat_or) => {

@@ -20,7 +20,7 @@ use rustc_hir::def_id::{DefId, LocalDefId, LocalModDefId, CRATE_DEF_INDEX, LOCAL
 use rustc_hir::{ItemKind, UseKind};
 use rustc_middle::ty::TyCtxt;
 use stable_mir::ty::{FnDef, RigidTy, TyKind};
-use stable_mir::{CrateDef, DefId as StableDefId};
+use stable_mir::CrateDef;
 use tracing::debug;
 
 /// Attempts to resolve a simple path (in the form of a string) to a function / method `DefId`.

@@ -6,24 +6,16 @@ use std::collections::BTreeMap;
 
 use kani_metadata::{CbmcSolver, HarnessAttributes, Stub};
 use rustc_ast::{
-    attr,
-    token::Token,
-    token::TokenKind,
-    tokenstream::{TokenStream, TokenTree},
-    AttrArgs, AttrArgsEq, AttrKind, Attribute, ExprKind, LitKind, MetaItem, MetaItemKind,
+    attr, AttrArgs, AttrArgsEq, AttrKind, Attribute, ExprKind, LitKind, MetaItem, MetaItemKind,
     NestedMetaItem,
 };
 use rustc_errors::ErrorGuaranteed;
-use rustc_hir::{
-    def::DefKind,
-    def_id::{DefId, LocalDefId},
-};
+use rustc_hir::{def::DefKind, def_id::DefId};
 use rustc_middle::ty::{Instance, TyCtxt, TyKind};
 use rustc_session::Session;
 use rustc_smir::rustc_internal;
 use rustc_span::{Span, Symbol};
 use stable_mir::mir::mono::Instance as InstanceStable;
-use stable_mir::mir::Local;
 use stable_mir::{CrateDef, DefId as StableDefId};
 use std::str::FromStr;
 use strum_macros::{AsRefStr, EnumString};
@@ -234,23 +226,21 @@ impl<'tcx> KaniAttributes<'tcx> {
     ///
     /// In the case of an error, this function will emit the error and return `None`.
     pub(crate) fn interpret_for_contract_attribute(&self) -> Option<(Symbol, DefId, Span)> {
-        self.expect_maybe_one(KaniAttributeKind::ProofForContract)
-            .map(|target| {
-                let name = expect_key_string_value(self.tcx.sess, target).ok()?;
-                self.resolve_from_mod(name.as_str())
-                    .map(|ok| (name, ok, target.span))
-                    .map_err(|resolve_err| {
-                        self.tcx.dcx().span_err(
-                            target.span,
-                            format!(
-                                "Failed to resolve checking function {} because {resolve_err}",
-                                name.as_str()
-                            ),
-                        )
-                    })
-                    .ok()
-            })
-            .flatten()
+        self.expect_maybe_one(KaniAttributeKind::ProofForContract).and_then(|target| {
+            let name = expect_key_string_value(self.tcx.sess, target).ok()?;
+            self.resolve_from_mod(name.as_str())
+                .map(|ok| (name, ok, target.span))
+                .map_err(|resolve_err| {
+                    self.tcx.dcx().span_err(
+                        target.span,
+                        format!(
+                            "Failed to resolve checking function {} because {resolve_err}",
+                            name.as_str()
+                        ),
+                    )
+                })
+                .ok()
+        })
     }
 
     pub fn proof_for_contract(&self) -> Option<Result<Symbol, ErrorGuaranteed>> {
@@ -404,8 +394,7 @@ impl<'tcx> KaniAttributes<'tcx> {
     /// upstream.
     fn attribute_value(&self, kind: KaniAttributeKind) -> Option<Symbol> {
         self.expect_maybe_one(kind)
-            .map(|target| expect_key_string_value(self.tcx.sess, target).ok())
-            .flatten()
+            .and_then(|target| expect_key_string_value(self.tcx.sess, target).ok())
     }
 
     /// Check that any unstable API has been enabled. Otherwise, emit an error.
@@ -589,64 +578,6 @@ impl<'tcx> KaniAttributes<'tcx> {
             }
         }
     }
-}
-
-/// Pattern macro for the comma token used in attributes.
-macro_rules! comma_tok {
-    () => {
-        TokenTree::Token(Token { kind: TokenKind::Comma, .. }, _)
-    };
-}
-
-/// Parse the token stream inside an attribute (like `kanitool::modifies`) as a comma separated
-/// sequence of function parameter names on `local_def_id` (must refer to a function). Then
-/// translates the names into [`Local`]s.
-fn parse_modify_values<'a>(
-    tcx: TyCtxt<'a>,
-    local_def_id: LocalDefId,
-    t: &'a TokenStream,
-) -> impl Iterator<Item = Local> + 'a {
-    let mir = tcx.optimized_mir(local_def_id);
-    let mut iter = t.trees();
-    std::iter::from_fn(move || {
-        let tree = iter.next()?;
-        let wrong_token_err =
-            || tcx.sess.dcx().span_err(tree.span(), "Unexpected token. Expected identifier.");
-        let result = match tree {
-            TokenTree::Token(token, _) => {
-                if let TokenKind::Ident(id, _) = &token.kind {
-                    let hir = tcx.hir();
-                    let bid = hir.body_owned_by(local_def_id).id();
-                    Some(
-                        hir.body_param_names(bid)
-                            .zip(mir.args_iter())
-                            .find(|(name, _decl)| name.name == *id)
-                            .unwrap()
-                            .1
-                            .as_usize(),
-                    )
-                } else {
-                    wrong_token_err();
-                    None
-                }
-            }
-            _ => {
-                wrong_token_err();
-                None
-            }
-        };
-        match iter.next() {
-            None | Some(comma_tok!()) => (),
-            Some(not_comma) => {
-                tcx.sess.dcx().span_err(
-                    not_comma.span(),
-                    "Unexpected token, expected end of attribute or comma",
-                );
-                iter.by_ref().skip_while(|t| !matches!(t, comma_tok!())).count();
-            }
-        }
-        result
-    })
 }
 
 /// An efficient check for the existence for a particular [`KaniAttributeKind`].

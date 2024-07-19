@@ -6,11 +6,7 @@
 use proc_macro2::{Ident, Span, TokenStream as TokenStream2};
 use quote::quote;
 use std::mem;
-use syn::punctuated::Punctuated;
-use syn::token::{Comma, SelfValue};
-use syn::{
-    parse_quote, Block, Expr, FnArg, Local, LocalInit, Pat, PatIdent, PatType, ReturnType, Stmt,
-};
+use syn::{parse_quote, Block, Expr, FnArg, Local, LocalInit, Pat, PatIdent, ReturnType, Stmt};
 
 use super::{
     helpers::*, shared::build_ensures, ContractConditionsData, ContractConditionsHandler,

@@ -1,20 +1,16 @@
-use std::io::stdout;
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::kani_middle::attributes::KaniAttributes;
-use crate::kani_middle::transform::BodyTransformation;
-use cbmc::goto_program::{DatatypeComponent, FunctionContract, Type};
+use cbmc::goto_program::FunctionContract;
 use cbmc::goto_program::{Lambda, Location};
-use cbmc::irep::Symbol;
 use kani_metadata::AssignsContract;
 use rustc_hir::def_id::DefId as InternalDefId;
 use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::{Instance, MonoItem};
-use stable_mir::mir::{Body, Local, VarDebugInfoContents};
-use stable_mir::ty::{ClosureKind, FnDef, RigidTy, TyKind};
+use stable_mir::mir::{Local, VarDebugInfoContents};
+use stable_mir::ty::{FnDef, RigidTy, TyKind};
 use stable_mir::CrateDef;
-use tracing::debug;
 
 impl<'tcx> GotocCtx<'tcx> {
     /// Given the `proof_for_contract` target `function_under_contract` and the reachable `items`,
@@ -36,13 +32,13 @@ impl<'tcx> GotocCtx<'tcx> {
         items: &[MonoItem],
     ) -> AssignsContract {
         let tcx = self.tcx;
-        let (check, modify) = items
+        let modify = items
             .iter()
             .find_map(|item| {
                 // Find the instance under contract
                 let MonoItem::Fn(instance) = *item else { return None };
                 if rustc_internal::internal(tcx, instance.def.def_id()) == function_under_contract {
-                    self.find_check_and_modifies(instance)
+                    self.find_modifies(instance)
                 } else {
                     None
                 }
@@ -91,8 +87,9 @@ impl<'tcx> GotocCtx<'tcx> {
         recursion_tracker
     }
 
-    /// Find the modifies and the check closure recursively since we may have a recursion wrapper.
-    fn find_check_and_modifies(&mut self, instance: Instance) -> Option<(Instance, Instance)> {
+    /// Find the modifies recursively since we may have a recursion wrapper.
+    /// I.e.: [recursion_wrapper ->]? check -> modifies.
+    fn find_modifies(&mut self, instance: Instance) -> Option<Instance> {
         let contract_attrs =
             KaniAttributes::for_instance(self.tcx, instance).contract_attributes()?;
         let mut find_closure = |inside: Instance, name: &str| {
@@ -116,7 +113,7 @@ impl<'tcx> GotocCtx<'tcx> {
             instance
         };
         let check = find_closure(outside_check, contract_attrs.checked_with.as_str())?;
-        Some((check, find_closure(check, contract_attrs.inner_check.as_str())?))
+        find_closure(check, contract_attrs.inner_check.as_str())
     }
 
     /// Convert the Kani level contract into a CBMC level contract by creating a

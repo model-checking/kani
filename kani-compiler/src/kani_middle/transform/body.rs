@@ -7,13 +7,9 @@ use crate::kani_middle::find_fn_def;
 use rustc_middle::ty::TyCtxt;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::*;
-use stable_mir::ty::{GenericArgs, MirConst, Region, RegionKind, Span, Ty, UintTy};
+use stable_mir::ty::{GenericArgs, MirConst, Span, Ty, UintTy};
 use std::fmt::Debug;
 use std::mem;
-
-pub const fn re_erased() -> Region {
-    Region { kind: RegionKind::ReErased }
-}
 
 /// This structure mimics a Body that can actually be modified.
 pub struct MutableBody {
@@ -453,11 +449,6 @@ impl SourceInstruction {
             SourceInstruction::Statement { bb, .. } | SourceInstruction::Terminator { bb } => bb,
         }
     }
-}
-
-/// Create a new operand that moves local.
-pub fn new_move_operand(local: Local) -> Operand {
-    Operand::Move(Place::from(Local::from(local)))
 }
 
 fn find_instance(tcx: TyCtxt, diagnostic: &str) -> Option<Instance> {

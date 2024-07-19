@@ -4,9 +4,7 @@
 use crate::kani_middle::attributes::KaniAttributes;
 use crate::kani_middle::codegen_units::CodegenUnit;
 use crate::kani_middle::find_fn_def;
-use crate::kani_middle::transform::body::{
-    new_move_operand, re_erased, CheckType, InsertPosition, MutableBody, SourceInstruction,
-};
+use crate::kani_middle::transform::body::{InsertPosition, MutableBody, SourceInstruction};
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
 use cbmc::{InternString, InternedString};
@@ -16,16 +14,12 @@ use rustc_smir::rustc_internal;
 use rustc_span::Symbol;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{
-    AggregateKind, Body, BorrowKind, ConstOperand, Local, Mutability, Operand, Place, Rvalue,
-    Terminator, TerminatorKind, UnwindAction, VarDebugInfo, VarDebugInfoContents,
+    Body, ConstOperand, Operand, Rvalue, Terminator, TerminatorKind, VarDebugInfoContents,
 };
-use stable_mir::ty::{
-    ClosureDef, ClosureKind, FnDef, GenericArgs, MirConst, Region, RigidTy, Ty, TyKind, UintTy,
-};
-use stable_mir::{CrateDef, DefId};
+use stable_mir::ty::{ClosureDef, FnDef, MirConst, RigidTy, TyKind, UintTy};
+use stable_mir::CrateDef;
 use std::collections::HashSet;
 use std::fmt::Debug;
-use std::io::{stdout, Stdout};
 use tracing::{debug, trace};
 
 /// Check if we can replace calls to any_modifies.
@@ -36,7 +30,6 @@ use tracing::{debug, trace};
 pub struct AnyModifiesPass {
     kani_any: Option<FnDef>,
     kani_any_modifies: Option<FnDef>,
-    stubbed: HashSet<DefId>,
     target_fn: Option<InternedString>,
 }
 
@@ -89,15 +82,15 @@ impl AnyModifiesPass {
         let kani_any_modifies = tcx
             .get_diagnostic_item(rustc_span::symbol::Symbol::intern("KaniAnyModifies"))
             .map(item_fn_def);
-        let (target_fn, stubbed) = if let Some(harness) = unit.harnesses.first() {
+        let target_fn = if let Some(harness) = unit.harnesses.first() {
             let attributes = KaniAttributes::for_instance(tcx, *harness);
             let target_fn =
                 attributes.proof_for_contract().map(|symbol| symbol.unwrap().as_str().intern());
-            (target_fn, unit.stubs.keys().map(|from| from.def_id()).collect::<HashSet<_>>())
+            target_fn
         } else {
-            (None, HashSet::new())
+            None
         };
-        AnyModifiesPass { kani_any, kani_any_modifies, target_fn, stubbed }
+        AnyModifiesPass { kani_any, kani_any_modifies, target_fn }
     }
 
     /// Replace calls to `any_modifies` by calls to `any`.
@@ -231,7 +224,7 @@ impl TransformPass for FunctionWithContractPass {
                     (false, body)
                 }
             }
-            other => {
+            _ => {
                 /* static variables case */
                 (false, body)
             }
@@ -245,11 +238,11 @@ impl FunctionWithContractPass {
     pub fn new(tcx: TyCtxt, unit: &CodegenUnit) -> FunctionWithContractPass {
         let harness = unit.harnesses.first().unwrap();
         let attrs = KaniAttributes::for_instance(tcx, *harness);
-        let check_fn = attrs.interpret_for_contract_attribute().map(|(_, def_id, span)| def_id);
+        let check_fn = attrs.interpret_for_contract_attribute().map(|(_, def_id, _)| def_id);
         let replace_fns: HashSet<_> = attrs
             .interpret_stub_verified_attribute()
             .iter()
-            .map(|(_, def_id, span)| *def_id)
+            .map(|(_, def_id, _)| *def_id)
             .collect();
         FunctionWithContractPass { check_fn, replace_fns, unused_closures: Default::default() }
     }
@@ -358,21 +351,21 @@ impl FunctionWithContractPass {
         match mode {
             ContractMode::Original => {
                 // No contract instrumentation needed. Add all closures to the list of unused.
-                self.unused_closures.insert(recursion_closure.def);
-                self.unused_closures.insert(check_closure.def);
-                self.unused_closures.insert(replace_closure.def);
+                self.unused_closures.insert(recursion_closure);
+                self.unused_closures.insert(check_closure);
+                self.unused_closures.insert(replace_closure);
             }
             ContractMode::RecursiveCheck => {
-                self.unused_closures.insert(replace_closure.def);
-                self.unused_closures.insert(check_closure.def);
+                self.unused_closures.insert(replace_closure);
+                self.unused_closures.insert(check_closure);
             }
             ContractMode::SimpleCheck => {
-                self.unused_closures.insert(replace_closure.def);
-                self.unused_closures.insert(recursion_closure.def);
+                self.unused_closures.insert(replace_closure);
+                self.unused_closures.insert(recursion_closure);
             }
             ContractMode::Replace => {
-                self.unused_closures.insert(recursion_closure.def);
-                self.unused_closures.insert(check_closure.def);
+                self.unused_closures.insert(recursion_closure);
+                self.unused_closures.insert(check_closure);
             }
         }
     }
@@ -389,15 +382,7 @@ enum ContractMode {
     Replace = 3,
 }
 
-/// Information about a closure.
-#[derive(Clone, Debug)]
-struct ClosureInfo {
-    ty: Ty,
-    def: ClosureDef,
-    args: GenericArgs,
-}
-
-fn find_closure(tcx: TyCtxt, fn_def: FnDef, body: &Body, name: &str) -> ClosureInfo {
+fn find_closure(tcx: TyCtxt, fn_def: FnDef, body: &Body, name: &str) -> ClosureDef {
     body.var_debug_info
         .iter()
         .find_map(|var_info| {
@@ -406,8 +391,8 @@ fn find_closure(tcx: TyCtxt, fn_def: FnDef, body: &Body, name: &str) -> ClosureI
                     VarDebugInfoContents::Place(place) => place.ty(body.locals()).unwrap(),
                     VarDebugInfoContents::Const(const_op) => const_op.ty(),
                 };
-                if let TyKind::RigidTy(RigidTy::Closure(def, args)) = ty.kind() {
-                    return Some(ClosureInfo { ty, def, args });
+                if let TyKind::RigidTy(RigidTy::Closure(def, _args)) = ty.kind() {
+                    return Some(def);
                 }
             }
             None
