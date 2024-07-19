@@ -162,10 +162,49 @@ impl AnyModifiesPass {
 
 /// This pass will transform functions annotated with contracts based on the harness configuration.
 ///
-/// For functions that are being checked, change the body to invoke the "check" closure.
-/// For functions that  are being stubbed, change the body to invoke the "replace" closure.
+/// Functions with contract will always follow the same structure:
 ///
-/// Functions with contract contains
+/// ```ignore
+/// #[kanitool::recursion_check = "__kani_recursion_check_modify"]
+/// #[kanitool::checked_with = "__kani_check_modify"]
+/// #[kanitool::replaced_with = "__kani_replace_modify"]
+/// #[kanitool::inner_check = "__kani_modifies_modify"]
+/// fn name_fn(ptr: &mut u32) {
+///     #[kanitool::fn_marker = "kani_register_contract"]
+///     pub const fn kani_register_contract<T, F: FnOnce() -> T>(f: F) -> T {
+///         kani::panic("internal error: entered unreachable code: ")
+///     }
+///     let kani_contract_mode = kani::internal::mode();
+///     match kani_contract_mode {
+///         kani::internal::RECURSION_CHECK => {
+///             #[kanitool::is_contract_generated(recursion_check)]
+///             let mut __kani_recursion_check_name_fn = || { /* recursion check body */ };
+///             kani_register_contract(__kani_recursion_check_modify)
+///         }
+///         kani::internal::REPLACE => {
+///             #[kanitool::is_contract_generated(replace)]
+///             let mut __kani_replace_name_fn = || { /* replace body */ };
+///             kani_register_contract(__kani_replace_name_fn)
+///         }
+///         kani::internal::SIMPLE_CHECK => {
+///             #[kanitool::is_contract_generated(check)]
+///             let mut __kani_check_name_fn = || { /* check body */ };
+///             kani_register_contract(__kani_check_name_fn)
+///         }
+///         _ => { /* original body */ }
+///     }
+/// }
+/// ```
+///
+/// This pass will perform the following operations:
+/// 1. For functions with contract that are not being used for check or replacement:
+///    - Set `kani_contract_mode` to the value ORIGINAL.
+///    - Replace the generated closures body with unreachable.
+/// 2. For functions with contract that are being used:
+///    - Set `kani_contract_mode` to the value corresponding to the expected usage.
+///    - Replace the non-used generated closures body with unreachable.
+/// 3. Replace the body of `kani_register_contract` by `kani::internal::run_contract_fn` to
+///    invoke the closure.
 #[derive(Debug)]
 pub struct FunctionWithContractPass {
     /// Function that is being checked, if any.

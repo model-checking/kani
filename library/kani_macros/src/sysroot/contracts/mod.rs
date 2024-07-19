@@ -31,26 +31,26 @@
 //! addition, we also want to make sure to support non-contract attributes on
 //! functions with contracts.
 //!
-//! To this end we use a state machine. The initial state is an "untouched"
+//! To this end we use a state machine with two states. The initial state is an "untouched"
 //! function with possibly multiple contract attributes, none of which have been
 //! expanded. When we expand the first (outermost) contract
 //! attribute on such a function we re-emit the function with a few closures defined
-//! in their body, which correspond to the "check" and "replace" that enforce the condition
-//! carried by the attribute currently being expanded.
+//! in their body, which correspond to the "check", "recursive" and "replace" that enforce the
+//! condition carried by the attribute currently being expanded.
 //!
 //! We also add new marker attributes to the original function to
-//! advance the state machine. The "check" closure gets a
-//! `kanitool::is_contract_generated(check)` attributes and analogous for
-//! replace. The re-emitted original meanwhile is decorated with
+//! advance the state machine. The re-emitted original meanwhile is decorated with
 //! `kanitool::checked_with(name_of_generated_check_variable)` and an analogous
-//! `kanittool::replaced_with` attribute also. The next contract attribute that
+//! `kanittool::replaced_with` attribute also.
+//! Each closure gets a `kanitool::is_contract_generated(<KIND>)` attributes.
+//! The next contract attribute that
 //! is expanded will detect the presence of these markers in the attributes of
 //! the item and be able to determine their position in the state machine this
-//! way. If the state is either a "check" or "replace" then the body of the
-//! function is augmented with the additional conditions carried by the macro.
-//! If the state is the "original" function, no changes are performed.
+//! way.
 //!
-//! We place marker attributes at the bottom of the attribute stack (innermost),
+//! Subsequent run, will expand the existing definitions with the condition being processed.
+//!
+//! Note: We place marker attributes at the bottom of the attribute stack (innermost),
 //! otherwise they would not be visible to the future macro expansions.
 //!
 //! Below you can see a graphical rendering where boxes are states and each
@@ -85,8 +85,8 @@
 //!
 //! The check function is a copy of the original function with preconditions
 //! added before the body and postconditions after as well as injected before
-//! every `return` (see [`PostconditionInjector`]). Attributes on the original
-//! function are also copied to the check function.
+//! every `return` (see [`PostconditionInjector`]). All arguments are captured
+//! by the closure.
 //!
 //! ## Replace Function
 //!
@@ -97,10 +97,6 @@
 //!
 //! Decorates the original function with `#[kanitool::replaced_by =
 //! "__kani_replace_<fn_name>"]`.
-//!
-//! The replace closure has the same signature as the original function but its
-//! body is replaced by `kani::any_modifies()`, which generates a non-deterministic
-//! value.
 //!
 //! ## Inductive Verification
 //!
@@ -128,25 +124,26 @@
 //! more than once in its harness.
 //!
 //! To facilitate all this we generate a `__kani_recursion_check_<fn_name>`
-//! function with the following shape:
+//! closure with the following shape:
 //!
 //! ```ignored
-//! let __kani_recursion_check_func = |(args ...)| {
+//! let __kani_recursion_check_func = || {
 //!     static mut REENTRY: bool = false;
 //!
 //!     if unsafe { REENTRY } {
-//!         call_replace(fn args...)
+//!         let __kani_replace_func = || { /* replace body */ }
+//!         __kani_replace_func()
 //!     } else {
 //!         unsafe { reentry = true };
-//!         let result_kani_internal = call_check(fn args...);
+//!         let __kani_check_func = || { /* check body */ }
+//!         let result_kani_internal = __kani_check_func();
 //!         unsafe { reentry = false };
 //!         result_kani_internal
 //!     }
 //! };
 //! ```
 //!
-//! We register this closure as `#[kanitool::checked_with = "__kani_recursion_..."]` instead of the
-//! check function.
+//! We register this closure as `#[kanitool::recursion_check = "__kani_recursion_..."]`.
 //!
 //! # Complete example
 //!
@@ -159,56 +156,106 @@
 //! ```
 //!
 //! Turns into
-//! TODO: Update this
 //! ```
-//! #[kanitool::checked_with = "div_recursion_check_965916"]
-//! #[kanitool::replaced_with = "div_replace_965916"]
-//! fn div(dividend: u32, divisor: u32) -> u32 { dividend / divisor }
-//!
-//! #[allow(dead_code, unused_variables)]
-//! #[kanitool :: is_contract_generated(check)] fn
-//! div_check_b97df2(dividend : u32, divisor : u32) -> u32
-//! {
-//!     let dividend_renamed = kani::internal::untracked_deref(& dividend);
-//!     let divisor_renamed = kani::internal::untracked_deref(& divisor);
-//!     kani::assume(divisor != 0);
-//!     let result_kani_internal : u32 = div_wrapper_b97df2(dividend, divisor);
-//!     kani::assert(
-//!     (| result : & u32 | *result <= dividend_renamed)(& result_kani_internal),
-//!     stringify!(|result : &u32| *result <= dividend));
-//!     std::mem::forget(dividend_renamed);
-//!     std::mem::forget(divisor_renamed);
-//!     result_kani_internal
-//! }
-//!
-//! #[allow(dead_code, unused_variables)]
-//! #[kanitool :: is_contract_generated(replace)] fn
-//! div_replace_b97df2(dividend : u32, divisor : u32) -> u32
-//! {
-//!     let divisor_renamed = kani::internal::untracked_deref(& divisor);
-//!     let dividend_renamed = kani::internal::untracked_deref(& dividend);
-//!     kani::assert(divisor != 0, stringify! (divisor != 0));
-//!     let result_kani_internal : u32 = kani::any_modifies();
-//!     kani::assume(
-//!     (|result : & u32| *result <= dividend_renamed)(&result_kani_internal));
-//!     std::mem::forget(divisor_renamed);
-//!     std::mem::forget(dividend_renamed);
-//!     result_kani_internal
-//! }
-//!
-//! #[allow(dead_code)]
-//! #[allow(unused_variables)]
-//! #[kanitool::is_contract_generated(recursion_check)]
-//! fn div_recursion_check_965916(dividend: u32, divisor: u32) -> u32 {
-//!     static mut REENTRY: bool = false;
-//!
-//!     if unsafe { REENTRY } {
-//!         div_replace_b97df2(dividend, divisor)
-//!     } else {
-//!         unsafe { reentry = true };
-//!         let result_kani_internal = div_check_b97df2(dividend, divisor);
-//!         unsafe { reentry = false };
-//!         result_kani_internal
+//! #[kanitool::recursion_check = "__kani_recursion_check_div"]
+//! #[kanitool::checked_with = "__kani_check_div"]
+//! #[kanitool::replaced_with = "__kani_replace_div"]
+//! #[kanitool::inner_check = "__kani_modifies_div"]
+//! fn div(dividend: u32, divisor: u32) -> u32 {
+//!     #[inline(never)]
+//!     #[kanitool::fn_marker = "kani_register_contract"]
+//!     pub const fn kani_register_contract<T, F: FnOnce() -> T>(f: F) -> T {
+//!         kani::panic("internal error: entered unreachable code: ")
+//!     }
+//!     let kani_contract_mode = kani::internal::mode();
+//!     match kani_contract_mode {
+//!         kani::internal::RECURSION_CHECK => {
+//!             #[kanitool::is_contract_generated(recursion_check)]
+//!             #[allow(dead_code, unused_variables, unused_mut)]
+//!             let mut __kani_recursion_check_div =
+//!                 || -> u32
+//!                     {
+//!                         #[kanitool::recursion_tracker]
+//!                         static mut REENTRY: bool = false;
+//!                         if unsafe { REENTRY } {
+//!                                 #[kanitool::is_contract_generated(replace)]
+//!                                 #[allow(dead_code, unused_variables, unused_mut)]
+//!                                 let mut __kani_replace_div =
+//!                                     || -> u32
+//!                                         {
+//!                                             kani::assert(divisor != 0, "divisor != 0");
+//!                                             let result_kani_internal: u32 = kani::any_modifies();
+//!                                             kani::assume(kani::internal::apply_closure(|result: &u32|
+//!                                                         *result <= dividend, &result_kani_internal));
+//!                                             result_kani_internal
+//!                                         };
+//!                                 __kani_replace_div()
+//!                             } else {
+//!                                unsafe { REENTRY = true };
+//!                                #[kanitool::is_contract_generated(check)]
+//!                                #[allow(dead_code, unused_variables, unused_mut)]
+//!                                let mut __kani_check_div =
+//!                                    || -> u32
+//!                                        {
+//!                                            kani::assume(divisor != 0);
+//!                                            let _wrapper_arg = ();
+//!                                            #[kanitool::is_contract_generated(wrapper)]
+//!                                            #[allow(dead_code, unused_variables, unused_mut)]
+//!                                            let mut __kani_modifies_div =
+//!                                                |_wrapper_arg| -> u32 { dividend / divisor };
+//!                                            let result_kani_internal: u32 =
+//!                                                __kani_modifies_div(_wrapper_arg);
+//!                                            kani::assert(kani::internal::apply_closure(|result: &u32|
+//!                                                        *result <= dividend, &result_kani_internal),
+//!                                                "|result : &u32| *result <= dividend");
+//!                                            result_kani_internal
+//!                                        };
+//!                                let result_kani_internal = __kani_check_div();
+//!                                unsafe { REENTRY = false };
+//!                                result_kani_internal
+//!                            }
+//!                     };
+//!             ;
+//!             kani_register_contract(__kani_recursion_check_div)
+//!         }
+//!         kani::internal::REPLACE => {
+//!             #[kanitool::is_contract_generated(replace)]
+//!             #[allow(dead_code, unused_variables, unused_mut)]
+//!             let mut __kani_replace_div =
+//!                 || -> u32
+//!                     {
+//!                         kani::assert(divisor != 0, "divisor != 0");
+//!                         let result_kani_internal: u32 = kani::any_modifies();
+//!                         kani::assume(kani::internal::apply_closure(|result: &u32|
+//!                                     *result <= dividend, &result_kani_internal));
+//!                         result_kani_internal
+//!                     };
+//!             ;
+//!             kani_register_contract(__kani_replace_div)
+//!         }
+//!         kani::internal::SIMPLE_CHECK => {
+//!             #[kanitool::is_contract_generated(check)]
+//!             #[allow(dead_code, unused_variables, unused_mut)]
+//!             let mut __kani_check_div =
+//!                 || -> u32
+//!                     {
+//!                         kani::assume(divisor != 0);
+//!                         let _wrapper_arg = ();
+//!                         #[kanitool::is_contract_generated(wrapper)]
+//!                         #[allow(dead_code, unused_variables, unused_mut)]
+//!                         let mut __kani_modifies_div =
+//!                             |_wrapper_arg| -> u32 { dividend / divisor };
+//!                         let result_kani_internal: u32 =
+//!                             __kani_modifies_div(_wrapper_arg);
+//!                         kani::assert(kani::internal::apply_closure(|result: &u32|
+//!                                     *result <= dividend, &result_kani_internal),
+//!                             "|result : &u32| *result <= dividend");
+//!                         result_kani_internal
+//!                     };
+//!             ;
+//!             kani_register_contract(__kani_check_div)
+//!         }
+//!         _ => { dividend / divisor }
 //!     }
 //! }
 //! ```
@@ -241,75 +288,136 @@
 //! ```
 //!
 //! This expands to
-//! TODO: Update this
 //!
 //! ```
-//! #[kanitool::checked_with = "modify_recursion_check_633496"]
-//! #[kanitool::replaced_with = "modify_replace_633496"]
-//! #[kanitool::inner_check = "modify_wrapper_633496"]
-//! fn modify(ptr: &mut u32) { { *ptr += 1; } }
-//! #[allow(dead_code, unused_variables, unused_mut)]
-//! #[kanitool::is_contract_generated(recursion_check)]
-//! fn modify_recursion_check_633496(arg0: &mut u32) {
-//!     static mut REENTRY: bool = false;
-//!     if unsafe { REENTRY } {
-//!             modify_replace_633496(arg0)
-//!         } else {
-//!            unsafe { REENTRY = true };
-//!            let result_kani_internal = modify_check_633496(arg0);
-//!            unsafe { REENTRY = false };
-//!            result_kani_internal
-//!        }
-//! }
-//! #[allow(dead_code, unused_variables, unused_mut)]
-//! #[kanitool::is_contract_generated(check)]
-//! fn modify_check_633496(ptr: &mut u32) {
-//!     let _wrapper_arg_1 =
-//!         unsafe { kani::internal::Pointer::decouple_lifetime(&ptr) };
-//!     kani::assume(*ptr < 100);
-//!     let remember_kani_internal_92cc419d8aca576c = *ptr + 1;
-//!     let remember_kani_internal_92cc419d8aca576c = *ptr + 1;
-//!     let result_kani_internal: () = modify_wrapper_633496(ptr, _wrapper_arg_1);
-//!     kani::assert((|result|
-//!                     (remember_kani_internal_92cc419d8aca576c) ==
-//!                         *ptr)(&result_kani_internal),
-//!         "|result| old(*ptr + 1) == *ptr");
-//!     kani::assert((|result|
-//!                     (remember_kani_internal_92cc419d8aca576c) ==
-//!                         *ptr)(&result_kani_internal),
-//!         "|result| old(*ptr + 1) == *ptr");
-//!     result_kani_internal
-//! }
-//! #[allow(dead_code, unused_variables, unused_mut)]
-//! #[kanitool::is_contract_generated(replace)]
-//! fn modify_replace_633496(ptr: &mut u32) {
-//!     kani::assert(*ptr < 100, "*ptr < 100");
-//!     let remember_kani_internal_92cc419d8aca576c = *ptr + 1;
-//!     let remember_kani_internal_92cc419d8aca576c = *ptr + 1;
-//!     let result_kani_internal: () = kani::any_modifies();
-//!     *unsafe {
-//!                 kani::internal::Pointer::assignable(kani::internal::untracked_deref(&(ptr)))
-//!             } = kani::any_modifies();
-//!     kani::assume((|result|
-//!                     (remember_kani_internal_92cc419d8aca576c) ==
-//!                         *ptr)(&result_kani_internal));
-//!     kani::assume((|result|
-//!                     (remember_kani_internal_92cc419d8aca576c) ==
-//!                         *ptr)(&result_kani_internal));
-//!     result_kani_internal
-//! }
-//! #[kanitool::modifies(_wrapper_arg_1)]
-//! #[allow(dead_code, unused_variables, unused_mut)]
-//! #[kanitool::is_contract_generated(wrapper)]
-//! fn modify_wrapper_633496<'_wrapper_arg_1,
-//!     WrapperArgType1>(ptr: &mut u32, _wrapper_arg_1: &WrapperArgType1) {
-//!     *ptr += 1;
-//! }
-//! #[allow(dead_code)]
-//! #[kanitool::proof_for_contract = "modify"]
-//! fn main() {
-//!     kani::internal::init_contracts();
-//!     { let mut i = kani::any(); modify(&mut i); }
+//! #[kanitool::recursion_check = "__kani_recursion_check_modify"]
+//! #[kanitool::checked_with = "__kani_check_modify"]
+//! #[kanitool::replaced_with = "__kani_replace_modify"]
+//! #[kanitool::inner_check = "__kani_modifies_modify"]
+//! fn modify(ptr: &mut u32) {
+//!     #[inline(never)]
+//!     #[kanitool::fn_marker = "kani_register_contract"]
+//!     pub const fn kani_register_contract<T, F: FnOnce() -> T>(f: F) -> T {
+//!         kani::panic("internal error: entered unreachable code: ")
+//!     }
+//!     let kani_contract_mode = kani::internal::mode();
+//!     match kani_contract_mode {
+//!         kani::internal::RECURSION_CHECK => {
+//!             #[kanitool::is_contract_generated(recursion_check)]
+//!             #[allow(dead_code, unused_variables, unused_mut)]
+//!             let mut __kani_recursion_check_modify =
+//!                 ||
+//!                     {
+//!                         #[kanitool::recursion_tracker]
+//!                         static mut REENTRY: bool = false;
+//!                         if unsafe { REENTRY } {
+//!                                 #[kanitool::is_contract_generated(replace)]
+//!                                 #[allow(dead_code, unused_variables, unused_mut)]
+//!                                 let mut __kani_replace_modify =
+//!                                     ||
+//!                                         {
+//!                                             kani::assert(*ptr < 100, "*ptr < 100");
+//!                                             let remember_kani_internal_92cc419d8aca576c = *ptr + 1;
+//!                                             let remember_kani_internal_92cc419d8aca576c = *ptr + 1;
+//!                                             let result_kani_internal: () = kani::any_modifies();
+//!                                             *unsafe {
+//!                                                         kani::internal::Pointer::assignable(kani::internal::untracked_deref(&(ptr)))
+//!                                                     } = kani::any_modifies();
+//!                                             kani::assume(kani::internal::apply_closure(|result|
+//!                                                         (remember_kani_internal_92cc419d8aca576c) == *ptr,
+//!                                                     &result_kani_internal));
+//!                                             kani::assume(kani::internal::apply_closure(|result|
+//!                                                         (remember_kani_internal_92cc419d8aca576c) == *ptr,
+//!                                                     &result_kani_internal));
+//!                                             result_kani_internal
+//!                                         };
+//!                                 __kani_replace_modify()
+//!                             } else {
+//!                                unsafe { REENTRY = true };
+//!                                #[kanitool::is_contract_generated(check)]
+//!                                #[allow(dead_code, unused_variables, unused_mut)]
+//!                                let mut __kani_check_modify =
+//!                                    ||
+//!                                        {
+//!                                            kani::assume(*ptr < 100);
+//!                                            let remember_kani_internal_92cc419d8aca576c = *ptr + 1;
+//!                                            let remember_kani_internal_92cc419d8aca576c = *ptr + 1;
+//!                                            let _wrapper_arg = (ptr as *const _,);
+//!                                            #[kanitool::is_contract_generated(wrapper)]
+//!                                            #[allow(dead_code, unused_variables, unused_mut)]
+//!                                            let mut __kani_modifies_modify =
+//!                                                |_wrapper_arg| { *ptr += 1; };
+//!                                            let result_kani_internal: () =
+//!                                                __kani_modifies_modify(_wrapper_arg);
+//!                                            kani::assert(kani::internal::apply_closure(|result|
+//!                                                        (remember_kani_internal_92cc419d8aca576c) == *ptr,
+//!                                                    &result_kani_internal), "|result| old(*ptr + 1) == *ptr");
+//!                                            kani::assert(kani::internal::apply_closure(|result|
+//!                                                        (remember_kani_internal_92cc419d8aca576c) == *ptr,
+//!                                                    &result_kani_internal), "|result| old(*ptr + 1) == *ptr");
+//!                                            result_kani_internal
+//!                                        };
+//!                                let result_kani_internal = __kani_check_modify();
+//!                                unsafe { REENTRY = false };
+//!                                result_kani_internal
+//!                            }
+//!                     };
+//!             ;
+//!             kani_register_contract(__kani_recursion_check_modify)
+//!         }
+//!         kani::internal::REPLACE => {
+//!             #[kanitool::is_contract_generated(replace)]
+//!             #[allow(dead_code, unused_variables, unused_mut)]
+//!             let mut __kani_replace_modify =
+//!                 ||
+//!                     {
+//!                         kani::assert(*ptr < 100, "*ptr < 100");
+//!                         let remember_kani_internal_92cc419d8aca576c = *ptr + 1;
+//!                         let remember_kani_internal_92cc419d8aca576c = *ptr + 1;
+//!                         let result_kani_internal: () = kani::any_modifies();
+//!                         *unsafe {
+//!                                     kani::internal::Pointer::assignable(kani::internal::untracked_deref(&(ptr)))
+//!                                 } = kani::any_modifies();
+//!                         kani::assume(kani::internal::apply_closure(|result|
+//!                                     (remember_kani_internal_92cc419d8aca576c) == *ptr,
+//!                                 &result_kani_internal));
+//!                         kani::assume(kani::internal::apply_closure(|result|
+//!                                     (remember_kani_internal_92cc419d8aca576c) == *ptr,
+//!                                 &result_kani_internal));
+//!                         result_kani_internal
+//!                     };
+//!             ;
+//!             kani_register_contract(__kani_replace_modify)
+//!         }
+//!         kani::internal::SIMPLE_CHECK => {
+//!             #[kanitool::is_contract_generated(check)]
+//!             #[allow(dead_code, unused_variables, unused_mut)]
+//!             let mut __kani_check_modify =
+//!                 ||
+//!                     {
+//!                         kani::assume(*ptr < 100);
+//!                         let remember_kani_internal_92cc419d8aca576c = *ptr + 1;
+//!                         let remember_kani_internal_92cc419d8aca576c = *ptr + 1;
+//!                         let _wrapper_arg = (ptr as *const _,);
+//!                         #[kanitool::is_contract_generated(wrapper)]
+//!                         #[allow(dead_code, unused_variables, unused_mut)]
+//!                         let mut __kani_modifies_modify =
+//!                             |_wrapper_arg| { *ptr += 1; };
+//!                         let result_kani_internal: () =
+//!                             __kani_modifies_modify(_wrapper_arg);
+//!                         kani::assert(kani::internal::apply_closure(|result|
+//!                                     (remember_kani_internal_92cc419d8aca576c) == *ptr,
+//!                                 &result_kani_internal), "|result| old(*ptr + 1) == *ptr");
+//!                         kani::assert(kani::internal::apply_closure(|result|
+//!                                     (remember_kani_internal_92cc419d8aca576c) == *ptr,
+//!                                 &result_kani_internal), "|result| old(*ptr + 1) == *ptr");
+//!                         result_kani_internal
+//!                     };
+//!             ;
+//!             kani_register_contract(__kani_check_modify)
+//!         }
+//!         _ => { *ptr += 1; }
+//!     }
 //! }
 //! ```
 
