@@ -13,7 +13,6 @@ use stable_mir::mir::mono::{Instance, MonoItem};
 use std::fs::File;
 use std::io::BufWriter;
 use std::io::Write;
-use std::path::PathBuf;
 
 use super::BodyTransformation;
 
@@ -44,17 +43,18 @@ impl GlobalPass for DumpMirPass {
     ) {
         // Create output buffer.
         let file_path = {
+            let base_path = tcx.output_filenames(()).path(OutputType::Object);
+            let base_name = base_path.as_path();
             let entry_point = (starting_items.len() == 1).then_some(starting_items[0].clone());
             // If there is a single entry point, use it as a file name.
             if let Some(MonoItem::Fn(starting_instance)) = entry_point {
                 let mangled_name = starting_instance.mangled_name();
-                PathBuf::from(mangled_name).with_extension(ArtifactType::SymTabGoto)
+                let file_stem =
+                    format!("{}_{mangled_name}", base_name.file_stem().unwrap().to_str().unwrap());
+                base_name.with_file_name(file_stem).with_extension(ArtifactType::SymTabGoto)
             } else {
                 // Otherwise, use the object output path from the compiler.
-                tcx.output_filenames(())
-                    .path(OutputType::Object)
-                    .as_path()
-                    .with_extension(ArtifactType::SymTabGoto)
+                base_name.with_extension(ArtifactType::SymTabGoto)
             }
         };
         let out_file = File::create(file_path.with_extension("kani.mir")).unwrap();
