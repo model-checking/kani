@@ -9,6 +9,9 @@ fn call_boxed_closure(f: Box<dyn Fn() -> ()>) -> () {
 #[kani::proof]
 fn main() {
     let x = 1;
-    let closure = move || {let _ = x; ()};
+    let closure = move || {
+        let _ = x;
+        ()
+    };
     call_boxed_closure(Box::new(closure));
 }
