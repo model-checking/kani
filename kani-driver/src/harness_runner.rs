@@ -104,6 +104,59 @@ impl<'sess, 'pr> HarnessRunner<'sess, 'pr> {
 }
 
 impl KaniSession {
+
+    fn process_output(&self, result: &VerificationResult, harness: &HarnessMetadata) {
+        if self.should_print_output() {
+            let output = if self.args.output_into_files {
+                self.write_output_to_file(result, harness)
+            } else {
+                self.render_output(result, harness)
+            };
+
+            println!("{}", output);
+        }
+    }
+
+    fn should_print_output(&self) -> bool {
+        return !self.args.common_args.quiet && self.args.output_format != OutputFormat::Old;
+    }
+
+    fn write_output_to_file(&self, result: &VerificationResult, harness: &HarnessMetadata) -> String {
+        let target_dir = self.get_target_dir();
+        let file_name = format!("{}/{}", target_dir, harness.pretty_name);
+        let path = Path::new(&file_name);
+        let prefix = path.parent().unwrap();
+
+        std::fs::create_dir_all(prefix).unwrap();
+        let mut file = File::create(&file_name).unwrap();
+
+        let file_output = self.render_output(result, harness);
+        if let Err(e) = writeln!(file, "{}", file_output) {
+            eprintln!("Failed to write to file {}: {}", file_name, e);
+        }
+
+        return file_output;
+    }
+
+    fn get_target_dir(&self) -> String {
+        return self.args.target_dir
+            .clone()
+            .map_or_else(|| "./kani_output".to_string(), |dir| {
+                format!("{}/", dir.into_os_string().into_string().unwrap())
+            });
+    }
+
+    fn render_output(&self, result: &VerificationResult, harness: &HarnessMetadata) -> String {
+        let format = if !self.args.output_into_files || self.args.output_format == OutputFormat::Terse {
+            &self.args.output_format
+        } else {
+            &OutputFormat::Regular
+        };
+
+        return result.render(format, harness.attributes.should_panic, self.args.coverage)
+    }
+
+
     /// Run the verification process for a single harness
     pub(crate) fn check_harness(
         &self,
@@ -122,56 +175,7 @@ impl KaniSession {
         } else {
             let mut result = self.with_timer(|| self.run_cbmc(binary, harness), "run_cbmc")?;
 
-            // When quiet, we don't want to print anything at all.
-            // When output is old, we also don't have real results to print.
-            if !self.args.common_args.quiet && self.args.output_format != OutputFormat::Old {
-                let file_output: String = Default::default();
-                if self.args.output_into_files {
-
-                    //target_dir might fail if not UTF-8 Encoded path
-                    let targ_dir = self.args.target_dir.clone();
-                    let dir_str;
-                    //This is to ensure that null won't brake, might be a better way to do this
-                    if targ_dir != None {
-                        dir_str = String::from(targ_dir.unwrap().into_os_string().into_string().unwrap().to_owned() + "/");
-                    } else {
-                        dir_str = String::from("./test/");
-                    }
-                    let file_name = String::from(dir_str.to_owned() + &harness.pretty_name.clone()); 
-                    let path = Path::new(&file_name);
-                    let prefix = path.parent().unwrap();
-                    std::fs::create_dir_all(prefix).unwrap();
-
-                    let file = File::create(&harness.pretty_name.clone());
-
-                    let file_output = result.render(
-                        &OutputFormat::Regular,
-                        harness.attributes.should_panic,
-                        self.args.coverage,
-                        );
-
-
-
-                    if let Err(e) = writeln!(file.unwrap(), "{}", file_output) {
-                        eprintln!("Failed to write to file {}: {}", file_name, e);
-                    }
-
-
-                }
-                let output;
-                //Only render clone if Terse format
-                if !self.args.output_into_files || self.args.output_format == OutputFormat::Terse {
-                    output = result.render(
-                        &self.args.output_format,
-                        harness.attributes.should_panic,
-                        self.args.coverage,
-                    );
-                } else {
-                    output = file_output.clone();
-                }
-
-                println!("{}", output);
-            }
+            self.process_output(&result, harness); 
             self.gen_and_add_concrete_playback(harness, &mut result)?;
             Ok(result)
         }
