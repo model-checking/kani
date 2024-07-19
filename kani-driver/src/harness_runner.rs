@@ -107,21 +107,20 @@ impl KaniSession {
 
     fn process_output(&self, result: &VerificationResult, harness: &HarnessMetadata) {
         if self.should_print_output() {
-            let output = if self.args.output_into_files {
-                self.write_output_to_file(result, harness)
-            } else {
-                self.render_output(result, harness)
-            };
+            if self.args.output_into_files {
+                self.write_output_to_file(result, harness);
+            } 
 
+            let output = result.render(&self.args.output_format, harness.attributes.should_panic, self.args.coverage);
             println!("{}", output);
         }
     }
 
     fn should_print_output(&self) -> bool {
-        return !self.args.common_args.quiet && self.args.output_format != OutputFormat::Old;
+        !self.args.common_args.quiet && self.args.output_format != OutputFormat::Old
     }
 
-    fn write_output_to_file(&self, result: &VerificationResult, harness: &HarnessMetadata) -> String {
+    fn write_output_to_file(&self, result: &VerificationResult, harness: &HarnessMetadata) {
         let target_dir = self.get_target_dir();
         let file_name = format!("{}/{}", target_dir, harness.pretty_name);
         let path = Path::new(&file_name);
@@ -129,31 +128,19 @@ impl KaniSession {
 
         std::fs::create_dir_all(prefix).unwrap();
         let mut file = File::create(&file_name).unwrap();
+        let file_output = result.render(&OutputFormat::Regular, harness.attributes.should_panic, self.args.coverage);
 
-        let file_output = self.render_output(result, harness);
         if let Err(e) = writeln!(file, "{}", file_output) {
             eprintln!("Failed to write to file {}: {}", file_name, e);
         }
-
-        return file_output;
     }
 
     fn get_target_dir(&self) -> String {
-        return self.args.target_dir
+        self.args.target_dir
             .clone()
             .map_or_else(|| "./kani_output".to_string(), |dir| {
                 format!("{}/", dir.into_os_string().into_string().unwrap())
-            });
-    }
-
-    fn render_output(&self, result: &VerificationResult, harness: &HarnessMetadata) -> String {
-        let format = if !self.args.output_into_files || self.args.output_format == OutputFormat::Terse {
-            &self.args.output_format
-        } else {
-            &OutputFormat::Regular
-        };
-
-        return result.render(format, harness.attributes.should_panic, self.args.coverage)
+            })
     }
 
 
