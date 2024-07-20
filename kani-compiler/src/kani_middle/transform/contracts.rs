@@ -205,7 +205,7 @@ impl AnyModifiesPass {
 ///    - Replace the non-used generated closures body with unreachable.
 /// 3. Replace the body of `kani_register_contract` by `kani::internal::run_contract_fn` to
 ///    invoke the closure.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct FunctionWithContractPass {
     /// Function that is being checked, if any.
     check_fn: Option<InternalDefId>,
@@ -275,15 +275,19 @@ impl FunctionWithContractPass {
     /// Build the pass by collecting which functions we are stubbing and which ones we are
     /// verifying.
     pub fn new(tcx: TyCtxt, unit: &CodegenUnit) -> FunctionWithContractPass {
-        let harness = unit.harnesses.first().unwrap();
-        let attrs = KaniAttributes::for_instance(tcx, *harness);
-        let check_fn = attrs.interpret_for_contract_attribute().map(|(_, def_id, _)| def_id);
-        let replace_fns: HashSet<_> = attrs
-            .interpret_stub_verified_attribute()
-            .iter()
-            .map(|(_, def_id, _)| *def_id)
-            .collect();
-        FunctionWithContractPass { check_fn, replace_fns, unused_closures: Default::default() }
+        if let Some(harness) = unit.harnesses.first() {
+            let attrs = KaniAttributes::for_instance(tcx, *harness);
+            let check_fn = attrs.interpret_for_contract_attribute().map(|(_, def_id, _)| def_id);
+            let replace_fns: HashSet<_> = attrs
+                .interpret_stub_verified_attribute()
+                .iter()
+                .map(|(_, def_id, _)| *def_id)
+                .collect();
+            FunctionWithContractPass { check_fn, replace_fns, unused_closures: Default::default() }
+        } else {
+            // Building the model for tests or public functions.
+            FunctionWithContractPass::default()
+        }
     }
 
     /// Functions with contract have the following structure:
