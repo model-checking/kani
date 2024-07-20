@@ -155,6 +155,11 @@ pub unsafe fn write_any_str(_s: *mut str) {
 #[doc(hidden)]
 #[allow(dead_code)]
 #[rustc_diagnostic_item = "KaniRunContract"]
+#[crate::unstable(
+    feature = "function-contracts",
+    issue = "none",
+    reason = "internal function required to run contract closure"
+)]
 fn run_contract_fn<T, F: FnOnce() -> T>(func: F) -> T {
     func()
 }

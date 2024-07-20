@@ -21,6 +21,10 @@
 #![feature(f16)]
 #![feature(f128)]
 
+// Allow us to use `kani::` instead of `crate::`.
+#[allow(unused_extern_crates)]
+extern crate self as kani;
+
 pub mod arbitrary;
 #[cfg(feature = "concrete_playback")]
 mod concrete_playback;

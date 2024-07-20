@@ -60,6 +60,7 @@ macro_rules! kani_lib {
 /// such as core in rust's std library itself.
 ///
 /// TODO: Use this inside kani library so that we dont have to maintain two copies of the same intrinsics.
+#[allow(clippy::crate_in_macro_def)]
 #[macro_export]
 macro_rules! kani_intrinsics {
     ($core:tt) => {
@@ -294,6 +295,7 @@ macro_rules! kani_intrinsics {
         }
 
         pub mod internal {
+            use crate::kani::Arbitrary;
 
             /// Helper trait for code generation for `modifies` contracts.
             ///
@@ -384,6 +386,87 @@ macro_rules! kani_intrinsics {
             #[doc(hidden)]
             #[rustc_diagnostic_item = "KaniInitContracts"]
             pub fn init_contracts() {}
+
+            /// Recieves a reference to a pointer-like object and assigns kani::any_modifies to that object.
+            /// Only for use within function contracts and will not be replaced if the recursive or function stub
+            /// replace contracts are not used.
+            #[rustc_diagnostic_item = "KaniWriteAny"]
+            #[inline(never)]
+            #[doc(hidden)]
+            pub unsafe fn write_any<T: ?Sized>(_pointer: *mut T) {
+                // This function should not be reacheable.
+                // Users must include `#[kani::recursion]` in any function contracts for recursive functions;
+                // otherwise, this might not be properly instantiate. We mark this as unreachable to make
+                // sure Kani doesn't report any false positives.
+                unreachable!()
+            }
+
+            /// Fill in a slice with kani::any.
+            /// Intended as a post compilation replacement for write_any
+            #[rustc_diagnostic_item = "KaniWriteAnySlice"]
+            #[inline(always)]
+            pub unsafe fn write_any_slice<T: Arbitrary>(slice: *mut [T]) {
+                (*slice).fill_with(T::any)
+            }
+
+            /// Fill in a pointer with kani::any.
+            /// Intended as a post compilation replacement for write_any
+            #[rustc_diagnostic_item = "KaniWriteAnySlim"]
+            #[inline(always)]
+            pub unsafe fn write_any_slim<T: Arbitrary>(pointer: *mut T) {
+                $core::ptr::write(pointer, T::any())
+            }
+
+            /// Fill in a str with kani::any.
+            /// Intended as a post compilation replacement for write_any.
+            /// Not yet implemented
+            #[rustc_diagnostic_item = "KaniWriteAnyStr"]
+            #[inline(always)]
+            pub unsafe fn write_any_str(_s: *mut str) {
+                //TODO: strings introduce new UB
+                //(*s).as_bytes_mut().fill_with(u8::any)
+                //TODO: String validation
+                unimplemented!("Kani does not support creating arbitrary `str`")
+            }
+
+            /// Function that calls a closure used to implement contracts.
+            ///
+            /// In contracts, we cannot invoke the generated closures directly, instead, we call register
+            /// contract. This function is a no-op. However, in the reality, we do want to call the closure,
+            /// so we swap the register body by this function body.
+            #[doc(hidden)]
+            #[allow(dead_code)]
+            #[rustc_diagnostic_item = "KaniRunContract"]
+            fn run_contract_fn<T, F: FnOnce() -> T>(func: F) -> T {
+                func()
+            }
+
+            /// This is used for documentation's sake of which implementation to keep during contract verification.
+            #[doc(hidden)]
+            type Mode = u8;
+
+            /// Keep the original body.
+            pub const ORIGINAL: Mode = 0;
+
+            /// Run the check with recursion support.
+            pub const RECURSION_CHECK: Mode = 1;
+
+            /// Run the simple check with no recursion support.
+            pub const SIMPLE_CHECK: Mode = 2;
+
+            /// Stub the body with its contract.
+            pub const REPLACE: Mode = 3;
+
+            /// This function is only used to help with contract instrumentation.
+            ///
+            /// It should be removed from the end user code during contract transformation.
+            /// By default, return the original code (used in concrete playback).
+            #[doc(hidden)]
+            #[inline(never)]
+            #[rustc_diagnostic_item = "KaniContractMode"]
+            pub const fn mode() -> Mode {
+                ORIGINAL
+            }
         }
     };
 }
