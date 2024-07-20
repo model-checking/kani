@@ -69,6 +69,9 @@ enum KaniAttributeKind {
     /// Generic marker that can be used to mark functions so this list doesn't have to keep growing.
     /// This takes a key which is the marker.
     FnMarker,
+    /// Used to mark functions where generating automatic pointer checks should be disabled. This is
+    /// used later to automatically attach pragma statements to locations.
+    DisableChecks,
 }
 
 impl KaniAttributeKind {
@@ -90,7 +93,8 @@ impl KaniAttributeKind {
             | KaniAttributeKind::RecursionCheck
             | KaniAttributeKind::CheckedWith
             | KaniAttributeKind::InnerCheck
-            | KaniAttributeKind::IsContractGenerated => false,
+            | KaniAttributeKind::IsContractGenerated
+            | KaniAttributeKind::DisableChecks => false,
         }
     }
 
@@ -382,6 +386,10 @@ impl<'tcx> KaniAttributes<'tcx> {
                 KaniAttributeKind::RecursionTracker => {
                     // Nothing to do here. This is used by contract instrumentation.
                 }
+                KaniAttributeKind::DisableChecks => {
+                    // Ignored here, because it should be an internal attribute. Actual validation
+                    // happens when pragmas are generated.
+                }
             }
         }
     }
@@ -502,6 +510,10 @@ impl<'tcx> KaniAttributes<'tcx> {
                 | KaniAttributeKind::RecursionTracker
                 | KaniAttributeKind::ReplacedWith => {
                     self.tcx.dcx().span_err(self.tcx.def_span(self.item), format!("Contracts are not supported on harnesses. (Found the kani-internal contract attribute `{}`)", kind.as_ref()));
+                },
+                KaniAttributeKind::DisableChecks => {
+                    // Internal attribute which shouldn't exist here.
+                    unreachable!()
                 }
                 KaniAttributeKind::FnMarker => {
                     /* no-op */

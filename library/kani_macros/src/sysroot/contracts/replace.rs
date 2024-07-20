@@ -96,7 +96,7 @@ impl<'a> ContractConditionsHandler<'a> {
                 let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
                 quote!({
                     #(#before)*
-                    #(*unsafe { kani::internal::Pointer::assignable(kani::internal::untracked_deref(&(#attr))) } = kani::any_modifies();)*
+                    #(unsafe{kani::internal::write_any(kani::internal::Pointer::assignable(kani::internal::untracked_deref(&#attr)))};)*
                     #(#after)*
                     #result
                 })

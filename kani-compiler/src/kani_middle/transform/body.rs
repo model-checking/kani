@@ -413,13 +413,30 @@ pub enum CheckType {
 }
 
 impl CheckType {
-    /// This will create the type of check that is available in the current crate.
+    /// This will create the type of check that is available in the current crate, attempting to
+    /// create a check that generates an assertion following by an assumption of the same assertion.
     ///
     /// If `kani` crate is available, this will return [CheckType::Assert], and the instance will
     /// point to `kani::assert`. Otherwise, we will collect the `core::panic_str` method and return
     /// [CheckType::Panic].
-    pub fn new(tcx: TyCtxt) -> CheckType {
+    pub fn new_assert_assume(tcx: TyCtxt) -> CheckType {
         if let Some(instance) = find_instance(tcx, "KaniAssert") {
+            CheckType::Assert(instance)
+        } else if find_instance(tcx, "panic_str").is_some() {
+            CheckType::Panic
+        } else {
+            CheckType::NoCore
+        }
+    }
+
+    /// This will create the type of check that is available in the current crate, attempting to
+    /// create a check that generates an assertion, without assuming the condition afterwards.
+    ///
+    /// If `kani` crate is available, this will return [CheckType::Assert], and the instance will
+    /// point to `kani::assert`. Otherwise, we will collect the `core::panic_str` method and return
+    /// [CheckType::Panic].
+    pub fn new_assert(tcx: TyCtxt) -> CheckType {
+        if let Some(instance) = find_instance(tcx, "KaniCheck") {
             CheckType::Assert(instance)
         } else if find_instance(tcx, "panic_str").is_some() {
             CheckType::Panic

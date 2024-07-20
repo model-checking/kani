@@ -3,7 +3,7 @@
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::kani_middle::attributes::KaniAttributes;
 use cbmc::goto_program::FunctionContract;
-use cbmc::goto_program::{Lambda, Location};
+use cbmc::goto_program::{Expr, Lambda, Location, Type};
 use kani_metadata::AssignsContract;
 use rustc_hir::def_id::DefId as InternalDefId;
 use rustc_smir::rustc_internal;
@@ -135,7 +135,7 @@ impl<'tcx> GotocCtx<'tcx> {
             .tcx
             .all_diagnostic_items(())
             .name_to_id
-            .get(&rustc_span::symbol::Symbol::intern("KaniMemInitShadowMem"))
+            .get(&rustc_span::symbol::Symbol::intern("KaniMemoryInitializationState"))
             .map(|attr_id| {
                 self.tcx
                     .symbol_name(rustc_middle::ty::Instance::mono(self.tcx, *attr_id))
@@ -163,18 +163,53 @@ impl<'tcx> GotocCtx<'tcx> {
         let assigns: Vec<_> = modifies_tys
             .into_iter()
             .enumerate()
-            .filter_map(|(idx, ty)| {
-                let kind = ty.kind();
-                kind.is_raw_ptr().then(|| {
+            .map(|(idx, ty)| {
+                assert!(ty.kind().is_any_ptr(), "Expected pointer, but found {}", ty);
+                let ptr = modifies_args.clone().member(idx.to_string(), &self.symbol_table);
+                if self.is_fat_pointer_stable(ty) {
+                    let unref = match ty.kind() {
+                        TyKind::RigidTy(RigidTy::RawPtr(pointee_ty, _)) => pointee_ty,
+                        kind => unreachable!("Expected a raw pointer, but found {:?}", kind),
+                    };
+                    let size = match unref.kind() {
+                        TyKind::RigidTy(RigidTy::Slice(elt_type)) => {
+                            elt_type.layout().unwrap().shape().size.bytes()
+                        }
+                        TyKind::RigidTy(RigidTy::Str) => 1,
+                        // For adt, see https://rust-lang.zulipchat.com/#narrow/stream/182449-t-compiler.2Fhelp
+                        TyKind::RigidTy(RigidTy::Adt(..)) => {
+                            todo!("Adt fat pointers not implemented")
+                        }
+                        kind => unreachable!("Generating a slice fat pointer to {:?}", kind),
+                    };
                     Lambda::as_contract_for(
                         &goto_annotated_fn_typ,
                         None,
-                        modifies_args
-                            .clone()
-                            .member(idx.to_string(), &self.symbol_table)
-                            .dereference(),
+                        Expr::symbol_expression(
+                            "__CPROVER_object_upto",
+                            Type::code(
+                                vec![
+                                    Type::empty()
+                                        .to_pointer()
+                                        .as_parameter(None, Some("ptr".into())),
+                                    Type::size_t().as_parameter(None, Some("size".into())),
+                                ],
+                                Type::empty(),
+                            ),
+                        )
+                        .call(vec![
+                            ptr.clone()
+                                .member("data", &self.symbol_table)
+                                .cast_to(Type::empty().to_pointer()),
+                            ptr.member("len", &self.symbol_table).mul(Expr::size_constant(
+                                size.try_into().unwrap(),
+                                &self.symbol_table,
+                            )),
+                        ]),
                     )
-                })
+                } else {
+                    Lambda::as_contract_for(&goto_annotated_fn_typ, None, ptr.dereference())
+                }
             })
             .chain(shadow_memory_assign)
             .collect();

@@ -118,9 +118,11 @@ where
     <T as Pointee>::Metadata: PtrProperties<T>,
 {
     let (thin_ptr, metadata) = ptr.to_raw_parts();
+    // Need to assert `is_initialized` because non-determinism is used under the hood, so it does
+    // not make sense to use it inside assumption context.
     metadata.is_ptr_aligned(thin_ptr, Internal)
         && is_inbounds(&metadata, thin_ptr)
-        && is_initialized(ptr, 1)
+        && assert_is_initialized(ptr)
         && unsafe { has_valid_value(ptr) }
 }
 
@@ -148,7 +150,11 @@ where
     <T as Pointee>::Metadata: PtrProperties<T>,
 {
     let (thin_ptr, metadata) = ptr.to_raw_parts();
-    is_inbounds(&metadata, thin_ptr) && is_initialized(ptr, 1) && unsafe { has_valid_value(ptr) }
+    // Need to assert `is_initialized` because non-determinism is used under the hood, so it does
+    // not make sense to use it inside assumption context.
+    is_inbounds(&metadata, thin_ptr)
+        && assert_is_initialized(ptr)
+        && unsafe { has_valid_value(ptr) }
 }
 
 /// Checks that `data_ptr` points to an allocation that can hold data of size calculated from `T`.
@@ -294,11 +300,23 @@ unsafe fn has_valid_value<T: ?Sized>(_ptr: *const T) -> bool {
 /// Check whether `len * size_of::<T>()` bytes are initialized starting from `ptr`.
 #[rustc_diagnostic_item = "KaniIsInitialized"]
 #[inline(never)]
-pub fn is_initialized<T: ?Sized>(_ptr: *const T, _len: usize) -> bool {
+pub(crate) fn is_initialized<T: ?Sized>(_ptr: *const T) -> bool {
     kani_intrinsic()
 }
 
+/// A helper to assert `is_initialized` to use it as a part of other predicates.
+fn assert_is_initialized<T: ?Sized>(ptr: *const T) -> bool {
+    crate::check(is_initialized(ptr), "Undefined Behavior: Reading from an uninitialized pointer");
+    true
+}
+
 /// Get the object ID of the given pointer.
+#[doc(hidden)]
+#[crate::unstable(
+    feature = "ghost-state",
+    issue = 3184,
+    reason = "experimental ghost state/shadow memory API"
+)]
 #[rustc_diagnostic_item = "KaniPointerObject"]
 #[inline(never)]
 pub fn pointer_object<T: ?Sized>(_ptr: *const T) -> usize {
@@ -306,6 +324,12 @@ pub fn pointer_object<T: ?Sized>(_ptr: *const T) -> usize {
 }
 
 /// Get the object offset of the given pointer.
+#[doc(hidden)]
+#[crate::unstable(
+    feature = "ghost-state",
+    issue = 3184,
+    reason = "experimental ghost state/shadow memory API"
+)]
 #[rustc_diagnostic_item = "KaniPointerOffset"]
 #[inline(never)]
 pub fn pointer_offset<T: ?Sized>(_ptr: *const T) -> usize {

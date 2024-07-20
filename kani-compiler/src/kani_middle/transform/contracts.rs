@@ -16,20 +16,29 @@ use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{
     Body, ConstOperand, Operand, Rvalue, Terminator, TerminatorKind, VarDebugInfoContents,
 };
-use stable_mir::ty::{ClosureDef, FnDef, MirConst, RigidTy, TyKind, UintTy};
+use stable_mir::ty::{ClosureDef, FnDef, MirConst, RigidTy, TyKind, TypeAndMut, UintTy};
 use stable_mir::CrateDef;
 use std::collections::HashSet;
 use std::fmt::Debug;
 use tracing::{debug, trace};
 
-/// Check if we can replace calls to any_modifies.
+/// Check if we can replace calls to any_modifies or write_any.
 ///
 /// This pass will replace the entire body, and it should only be applied to stubs
 /// that have a body.
+///
+/// write_any is replaced with one of write_any_slim, write_any_slice, or write_any_str
+/// depending on what the type of the input it
+///
+/// any_modifies is replaced with any
 #[derive(Debug)]
 pub struct AnyModifiesPass {
     kani_any: Option<FnDef>,
     kani_any_modifies: Option<FnDef>,
+    kani_write_any: Option<FnDef>,
+    kani_write_any_slim: Option<FnDef>,
+    kani_write_any_slice: Option<FnDef>,
+    kani_write_any_str: Option<FnDef>,
     target_fn: Option<InternedString>,
 }
 
@@ -82,6 +91,18 @@ impl AnyModifiesPass {
         let kani_any_modifies = tcx
             .get_diagnostic_item(rustc_span::symbol::Symbol::intern("KaniAnyModifies"))
             .map(item_fn_def);
+        let kani_write_any = tcx
+            .get_diagnostic_item(rustc_span::symbol::Symbol::intern("KaniWriteAny"))
+            .map(item_fn_def);
+        let kani_write_any_slim = tcx
+            .get_diagnostic_item(rustc_span::symbol::Symbol::intern("KaniWriteAnySlim"))
+            .map(item_fn_def);
+        let kani_write_any_slice = tcx
+            .get_diagnostic_item(rustc_span::symbol::Symbol::intern("KaniWriteAnySlice"))
+            .map(item_fn_def);
+        let kani_write_any_str = tcx
+            .get_diagnostic_item(rustc_span::symbol::Symbol::intern("KaniWriteAnyStr"))
+            .map(item_fn_def);
         let target_fn = if let Some(harness) = unit.harnesses.first() {
             let attributes = KaniAttributes::for_instance(tcx, *harness);
             let target_fn =
@@ -90,7 +111,15 @@ impl AnyModifiesPass {
         } else {
             None
         };
-        AnyModifiesPass { kani_any, kani_any_modifies, target_fn }
+        AnyModifiesPass {
+            kani_any,
+            kani_any_modifies,
+            kani_write_any,
+            kani_write_any_slim,
+            kani_write_any_slice,
+            kani_write_any_str,
+            target_fn,
+        }
     }
 
     /// Replace calls to `any_modifies` by calls to `any`.
@@ -98,7 +127,7 @@ impl AnyModifiesPass {
         let mut changed = false;
         let locals = body.locals().to_vec();
         for bb in body.blocks.iter_mut() {
-            let TerminatorKind::Call { func, .. } = &mut bb.terminator.kind else { continue };
+            let TerminatorKind::Call { func, args, .. } = &mut bb.terminator.kind else { continue };
             if let TyKind::RigidTy(RigidTy::FnDef(def, instance_args)) =
                 func.ty(&locals).unwrap().kind()
                 && Some(def) == self.kani_any_modifies
@@ -108,6 +137,47 @@ impl AnyModifiesPass {
                 let span = bb.terminator.span;
                 let new_func = ConstOperand { span, user_ty: None, const_: literal };
                 *func = Operand::Constant(new_func);
+                changed = true;
+            }
+
+            // if this is a valid kani::write_any function
+            if let TyKind::RigidTy(RigidTy::FnDef(def, instance_args)) =
+                func.ty(&locals).unwrap().kind()
+                && Some(def) == self.kani_write_any
+                && args.len() == 1
+                && let Some(fn_sig) = func.ty(&locals).unwrap().kind().fn_sig()
+                && let Some(TypeAndMut { ty: internal_type, mutability: _ }) =
+                    fn_sig.skip_binder().inputs()[0].kind().builtin_deref(true)
+            {
+                // case on the type of the input
+                if let TyKind::RigidTy(RigidTy::Slice(_)) = internal_type.kind() {
+                    //if the input is a slice, use write_any_slice
+                    let instance =
+                        Instance::resolve(self.kani_write_any_slice.unwrap(), &instance_args)
+                            .unwrap();
+                    let literal = MirConst::try_new_zero_sized(instance.ty()).unwrap();
+                    let span = bb.terminator.span;
+                    let new_func = ConstOperand { span, user_ty: None, const_: literal };
+                    *func = Operand::Constant(new_func);
+                } else if let TyKind::RigidTy(RigidTy::Str) = internal_type.kind() {
+                    //if the input is a str, use write_any_str
+                    let instance =
+                        Instance::resolve(self.kani_write_any_str.unwrap(), &instance_args)
+                            .unwrap();
+                    let literal = MirConst::try_new_zero_sized(instance.ty()).unwrap();
+                    let span = bb.terminator.span;
+                    let new_func = ConstOperand { span, user_ty: None, const_: literal };
+                    *func = Operand::Constant(new_func);
+                } else {
+                    //otherwise, use write_any_slim
+                    let instance =
+                        Instance::resolve(self.kani_write_any_slim.unwrap(), &instance_args)
+                            .unwrap();
+                    let literal = MirConst::try_new_zero_sized(instance.ty()).unwrap();
+                    let span = bb.terminator.span;
+                    let new_func = ConstOperand { span, user_ty: None, const_: literal };
+                    *func = Operand::Constant(new_func);
+                }
                 changed = true;
             }
         }
