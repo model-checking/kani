@@ -305,22 +305,12 @@ macro_rules! kani_intrinsics {
                 /// Type of the pointed-to data
                 type Inner;
 
-                /// Used for checking assigns contracts where we pass immutable references to the function.
-                ///
-                /// We're using a reference to self here, because the user can use just a plain function
-                /// argument, for instance one of type `&mut _`, in the `modifies` clause which would move it.
-                unsafe fn decouple_lifetime(&self) -> &'a Self::Inner;
-
                 /// used for havocking on replecement of a `modifies` clause.
                 unsafe fn assignable(self) -> &'a mut Self::Inner;
             }
 
             impl<'a, 'b, T> Pointer<'a> for &'b T {
                 type Inner = T;
-                unsafe fn decouple_lifetime(&self) -> &'a Self::Inner {
-                    $core::mem::transmute(*self)
-                }
-
                 #[allow(clippy::transmute_ptr_to_ref)]
                 unsafe fn assignable(self) -> &'a mut Self::Inner {
                     $core::mem::transmute(self as *const T)
@@ -330,11 +320,6 @@ macro_rules! kani_intrinsics {
             impl<'a, 'b, T> Pointer<'a> for &'b mut T {
                 type Inner = T;
 
-                #[allow(clippy::transmute_ptr_to_ref)]
-                unsafe fn decouple_lifetime(&self) -> &'a Self::Inner {
-                    $core::mem::transmute::<_, &&'a T>(self)
-                }
-
                 unsafe fn assignable(self) -> &'a mut Self::Inner {
                     $core::mem::transmute(self)
                 }
@@ -342,9 +327,6 @@ macro_rules! kani_intrinsics {
 
             impl<'a, T> Pointer<'a> for *const T {
                 type Inner = T;
-                unsafe fn decouple_lifetime(&self) -> &'a Self::Inner {
-                    &**self as &'a T
-                }
 
                 #[allow(clippy::transmute_ptr_to_ref)]
                 unsafe fn assignable(self) -> &'a mut Self::Inner {
@@ -354,10 +336,6 @@ macro_rules! kani_intrinsics {
 
             impl<'a, T> Pointer<'a> for *mut T {
                 type Inner = T;
-                unsafe fn decouple_lifetime(&self) -> &'a Self::Inner {
-                    &**self as &'a T
-                }
-
                 #[allow(clippy::transmute_ptr_to_ref)]
                 unsafe fn assignable(self) -> &'a mut Self::Inner {
                     $core::mem::transmute(self)

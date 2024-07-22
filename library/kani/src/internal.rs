@@ -12,21 +12,11 @@ pub trait Pointer<'a> {
     /// Type of the pointed-to data
     type Inner: ?Sized;
 
-    /// Used for checking assigns contracts where we pass immutable references to the function.
-    ///
-    /// We're using a reference to self here, because the user can use just a plain function
-    /// argument, for instance one of type `&mut _`, in the `modifies` clause which would move it.
-    unsafe fn decouple_lifetime(&self) -> &'a Self::Inner;
-
     unsafe fn assignable(self) -> *mut Self::Inner;
 }
 
 impl<'a, 'b, T: ?Sized> Pointer<'a> for &'b T {
     type Inner = T;
-    unsafe fn decouple_lifetime(&self) -> &'a Self::Inner {
-        std::mem::transmute(*self)
-    }
-
     unsafe fn assignable(self) -> *mut Self::Inner {
         std::mem::transmute(self as *const T)
     }
@@ -35,11 +25,6 @@ impl<'a, 'b, T: ?Sized> Pointer<'a> for &'b T {
 impl<'a, 'b, T: ?Sized> Pointer<'a> for &'b mut T {
     type Inner = T;
 
-    #[allow(clippy::transmute_ptr_to_ref)]
-    unsafe fn decouple_lifetime(&self) -> &'a Self::Inner {
-        std::mem::transmute::<_, &&'a T>(self)
-    }
-
     unsafe fn assignable(self) -> *mut Self::Inner {
         self as *mut T
     }
@@ -47,10 +32,6 @@ impl<'a, 'b, T: ?Sized> Pointer<'a> for &'b mut T {
 
 impl<'a, T: ?Sized> Pointer<'a> for *const T {
     type Inner = T;
-    unsafe fn decouple_lifetime(&self) -> &'a Self::Inner {
-        &**self as &'a T
-    }
-
     unsafe fn assignable(self) -> *mut Self::Inner {
         std::mem::transmute(self)
     }
@@ -58,10 +39,6 @@ impl<'a, T: ?Sized> Pointer<'a> for *const T {
 
 impl<'a, T: ?Sized> Pointer<'a> for *mut T {
     type Inner = T;
-    unsafe fn decouple_lifetime(&self) -> &'a Self::Inner {
-        &**self as &'a T
-    }
-
     unsafe fn assignable(self) -> *mut Self::Inner {
         self
     }
