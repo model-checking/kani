@@ -1,5 +1,4 @@
 error[E0596]: cannot borrow `*x` as mutable, as it is behind a `&` reference
-  --> safety_constraint_helper_side_effect/safety_constraint_helper_side_effect.rs:12:28
    |
 |     #[safety_constraint({*(x.as_mut()) = 0; true})]
    |                            ^ `x` is a `&` reference, so the data it refers to cannot be borrowed as mutable
