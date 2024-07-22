@@ -1,0 +1,25 @@
+// Copyright Kani Contributors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+// kani-flags: -Zfunction-contracts
+
+use std::cell::UnsafeCell;
+
+// This struct is contains UnsafeCell which can be mutated
+struct InteriorMutability {
+    x: UnsafeCell<u32>,
+}
+
+// contracts need to access im.x internal data through im.x.get() with an unsafe raw pointer dereference
+#[kani::requires(unsafe{*im.x.get()} < 100)]
+#[kani::modifies(im.x.get())]
+#[kani::ensures(|_| unsafe{*im.x.get()} < 101)]
+fn modify(im: &InteriorMutability) {
+    //im is an immutable reference with interior mutability
+    unsafe { *im.x.get() += 1 }
+}
+
+#[kani::proof_for_contract(modify)]
+fn harness_for_modify() {
+    let im: InteriorMutability = InteriorMutability { x: UnsafeCell::new(kani::any()) };
+    modify(&im)
+}
