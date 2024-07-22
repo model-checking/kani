@@ -2,13 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Zfunction-contracts
 
-// The objective of this test is to show that the contracts for double can be replaced as a stub within the contracts for quadruple.
-// This shows that we can generate kani::any() for Cell safely by breaking encapsulation
+/// The objective of this test is to show that the contracts for double can be replaced as a stub within the contracts for quadruple.
+/// This shows that we can generate kani::any() for Cell safely by breaking encapsulation
 
-// ---------------------------------------------------
-//        Abstraction Breaking Functionality
-// ---------------------------------------------------
-
+/// ---------------------------------------------------
+///        Abstraction Breaking Functionality
+/// ---------------------------------------------------
 use std::cell::Cell;
 use std::mem::transmute;
 
@@ -17,18 +16,18 @@ trait Exposeable<T: ?Sized> {
     unsafe fn expose(&self) -> &T;
 }
 
-// This unsafe manipulation is valid due to Cell having the same underlying data layout as its internal T as explained here: https://doc.rust-lang.org/stable/std/cell/struct.Cell.html#memory-layout
+/// This unsafe manipulation is valid due to Cell having the same underlying data layout as its internal T as explained here: https://doc.rust-lang.org/stable/std/cell/struct.Cell.html#memory-layout
 impl<T: ?Sized> Exposeable<T> for Cell<T> {
     unsafe fn expose(&self) -> &T {
         transmute(self)
     }
 }
 
-// ---------------------------------------------------
-//                      Test Case
-// ---------------------------------------------------
+/// ---------------------------------------------------
+///                      Test Case
+/// ---------------------------------------------------
 
-// This struct is contains Cell which can be mutated
+/// This struct is contains Cell which can be mutated
 struct InteriorMutability {
     x: Cell<u32>,
 }

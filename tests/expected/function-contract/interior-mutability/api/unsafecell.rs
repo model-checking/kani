@@ -4,17 +4,17 @@
 
 use std::cell::UnsafeCell;
 
-// This struct is contains UnsafeCell which can be mutated
+/// This struct is contains UnsafeCell which can be mutated
 struct InteriorMutability {
     x: UnsafeCell<u32>,
 }
 
-// contracts need to access im.x internal data through im.x.get() with an unsafe raw pointer dereference
+/// contracts need to access im.x internal data through im.x.get() with an unsafe raw pointer dereference
 #[kani::requires(unsafe{*im.x.get()} < 100)]
 #[kani::modifies(im.x.get())]
 #[kani::ensures(|_| unsafe{*im.x.get()} < 101)]
+///im is an immutable reference with interior mutability
 fn modify(im: &InteriorMutability) {
-    //im is an immutable reference with interior mutability
     unsafe { *im.x.get() += 1 }
 }
 

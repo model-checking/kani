@@ -2,22 +2,21 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Zfunction-contracts
 
-// Mutating Cell via as_ptr in contracts
-
+/// Mutating Cell via as_ptr in contracts
 use std::cell::Cell;
 
-// This struct is contains Cell which can be mutated
+/// This struct is contains Cell which can be mutated
 struct InteriorMutability {
     x: Cell<u32>,
 }
 
-// contracts need to access im.x internal data through the api im.x.as_ptr
+/// contracts need to access im.x internal data through the api im.x.as_ptr
 #[kani::requires(im.x.get() < 100)]
 #[kani::modifies(im.x.as_ptr())]
 #[kani::ensures(|_| im.x.get() < 101)]
+///im is an immutable reference with interior mutability
 fn modify(im: &InteriorMutability) {
-    //im is an immutable reference with interior mutability
-    // valid rust methodology for getting and setting value without breaking encapsulation
+    /// valid rust methodology for getting and setting value without breaking encapsulation
     im.x.set(im.x.get() + 1)
 }
 

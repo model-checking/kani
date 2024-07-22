@@ -2,12 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Zfunction-contracts
 
-// The objective of this test is to check the modification of an UnsafeCell used as interior mutability in an immutable struct
+/// The objective of this test is to check the modification of an UnsafeCell used as interior mutability in an immutable struct
 
-// ---------------------------------------------------
-//        Abstraction Breaking Functionality
-// ---------------------------------------------------
-
+/// ---------------------------------------------------
+///        Abstraction Breaking Functionality
+/// ---------------------------------------------------
 use std::cell::UnsafeCell;
 use std::mem::transmute;
 
@@ -16,28 +15,28 @@ trait Exposeable<T: ?Sized> {
     unsafe fn expose(&self) -> &T;
 }
 
-// This unsafe manipulation is valid due to UnsafeCell having the same underlying data layout as its internal T as explained here: https://doc.rust-lang.org/stable/std/cell/struct.UnsafeCell.html#memory-layout
+/// This unsafe manipulation is valid due to UnsafeCell having the same underlying data layout as its internal T as explained here: https://doc.rust-lang.org/stable/std/cell/struct.UnsafeCell.html#memory-layout
 impl<T: ?Sized> Exposeable<T> for UnsafeCell<T> {
     unsafe fn expose(&self) -> &T {
         transmute(self)
     }
 }
 
-// ---------------------------------------------------
-//                      Test Case
-// ---------------------------------------------------
+/// ---------------------------------------------------
+///                      Test Case
+/// ---------------------------------------------------
 
-// This struct is contains UnsafeCell which can be mutated
+/// This struct is contains UnsafeCell which can be mutated
 struct InteriorMutability {
     x: UnsafeCell<u32>,
 }
 
-// contracts need to access im.x internal data through the unsafe function im.x.expose()
+/// contracts need to access im.x internal data through the unsafe function im.x.expose()
 #[kani::requires(*unsafe{im.x.expose()} < 100)]
 #[kani::modifies(im.x.expose())]
 #[kani::ensures(|_| *unsafe{im.x.expose()} < 101)]
+///im is an immutable reference with interior mutability
 fn modify(im: &InteriorMutability) {
-    //im is an immutable reference with interior mutability
     unsafe { *im.x.get() += 1 }
 }
 
