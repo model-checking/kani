@@ -598,6 +598,10 @@ impl goto_program::Symbol {
                 Irep::just_sub(contract.assigns.iter().map(|req| req.to_irep(mm)).collect()),
             );
         }
+        if self.is_static_const {
+            // Add a `const` to the type.
+            typ = typ.with_named_sub(IrepId::CConstant, Irep::just_id(IrepId::from_int(1)))
+        }
         super::Symbol {
             typ,
             value: match &self.value {
