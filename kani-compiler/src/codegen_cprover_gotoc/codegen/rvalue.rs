@@ -57,7 +57,7 @@ impl<'tcx> GotocCtx<'tcx> {
     ) -> Expr {
         debug!(?op, ?left_op, ?right_op, "codegen_comparison_fat_ptr");
         let left_typ = self.operand_ty_stable(left_op);
-        let right_typ = self.operand_ty_stable(left_op);
+        let right_typ = self.operand_ty_stable(right_op);
         assert_eq!(left_typ, right_typ, "Cannot compare pointers of different types");
         assert!(self.is_fat_pointer_stable(left_typ));
 
@@ -703,8 +703,10 @@ impl<'tcx> GotocCtx<'tcx> {
                         if meta.typ().sizeof(&self.symbol_table) == 0 {
                             data_cast
                         } else {
-                            let vtable_expr =
-                                meta.member("_vtable_ptr", &self.symbol_table).cast_to(
+                            let vtable_expr = meta
+                                .member("_vtable_ptr", &self.symbol_table)
+                                .member("pointer", &self.symbol_table)
+                                .cast_to(
                                     typ.lookup_field_type("vtable", &self.symbol_table).unwrap(),
                                 );
                             dynamic_fat_ptr(typ, data_cast, vtable_expr, &self.symbol_table)
@@ -835,13 +837,29 @@ impl<'tcx> GotocCtx<'tcx> {
                             dst_goto_typ.lookup_components(&self.symbol_table).unwrap();
                         assert_eq!(dst_components.len(), 2);
                         assert_eq!(dst_components[0].name(), "_vtable_ptr");
-                        assert!(dst_components[0].typ().is_pointer());
+                        assert!(dst_components[0].typ().is_struct_like());
                         assert_eq!(dst_components[1].name(), "_phantom");
                         self.assert_is_rust_phantom_data_like(&dst_components[1].typ());
+                        // accessing pointer type of _vtable_ptr, which is wrapped in NonNull
+                        let vtable_ptr_typ = dst_goto_typ
+                            .lookup_field_type("_vtable_ptr", &self.symbol_table)
+                            .unwrap()
+                            .lookup_components(&self.symbol_table)
+                            .unwrap()[0]
+                            .typ();
                         Expr::struct_expr(
-                            dst_goto_typ,
+                            dst_goto_typ.clone(),
                             btree_string_map![
-                                ("_vtable_ptr", vtable_expr.cast_to(dst_components[0].typ())),
+                                (
+                                    "_vtable_ptr",
+                                    Expr::struct_expr_from_values(
+                                        dst_goto_typ
+                                            .lookup_field_type("_vtable_ptr", &self.symbol_table)
+                                            .unwrap(),
+                                        vec![vtable_expr.clone().cast_to(vtable_ptr_typ)],
+                                        &self.symbol_table
+                                    )
+                                ),
                                 (
                                     "_phantom",
                                     Expr::struct_expr(

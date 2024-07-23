@@ -29,6 +29,9 @@
 //! Speical [irep::Irep::id]s include:
 //! 1. [irep::IrepId::Empty] and [irep::IrepId::Nil] behaves like \[null\].
 
+#![feature(f128)]
+#![feature(f16)]
+
 mod env;
 pub use env::global_dead_object;
 pub mod goto_program;

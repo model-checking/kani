@@ -51,9 +51,7 @@ Status: SATISFIED\
 Description: "Non-finite numbers are valid float"\
 in function check_f32
 
-
  ** 6 of 6 cover properties satisfied
-
 
 VERIFICATION:- SUCCESSFUL
 

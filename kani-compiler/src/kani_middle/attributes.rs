@@ -74,6 +74,9 @@ enum KaniAttributeKind {
     /// We use this attribute to properly instantiate `kani::any_modifies` in
     /// cases when recursion is present given our contracts instrumentation.
     Recursion,
+    /// Used to mark functions where generating automatic pointer checks should be disabled. This is
+    /// used later to automatically attach pragma statements to locations.
+    DisableChecks,
 }
 
 impl KaniAttributeKind {
@@ -93,7 +96,8 @@ impl KaniAttributeKind {
             | KaniAttributeKind::CheckedWith
             | KaniAttributeKind::Modifies
             | KaniAttributeKind::InnerCheck
-            | KaniAttributeKind::IsContractGenerated => false,
+            | KaniAttributeKind::IsContractGenerated
+            | KaniAttributeKind::DisableChecks => false,
         }
     }
 
@@ -382,6 +386,10 @@ impl<'tcx> KaniAttributes<'tcx> {
                 KaniAttributeKind::InnerCheck => {
                     self.inner_check();
                 }
+                KaniAttributeKind::DisableChecks => {
+                    // Ignored here, because it should be an internal attribute. Actual validation
+                    // happens when pragmas are generated.
+                }
             }
         }
     }
@@ -490,6 +498,10 @@ impl<'tcx> KaniAttributes<'tcx> {
                 | KaniAttributeKind::InnerCheck
                 | KaniAttributeKind::ReplacedWith => {
                     self.tcx.dcx().span_err(self.tcx.def_span(self.item), format!("Contracts are not supported on harnesses. (Found the kani-internal contract attribute `{}`)", kind.as_ref()));
+                },
+                KaniAttributeKind::DisableChecks => {
+                    // Internal attribute which shouldn't exist here.
+                    unreachable!()
                 }
             };
             harness
@@ -1034,10 +1046,9 @@ fn attr_kind(tcx: TyCtxt, attr: &Attribute) -> Option<KaniAttributeKind> {
                     .intersperse("::")
                     .collect::<String>();
                 KaniAttributeKind::try_from(ident_str.as_str())
-                    .map_err(|err| {
+                    .inspect_err(|&err| {
                         debug!(?err, "attr_kind_failed");
                         tcx.dcx().span_err(attr.span, format!("unknown attribute `{ident_str}`"));
-                        err
                     })
                     .ok()
             } else {

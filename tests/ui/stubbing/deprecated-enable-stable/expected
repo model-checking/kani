@@ -1,2 +1,0 @@
-warning: The `--enable-stubbing` option is deprecated. This option will be removed soon. Consider using `-Z stubbing` instead
-VERIFICATION:- SUCCESSFUL

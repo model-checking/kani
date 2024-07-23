@@ -274,17 +274,6 @@ pub struct VerificationArgs {
     #[arg(long)]
     pub randomize_layout: Option<Option<u64>>,
 
-    /// Enable the stubbing of functions and methods.
-    // TODO: Stubbing should in principle work with concrete playback.
-    // <https://github.com/model-checking/kani/issues/1842>
-    #[arg(
-        long,
-        hide_short_help = true,
-        requires("enable_unstable"),
-        conflicts_with("concrete_playback")
-    )]
-    enable_stubbing: bool,
-
     /// Enable Kani coverage output alongside verification result
     #[arg(long, hide_short_help = true)]
     pub coverage: bool,
@@ -337,8 +326,7 @@ impl VerificationArgs {
 
     /// Is experimental stubbing enabled?
     pub fn is_stubbing_enabled(&self) -> bool {
-        self.enable_stubbing
-            || self.common_args.unstable_features.contains(UnstableFeature::Stubbing)
+        self.common_args.unstable_features.contains(UnstableFeature::Stubbing)
             || self.is_function_contracts_enabled()
     }
 }
@@ -571,6 +559,13 @@ impl ValidateArgs for VerificationArgs {
                 --output-format=old.",
             ));
         }
+        if self.concrete_playback.is_some() && self.is_stubbing_enabled() {
+            // Concrete playback currently does not work with contracts or stubbing.
+            return Err(Error::raw(
+                ErrorKind::ArgumentConflict,
+                "Conflicting options: --concrete-playback isn't compatible with stubbing.",
+            ));
+        }
         if self.concrete_playback.is_some() && self.jobs() != Some(1) {
             // Concrete playback currently embeds a lot of assumptions about the order in which harnesses get called.
             return Err(Error::raw(
@@ -596,10 +591,6 @@ impl ValidateArgs for VerificationArgs {
                     ),
                 ));
             }
-        }
-
-        if self.enable_stubbing {
-            print_deprecated(&self.common_args, "--enable-stubbing", "-Z stubbing");
         }
 
         if self.concrete_playback.is_some()
@@ -872,14 +863,18 @@ mod tests {
 
     #[test]
     fn check_enable_stubbing() {
-        check_unstable_flag!("--enable-stubbing --harness foo", enable_stubbing);
+        let res = parse_unstable_disabled("--harness foo").unwrap();
+        assert!(!res.verify_opts.is_stubbing_enabled());
 
-        check_unstable_flag!("--enable-stubbing", enable_stubbing);
+        let res = parse_unstable_disabled("--harness foo -Z stubbing").unwrap();
+        assert!(res.verify_opts.is_stubbing_enabled());
 
-        // `--enable-stubbing` cannot be called with `--concrete-playback`
-        let err =
-            parse_unstable_enabled("--enable-stubbing --harness foo --concrete-playback=print")
-                .unwrap_err();
+        // `-Z stubbing` cannot be called with `--concrete-playback`
+        let res = parse_unstable_disabled(
+            "--harness foo --concrete-playback=print -Z concrete-playback -Z stubbing",
+        )
+        .unwrap();
+        let err = res.validate().unwrap_err();
         assert_eq!(err.kind(), ErrorKind::ArgumentConflict);
     }
 
