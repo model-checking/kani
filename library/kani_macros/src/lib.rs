@@ -12,7 +12,7 @@
 mod derive;
 
 // proc_macro::quote is nightly-only, so we'll cobble things together instead
-use derive::{add_trait_bound_invariant, field_refs, fn_any_body};
+use derive::{add_trait_bound_invariant, field_refs, fn_any_body, field_safe_calls};
 use proc_macro::TokenStream;
 use proc_macro2::{Span, TokenStream as TokenStream2};
 use proc_macro_error::{abort, proc_macro_error};
@@ -534,6 +534,7 @@ fn attr_custom_invariant(
 
     let body = fn_any_body(&item_name, &derive_item.data);
     let field_refs = field_refs(&item_name, &derive_item.data);
+    let field_safe_calls = field_safe_calls(&item_name, &derive_item.data);
 
     let expanded = quote! {
         // Re-emit the original item
@@ -554,7 +555,7 @@ fn attr_custom_invariant(
             fn is_safe(&self) -> bool {
                 let obj = self;
                 #field_refs
-                #attr
+                #field_safe_calls && #attr
             }
         }
     };

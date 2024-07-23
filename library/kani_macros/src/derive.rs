@@ -53,16 +53,6 @@ pub fn expand_derive_arbitrary(item: proc_macro::TokenStream) -> proc_macro::Tok
                     #body
                 }
             }
-        };
-        proc_macro::TokenStream::from(expanded)
-    } else {
-        quote! {
-            // The generated implementation.
-            impl #impl_generics kani::Arbitrary for #item_name #ty_generics #where_clause {
-                fn any() -> Self {
-                    #body
-                }
-            }
         }
     };
     proc_macro::TokenStream::from(expanded)
@@ -200,6 +190,39 @@ fn field_refs_inner(_ident: &Ident, fields: &Fields) -> TokenStream {
         Fields::Unit => quote! {},
     }
 }
+
+pub fn field_safe_calls(ident: &Ident, data: &Data) -> TokenStream {
+    match data {
+        Data::Struct(struct_data) => field_safe_calls_inner(ident, &struct_data.fields),
+        Data::Enum(_) => unreachable!(),
+        Data::Union(_) => unreachable!(),
+    }
+}
+
+fn field_safe_calls_inner(_ident: &Ident, fields: &Fields) -> TokenStream {
+    match fields {
+        Fields::Named(ref fields) => {
+            let field_safe_calls: Vec<TokenStream> = fields
+                .named
+                .iter()
+                .map(|field| {
+                    let name = &field.ident;
+                    quote_spanned! {field.span()=>
+                        #name.is_safe()
+                    }
+                })
+                .collect();
+            if !field_safe_calls.is_empty() {
+                quote! { #( #field_safe_calls )&&* }
+            } else {
+                quote! { true }
+            }
+        }
+        Fields::Unnamed(_) => quote! {},
+        Fields::Unit => quote! {},
+    }
+}
+
 
 /// Generate an item initialization where an item can be a struct or a variant.
 /// For named fields, this will generate: `Item { field1: kani::any(), field2: kani::any(), .. }`
