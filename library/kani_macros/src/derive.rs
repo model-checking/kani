@@ -223,7 +223,6 @@ fn field_safe_calls_inner(_ident: &Ident, fields: &Fields) -> TokenStream {
     }
 }
 
-
 /// Generate an item initialization where an item can be a struct or a variant.
 /// For named fields, this will generate: `Item { field1: kani::any(), field2: kani::any(), .. }`
 /// For unnamed fields, this will generate: `Item (kani::any(), kani::any(), ..)`

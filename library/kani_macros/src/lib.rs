@@ -12,7 +12,7 @@
 mod derive;
 
 // proc_macro::quote is nightly-only, so we'll cobble things together instead
-use derive::{add_trait_bound_invariant, field_refs, fn_any_body, field_safe_calls};
+use derive::{add_trait_bound_invariant, field_refs, field_safe_calls, fn_any_body};
 use proc_macro::TokenStream;
 use proc_macro2::{Span, TokenStream as TokenStream2};
 use proc_macro_error::{abort, proc_macro_error};
