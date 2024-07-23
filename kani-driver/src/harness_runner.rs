@@ -14,6 +14,9 @@ use crate::session::KaniSession;
 use std::fs::File;
 use std::io::Write;
 
+use std::path::PathBuf;
+use std::env::current_dir;
+
 /// A HarnessRunner is responsible for checking all proof harnesses. The data in this structure represents
 /// "background information" that the controlling driver (e.g. cargo-kani or kani) computed.
 ///
@@ -121,8 +124,8 @@ impl KaniSession {
     }
 
     fn write_output_to_file(&self, result: &VerificationResult, harness: &HarnessMetadata) {
-        let target_dir = self.get_target_dir();
-        let file_name = format!("{}/{}", target_dir, harness.pretty_name);
+        let target_dir = self.result_output_dir().unwrap();
+        let file_name = target_dir.join(harness.pretty_name.clone());
         let path = Path::new(&file_name);
         let prefix = path.parent().unwrap();
 
@@ -131,16 +134,15 @@ impl KaniSession {
         let file_output = result.render(&OutputFormat::Regular, harness.attributes.should_panic, self.args.coverage);
 
         if let Err(e) = writeln!(file, "{}", file_output) {
-            eprintln!("Failed to write to file {}: {}", file_name, e);
+            eprintln!("Failed to write to file {}: {}", file_name.into_os_string().into_string().unwrap(), e);
         }
     }
 
-    fn get_target_dir(&self) -> String {
-        self.args.target_dir
+    fn result_output_dir(&self) -> Result<PathBuf> {
+        let target_dir = self.args.target_dir
             .clone()
-            .map_or_else(|| "./kani_output".to_string(), |dir| {
-                format!("{}/", dir.into_os_string().into_string().unwrap())
-            })
+            .map_or_else(|| current_dir(), |dir| Ok(dir))?;
+        Ok(target_dir.join("kani_results"))
     }
 
 
