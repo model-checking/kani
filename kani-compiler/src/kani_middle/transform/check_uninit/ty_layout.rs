@@ -332,3 +332,36 @@ fn data_bytes_for_ty(
         FieldsShape::Array { .. } => Ok(vec![]),
     }
 }
+
+/// Returns true if `to_ty` has a smaller or equal size and the same padding bytes as `from_ty` up until
+/// its size.
+pub fn tys_layout_compatible(from_ty: &Ty, to_ty: &Ty) -> bool {
+    // Retrieve layouts to assess compatibility.
+    let from_ty_info = PointeeInfo::from_ty(*from_ty);
+    let to_ty_info = PointeeInfo::from_ty(*to_ty);
+    if let (Ok(from_ty_info), Ok(to_ty_info)) = (from_ty_info, to_ty_info) {
+        let from_ty_layout = match from_ty_info.layout() {
+            PointeeLayout::Sized { layout } => layout,
+            PointeeLayout::Slice { element_layout } => element_layout,
+            PointeeLayout::TraitObject => return false,
+        };
+        let to_ty_layout = match to_ty_info.layout() {
+            PointeeLayout::Sized { layout } => layout,
+            PointeeLayout::Slice { element_layout } => element_layout,
+            PointeeLayout::TraitObject => return false,
+        };
+        // Ensure `to_ty_layout` does not have a larger size.
+        if to_ty_layout.len() <= from_ty_layout.len() {
+            // Check data and padding bytes pair-wise.
+            if from_ty_layout.iter().zip(to_ty_layout.iter()).all(
+                |(from_ty_layout_byte, to_ty_layout_byte)| {
+                    // Make sure all data and padding bytes match.
+                    from_ty_layout_byte == to_ty_layout_byte
+                },
+            ) {
+                return true;
+            }
+        }
+    };
+    false
+}

@@ -4,6 +4,11 @@
 //! Visitor that collects all instructions relevant to uninitialized memory access.
 
 use crate::kani_middle::transform::body::{InsertPosition, MutableBody, SourceInstruction};
+use crate::kani_middle::transform::check_uninit::relevant_instruction::{
+    InitRelevantInstruction, MemoryInitOp,
+};
+use crate::kani_middle::transform::check_uninit::ty_layout::tys_layout_compatible;
+use crate::kani_middle::transform::check_uninit::TargetFinder;
 use stable_mir::mir::alloc::GlobalAlloc;
 use stable_mir::mir::mono::{Instance, InstanceKind};
 use stable_mir::mir::visit::{Location, PlaceContext};
@@ -12,123 +17,7 @@ use stable_mir::mir::{
     Place, PointerCoercion, ProjectionElem, Rvalue, Statement, StatementKind, Terminator,
     TerminatorKind,
 };
-use stable_mir::ty::{ConstantKind, RigidTy, Ty, TyKind};
-use strum_macros::AsRefStr;
-
-use super::{PointeeInfo, PointeeLayout};
-
-/// Memory initialization operations: set or get memory initialization state for a given pointer.
-#[derive(AsRefStr, Clone, Debug)]
-pub enum MemoryInitOp {
-    /// Check memory initialization of data bytes in a memory region starting from the pointer
-    /// `operand` and of length `sizeof(operand)` bytes.
-    Check { operand: Operand },
-    /// Set memory initialization state of data bytes in a memory region starting from the pointer
-    /// `operand` and of length `sizeof(operand)` bytes.
-    Set { operand: Operand, value: bool, position: InsertPosition },
-    /// Check memory initialization of data bytes in a memory region starting from the pointer
-    /// `operand` and of length `count * sizeof(operand)` bytes.
-    CheckSliceChunk { operand: Operand, count: Operand },
-    /// Set memory initialization state of data bytes in a memory region starting from the pointer
-    /// `operand` and of length `count * sizeof(operand)` bytes.
-    SetSliceChunk { operand: Operand, count: Operand, value: bool, position: InsertPosition },
-    /// Set memory initialization of data bytes in a memory region starting from the reference to
-    /// `operand` and of length `sizeof(operand)` bytes.
-    SetRef { operand: Operand, value: bool, position: InsertPosition },
-    /// Unsupported memory initialization operation.
-    Unsupported { reason: String },
-    /// Operation that trivially accesses uninitialized memory, results in injecting `assert!(false)`.
-    TriviallyUnsafe { reason: String },
-}
-
-impl MemoryInitOp {
-    /// Produce an operand for the relevant memory initialization related operation. This is mostly
-    /// required so that the analysis can create a new local to take a reference in
-    /// `MemoryInitOp::SetRef`.
-    pub fn mk_operand(&self, body: &mut MutableBody, source: &mut SourceInstruction) -> Operand {
-        match self {
-            MemoryInitOp::Check { operand, .. }
-            | MemoryInitOp::Set { operand, .. }
-            | MemoryInitOp::CheckSliceChunk { operand, .. }
-            | MemoryInitOp::SetSliceChunk { operand, .. } => operand.clone(),
-            MemoryInitOp::SetRef { operand, .. } => Operand::Copy(Place {
-                local: {
-                    let place = match operand {
-                        Operand::Copy(place) | Operand::Move(place) => place,
-                        Operand::Constant(_) => unreachable!(),
-                    };
-                    body.new_assignment(
-                        Rvalue::AddressOf(Mutability::Not, place.clone()),
-                        source,
-                        self.position(),
-                    )
-                },
-                projection: vec![],
-            }),
-            MemoryInitOp::Unsupported { .. } | MemoryInitOp::TriviallyUnsafe { .. } => {
-                unreachable!()
-            }
-        }
-    }
-
-    pub fn expect_count(&self) -> Operand {
-        match self {
-            MemoryInitOp::CheckSliceChunk { count, .. }
-            | MemoryInitOp::SetSliceChunk { count, .. } => count.clone(),
-            MemoryInitOp::Check { .. }
-            | MemoryInitOp::Set { .. }
-            | MemoryInitOp::SetRef { .. }
-            | MemoryInitOp::Unsupported { .. }
-            | MemoryInitOp::TriviallyUnsafe { .. } => unreachable!(),
-        }
-    }
-
-    pub fn expect_value(&self) -> bool {
-        match self {
-            MemoryInitOp::Set { value, .. }
-            | MemoryInitOp::SetSliceChunk { value, .. }
-            | MemoryInitOp::SetRef { value, .. } => *value,
-            MemoryInitOp::Check { .. }
-            | MemoryInitOp::CheckSliceChunk { .. }
-            | MemoryInitOp::Unsupported { .. }
-            | MemoryInitOp::TriviallyUnsafe { .. } => unreachable!(),
-        }
-    }
-
-    pub fn position(&self) -> InsertPosition {
-        match self {
-            MemoryInitOp::Set { position, .. }
-            | MemoryInitOp::SetSliceChunk { position, .. }
-            | MemoryInitOp::SetRef { position, .. } => *position,
-            MemoryInitOp::Check { .. }
-            | MemoryInitOp::CheckSliceChunk { .. }
-            | MemoryInitOp::Unsupported { .. }
-            | MemoryInitOp::TriviallyUnsafe { .. } => InsertPosition::Before,
-        }
-    }
-}
-
-/// Represents an instruction in the source code together with all memory initialization checks/sets
-/// that are connected to the memory used in this instruction and whether they should be inserted
-/// before or after the instruction.
-#[derive(Clone, Debug)]
-pub struct InitRelevantInstruction {
-    /// The instruction that affects the state of the memory.
-    pub source: SourceInstruction,
-    /// All memory-related operations that should happen after the instruction.
-    pub before_instruction: Vec<MemoryInitOp>,
-    /// All memory-related operations that should happen after the instruction.
-    pub after_instruction: Vec<MemoryInitOp>,
-}
-
-impl InitRelevantInstruction {
-    pub fn push_operation(&mut self, source_op: MemoryInitOp) {
-        match source_op.position() {
-            InsertPosition::Before => self.before_instruction.push(source_op),
-            InsertPosition::After => self.after_instruction.push(source_op),
-        }
-    }
-}
+use stable_mir::ty::{ConstantKind, RigidTy, TyKind};
 
 pub struct CheckUninitVisitor<'a> {
     locals: &'a [LocalDecl],
@@ -145,11 +34,12 @@ pub struct CheckUninitVisitor<'a> {
     bb: BasicBlockIdx,
 }
 
-impl<'a> CheckUninitVisitor<'a> {
-    pub fn find_next(
-        body: &'a MutableBody,
+impl<'a> TargetFinder for CheckUninitVisitor<'a> {
+    fn find_next(
+        body: &MutableBody,
         bb: BasicBlockIdx,
         skip_first: bool,
+        _place_filter: &[Place],
     ) -> Option<InitRelevantInstruction> {
         let mut visitor = CheckUninitVisitor {
             locals: body.locals(),
@@ -161,7 +51,9 @@ impl<'a> CheckUninitVisitor<'a> {
         visitor.visit_basic_block(&body.blocks()[bb]);
         visitor.target
     }
+}
 
+impl<'a> CheckUninitVisitor<'a> {
     fn push_target(&mut self, source_op: MemoryInitOp) {
         let target = self.target.get_or_insert_with(|| InitRelevantInstruction {
             source: self.current,
@@ -186,7 +78,7 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                         operand: copy.src.clone(),
                         count: copy.count.clone(),
                     });
-                    // Destimation is a *mut T so it gets initialized.
+                    // Destination is a *mut T so it gets initialized.
                     self.push_target(MemoryInitOp::SetSliceChunk {
                         operand: copy.dst.clone(),
                         count: copy.count.clone(),
@@ -572,37 +464,9 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                         }
                     }
                 }
-                CastKind::PtrToPtr => {
-                    let operand_ty = operand.ty(&self.locals).unwrap();
-                    if let (
-                        RigidTy::RawPtr(from_ty, Mutability::Mut),
-                        RigidTy::RawPtr(to_ty, Mutability::Mut),
-                    ) = (operand_ty.kind().rigid().unwrap(), ty.kind().rigid().unwrap())
-                    {
-                        if !tys_layout_compatible(from_ty, to_ty) {
-                            // If casting from a mutable pointer to a mutable pointer with
-                            // different layouts, delayed UB could occur.
-                            self.push_target(MemoryInitOp::Unsupported {
-                                reason: "Kani does not support reasoning about memory initialization in presence of mutable raw pointer casts that could cause delayed UB.".to_string(),
-                            });
-                        }
-                    }
-                }
                 CastKind::Transmute => {
                     let operand_ty = operand.ty(&self.locals).unwrap();
-                    if let (
-                        RigidTy::RawPtr(from_ty, Mutability::Mut),
-                        RigidTy::RawPtr(to_ty, Mutability::Mut),
-                    ) = (operand_ty.kind().rigid().unwrap(), ty.kind().rigid().unwrap())
-                    {
-                        if !tys_layout_compatible(from_ty, to_ty) {
-                            // If casting from a mutable pointer to a mutable pointer with different
-                            // layouts, delayed UB could occur.
-                            self.push_target(MemoryInitOp::Unsupported {
-                                reason: "Kani does not support reasoning about memory initialization in presence of mutable raw pointer casts that could cause delayed UB.".to_string(),
-                            });
-                        }
-                    } else if !tys_layout_compatible(&operand_ty, &ty) {
+                    if !tys_layout_compatible(&operand_ty, &ty) {
                         // If transmuting between two types of incompatible layouts, padding
                         // bytes are exposed, which is UB.
                         self.push_target(MemoryInitOp::TriviallyUnsafe {
@@ -772,37 +636,4 @@ fn try_resolve_instance(locals: &[LocalDecl], func: &Operand) -> Result<Instance
             "Kani does not support reasoning about memory initialization of arguments to `{ty:?}`."
         )),
     }
-}
-
-/// Returns true if `to_ty` has a smaller or equal size and the same padding bytes as `from_ty` up until
-/// its size.
-fn tys_layout_compatible(from_ty: &Ty, to_ty: &Ty) -> bool {
-    // Retrieve layouts to assess compatibility.
-    let from_ty_info = PointeeInfo::from_ty(*from_ty);
-    let to_ty_info = PointeeInfo::from_ty(*to_ty);
-    if let (Ok(from_ty_info), Ok(to_ty_info)) = (from_ty_info, to_ty_info) {
-        let from_ty_layout = match from_ty_info.layout() {
-            PointeeLayout::Sized { layout } => layout,
-            PointeeLayout::Slice { element_layout } => element_layout,
-            PointeeLayout::TraitObject => return false,
-        };
-        let to_ty_layout = match to_ty_info.layout() {
-            PointeeLayout::Sized { layout } => layout,
-            PointeeLayout::Slice { element_layout } => element_layout,
-            PointeeLayout::TraitObject => return false,
-        };
-        // Ensure `to_ty_layout` does not have a larger size.
-        if to_ty_layout.len() <= from_ty_layout.len() {
-            // Check data and padding bytes pair-wise.
-            if from_ty_layout.iter().zip(to_ty_layout.iter()).all(
-                |(from_ty_layout_byte, to_ty_layout_byte)| {
-                    // Make sure all data and padding bytes match.
-                    from_ty_layout_byte == to_ty_layout_byte
-                },
-            ) {
-                return true;
-            }
-        }
-    };
-    false
 }
