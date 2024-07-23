@@ -24,7 +24,6 @@ use stable_mir::visitor::{Visitable, Visitor as TyVisitor};
 use stable_mir::CrateDef;
 use std::ops::ControlFlow;
 
-
 use self::attributes::KaniAttributes;
 
 pub mod analysis;
