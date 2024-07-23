@@ -3,7 +3,6 @@
 // kani-flags: -Zfunction-contracts
 
 /// The objective of this test is to check the modification of an OnceCell used as interior mutability in an immutable struct
-
 use std::cell::OnceCell;
 
 /// This struct is contains OnceCell which can be mutated
