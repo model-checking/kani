@@ -4,9 +4,7 @@
 //! and transformations.
 
 use std::collections::HashSet;
-use std::path::Path;
 
-use crate::kani_middle::transform::BodyTransformation;
 use crate::kani_queries::QueryDb;
 use rustc_hir::{def::DefKind, def_id::LOCAL_CRATE};
 use rustc_middle::span_bug;
@@ -15,20 +13,17 @@ use rustc_middle::ty::layout::{
     LayoutOfHelpers, TyAndLayout,
 };
 use rustc_middle::ty::{self, Instance as InstanceInternal, Ty as TyInternal, TyCtxt};
-use rustc_session::config::OutputType;
 use rustc_smir::rustc_internal;
 use rustc_span::source_map::respan;
 use rustc_span::Span;
 use rustc_target::abi::call::FnAbi;
 use rustc_target::abi::{HasDataLayout, TargetDataLayout};
-use stable_mir::mir::mono::{Instance, MonoItem};
+use stable_mir::mir::mono::MonoItem;
 use stable_mir::ty::{FnDef, RigidTy, Span as SpanStable, Ty, TyKind};
 use stable_mir::visitor::{Visitable, Visitor as TyVisitor};
 use stable_mir::CrateDef;
-use std::fs::File;
-use std::io::BufWriter;
-use std::io::Write;
 use std::ops::ControlFlow;
+
 
 use self::attributes::KaniAttributes;
 
@@ -122,52 +117,6 @@ pub fn check_reachable_items(tcx: TyCtxt, queries: &QueryDb, items: &[MonoItem])
         }
     }
     tcx.dcx().abort_if_errors();
-}
-
-/// Print MIR for the reachable items if the `--emit mir` option was provided to rustc.
-pub fn dump_mir_items(
-    tcx: TyCtxt,
-    transformer: &mut BodyTransformation,
-    items: &[MonoItem],
-    output: &Path,
-) {
-    /// Convert MonoItem into a DefId.
-    /// Skip stuff that we cannot generate the MIR items.
-    fn get_instance(item: &MonoItem) -> Option<Instance> {
-        match item {
-            // Exclude FnShims and others that cannot be dumped.
-            MonoItem::Fn(instance) => Some(*instance),
-            MonoItem::Static(def) => {
-                let instance: Instance = (*def).into();
-                instance.has_body().then_some(instance)
-            }
-            MonoItem::GlobalAsm(_) => None,
-        }
-    }
-
-    if tcx.sess.opts.output_types.contains_key(&OutputType::Mir) {
-        // Create output buffer.
-        let out_file = File::create(output).unwrap();
-        let mut writer = BufWriter::new(out_file);
-
-        // Dump the static allocations
-        for static_def in items
-            .iter()
-            .filter_map(|item| if let MonoItem::Static(def) = item { Some(def) } else { None })
-        {
-            let symbol_name = Instance::from(*static_def).mangled_name();
-            writeln!(writer, "// Item: {} ({})", static_def.name(), symbol_name).unwrap();
-            let alloc = static_def.eval_initializer().unwrap();
-            writeln!(writer, "{alloc:?}").unwrap();
-        }
-
-        // For each def_id, dump their MIR
-        for instance in items.iter().filter_map(get_instance) {
-            writeln!(writer, "// Item: {} ({})", instance.name(), instance.mangled_name()).unwrap();
-            let body = transformer.body(tcx, instance);
-            let _ = body.dump(&mut writer, &instance.name());
-        }
-    }
 }
 
 /// Structure that represents the source location of a definition.

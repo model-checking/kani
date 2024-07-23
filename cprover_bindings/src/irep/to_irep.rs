@@ -389,15 +389,32 @@ impl ToIrep for Location {
                 (IrepId::Function, Irep::just_string_id(function_name.to_string())),
             ])
             .with_named_sub_option(IrepId::Line, line.map(Irep::just_int_id)),
-            Location::Loc { file, function, start_line, start_col, end_line: _, end_col: _ } => {
-                Irep::just_named_sub(linear_map![
-                    (IrepId::File, Irep::just_string_id(file.to_string())),
-                    (IrepId::Line, Irep::just_int_id(*start_line)),
-                ])
-                .with_named_sub_option(IrepId::Column, start_col.map(Irep::just_int_id))
-                .with_named_sub_option(IrepId::Function, function.map(Irep::just_string_id))
-            }
-            Location::Property { file, function, line, col, property_class, comment } => {
+            Location::Loc {
+                file,
+                function,
+                start_line,
+                start_col,
+                end_line: _,
+                end_col: _,
+                pragmas,
+            } => Irep::just_named_sub(linear_map![
+                (IrepId::File, Irep::just_string_id(file.to_string())),
+                (IrepId::Line, Irep::just_int_id(*start_line)),
+            ])
+            .with_named_sub_option(IrepId::Column, start_col.map(Irep::just_int_id))
+            .with_named_sub_option(IrepId::Function, function.map(Irep::just_string_id))
+            .with_named_sub_option(
+                IrepId::Pragma,
+                Some(Irep::just_named_sub(
+                    pragmas
+                        .iter()
+                        .map(|pragma| {
+                            (IrepId::from_string(*pragma), Irep::just_id(IrepId::EmptyString))
+                        })
+                        .collect(),
+                )),
+            ),
+            Location::Property { file, function, line, col, property_class, comment, pragmas } => {
                 Irep::just_named_sub(linear_map![
                     (IrepId::File, Irep::just_string_id(file.to_string())),
                     (IrepId::Line, Irep::just_int_id(*line)),
@@ -408,6 +425,17 @@ impl ToIrep for Location {
                 .with_named_sub(
                     IrepId::PropertyClass,
                     Irep::just_string_id(property_class.to_string()),
+                )
+                .with_named_sub_option(
+                    IrepId::Pragma,
+                    Some(Irep::just_named_sub(
+                        pragmas
+                            .iter()
+                            .map(|pragma| {
+                                (IrepId::from_string(*pragma), Irep::just_id(IrepId::EmptyString))
+                            })
+                            .collect(),
+                    )),
                 )
             }
             Location::PropertyUnknownLocation { property_class, comment } => {

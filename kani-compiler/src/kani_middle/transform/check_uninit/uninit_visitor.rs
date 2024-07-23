@@ -37,6 +37,8 @@ pub enum MemoryInitOp {
     SetRef { operand: Operand, value: bool, position: InsertPosition },
     /// Unsupported memory initialization operation.
     Unsupported { reason: String },
+    /// Operation that trivially accesses uninitialized memory, results in injecting `assert!(false)`.
+    TriviallyUnsafe { reason: String },
 }
 
 impl MemoryInitOp {
@@ -63,7 +65,9 @@ impl MemoryInitOp {
                 },
                 projection: vec![],
             }),
-            MemoryInitOp::Unsupported { .. } => unreachable!(),
+            MemoryInitOp::Unsupported { .. } | MemoryInitOp::TriviallyUnsafe { .. } => {
+                unreachable!()
+            }
         }
     }
 
@@ -74,7 +78,8 @@ impl MemoryInitOp {
             MemoryInitOp::Check { .. }
             | MemoryInitOp::Set { .. }
             | MemoryInitOp::SetRef { .. }
-            | MemoryInitOp::Unsupported { .. } => unreachable!(),
+            | MemoryInitOp::Unsupported { .. }
+            | MemoryInitOp::TriviallyUnsafe { .. } => unreachable!(),
         }
     }
 
@@ -85,7 +90,8 @@ impl MemoryInitOp {
             | MemoryInitOp::SetRef { value, .. } => *value,
             MemoryInitOp::Check { .. }
             | MemoryInitOp::CheckSliceChunk { .. }
-            | MemoryInitOp::Unsupported { .. } => unreachable!(),
+            | MemoryInitOp::Unsupported { .. }
+            | MemoryInitOp::TriviallyUnsafe { .. } => unreachable!(),
         }
     }
 
@@ -96,7 +102,8 @@ impl MemoryInitOp {
             | MemoryInitOp::SetRef { position, .. } => *position,
             MemoryInitOp::Check { .. }
             | MemoryInitOp::CheckSliceChunk { .. }
-            | MemoryInitOp::Unsupported { .. } => InsertPosition::Before,
+            | MemoryInitOp::Unsupported { .. }
+            | MemoryInitOp::TriviallyUnsafe { .. } => InsertPosition::Before,
         }
     }
 }
@@ -579,6 +586,29 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                 reason: "Kani does not support reasoning about memory initialization in presence of mutable raw pointer casts that could cause delayed UB.".to_string(),
                             });
                         }
+                    }
+                }
+                CastKind::Transmute => {
+                    let operand_ty = operand.ty(&self.locals).unwrap();
+                    if let (
+                        RigidTy::RawPtr(from_ty, Mutability::Mut),
+                        RigidTy::RawPtr(to_ty, Mutability::Mut),
+                    ) = (operand_ty.kind().rigid().unwrap(), ty.kind().rigid().unwrap())
+                    {
+                        if !tys_layout_compatible(from_ty, to_ty) {
+                            // If casting from a mutable pointer to a mutable pointer with different
+                            // layouts, delayed UB could occur.
+                            self.push_target(MemoryInitOp::Unsupported {
+                                reason: "Kani does not support reasoning about memory initialization in presence of mutable raw pointer casts that could cause delayed UB.".to_string(),
+                            });
+                        }
+                    } else if !tys_layout_compatible(&operand_ty, &ty) {
+                        // If transmuting between two types of incompatible layouts, padding
+                        // bytes are exposed, which is UB.
+                        self.push_target(MemoryInitOp::TriviallyUnsafe {
+                            reason: "Transmuting between types of incompatible layouts."
+                                .to_string(),
+                        });
                     }
                 }
                 _ => {}
