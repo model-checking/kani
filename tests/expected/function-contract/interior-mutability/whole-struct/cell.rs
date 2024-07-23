@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Zfunction-contracts
 
-/// Mutating Cell via as_ptr in contracts
+/// The objective of this test is to check the modification of a Cell used as interior mutability in an immutable struct
+
 use std::cell::Cell;
 
 /// This struct is contains Cell which can be mutated
@@ -10,9 +11,8 @@ struct InteriorMutability {
     x: Cell<u32>,
 }
 
-/// contracts need to access im.x internal data through the api im.x.as_ptr
 #[kani::requires(im.x.get() < 100)]
-#[kani::modifies(im.x.as_ptr())]
+#[kani::modifies(&im.x)]
 #[kani::ensures(|_| im.x.get() < 101)]
 ///im is an immutable reference with interior mutability
 fn modify(im: &InteriorMutability) {

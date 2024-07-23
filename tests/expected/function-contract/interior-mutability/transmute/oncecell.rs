@@ -36,7 +36,7 @@ struct InteriorMutability {
 #[kani::modifies(im.x.expose())]
 #[kani::ensures(|_| unsafe{im.x.expose()}.is_some())]
 fn modify(im: &InteriorMutability) {
-    /// method for setting value in OnceCell without breaking encapsulation
+    // method for setting value in OnceCell without breaking encapsulation
     im.x.set(5).expect("")
 }
 

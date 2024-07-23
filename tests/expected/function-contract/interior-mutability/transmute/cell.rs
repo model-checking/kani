@@ -37,7 +37,7 @@ struct InteriorMutability {
 #[kani::ensures(|_| *unsafe{im.x.expose()} < 101)]
 ///im is an immutable reference with interior mutability
 fn modify(im: &InteriorMutability) {
-    /// valid rust methodology for getting and setting value without breaking encapsulation
+    // valid rust methodology for getting and setting value without breaking encapsulation
     im.x.set(im.x.get() + 1)
 }
 
