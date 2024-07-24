@@ -89,7 +89,6 @@ fn delayed_ub_closure_laundered() {
     }
 }
 
-
 /// Delayed UB via mutable pointer write using `copy_nonoverlapping` under the hood.
 #[kani::proof]
 fn delayed_ub_copy() {
