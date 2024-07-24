@@ -7,9 +7,7 @@
 use crate::kani_middle::{
     reachability::CallGraph,
     transform::{
-        check_uninit::delayed_ub::points_to_graph::{
-            GlobalPlaceOrAlloc, PlaceOrAlloc, PointsToGraph,
-        },
+        check_uninit::delayed_ub::points_to_graph::{GlobalMemLoc, LocalMemLoc, PointsToGraph},
         internal_mir::RustcInternalMir,
         BodyTransformation,
     },
@@ -32,16 +30,16 @@ use std::collections::HashSet;
 
 /// Main points-to analysis object. Since this one will be created anew for each instance analysis,
 /// we need to make sure big data structures are not copied unnecessarily.
-pub struct PointsToAnalysis<'a, 'b, 'c, 'tcx> {
+pub struct PointsToAnalysis<'a, 'tcx> {
     def_id: DefId,
     body: Body<'tcx>,
     tcx: TyCtxt<'tcx>,
     call_graph: &'a CallGraph,
-    instances: &'b Vec<StableInstance>,
-    transformer: &'c mut BodyTransformation,
+    instances: &'a Vec<StableInstance>,
+    transformer: &'a mut BodyTransformation,
 }
 
-impl<'a, 'b, 'c, 'tcx> PointsToAnalysis<'a, 'b, 'c, 'tcx> {
+impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
     /// Perform the analysis on a body, outputting the graph containing aliasing information of the
     /// body itself and any body reachable from it.
     pub fn run(
@@ -49,13 +47,13 @@ impl<'a, 'b, 'c, 'tcx> PointsToAnalysis<'a, 'b, 'c, 'tcx> {
         tcx: TyCtxt<'tcx>,
         def_id: DefId,
         call_graph: &'a CallGraph,
-        instances: &'b Vec<StableInstance>,
-        transformer: &'c mut BodyTransformation,
+        instances: &'a Vec<StableInstance>,
+        transformer: &'a mut BodyTransformation,
     ) -> PointsToGraph<'tcx> {
         let analysis = Self { body: body.clone(), tcx, def_id, call_graph, instances, transformer };
         let mut cursor =
             analysis.into_engine(tcx, &body).iterate_to_fixpoint().into_results_cursor(&body);
-        let mut results = PointsToGraph::new(&body, def_id);
+        let mut results = PointsToGraph::from_body(&body, def_id);
         for (idx, _) in body.basic_blocks.iter().enumerate() {
             cursor.seek_to_block_end(idx.into());
             results.join(cursor.get());
@@ -64,7 +62,7 @@ impl<'a, 'b, 'c, 'tcx> PointsToAnalysis<'a, 'b, 'c, 'tcx> {
     }
 }
 
-impl<'a, 'b, 'c, 'tcx> AnalysisDomain<'tcx> for PointsToAnalysis<'a, 'b, 'c, 'tcx> {
+impl<'a, 'tcx> AnalysisDomain<'tcx> for PointsToAnalysis<'a, 'tcx> {
     type Domain = PointsToGraph<'tcx>;
 
     type Direction = Forward;
@@ -73,7 +71,7 @@ impl<'a, 'b, 'c, 'tcx> AnalysisDomain<'tcx> for PointsToAnalysis<'a, 'b, 'c, 'tc
 
     /// Dataflow state instantiated at the beginning of each basic block.
     fn bottom_value(&self, body: &Body<'tcx>) -> Self::Domain {
-        PointsToGraph::new(body, self.def_id)
+        PointsToGraph::from_body(body, self.def_id)
     }
 
     /// Dataflow state instantiated at the entry into the body, for us this coincides with the
@@ -86,7 +84,7 @@ impl<'a, 'b, 'c, 'tcx> AnalysisDomain<'tcx> for PointsToAnalysis<'a, 'b, 'c, 'tc
     }
 }
 
-impl<'a, 'b, 'c, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'b, 'c, 'tcx> {
+impl<'a, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'tcx> {
     /// Update current dataflow state based on the information we can infer from the given
     /// statement.
     fn apply_statement_effect(
@@ -108,7 +106,7 @@ impl<'a, 'b, 'c, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'b, 'c, 'tcx> {
                     Rvalue::Use(operand)
                     | Rvalue::ShallowInitBox(operand, _)
                     | Rvalue::Cast(_, operand, _)
-                    | Rvalue::Repeat(operand, ..) => self.find_operand_pointees(state, operand),
+                    | Rvalue::Repeat(operand, ..) => self.follow_rvalue(state, operand),
                     Rvalue::Ref(_, _, place) | Rvalue::AddressOf(_, place) => {
                         // Here, a reference to a place is created, which leaves the place
                         // unchanged.
@@ -120,14 +118,7 @@ impl<'a, 'b, 'c, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'b, 'c, 'tcx> {
                                 // Offsetting a pointer should still be within the boundaries of the
                                 // same object, so we can simply use the operand unchanged.
                                 let (ptr, _) = *operands.clone();
-                                match ptr {
-                                    Operand::Copy(place) | Operand::Move(place) => {
-                                        state.follow(&state.follow_from_place(place, self.def_id))
-                                    }
-                                    Operand::Constant(_) => {
-                                        unreachable!("Pointer in offset should not be a constant.")
-                                    }
-                                }
+                                self.follow_rvalue(state, ptr)
                             }
                             BinOp::Add
                             | BinOp::AddUnchecked
@@ -151,18 +142,8 @@ impl<'a, 'b, 'c, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'b, 'c, 'tcx> {
                                 // track them. We assume that even shifted addresses will be within
                                 // the same original object.
                                 let (l_operand, r_operand) = *operands.clone();
-                                let l_operand_set = match l_operand {
-                                    Operand::Copy(place) | Operand::Move(place) => {
-                                        state.follow(&state.follow_from_place(place, self.def_id))
-                                    }
-                                    Operand::Constant(_) => HashSet::new(),
-                                };
-                                let r_operand_set = match r_operand {
-                                    Operand::Copy(place) | Operand::Move(place) => {
-                                        state.follow(&state.follow_from_place(place, self.def_id))
-                                    }
-                                    Operand::Constant(_) => HashSet::new(),
-                                };
+                                let l_operand_set = self.follow_rvalue(state, l_operand);
+                                let r_operand_set = self.follow_rvalue(state, r_operand);
                                 l_operand_set.union(&r_operand_set).cloned().collect()
                             }
                             BinOp::Eq
@@ -179,12 +160,7 @@ impl<'a, 'b, 'c, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'b, 'c, 'tcx> {
                     }
                     Rvalue::UnaryOp(_, operand) => {
                         // The same story from BinOp applies here, too. Need to track those things.
-                        match operand {
-                            Operand::Copy(place) | Operand::Move(place) => {
-                                state.follow(&state.follow_from_place(place, self.def_id))
-                            }
-                            Operand::Constant(_) => HashSet::new(),
-                        }
+                        self.follow_rvalue(state, operand)
                     }
                     Rvalue::Len(..) | Rvalue::NullaryOp(..) | Rvalue::Discriminant(..) => {
                         // All of those should yield a constant.
@@ -192,31 +168,16 @@ impl<'a, 'b, 'c, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'b, 'c, 'tcx> {
                     }
                     Rvalue::Aggregate(_, operands) => {
                         // Conservatively find a union of all places mentioned here.
-                        let places = operands
+                        operands
                             .into_iter()
-                            .filter_map(|operand| {
-                                match operand {
-                                    Operand::Copy(place) | Operand::Move(place) => {
-                                        // Simply add a constant here.
-                                        let place_or_alloc: PlaceOrAlloc = place.into();
-                                        Some(place_or_alloc.with_def_id(self.def_id))
-                                    }
-                                    Operand::Constant(_) => {
-                                        // This is a constant, the aliasing state is empty
-                                        None
-                                    }
-                                }
-                            })
-                            .collect();
-                        state.follow(&places)
+                            .flat_map(|operand| self.follow_rvalue(state, operand))
+                            .collect()
                     }
                     Rvalue::CopyForDeref(place) => {
                         // Use a place unchanged.
                         state.follow(&state.follow_from_place(place, self.def_id))
                     }
-                    Rvalue::ThreadLocalRef(_) => {
-                        unimplemented!("Delayed UB analysis in Kani does not support statics.")
-                    }
+                    Rvalue::ThreadLocalRef(def_id) => HashSet::from([GlobalMemLoc::Global(def_id)]),
                 };
                 // Create an edge between all places which could be lvalue and all places rvalue
                 // could be pointing to.
@@ -281,29 +242,12 @@ impl<'a, 'b, 'c, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'b, 'c, 'tcx> {
                                         args[0].node.ty(&self.body, self.tcx).kind(),
                                         TyKind::RawPtr(_, Mutability::Mut)
                                     ));
-                                    let src_set = match args[2].node {
-                                        Operand::Copy(place) | Operand::Move(place) => {
-                                            state.follow_from_place(place, self.def_id)
-                                        }
-                                        Operand::Constant(_) => HashSet::new(),
-                                    };
-                                    let dst_set = match args[0].node {
-                                        Operand::Copy(place) | Operand::Move(place) => state
-                                            .follow_from_place(
-                                                place.project_deeper(
-                                                    &[ProjectionElem::Deref],
-                                                    self.tcx,
-                                                ),
-                                                self.def_id,
-                                            ),
-                                        Operand::Constant(_) => {
-                                            unreachable!("pointer cannot be a constant")
-                                        }
-                                    };
+                                    let src_set = self.follow_rvalue(state, args[2].node.clone());
+                                    let dst_set = self.follow_deref(state, args[0].node.clone());
                                     let destination_set =
                                         state.follow_from_place(*destination, self.def_id);
                                     state.extend(&destination_set, &state.follow(&dst_set));
-                                    state.extend(&dst_set, &state.follow(&src_set));
+                                    state.extend(&dst_set, &src_set);
                                 }
                                 // All `atomic_load` intrinsics take `src` as an argument.
                                 // This is equivalent to `destination = *src`.
@@ -317,19 +261,7 @@ impl<'a, 'b, 'c, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'b, 'c, 'tcx> {
                                         args[0].node.ty(&self.body, self.tcx).kind(),
                                         TyKind::RawPtr(_, Mutability::Not)
                                     ));
-                                    let src_set = match args[0].node {
-                                        Operand::Copy(place) | Operand::Move(place) => state
-                                            .follow_from_place(
-                                                place.project_deeper(
-                                                    &[ProjectionElem::Deref],
-                                                    self.tcx,
-                                                ),
-                                                self.def_id,
-                                            ),
-                                        Operand::Constant(_) => {
-                                            unreachable!("pointer cannot be a constant")
-                                        }
-                                    };
+                                    let src_set = self.follow_deref(state, args[0].node.clone());
                                     let destination_set =
                                         state.follow_from_place(*destination, self.def_id);
                                     state.extend(&destination_set, &state.follow(&src_set));
@@ -346,26 +278,9 @@ impl<'a, 'b, 'c, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'b, 'c, 'tcx> {
                                         args[0].node.ty(&self.body, self.tcx).kind(),
                                         TyKind::RawPtr(_, Mutability::Mut)
                                     ));
-                                    let dst_set = match args[0].node {
-                                        Operand::Copy(place) | Operand::Move(place) => state
-                                            .follow_from_place(
-                                                place.project_deeper(
-                                                    &[ProjectionElem::Deref],
-                                                    self.tcx,
-                                                ),
-                                                self.def_id,
-                                            ),
-                                        Operand::Constant(_) => {
-                                            unreachable!("pointer cannot be a constant")
-                                        }
-                                    };
-                                    let val_set = match args[1].node {
-                                        Operand::Copy(place) | Operand::Move(place) => {
-                                            state.follow_from_place(place, self.def_id)
-                                        }
-                                        Operand::Constant(_) => HashSet::new(),
-                                    };
-                                    state.extend(&dst_set, &state.follow(&val_set));
+                                    let dst_set = self.follow_deref(state, args[0].node.clone());
+                                    let val_set = self.follow_rvalue(state, args[1].node.clone());
+                                    state.extend(&dst_set, &val_set);
                                 }
                                 // All other `atomic` intrinsics take `dst, src` as arguments.
                                 // This is equivalent to `destination = *dst; *dst = src`.
@@ -379,29 +294,12 @@ impl<'a, 'b, 'c, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'b, 'c, 'tcx> {
                                         args[0].node.ty(&self.body, self.tcx).kind(),
                                         TyKind::RawPtr(_, Mutability::Mut)
                                     ));
-                                    let src_set = match args[1].node {
-                                        Operand::Copy(place) | Operand::Move(place) => {
-                                            state.follow_from_place(place, self.def_id)
-                                        }
-                                        Operand::Constant(_) => HashSet::new(),
-                                    };
-                                    let dst_set = match args[0].node {
-                                        Operand::Copy(place) | Operand::Move(place) => state
-                                            .follow_from_place(
-                                                place.project_deeper(
-                                                    &[ProjectionElem::Deref],
-                                                    self.tcx,
-                                                ),
-                                                self.def_id,
-                                            ),
-                                        Operand::Constant(_) => {
-                                            unreachable!("pointer cannot be a constant")
-                                        }
-                                    };
+                                    let src_set = self.follow_rvalue(state, args[1].node.clone());
+                                    let dst_set = self.follow_deref(state, args[0].node.clone());
                                     let destination_set =
                                         state.follow_from_place(*destination, self.def_id);
                                     state.extend(&destination_set, &state.follow(&dst_set));
-                                    state.extend(&dst_set, &state.follow(&src_set));
+                                    state.extend(&dst_set, &src_set);
                                 }
                             };
                         }
@@ -452,15 +350,7 @@ impl<'a, 'b, 'c, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'b, 'c, 'tcx> {
                             ));
                             // Destination of the return value.
                             let lvalue_set = state.follow_from_place(*destination, self.def_id);
-                            let rvalue_set = match args[0].node {
-                                // Need to add an additional dereference, since the value is loaded, not pointer.
-                                Operand::Copy(place) | Operand::Move(place) => state
-                                    .follow_from_place(
-                                        place.project_deeper(&[ProjectionElem::Deref], self.tcx),
-                                        self.def_id,
-                                    ),
-                                Operand::Constant(_) => HashSet::new(),
-                            };
+                            let rvalue_set = self.follow_deref(state, args[0].node.clone());
                             state.extend(&lvalue_set, &state.follow(&rvalue_set));
                         }
                         // Semantically equivalent *a = b.
@@ -474,24 +364,9 @@ impl<'a, 'b, 'c, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'b, 'c, 'tcx> {
                                 args[0].node.ty(&self.body, self.tcx).kind(),
                                 TyKind::RawPtr(_, Mutability::Mut)
                             ));
-                            let lvalue_set = match args[0].node {
-                                // Need to add an additional dereference, since storing into the dereference.
-                                Operand::Copy(place) | Operand::Move(place) => state
-                                    .follow_from_place(
-                                        place.project_deeper(&[ProjectionElem::Deref], self.tcx),
-                                        self.def_id,
-                                    ),
-                                Operand::Constant(_) => {
-                                    unreachable!("pointer should not be a constant")
-                                }
-                            };
-                            let rvalue_set = match args[1].node {
-                                Operand::Copy(place) | Operand::Move(place) => {
-                                    state.follow_from_place(place, self.def_id)
-                                }
-                                Operand::Constant(_) => HashSet::new(),
-                            };
-                            state.extend(&lvalue_set, &state.follow(&rvalue_set));
+                            let lvalue_set = self.follow_deref(state, args[0].node.clone());
+                            let rvalue_set = self.follow_rvalue(state, args[1].node.clone());
+                            state.extend(&lvalue_set, &rvalue_set);
                         }
                         _ => {
                             // TODO: go through the list of intrinsics and make sure none have
@@ -514,7 +389,7 @@ impl<'a, 'b, 'c, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'b, 'c, 'tcx> {
                             "alloc::alloc::__rust_alloc" | "alloc::alloc::__rust_alloc_zeroed" => {
                                 let lvalue_set = state.follow_from_place(*destination, self.def_id);
                                 let rvalue_set = HashSet::from([
-                                    PlaceOrAlloc::new_alloc().with_def_id(self.def_id)
+                                    LocalMemLoc::new_alloc().with_def_id(self.def_id)
                                 ]);
                                 state.extend(&lvalue_set, &rvalue_set);
                             }
@@ -557,7 +432,7 @@ fn try_resolve_instance<'tcx>(
     }
 }
 
-impl<'a, 'b, 'c, 'tcx> PointsToAnalysis<'a, 'b, 'c, 'tcx> {
+impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
     // Update the analysis state according to the operation, which is semantically equivalent to `*to = *from`.
     fn apply_copy_effect(
         &self,
@@ -565,41 +440,51 @@ impl<'a, 'b, 'c, 'tcx> PointsToAnalysis<'a, 'b, 'c, 'tcx> {
         from: Operand<'tcx>,
         to: Operand<'tcx>,
     ) {
-        let lvalue_set = match to {
-            Operand::Copy(place) | Operand::Move(place) => state.follow_from_place(
-                place.project_deeper(&[ProjectionElem::Deref], self.tcx),
-                self.def_id,
-            ),
-            Operand::Constant(_) => {
-                unreachable!("pointer cannot be a constant")
-            }
-        };
-        let rvalue_set = match from {
-            Operand::Copy(place) | Operand::Move(place) => state.follow_from_place(
-                place.project_deeper(&[ProjectionElem::Deref], self.tcx),
-                self.def_id,
-            ),
-            Operand::Constant(_) => {
-                unreachable!("pointer cannot be a constant")
-            }
-        };
+        let lvalue_set = self.follow_deref(state, to);
+        let rvalue_set = self.follow_deref(state, from);
         state.extend(&lvalue_set, &state.follow(&rvalue_set));
     }
 
     // Find all places where the operand could point to at the current stage of the program.
-    fn find_operand_pointees(
+    fn follow_rvalue(
         &self,
         state: &mut PointsToGraph<'tcx>,
         operand: Operand<'tcx>,
-    ) -> HashSet<GlobalPlaceOrAlloc<'tcx>> {
+    ) -> HashSet<GlobalMemLoc<'tcx>> {
         match operand {
             Operand::Copy(place) | Operand::Move(place) => {
                 // Find all places which are pointed to by the place.
                 state.follow(&state.follow_from_place(place, self.def_id))
             }
-            Operand::Constant(_) => {
-                // Constants do not point to anything, the aliasing state is empty.
-                HashSet::new()
+            Operand::Constant(const_operand) => {
+                // Constants could point to a static, so need to check for that.
+                if let Some(static_def_id) = const_operand.check_static_ptr(self.tcx) {
+                    HashSet::from([GlobalMemLoc::Global(static_def_id)])
+                } else {
+                    HashSet::new()
+                }
+            }
+        }
+    }
+
+    // Find all places where the deref of the operand could point to at the current stage of the program.
+    fn follow_deref(
+        &self,
+        state: &mut PointsToGraph<'tcx>,
+        operand: Operand<'tcx>,
+    ) -> HashSet<GlobalMemLoc<'tcx>> {
+        match operand {
+            Operand::Copy(place) | Operand::Move(place) => state.follow_from_place(
+                place.project_deeper(&[ProjectionElem::Deref], self.tcx),
+                self.def_id,
+            ),
+            Operand::Constant(const_operand) => {
+                // Constants could point to a static, so need to check for that.
+                if let Some(static_def_id) = const_operand.check_static_ptr(self.tcx) {
+                    HashSet::from([GlobalMemLoc::Global(static_def_id)])
+                } else {
+                    HashSet::new()
+                }
             }
         }
     }
@@ -638,23 +523,18 @@ impl<'a, 'b, 'c, 'tcx> PointsToAnalysis<'a, 'b, 'c, 'tcx> {
         // TODO: this is probably wrong if the arguments are passed via spread,
         // as in with closures, so we would need to fix that.
         for (i, arg) in args.iter().enumerate() {
-            match &arg.node {
-                Operand::Copy(place) | Operand::Move(place) => {
-                    let lvalue_set = HashSet::from([PlaceOrAlloc::Place(Place {
-                        local: (i + 1).into(), // Since arguments in the callee are starting with 1, account for that.
-                        projection: List::empty(),
-                    })
-                    .with_def_id(instance.def_id())]);
-                    let rvalue_set = state.follow_from_place(*place, self.def_id);
-                    state.extend(&lvalue_set, &state.follow(&rvalue_set));
-                }
-                Operand::Constant(_) => {}
-            }
+            let lvalue_set = HashSet::from([LocalMemLoc::Place(Place {
+                local: (i + 1).into(), // Since arguments in the callee are starting with 1, account for that.
+                projection: List::empty(),
+            })
+            .with_def_id(instance.def_id())]);
+            let rvalue_set = self.follow_rvalue(state, arg.node.clone());
+            state.extend(&lvalue_set, &rvalue_set);
         }
         // Similarly, need to connect the return value to the return
         // destination.
         let lvalue_set = state.follow_from_place(*destination, self.def_id);
-        let rvalue_set = HashSet::from([PlaceOrAlloc::Place(Place {
+        let rvalue_set = HashSet::from([LocalMemLoc::Place(Place {
             local: 0usize.into(),
             projection: List::empty(),
         })

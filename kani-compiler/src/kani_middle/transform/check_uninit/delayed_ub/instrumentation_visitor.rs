@@ -5,15 +5,21 @@
 //! UB. In practice, that means collecting all instructions where the place is featured.
 
 use crate::kani_middle::transform::body::{InsertPosition, MutableBody, SourceInstruction};
+use crate::kani_middle::transform::check_uninit::delayed_ub::points_to_graph::{
+    GlobalMemLoc, PointsToGraph,
+};
 use crate::kani_middle::transform::check_uninit::relevant_instruction::{
     InitRelevantInstruction, MemoryInitOp,
 };
 use crate::kani_middle::transform::check_uninit::TargetFinder;
-
+use rustc_hir::def_id::DefId as InternalDefId;
+use rustc_middle::ty::TyCtxt;
+use rustc_smir::rustc_internal;
 use stable_mir::mir::visit::{Location, PlaceContext};
-use stable_mir::mir::{BasicBlockIdx, MirVisitor, Operand, Place, ProjectionElem, Statement};
+use stable_mir::mir::{BasicBlockIdx, MirVisitor, Operand, Place, Statement};
+use std::collections::HashSet;
 
-pub struct DelayedUbTargetVisitor<'a> {
+pub struct InstrumentationVisitor<'a, 'tcx> {
     /// Whether we should skip the next instruction, since it might've been instrumented already.
     /// When we instrument an instruction, we partition the basic block, and the instruction that
     /// may trigger UB becomes the first instruction of the basic block, which we need to skip
@@ -23,29 +29,46 @@ pub struct DelayedUbTargetVisitor<'a> {
     current: SourceInstruction,
     /// The target instruction that should be verified.
     pub target: Option<InitRelevantInstruction>,
-    /// The list of places we should be looking for, ignoring others.
-    place_filter: &'a [Place],
+    /// Aliasing analysis data.
+    points_to: &'a PointsToGraph<'tcx>,
+    /// The list of places we should be looking for, ignoring others
+    analysis_targets: &'a HashSet<GlobalMemLoc<'tcx>>,
+    current_def_id: InternalDefId,
+    tcx: TyCtxt<'tcx>,
 }
 
-impl<'a> TargetFinder for DelayedUbTargetVisitor<'a> {
+impl<'a, 'tcx> TargetFinder for InstrumentationVisitor<'a, 'tcx> {
     fn find_next(
+        &mut self,
         body: &MutableBody,
         bb: BasicBlockIdx,
         skip_first: bool,
-        place_filter: &[Place],
     ) -> Option<InitRelevantInstruction> {
-        let mut visitor = DelayedUbTargetVisitor {
-            skip_next: skip_first,
-            current: SourceInstruction::Statement { idx: 0, bb },
-            target: None,
-            place_filter,
-        };
-        visitor.visit_basic_block(&body.blocks()[bb]);
-        visitor.target
+        self.skip_next = skip_first;
+        self.current = SourceInstruction::Statement { idx: 0, bb };
+        self.target = None;
+        self.visit_basic_block(&body.blocks()[bb]);
+        self.target.clone()
     }
 }
 
-impl<'a> DelayedUbTargetVisitor<'a> {
+impl<'a, 'tcx> InstrumentationVisitor<'a, 'tcx> {
+    pub fn new(
+        points_to: &'a PointsToGraph<'tcx>,
+        analysis_targets: &'a HashSet<GlobalMemLoc<'tcx>>,
+        current_def_id: InternalDefId,
+        tcx: TyCtxt<'tcx>,
+    ) -> Self {
+        Self {
+            skip_next: false,
+            current: SourceInstruction::Statement { idx: 0, bb: 0 },
+            target: None,
+            points_to,
+            analysis_targets,
+            current_def_id,
+            tcx,
+        }
+    }
     fn push_target(&mut self, source_op: MemoryInitOp) {
         let target = self.target.get_or_insert_with(|| InitRelevantInstruction {
             source: self.current,
@@ -56,7 +79,7 @@ impl<'a> DelayedUbTargetVisitor<'a> {
     }
 }
 
-impl<'a> MirVisitor for DelayedUbTargetVisitor<'a> {
+impl<'a, 'tcx> MirVisitor for InstrumentationVisitor<'a, 'tcx> {
     fn visit_statement(&mut self, stmt: &Statement, location: Location) {
         if self.skip_next {
             self.skip_next = false;
@@ -70,31 +93,24 @@ impl<'a> MirVisitor for DelayedUbTargetVisitor<'a> {
     }
 
     fn visit_place(&mut self, place: &Place, ptx: PlaceContext, location: Location) {
-        // Match the place by its local.
+        // Match the place by whatever it is pointing to and find an intersection with the targets.
         if self
-            .place_filter
-            .iter()
-            .any(|instrumented_place| instrumented_place.local == place.local)
+            .points_to
+            .follow_from_place(rustc_internal::internal(self.tcx, place), self.current_def_id)
+            .intersection(&self.analysis_targets)
+            .count()
+            != 0
         {
-            let deref_projection_detected = place
-                .projection
-                .iter()
-                .any(|projection_elem| matches!(projection_elem, ProjectionElem::Deref));
-            // We should only track the place itself, not whatever it gets dereferenced to.
-            if !deref_projection_detected {
-                // If we are mutating the place, initialize it.
-                if ptx.is_mutating() {
-                    self.push_target(MemoryInitOp::SetRef {
-                        operand: Operand::Copy(place.clone()),
-                        value: true,
-                        position: InsertPosition::After,
-                    });
-                } else {
-                    // Otherwise, check its initialization.
-                    self.push_target(MemoryInitOp::CheckRef {
-                        operand: Operand::Copy(place.clone()),
-                    });
-                }
+            // If we are mutating the place, initialize it.
+            if ptx.is_mutating() {
+                self.push_target(MemoryInitOp::SetRef {
+                    operand: Operand::Copy(place.clone()),
+                    value: true,
+                    position: InsertPosition::After,
+                });
+            } else {
+                // Otherwise, check its initialization.
+                self.push_target(MemoryInitOp::CheckRef { operand: Operand::Copy(place.clone()) });
             }
         }
         self.super_place(place, ptx, location)

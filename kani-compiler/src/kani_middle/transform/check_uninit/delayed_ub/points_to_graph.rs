@@ -16,46 +16,50 @@ use std::{
 
 /// A node in the points-to graph, which could be a place on the stack or a heap allocation.
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
-pub enum PlaceOrAlloc<'tcx> {
+pub enum LocalMemLoc<'tcx> {
     Alloc(usize),
     Place(Place<'tcx>),
 }
 
 /// A node tagged with a DefId, to differentiate between places across different functions.
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
-pub struct GlobalPlaceOrAlloc<'tcx> {
-    def_id: DefId,
-    place_or_alloc: PlaceOrAlloc<'tcx>,
+pub enum GlobalMemLoc<'tcx> {
+    Local(DefId, LocalMemLoc<'tcx>),
+    Global(DefId),
 }
 
-impl<'tcx> GlobalPlaceOrAlloc<'tcx> {
-    /// Check if the node has a given DefId.
-    pub fn has_def_id(&self, def_id: DefId) -> bool {
-        self.def_id == def_id
+impl<'tcx> GlobalMemLoc<'tcx> {
+    /// Returns DefId of the memory location.
+    pub fn def_id(&self) -> DefId {
+        match self {
+            GlobalMemLoc::Local(def_id, _) | GlobalMemLoc::Global(def_id) => *def_id,
+        }
     }
 
-    /// Remove DefId from the node.
-    pub fn without_def_id(&self) -> PlaceOrAlloc<'tcx> {
-        self.place_or_alloc
+    pub fn maybe_local_mem_loc(&self) -> Option<LocalMemLoc<'tcx>> {
+        match self {
+            GlobalMemLoc::Local(_, mem_loc) => Some(*mem_loc),
+            GlobalMemLoc::Global(_) => None,
+        }
     }
 }
 
-impl<'tcx> From<Place<'tcx>> for PlaceOrAlloc<'tcx> {
+impl<'tcx> From<Place<'tcx>> for LocalMemLoc<'tcx> {
     fn from(value: Place<'tcx>) -> Self {
-        PlaceOrAlloc::Place(value)
+        LocalMemLoc::Place(value)
     }
 }
 
-impl<'tcx> PlaceOrAlloc<'tcx> {
+impl<'tcx> LocalMemLoc<'tcx> {
     /// Generate a new alloc with increasing allocation id.
     pub fn new_alloc() -> Self {
         static NEXT_ALLOC_ID: AtomicUsize = AtomicUsize::new(0);
-        PlaceOrAlloc::Alloc(NEXT_ALLOC_ID.fetch_add(1, Ordering::Relaxed))
+        LocalMemLoc::Alloc(NEXT_ALLOC_ID.fetch_add(1, Ordering::Relaxed))
     }
 
     /// Tag the node with a DefId.
-    pub fn with_def_id(&self, def_id: DefId) -> GlobalPlaceOrAlloc<'tcx> {
-        GlobalPlaceOrAlloc { def_id, place_or_alloc: *self }
+    pub fn with_def_id(&self, def_id: DefId) -> GlobalMemLoc<'tcx> {
+        GlobalMemLoc::Local(def_id, *self)
     }
 }
 
@@ -69,14 +73,18 @@ impl<'tcx> PlaceOrAlloc<'tcx> {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PointsToGraph<'tcx> {
     /// A hash map of node --> {nodes} edges.
-    edges: HashMap<GlobalPlaceOrAlloc<'tcx>, HashSet<GlobalPlaceOrAlloc<'tcx>>>,
+    edges: HashMap<GlobalMemLoc<'tcx>, HashSet<GlobalMemLoc<'tcx>>>,
 }
 
 impl<'tcx> PointsToGraph<'tcx> {
+    pub fn empty() -> Self {
+        Self { edges: HashMap::new() }
+    }
+
     /// Create a new graph, adding all existing places without projections from a body.
-    pub fn new(body: &Body, def_id: DefId) -> Self {
+    pub fn from_body(body: &Body, def_id: DefId) -> Self {
         let places = (0..body.local_decls.len()).map(|local| {
-            let place: PlaceOrAlloc =
+            let place: LocalMemLoc =
                 Place { local: local.into(), projection: List::empty() }.into();
             (place.with_def_id(def_id), HashSet::new())
         });
@@ -84,19 +92,12 @@ impl<'tcx> PointsToGraph<'tcx> {
     }
 
     /// Collect all nodes which have incoming edges from `nodes`.
-    pub fn follow(
-        &self,
-        nodes: &HashSet<GlobalPlaceOrAlloc<'tcx>>,
-    ) -> HashSet<GlobalPlaceOrAlloc<'tcx>> {
+    pub fn follow(&self, nodes: &HashSet<GlobalMemLoc<'tcx>>) -> HashSet<GlobalMemLoc<'tcx>> {
         nodes.iter().flat_map(|node| self.edges.get(node).cloned().unwrap_or_default()).collect()
     }
 
     /// For each node in `from`, add an edge to each node in `to`.
-    pub fn extend(
-        &mut self,
-        from: &HashSet<GlobalPlaceOrAlloc<'tcx>>,
-        to: &HashSet<GlobalPlaceOrAlloc<'tcx>>,
-    ) {
+    pub fn extend(&mut self, from: &HashSet<GlobalMemLoc<'tcx>>, to: &HashSet<GlobalMemLoc<'tcx>>) {
         for node in from.iter() {
             let node_pointees = self.edges.entry(*node).or_default();
             node_pointees.extend(to.iter());
@@ -109,8 +110,8 @@ impl<'tcx> PointsToGraph<'tcx> {
         &self,
         place: Place<'tcx>,
         current_def_id: DefId,
-    ) -> HashSet<GlobalPlaceOrAlloc<'tcx>> {
-        let place_or_alloc: PlaceOrAlloc =
+    ) -> HashSet<GlobalMemLoc<'tcx>> {
+        let place_or_alloc: LocalMemLoc =
             Place { local: place.local, projection: List::empty() }.into();
         let mut node_set = HashSet::from([place_or_alloc.with_def_id(current_def_id)]);
         for projection in place.projection {
@@ -137,16 +138,30 @@ impl<'tcx> PointsToGraph<'tcx> {
         let nodes: Vec<String> = self
             .edges
             .keys()
-            .map(|from| format!("\t\"{:?}:{:?}\"", from.def_id, from.place_or_alloc))
+            .map(|from| {
+                format!(
+                    "\t\"{:?}:{:?}\"",
+                    from.def_id(),
+                    from.maybe_local_mem_loc().unwrap_or(LocalMemLoc::Alloc(0))
+                )
+            })
             .collect();
         let nodes_str = nodes.join("\n");
         let edges: Vec<String> = self
             .edges
             .iter()
             .flat_map(|(from, to)| {
-                let from = format!("\"{:?}:{:?}\"", from.def_id, from.place_or_alloc);
+                let from = format!(
+                    "\"{:?}:{:?}\"",
+                    from.def_id(),
+                    from.maybe_local_mem_loc().unwrap_or(LocalMemLoc::Alloc(0))
+                );
                 to.iter().map(move |to| {
-                    let to = format!("\"{:?}:{:?}\"", to.def_id, to.place_or_alloc);
+                    let to = format!(
+                        "\"{:?}:{:?}\"",
+                        to.def_id(),
+                        to.maybe_local_mem_loc().unwrap_or(LocalMemLoc::Alloc(0))
+                    );
                     format!("\t{} -> {}", from.clone(), to)
                 })
             })
@@ -156,10 +171,7 @@ impl<'tcx> PointsToGraph<'tcx> {
     }
 
     /// Find a transitive closure of the graph starting from a given place.
-    pub fn transitive_closure(
-        &self,
-        target: &GlobalPlaceOrAlloc<'tcx>,
-    ) -> HashSet<GlobalPlaceOrAlloc<'tcx>> {
+    pub fn transitive_closure(&self, target: &GlobalMemLoc<'tcx>) -> HashSet<GlobalMemLoc<'tcx>> {
         let mut result = HashSet::new();
         let mut queue = VecDeque::from([*target]);
         while !queue.is_empty() {
@@ -174,10 +186,7 @@ impl<'tcx> PointsToGraph<'tcx> {
     }
 
     /// Retrieve all places to which a given place is pointing to.
-    pub fn pointees_of(
-        &self,
-        target: &GlobalPlaceOrAlloc<'tcx>,
-    ) -> HashSet<GlobalPlaceOrAlloc<'tcx>> {
+    pub fn pointees_of(&self, target: &GlobalMemLoc<'tcx>) -> HashSet<GlobalMemLoc<'tcx>> {
         self.edges
             .get(&target)
             .expect(format!("unable to retrieve {:?} from points-to graph", target).as_str())

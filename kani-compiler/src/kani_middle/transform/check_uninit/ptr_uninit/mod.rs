@@ -20,6 +20,7 @@ use stable_mir::CrateDef;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use tracing::trace;
+use uninit_visitor::CheckUninitVisitor;
 
 mod uninit_visitor;
 
@@ -64,8 +65,8 @@ impl TransformPass for UninitPass {
             check_type: self.check_type.clone(),
             mem_init_fn_cache: &mut self.mem_init_fn_cache,
         };
-        let (instrumentation_added, body) = instrumenter
-            .instrument::<uninit_visitor::CheckUninitVisitor>(tcx, new_body, instance, &[]);
+        let (instrumentation_added, body) =
+            instrumenter.instrument(tcx, new_body, instance, CheckUninitVisitor::new());
 
         (changed || instrumentation_added, body.into())
     }

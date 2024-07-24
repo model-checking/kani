@@ -30,10 +30,10 @@ mod ty_layout;
 /// Trait that the instrumentation target providers must implement to work with the instrumenter.
 trait TargetFinder {
     fn find_next(
+        &mut self,
         body: &MutableBody,
         bb: BasicBlockIdx,
         skip_first: bool,
-        place_filter: &[Place],
     ) -> Option<InitRelevantInstruction>;
 }
 
@@ -60,12 +60,12 @@ pub struct UninitInstrumenter<'a> {
 impl<'a> UninitInstrumenter<'a> {
     /// Instrument a body with memory initialization checks, the visitor that generates
     /// instrumentation targets must be provided via a TF type parameter.
-    fn instrument<TF: TargetFinder>(
+    fn instrument(
         &mut self,
         tcx: TyCtxt,
         mut body: MutableBody,
         instance: Instance,
-        place_filter: &[Place],
+        mut target_finder: impl TargetFinder,
     ) -> (bool, MutableBody) {
         // Need to break infinite recursion when memory initialization checks are inserted, so the
         // internal functions responsible for memory initialization are skipped.
@@ -95,7 +95,7 @@ impl<'a> UninitInstrumenter<'a> {
         let mut bb_idx = 0;
         while bb_idx < body.blocks().len() {
             if let Some(candidate) =
-                TF::find_next(&body, bb_idx, skip_first.contains(&bb_idx), place_filter)
+                target_finder.find_next(&body, bb_idx, skip_first.contains(&bb_idx))
             {
                 self.build_check_for_instruction(tcx, &mut body, candidate, &mut skip_first);
                 bb_idx += 1

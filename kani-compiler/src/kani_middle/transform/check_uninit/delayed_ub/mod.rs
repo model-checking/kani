@@ -16,19 +16,20 @@ use crate::kani_middle::transform::BodyTransformation;
 use crate::kani_middle::transform::GlobalPass;
 use crate::kani_middle::transform::TransformationResult;
 use crate::kani_queries::QueryDb;
-use delayed_ub_visitor::DelayedUbVisitor;
-use instrumentation_visitor::DelayedUbTargetVisitor;
+use initial_target_visitor::InitialTargetVisitor;
+use instrumentation_visitor::InstrumentationVisitor;
 use points_to_analysis::PointsToAnalysis;
-use points_to_graph::PlaceOrAlloc;
+use points_to_graph::LocalMemLoc;
+use points_to_graph::PointsToGraph;
 use rustc_middle::ty::TyCtxt;
+use rustc_mir_dataflow::JoinSemiLattice;
 use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::{Instance, MonoItem};
 use stable_mir::mir::MirVisitor;
-use stable_mir::mir::Place;
 use stable_mir::ty::FnDef;
 use stable_mir::CrateDef;
 
-mod delayed_ub_visitor;
+mod initial_target_visitor;
 mod instrumentation_visitor;
 mod points_to_analysis;
 mod points_to_graph;
@@ -66,18 +67,19 @@ impl GlobalPass for DelayedUbPass {
             .flat_map(|instance| {
                 let def_id = rustc_internal::internal(tcx, instance.def.def_id());
                 let body = instance.body().unwrap();
-                let mut visitor = DelayedUbVisitor::new(body.clone());
+                let mut visitor = InitialTargetVisitor::new(body.clone());
                 visitor.visit_body(&body);
                 // Convert all places into the format of aliasing graph for later comparison.
                 visitor.into_targets().into_iter().map(move |place| {
-                    PlaceOrAlloc::Place(rustc_internal::internal(tcx, place)).with_def_id(def_id)
+                    LocalMemLoc::Place(rustc_internal::internal(tcx, place)).with_def_id(def_id)
                 })
             })
             .collect();
 
         // Only perform this analysis if there is something to analyze.
         if !targets.is_empty() {
-            let mut places_need_instrumentation = HashSet::new();
+            let mut analysis_targets = HashSet::new();
+            let mut global_points_to_graph = PointsToGraph::empty();
             // Analyze aliasing for every harness.
             for entry_item in starting_items {
                 // Convert each entry function into instance, if possible.
@@ -105,8 +107,9 @@ impl GlobalPass for DelayedUbPass {
                     );
                     // Since analysis targets are *pointers*, need to get its followers for instrumentation.
                     for target in targets.iter() {
-                        places_need_instrumentation.extend(results.pointees_of(target));
+                        analysis_targets.extend(results.pointees_of(target));
                     }
+                    global_points_to_graph.join(&results);
                 }
             }
 
@@ -118,24 +121,16 @@ impl GlobalPass for DelayedUbPass {
                     mem_init_fn_cache: &mut self.mem_init_fn_cache,
                 };
                 // Retrieve the body with all local instrumentation passes applied.
-                let new_body = MutableBody::from(transformer.body(tcx, instance));
-                // Retrieve all places we need to instrument in the appropriate format.
-                let place_filter: Vec<Place> = places_need_instrumentation
-                    .iter()
-                    .filter(|place| {
-                        // Make sure only places from the current instance are included.
-                        place.has_def_id(internal_def_id)
-                    })
-                    .filter_map(|global_place_or_alloc| {
-                        match global_place_or_alloc.without_def_id() {
-                            PlaceOrAlloc::Alloc(_) => None, // Allocations cannot be read directly, so we need not worry about them.
-                            PlaceOrAlloc::Place(place) => Some(rustc_internal::stable(place)), // Convert back to StableMIR.
-                        }
-                    })
-                    .collect();
-                // Finally, instrument.
-                let (instrumentation_added, body) = instrumenter
-                    .instrument::<DelayedUbTargetVisitor>(tcx, new_body, instance, &place_filter);
+                let body = MutableBody::from(transformer.body(tcx, instance));
+                // Instrument for delayed UB.
+                let target_finder = InstrumentationVisitor::new(
+                    &global_points_to_graph,
+                    &analysis_targets,
+                    internal_def_id,
+                    tcx,
+                );
+                let (instrumentation_added, body) =
+                    instrumenter.instrument(tcx, body, instance, target_finder);
                 // If some instrumentation has been performed, update the cached body in the local transformer.
                 if instrumentation_added {
                     transformer.cache.entry(instance).and_modify(|transformation_result| {

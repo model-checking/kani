@@ -18,22 +18,22 @@ use crate::kani_middle::transform::check_uninit::ty_layout::tys_layout_compatibl
 
 /// Visitor that finds initial analysis targets for delayed UB instrumentation. For our purposes,
 /// analysis targets are *pointers* to places reading and writing from which should be tracked.
-pub struct DelayedUbVisitor {
+pub struct InitialTargetVisitor {
     body: Body,
-    delayed_ub_targets: Vec<Place>,
+    targets: Vec<Place>,
 }
 
-impl DelayedUbVisitor {
+impl InitialTargetVisitor {
     pub fn new(body: Body) -> Self {
-        Self { body, delayed_ub_targets: vec![] }
+        Self { body, targets: vec![] }
     }
 
     pub fn into_targets(self) -> Vec<Place> {
-        self.delayed_ub_targets
+        self.targets
     }
 }
 
-impl MirVisitor for DelayedUbVisitor {
+impl MirVisitor for InitialTargetVisitor {
     fn visit_rvalue(&mut self, rvalue: &Rvalue, location: Location) {
         if let Rvalue::Cast(kind, operand, ty) = rvalue {
             let operand_ty = operand.ty(self.body.locals()).unwrap();
@@ -47,13 +47,11 @@ impl MirVisitor for DelayedUbVisitor {
                         match operand {
                             Operand::Copy(place) | Operand::Move(place) => {
                                 if !tys_layout_compatible(from_ty, to_ty) {
-                                    self.delayed_ub_targets.push(place.clone());
+                                    self.targets.push(place.clone());
                                 }
                             }
                             Operand::Constant(_) => {
-                                unimplemented!(
-                                    "Delayed UB in presence of constants is not yet supported."
-                                )
+                                unreachable!("cannot be a constant")
                             }
                         }
                     }
@@ -70,10 +68,10 @@ impl MirVisitor for DelayedUbVisitor {
         {
             match &copy.dst {
                 Operand::Copy(place) | Operand::Move(place) => {
-                    self.delayed_ub_targets.push(place.clone());
+                    self.targets.push(place.clone());
                 }
                 Operand::Constant(_) => {
-                    unimplemented!("Delayed UB in presence of constants is not yet supported.")
+                    unreachable!("cannot be a constant")
                 }
             }
         }
@@ -103,11 +101,9 @@ impl MirVisitor for DelayedUbVisitor {
                         // Here, `dst` is the second argument.
                         match &args[1] {
                             Operand::Copy(place) | Operand::Move(place) => {
-                                self.delayed_ub_targets.push(place.clone());
+                                self.targets.push(place.clone());
                             }
-                            Operand::Constant(_) => unimplemented!(
-                                "Delayed UB in presence of constants is not yet supported."
-                            ),
+                            Operand::Constant(_) => unreachable!("cannot be a constant"),
                         }
                     }
                     "volatile_copy_memory" | "volatile_copy_nonoverlapping_memory" => {
@@ -127,11 +123,9 @@ impl MirVisitor for DelayedUbVisitor {
                         // Here, `dst` is the first argument.
                         match &args[0] {
                             Operand::Copy(place) | Operand::Move(place) => {
-                                self.delayed_ub_targets.push(place.clone());
+                                self.targets.push(place.clone());
                             }
-                            Operand::Constant(_) => unimplemented!(
-                                "Delayed UB in presence of constants is not yet supported."
-                            ),
+                            Operand::Constant(_) => unreachable!("cannot be a constant"),
                         }
                     }
                     _ => {}

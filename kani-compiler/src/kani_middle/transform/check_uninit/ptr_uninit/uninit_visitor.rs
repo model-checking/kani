@@ -19,8 +19,8 @@ use stable_mir::mir::{
 };
 use stable_mir::ty::{ConstantKind, RigidTy, TyKind};
 
-pub struct CheckUninitVisitor<'a> {
-    locals: &'a [LocalDecl],
+pub struct CheckUninitVisitor {
+    locals: Vec<LocalDecl>,
     /// Whether we should skip the next instruction, since it might've been instrumented already.
     /// When we instrument an instruction, we partition the basic block, and the instruction that
     /// may trigger UB becomes the first instruction of the basic block, which we need to skip
@@ -34,26 +34,34 @@ pub struct CheckUninitVisitor<'a> {
     bb: BasicBlockIdx,
 }
 
-impl<'a> TargetFinder for CheckUninitVisitor<'a> {
+impl TargetFinder for CheckUninitVisitor {
     fn find_next(
+        &mut self,
         body: &MutableBody,
         bb: BasicBlockIdx,
         skip_first: bool,
-        _place_filter: &[Place],
     ) -> Option<InitRelevantInstruction> {
-        let mut visitor = CheckUninitVisitor {
-            locals: body.locals(),
-            skip_next: skip_first,
-            current: SourceInstruction::Statement { idx: 0, bb },
-            target: None,
-            bb,
-        };
-        visitor.visit_basic_block(&body.blocks()[bb]);
-        visitor.target
+        self.locals = body.locals().to_vec();
+        self.skip_next = skip_first;
+        self.current = SourceInstruction::Statement { idx: 0, bb };
+        self.target = None;
+        self.bb = bb;
+        self.visit_basic_block(&body.blocks()[bb]);
+        self.target.clone()
     }
 }
 
-impl<'a> CheckUninitVisitor<'a> {
+impl CheckUninitVisitor {
+    pub fn new() -> Self {
+        Self {
+            locals: vec![],
+            skip_next: false,
+            current: SourceInstruction::Statement { idx: 0, bb: 0 },
+            target: None,
+            bb: 0,
+        }
+    }
+
     fn push_target(&mut self, source_op: MemoryInitOp) {
         let target = self.target.get_or_insert_with(|| InitRelevantInstruction {
             source: self.current,
@@ -64,7 +72,7 @@ impl<'a> CheckUninitVisitor<'a> {
     }
 }
 
-impl<'a> MirVisitor for CheckUninitVisitor<'a> {
+impl MirVisitor for CheckUninitVisitor {
     fn visit_statement(&mut self, stmt: &Statement, location: Location) {
         if self.skip_next {
             self.skip_next = false;
@@ -100,7 +108,7 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                             // if it points to initialized memory.
                             if *projection_elem == ProjectionElem::Deref {
                                 if let TyKind::RigidTy(RigidTy::RawPtr(..)) =
-                                    place_to_add_projections.ty(&self.locals).unwrap().kind()
+                                    place_to_add_projections.ty(&&self.locals).unwrap().kind()
                                 {
                                     self.push_target(MemoryInitOp::Check {
                                         operand: Operand::Copy(place_to_add_projections.clone()),
@@ -109,7 +117,7 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                             }
                             place_to_add_projections.projection.push(projection_elem.clone());
                         }
-                        if place_without_deref.ty(&self.locals).unwrap().kind().is_raw_ptr() {
+                        if place_without_deref.ty(&&self.locals).unwrap().kind().is_raw_ptr() {
                             self.push_target(MemoryInitOp::Set {
                                 operand: Operand::Copy(place_without_deref),
                                 value: true,
@@ -118,7 +126,7 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                         }
                     }
                     // Check whether Rvalue creates a new initialized pointer previously not captured inside shadow memory.
-                    if place.ty(&self.locals).unwrap().kind().is_raw_ptr() {
+                    if place.ty(&&self.locals).unwrap().kind().is_raw_ptr() {
                         if let Rvalue::AddressOf(..) = rvalue {
                             self.push_target(MemoryInitOp::Set {
                                 operand: Operand::Copy(place.clone()),
@@ -160,7 +168,7 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
             match &term.kind {
                 TerminatorKind::Call { func, args, destination, .. } => {
                     self.super_terminator(term, location);
-                    let instance = match try_resolve_instance(self.locals, func) {
+                    let instance = match try_resolve_instance(&self.locals, func) {
                         Ok(instance) => instance,
                         Err(reason) => {
                             self.super_terminator(term, location);
@@ -189,7 +197,7 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                         "Unexpected number of arguments for `{name}`"
                                     );
                                     assert!(matches!(
-                                        args[0].ty(self.locals).unwrap().kind(),
+                                        args[0].ty(&self.locals).unwrap().kind(),
                                         TyKind::RigidTy(RigidTy::RawPtr(..))
                                     ));
                                     self.push_target(MemoryInitOp::Check {
@@ -203,11 +211,11 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                         "Unexpected number of arguments for `compare_bytes`"
                                     );
                                     assert!(matches!(
-                                        args[0].ty(self.locals).unwrap().kind(),
+                                        args[0].ty(&self.locals).unwrap().kind(),
                                         TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Not))
                                     ));
                                     assert!(matches!(
-                                        args[1].ty(self.locals).unwrap().kind(),
+                                        args[1].ty(&self.locals).unwrap().kind(),
                                         TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Not))
                                     ));
                                     self.push_target(MemoryInitOp::CheckSliceChunk {
@@ -228,11 +236,11 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                         "Unexpected number of arguments for `copy`"
                                     );
                                     assert!(matches!(
-                                        args[0].ty(self.locals).unwrap().kind(),
+                                        args[0].ty(&self.locals).unwrap().kind(),
                                         TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Not))
                                     ));
                                     assert!(matches!(
-                                        args[1].ty(self.locals).unwrap().kind(),
+                                        args[1].ty(&self.locals).unwrap().kind(),
                                         TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Mut))
                                     ));
                                     self.push_target(MemoryInitOp::CheckSliceChunk {
@@ -253,11 +261,11 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                         "Unexpected number of arguments for `typed_swap`"
                                     );
                                     assert!(matches!(
-                                        args[0].ty(self.locals).unwrap().kind(),
+                                        args[0].ty(&self.locals).unwrap().kind(),
                                         TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Mut))
                                     ));
                                     assert!(matches!(
-                                        args[1].ty(self.locals).unwrap().kind(),
+                                        args[1].ty(&self.locals).unwrap().kind(),
                                         TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Mut))
                                     ));
                                     self.push_target(MemoryInitOp::Check {
@@ -274,7 +282,7 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                         "Unexpected number of arguments for `volatile_load`"
                                     );
                                     assert!(matches!(
-                                        args[0].ty(self.locals).unwrap().kind(),
+                                        args[0].ty(&self.locals).unwrap().kind(),
                                         TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Not))
                                     ));
                                     self.push_target(MemoryInitOp::Check {
@@ -288,7 +296,7 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                         "Unexpected number of arguments for `volatile_store`"
                                     );
                                     assert!(matches!(
-                                        args[0].ty(self.locals).unwrap().kind(),
+                                        args[0].ty(&self.locals).unwrap().kind(),
                                         TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Mut))
                                     ));
                                     self.push_target(MemoryInitOp::Set {
@@ -304,7 +312,7 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                                         "Unexpected number of arguments for `write_bytes`"
                                     );
                                     assert!(matches!(
-                                        args[0].ty(self.locals).unwrap().kind(),
+                                        args[0].ty(&self.locals).unwrap().kind(),
                                         TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Mut))
                                     ));
                                     self.push_target(MemoryInitOp::SetSliceChunk {
@@ -355,13 +363,13 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                 }
                 TerminatorKind::Drop { place, .. } => {
                     self.super_terminator(term, location);
-                    let place_ty = place.ty(&self.locals).unwrap();
+                    let place_ty = place.ty(&&self.locals).unwrap();
 
                     // When drop is codegen'ed for types that could define their own dropping
                     // behavior, a reference is taken to the place which is later implicitly coerced
                     // to a pointer. Hence, we need to bless this pointer as initialized.
                     match place
-                        .ty(&self.locals)
+                        .ty(&&self.locals)
                         .unwrap()
                         .kind()
                         .rigid()
@@ -403,7 +411,7 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                 Place { local: place.local, projection: place.projection[..idx].to_vec() };
             match elem {
                 ProjectionElem::Deref => {
-                    let ptr_ty = intermediate_place.ty(self.locals).unwrap();
+                    let ptr_ty = intermediate_place.ty(&self.locals).unwrap();
                     if ptr_ty.kind().is_raw_ptr() {
                         self.push_target(MemoryInitOp::Check {
                             operand: Operand::Copy(intermediate_place.clone()),
@@ -465,7 +473,7 @@ impl<'a> MirVisitor for CheckUninitVisitor<'a> {
                     }
                 }
                 CastKind::Transmute => {
-                    let operand_ty = operand.ty(&self.locals).unwrap();
+                    let operand_ty = operand.ty(&&self.locals).unwrap();
                     if !tys_layout_compatible(&operand_ty, &ty) {
                         // If transmuting between two types of incompatible layouts, padding
                         // bytes are exposed, which is UB.
