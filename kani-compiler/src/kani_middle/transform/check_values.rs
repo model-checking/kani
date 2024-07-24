@@ -91,7 +91,7 @@ impl ValidValuePass {
                         let result = build_limits(body, &range, rvalue_ptr.clone(), &mut source);
                         let msg =
                             format!("Undefined Behavior: Invalid value of type `{target_ty}`",);
-                        body.add_check(
+                        body.new_check(
                             tcx,
                             &self.check_type,
                             &mut source,
@@ -106,7 +106,7 @@ impl ValidValuePass {
                         let result = build_limits(body, &range, rvalue.clone(), &mut source);
                         let msg =
                             format!("Undefined Behavior: Invalid value of type `{pointee_ty}`",);
-                        body.add_check(
+                        body.new_check(
                             tcx,
                             &self.check_type,
                             &mut source,
@@ -140,7 +140,7 @@ impl ValidValuePass {
             user_ty: None,
         }));
         let result = body.new_assignment(rvalue, source, InsertPosition::Before);
-        body.add_check(tcx, &self.check_type, source, InsertPosition::Before, result, reason);
+        body.new_check(tcx, &self.check_type, source, InsertPosition::Before, result, reason);
     }
 }
 
@@ -771,18 +771,18 @@ pub fn build_limits(
     let span = source.span(body.blocks());
     debug!(?req, ?rvalue_ptr, ?span, "build_limits");
     let primitive_ty = uint_ty(req.size.bytes());
-    let start_const = body.new_const_operand(req.valid_range.start, primitive_ty, span);
-    let end_const = body.new_const_operand(req.valid_range.end, primitive_ty, span);
+    let start_const = body.new_uint_operand(req.valid_range.start, primitive_ty, span);
+    let end_const = body.new_uint_operand(req.valid_range.end, primitive_ty, span);
     let orig_ptr = if req.offset != 0 {
         let start_ptr = move_local(body.new_assignment(rvalue_ptr, source, InsertPosition::Before));
-        let byte_ptr = move_local(body.new_cast_ptr(
+        let byte_ptr = move_local(body.new_ptr_cast(
             start_ptr,
             Ty::unsigned_ty(UintTy::U8),
             Mutability::Not,
             source,
             InsertPosition::Before,
         ));
-        let offset_const = body.new_const_operand(req.offset as _, UintTy::Usize, span);
+        let offset_const = body.new_uint_operand(req.offset as _, UintTy::Usize, span);
         let offset = move_local(body.new_assignment(
             Rvalue::Use(offset_const),
             source,
@@ -798,7 +798,7 @@ pub fn build_limits(
     } else {
         move_local(body.new_assignment(rvalue_ptr, source, InsertPosition::Before))
     };
-    let value_ptr = body.new_cast_ptr(
+    let value_ptr = body.new_ptr_cast(
         orig_ptr,
         Ty::unsigned_ty(primitive_ty),
         Mutability::Not,
