@@ -1444,8 +1444,9 @@ impl<'tcx> GotocCtx<'tcx> {
         let vtable_name = self.vtable_name_stable(trait_type).intern();
         let vtable_impl_name = format!("{vtable_name}_impl_for_{src_name}");
 
-        self.ensure_global_var(
+        self.ensure_global_var_init(
             vtable_impl_name,
+            true,
             true,
             Type::struct_tag(vtable_name),
             loc,
@@ -1487,11 +1488,10 @@ impl<'tcx> GotocCtx<'tcx> {
                     vtable_fields,
                     &ctx.symbol_table,
                 );
-                let body = var.assign(vtable, loc);
-                let block = Stmt::block(vec![size_assert, body], loc);
-                Some(block)
+                Expr::statement_expression(vec![size_assert, vtable.as_stmt(loc)], var.typ, loc)
             },
         )
+        .to_expr()
     }
 
     /// Cast a pointer to a fat pointer.

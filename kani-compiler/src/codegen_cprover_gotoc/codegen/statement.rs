@@ -317,9 +317,8 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_ret_unit(&mut self, loc: Location) -> Stmt {
         let is_file_local = false;
         let ty = self.codegen_ty_unit();
-        let var =
-            self.ensure_global_var(FN_RETURN_VOID_VAR_NAME, is_file_local, ty, loc, |_, _| None);
-        Stmt::ret(Some(var), loc)
+        let var = self.ensure_global_var(FN_RETURN_VOID_VAR_NAME, is_file_local, ty, loc);
+        Stmt::ret(Some(var.to_expr()), loc)
     }
 
     /// Generates Goto-C for MIR [TerminatorKind::Drop] calls. We only handle code _after_ Rust's "drop elaboration"
