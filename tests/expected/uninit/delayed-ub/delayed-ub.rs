@@ -43,14 +43,14 @@ fn delayed_ub_static() {
 }
 
 /// Helper to launder the pointer while keeping the address.
-unsafe fn launder(ptr: *mut (u8, u32, u64)) -> *mut (u8, u32, u64) {
+unsafe fn launder(ptr: *mut u128) -> *mut u128 {
     let a = ptr;
     let b = a as *const u128;
     let c: *mut i128 = std::mem::transmute(b);
     let d = c as usize;
     let e = d + 1;
     let f = e - 1;
-    return f as *mut (u8, u32, u64);
+    return f as *mut u128;
 }
 
 /// Delayed UB via mutable pointer write with additional laundering.
@@ -58,13 +58,37 @@ unsafe fn launder(ptr: *mut (u8, u32, u64)) -> *mut (u8, u32, u64) {
 fn delayed_ub_laundered() {
     unsafe {
         let mut value: u128 = 0;
-        let ptr = &mut value as *mut _ as *mut (u8, u32, u64);
+        let ptr = &mut value as *mut u128;
         // Pass pointer around in an attempt to remove the association.
-        let ptr = launder(ptr);
+        let ptr = launder(ptr) as *mut (u8, u32, u64);
         *ptr = (4, 4, 4);
         assert!(value > 0); // UB: This reads a padding value!
     }
 }
+
+/// Delayed UB via mutable pointer write with additional laundering but via closure.
+#[kani::proof]
+fn delayed_ub_closure_laundered() {
+    unsafe {
+        let mut value: u128 = 0;
+        let ptr = &mut value as *mut u128;
+        // Add extra args to test spread_arg.
+        let launder = |arg1: bool, arg2: bool, arg3: bool, ptr: *mut u128| -> *mut u128 {
+            let a = ptr;
+            let b = a as *const u128;
+            let c: *mut i128 = std::mem::transmute(b);
+            let d = c as usize;
+            let e = d + 1;
+            let f = e - 1;
+            return f as *mut u128;
+        };
+        // Pass pointer around in an attempt to remove the association.
+        let ptr = launder(false, true, false, ptr) as *mut (u8, u32, u64);
+        *ptr = (4, 4, 4);
+        assert!(value > 0); // UB: This reads a padding value!
+    }
+}
+
 
 /// Delayed UB via mutable pointer write using `copy_nonoverlapping` under the hood.
 #[kani::proof]

@@ -112,6 +112,7 @@ impl GlobalPass for DelayedUbPass {
                         call_graph,
                         &instances,
                         transformer,
+                        &PointsToGraph::empty(),
                     );
                     // Since analysis targets are *pointers*, need to get its followers for instrumentation.
                     for target in targets.iter() {
