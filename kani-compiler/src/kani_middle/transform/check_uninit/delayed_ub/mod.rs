@@ -16,9 +16,11 @@ use crate::kani_middle::transform::BodyTransformation;
 use crate::kani_middle::transform::GlobalPass;
 use crate::kani_middle::transform::TransformationResult;
 use crate::kani_queries::QueryDb;
+use initial_target_visitor::AnalysisTarget;
 use initial_target_visitor::InitialTargetVisitor;
 use instrumentation_visitor::InstrumentationVisitor;
 use points_to_analysis::PointsToAnalysis;
+use points_to_graph::GlobalMemLoc;
 use points_to_graph::LocalMemLoc;
 use points_to_graph::PointsToGraph;
 use rustc_middle::ty::TyCtxt;
@@ -70,8 +72,14 @@ impl GlobalPass for DelayedUbPass {
                 let mut visitor = InitialTargetVisitor::new(body.clone());
                 visitor.visit_body(&body);
                 // Convert all places into the format of aliasing graph for later comparison.
-                visitor.into_targets().into_iter().map(move |place| {
-                    LocalMemLoc::Place(rustc_internal::internal(tcx, place)).with_def_id(def_id)
+                visitor.into_targets().into_iter().map(move |analysis_target| match analysis_target
+                {
+                    AnalysisTarget::Place(place) => {
+                        LocalMemLoc::Place(rustc_internal::internal(tcx, place)).with_def_id(def_id)
+                    }
+                    AnalysisTarget::Static(def_id) => {
+                        GlobalMemLoc::Global(rustc_internal::internal(tcx, def_id))
+                    }
                 })
             })
             .collect();

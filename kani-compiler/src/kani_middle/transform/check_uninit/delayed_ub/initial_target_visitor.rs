@@ -6,21 +6,29 @@
 
 use stable_mir::{
     mir::{
+        alloc::GlobalAlloc,
         mono::{Instance, InstanceKind},
         visit::Location,
         Body, CastKind, LocalDecl, MirVisitor, Mutability, NonDivergingIntrinsic, Operand, Place,
         Rvalue, Statement, StatementKind, Terminator, TerminatorKind,
     },
-    ty::{RigidTy, TyKind},
+    ty::{ConstantKind, RigidTy, TyKind},
+    CrateDef, DefId,
 };
 
 use crate::kani_middle::transform::check_uninit::ty_layout::tys_layout_compatible;
+
+/// Pointer, write through which might trigger delayed UB.
+pub enum AnalysisTarget {
+    Place(Place),
+    Static(DefId),
+}
 
 /// Visitor that finds initial analysis targets for delayed UB instrumentation. For our purposes,
 /// analysis targets are *pointers* to places reading and writing from which should be tracked.
 pub struct InitialTargetVisitor {
     body: Body,
-    targets: Vec<Place>,
+    targets: Vec<AnalysisTarget>,
 }
 
 impl InitialTargetVisitor {
@@ -28,8 +36,26 @@ impl InitialTargetVisitor {
         Self { body, targets: vec![] }
     }
 
-    pub fn into_targets(self) -> Vec<Place> {
+    pub fn into_targets(self) -> Vec<AnalysisTarget> {
         self.targets
+    }
+
+    pub fn push_operand(&mut self, operand: &Operand) {
+        match operand {
+            Operand::Copy(place) | Operand::Move(place) => {
+                self.targets.push(AnalysisTarget::Place(place.clone()));
+            }
+            Operand::Constant(constant) => {
+                // Extract the static from the constant.
+                if let ConstantKind::Allocated(allocation) = constant.const_.kind() {
+                    for (_, prov) in &allocation.provenance.ptrs {
+                        if let GlobalAlloc::Static(static_def) = GlobalAlloc::from(prov.0) {
+                            self.targets.push(AnalysisTarget::Static(static_def.def_id()));
+                        };
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -44,15 +70,8 @@ impl MirVisitor for InitialTargetVisitor {
                         RigidTy::RawPtr(to_ty, Mutability::Mut),
                     ) = (operand_ty.kind().rigid().unwrap(), ty.kind().rigid().unwrap())
                     {
-                        match operand {
-                            Operand::Copy(place) | Operand::Move(place) => {
-                                if !tys_layout_compatible(from_ty, to_ty) {
-                                    self.targets.push(place.clone());
-                                }
-                            }
-                            Operand::Constant(_) => {
-                                unreachable!("cannot be a constant")
-                            }
+                        if !tys_layout_compatible(from_ty, to_ty) {
+                            self.push_operand(operand);
                         }
                     }
                 }
@@ -66,14 +85,7 @@ impl MirVisitor for InitialTargetVisitor {
         if let StatementKind::Intrinsic(NonDivergingIntrinsic::CopyNonOverlapping(copy)) =
             &stmt.kind
         {
-            match &copy.dst {
-                Operand::Copy(place) | Operand::Move(place) => {
-                    self.targets.push(place.clone());
-                }
-                Operand::Constant(_) => {
-                    unreachable!("cannot be a constant")
-                }
-            }
+            self.push_operand(&copy.dst);
         }
         self.super_statement(stmt, location);
     }
@@ -99,12 +111,7 @@ impl MirVisitor for InitialTargetVisitor {
                             TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Mut))
                         ));
                         // Here, `dst` is the second argument.
-                        match &args[1] {
-                            Operand::Copy(place) | Operand::Move(place) => {
-                                self.targets.push(place.clone());
-                            }
-                            Operand::Constant(_) => unreachable!("cannot be a constant"),
-                        }
+                        self.push_operand(&args[1]);
                     }
                     "volatile_copy_memory" | "volatile_copy_nonoverlapping_memory" => {
                         assert_eq!(
@@ -121,12 +128,7 @@ impl MirVisitor for InitialTargetVisitor {
                             TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Not))
                         ));
                         // Here, `dst` is the first argument.
-                        match &args[0] {
-                            Operand::Copy(place) | Operand::Move(place) => {
-                                self.targets.push(place.clone());
-                            }
-                            Operand::Constant(_) => unreachable!("cannot be a constant"),
-                        }
+                        self.push_operand(&args[0]);
                     }
                     _ => {}
                 }
