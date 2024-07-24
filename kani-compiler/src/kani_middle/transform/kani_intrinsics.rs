@@ -115,18 +115,17 @@ impl IntrinsicGeneratorPass {
             Ok(ranges) => {
                 // Given the pointer argument, check for possible invalid ranges.
                 let rvalue = Rvalue::Use(Operand::Move(Place::from(1)));
-                for range in ranges {
-                    let result =
-                        build_limits(&mut new_body, &range, rvalue.clone(), &mut terminator);
-                    let rvalue = Rvalue::BinaryOp(
-                        BinOp::BitAnd,
-                        Operand::Move(Place::from(ret_var)),
-                        Operand::Move(Place::from(result)),
-                    );
-                    let assign = StatementKind::Assign(Place::from(ret_var), rvalue);
-                    let stmt = Statement { kind: assign, span };
-                    new_body.insert_stmt(stmt, &mut terminator, InsertPosition::Before);
-                }
+                // for range in &ranges {
+                let result = build_limits(&mut new_body, &ranges, rvalue.clone(), &mut terminator);
+                let rvalue = Rvalue::BinaryOp(
+                    BinOp::BitAnd,
+                    Operand::Move(Place::from(ret_var)),
+                    Operand::Move(Place::from(result)),
+                );
+                let assign = StatementKind::Assign(Place::from(ret_var), rvalue);
+                let stmt = Statement { kind: assign, span };
+                new_body.insert_stmt(stmt, &mut terminator, InsertPosition::Before);
+                // }
             }
             Err(msg) => {
                 // We failed to retrieve all the valid ranges.
