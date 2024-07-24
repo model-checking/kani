@@ -3,6 +3,7 @@
 // kani-flags: -Zfunction-contracts
 
 /// This is a valid but not recommended alternative to havocing UnsafeCell
+/// Only done for test purposes
 
 /// ---------------------------------------------------
 ///        Abstraction Breaking Functionality
