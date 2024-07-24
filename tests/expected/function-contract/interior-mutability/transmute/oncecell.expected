@@ -1,6 +1,0 @@
-assertion\
-- Status: SUCCESS\
-- Description: "|_| unsafe{ im.x.expose() }.is_some()"\
-in function modify
-
-VERIFICATION:- SUCCESSFUL

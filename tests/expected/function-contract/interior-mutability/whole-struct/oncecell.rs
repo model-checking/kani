@@ -14,7 +14,6 @@ struct InteriorMutability {
 #[kani::modifies(&im.x)]
 #[kani::ensures(|_| im.x.get().is_some())]
 fn modify(im: &InteriorMutability) {
-    // method for setting value in OnceCell without breaking encapsulation
     im.x.set(5).expect("")
 }
 

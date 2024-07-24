@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Zfunction-contracts
 
-/// The objective of this test is to check the modification of an UnsafeCell used as interior mutability in an immutable struct
+/// This is a valid but not recommended alternative to havocing UnsafeCell
 
 /// ---------------------------------------------------
 ///        Abstraction Breaking Functionality
@@ -26,22 +26,15 @@ impl<T: ?Sized> Exposeable<T> for UnsafeCell<T> {
 ///                      Test Case
 /// ---------------------------------------------------
 
-/// This struct is contains UnsafeCell which can be mutated
-struct InteriorMutability {
-    x: UnsafeCell<u32>,
-}
-
-/// contracts need to access im.x internal data through the unsafe function im.x.expose()
-#[kani::requires(*unsafe{im.x.expose()} < 100)]
-#[kani::modifies(im.x.expose())]
-#[kani::ensures(|_| *unsafe{im.x.expose()} < 101)]
-///im is an immutable reference with interior mutability
-fn modify(im: &InteriorMutability) {
-    unsafe { *im.x.get() += 1 }
+#[kani::requires(*unsafe{x.expose()} < 100)]
+#[kani::modifies(x.expose())]
+#[kani::ensures(|_| *unsafe{x.expose()} < 101)]
+fn modify(x: &UnsafeCell<u32>) {
+    unsafe { *x.get() += 1 }
 }
 
 #[kani::proof_for_contract(modify)]
 fn harness_for_modify() {
-    let im: InteriorMutability = InteriorMutability { x: UnsafeCell::new(kani::any()) };
-    modify(&im)
+    let x = UnsafeCell::new(kani::any());
+    modify(&x)
 }

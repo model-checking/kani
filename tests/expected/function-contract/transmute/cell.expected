@@ -1,6 +1,6 @@
 assertion\
 - Status: SUCCESS\
-- Description: "|_| *unsafe{ im.x.expose() } < 101"\
+- Description: "|_| *unsafe{ x.expose() } < 101"\
 in function modify
 
 VERIFICATION:- SUCCESSFUL

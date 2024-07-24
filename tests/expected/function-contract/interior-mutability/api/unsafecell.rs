@@ -9,7 +9,6 @@ struct InteriorMutability {
     x: UnsafeCell<u32>,
 }
 
-/// contracts need to access im.x internal data through im.x.get() with an unsafe raw pointer dereference
 #[kani::requires(unsafe{*im.x.get()} < 100)]
 #[kani::modifies(im.x.get())]
 #[kani::ensures(|_| unsafe{*im.x.get()} < 101)]
