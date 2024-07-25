@@ -45,6 +45,7 @@ fn test_conc_sci() {
 }
 
 #[kani::proof]
+#[kani::solver(minisat)]
 fn test_towards_neg_inf() {
     let x: f64 = kani::any();
     kani::assume(!x.is_nan());
@@ -53,6 +54,7 @@ fn test_towards_neg_inf() {
 }
 
 #[kani::proof]
+#[kani::solver(minisat)]
 fn test_diff_one() {
     let x: f64 = kani::any();
     kani::assume(!x.is_nan());

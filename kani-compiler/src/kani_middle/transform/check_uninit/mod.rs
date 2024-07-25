@@ -222,7 +222,7 @@ impl<'a> UninitInstrumenter<'a> {
                     *pointee_info.ty(),
                 );
                 collect_skipped(&operation, body, skip_first);
-                body.add_call(
+                body.insert_call(
                     &is_ptr_initialized_instance,
                     source,
                     operation.position(),
@@ -249,7 +249,7 @@ impl<'a> UninitInstrumenter<'a> {
                 let layout_operand =
                     mk_layout_operand(body, source, operation.position(), &element_layout);
                 collect_skipped(&operation, body, skip_first);
-                body.add_call(
+                body.insert_call(
                     &is_ptr_initialized_instance,
                     source,
                     operation.position(),
@@ -274,7 +274,7 @@ impl<'a> UninitInstrumenter<'a> {
             | MemoryInitOp::CheckRef { operand } => operand.ty(body.locals()).unwrap(),
             _ => unreachable!(),
         };
-        body.add_check(
+        body.insert_check(
             tcx,
             &self.check_type,
             source,
@@ -345,7 +345,7 @@ impl<'a> UninitInstrumenter<'a> {
                     *pointee_info.ty(),
                 );
                 collect_skipped(&operation, body, skip_first);
-                body.add_call(
+                body.insert_call(
                     &set_ptr_initialized_instance,
                     source,
                     operation.position(),
@@ -372,7 +372,7 @@ impl<'a> UninitInstrumenter<'a> {
                 let layout_operand =
                     mk_layout_operand(body, source, operation.position(), &element_layout);
                 collect_skipped(&operation, body, skip_first);
-                body.add_call(
+                body.insert_call(
                     &set_ptr_initialized_instance,
                     source,
                     operation.position(),
@@ -408,8 +408,8 @@ impl<'a> UninitInstrumenter<'a> {
             span,
             user_ty: None,
         }));
-        let result = body.new_assignment(rvalue, source, position);
-        body.add_check(tcx, &self.check_type, source, position, result, reason);
+        let result = body.insert_assignment(rvalue, source, position);
+        body.insert_check(tcx, &self.check_type, source, position, result, reason);
     }
 }
 
@@ -432,7 +432,7 @@ pub fn mk_layout_operand(
     layout_byte_mask: &[bool],
 ) -> Operand {
     Operand::Move(Place {
-        local: body.new_assignment(
+        local: body.insert_assignment(
             Rvalue::Aggregate(
                 AggregateKind::Array(Ty::bool_ty()),
                 layout_byte_mask
