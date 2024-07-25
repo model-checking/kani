@@ -25,6 +25,7 @@ use points_to_graph::LocalMemLoc;
 use points_to_graph::PointsToGraph;
 use rustc_middle::ty::TyCtxt;
 use rustc_mir_dataflow::JoinSemiLattice;
+use rustc_session::config::OutputType;
 use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::{Instance, MonoItem};
 use stable_mir::mir::MirVisitor;
@@ -112,14 +113,20 @@ impl GlobalPass for DelayedUbPass {
                         call_graph,
                         &instances,
                         transformer,
-                        &PointsToGraph::empty(),
+                        PointsToGraph::empty(),
                     );
-                    // Since analysis targets are *pointers*, need to get its followers for instrumentation.
-                    for target in targets.iter() {
-                        analysis_targets.extend(results.pointees_of(target));
-                    }
                     global_points_to_graph.join(&results);
                 }
+            }
+
+            // Since analysis targets are *pointers*, need to get its followers for instrumentation.
+            for target in targets.iter() {
+                analysis_targets.extend(global_points_to_graph.pointees_of(target));
+            }
+
+            // If we are generating MIR, generate the points-to graph as well.
+            if tcx.sess.opts.output_types.contains_key(&OutputType::Mir) {
+                global_points_to_graph.dump("points-to.dot");
             }
 
             // Instrument each instance based on the final targets we found.

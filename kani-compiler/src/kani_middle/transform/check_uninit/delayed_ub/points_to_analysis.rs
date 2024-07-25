@@ -37,7 +37,7 @@ pub struct PointsToAnalysis<'a, 'tcx> {
     call_graph: &'a CallGraph,
     instances: &'a Vec<StableInstance>,
     transformer: &'a mut BodyTransformation,
-    initial_graph: &'a PointsToGraph<'tcx>,
+    initial_graph: PointsToGraph<'tcx>,
 }
 
 impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
@@ -50,7 +50,7 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
         call_graph: &'a CallGraph,
         instances: &'a Vec<StableInstance>,
         transformer: &'a mut BodyTransformation,
-        initial_graph: &'a PointsToGraph<'tcx>,
+        initial_graph: PointsToGraph<'tcx>,
     ) -> PointsToGraph<'tcx> {
         let analysis = Self {
             body: body.clone(),
@@ -63,7 +63,7 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
         };
         let mut cursor =
             analysis.into_engine(tcx, &body).iterate_to_fixpoint().into_results_cursor(&body);
-        let mut results = PointsToGraph::from_body(&body, def_id);
+        let mut results = PointsToGraph::empty();
         for (idx, _) in body.basic_blocks.iter().enumerate() {
             cursor.seek_to_block_end(idx.into());
             results.join(cursor.get());
@@ -88,10 +88,11 @@ impl<'a, 'tcx> AnalysisDomain<'tcx> for PointsToAnalysis<'a, 'tcx> {
     /// graph.
     fn initialize_start_block(
         &self,
-        _body: &rustc_middle::mir::Body<'tcx>,
+        body: &rustc_middle::mir::Body<'tcx>,
         state: &mut Self::Domain,
     ) {
         state.join(&self.initial_graph);
+        state.join(&PointsToGraph::from_body(body, self.def_id));
     }
 }
 
@@ -508,8 +509,7 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
         args: &[Spanned<Operand<'tcx>>],
         destination: &Place<'tcx>,
     ) {
-        // Here we simply call another function, so need to retrieve internal
-        // body for it.
+        // Here we simply call another function, so need to retrieve internal body for it.
         let new_body = {
             let internal_instance = rustc_internal::stable(instance);
             assert!(self.instances.contains(&internal_instance));
@@ -517,37 +517,60 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
             stable_body.internal_mir(self.tcx)
         };
 
-        // One missing link is the connections between the arguments in the
-        // caller and parameters in the callee, add it to the graph.
-        match new_body.spread_arg {
-            Some(spread_arg) => {
-                let spread_arg_operand = args[spread_arg.as_usize()].node.clone();
-                for i in 0..new_body.arg_count {
-                    let lvalue_set = HashSet::from([LocalMemLoc::Place(Place {
-                        local: (i + 1).into(), // Since arguments in the callee are starting with 1, account for that.
-                        projection: List::empty(),
-                    })
-                    .with_def_id(instance.def_id())]);
-                    // This conservatively assumes all arguments alias to all parameters. This can be
-                    // improved by supporting scalar places.
-                    let rvalue_set = self.follow_rvalue(state, spread_arg_operand.clone());
-                    state.extend(&lvalue_set, &rvalue_set);
+        // In order to be efficient, create a new graph for the function call analysis, which only
+        // contains arguments and anything transitively reachable from them.
+        let mut initial_graph = PointsToGraph::empty();
+        for arg in args.iter() {
+            match arg.node {
+                Operand::Copy(place) | Operand::Move(place) => {
+                    initial_graph.join(
+                        &state.transitive_closure(state.follow_from_place(place, self.def_id)),
+                    );
                 }
-            }
-            None => {
-                for (i, arg) in args.iter().enumerate() {
-                    let lvalue_set = HashSet::from([LocalMemLoc::Place(Place {
-                        local: (i + 1).into(), // Since arguments in the callee are starting with 1, account for that.
-                        projection: List::empty(),
-                    })
-                    .with_def_id(instance.def_id())]);
-                    let rvalue_set = self.follow_rvalue(state, arg.node.clone());
-                    state.extend(&lvalue_set, &rvalue_set);
-                }
+                Operand::Constant(_) => {}
             }
         }
 
-        // Recursively run the analysis and join the results into the current state.
+        // A missing link is the connections between the arguments in the caller and parameters in
+        // the callee, add it to the graph.
+        if self.tcx.is_closure_like(instance.def.def_id()) {
+            // This means we encountered a closure call.
+            assert!(args.len() == 2);
+            // First, connect all upvars.
+            let lvalue_set = HashSet::from([LocalMemLoc::Place(Place {
+                local: 1usize.into(),
+                projection: List::empty(),
+            })
+            .with_def_id(instance.def_id())]);
+            let rvalue_set = self.follow_rvalue(state, args[0].node.clone());
+            initial_graph.extend(&lvalue_set, &rvalue_set);
+            // Then, connect the argument tuple to each of the spread arguments.
+            let spread_arg_operand = args[1].node.clone();
+            for i in 0..new_body.arg_count {
+                let lvalue_set = HashSet::from([LocalMemLoc::Place(Place {
+                    local: (i + 1).into(), // Since arguments in the callee are starting with 1, account for that.
+                    projection: List::empty(),
+                })
+                .with_def_id(instance.def_id())]);
+                // This conservatively assumes all arguments alias to all parameters. This can be
+                // improved by supporting scalar places.
+                let rvalue_set = self.follow_rvalue(state, spread_arg_operand.clone());
+                initial_graph.extend(&lvalue_set, &rvalue_set);
+            }
+        } else {
+            // Otherwise, simply connect all arguments to parameters.
+            for (i, arg) in args.iter().enumerate() {
+                let lvalue_set = HashSet::from([LocalMemLoc::Place(Place {
+                    local: (i + 1).into(), // Since arguments in the callee are starting with 1, account for that.
+                    projection: List::empty(),
+                })
+                .with_def_id(instance.def_id())]);
+                let rvalue_set = self.follow_rvalue(state, arg.node.clone());
+                initial_graph.extend(&lvalue_set, &rvalue_set);
+            }
+        }
+
+        // Run the analysis.
         let new_result = PointsToAnalysis::run(
             new_body,
             self.tcx,
@@ -555,11 +578,12 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
             self.call_graph,
             self.instances,
             self.transformer,
-            state,
+            initial_graph,
         );
+        // Merge the results into the current state.
         state.join(&new_result);
 
-        // Now, need to connect the return value to the return destination.
+        // Connect the return value to the return destination.
         let lvalue_set = state.follow_from_place(*destination, self.def_id);
         let rvalue_set = HashSet::from([LocalMemLoc::Place(Place {
             local: 0usize.into(),

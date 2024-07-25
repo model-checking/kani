@@ -135,33 +135,16 @@ impl<'tcx> PointsToGraph<'tcx> {
 
     /// Dump the graph into a file using the graphviz format for later visualization.
     pub fn dump(&self, file_path: &str) {
-        let nodes: Vec<String> = self
-            .edges
-            .keys()
-            .map(|from| {
-                format!(
-                    "\t\"{:?}:{:?}\"",
-                    from.def_id(),
-                    from.maybe_local_mem_loc().unwrap_or(LocalMemLoc::Alloc(0))
-                )
-            })
-            .collect();
+        let nodes: Vec<String> =
+            self.edges.keys().map(|from| format!("\t\"{:?}\"", from)).collect();
         let nodes_str = nodes.join("\n");
         let edges: Vec<String> = self
             .edges
             .iter()
             .flat_map(|(from, to)| {
-                let from = format!(
-                    "\"{:?}:{:?}\"",
-                    from.def_id(),
-                    from.maybe_local_mem_loc().unwrap_or(LocalMemLoc::Alloc(0))
-                );
+                let from = format!("\"{:?}\"", from);
                 to.iter().map(move |to| {
-                    let to = format!(
-                        "\"{:?}:{:?}\"",
-                        to.def_id(),
-                        to.maybe_local_mem_loc().unwrap_or(LocalMemLoc::Alloc(0))
-                    );
+                    let to = format!("\"{:?}\"", to);
                     format!("\t{} -> {}", from.clone(), to)
                 })
             })
@@ -171,15 +154,16 @@ impl<'tcx> PointsToGraph<'tcx> {
     }
 
     /// Find a transitive closure of the graph starting from a given place.
-    pub fn transitive_closure(&self, target: &GlobalMemLoc<'tcx>) -> HashSet<GlobalMemLoc<'tcx>> {
-        let mut result = HashSet::new();
-        let mut queue = VecDeque::from([*target]);
+    pub fn transitive_closure(&self, targets: HashSet<GlobalMemLoc<'tcx>>) -> PointsToGraph<'tcx> {
+        let mut result = PointsToGraph::empty();
+        let mut queue = VecDeque::from_iter(targets.into_iter());
         while !queue.is_empty() {
             let next_target = queue.pop_front().unwrap();
-            if !result.contains(&next_target) {
-                let outgoing_edges = self.edges.get(&next_target).unwrap();
+            if !result.edges.contains_key(&next_target) {
+                let outgoing_edges =
+                    self.edges.get(&next_target).cloned().unwrap_or(HashSet::new());
                 queue.extend(outgoing_edges.iter());
-                result.insert(next_target);
+                result.edges.insert(next_target, outgoing_edges.clone());
             }
         }
         result
@@ -209,9 +193,9 @@ impl<'tcx> JoinSemiLattice for PointsToGraph<'tcx> {
                 // graph.
                 if to.difference(self.edges.get(from).unwrap()).count() != 0 {
                     updated = true;
+                    // Add all edges to the original graph.
+                    self.edges.get_mut(from).unwrap().extend(to.iter());
                 }
-                // Add all edges to the original graph.
-                self.edges.get_mut(from).unwrap().extend(to.iter());
             } else {
                 // If node does not exist, add the node and all edges from it.
                 self.edges.insert(*from, to.clone());
