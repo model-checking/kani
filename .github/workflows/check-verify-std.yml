@@ -39,7 +39,7 @@ jobs:
           path: kani
 
       - name: Setup Kani Dependencies
-        uses: ./.github/actions/setup
+        uses: ./kani/.github/actions/setup
         with:
           os: ${{ matrix.os }}
           kani_dir: kani
