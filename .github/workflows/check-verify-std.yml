@@ -19,7 +19,7 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
-  build:
+  verify-std:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
