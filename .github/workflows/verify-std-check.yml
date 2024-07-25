@@ -13,7 +13,9 @@
 # Changes unrelated to the toolchain should match the current status of main.
 
 name: Check Std Verification
-on: pull_request
+on:
+  pull_request:
+  workflow_call:
 
 env:
   RUST_BACKTRACE: 1
@@ -61,7 +63,7 @@ jobs:
       # If the head failed, check if it's a new failure.
       - name: Checkout base
         working-directory: kani
-        if: steps.check-head.outcome != 'success'
+        if: steps.check-head.outcome != 'success' && github.event_name == 'pull_request'
         run: |
           BASE_REF=${{ github.event.pull_request.base.sha }}
           git checkout ${BASE_REF}
@@ -69,15 +71,15 @@ jobs:
 
       - name: Run verification with BASE
         id: check-base
-        if: steps.check-head.outcome != 'success'
+        if: steps.check-head.outcome != 'success' && github.event_name == 'pull_request'
         working-directory: verify-rust-std
         continue-on-error: true
         run: |
           kani verify-std -Z unstable-options ./library --target-dir ${{ runner.temp }} -Z function-contracts \
             -Z mem-predicates -Z ptr-to-ref-cast-checks
 
-      - name: Compare results
-        if: steps.check-head.outcome != 'success' && steps.check-base.output == 'success'
+      - name: Compare PR results
+        if: steps.check-head.outcome != 'success' && steps.check-head.output != github.check-base.output
         run: |
           echo "New failure introduced by this change"
           exit 1
