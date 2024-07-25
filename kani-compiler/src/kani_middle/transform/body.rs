@@ -153,7 +153,7 @@ impl MutableBody {
     /// will be split. If `InsertPosition` is `InsertPosition::Before`, `source` will point to the
     /// same instruction as before. If `InsertPosition` is `InsertPosition::After`, `source` will
     /// point to the new terminator.
-    pub fn new_check(
+    pub fn insert_check(
         &mut self,
         tcx: TyCtxt,
         check_type: &CheckType,
@@ -208,7 +208,7 @@ impl MutableBody {
     /// split. If `InsertPosition` is `InsertPosition::Before`, `source` will point to the same
     /// instruction as before. If `InsertPosition` is `InsertPosition::After`, `source` will point
     /// to the new terminator.
-    pub fn new_call(
+    pub fn insert_call(
         &mut self,
         callee: &Instance,
         source: &mut SourceInstruction,

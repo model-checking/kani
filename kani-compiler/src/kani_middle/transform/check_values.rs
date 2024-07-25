@@ -91,7 +91,7 @@ impl ValidValuePass {
                         let result = build_limits(body, &range, rvalue_ptr.clone(), &mut source);
                         let msg =
                             format!("Undefined Behavior: Invalid value of type `{target_ty}`",);
-                        body.new_check(
+                        body.insert_check(
                             tcx,
                             &self.check_type,
                             &mut source,
@@ -106,7 +106,7 @@ impl ValidValuePass {
                         let result = build_limits(body, &range, rvalue.clone(), &mut source);
                         let msg =
                             format!("Undefined Behavior: Invalid value of type `{pointee_ty}`",);
-                        body.new_check(
+                        body.insert_check(
                             tcx,
                             &self.check_type,
                             &mut source,
@@ -140,7 +140,7 @@ impl ValidValuePass {
             user_ty: None,
         }));
         let result = body.new_assignment(rvalue, source, InsertPosition::Before);
-        body.new_check(tcx, &self.check_type, source, InsertPosition::Before, result, reason);
+        body.insert_check(tcx, &self.check_type, source, InsertPosition::Before, result, reason);
     }
 }
 

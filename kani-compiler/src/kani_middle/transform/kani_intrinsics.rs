@@ -140,7 +140,7 @@ impl IntrinsicGeneratorPass {
                 let reason = format!(
                     "Kani currently doesn't support checking validity of `{target_ty}`. {msg}"
                 );
-                new_body.new_check(
+                new_body.insert_check(
                     tcx,
                     &self.check_type,
                     &mut terminator,
@@ -212,7 +212,7 @@ impl IntrinsicGeneratorPass {
                             InsertPosition::Before,
                             &layout,
                         );
-                        new_body.new_call(
+                        new_body.insert_call(
                             &is_ptr_initialized_instance,
                             &mut terminator,
                             InsertPosition::Before,
@@ -242,7 +242,7 @@ impl IntrinsicGeneratorPass {
                             InsertPosition::Before,
                             &element_layout,
                         );
-                        new_body.new_call(
+                        new_body.insert_call(
                             &is_ptr_initialized_instance,
                             &mut terminator,
                             InsertPosition::Before,
@@ -263,7 +263,7 @@ impl IntrinsicGeneratorPass {
                         );
                         let reason: &str = "Kani does not support reasoning about memory initialization of pointers to trait objects.";
 
-                        new_body.new_check(
+                        new_body.insert_check(
                             tcx,
                             &self.check_type,
                             &mut terminator,
@@ -286,7 +286,7 @@ impl IntrinsicGeneratorPass {
                 let reason = format!(
                     "Kani currently doesn't support checking memory initialization of `{target_ty}`. {msg}"
                 );
-                new_body.new_check(
+                new_body.insert_check(
                     tcx,
                     &self.check_type,
                     &mut terminator,
