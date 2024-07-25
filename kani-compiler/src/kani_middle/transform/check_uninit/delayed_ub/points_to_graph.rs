@@ -156,15 +156,15 @@ impl<'tcx> PointsToGraph<'tcx> {
     /// Find a transitive closure of the graph starting from a given place.
     pub fn transitive_closure(&self, targets: HashSet<GlobalMemLoc<'tcx>>) -> PointsToGraph<'tcx> {
         let mut result = PointsToGraph::empty();
-        let mut queue = VecDeque::from_iter(targets.into_iter());
+        let mut queue = VecDeque::from_iter(targets);
         while !queue.is_empty() {
             let next_target = queue.pop_front().unwrap();
-            if !result.edges.contains_key(&next_target) {
+            result.edges.entry(next_target).or_insert_with(|| {
                 let outgoing_edges =
                     self.edges.get(&next_target).cloned().unwrap_or(HashSet::new());
                 queue.extend(outgoing_edges.iter());
-                result.edges.insert(next_target, outgoing_edges.clone());
-            }
+                outgoing_edges.clone()
+            });
         }
         result
     }

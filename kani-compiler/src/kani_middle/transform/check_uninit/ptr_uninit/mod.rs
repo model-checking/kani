@@ -119,7 +119,7 @@ fn inject_memory_init_setup(
     )
     .unwrap();
 
-    new_body.add_call(
+    new_body.insert_call(
         &memory_initialization_init,
         &mut source,
         InsertPosition::Before,
