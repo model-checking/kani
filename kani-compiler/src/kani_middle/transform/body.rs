@@ -101,7 +101,7 @@ impl MutableBody {
     }
 
     /// Create a raw pointer of `*mut type` and return a new local where that value is stored.
-    pub fn new_ptr_cast(
+    pub fn insert_ptr_cast(
         &mut self,
         from: Operand,
         pointee_ty: Ty,
@@ -112,13 +112,13 @@ impl MutableBody {
         assert!(from.ty(self.locals()).unwrap().kind().is_raw_ptr());
         let target_ty = Ty::new_ptr(pointee_ty, mutability);
         let rvalue = Rvalue::Cast(CastKind::PtrToPtr, from, target_ty);
-        self.new_assignment(rvalue, source, position)
+        self.insert_assignment(rvalue, source, position)
     }
 
     /// Add a new assignment for the given binary operation.
     ///
     /// Return the local where the result is saved.
-    pub fn new_binary_op(
+    pub fn insert_binary_op(
         &mut self,
         bin_op: BinOp,
         lhs: Operand,
@@ -127,13 +127,13 @@ impl MutableBody {
         position: InsertPosition,
     ) -> Local {
         let rvalue = Rvalue::BinaryOp(bin_op, lhs, rhs);
-        self.new_assignment(rvalue, source, position)
+        self.insert_assignment(rvalue, source, position)
     }
 
     /// Add a new assignment.
     ///
     /// Return the local where the result is saved.
-    pub fn new_assignment(
+    pub fn insert_assignment(
         &mut self,
         rvalue: Rvalue,
         source: &mut SourceInstruction,

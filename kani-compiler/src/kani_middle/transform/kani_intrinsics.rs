@@ -136,7 +136,7 @@ impl IntrinsicGeneratorPass {
                     user_ty: None,
                 }));
                 let result =
-                    new_body.new_assignment(rvalue, &mut terminator, InsertPosition::Before);
+                    new_body.insert_assignment(rvalue, &mut terminator, InsertPosition::Before);
                 let reason = format!(
                     "Kani currently doesn't support checking validity of `{target_ty}`. {msg}"
                 );
@@ -256,7 +256,7 @@ impl IntrinsicGeneratorPass {
                             span,
                             user_ty: None,
                         }));
-                        let result = new_body.new_assignment(
+                        let result = new_body.insert_assignment(
                             rvalue,
                             &mut terminator,
                             InsertPosition::Before,
@@ -282,7 +282,7 @@ impl IntrinsicGeneratorPass {
                     user_ty: None,
                 }));
                 let result =
-                    new_body.new_assignment(rvalue, &mut terminator, InsertPosition::Before);
+                    new_body.insert_assignment(rvalue, &mut terminator, InsertPosition::Before);
                 let reason = format!(
                     "Kani currently doesn't support checking memory initialization of `{target_ty}`. {msg}"
                 );

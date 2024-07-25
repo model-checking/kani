@@ -408,7 +408,7 @@ impl UninitPass {
             span,
             user_ty: None,
         }));
-        let result = body.new_assignment(rvalue, source, position);
+        let result = body.insert_assignment(rvalue, source, position);
         body.insert_check(tcx, &self.check_type, source, position, result, reason);
     }
 }
@@ -432,7 +432,7 @@ pub fn mk_layout_operand(
     layout_byte_mask: &[bool],
 ) -> Operand {
     Operand::Move(Place {
-        local: body.new_assignment(
+        local: body.insert_assignment(
             Rvalue::Aggregate(
                 AggregateKind::Array(Ty::bool_ty()),
                 layout_byte_mask
