@@ -57,7 +57,7 @@ impl MemoryInitOp {
                         Operand::Copy(place) | Operand::Move(place) => place,
                         Operand::Constant(_) => unreachable!(),
                     };
-                    body.new_assignment(
+                    body.insert_assignment(
                         Rvalue::AddressOf(Mutability::Not, place.clone()),
                         source,
                         self.position(),
