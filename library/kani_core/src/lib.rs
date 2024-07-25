@@ -295,48 +295,48 @@ macro_rules! kani_intrinsics {
         }
 
         pub mod internal {
+            use crate::kani::Arbitrary;
+            use core::ptr;
 
             /// Helper trait for code generation for `modifies` contracts.
             ///
             /// We allow the user to provide us with a pointer-like object that we convert as needed.
             #[doc(hidden)]
-            pub trait Pointer<'a> {
+            pub trait Pointer {
                 /// Type of the pointed-to data
                 type Inner: ?Sized;
 
                 /// used for havocking on replecement of a `modifies` clause.
-                unsafe fn assignable(self) -> &'a mut Self::Inner;
+                unsafe fn assignable(self) -> *mut Self::Inner;
             }
 
-            impl<'a, 'b, T: ?Sized> Pointer<'a> for &'b T {
+            impl<T: ?Sized> Pointer for &T {
                 type Inner = T;
-                #[allow(clippy::transmute_ptr_to_ref)]
-                unsafe fn assignable(self) -> &'a mut Self::Inner {
-                    $core::mem::transmute(self as *const T)
+                unsafe fn assignable(self) -> *mut Self::Inner {
+                    self as *const T as *mut T
                 }
             }
 
-            impl<'a, 'b, T: ?Sized> Pointer<'a> for &'b mut T {
-                type Inner = T;
-
-                unsafe fn assignable(self) -> &'a mut Self::Inner {
-                    $core::mem::transmute(self)
-                }
-            }
-
-            impl<'a, T: ?Sized> Pointer<'a> for *const T {
+            impl<T: ?Sized> Pointer for &mut T {
                 type Inner = T;
 
                 unsafe fn assignable(self) -> *mut Self::Inner {
-                    core::mem::transmute(self)
+                    self as *mut T
                 }
             }
 
-            impl<'a, T: ?Sized> Pointer<'a> for *mut T {
+            impl<T: ?Sized> Pointer for *const T {
                 type Inner = T;
-                #[allow(clippy::transmute_ptr_to_ref)]
-                unsafe fn assignable(self) -> &'a mut Self::Inner {
-                    $core::mem::transmute(self)
+
+                unsafe fn assignable(self) -> *mut Self::Inner {
+                    self as *mut T
+                }
+            }
+
+            impl<T: ?Sized> Pointer for *mut T {
+                type Inner = T;
+                unsafe fn assignable(self) -> *mut Self::Inner {
+                    self
                 }
             }
 
