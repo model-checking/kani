@@ -9,6 +9,7 @@
 //! - Pin<P> where P is one of the types above
 //! Source: <https://doc.rust-lang.org/reference/items/traits.html?highlight=receiver#object-safety>
 // compile-flags: --edition 2021
+// kani-flags: -Zfunction-contracts
 
 #![feature(rustc_attrs)]
 
@@ -63,6 +64,8 @@ impl CharASCII {
         Rc::<_>::get_mut(&mut self).unwrap().0 = new_val
     }
 
+    /// We cannot specify the counter today which is modified in this function.
+    /// <https://github.com/model-checking/kani/issues/3372>
     #[kani::modifies(&self.as_ref().0)]
     #[kani::requires(new_val <= 128)]
     #[kani::ensures(|_| self.as_ref().0 == new_val)]
@@ -121,6 +124,11 @@ mod verify {
         unsafe { Rc::new(obj).set_rc(new_val) };
     }
 
+    /// This test currently fails because we cannot specify that the counter will be modified.
+    /// The counter is behind a pointer, but `Arc` only provide access to the data portion of
+    /// the allocation.
+    /// <https://github.com/model-checking/kani/issues/3372>
+    #[cfg(arc_fails)]
     #[kani::proof_for_contract(CharASCII::set_arc)]
     fn check_arc() {
         let obj = CharASCII::any();

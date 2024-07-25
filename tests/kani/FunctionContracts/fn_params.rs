@@ -4,6 +4,7 @@
 //! Source: <https://doc.rust-lang.org/reference/items/functions.html>
 //!
 //! Note: See `receiver_contracts` for receiver parameters.
+// kani-flags: -Zfunction-contracts
 
 extern crate kani;
 use std::convert::TryFrom;
