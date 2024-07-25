@@ -137,11 +137,11 @@ impl IntrinsicGeneratorPass {
                     user_ty: None,
                 }));
                 let result =
-                    new_body.new_assignment(rvalue, &mut terminator, InsertPosition::Before);
+                    new_body.insert_assignment(rvalue, &mut terminator, InsertPosition::Before);
                 let reason = format!(
                     "Kani currently doesn't support checking validity of `{target_ty}`. {msg}"
                 );
-                new_body.add_check(
+                new_body.insert_check(
                     tcx,
                     &self.check_type,
                     &mut terminator,
@@ -213,7 +213,7 @@ impl IntrinsicGeneratorPass {
                             InsertPosition::Before,
                             &layout,
                         );
-                        new_body.add_call(
+                        new_body.insert_call(
                             &is_ptr_initialized_instance,
                             &mut terminator,
                             InsertPosition::Before,
@@ -243,7 +243,7 @@ impl IntrinsicGeneratorPass {
                             InsertPosition::Before,
                             &element_layout,
                         );
-                        new_body.add_call(
+                        new_body.insert_call(
                             &is_ptr_initialized_instance,
                             &mut terminator,
                             InsertPosition::Before,
@@ -257,14 +257,14 @@ impl IntrinsicGeneratorPass {
                             span,
                             user_ty: None,
                         }));
-                        let result = new_body.new_assignment(
+                        let result = new_body.insert_assignment(
                             rvalue,
                             &mut terminator,
                             InsertPosition::Before,
                         );
                         let reason: &str = "Kani does not support reasoning about memory initialization of pointers to trait objects.";
 
-                        new_body.add_check(
+                        new_body.insert_check(
                             tcx,
                             &self.check_type,
                             &mut terminator,
@@ -283,11 +283,11 @@ impl IntrinsicGeneratorPass {
                     user_ty: None,
                 }));
                 let result =
-                    new_body.new_assignment(rvalue, &mut terminator, InsertPosition::Before);
+                    new_body.insert_assignment(rvalue, &mut terminator, InsertPosition::Before);
                 let reason = format!(
                     "Kani currently doesn't support checking memory initialization of `{target_ty}`. {msg}"
                 );
-                new_body.add_check(
+                new_body.insert_check(
                     tcx,
                     &self.check_type,
                     &mut terminator,

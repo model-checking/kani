@@ -127,7 +127,9 @@ impl AnyModifiesPass {
         let mut changed = false;
         let locals = body.locals().to_vec();
         for bb in body.blocks.iter_mut() {
-            let TerminatorKind::Call { func, args, .. } = &mut bb.terminator.kind else { continue };
+            let TerminatorKind::Call { func, args, .. } = &mut bb.terminator.kind else {
+                continue;
+            };
             if let TyKind::RigidTy(RigidTy::FnDef(def, instance_args)) =
                 func.ty(&locals).unwrap().kind()
                 && Some(def) == self.kani_any_modifies
@@ -191,7 +193,9 @@ impl AnyModifiesPass {
         let mut valid = true;
         let locals = body.locals().to_vec();
         for bb in body.blocks.iter_mut() {
-            let TerminatorKind::Call { func, .. } = &mut bb.terminator.kind else { continue };
+            let TerminatorKind::Call { func, .. } = &mut bb.terminator.kind else {
+                continue;
+            };
             if let TyKind::RigidTy(RigidTy::FnDef(def, args)) = func.ty(&locals).unwrap().kind() {
                 match Instance::resolve(def, &args) {
                     Ok(_) => {}
@@ -420,7 +424,7 @@ impl FunctionWithContractPass {
             .unwrap();
 
         let span = mode_call.span(new_body.blocks());
-        let mode_const = new_body.new_const_operand(mode as _, UintTy::U8, span);
+        let mode_const = new_body.new_uint_operand(mode as _, UintTy::U8, span);
         new_body.assign_to(
             ret.clone(),
             Rvalue::Use(mode_const),
