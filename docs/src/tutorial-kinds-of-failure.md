@@ -86,33 +86,23 @@ How does Kani's output change, compared to the unsafe operation?
 <details>
 <summary>Click to see explanation for exercise 1</summary>
 
-Having switched back to the safe indexing operation, Kani reports two failures:
+Having switched back to the safe indexing operation, Kani reports a bounds check failure:
 
 ```
-SUMMARY: 
- ** 2 of 350 failed
+SUMMARY:
+ ** 1 of 343 failed (8 unreachable)
 Failed Checks: index out of bounds: the length is less than or equal to the given index
- File: "./src/bounds_check.rs", line 11, in bounds_check::get_wrapped
-Failed Checks: dereference failure: pointer outside object bounds
- File: "./src/bounds_check.rs", line 11, in bounds_check::get_wrapped
+ File: "src/bounds_check.rs", line 11, in bounds_check::get_wrapped
 
 VERIFICATION:- FAILED
 ```
-
-The first is Rust's runtime bounds checking for the safe indexing operation.
-The second is Kani's check to ensure the pointer operation is actually safe.
-This pattern (two checks for similar issues in safe Rust code) is common to see, and we'll see it again in the next section.
-
-> **NOTE**: While Kani will always be checking for both properties, [in the future the output here may change](https://github.com/model-checking/kani/issues/1349).
-> You might have noticed that the bad pointer dereference can't happen, since the bounds check would panic first.
-> In the future, Kani's output may report only the bounds checking failure in this example.
 
 </details>
 
 <details>
 <summary>Click to see explanation for exercise 2</summary>
 
-Having run `cargo kani --harness bound_check --visualize` and clicked on one of the failures to see a trace, there are three things to immediately notice:
+Having run `cargo kani --harness bound_check --visualize --enable-unstable` and clicked on one of the failures to see a trace, there are three things to immediately notice:
 
 1. This trace is huge. Because the standard library `Vec` is involved, there's a lot going on.
 2. The top of the trace file contains some "trace navigation tips" that might be helpful in navigating the trace.
@@ -126,13 +116,15 @@ In this case, where we just have a couple of `kani::any` values in our proof har
 In this trace we find (and the values you get may be different):
 
 ```
-Step 36: Function bound_check, File src/bounds_check.rs, Line 37
-let size: usize = kani::any();
-size = 2464ul
-
-Step 39: Function bound_check, File src/bounds_check.rs, Line 39
-let index: usize = kani::any();
-index = 2463ul
+Step 523: Function bound_check, File src/bounds_check.rs, Line 37
+<- kani::any::<usize>
+Step 524: Function bound_check, File src/bounds_check.rs, Line 37
+size = 1ul (00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000001)
+...
+Step 537: Function bound_check, File src/bounds_check.rs, Line 39
+<- kani::any::<usize>
+Step 538: Function bound_check, File src/bounds_check.rs, Line 39
+index = 18446744073709551615ul (11111111 11111111 11111111 11111111 11111111 11111111 11111111 11111111)
 ```
 
 You may see different values here, as it depends on the solver's behavior.

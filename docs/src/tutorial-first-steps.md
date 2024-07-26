@@ -200,17 +200,22 @@ Fortunately, Kani is able to report a coverage metric for each proof harness.
 Try running:
 
 ```
-cargo kani --visualize --harness verify_success
+cargo kani --coverage -Z line-coverage --harness verify_success
 ```
 
-The beginning of the report includes coverage information.
-Clicking through to the file will show fully-covered lines in green.
-Lines not covered by our proof harness will show in red.
+which verifies the harness, then prints coverage information for each line.
+In this case, we see that each line of `estimate_size` is followed by `FULL`, indicating that our proof harness provides full coverage.
 
 Try changing the assumption in the proof harness to `x < 2048`.
 Now the harness won't be testing all possible cases.
-Rerun `cargo kani --visualize`.
-Look at the report: you'll see we no longer have 100% coverage of the function.
+Rerun the command.
+You'll see this line:
+
+```
+src/lib.rs, 24, NONE
+```
+
+which indicates that the proof no longer covers line 24, which addresses the case where `x >= 2048`.
 
 ## Summary
 
