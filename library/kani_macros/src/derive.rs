@@ -22,17 +22,16 @@ pub fn expand_derive_arbitrary(item: proc_macro::TokenStream) -> proc_macro::Tok
     let derive_item = parse_macro_input!(item as DeriveInput);
     let item_name = &derive_item.ident;
 
+    let body = fn_any_body(&item_name, &derive_item.data);
+    // Get the safety constraints (if any) to produce type-safe values
+    let safety_conds_opt = safety_conds_opt(&item_name, &derive_item);
+
     // Add a bound `T: Arbitrary` to every type parameter T.
     let generics = add_trait_bound_arbitrary(derive_item.generics);
     // Generate an expression to sum up the heap size of each field.
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
-    let body = fn_any_body(&item_name, &derive_item.data);
-
-    // Get the safety constraints (if any) to produce type-safe values
-    let safety_conds_opt = safety_conds(&item_name, &derive_item.data);
-
-    let expanded = if let Some(safety_cond) = safety_conds_opt {
+    let expanded = if let Some(safety_conds) = safety_conds_opt {
         let field_refs = field_refs(&item_name, &derive_item.data);
         quote! {
             // The generated implementation.
@@ -40,7 +39,7 @@ pub fn expand_derive_arbitrary(item: proc_macro::TokenStream) -> proc_macro::Tok
                 fn any() -> Self {
                     let obj = #body;
                     #field_refs
-                    kani::assume(#safety_cond);
+                    kani::assume(#safety_conds);
                     obj
                 }
             }
@@ -399,11 +398,22 @@ fn fn_any_enum(ident: &Ident, data: &DataEnum) -> TokenStream {
     }
 }
 
+fn safe_body_with_calls(item_name: &Ident, derive_input: &DeriveInput) -> TokenStream {
+    let safety_conds_opt = safety_conds_opt(&item_name, &derive_input);
+    let safe_body_default = safe_body_default(&item_name, &derive_input.data);
+
+    if let Some(safety_conds) = safety_conds_opt {
+        quote! { #safe_body_default && #safety_conds }
+    } else {
+        safe_body_default
+    }
+}
+
 pub fn expand_derive_invariant(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let derive_item = parse_macro_input!(item as DeriveInput);
     let item_name = &derive_item.ident;
 
-    let safe_body = safe_body(&item_name, &derive_item);
+    let safe_body = safe_body_with_calls(&item_name, &derive_item);
     let field_refs = field_refs(&item_name, &derive_item.data);
 
     // Add a bound `T: Invariant` to every type parameter T.
@@ -424,32 +434,53 @@ pub fn expand_derive_invariant(item: proc_macro::TokenStream) -> proc_macro::Tok
     proc_macro::TokenStream::from(expanded)
 }
 
-fn safe_body(item_name: &Ident, derive_input: &DeriveInput) -> TokenStream {
+// fn safe_body(item_name: &Ident, derive_input: &DeriveInput) -> TokenStream {
+//     let has_item_safety_constraint =
+//         derive_input.attrs.iter().any(|attr| attr.path().is_ident("safety_constraint"));
+//     let has_field_safety_constraints = has_field_safety_constraints(&item_name, &derive_input.data);
+
+//     if has_item_safety_constraint && has_field_safety_constraints {
+//         abort!(Span::call_site(), "Cannot derive `Invariant` for `{}`", item_name;
+//         note = item_name.span() =>
+//         "`#[safety_constraint(...)]` cannot be used in struct AND its fields"
+//         )
+//     }
+
+//     let safe_body_from_attrs_opt: Option<TokenStream> = if has_item_safety_constraint {
+//         Some(safe_body_from_struct_attr(&item_name, &derive_input))
+//     } else if has_field_safety_constraints {
+//         Some(safe_body_from_fields_attr(&item_name, &derive_input.data))
+//     } else {
+//         None
+//     };
+
+//     let safe_body_default = safe_body_default(&item_name, &derive_input.data);
+
+//     if let Some(safe_body_from_attrs) = safe_body_from_attrs_opt {
+//         quote! { #safe_body_default && #safe_body_from_attrs }
+//     } else {
+//         safe_body_default
+//     }
+// }
+
+fn safety_conds_opt(item_name: &Ident, derive_input: &DeriveInput) -> Option<TokenStream> {
     let has_item_safety_constraint =
         derive_input.attrs.iter().any(|attr| attr.path().is_ident("safety_constraint"));
     let has_field_safety_constraints = has_field_safety_constraints(&item_name, &derive_input.data);
 
     if has_item_safety_constraint && has_field_safety_constraints {
-        abort!(Span::call_site(), "Cannot derive `Invariant` for `{}`", item_name;
+        abort!(Span::call_site(), "Cannot derive `Arbitrary` for `{}`", item_name;
         note = item_name.span() =>
-        "`#[safety_constaint(...)]` cannot be used in struct AND its fields"
+        "`#[safety_constraint(...)]` cannot be used in struct AND its fields"
         )
     }
 
-    let safe_body_from_attrs_opt: Option<TokenStream> = if has_item_safety_constraint {
+    if has_item_safety_constraint {
         Some(safe_body_from_struct_attr(&item_name, &derive_input))
     } else if has_field_safety_constraints {
         Some(safe_body_from_fields_attr(&item_name, &derive_input.data))
     } else {
         None
-    };
-
-    let safe_body_default = safe_body_default(&item_name, &derive_input.data);
-
-    if let Some(safe_body_from_attrs) = safe_body_from_attrs_opt {
-        quote! { #safe_body_default && #safe_body_from_attrs }
-    } else {
-        safe_body_default
     }
 }
 
