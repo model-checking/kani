@@ -424,9 +424,9 @@ macro_rules! kani_intrinsics {
                 func()
             }
 
-            /// This is used for documentation's sake of which implementation to keep during contract verification.
+            /// This is used by contracts to select which version of the contract to use during codegen.
             #[doc(hidden)]
-            type Mode = u8;
+            pub type Mode = u8;
 
             /// Keep the original body.
             pub const ORIGINAL: Mode = 0;
@@ -439,17 +439,6 @@ macro_rules! kani_intrinsics {
 
             /// Stub the body with its contract.
             pub const REPLACE: Mode = 3;
-
-            /// This function is only used to help with contract instrumentation.
-            ///
-            /// It should be removed from the end user code during contract transformation.
-            /// By default, return the original code (used in concrete playback).
-            #[doc(hidden)]
-            #[inline(never)]
-            #[rustc_diagnostic_item = "KaniContractMode"]
-            pub const fn mode() -> Mode {
-                ORIGINAL
-            }
         }
     };
 }

@@ -143,9 +143,9 @@ fn run_contract_fn<T, F: FnOnce() -> T>(func: F) -> T {
     func()
 }
 
-/// This is used for documentation's sake of which implementation to keep during contract verification.
+/// This is used by contracts to select which version of the contract to use during codegen.
 #[doc(hidden)]
-type Mode = u8;
+pub type Mode = u8;
 
 /// Keep the original body.
 pub const ORIGINAL: Mode = 0;
@@ -158,19 +158,3 @@ pub const SIMPLE_CHECK: Mode = 2;
 
 /// Stub the body with its contract.
 pub const REPLACE: Mode = 3;
-
-/// This function is only used to help with contract instrumentation.
-///
-/// It should be removed from the end user code during contract transformation.
-/// By default, return the original code (used in concrete playback).
-#[doc(hidden)]
-#[inline(never)]
-#[crate::unstable(
-    feature = "function-contracts",
-    issue = 2652,
-    reason = "experimental support for function contracts"
-)]
-#[rustc_diagnostic_item = "KaniContractMode"]
-pub const fn mode() -> Mode {
-    ORIGINAL
-}

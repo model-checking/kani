@@ -400,7 +400,6 @@ impl FunctionWithContractPass {
     /// 2. Replace `kani_register_contract` by the call to the closure.
     fn set_mode(&self, tcx: TyCtxt, body: Body, mode: ContractMode) -> Body {
         debug!(?mode, "set_mode");
-        let mode_fn = find_fn_def(tcx, "KaniContractMode").unwrap();
         let mut new_body = MutableBody::from(body);
         let (mut mode_call, ret, target) = new_body
             .blocks()
@@ -410,16 +409,16 @@ impl FunctionWithContractPass {
                 if let TerminatorKind::Call { func, target, destination, .. } = &bb.terminator.kind
                 {
                     let (callee, _) = func.ty(new_body.locals()).unwrap().kind().fn_def()?;
-                    (callee == mode_fn).then(|| {
-                        (
+                    let marker = KaniAttributes::for_def_id(tcx, callee.def_id()).fn_marker();
+                    if marker.is_some_and(|s| s.as_str() == "kani_contract_mode") {
+                        return Some((
                             SourceInstruction::Terminator { bb: bb_idx },
                             destination.clone(),
                             target.unwrap(),
-                        )
-                    })
-                } else {
-                    None
+                        ));
+                    }
                 }
+                None
             })
             .unwrap();
 

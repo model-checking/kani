@@ -48,10 +48,17 @@ impl<'a> ContractConditionsHandler<'a> {
                 // This function gets replaced by `kani::internal::call_closure`.
                 #[inline(never)]
                 #[kanitool::fn_marker = "kani_register_contract"]
-                pub const fn kani_register_contract<T, F: FnOnce() -> T>(f: F) -> T {
+                const fn kani_register_contract<T, F: FnOnce() -> T>(f: F) -> T {
                     unreachable!()
                 }
-                let kani_contract_mode = kani::internal::mode();
+                // Dummy function that we replace to pick the contract mode.
+                // By default, return ORIGINAL
+                #[inline(never)]
+                #[kanitool::fn_marker = "kani_contract_mode"]
+                const fn kani_contract_mode() -> kani::internal::Mode {
+                    kani::internal::ORIGINAL
+                }
+                let kani_contract_mode = kani_contract_mode();
                 match kani_contract_mode {
                     kani::internal::RECURSION_CHECK => {
                         #recursion_closure;
