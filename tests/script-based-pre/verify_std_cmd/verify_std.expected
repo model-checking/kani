@@ -9,7 +9,13 @@ VERIFICATION:- SUCCESSFUL
 Checking harness verify::check_dummy_read...
 VERIFICATION:- SUCCESSFUL
 
+Checking harness verify::check_add_one...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness verify::check_swap_tuple...
+VERIFICATION:- SUCCESSFUL
+
 Checking harness num::verify::check_non_zero...
 VERIFICATION:- SUCCESSFUL
 
-Complete - 4 successfully verified harnesses, 0 failures, 4 total.
+Complete - 6 successfully verified harnesses, 0 failures, 6 total.
