@@ -71,6 +71,8 @@ pub fn machine_model_symbols(mm: &MachineModel) -> Vec<Symbol> {
     ]
 }
 
+const DEAD_OBJECT_IDENTIFIER: &str = "__CPROVER_dead_object";
+
 pub fn additional_env_symbols() -> Vec<Symbol> {
     vec![
         Symbol::builtin_function("__CPROVER_initialize", vec![], Type::empty()),
@@ -83,8 +85,8 @@ pub fn additional_env_symbols() -> Vec<Symbol> {
         )
         .with_is_extern(true),
         Symbol::static_variable(
-            "__CPROVER_dead_object",
-            "__CPROVER_dead_object",
+            DEAD_OBJECT_IDENTIFIER,
+            DEAD_OBJECT_IDENTIFIER,
             Type::void_pointer(),
             Location::none(),
         )
@@ -93,5 +95,5 @@ pub fn additional_env_symbols() -> Vec<Symbol> {
 }
 
 pub fn global_dead_object(symbol_table: &SymbolTable) -> Expr {
-    symbol_table.lookup("__CPROVER_dead_object").unwrap().to_expr()
+    symbol_table.lookup(DEAD_OBJECT_IDENTIFIER).unwrap().to_expr()
 }
