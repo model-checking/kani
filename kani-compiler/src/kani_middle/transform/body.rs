@@ -469,6 +469,12 @@ impl SourceInstruction {
             SourceInstruction::Terminator { bb } => blocks[bb].terminator.span,
         }
     }
+
+    pub fn bb(&self) -> usize {
+        match self {
+            SourceInstruction::Statement { bb, .. } | SourceInstruction::Terminator { bb } => *bb,
+        }
+    }
 }
 
 fn find_instance(tcx: TyCtxt, diagnostic: &str) -> Option<Instance> {

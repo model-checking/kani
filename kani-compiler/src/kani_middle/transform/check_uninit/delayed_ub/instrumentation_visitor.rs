@@ -16,7 +16,7 @@ use rustc_hir::def_id::DefId as InternalDefId;
 use rustc_middle::ty::TyCtxt;
 use rustc_smir::rustc_internal;
 use stable_mir::mir::visit::{Location, PlaceContext};
-use stable_mir::mir::{BasicBlockIdx, MirVisitor, Operand, Place, Statement};
+use stable_mir::mir::{BasicBlockIdx, MirVisitor, Operand, Place, Statement, Terminator};
 use std::collections::HashSet;
 
 pub struct InstrumentationVisitor<'a, 'tcx> {
@@ -89,6 +89,13 @@ impl<'a, 'tcx> MirVisitor for InstrumentationVisitor<'a, 'tcx> {
             // Switch to the next statement.
             let SourceInstruction::Statement { idx, bb } = self.current else { unreachable!() };
             self.current = SourceInstruction::Statement { idx: idx + 1, bb };
+        }
+    }
+
+    fn visit_terminator(&mut self, term: &Terminator, location: Location) {
+        if !(self.skip_next || self.target.is_some()) {
+            self.current = SourceInstruction::Terminator { bb: self.current.bb() };
+            self.super_terminator(term, location);
         }
     }
 
