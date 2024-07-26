@@ -192,8 +192,8 @@ pub struct GlobalPasses {
 impl GlobalPasses {
     pub fn new(queries: &QueryDb, tcx: TyCtxt) -> Self {
         let mut global_passes = GlobalPasses { global_passes: vec![] };
-        global_passes.add_global_pass(queries, DumpMirPass::new(tcx));
         global_passes.add_global_pass(queries, DelayedUbPass::new(CheckType::new_assert(tcx)));
+        global_passes.add_global_pass(queries, DumpMirPass::new(tcx));
         global_passes
     }
 

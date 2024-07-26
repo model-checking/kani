@@ -111,8 +111,6 @@ impl GlobalPass for DelayedUbPass {
                         tcx,
                         internal_def_id,
                         call_graph,
-                        &instances,
-                        transformer,
                         PointsToGraph::empty(),
                     );
                     global_points_to_graph.join(&results);

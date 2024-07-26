@@ -267,8 +267,8 @@ impl CodegenBackend for GotocCodegenBackend {
                     for unit in units.iter() {
                         // We reset the body cache for now because each codegen unit has different
                         // configurations that affect how we transform the instance body.
-                        let mut transformer = BodyTransformation::new(&queries, tcx, &unit);
                         for harness in &unit.harnesses {
+                            let transformer = BodyTransformation::new(&queries, tcx, &unit);
                             let model_path = units.harness_model_path(*harness).unwrap();
                             let contract_metadata =
                                 contract_metadata_for_harness(tcx, harness.def.def_id()).unwrap();
@@ -280,7 +280,7 @@ impl CodegenBackend for GotocCodegenBackend {
                                 contract_metadata,
                                 transformer,
                             );
-                            transformer = results.extend(gcx, items, None);
+                            results.extend(gcx, items, None);
                             if let Some(assigns_contract) = contract_info {
                                 modifies_instances.push((*harness, assigns_contract));
                             }

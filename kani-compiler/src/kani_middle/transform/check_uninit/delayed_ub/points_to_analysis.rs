@@ -9,7 +9,6 @@ use crate::kani_middle::{
     transform::{
         check_uninit::delayed_ub::points_to_graph::{GlobalMemLoc, LocalMemLoc, PointsToGraph},
         internal_mir::RustcInternalMir,
-        BodyTransformation,
     },
 };
 use rustc_ast::Mutability;
@@ -25,7 +24,6 @@ use rustc_middle::{
 use rustc_mir_dataflow::{Analysis, AnalysisDomain, Forward, JoinSemiLattice};
 use rustc_smir::rustc_internal;
 use rustc_span::source_map::Spanned;
-use stable_mir::mir::mono::Instance as StableInstance;
 use std::collections::HashSet;
 
 /// Main points-to analysis object. Since this one will be created anew for each instance analysis,
@@ -35,8 +33,6 @@ pub struct PointsToAnalysis<'a, 'tcx> {
     body: Body<'tcx>,
     tcx: TyCtxt<'tcx>,
     call_graph: &'a CallGraph,
-    instances: &'a Vec<StableInstance>,
-    transformer: &'a mut BodyTransformation,
     initial_graph: PointsToGraph<'tcx>,
 }
 
@@ -48,19 +44,9 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
         tcx: TyCtxt<'tcx>,
         def_id: DefId,
         call_graph: &'a CallGraph,
-        instances: &'a Vec<StableInstance>,
-        transformer: &'a mut BodyTransformation,
         initial_graph: PointsToGraph<'tcx>,
     ) -> PointsToGraph<'tcx> {
-        let analysis = Self {
-            body: body.clone(),
-            tcx,
-            def_id,
-            call_graph,
-            instances,
-            transformer,
-            initial_graph,
-        };
+        let analysis = Self { body: body.clone(), tcx, def_id, call_graph, initial_graph };
         let mut cursor =
             analysis.into_engine(tcx, &body).iterate_to_fixpoint().into_results_cursor(&body);
         let mut results = PointsToGraph::empty();
@@ -86,11 +72,7 @@ impl<'a, 'tcx> AnalysisDomain<'tcx> for PointsToAnalysis<'a, 'tcx> {
 
     /// Dataflow state instantiated at the entry into the body, this should be the current dataflow
     /// graph.
-    fn initialize_start_block(
-        &self,
-        body: &rustc_middle::mir::Body<'tcx>,
-        state: &mut Self::Domain,
-    ) {
+    fn initialize_start_block(&self, body: &Body<'tcx>, state: &mut Self::Domain) {
         state.join(&self.initial_graph);
         state.join(&PointsToGraph::from_body(body, self.def_id));
     }
@@ -511,9 +493,8 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
     ) {
         // Here we simply call another function, so need to retrieve internal body for it.
         let new_body = {
-            let internal_instance = rustc_internal::stable(instance);
-            assert!(self.instances.contains(&internal_instance));
-            let stable_body = self.transformer.body(self.tcx, rustc_internal::stable(instance));
+            let stable_instance = rustc_internal::stable(instance);
+            let stable_body = stable_instance.body().unwrap();
             stable_body.internal_mir(self.tcx)
         };
 
@@ -576,8 +557,6 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
             self.tcx,
             instance.def_id(),
             self.call_graph,
-            self.instances,
-            self.transformer,
             initial_graph,
         );
         // Merge the results into the current state.

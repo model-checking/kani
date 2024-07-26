@@ -135,10 +135,12 @@ impl<'tcx> PointsToGraph<'tcx> {
 
     /// Dump the graph into a file using the graphviz format for later visualization.
     pub fn dump(&self, file_path: &str) {
-        let nodes: Vec<String> =
+        let mut nodes: Vec<String> =
             self.edges.keys().map(|from| format!("\t\"{:?}\"", from)).collect();
+        nodes.sort();
         let nodes_str = nodes.join("\n");
-        let edges: Vec<String> = self
+
+        let mut edges: Vec<String> = self
             .edges
             .iter()
             .flat_map(|(from, to)| {
@@ -149,7 +151,9 @@ impl<'tcx> PointsToGraph<'tcx> {
                 })
             })
             .collect();
+        edges.sort();
         let edges_str = edges.join("\n");
+
         std::fs::write(file_path, format!("digraph {{\n{}\n{}\n}}", nodes_str, edges_str)).unwrap();
     }
 
