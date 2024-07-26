@@ -27,7 +27,7 @@ pub struct CurrentFnCtx<'tcx> {
     /// A list of pretty names for locals that corrspond to user variables.
     local_names: HashMap<Local, InternedString>,
     /// Collection of variables that are used in a reference or address-of expression.
-    address_taken_locals: HashSet<usize>,
+    address_taken_locals: HashSet<Local>,
     /// The symbol name of the current function
     name: String,
     /// A human readable pretty name for the current function
@@ -38,7 +38,7 @@ pub struct CurrentFnCtx<'tcx> {
 
 struct AddressTakenLocalsCollector {
     /// Locals that appear in `Rvalue::Ref` or `Rvalue::AddressOf` expressions.
-    address_taken_locals: HashSet<usize>,
+    address_taken_locals: HashSet<Local>,
 }
 
 impl MirVisitor for AddressTakenLocalsCollector {
@@ -130,7 +130,7 @@ impl<'tcx> CurrentFnCtx<'tcx> {
         self.local_names.get(&local).copied()
     }
 
-    pub fn is_address_taken_local(&self, local: usize) -> bool {
+    pub fn is_address_taken_local(&self, local: Local) -> bool {
         self.address_taken_locals.contains(&local)
     }
 }
