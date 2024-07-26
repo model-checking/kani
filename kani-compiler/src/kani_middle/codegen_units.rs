@@ -104,7 +104,7 @@ impl CodegenUnits {
     /// Generate [KaniMetadata] for the target crate.
     fn generate_metadata(&self) -> KaniMetadata {
         let (proof_harnesses, test_harnesses) =
-            self.harness_info.values().cloned().partition(|md| md.attributes.proof);
+            self.harness_info.values().cloned().partition(|md| md.attributes.is_proof());
         KaniMetadata {
             crate_name: self.crate_info.name.clone(),
             proof_harnesses,
