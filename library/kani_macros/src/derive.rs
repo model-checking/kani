@@ -398,6 +398,10 @@ pub fn expand_derive_invariant(item: proc_macro::TokenStream) -> proc_macro::Tok
     proc_macro::TokenStream::from(expanded)
 }
 
+/// Looks for `#[safety_constraint(...)]` attributes used in the struct or its
+/// fields, and returns the constraints if there were any, otherwise returns
+/// `None`.
+/// Note: Errors out if the attribute is used in both the struct and its fields.
 fn safety_conds_opt(
     item_name: &Ident,
     derive_input: &DeriveInput,
@@ -408,7 +412,7 @@ fn safety_conds_opt(
     let has_field_safety_constraints = has_field_safety_constraints(&item_name, &derive_input.data);
 
     if has_item_safety_constraint && has_field_safety_constraints {
-        abort!(Span::call_site(), "Cannot derive `Arbitrary` for `{}`", item_name;
+        abort!(Span::call_site(), "Cannot derive `{}` for `{}`", trait_name, item_name;
         note = item_name.span() =>
         "`#[safety_constraint(...)]` cannot be used in struct AND its fields"
         )
@@ -431,6 +435,8 @@ fn has_field_safety_constraints(ident: &Ident, data: &Data) -> bool {
     }
 }
 
+/// Checks if the `#[safety_constraint(...)]` attribute is attached to any
+/// field.
 fn has_field_safety_constraints_inner(_ident: &Ident, fields: &Fields) -> bool {
     match fields {
         Fields::Named(ref fields) => fields
@@ -452,10 +458,12 @@ pub fn add_trait_bound_invariant(mut generics: Generics) -> Generics {
     generics
 }
 
+/// Checks if the `#[safety_constraint(...)]` attribute is attached to any
+/// field.
 fn safe_body_from_struct_attr(
     ident: &Ident,
     derive_input: &DeriveInput,
-    trait_name: &str,
+    _trait_name: &str,
 ) -> TokenStream {
     // TODO: Check that this is a struct
     parse_safety_expr_struct(ident, derive_input).unwrap()
@@ -479,11 +487,11 @@ fn safe_body_from_struct_attr(
 /// ```
 /// *x >= 0 && *y >= 0
 /// ```
-/// which can be passed to `kani::assume` to constrain the values generated
-/// through the `Arbitrary` impl so that they are type-safe by construction.
+/// which can be used by the `Arbitrary` and `Invariant` to generate and check
+/// type-safe values for the struct, respectively.
 fn safe_body_from_fields_attr(ident: &Ident, data: &Data, trait_name: &str) -> TokenStream {
     match data {
-        Data::Struct(struct_data) => struct_invariant_conjunction(ident, &struct_data.fields),
+        Data::Struct(struct_data) => safe_body_from_fields_attr_inner(ident, &struct_data.fields),
         Data::Enum(_) => {
             abort!(Span::call_site(), "Cannot derive `{}` for `{}` enum", trait_name, ident;
                 note = ident.span() =>
@@ -501,7 +509,7 @@ fn safe_body_from_fields_attr(ident: &Ident, data: &Data, trait_name: &str) -> T
 
 /// Generates an expression resulting from the conjunction of conditions
 /// specified as safety constraints for each field. See `safe_body_from_fields_attr` for more details.
-fn struct_invariant_conjunction(ident: &Ident, fields: &Fields) -> TokenStream {
+fn safe_body_from_fields_attr_inner(ident: &Ident, fields: &Fields) -> TokenStream {
     match fields {
         // Expands to the expression
         // `<safety_cond1> && <safety_cond2> && ..`
