@@ -123,3 +123,44 @@ fn delayed_ub_copy() {
         assert!(value > 0); // UB: This reads a padding value!
     }
 }
+
+struct S {
+    u: U,
+}
+
+struct U {
+    value1: u128,
+    value2: u64,
+    value3: u32,
+}
+
+struct Inner<T>(*mut T);
+
+/// Delayed UB via mutable pointer write into inner fields of structs.
+#[kani::proof]
+fn delayed_ub_structs() {
+    unsafe {
+        // Create a convoluted struct.
+        let mut s: S = S { u: U { value1: 0, value2: 0, value3: 0 } };
+        // Get a pointer to an inner field of the struct. Then, cast between two pointers of
+        // different padding.
+        let inner = Inner(&mut s.u.value2 as *mut _);
+        let inner_cast = Inner(inner.0 as *mut (u8, u32));
+        let ptr = inner_cast.0;
+        *ptr = (4, 4);
+        let u: U = s.u; // UB: This reads a padding value inside the inner struct!
+    }
+}
+
+/// Delayed UB via mutable pointer write into a slice element.
+#[kani::proof]
+fn delayed_ub_slices() {
+    unsafe {
+        // Create an array.
+        let mut arr = [0u128; 4];
+        // Get a pointer to a part of the array.
+        let ptr = &mut arr[0..2][0..1][0] as *mut _ as *mut (u8, u32);
+        *ptr = (4, 4);
+        let arr_copy = arr; // UB: This reads a padding value inside the array!
+    }
+}

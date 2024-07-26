@@ -5,7 +5,7 @@
 
 use rustc_hir::def_id::DefId;
 use rustc_middle::{
-    mir::{Body, Location, Place, ProjectionElem},
+    mir::{Location, Place, ProjectionElem},
     ty::List,
 };
 use rustc_mir_dataflow::{fmt::DebugWithContext, JoinSemiLattice};
@@ -76,16 +76,6 @@ pub struct PointsToGraph<'tcx> {
 impl<'tcx> PointsToGraph<'tcx> {
     pub fn empty() -> Self {
         Self { edges: HashMap::new() }
-    }
-
-    /// Create a new graph, adding all existing places without projections from a body.
-    pub fn from_body(body: &Body, def_id: DefId) -> Self {
-        let places = (0..body.local_decls.len()).map(|local| {
-            let place: LocalMemLoc =
-                Place { local: local.into(), projection: List::empty() }.into();
-            (place.with_def_id(def_id), HashSet::new())
-        });
-        Self { edges: HashMap::from_iter(places) }
     }
 
     /// Collect all nodes which have incoming edges from `nodes`.
@@ -177,10 +167,7 @@ impl<'tcx> PointsToGraph<'tcx> {
 
     /// Retrieve all places to which a given place is pointing to.
     pub fn pointees_of(&self, target: &GlobalMemLoc<'tcx>) -> HashSet<GlobalMemLoc<'tcx>> {
-        self.edges
-            .get(&target)
-            .expect(format!("unable to retrieve {:?} from points-to graph", target).as_str())
-            .clone()
+        self.edges.get(&target).unwrap_or(&HashSet::new()).clone()
     }
 
     // Merge the other graph into self, consuming it.

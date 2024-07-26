@@ -74,9 +74,8 @@ impl<'a, 'tcx> AnalysisDomain<'tcx> for PointsToAnalysis<'a, 'tcx> {
 
     /// Dataflow state instantiated at the entry into the body, this should be the current dataflow
     /// graph.
-    fn initialize_start_block(&self, body: &Body<'tcx>, state: &mut Self::Domain) {
+    fn initialize_start_block(&self, _body: &Body<'tcx>, state: &mut Self::Domain) {
         state.consume(self.initial_graph.clone());
-        state.consume(PointsToGraph::from_body(body, self.def_id));
     }
 }
 

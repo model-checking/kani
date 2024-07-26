@@ -1,3 +1,15 @@
+Checking harness delayed_ub_slices...
+
+Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `[u128; 4]`
+
+VERIFICATION:- FAILED
+
+Checking harness delayed_ub_structs...
+
+Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `U`
+
+VERIFICATION:- FAILED
+
 Checking harness delayed_ub_copy...
 
 Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `u128`
@@ -41,6 +53,8 @@ Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type
 VERIFICATION:- FAILED
 
 Summary:
+Verification failed for - delayed_ub_slices
+Verification failed for - delayed_ub_structs
 Verification failed for - delayed_ub_copy
 Verification failed for - delayed_ub_closure_capture_laundered
 Verification failed for - delayed_ub_closure_laundered
@@ -48,4 +62,4 @@ Verification failed for - delayed_ub_laundered
 Verification failed for - delayed_ub_static
 Verification failed for - delayed_ub_transmute
 Verification failed for - delayed_ub
-Complete - 0 successfully verified harnesses, 7 failures, 7 total.
+Complete - 0 successfully verified harnesses, 9 failures, 9 total.
