@@ -6,6 +6,7 @@
 
 use crate::args::ConcretePlaybackMode;
 use crate::call_cbmc::VerificationResult;
+use crate::cbmc_output_parser::Property;
 use crate::session::KaniSession;
 use anyhow::{Context, Result};
 use concrete_vals_extractor::{extract_harness_values, ConcreteVal};
@@ -32,7 +33,7 @@ impl KaniSession {
         };
 
         if let Ok(result_items) = &verification_result.results {
-            let harness_values: Vec<Vec<ConcreteVal>> = extract_harness_values(result_items);
+            let harness_values = extract_harness_values(result_items);
 
             if harness_values.is_empty() {
                 println!(
@@ -43,9 +44,9 @@ impl KaniSession {
             } else {
                 let mut unit_tests: Vec<UnitTest> = harness_values
                     .iter()
-                    .map(|concrete_vals| {
+                    .map(|(prop, concrete_vals)| {
                         let pretty_name = harness.get_harness_name_unqualified();
-                        format_unit_test(&pretty_name, &concrete_vals, gen_test_doc(harness))
+                        format_unit_test(&pretty_name, &concrete_vals, gen_test_doc(harness, *prop))
                     })
                     .collect();
                 unit_tests.dedup_by(|a, b| a.name == b.name);
@@ -168,6 +169,9 @@ impl KaniSession {
                 writeln!(temp_file, "{line}")?;
                 if curr_line_num == proof_harness_end_line {
                     for unit_test in unit_tests.iter() {
+                        // Write an empty line before the unit test.
+                        writeln!(temp_file, "")?;
+
                         for unit_test_line in unit_test.code.iter() {
                             curr_line_num += 1;
                             writeln!(temp_file, "{unit_test_line}")?;
@@ -176,7 +180,7 @@ impl KaniSession {
                 }
             }
 
-            // Renames are usually automic, so we won't corrupt the user's source file during a
+            // Renames are usually atomic, so we won't corrupt the user's source file during a
             // crash; but first flush all updates to disk, which persist wouldn't take care of.
             temp_file.as_file().sync_all()?;
             temp_file.persist(source_path).expect("Could not rename file");
@@ -231,14 +235,14 @@ impl KaniSession {
     }
 }
 
-fn gen_test_doc(harness: &HarnessMetadata) -> String {
+fn gen_test_doc(harness: &HarnessMetadata, property: &Property) -> String {
     let mut doc_str = match &harness.attributes.kind {
         HarnessKind::Proof => {
             format!("/// Test generated for harness `{}` \n", harness.pretty_name)
         }
         HarnessKind::ProofForContract { target_fn } => {
             format!(
-                "/// Test generated for harness `{}` that check contract for `{target_fn}`\n",
+                "/// Test generated for harness `{}` that checks contract for `{target_fn}`\n",
                 harness.pretty_name
             )
         }
@@ -246,13 +250,19 @@ fn gen_test_doc(harness: &HarnessMetadata) -> String {
             unreachable!("Concrete playback for tests is not supported")
         }
     };
+    doc_str.push_str("///\n");
+    doc_str.push_str(&format!(
+        "/// Check for `{}`: \"{}\"\n",
+        property.property_class(),
+        property.description
+    ));
     if !harness.attributes.stubs.is_empty() {
         doc_str.push_str("///\n");
         doc_str.push_str(
             "/// # Warning\n\
                ///\n\
-               /// Concrete playback tests combined with stubs is highly experimental, and\n\
-               /// subject to change.\n\
+               /// Concrete playback tests combined with stubs or contracts is highly \n\
+               /// experimental, and subject to change.\n\
                ///\n\
                /// The original harness has stubs which are not applied to this test.\n\
                /// This may cause a mismatch of non-deterministic values if the stub\n\
@@ -362,7 +372,7 @@ mod concrete_vals_extractor {
     /// Extract a set of concrete values that trigger one assertion
     /// failure. Each element of the outer vector corresponds to
     /// inputs triggering one assertion failure or cover statement.
-    pub fn extract_harness_values(result_items: &[Property]) -> Vec<Vec<ConcreteVal>> {
+    pub fn extract_harness_values(result_items: &[Property]) -> Vec<(&Property, Vec<ConcreteVal>)> {
         result_items
             .iter()
             .filter(|prop| {
@@ -378,7 +388,7 @@ mod concrete_vals_extractor {
                 let concrete_vals: Vec<ConcreteVal> =
                     trace.iter().filter_map(&extract_from_trace_item).collect();
 
-                concrete_vals
+                (property, concrete_vals)
             })
             .collect()
     }
@@ -397,7 +407,7 @@ mod concrete_vals_extractor {
             {
                 if trace_item.step_type == "assignment"
                     && lhs.starts_with("goto_symex$$return_value")
-                    && func.starts_with("kani::any_raw_internal")
+                    && func.starts_with("kani::any_raw_")
                 {
                     let declared_width = width_u64 as usize;
                     let actual_width = bit_concrete_val.len();
@@ -647,7 +657,7 @@ mod tests {
                 }),
             }]),
         }];
-        let concrete_vals = extract_harness_values(&processed_items).pop().unwrap();
+        let (_, concrete_vals) = extract_harness_values(&processed_items).pop().unwrap();
         let concrete_val = &concrete_vals[0];
 
         assert_eq!(concrete_val.byte_arr, vec![1, 3]);
