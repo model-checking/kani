@@ -19,12 +19,13 @@ use syn::{
 };
 
 pub fn expand_derive_arbitrary(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let trait_name = "Arbitrary";
     let derive_item = parse_macro_input!(item as DeriveInput);
     let item_name = &derive_item.ident;
 
     let body = fn_any_body(&item_name, &derive_item.data);
     // Get the safety constraints (if any) to produce type-safe values
-    let safety_conds_opt = safety_conds_opt(&item_name, &derive_item);
+    let safety_conds_opt = safety_conds_opt(&item_name, &derive_item, trait_name);
 
     // Add a bound `T: Arbitrary` to every type parameter T.
     let generics = add_trait_bound_arbitrary(derive_item.generics);
@@ -90,48 +91,6 @@ pub fn fn_any_body(ident: &Ident, data: &Data) -> TokenStream {
                 "`#[derive(Arbitrary)]` cannot be used for unions such as `{}`", ident
             )
         }
-    }
-}
-
-/// Parse the condition expressions in `#[safety_constraint(<cond>)]` attached to struct
-/// fields and, it at least one was found, generate a conjunction to be assumed.
-///
-/// For example, if we're deriving implementations for the struct
-/// ```
-/// #[derive(Arbitrary)]
-/// #[derive(Invariant)]
-/// struct PositivePoint {
-///     #[safety_constraint(*x >= 0)]
-///     x: i32,
-///     #[safety_constraint(*y >= 0)]
-///     y: i32,
-/// }
-/// ```
-/// this function will generate the `TokenStream`
-/// ```
-/// *x >= 0 && *y >= 0
-/// ```
-/// which can be passed to `kani::assume` to constrain the values generated
-/// through the `Arbitrary` impl so that they are type-safe by construction.
-fn safety_conds(ident: &Ident, data: &Data) -> Option<TokenStream> {
-    match data {
-        Data::Struct(struct_data) => safety_conds_inner(ident, &struct_data.fields),
-        Data::Enum(_) => None,
-        Data::Union(_) => None,
-    }
-}
-
-/// Generates an expression resulting from the conjunction of conditions
-/// specified as safety constraints for each field. See `safety_conds` for more details.
-fn safety_conds_inner(ident: &Ident, fields: &Fields) -> Option<TokenStream> {
-    match fields {
-        Fields::Named(ref fields) => {
-            let conds: Vec<TokenStream> =
-                fields.named.iter().filter_map(|field| parse_safety_expr(ident, field)).collect();
-            if !conds.is_empty() { Some(quote! { #(#conds)&&* }) } else { None }
-        }
-        Fields::Unnamed(_) => None,
-        Fields::Unit => None,
     }
 }
 
@@ -398,8 +357,12 @@ fn fn_any_enum(ident: &Ident, data: &DataEnum) -> TokenStream {
     }
 }
 
-fn safe_body_with_calls(item_name: &Ident, derive_input: &DeriveInput) -> TokenStream {
-    let safety_conds_opt = safety_conds_opt(&item_name, &derive_input);
+fn safe_body_with_calls(
+    item_name: &Ident,
+    derive_input: &DeriveInput,
+    trait_name: &str,
+) -> TokenStream {
+    let safety_conds_opt = safety_conds_opt(&item_name, &derive_input, trait_name);
     let safe_body_default = safe_body_default(&item_name, &derive_input.data);
 
     if let Some(safety_conds) = safety_conds_opt {
@@ -410,10 +373,11 @@ fn safe_body_with_calls(item_name: &Ident, derive_input: &DeriveInput) -> TokenS
 }
 
 pub fn expand_derive_invariant(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let trait_name = "Invariant";
     let derive_item = parse_macro_input!(item as DeriveInput);
     let item_name = &derive_item.ident;
 
-    let safe_body = safe_body_with_calls(&item_name, &derive_item);
+    let safe_body = safe_body_with_calls(&item_name, &derive_item, trait_name);
     let field_refs = field_refs(&item_name, &derive_item.data);
 
     // Add a bound `T: Invariant` to every type parameter T.
@@ -434,36 +398,11 @@ pub fn expand_derive_invariant(item: proc_macro::TokenStream) -> proc_macro::Tok
     proc_macro::TokenStream::from(expanded)
 }
 
-// fn safe_body(item_name: &Ident, derive_input: &DeriveInput) -> TokenStream {
-//     let has_item_safety_constraint =
-//         derive_input.attrs.iter().any(|attr| attr.path().is_ident("safety_constraint"));
-//     let has_field_safety_constraints = has_field_safety_constraints(&item_name, &derive_input.data);
-
-//     if has_item_safety_constraint && has_field_safety_constraints {
-//         abort!(Span::call_site(), "Cannot derive `Invariant` for `{}`", item_name;
-//         note = item_name.span() =>
-//         "`#[safety_constraint(...)]` cannot be used in struct AND its fields"
-//         )
-//     }
-
-//     let safe_body_from_attrs_opt: Option<TokenStream> = if has_item_safety_constraint {
-//         Some(safe_body_from_struct_attr(&item_name, &derive_input))
-//     } else if has_field_safety_constraints {
-//         Some(safe_body_from_fields_attr(&item_name, &derive_input.data))
-//     } else {
-//         None
-//     };
-
-//     let safe_body_default = safe_body_default(&item_name, &derive_input.data);
-
-//     if let Some(safe_body_from_attrs) = safe_body_from_attrs_opt {
-//         quote! { #safe_body_default && #safe_body_from_attrs }
-//     } else {
-//         safe_body_default
-//     }
-// }
-
-fn safety_conds_opt(item_name: &Ident, derive_input: &DeriveInput) -> Option<TokenStream> {
+fn safety_conds_opt(
+    item_name: &Ident,
+    derive_input: &DeriveInput,
+    trait_name: &str,
+) -> Option<TokenStream> {
     let has_item_safety_constraint =
         derive_input.attrs.iter().any(|attr| attr.path().is_ident("safety_constraint"));
     let has_field_safety_constraints = has_field_safety_constraints(&item_name, &derive_input.data);
@@ -476,9 +415,9 @@ fn safety_conds_opt(item_name: &Ident, derive_input: &DeriveInput) -> Option<Tok
     }
 
     if has_item_safety_constraint {
-        Some(safe_body_from_struct_attr(&item_name, &derive_input))
+        Some(safe_body_from_struct_attr(&item_name, &derive_input, trait_name))
     } else if has_field_safety_constraints {
-        Some(safe_body_from_fields_attr(&item_name, &derive_input.data))
+        Some(safe_body_from_fields_attr(&item_name, &derive_input.data, trait_name))
     } else {
         None
     }
@@ -513,21 +452,46 @@ pub fn add_trait_bound_invariant(mut generics: Generics) -> Generics {
     generics
 }
 
-fn safe_body_from_struct_attr(ident: &Ident, derive_input: &DeriveInput) -> TokenStream {
+fn safe_body_from_struct_attr(
+    ident: &Ident,
+    derive_input: &DeriveInput,
+    trait_name: &str,
+) -> TokenStream {
+    // TODO: Check that this is a struct
     parse_safety_expr_struct(ident, derive_input).unwrap()
 }
 
-fn safe_body_from_fields_attr(ident: &Ident, data: &Data) -> TokenStream {
+/// Parse the condition expressions in `#[safety_constraint(<cond>)]` attached to struct
+/// fields and, it at least one was found, generate a conjunction to be assumed.
+///
+/// For example, if we're deriving implementations for the struct
+/// ```
+/// #[derive(Arbitrary)]
+/// #[derive(Invariant)]
+/// struct PositivePoint {
+///     #[safety_constraint(*x >= 0)]
+///     x: i32,
+///     #[safety_constraint(*y >= 0)]
+///     y: i32,
+/// }
+/// ```
+/// this function will generate the `TokenStream`
+/// ```
+/// *x >= 0 && *y >= 0
+/// ```
+/// which can be passed to `kani::assume` to constrain the values generated
+/// through the `Arbitrary` impl so that they are type-safe by construction.
+fn safe_body_from_fields_attr(ident: &Ident, data: &Data, trait_name: &str) -> TokenStream {
     match data {
         Data::Struct(struct_data) => struct_invariant_conjunction(ident, &struct_data.fields),
         Data::Enum(_) => {
-            abort!(Span::call_site(), "Cannot derive `Invariant` for `{}` enum", ident;
+            abort!(Span::call_site(), "Cannot derive `{}` for `{}` enum", trait_name, ident;
                 note = ident.span() =>
                 "`#[derive(Invariant)]` cannot be used for enums such as `{}`", ident
             )
         }
         Data::Union(_) => {
-            abort!(Span::call_site(), "Cannot derive `Invariant` for `{}` union", ident;
+            abort!(Span::call_site(), "Cannot derive `{}` for `{}` union", trait_name, ident;
                 note = ident.span() =>
                 "`#[derive(Invariant)]` cannot be used for unions such as `{}`", ident
             )
@@ -535,7 +499,8 @@ fn safe_body_from_fields_attr(ident: &Ident, data: &Data) -> TokenStream {
     }
 }
 
-/// Generates an expression that is the conjunction of safety constraints for each field in the struct.
+/// Generates an expression resulting from the conjunction of conditions
+/// specified as safety constraints for each field. See `safe_body_from_fields_attr` for more details.
 fn struct_invariant_conjunction(ident: &Ident, fields: &Fields) -> TokenStream {
     match fields {
         // Expands to the expression
