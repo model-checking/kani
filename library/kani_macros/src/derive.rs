@@ -218,8 +218,25 @@ fn safe_body_default_inner(_ident: &Ident, fields: &Fields) -> TokenStream {
                 quote! { true }
             }
         }
-        Fields::Unnamed(_) => quote! {},
-        Fields::Unit => quote! {},
+        Fields::Unnamed(ref fields) => {
+            let field_safe_calls: Vec<TokenStream> = fields
+                .unnamed
+                .iter()
+                .enumerate()
+                .map(|(idx, field)| {
+                    let field_idx = Index::from(idx);
+                    quote_spanned! {field.span()=>
+                        #field_idx.is_safe()
+                    }
+                })
+                .collect();
+            if !field_safe_calls.is_empty() {
+                quote! { #( #field_safe_calls )&&* }
+            } else {
+                quote! { true }
+            }
+        }
+        Fields::Unit => quote! { true },
     }
 }
 
