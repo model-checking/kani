@@ -191,15 +191,15 @@ fn field_refs_inner(_ident: &Ident, fields: &Fields) -> TokenStream {
     }
 }
 
-pub fn field_safe_calls(ident: &Ident, data: &Data) -> TokenStream {
+pub fn safe_body_default(ident: &Ident, data: &Data) -> TokenStream {
     match data {
-        Data::Struct(struct_data) => field_safe_calls_inner(ident, &struct_data.fields),
+        Data::Struct(struct_data) => safe_body_default_inner(ident, &struct_data.fields),
         Data::Enum(_) => unreachable!(),
         Data::Union(_) => unreachable!(),
     }
 }
 
-fn field_safe_calls_inner(_ident: &Ident, fields: &Fields) -> TokenStream {
+fn safe_body_default_inner(_ident: &Ident, fields: &Fields) -> TokenStream {
     match fields {
         Fields::Named(ref fields) => {
             let field_safe_calls: Vec<TokenStream> = fields
@@ -299,6 +299,38 @@ fn parse_safety_expr(ident: &Ident, field: &syn::Field) -> Option<TokenStream> {
     }
 }
 
+fn parse_safety_expr_struct(ident: &Ident, derive_input: &DeriveInput) -> Option<TokenStream> {
+    let name = ident;
+    let mut safety_attr = None;
+
+    // Keep the attribute if we find it
+    for attr in &derive_input.attrs {
+        if attr.path().is_ident("safety_constraint") {
+            safety_attr = Some(attr);
+        }
+    }
+
+    // Parse the arguments in the `#[safety_constraint(...)]` attribute
+    if let Some(attr) = safety_attr {
+        let expr_args: Result<syn::Expr, syn::Error> = attr.parse_args();
+
+        // Check if there was an error parsing the arguments
+        if let Err(err) = expr_args {
+            abort!(Span::call_site(), "Cannot derive impl for `{}`", ident;
+            note = attr.span() =>
+            "safety constraint in `{}` could not be parsed: {}", name.to_string(), err
+            )
+        }
+
+        // Return the expression associated to the safety constraint
+        let safety_expr = expr_args.unwrap();
+        Some(quote_spanned! {derive_input.span()=>
+            #safety_expr
+        })
+    } else {
+        None
+    }
+}
 /// Generate the body of the function `any()` for enums. The cases are:
 /// 1. For zero-variants enumerations, this will encode a `panic!()` statement.
 /// 2. For one or more variants, the code will be something like:
@@ -354,13 +386,31 @@ pub fn expand_derive_invariant(item: proc_macro::TokenStream) -> proc_macro::Tok
     let derive_item = parse_macro_input!(item as DeriveInput);
     let item_name = &derive_item.ident;
 
+    let has_item_safety_constraint =
+        derive_item.attrs.iter().any(|attr| attr.path().is_ident("safety_constraint"));
+    let has_field_safety_constraints = has_field_safety_constraints(&item_name, &derive_item.data);
+
+    if has_item_safety_constraint && has_field_safety_constraints {
+        abort!(Span::call_site(), "Cannot derive `Invariant` for `{}`", item_name;
+        note = item_name.span() =>
+        "`#[safety_constaint(...)]` cannot be used in struct AND its fields"
+        )
+    }
+
+    let field_refs = field_refs(&item_name, &derive_item.data);
+
+    let safe_body_from_attrs = if has_item_safety_constraint {
+        safe_body_from_struct_attr(&item_name, &derive_item)
+    } else {
+        safe_body_from_fields_attr(&item_name, &derive_item.data)
+    };
+
+    let safe_body_default = safe_body_default(&item_name, &derive_item.data);
+
     // Add a bound `T: Invariant` to every type parameter T.
     let generics = add_trait_bound_invariant(derive_item.generics);
     // Generate an expression to sum up the heap size of each field.
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
-
-    let body = is_safe_body(&item_name, &derive_item.data);
-    let field_refs = field_refs(&item_name, &derive_item.data);
 
     let expanded = quote! {
         // The generated implementation.
@@ -368,11 +418,30 @@ pub fn expand_derive_invariant(item: proc_macro::TokenStream) -> proc_macro::Tok
             fn is_safe(&self) -> bool {
                 let obj = self;
                 #field_refs
-                #body
+                #safe_body_default && #safe_body_from_attrs
             }
         }
     };
     proc_macro::TokenStream::from(expanded)
+}
+
+fn has_field_safety_constraints(ident: &Ident, data: &Data) -> bool {
+    match data {
+        Data::Struct(struct_data) => has_field_safety_constraints_inner(ident, &struct_data.fields),
+        Data::Enum(_) => false,
+        Data::Union(_) => false,
+    }
+}
+
+fn has_field_safety_constraints_inner(_ident: &Ident, fields: &Fields) -> bool {
+    match fields {
+        Fields::Named(ref fields) => fields
+            .named
+            .iter()
+            .any(|field| field.attrs.iter().any(|attr| attr.path().is_ident("safety_constraint"))),
+        Fields::Unnamed(_) => false,
+        Fields::Unit => false,
+    }
 }
 
 /// Add a bound `T: Invariant` to every type parameter T.
@@ -385,7 +454,11 @@ pub fn add_trait_bound_invariant(mut generics: Generics) -> Generics {
     generics
 }
 
-fn is_safe_body(ident: &Ident, data: &Data) -> TokenStream {
+fn safe_body_from_struct_attr(ident: &Ident, derive_input: &DeriveInput) -> TokenStream {
+    parse_safety_expr_struct(ident, derive_input).unwrap()
+}
+
+fn safe_body_from_fields_attr(ident: &Ident, data: &Data) -> TokenStream {
     match data {
         Data::Struct(struct_data) => struct_invariant_conjunction(ident, &struct_data.fields),
         Data::Enum(_) => {
@@ -416,37 +489,17 @@ fn struct_invariant_conjunction(ident: &Ident, fields: &Fields) -> TokenStream {
         // Therefore, if `#[safety_constraint(<cond>)]` isn't specified for any field, this expands to
         // `true && self.field1.is_safe() && self.field2.is_safe() && ..`
         Fields::Named(ref fields) => {
-            let safety_conds: Vec<TokenStream> = fields
-                .named
-                .iter()
-                .map(|field| {
-                    let name = &field.ident;
-                    let default_expr = quote_spanned! {field.span()=>
-                        #name.is_safe()
-                    };
-                    parse_safety_expr(ident, field)
-                        .map(|expr| quote! { #expr && #default_expr})
-                        .unwrap_or(default_expr)
-                })
-                .collect();
+            let safety_conds: Vec<TokenStream> =
+                fields.named.iter().filter_map(|field| parse_safety_expr(ident, field)).collect();
             // An initial value is required for empty structs
             safety_conds.iter().fold(quote! { true }, |acc, cond| {
                 quote! { #acc && #cond }
             })
         }
-        Fields::Unnamed(ref fields) => {
-            // Expands to the expression
-            // `true && self.0.is_safe() && self.1.is_safe() && ..`
-            let safe_calls = fields.unnamed.iter().enumerate().map(|(i, field)| {
-                let idx = syn::Index::from(i);
-                quote_spanned! {field.span()=>
-                    self.#idx.is_safe()
-                }
-            });
-            // An initial value is required for empty structs
-            safe_calls.fold(quote! { true }, |acc, call| {
-                quote! { #acc && #call }
-            })
+        Fields::Unnamed(_) => {
+            quote! {
+                true
+            }
         }
         // Expands to the expression
         // `true`
