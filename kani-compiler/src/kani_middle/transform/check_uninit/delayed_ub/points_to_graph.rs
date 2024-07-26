@@ -194,7 +194,7 @@ impl<'tcx> JoinSemiLattice for PointsToGraph<'tcx> {
                 // graph.
                 let difference: HashSet<_> =
                     to.difference(self.edges.get(from).unwrap()).cloned().collect();
-                if difference.len() != 0 {
+                if !difference.is_empty() {
                     updated = true;
                     // Add all edges to the original graph.
                     self.edges.get_mut(from).unwrap().extend(difference);
