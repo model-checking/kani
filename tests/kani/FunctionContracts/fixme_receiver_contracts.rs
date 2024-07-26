@@ -9,6 +9,7 @@
 //! - Pin<P> where P is one of the types above
 //! Source: <https://doc.rust-lang.org/reference/items/traits.html?highlight=receiver#object-safety>
 // compile-flags: --edition 2021
+// kani-flags: -Zfunction-contracts
 
 #![feature(rustc_attrs)]
 
