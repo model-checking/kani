@@ -7,14 +7,14 @@ use crate::args::ReachabilityType;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::kani_middle::analysis;
 use crate::kani_middle::attributes::{is_test_harness_description, KaniAttributes};
+use crate::kani_middle::check_reachable_items;
 use crate::kani_middle::codegen_units::{CodegenUnit, CodegenUnits};
 use crate::kani_middle::metadata::gen_test_metadata;
 use crate::kani_middle::provide;
 use crate::kani_middle::reachability::{
     collect_reachable_items, filter_const_crate_items, filter_crate_items,
 };
-use crate::kani_middle::transform::BodyTransformation;
-use crate::kani_middle::{check_reachable_items, dump_mir_items};
+use crate::kani_middle::transform::{BodyTransformation, GlobalPasses};
 use crate::kani_queries::QueryDb;
 use cbmc::goto_program::Location;
 use cbmc::irep::goto_binary_serde::write_goto_binary_file;
@@ -24,9 +24,7 @@ use kani_metadata::artifact::convert_type;
 use kani_metadata::UnsupportedFeature;
 use kani_metadata::{ArtifactType, HarnessMetadata, KaniMetadata};
 use kani_metadata::{AssignsContract, CompilerArtifactStub};
-use rustc_codegen_ssa::back::archive::{
-    get_native_object_symbols, ArArchiveBuilder, ArchiveBuilder,
-};
+use rustc_codegen_ssa::back::archive::{ArArchiveBuilder, ArchiveBuilder, DEFAULT_OBJECT_READER};
 use rustc_codegen_ssa::back::metadata::create_wrapper_file;
 use rustc_codegen_ssa::traits::CodegenBackend;
 use rustc_codegen_ssa::{CodegenResults, CrateInfo};
@@ -89,11 +87,33 @@ impl GotocCodegenBackend {
         check_contract: Option<InternalDefId>,
         mut transformer: BodyTransformation,
     ) -> (GotocCtx<'tcx>, Vec<MonoItem>, Option<AssignsContract>) {
-        let items = with_timer(
+        let (items, call_graph) = with_timer(
             || collect_reachable_items(tcx, &mut transformer, starting_items),
             "codegen reachability analysis",
         );
-        dump_mir_items(tcx, &mut transformer, &items, &symtab_goto.with_extension("kani.mir"));
+
+        // Retrieve all instances from the currently codegened items.
+        let instances = items
+            .iter()
+            .filter_map(|item| match item {
+                MonoItem::Fn(instance) => Some(*instance),
+                MonoItem::Static(static_def) => {
+                    let instance: Instance = (*static_def).into();
+                    instance.has_body().then_some(instance)
+                }
+                MonoItem::GlobalAsm(_) => None,
+            })
+            .collect();
+
+        // Apply all transformation passes, including global passes.
+        let mut global_passes = GlobalPasses::new(&self.queries.lock().unwrap(), tcx);
+        global_passes.run_global_passes(
+            &mut transformer,
+            tcx,
+            starting_items,
+            instances,
+            call_graph,
+        );
 
         // Follow rustc naming convention (cx is abbrev for context).
         // https://rustc-dev-guide.rust-lang.org/conventions.html#naming-conventions
@@ -402,7 +422,7 @@ impl CodegenBackend for GotocCodegenBackend {
             debug!(?crate_type, ?out_path, "link");
             if *crate_type == CrateType::Rlib {
                 // Emit the `rlib` that contains just one file: `<crate>.rmeta`
-                let mut builder = Box::new(ArArchiveBuilder::new(sess, get_native_object_symbols));
+                let mut builder = Box::new(ArArchiveBuilder::new(sess, &DEFAULT_OBJECT_READER));
                 let tmp_dir = TempFileBuilder::new().prefix("kani").tempdir().unwrap();
                 let path = MaybeTempDir::new(tmp_dir, sess.opts.cg.save_temps);
                 let (metadata, _metadata_position) = create_wrapper_file(
