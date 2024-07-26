@@ -60,6 +60,7 @@ macro_rules! kani_lib {
 /// such as core in rust's std library itself.
 ///
 /// TODO: Use this inside kani library so that we dont have to maintain two copies of the same intrinsics.
+#[allow(clippy::crate_in_macro_def)]
 #[macro_export]
 macro_rules! kani_intrinsics {
     ($core:tt) => {
@@ -180,7 +181,7 @@ macro_rules! kani_intrinsics {
         /// under all possible `NonZeroU8` input values, i.e., all possible `u8` values except zero.
         ///
         /// ```rust
-        /// let inputA = kani::any::<std::num::NonZeroU8>();
+        /// let inputA = kani::any::<core::num::NonZeroU8>();
         /// fn_under_verification(inputA);
         /// ```
         ///
@@ -247,21 +248,21 @@ macro_rules! kani_intrinsics {
         /// Note that SIZE_T must be equal the size of type T in bytes.
         #[inline(never)]
         #[cfg(not(feature = "concrete_playback"))]
-        pub(crate) unsafe fn any_raw_internal<T, const SIZE_T: usize>() -> T {
+        pub(crate) unsafe fn any_raw_internal<T: Copy>() -> T {
             any_raw_inner::<T>()
         }
 
         #[inline(never)]
         #[cfg(feature = "concrete_playback")]
-        pub(crate) unsafe fn any_raw_internal<T, const SIZE_T: usize>() -> T {
-            concrete_playback::any_raw_internal::<T, SIZE_T>()
+        pub(crate) unsafe fn any_raw_internal<T: Copy>() -> T {
+            concrete_playback::any_raw_internal::<T>()
         }
 
         /// This low-level function returns nondet bytes of size T.
         #[rustc_diagnostic_item = "KaniAnyRaw"]
         #[inline(never)]
         #[allow(dead_code)]
-        pub fn any_raw_inner<T>() -> T {
+        pub fn any_raw_inner<T: Copy>() -> T {
             kani_intrinsic()
         }
 
@@ -269,7 +270,7 @@ macro_rules! kani_intrinsics {
         /// supported by Kani display.
         ///
         /// During verification this will get replaced by `assert(false)`. For concrete executions, we just
-        /// invoke the regular `std::panic!()` function. This function is used by our standard library
+        /// invoke the regular `core::panic!()` function. This function is used by our standard library
         /// overrides, but not the other way around.
         #[inline(never)]
         #[rustc_diagnostic_item = "KaniPanic"]
@@ -294,6 +295,8 @@ macro_rules! kani_intrinsics {
         }
 
         pub mod internal {
+            use crate::kani::Arbitrary;
+            use core::ptr;
 
             /// Helper trait for code generation for `modifies` contracts.
             ///
@@ -301,7 +304,7 @@ macro_rules! kani_intrinsics {
             #[doc(hidden)]
             pub trait Pointer<'a> {
                 /// Type of the pointed-to data
-                type Inner;
+                type Inner: ?Sized;
 
                 /// Used for checking assigns contracts where we pass immutable references to the function.
                 ///
@@ -309,56 +312,52 @@ macro_rules! kani_intrinsics {
                 /// argument, for instance one of type `&mut _`, in the `modifies` clause which would move it.
                 unsafe fn decouple_lifetime(&self) -> &'a Self::Inner;
 
-                /// used for havocking on replecement of a `modifies` clause.
-                unsafe fn assignable(self) -> &'a mut Self::Inner;
+                unsafe fn assignable(self) -> *mut Self::Inner;
             }
 
-            impl<'a, 'b, T> Pointer<'a> for &'b T {
+            impl<'a, 'b, T: ?Sized> Pointer<'a> for &'b T {
                 type Inner = T;
                 unsafe fn decouple_lifetime(&self) -> &'a Self::Inner {
-                    $core::mem::transmute(*self)
+                    core::mem::transmute(*self)
                 }
 
-                #[allow(clippy::transmute_ptr_to_ref)]
-                unsafe fn assignable(self) -> &'a mut Self::Inner {
-                    $core::mem::transmute(self as *const T)
+                unsafe fn assignable(self) -> *mut Self::Inner {
+                    core::mem::transmute(self as *const T)
                 }
             }
 
-            impl<'a, 'b, T> Pointer<'a> for &'b mut T {
+            impl<'a, 'b, T: ?Sized> Pointer<'a> for &'b mut T {
                 type Inner = T;
 
                 #[allow(clippy::transmute_ptr_to_ref)]
                 unsafe fn decouple_lifetime(&self) -> &'a Self::Inner {
-                    $core::mem::transmute::<_, &&'a T>(self)
+                    core::mem::transmute::<_, &&'a T>(self)
                 }
 
-                unsafe fn assignable(self) -> &'a mut Self::Inner {
-                    $core::mem::transmute(self)
-                }
-            }
-
-            impl<'a, T> Pointer<'a> for *const T {
-                type Inner = T;
-                unsafe fn decouple_lifetime(&self) -> &'a Self::Inner {
-                    &**self as &'a T
-                }
-
-                #[allow(clippy::transmute_ptr_to_ref)]
-                unsafe fn assignable(self) -> &'a mut Self::Inner {
-                    $core::mem::transmute(self)
+                unsafe fn assignable(self) -> *mut Self::Inner {
+                    self as *mut T
                 }
             }
 
-            impl<'a, T> Pointer<'a> for *mut T {
+            impl<'a, T: ?Sized> Pointer<'a> for *const T {
                 type Inner = T;
                 unsafe fn decouple_lifetime(&self) -> &'a Self::Inner {
                     &**self as &'a T
                 }
 
-                #[allow(clippy::transmute_ptr_to_ref)]
-                unsafe fn assignable(self) -> &'a mut Self::Inner {
-                    $core::mem::transmute(self)
+                unsafe fn assignable(self) -> *mut Self::Inner {
+                    core::mem::transmute(self)
+                }
+            }
+
+            impl<'a, T: ?Sized> Pointer<'a> for *mut T {
+                type Inner = T;
+                unsafe fn decouple_lifetime(&self) -> &'a Self::Inner {
+                    &**self as &'a T
+                }
+
+                unsafe fn assignable(self) -> *mut Self::Inner {
+                    self
                 }
             }
 
@@ -384,6 +383,55 @@ macro_rules! kani_intrinsics {
             #[doc(hidden)]
             #[rustc_diagnostic_item = "KaniInitContracts"]
             pub fn init_contracts() {}
+
+            /// This should only be used within contracts. The intent is to
+            /// perform type inference on a closure's argument
+            #[doc(hidden)]
+            pub fn apply_closure<T, U: Fn(&T) -> bool>(f: U, x: &T) -> bool {
+                f(x)
+            }
+
+            /// Recieves a reference to a pointer-like object and assigns kani::any_modifies to that object.
+            /// Only for use within function contracts and will not be replaced if the recursive or function stub
+            /// replace contracts are not used.
+            #[rustc_diagnostic_item = "KaniWriteAny"]
+            #[inline(never)]
+            #[doc(hidden)]
+            pub unsafe fn write_any<T: ?Sized>(_pointer: *mut T) {
+                // This function should not be reacheable.
+                // Users must include `#[kani::recursion]` in any function contracts for recursive functions;
+                // otherwise, this might not be properly instantiate. We mark this as unreachable to make
+                // sure Kani doesn't report any false positives.
+                unreachable!()
+            }
+
+            /// Fill in a slice with kani::any.
+            /// Intended as a post compilation replacement for write_any
+            #[rustc_diagnostic_item = "KaniWriteAnySlice"]
+            #[inline(always)]
+            pub unsafe fn write_any_slice<T: Arbitrary>(slice: *mut [T]) {
+                (*slice).fill_with(T::any)
+            }
+
+            /// Fill in a pointer with kani::any.
+            /// Intended as a post compilation replacement for write_any
+            #[rustc_diagnostic_item = "KaniWriteAnySlim"]
+            #[inline(always)]
+            pub unsafe fn write_any_slim<T: Arbitrary>(pointer: *mut T) {
+                ptr::write(pointer, T::any())
+            }
+
+            /// Fill in a str with kani::any.
+            /// Intended as a post compilation replacement for write_any.
+            /// Not yet implemented
+            #[rustc_diagnostic_item = "KaniWriteAnyStr"]
+            #[inline(always)]
+            pub unsafe fn write_any_str(_s: *mut str) {
+                //TODO: strings introduce new UB
+                //(*s).as_bytes_mut().fill_with(u8::any)
+                //TODO: String validation
+                unimplemented!("Kani does not support creating arbitrary `str`")
+            }
         }
     };
 }
