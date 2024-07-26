@@ -9,7 +9,7 @@ use crate::call_cbmc::VerificationResult;
 use crate::session::KaniSession;
 use anyhow::{Context, Result};
 use concrete_vals_extractor::{extract_harness_values, ConcreteVal};
-use kani_metadata::HarnessMetadata;
+use kani_metadata::{HarnessKind, HarnessMetadata};
 use std::collections::hash_map::DefaultHasher;
 use std::ffi::OsString;
 use std::fs::{read_to_string, File};
@@ -45,7 +45,7 @@ impl KaniSession {
                     .iter()
                     .map(|concrete_vals| {
                         let pretty_name = harness.get_harness_name_unqualified();
-                        format_unit_test(&pretty_name, &concrete_vals)
+                        format_unit_test(&pretty_name, &concrete_vals, gen_test_doc(harness))
                     })
                     .collect();
                 unit_tests.dedup_by(|a, b| a.name == b.name);
@@ -231,8 +231,45 @@ impl KaniSession {
     }
 }
 
+fn gen_test_doc(harness: &HarnessMetadata) -> String {
+    let mut doc_str = match &harness.attributes.kind {
+        HarnessKind::Proof => {
+            format!("/// Test generated for harness `{}` \n", harness.pretty_name)
+        }
+        HarnessKind::ProofForContract { target_fn } => {
+            format!(
+                "/// Test generated for harness `{}` that check contract for `{target_fn}`\n",
+                harness.pretty_name
+            )
+        }
+        HarnessKind::Test => {
+            unreachable!("Concrete playback for tests is not supported")
+        }
+    };
+    if !harness.attributes.stubs.is_empty() {
+        doc_str.push_str("///\n");
+        doc_str.push_str(
+            "/// # Warning\n\
+               ///\n\
+               /// Concrete playback tests combined with stubs is highly experimental, and\n\
+               /// subject to change.\n\
+               ///\n\
+               /// The original harness has stubs which are not applied to this test.\n\
+               /// This may cause a mismatch of non-deterministic values if the stub\n\
+               /// creates any non-deterministic value.\n\
+               /// The execution path may also differ, which can be used to refine the stub\n\
+               /// logic.",
+        );
+    }
+    doc_str
+}
+
 /// Generate a formatted unit test from a list of concrete values.
-fn format_unit_test(harness_name: &str, concrete_vals: &[ConcreteVal]) -> UnitTest {
+fn format_unit_test(
+    harness_name: &str,
+    concrete_vals: &[ConcreteVal],
+    doc_str: String,
+) -> UnitTest {
     // Hash the concrete values along with the proof harness name.
     let mut hasher = DefaultHasher::new();
     harness_name.hash(&mut hasher);
@@ -241,6 +278,7 @@ fn format_unit_test(harness_name: &str, concrete_vals: &[ConcreteVal]) -> UnitTe
     let func_name = format!("kani_concrete_playback_{harness_name}_{hash}");
 
     let func_before_concrete_vals = [
+        doc_str,
         "#[test]".to_string(),
         format!("fn {func_name}() {{"),
         format!("{:<4}let concrete_vals: Vec<Vec<u8>> = vec![", " "),
@@ -484,9 +522,10 @@ mod tests {
     /// Since hashes can not be relied on in tests, this compares all parts of a unit test except the hash.
     #[test]
     fn format_unit_test_full_func() {
+        let doc_str = "/// Test documentation";
         let harness_name = "test_proof_harness";
         let concrete_vals = [ConcreteVal { byte_arr: vec![0, 0], interp_val: "0".to_string() }];
-        let unit_test = format_unit_test(harness_name, &concrete_vals);
+        let unit_test = format_unit_test(harness_name, &concrete_vals, doc_str.to_string());
         let full_func = unit_test.code;
         let split_unit_test_name = split_unit_test_name(&unit_test.name);
         let expected_after_func_name = vec![
@@ -498,18 +537,23 @@ mod tests {
             "}".to_string(),
         ];
 
-        assert_eq!(full_func[0], "#[test]");
+        assert_eq!(full_func[0], doc_str);
+        assert_eq!(full_func[1], "#[test]");
         assert_eq!(
             split_unit_test_name.before_hash,
             format!("kani_concrete_playback_{harness_name}")
         );
-        assert_eq!(full_func[1], format!("fn {}() {{", unit_test.name));
-        assert_eq!(full_func[2..], expected_after_func_name);
+        assert_eq!(full_func[2], format!("fn {}() {{", unit_test.name));
+        assert_eq!(full_func[3..], expected_after_func_name);
     }
 
     /// Generates a unit test and returns its hash.
     fn extract_hash_from_unit_test(harness_name: &str, concrete_vals: &[ConcreteVal]) -> String {
-        let unit_test = format_unit_test(harness_name, concrete_vals);
+        let unit_test = format_unit_test(
+            harness_name,
+            concrete_vals,
+            "/// Harness created for unit test".to_string(),
+        );
         split_unit_test_name(&unit_test.name).hash
     }
 

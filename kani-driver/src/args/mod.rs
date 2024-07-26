@@ -137,10 +137,10 @@ pub struct VerificationArgs {
     /// If value supplied is 'inplace', Kani automatically adds the unit test to your source code.
     /// This option does not work with `--output-format old`.
     #[arg(
-        long,
-        conflicts_with_all(&["visualize"]),
-        ignore_case = true,
-        value_enum
+    long,
+    conflicts_with_all(& ["visualize"]),
+    ignore_case = true,
+    value_enum
     )]
     pub concrete_playback: Option<ConcretePlaybackMode>,
     /// Keep temporary files generated throughout Kani process. This is already the default
@@ -210,10 +210,10 @@ pub struct VerificationArgs {
     /// Pass through directly to CBMC; must be the last flag.
     /// This feature is unstable and it requires `--enable_unstable` to be used
     #[arg(
-        long,
-        allow_hyphen_values = true,
-        requires("enable_unstable"),
-        num_args(0..)
+    long,
+    allow_hyphen_values = true,
+    requires("enable_unstable"),
+    num_args(0..)
     )]
     // consumes everything
     pub cbmc_args: Vec<OsString>,
@@ -565,13 +565,6 @@ impl ValidateArgs for VerificationArgs {
                 ErrorKind::ArgumentConflict,
                 "Conflicting options: --concrete-playback isn't compatible with \
                 --output-format=old.",
-            ));
-        }
-        if self.concrete_playback.is_some() && self.is_stubbing_enabled() {
-            // Concrete playback currently does not work with contracts or stubbing.
-            return Err(Error::raw(
-                ErrorKind::ArgumentConflict,
-                "Conflicting options: --concrete-playback isn't compatible with stubbing.",
             ));
         }
         if self.concrete_playback.is_some() && self.jobs() != Some(1) {
