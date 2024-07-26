@@ -407,8 +407,8 @@ fn safety_conds_opt(
     derive_input: &DeriveInput,
     trait_name: &str,
 ) -> Option<TokenStream> {
-    let has_item_safety_constraint =
-        derive_input.attrs.iter().any(|attr| attr.path().is_ident("safety_constraint"));
+    let has_item_safety_constraint = has_item_safety_constraint(&item_name, &derive_input, trait_name);
+        
     let has_field_safety_constraints = has_field_safety_constraints(&item_name, &derive_input.data);
 
     if has_item_safety_constraint && has_field_safety_constraints {
@@ -425,6 +425,17 @@ fn safety_conds_opt(
     } else {
         None
     }
+}
+
+fn has_item_safety_constraint(ident: &Ident, derive_input: &DeriveInput, trait_name: &str) -> bool {
+    let safety_constraints_in_item = derive_input.attrs.iter().filter(|attr| attr.path().is_ident("safety_constraint")).count();
+    if safety_constraints_in_item > 1 {
+        abort!(Span::call_site(), "Cannot derive `{}` for `{}`", trait_name, ident;
+        note = ident.span() =>
+        "`#[safety_constraint(...)]` cannot be used more than once."
+        )
+    }
+    safety_constraints_in_item == 1
 }
 
 fn has_field_safety_constraints(ident: &Ident, data: &Data) -> bool {

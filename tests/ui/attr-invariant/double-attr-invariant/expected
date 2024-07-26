@@ -1,6 +1,6 @@
-error[E0119]: conflicting implementations of trait `kani::Invariant` for type `Point`
+error: Cannot derive `Invariant` for `Point`
    |
-12 | #[kani::invariant(*x >= 0)]
-   | --------------------------- first implementation here
-13 | #[kani::invariant(*y >= 0)]
-   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^ conflicting implementation for `Point`
+| #[derive(Invariant)]
+   |          ^^^^^^^^^
+   |
+note: `#[safety_constraint(...)]` cannot be used more than once.
