@@ -1,6 +1,0 @@
-assertion\
-- Status: SUCCESS\
-- Description: "|_| *unsafe{ x.expose() } < 101"\
-in function modify
-
-VERIFICATION:- SUCCESSFUL
