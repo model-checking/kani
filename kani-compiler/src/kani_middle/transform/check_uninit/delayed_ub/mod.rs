@@ -24,7 +24,6 @@ use points_to_graph::GlobalMemLoc;
 use points_to_graph::LocalMemLoc;
 use points_to_graph::PointsToGraph;
 use rustc_middle::ty::TyCtxt;
-use rustc_mir_dataflow::JoinSemiLattice;
 use rustc_session::config::OutputType;
 use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::{Instance, MonoItem};
@@ -113,7 +112,7 @@ impl GlobalPass for DelayedUbPass {
                         call_graph,
                         PointsToGraph::empty(),
                     );
-                    global_points_to_graph.join(&results);
+                    global_points_to_graph.consume(results);
                 }
             }
 

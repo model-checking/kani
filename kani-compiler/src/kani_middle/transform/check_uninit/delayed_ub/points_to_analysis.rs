@@ -21,7 +21,7 @@ use rustc_middle::{
     },
     ty::{Instance, InstanceKind, List, ParamEnv, TyCtxt, TyKind},
 };
-use rustc_mir_dataflow::{Analysis, AnalysisDomain, Forward, JoinSemiLattice};
+use rustc_mir_dataflow::{Analysis, AnalysisDomain, Forward};
 use rustc_smir::rustc_internal;
 use rustc_span::source_map::Spanned;
 use std::collections::HashSet;
@@ -50,9 +50,11 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
         let mut cursor =
             analysis.into_engine(tcx, &body).iterate_to_fixpoint().into_results_cursor(&body);
         let mut results = PointsToGraph::empty();
-        for (idx, _) in body.basic_blocks.iter().enumerate() {
-            cursor.seek_to_block_end(idx.into());
-            results.join(cursor.get());
+        for (idx, bb) in body.basic_blocks.iter().enumerate() {
+            if let TerminatorKind::Return = bb.terminator().kind {
+                cursor.seek_to_block_end(idx.into());
+                results.consume(cursor.get().clone());
+            }
         }
         results
     }
@@ -73,8 +75,8 @@ impl<'a, 'tcx> AnalysisDomain<'tcx> for PointsToAnalysis<'a, 'tcx> {
     /// Dataflow state instantiated at the entry into the body, this should be the current dataflow
     /// graph.
     fn initialize_start_block(&self, body: &Body<'tcx>, state: &mut Self::Domain) {
-        state.join(&self.initial_graph);
-        state.join(&PointsToGraph::from_body(body, self.def_id));
+        state.consume(self.initial_graph.clone());
+        state.consume(PointsToGraph::from_body(body, self.def_id));
     }
 }
 
@@ -209,7 +211,7 @@ impl<'a, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'tcx> {
         &mut self,
         state: &mut Self::Domain,
         terminator: &'mir Terminator<'tcx>,
-        _location: Location,
+        location: Location,
     ) -> TerminatorEdges<'mir, 'tcx> {
         if let TerminatorKind::Call { func, args, destination, .. } = &terminator.kind {
             let instance = match try_resolve_instance(&self.body, func, self.tcx) {
@@ -382,9 +384,9 @@ impl<'a, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'tcx> {
                             // which creates a new node we need to add to the points-to graph.
                             "alloc::alloc::__rust_alloc" | "alloc::alloc::__rust_alloc_zeroed" => {
                                 let lvalue_set = state.follow_from_place(*destination, self.def_id);
-                                let rvalue_set = HashSet::from([
-                                    LocalMemLoc::new_alloc().with_def_id(self.def_id)
-                                ]);
+                                let rvalue_set =
+                                    HashSet::from([LocalMemLoc::new_alloc(self.def_id, location)
+                                        .with_def_id(self.def_id)]);
                                 state.extend(&lvalue_set, &rvalue_set);
                             }
                             _ => {}
@@ -504,8 +506,8 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
         for arg in args.iter() {
             match arg.node {
                 Operand::Copy(place) | Operand::Move(place) => {
-                    initial_graph.join(
-                        &state.transitive_closure(state.follow_from_place(place, self.def_id)),
+                    initial_graph.consume(
+                        state.transitive_closure(state.follow_from_place(place, self.def_id)),
                     );
                 }
                 Operand::Constant(_) => {}
@@ -560,7 +562,7 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
             initial_graph,
         );
         // Merge the results into the current state.
-        state.join(&new_result);
+        state.consume(new_result);
 
         // Connect the return value to the return destination.
         let lvalue_set = state.follow_from_place(*destination, self.def_id);

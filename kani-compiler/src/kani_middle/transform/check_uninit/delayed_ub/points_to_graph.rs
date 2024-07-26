@@ -5,19 +5,17 @@
 
 use rustc_hir::def_id::DefId;
 use rustc_middle::{
-    mir::{Body, Place, ProjectionElem},
+    mir::{Body, Location, Place, ProjectionElem},
     ty::List,
 };
 use rustc_mir_dataflow::{fmt::DebugWithContext, JoinSemiLattice};
-use std::{
-    collections::{HashMap, HashSet, VecDeque},
-    sync::atomic::{AtomicUsize, Ordering},
-};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 /// A node in the points-to graph, which could be a place on the stack or a heap allocation.
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum LocalMemLoc<'tcx> {
-    Alloc(usize),
+    /// Using a combination of DefId + Location implements allocation-site abstraction.
+    Alloc(DefId, Location),
     Place(Place<'tcx>),
 }
 
@@ -52,9 +50,8 @@ impl<'tcx> From<Place<'tcx>> for LocalMemLoc<'tcx> {
 
 impl<'tcx> LocalMemLoc<'tcx> {
     /// Generate a new alloc with increasing allocation id.
-    pub fn new_alloc() -> Self {
-        static NEXT_ALLOC_ID: AtomicUsize = AtomicUsize::new(0);
-        LocalMemLoc::Alloc(NEXT_ALLOC_ID.fetch_add(1, Ordering::Relaxed))
+    pub fn new_alloc(def_id: DefId, location: Location) -> Self {
+        LocalMemLoc::Alloc(def_id, location)
     }
 
     /// Tag the node with a DefId.
@@ -160,7 +157,12 @@ impl<'tcx> PointsToGraph<'tcx> {
     /// Find a transitive closure of the graph starting from a given place.
     pub fn transitive_closure(&self, targets: HashSet<GlobalMemLoc<'tcx>>) -> PointsToGraph<'tcx> {
         let mut result = PointsToGraph::empty();
+        // Working queue.
         let mut queue = VecDeque::from_iter(targets);
+        // Add all statics, as they can be accessed at any point.
+        let statics = self.edges.keys().filter(|node| matches!(node, GlobalMemLoc::Global(_)));
+        queue.extend(statics);
+        // Add all entries.
         while !queue.is_empty() {
             let next_target = queue.pop_front().unwrap();
             result.edges.entry(next_target).or_insert_with(|| {
@@ -180,6 +182,14 @@ impl<'tcx> PointsToGraph<'tcx> {
             .expect(format!("unable to retrieve {:?} from points-to graph", target).as_str())
             .clone()
     }
+
+    // Merge the other graph into self, consuming it.
+    pub fn consume(&mut self, other: PointsToGraph<'tcx>) {
+        for (from, to) in other.edges {
+            let existing_to = self.edges.entry(from).or_default();
+            existing_to.extend(to);
+        }
+    }
 }
 
 /// Since we are performing the analysis using a dataflow, we need to implement a proper monotonous
@@ -195,10 +205,12 @@ impl<'tcx> JoinSemiLattice for PointsToGraph<'tcx> {
             if self.edges.contains_key(from) {
                 // Check if there are any edges that are in the other graph but not in the original
                 // graph.
-                if to.difference(self.edges.get(from).unwrap()).count() != 0 {
+                let difference: HashSet<_> =
+                    to.difference(self.edges.get(from).unwrap()).cloned().collect();
+                if difference.len() != 0 {
                     updated = true;
                     // Add all edges to the original graph.
-                    self.edges.get_mut(from).unwrap().extend(to.iter());
+                    self.edges.get_mut(from).unwrap().extend(difference);
                 }
             } else {
                 // If node does not exist, add the node and all edges from it.
