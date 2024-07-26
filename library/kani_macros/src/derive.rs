@@ -458,8 +458,6 @@ pub fn add_trait_bound_invariant(mut generics: Generics) -> Generics {
     generics
 }
 
-/// Checks if the `#[safety_constraint(...)]` attribute is attached to any
-/// field.
 fn safe_body_from_struct_attr(
     ident: &Ident,
     derive_input: &DeriveInput,
@@ -508,7 +506,8 @@ fn safe_body_from_fields_attr(ident: &Ident, data: &Data, trait_name: &str) -> T
 }
 
 /// Generates an expression resulting from the conjunction of conditions
-/// specified as safety constraints for each field. See `safe_body_from_fields_attr` for more details.
+/// specified as safety constraints for each field.
+/// See `safe_body_from_fields_attr` for more details.
 fn safe_body_from_fields_attr_inner(ident: &Ident, fields: &Fields) -> TokenStream {
     match fields {
         // Expands to the expression

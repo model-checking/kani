@@ -1,6 +1,0 @@
-error: Cannot define invariant for `MyEnum`
-   |
-9  | #[kani::invariant(true)]
-   | ^^^^^^^^^^^^^^^^^^^^^^^^
-   |
-note: `#[kani::invariant(..)]` is only available for structs

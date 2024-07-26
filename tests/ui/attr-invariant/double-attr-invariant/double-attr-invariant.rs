@@ -9,8 +9,9 @@ use kani::Invariant;
 
 // Note: The struct fields `x` and `y` are references in this context, we should
 // refer to `*x` and `*y` instead.
-#[kani::invariant(*x >= 0)]
-#[kani::invariant(*y >= 0)]
+#[derive(Invariant)]
+#[safety_constraint(*x >= 0)]
+#[safety_constraint(*y >= 0)]
 struct Point {
     x: i32,
     y: i32,
