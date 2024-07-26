@@ -19,8 +19,10 @@ use rustc_span::Span;
 use rustc_target::abi::call::FnAbi;
 use rustc_target::abi::{HasDataLayout, TargetDataLayout};
 use stable_mir::mir::mono::MonoItem;
-use stable_mir::ty::{FnDef, RigidTy, Span as SpanStable, TyKind};
+use stable_mir::ty::{FnDef, RigidTy, Span as SpanStable, Ty, TyKind};
+use stable_mir::visitor::{Visitable, Visitor as TyVisitor};
 use stable_mir::CrateDef;
+use std::ops::ControlFlow;
 
 use self::attributes::KaniAttributes;
 
@@ -60,6 +62,36 @@ pub fn check_crate_items(tcx: TyCtxt, ignore_asm: bool) {
         }
     }
     tcx.dcx().abort_if_errors();
+}
+
+/// Traverse the type definition to see if the type contains interior mutability.
+///
+/// See <https://doc.rust-lang.org/reference/interior-mutability.html> for more details.
+pub fn is_interior_mut(tcx: TyCtxt, ty: Ty) -> bool {
+    let mut visitor = FindUnsafeCell { tcx };
+    visitor.visit_ty(&ty) == ControlFlow::Break(())
+}
+
+struct FindUnsafeCell<'tcx> {
+    tcx: TyCtxt<'tcx>,
+}
+
+impl<'tcx> TyVisitor for FindUnsafeCell<'tcx> {
+    type Break = ();
+    fn visit_ty(&mut self, ty: &Ty) -> ControlFlow<Self::Break> {
+        match ty.kind() {
+            TyKind::RigidTy(RigidTy::Adt(def, _))
+                if rustc_internal::internal(self.tcx, def).is_unsafe_cell() =>
+            {
+                ControlFlow::Break(())
+            }
+            TyKind::RigidTy(RigidTy::Ref(..) | RigidTy::RawPtr(..)) => {
+                // We only care about the current memory space.
+                ControlFlow::Continue(())
+            }
+            _ => ty.super_visit(self),
+        }
+    }
 }
 
 /// Check that all given items are supported and there's no misconfiguration.

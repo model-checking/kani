@@ -47,19 +47,17 @@ pub fn concrete_playback_run<F: Fn()>(mut local_concrete_vals: Vec<Vec<u8>>, pro
 /// # Safety
 ///
 /// The semantics of this function require that SIZE_T equals the size of type T.
-pub(crate) unsafe fn any_raw_internal<T, const SIZE_T: usize>() -> T {
+pub(crate) unsafe fn any_raw_internal<T: Copy>() -> T {
+    let sz = size_of::<T>();
     let mut next_concrete_val: Vec<u8> = Vec::new();
     CONCRETE_VALS.with(|glob_concrete_vals| {
         let mut_ref_glob_concrete_vals = &mut *glob_concrete_vals.borrow_mut();
-        next_concrete_val = if SIZE_T > 0 {
+        next_concrete_val = if sz > 0 {
             mut_ref_glob_concrete_vals.pop().expect("Not enough det vals found")
         } else {
             vec![]
         };
     });
-    let next_concrete_val_len = next_concrete_val.len();
-    let bytes_t: [u8; SIZE_T] = next_concrete_val.try_into().expect(&format!(
-        "Expected {SIZE_T} bytes instead of {next_concrete_val_len} bytes in the following det vals vec"
-    ));
-    std::mem::transmute_copy::<[u8; SIZE_T], T>(&bytes_t)
+    assert_eq!(next_concrete_val.len(), sz, "Expected {sz} bytes in the following det vals vec");
+    unsafe { *(next_concrete_val.as_ptr() as *mut T) }
 }

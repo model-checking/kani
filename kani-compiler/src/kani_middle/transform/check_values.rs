@@ -85,13 +85,13 @@ impl ValidValuePass {
         for operation in instruction.operations {
             match operation {
                 SourceOp::BytesValidity { ranges, target_ty, rvalue } => {
-                    let value = body.new_assignment(rvalue, &mut source, InsertPosition::Before);
+                    let value = body.insert_assignment(rvalue, &mut source, InsertPosition::Before);
                     let rvalue_ptr = Rvalue::AddressOf(Mutability::Not, Place::from(value));
                     for range in ranges {
                         let result = build_limits(body, &range, rvalue_ptr.clone(), &mut source);
                         let msg =
                             format!("Undefined Behavior: Invalid value of type `{target_ty}`",);
-                        body.add_check(
+                        body.insert_check(
                             tcx,
                             &self.check_type,
                             &mut source,
@@ -106,7 +106,7 @@ impl ValidValuePass {
                         let result = build_limits(body, &range, rvalue.clone(), &mut source);
                         let msg =
                             format!("Undefined Behavior: Invalid value of type `{pointee_ty}`",);
-                        body.add_check(
+                        body.insert_check(
                             tcx,
                             &self.check_type,
                             &mut source,
@@ -139,8 +139,8 @@ impl ValidValuePass {
             span,
             user_ty: None,
         }));
-        let result = body.new_assignment(rvalue, source, InsertPosition::Before);
-        body.add_check(tcx, &self.check_type, source, InsertPosition::Before, result, reason);
+        let result = body.insert_assignment(rvalue, source, InsertPosition::Before);
+        body.insert_check(tcx, &self.check_type, source, InsertPosition::Before, result, reason);
     }
 }
 
@@ -771,24 +771,25 @@ pub fn build_limits(
     let span = source.span(body.blocks());
     debug!(?req, ?rvalue_ptr, ?span, "build_limits");
     let primitive_ty = uint_ty(req.size.bytes());
-    let start_const = body.new_const_operand(req.valid_range.start, primitive_ty, span);
-    let end_const = body.new_const_operand(req.valid_range.end, primitive_ty, span);
+    let start_const = body.new_uint_operand(req.valid_range.start, primitive_ty, span);
+    let end_const = body.new_uint_operand(req.valid_range.end, primitive_ty, span);
     let orig_ptr = if req.offset != 0 {
-        let start_ptr = move_local(body.new_assignment(rvalue_ptr, source, InsertPosition::Before));
-        let byte_ptr = move_local(body.new_cast_ptr(
+        let start_ptr =
+            move_local(body.insert_assignment(rvalue_ptr, source, InsertPosition::Before));
+        let byte_ptr = move_local(body.insert_ptr_cast(
             start_ptr,
             Ty::unsigned_ty(UintTy::U8),
             Mutability::Not,
             source,
             InsertPosition::Before,
         ));
-        let offset_const = body.new_const_operand(req.offset as _, UintTy::Usize, span);
-        let offset = move_local(body.new_assignment(
+        let offset_const = body.new_uint_operand(req.offset as _, UintTy::Usize, span);
+        let offset = move_local(body.insert_assignment(
             Rvalue::Use(offset_const),
             source,
             InsertPosition::Before,
         ));
-        move_local(body.new_binary_op(
+        move_local(body.insert_binary_op(
             BinOp::Offset,
             byte_ptr,
             offset,
@@ -796,9 +797,9 @@ pub fn build_limits(
             InsertPosition::Before,
         ))
     } else {
-        move_local(body.new_assignment(rvalue_ptr, source, InsertPosition::Before))
+        move_local(body.insert_assignment(rvalue_ptr, source, InsertPosition::Before))
     };
-    let value_ptr = body.new_cast_ptr(
+    let value_ptr = body.insert_ptr_cast(
         orig_ptr,
         Ty::unsigned_ty(primitive_ty),
         Mutability::Not,
@@ -806,13 +807,18 @@ pub fn build_limits(
         InsertPosition::Before,
     );
     let value = Operand::Copy(Place { local: value_ptr, projection: vec![ProjectionElem::Deref] });
-    let start_result =
-        body.new_binary_op(BinOp::Ge, value.clone(), start_const, source, InsertPosition::Before);
+    let start_result = body.insert_binary_op(
+        BinOp::Ge,
+        value.clone(),
+        start_const,
+        source,
+        InsertPosition::Before,
+    );
     let end_result =
-        body.new_binary_op(BinOp::Le, value, end_const, source, InsertPosition::Before);
+        body.insert_binary_op(BinOp::Le, value, end_const, source, InsertPosition::Before);
     if req.valid_range.wraps_around() {
         // valid >= start || valid <= end
-        body.new_binary_op(
+        body.insert_binary_op(
             BinOp::BitOr,
             move_local(start_result),
             move_local(end_result),
@@ -821,7 +827,7 @@ pub fn build_limits(
         )
     } else {
         // valid >= start && valid <= end
-        body.new_binary_op(
+        body.insert_binary_op(
             BinOp::BitAnd,
             move_local(start_result),
             move_local(end_result),
