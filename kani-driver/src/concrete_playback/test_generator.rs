@@ -46,7 +46,7 @@ impl KaniSession {
                     .iter()
                     .map(|(prop, concrete_vals)| {
                         let pretty_name = harness.get_harness_name_unqualified();
-                        format_unit_test(&pretty_name, &concrete_vals, gen_test_doc(harness, *prop))
+                        format_unit_test(&pretty_name, &concrete_vals, gen_test_doc(harness, prop))
                     })
                     .collect();
                 unit_tests.dedup_by(|a, b| a.name == b.name);
@@ -170,7 +170,7 @@ impl KaniSession {
                 if curr_line_num == proof_harness_end_line {
                     for unit_test in unit_tests.iter() {
                         // Write an empty line before the unit test.
-                        writeln!(temp_file, "")?;
+                        writeln!(temp_file)?;
 
                         for unit_test_line in unit_test.code.iter() {
                             curr_line_num += 1;
