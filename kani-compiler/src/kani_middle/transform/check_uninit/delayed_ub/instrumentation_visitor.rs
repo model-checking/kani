@@ -90,10 +90,10 @@ impl<'a, 'tcx> MirVisitor for InstrumentationVisitor<'a, 'tcx> {
         } else if self.target.is_none() {
             // Check all inner places.
             self.super_statement(stmt, location);
-            // Switch to the next statement.
-            let SourceInstruction::Statement { idx, bb } = self.current else { unreachable!() };
-            self.current = SourceInstruction::Statement { idx: idx + 1, bb };
         }
+        // Switch to the next statement.
+        let SourceInstruction::Statement { idx, bb } = self.current else { unreachable!() };
+        self.current = SourceInstruction::Statement { idx: idx + 1, bb };
     }
 
     fn visit_terminator(&mut self, term: &Terminator, location: Location) {
