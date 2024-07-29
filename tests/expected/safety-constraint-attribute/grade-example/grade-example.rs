@@ -1,9 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-//! Check that the `#[safety_constraint(...)]` attribute automatically generates
-//! the `Arbitrary` implementation, and also that the values it generates
-//! respect the type invariant.
+//! Check that the `#[safety_constraint(...)]` attribute works as expected when
+//! deriving `Arbitrary` and `Invariant` implementations.
 
 //! In this case, we test the attribute on a struct that represents a hybrid
 //! grade (letter-numerical) which should keep the following equivalences:

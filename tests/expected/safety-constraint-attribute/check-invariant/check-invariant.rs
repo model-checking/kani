@@ -1,8 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-//! Check that the `#[safety_constraint(...)]` attribute automatically generates
-//! the `Arbitrary` and `Invariant` implementations for the annotated type.
+//! Check that the `#[safety_constraint(...)]` attribute works as expected when
+//! deriving `Arbitrary` and `Invariant` implementations.
 
 extern crate kani;
 use kani::Invariant;
