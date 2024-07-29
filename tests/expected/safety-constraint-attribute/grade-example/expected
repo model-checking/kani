@@ -1,8 +1,8 @@
-Check 4: Grade::check_percentage_safety.assertion.1\
+Grade::check_percentage_safety.assertion.1\
          - Status: SUCCESS\
          - Description: "assertion failed: self.percentage <= 100"
 
-Check 5: check_grade_safe.assertion.1\
+check_grade_safe.assertion.1\
          - Status: SUCCESS\
          - Description: "assertion failed: grade.is_safe()"
 
