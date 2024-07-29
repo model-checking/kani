@@ -3,7 +3,9 @@
 
 //! This file contains conversions between from stable MIR data structures to its internal
 //! counterparts. This is primarily done to facilitate using dataflow analysis, which does not yet
-//! support StableMIR.
+//! support StableMIR. We tried to contribute this back to StableMIR, but faced some push back since
+//! other maintainers wanted to keep the conversions minimal. For more information, see
+//! https://github.com/rust-lang/rust/pull/127782
 
 use rustc_middle::ty::{self as rustc_ty, TyCtxt};
 use rustc_smir::rustc_internal::internal;
