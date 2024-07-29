@@ -7,7 +7,7 @@ use crate::kani_middle::transform::{
     body::{InsertPosition, MutableBody, SourceInstruction},
     check_uninit::{
         relevant_instruction::{InitRelevantInstruction, MemoryInitOp},
-        ty_layout::tys_layout_compatible,
+        ty_layout::tys_layout_compatible_to_size,
         TargetFinder,
     },
 };
@@ -477,14 +477,37 @@ impl MirVisitor for CheckUninitVisitor {
                     }
                 }
                 CastKind::Transmute => {
-                    let operand_ty = operand.ty(&&self.locals).unwrap();
-                    if !tys_layout_compatible(&operand_ty, &ty) {
+                    let operand_ty = operand.ty(&self.locals).unwrap();
+                    if !tys_layout_compatible_to_size(&operand_ty, &ty) {
                         // If transmuting between two types of incompatible layouts, padding
                         // bytes are exposed, which is UB.
                         self.push_target(MemoryInitOp::TriviallyUnsafe {
                             reason: "Transmuting between types of incompatible layouts."
                                 .to_string(),
                         });
+                    } else if let (
+                        TyKind::RigidTy(RigidTy::Ref(_, from_ty, _)),
+                        TyKind::RigidTy(RigidTy::Ref(_, to_ty, _)),
+                    ) = (operand_ty.kind(), ty.kind())
+                    {
+                        if !tys_layout_compatible_to_size(&from_ty, &to_ty) {
+                            // Since references are supposed to always be initialized for its type,
+                            // transmuting between two references of incompatible layout is UB.
+                            self.push_target(MemoryInitOp::TriviallyUnsafe {
+                                reason: "Transmuting between references pointing to types of incompatible layouts."
+                                    .to_string(),
+                            });
+                        }
+                    } else if let (
+                        TyKind::RigidTy(RigidTy::RawPtr(from_ty, _)),
+                        TyKind::RigidTy(RigidTy::Ref(_, to_ty, _)),
+                    ) = (operand_ty.kind(), ty.kind())
+                    {
+                        // Assert that we can only cast this way if types are the same.
+                        assert!(from_ty == to_ty);
+                        // When transmuting from a raw pointer to a reference, need to check that
+                        // the value pointed by the raw pointer is initialized.
+                        self.push_target(MemoryInitOp::Check { operand: operand.clone() });
                     }
                 }
                 _ => {}

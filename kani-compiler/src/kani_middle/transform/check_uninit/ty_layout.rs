@@ -335,9 +335,21 @@ fn data_bytes_for_ty(
     }
 }
 
-/// Returns true if `to_ty` has a smaller or equal size and the same padding bytes as `from_ty` up until
-/// its size.
-pub fn tys_layout_compatible(from_ty: &Ty, to_ty: &Ty) -> bool {
+/// Returns true if `to_ty` has a smaller or equal size and padding bytes in `from_ty` are padding
+/// bytes in `to_ty`.
+pub fn tys_layout_compatible_to_size(from_ty: &Ty, to_ty: &Ty) -> bool {
+    tys_layout_cmp_to_size(from_ty, to_ty, |from_byte, to_byte| from_byte || !to_byte)
+}
+
+/// Returns true if `to_ty` has a smaller or equal size and padding bytes in `from_ty` are padding
+/// bytes in `to_ty`.
+pub fn tys_layout_equal_to_size(from_ty: &Ty, to_ty: &Ty) -> bool {
+    tys_layout_cmp_to_size(from_ty, to_ty, |from_byte, to_byte| from_byte == to_byte)
+}
+
+/// Returns true if `to_ty` has a smaller or equal size and comparator function returns true for all
+/// byte initialization value pairs up to size.
+fn tys_layout_cmp_to_size(from_ty: &Ty, to_ty: &Ty, cmp: impl Fn(bool, bool) -> bool) -> bool {
     // Retrieve layouts to assess compatibility.
     let from_ty_info = PointeeInfo::from_ty(*from_ty);
     let to_ty_info = PointeeInfo::from_ty(*to_ty);
@@ -357,8 +369,8 @@ pub fn tys_layout_compatible(from_ty: &Ty, to_ty: &Ty) -> bool {
             // Check data and padding bytes pair-wise.
             if from_ty_layout.iter().zip(to_ty_layout.iter()).all(
                 |(from_ty_layout_byte, to_ty_layout_byte)| {
-                    // Make sure all data and padding bytes match.
-                    from_ty_layout_byte == to_ty_layout_byte
+                    // Run comparator on each pair.
+                    cmp(*from_ty_layout_byte, *to_ty_layout_byte)
                 },
             ) {
                 return true;

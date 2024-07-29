@@ -4,7 +4,7 @@
 //! This module contains the visitor responsible for collecting initial analysis targets for delayed
 //! UB instrumentation.
 
-use crate::kani_middle::transform::check_uninit::ty_layout::tys_layout_compatible;
+use crate::kani_middle::transform::check_uninit::ty_layout::tys_layout_equal_to_size;
 use stable_mir::{
     mir::{
         alloc::GlobalAlloc,
@@ -66,12 +66,18 @@ impl MirVisitor for InitialTargetVisitor {
             let operand_ty = operand.ty(self.body.locals()).unwrap();
             match kind {
                 CastKind::Transmute | CastKind::PtrToPtr => {
-                    if let (
-                        RigidTy::RawPtr(from_ty, Mutability::Mut),
-                        RigidTy::RawPtr(to_ty, Mutability::Mut),
-                    ) = (operand_ty.kind().rigid().unwrap(), ty.kind().rigid().unwrap())
-                    {
-                        if !tys_layout_compatible(from_ty, to_ty) {
+                    let operand_ty_kind = operand_ty.kind();
+                    let from_ty = match operand_ty_kind.rigid().unwrap() {
+                        RigidTy::RawPtr(ty, _) | RigidTy::Ref(_, ty, _) => Some(ty),
+                        _ => None,
+                    };
+                    let ty_kind = ty.kind();
+                    let to_ty = match ty_kind.rigid().unwrap() {
+                        RigidTy::RawPtr(ty, _) | RigidTy::Ref(_, ty, _) => Some(ty),
+                        _ => None,
+                    };
+                    if let (Some(from_ty), Some(to_ty)) = (from_ty, to_ty) {
+                        if !tys_layout_equal_to_size(from_ty, to_ty) {
                             self.push_operand(operand);
                         }
                     }
