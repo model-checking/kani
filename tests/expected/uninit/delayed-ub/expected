@@ -1,56 +1,38 @@
-Checking harness delayed_ub_slices...
+delayed_ub_slices.assertion.4\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `[u128; 4]`"
 
-Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `[u128; 4]`
+delayed_ub_structs.assertion.2\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `U`"
 
-VERIFICATION:- FAILED
+delayed_ub_copy.assertion.1\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u128`"
 
-Checking harness delayed_ub_structs...
+delayed_ub_closure_capture_laundered.assertion.2\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u128`"
 
-Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `U`
+delayed_ub_closure_laundered.assertion.2\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u128`"
 
-VERIFICATION:- FAILED
+delayed_ub_laundered.assertion.2\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u128`"
 
-Checking harness delayed_ub_copy...
+delayed_ub_static.assertion.4\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u128`"
 
-Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `u128`
+delayed_ub_transmute.assertion.2\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u128`"
 
-VERIFICATION:- FAILED
-
-Checking harness delayed_ub_closure_capture_laundered...
-
-Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `u128`
-
-VERIFICATION:- FAILED
-
-Checking harness delayed_ub_closure_laundered...
-
-Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `u128`
-
-VERIFICATION:- FAILED
-
-Checking harness delayed_ub_laundered...
-
-Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `u128`
-
-VERIFICATION:- FAILED
-
-Checking harness delayed_ub_static...
-
-Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `u128`
-
-VERIFICATION:- FAILED
-
-Checking harness delayed_ub_transmute...
-
-Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `u128`
-
-VERIFICATION:- FAILED
-
-Checking harness delayed_ub...
-
-Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `u128`
-
-VERIFICATION:- FAILED
+delayed_ub.assertion.2\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u128`"
 
 Summary:
 Verification failed for - delayed_ub_slices
