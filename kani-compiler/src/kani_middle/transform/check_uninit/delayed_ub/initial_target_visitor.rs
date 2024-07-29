@@ -145,6 +145,8 @@ fn try_resolve_instance(locals: &[LocalDecl], func: &Operand) -> Result<Instance
     let ty = func.ty(locals).unwrap();
     match ty.kind() {
         TyKind::RigidTy(RigidTy::FnDef(def, args)) => Ok(Instance::resolve(def, &args).unwrap()),
-        _ => Err(format!("Kani was not able to resolve the instance of the function operand `{ty:?}`. Currently, memory initialization checks in presence of function pointers and vtable calls are not supported. For more information about planned support, see https://github.com/model-checking/kani/issues/3300.")),
+        _ => Err(format!(
+            "Kani was not able to resolve the instance of the function operand `{ty:?}`. Currently, memory initialization checks in presence of function pointers and vtable calls are not supported. For more information about planned support, see https://github.com/model-checking/kani/issues/3300."
+        )),
     }
 }
