@@ -85,4 +85,9 @@ pub enum ExtraChecks {
     /// Check that produced values are valid except for uninitialized values.
     /// See https://github.com/model-checking/kani/issues/920.
     Validity,
+    /// Check pointer validity when casting pointers to references.
+    /// See https://github.com/model-checking/kani/issues/2975.
+    PtrToRefCast,
+    /// Check for using uninitialized memory.
+    Uninit,
 }

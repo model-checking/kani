@@ -10,7 +10,6 @@ use crate::args::OutputFormat;
 use crate::call_cbmc::{VerificationResult, VerificationStatus};
 use crate::project::Project;
 use crate::session::KaniSession;
-use crate::util::error;
 
 /// A HarnessRunner is responsible for checking all proof harnesses. The data in this structure represents
 /// "background information" that the controlling driver (e.g. cargo-kani or kani) computed.
@@ -173,8 +172,8 @@ impl KaniSession {
                     "Complete - {succeeding} successfully verified harnesses, {failing} failures, {total} total."
                 );
             } else {
-                match (self.args.harnesses.as_slice(), &self.args.function) {
-                    ([], None) =>
+                match self.args.harnesses.as_slice() {
+                    [] =>
                     // TODO: This could use a better message, possibly with links to Kani documentation.
                     // New users may encounter this and could use a pointer to how to write proof harnesses.
                     {
@@ -182,16 +181,12 @@ impl KaniSession {
                             "No proof harnesses (functions with #[kani::proof]) were found to verify."
                         )
                     }
-                    ([harness], None) => {
+                    [harness] => {
                         bail!("no harnesses matched the harness filter: `{harness}`")
                     }
-                    (harnesses, None) => bail!(
+                    harnesses => bail!(
                         "no harnesses matched the harness filters: `{}`",
                         harnesses.join("`, `")
-                    ),
-                    ([], Some(func)) => error(&format!("No function named {func} was found")),
-                    _ => unreachable!(
-                        "invalid configuration. Cannot specify harness and function at the same time"
                     ),
                 };
             }

@@ -12,7 +12,7 @@ use crate::codegen_cprover_gotoc::codegen::{bb_label, PropertyClass};
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::kani_middle::attributes::matches_diagnostic as matches_function;
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
-use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Type};
+use cbmc::goto_program::{BuiltinFn, Expr, Stmt, Type};
 use rustc_middle::ty::TyCtxt;
 use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::Instance;
@@ -143,6 +143,41 @@ impl GotocHook for Assert {
     }
 }
 
+struct Check;
+impl GotocHook for Check {
+    fn hook_applies(&self, tcx: TyCtxt, instance: Instance) -> bool {
+        matches_function(tcx, instance.def, "KaniCheck")
+    }
+
+    fn handle(
+        &self,
+        gcx: &mut GotocCtx,
+        _instance: Instance,
+        mut fargs: Vec<Expr>,
+        _assign_to: &Place,
+        target: Option<BasicBlockIdx>,
+        span: Span,
+    ) -> Stmt {
+        assert_eq!(fargs.len(), 2);
+        let cond = fargs.remove(0).cast_to(Type::bool());
+        let msg = fargs.remove(0);
+        let msg = gcx.extract_const_message(&msg).unwrap();
+        let target = target.unwrap();
+        let caller_loc = gcx.codegen_caller_span_stable(span);
+
+        let (msg, reach_stmt) = gcx.codegen_reachability_check(msg, span);
+
+        Stmt::block(
+            vec![
+                reach_stmt,
+                gcx.codegen_assert(cond, PropertyClass::Assertion, &msg, caller_loc),
+                Stmt::goto(bb_label(target), caller_loc),
+            ],
+            caller_loc,
+        )
+    }
+}
+
 struct Nondet;
 
 impl GotocHook for Nondet {
@@ -168,7 +203,7 @@ impl GotocHook for Nondet {
         } else {
             let pe = unwrap_or_return_codegen_unimplemented_stmt!(
                 gcx,
-                gcx.codegen_place_stable(assign_to)
+                gcx.codegen_place_stable(assign_to, loc)
             )
             .goto_expr;
             Stmt::block(
@@ -207,11 +242,11 @@ impl GotocHook for Panic {
     }
 }
 
-/// Encodes __CPROVER_r_ok
-struct IsReadOk;
-impl GotocHook for IsReadOk {
+/// Encodes __CPROVER_r_ok(ptr, size)
+struct IsAllocated;
+impl GotocHook for IsAllocated {
     fn hook_applies(&self, tcx: TyCtxt, instance: Instance) -> bool {
-        matches_function(tcx, instance.def, "KaniIsReadOk")
+        matches_function(tcx, instance.def, "KaniIsAllocated")
     }
 
     fn handle(
@@ -228,16 +263,90 @@ impl GotocHook for IsReadOk {
         let ptr = fargs.pop().unwrap().cast_to(Type::void_pointer());
         let target = target.unwrap();
         let loc = gcx.codegen_caller_span_stable(span);
-        let ret_place =
-            unwrap_or_return_codegen_unimplemented_stmt!(gcx, gcx.codegen_place_stable(assign_to));
+        let ret_place = unwrap_or_return_codegen_unimplemented_stmt!(
+            gcx,
+            gcx.codegen_place_stable(assign_to, loc)
+        );
         let ret_type = ret_place.goto_expr.typ().clone();
 
         Stmt::block(
             vec![
                 ret_place.goto_expr.assign(Expr::read_ok(ptr, size).cast_to(ret_type), loc),
-                Stmt::goto(bb_label(target), Location::none()),
+                Stmt::goto(bb_label(target), loc),
             ],
-            Location::none(),
+            loc,
+        )
+    }
+}
+
+/// Encodes __CPROVER_pointer_object(ptr)
+struct PointerObject;
+impl GotocHook for PointerObject {
+    fn hook_applies(&self, tcx: TyCtxt, instance: Instance) -> bool {
+        matches_function(tcx, instance.def, "KaniPointerObject")
+    }
+
+    fn handle(
+        &self,
+        gcx: &mut GotocCtx,
+        _instance: Instance,
+        mut fargs: Vec<Expr>,
+        assign_to: &Place,
+        target: Option<BasicBlockIdx>,
+        span: Span,
+    ) -> Stmt {
+        assert_eq!(fargs.len(), 1);
+        let ptr = fargs.pop().unwrap().cast_to(Type::void_pointer());
+        let target = target.unwrap();
+        let loc = gcx.codegen_caller_span_stable(span);
+        let ret_place = unwrap_or_return_codegen_unimplemented_stmt!(
+            gcx,
+            gcx.codegen_place_stable(assign_to, loc)
+        );
+        let ret_type = ret_place.goto_expr.typ().clone();
+
+        Stmt::block(
+            vec![
+                ret_place.goto_expr.assign(Expr::pointer_object(ptr).cast_to(ret_type), loc),
+                Stmt::goto(bb_label(target), loc),
+            ],
+            loc,
+        )
+    }
+}
+
+/// Encodes __CPROVER_pointer_offset(ptr)
+struct PointerOffset;
+impl GotocHook for PointerOffset {
+    fn hook_applies(&self, tcx: TyCtxt, instance: Instance) -> bool {
+        matches_function(tcx, instance.def, "KaniPointerOffset")
+    }
+
+    fn handle(
+        &self,
+        gcx: &mut GotocCtx,
+        _instance: Instance,
+        mut fargs: Vec<Expr>,
+        assign_to: &Place,
+        target: Option<BasicBlockIdx>,
+        span: Span,
+    ) -> Stmt {
+        assert_eq!(fargs.len(), 1);
+        let ptr = fargs.pop().unwrap().cast_to(Type::void_pointer());
+        let target = target.unwrap();
+        let loc = gcx.codegen_caller_span_stable(span);
+        let ret_place = unwrap_or_return_codegen_unimplemented_stmt!(
+            gcx,
+            gcx.codegen_place_stable(assign_to, loc)
+        );
+        let ret_type = ret_place.goto_expr.typ().clone();
+
+        Stmt::block(
+            vec![
+                ret_place.goto_expr.assign(Expr::pointer_offset(ptr).cast_to(ret_type), loc),
+                Stmt::goto(bb_label(target), loc),
+            ],
+            loc,
         )
     }
 }
@@ -268,7 +377,7 @@ impl GotocHook for RustAlloc {
             vec![
                 unwrap_or_return_codegen_unimplemented_stmt!(
                     gcx,
-                    gcx.codegen_place_stable(assign_to)
+                    gcx.codegen_place_stable(assign_to, loc)
                 )
                 .goto_expr
                 .assign(
@@ -277,9 +386,9 @@ impl GotocHook for RustAlloc {
                         .cast_to(Type::unsigned_int(8).to_pointer()),
                     loc,
                 ),
-                Stmt::goto(bb_label(target), Location::none()),
+                Stmt::goto(bb_label(target), loc),
             ],
-            Location::none(),
+            loc,
         )
     }
 }
@@ -328,13 +437,14 @@ impl GotocHook for MemCmp {
         let is_first_ok = first_var.clone().is_nonnull();
         let is_second_ok = second_var.clone().is_nonnull();
         let should_skip_pointer_checks = is_count_zero.and(is_first_ok).and(is_second_ok);
-        let place_expr =
-            unwrap_or_return_codegen_unimplemented_stmt!(gcx, gcx.codegen_place_stable(assign_to))
-                .goto_expr;
+        let place_expr = unwrap_or_return_codegen_unimplemented_stmt!(
+            gcx,
+            gcx.codegen_place_stable(assign_to, loc)
+        )
+        .goto_expr;
         let rhs = should_skip_pointer_checks.ternary(
             Expr::int_constant(0, place_expr.typ().clone()), // zero bytes are always equal (as long as pointers are nonnull and aligned)
-            gcx.codegen_func_expr(instance, Some(span))
-                .call(vec![first_var, second_var, count_var]),
+            gcx.codegen_func_expr(instance, loc).call(vec![first_var, second_var, count_var]),
         );
         let code = place_expr.assign(rhs, loc).with_location(loc);
         Stmt::block(
@@ -379,12 +489,51 @@ impl GotocHook for UntrackedDeref {
             vec![Stmt::assign(
                 unwrap_or_return_codegen_unimplemented_stmt!(
                     gcx,
-                    gcx.codegen_place_stable(assign_to)
+                    gcx.codegen_place_stable(assign_to, loc)
                 )
                 .goto_expr,
                 fargs.pop().unwrap().dereference(),
                 loc,
             )],
+            loc,
+        )
+    }
+}
+
+struct InitContracts;
+
+/// CBMC contracts currently has a limitation where `free` has to be in scope.
+/// However, if there is no dynamic allocation in the harness, slicing removes `free` from the
+/// scope.
+///
+/// Thus, this function will basically translate into:
+/// ```c
+/// // This is a no-op.
+/// free(NULL);
+/// ```
+impl GotocHook for InitContracts {
+    fn hook_applies(&self, tcx: TyCtxt, instance: Instance) -> bool {
+        matches_function(tcx, instance.def, "KaniInitContracts")
+    }
+
+    fn handle(
+        &self,
+        gcx: &mut GotocCtx,
+        _instance: Instance,
+        fargs: Vec<Expr>,
+        _assign_to: &Place,
+        target: Option<BasicBlockIdx>,
+        span: Span,
+    ) -> Stmt {
+        assert_eq!(fargs.len(), 0,);
+        let loc = gcx.codegen_span_stable(span);
+        Stmt::block(
+            vec![
+                BuiltinFn::Free
+                    .call(vec![Expr::pointer_constant(0, Type::void_pointer())], loc)
+                    .as_stmt(loc),
+                Stmt::goto(bb_label(target.unwrap()), loc),
+            ],
             loc,
         )
     }
@@ -396,12 +545,16 @@ pub fn fn_hooks() -> GotocHooks {
             Rc::new(Panic),
             Rc::new(Assume),
             Rc::new(Assert),
+            Rc::new(Check),
             Rc::new(Cover),
             Rc::new(Nondet),
-            Rc::new(IsReadOk),
+            Rc::new(IsAllocated),
+            Rc::new(PointerObject),
+            Rc::new(PointerOffset),
             Rc::new(RustAlloc),
             Rc::new(MemCmp),
             Rc::new(UntrackedDeref),
+            Rc::new(InitContracts),
         ],
     }
 }

@@ -95,17 +95,28 @@ fn standalone_main() -> Result<()> {
     let args = args::StandaloneArgs::parse();
     check_is_valid(&args);
 
-    if let Some(StandaloneSubcommand::Playback(args)) = args.command {
-        return playback_standalone(*args);
-    }
+    let (session, project) = match args.command {
+        Some(StandaloneSubcommand::Playback(args)) => return playback_standalone(*args),
+        Some(StandaloneSubcommand::VerifyStd(args)) => {
+            let session = KaniSession::new(args.verify_opts)?;
+            if !session.args.common_args.quiet {
+                print_kani_version(InvocationType::Standalone);
+            }
 
-    let session = session::KaniSession::new(args.verify_opts)?;
+            let project = project::std_project(&args.std_path, &session)?;
+            (session, project)
+        }
+        None => {
+            let session = KaniSession::new(args.verify_opts)?;
+            if !session.args.common_args.quiet {
+                print_kani_version(InvocationType::Standalone);
+            }
 
-    if !session.args.common_args.quiet {
-        print_kani_version(InvocationType::Standalone);
-    }
-
-    let project = project::standalone_project(&args.input.unwrap(), args.crate_name, &session)?;
+            let project =
+                project::standalone_project(&args.input.unwrap(), args.crate_name, &session)?;
+            (session, project)
+        }
+    };
     if session.args.only_codegen { Ok(()) } else { verify_project(project, session) }
 }
 

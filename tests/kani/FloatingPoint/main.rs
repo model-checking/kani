@@ -1,5 +1,9 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+
+#![feature(f16)]
+#![feature(f128)]
+
 macro_rules! test_floats {
     ($ty:ty) => {
         let a: $ty = kani::any();
@@ -22,10 +26,13 @@ macro_rules! test_floats {
 }
 
 #[kani::proof]
+#[kani::solver(minisat)]
 fn main() {
     assert!(1.1 == 1.1 * 1.0);
     assert!(1.1 != 1.11 / 1.0);
 
+    test_floats!(f16);
     test_floats!(f32);
     test_floats!(f64);
+    test_floats!(f128);
 }

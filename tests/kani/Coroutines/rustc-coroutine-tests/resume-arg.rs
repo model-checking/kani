@@ -7,6 +7,7 @@
 // See GitHub history for details.
 
 #![feature(coroutines, coroutine_trait)]
+#![feature(stmt_expr_attributes)]
 
 use std::ops::{Coroutine, CoroutineState};
 use std::pin::Pin;
@@ -18,7 +19,8 @@ use std::mem::size_of_val;
 #[kani::proof]
 fn main() {
     // Coroutine taking a `Copy`able resume arg.
-    let mut gen_copy = |mut x: usize| {
+    let mut gen_copy = #[coroutine]
+    |mut x: usize| {
         loop {
             drop(x);
             x = yield;
@@ -26,7 +28,8 @@ fn main() {
     };
 
     // Coroutine taking a non-`Copy` resume arg.
-    let mut gen_move = |mut x: Box<usize>| {
+    let mut gen_move = #[coroutine]
+    |mut x: Box<usize>| {
         loop {
             drop(x);
             x = yield;

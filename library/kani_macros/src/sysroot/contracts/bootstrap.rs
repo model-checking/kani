@@ -4,11 +4,14 @@
 //! Special way we handle the first time we encounter a contract attribute on a
 //! function.
 
-use proc_macro2::Span;
+use proc_macro2::{Ident, Span};
 use quote::quote;
 use syn::ItemFn;
 
-use super::{helpers::*, shared::identifier_for_generated_function, ContractConditionsHandler};
+use super::{
+    helpers::*, shared::identifier_for_generated_function, ContractConditionsHandler,
+    INTERNAL_RESULT_IDENT,
+};
 
 impl<'a> ContractConditionsHandler<'a> {
     /// The complex case. We are the first time a contract is handled on this function, so
@@ -71,6 +74,8 @@ impl<'a> ContractConditionsHandler<'a> {
 
         let mut wrapper_sig = sig.clone();
         wrapper_sig.ident = recursion_wrapper_name;
+        // We use non-constant functions, thus, the wrapper cannot be constant.
+        wrapper_sig.constness = None;
 
         let args = pats_to_idents(&mut wrapper_sig.inputs).collect::<Vec<_>>();
         let also_args = args.iter();
@@ -80,8 +85,9 @@ impl<'a> ContractConditionsHandler<'a> {
             (quote!(#check_fn_name), quote!(#replace_fn_name))
         };
 
+        let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
         self.output.extend(quote!(
-            #[allow(dead_code, unused_variables)]
+            #[allow(dead_code, unused_variables, unused_mut)]
             #[kanitool::is_contract_generated(recursion_wrapper)]
             #wrapper_sig {
                 static mut REENTRY: bool = false;
@@ -89,9 +95,9 @@ impl<'a> ContractConditionsHandler<'a> {
                     #call_replace(#(#args),*)
                 } else {
                     unsafe { REENTRY = true };
-                    let result = #call_check(#(#also_args),*);
+                    let #result = #call_check(#(#also_args),*);
                     unsafe { REENTRY = false };
-                    result
+                    #result
                 }
             }
         ));

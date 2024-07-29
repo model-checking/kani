@@ -190,7 +190,9 @@ impl KaniSession {
         }
 
         if self.args.checks.unwinding_on() {
+            // TODO: With CBMC v6 the below can be removed as those are defaults.
             args.push("--unwinding-assertions".into());
+            args.push("--no-self-loops-to-assumptions".into());
         }
 
         if self.args.extra_pointer_checks {
@@ -496,7 +498,7 @@ pub fn resolve_unwind_value(
 #[cfg(test)]
 mod tests {
     use crate::args;
-    use crate::metadata::mock_proof_harness;
+    use crate::metadata::tests::mock_proof_harness;
     use clap::Parser;
 
     use super::*;

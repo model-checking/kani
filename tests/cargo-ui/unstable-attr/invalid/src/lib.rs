@@ -6,18 +6,18 @@
 //! we don't guarantee the order that these will be evaluated.
 //! TODO: We should break down this test to ensure all of these fail.
 
-#[kani::unstable(reason = "just checking", issue = "<link>")]
+#[kani::unstable_feature(reason = "just checking", issue = "<link>")]
 pub fn missing_feature() {
     todo!()
 }
 
-#[kani::unstable(feature("invalid_args"))]
+#[kani::unstable_feature(feature("invalid_args"))]
 pub fn invalid_fn_style() {}
 
-#[kani::unstable(feature, issue)]
+#[kani::unstable_feature(feature, issue)]
 pub fn invalid_list() {}
 
-#[kani::unstable(1010)]
+#[kani::unstable_feature(1010)]
 pub fn invalid_argument() {}
 
 #[kani::proof]

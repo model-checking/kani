@@ -4,7 +4,7 @@
 
 #![allow(unreachable_code, unused_variables)]
 
-#[kani::ensures(true)]
+#[kani::ensures(|result| true)]
 fn allowed_pointer(t: *const bool) {}
 
 #[kani::proof_for_contract(allowed_pointer)]
