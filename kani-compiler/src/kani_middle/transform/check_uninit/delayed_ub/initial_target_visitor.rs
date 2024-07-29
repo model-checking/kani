@@ -57,6 +57,9 @@ impl InitialTargetVisitor {
     }
 }
 
+/// We implement MirVisitor to facilitate target finding, we look for:
+/// - pointer casts where pointees have different padding;
+/// - calls to `copy`-like intrinsics.
 impl MirVisitor for InitialTargetVisitor {
     fn visit_rvalue(&mut self, rvalue: &Rvalue, location: Location) {
         if let Rvalue::Cast(kind, operand, ty) = rvalue {
