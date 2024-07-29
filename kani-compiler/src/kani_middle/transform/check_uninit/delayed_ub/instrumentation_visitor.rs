@@ -105,8 +105,8 @@ impl<'a, 'tcx> MirVisitor for InstrumentationVisitor<'a, 'tcx> {
             .points_to
             .follow_from_place(rustc_internal::internal(self.tcx, place), self.current_def_id)
             .intersection(&self.analysis_targets)
-            .count()
-            != 0
+            .next()
+            .is_some()
         {
             // If we are mutating the place, initialize it.
             if ptx.is_mutating() {
