@@ -8,19 +8,18 @@ use crate::kani_middle::transform::check_uninit::ty_layout::tys_layout_compatibl
 use stable_mir::{
     mir::{
         alloc::GlobalAlloc,
-        mono::{Instance, InstanceKind},
+        mono::{Instance, InstanceKind, StaticDef},
         visit::Location,
         Body, CastKind, LocalDecl, MirVisitor, Mutability, NonDivergingIntrinsic, Operand, Place,
         Rvalue, Statement, StatementKind, Terminator, TerminatorKind,
     },
     ty::{ConstantKind, RigidTy, TyKind},
-    CrateDef, DefId,
 };
 
 /// Pointer, write through which might trigger delayed UB.
 pub enum AnalysisTarget {
     Place(Place),
-    Static(DefId),
+    Static(StaticDef),
 }
 
 /// Visitor that finds initial analysis targets for delayed UB instrumentation. For our purposes,
@@ -49,7 +48,7 @@ impl InitialTargetVisitor {
                 if let ConstantKind::Allocated(allocation) = constant.const_.kind() {
                     for (_, prov) in &allocation.provenance.ptrs {
                         if let GlobalAlloc::Static(static_def) = GlobalAlloc::from(prov.0) {
-                            self.targets.push(AnalysisTarget::Static(static_def.def_id()));
+                            self.targets.push(AnalysisTarget::Static(static_def));
                         };
                     }
                 }
