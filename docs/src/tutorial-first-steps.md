@@ -193,30 +193,6 @@ Here's a revised example of the proof harness, one that now succeeds:
 {{#include tutorial/first-steps-v2/src/lib.rs:kani}}
 ```
 
-But now we must wonder if we've really fully tested our function.
-What if we revise the function, but forget to update the assumption in our proof harness to cover the new range of inputs?
-
-Fortunately, Kani is able to report a coverage metric for each proof harness.
-Try running:
-
-```
-cargo kani --coverage -Z line-coverage --harness verify_success
-```
-
-which verifies the harness, then prints coverage information for each line.
-In this case, we see that each line of `estimate_size` is followed by `FULL`, indicating that our proof harness provides full coverage.
-
-Try changing the assumption in the proof harness to `x < 2048`.
-Now the harness won't be testing all possible cases.
-Rerun the command.
-You'll see this line:
-
-```
-src/lib.rs, 24, NONE
-```
-
-which indicates that the proof no longer covers line 24, which addresses the case where `x >= 2048`.
-
 ## Summary
 
 In this section:
@@ -226,4 +202,3 @@ In this section:
 3. We saw how to write a proof harness and use `kani::any()`.
 4. We saw how to get a failing **trace** using `kani --visualize`
 5. We saw how proof harnesses are used to set up preconditions with `kani::assume()`.
-6. We saw how to obtain **coverage** metrics and use them to ensure our proofs are covering as much as they should be.
