@@ -87,6 +87,13 @@ impl GotocCodegenBackend {
         check_contract: Option<InternalDefId>,
         mut transformer: BodyTransformation,
     ) -> (GotocCtx<'tcx>, Vec<MonoItem>, Option<AssignsContract>) {
+        // This runs reachability analysis before global passes are applied. 
+        //
+        // Alternatively, we could run reachability only once after the global passes are applied
+        // and resolve the necessary dependencies inside the passes on the fly. This, however, has a
+        // disadvantage of not having a precomputed call graph for the global passes to use. The
+        // call graph could be used, for example, in resolving function pointer or vtable calls for
+        // global passes that need this.
         let (items, call_graph) = with_timer(
             || collect_reachable_items(tcx, &mut transformer, starting_items),
             "codegen reachability analysis",
