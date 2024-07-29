@@ -9,14 +9,19 @@ use kani::Invariant;
 
 #[derive(kani::Arbitrary)]
 #[derive(kani::Invariant)]
-#[safety_constraint(true)]
-struct Point {
+#[safety_constraint(*x == *y)]
+struct SameCoordsPoint {
     x: i32,
     y: i32,
 }
 
 #[kani::proof]
 fn check_invariant() {
-    let point: Point = kani::any();
+    let point: SameCoordsPoint = kani::any();
     assert!(point.is_safe());
+
+    // Assuming `point.x != point.y` here should be like assuming `false`.
+    // The assertion should be unreachable because we're blocking the path.
+    kani::assume(point.x != point.y);
+    assert!(false, "this assertion should unreachable");
 }
