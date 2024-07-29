@@ -1,9 +1,10 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-//! Check that there is a compilation error when the predicate passed to
+//! Check that there is a compilation error when the predicate passed to the
 //! `#[safety_constraint(...)]` attribute would result in a compiler error.
-//! The `#[derive(kani::Invariant)]` macro is required for the compiler error,
+//!
+//! Note: the `#[derive(kani::Invariant)]` macro is required for the compiler error,
 //! otherwise the `#[safety_constraint(...)]` attribute is ignored.
 
 extern crate kani;

@@ -274,7 +274,7 @@ fn parse_safety_expr(ident: &Ident, field: &syn::Field) -> Option<TokenStream> {
     }
 }
 
-fn parse_safety_expr_struct(ident: &Ident, derive_input: &DeriveInput) -> Option<TokenStream> {
+fn parse_safety_expr_input(ident: &Ident, derive_input: &DeriveInput) -> Option<TokenStream> {
     let name = ident;
     let mut safety_attr = None;
 
@@ -407,8 +407,9 @@ fn safety_conds_opt(
     derive_input: &DeriveInput,
     trait_name: &str,
 ) -> Option<TokenStream> {
-    let has_item_safety_constraint = has_item_safety_constraint(&item_name, &derive_input, trait_name);
-        
+    let has_item_safety_constraint =
+        has_item_safety_constraint(&item_name, &derive_input, trait_name);
+
     let has_field_safety_constraints = has_field_safety_constraints(&item_name, &derive_input.data);
 
     if has_item_safety_constraint && has_field_safety_constraints {
@@ -428,7 +429,8 @@ fn safety_conds_opt(
 }
 
 fn has_item_safety_constraint(ident: &Ident, derive_input: &DeriveInput, trait_name: &str) -> bool {
-    let safety_constraints_in_item = derive_input.attrs.iter().filter(|attr| attr.path().is_ident("safety_constraint")).count();
+    let safety_constraints_in_item =
+        derive_input.attrs.iter().filter(|attr| attr.path().is_ident("safety_constraint")).count();
     if safety_constraints_in_item > 1 {
         abort!(Span::call_site(), "Cannot derive `{}` for `{}`", trait_name, ident;
         note = ident.span() =>
@@ -472,10 +474,15 @@ pub fn add_trait_bound_invariant(mut generics: Generics) -> Generics {
 fn safe_body_from_struct_attr(
     ident: &Ident,
     derive_input: &DeriveInput,
-    _trait_name: &str,
+    trait_name: &str,
 ) -> TokenStream {
-    // TODO: Check that this is a struct
-    parse_safety_expr_struct(ident, derive_input).unwrap()
+    if !matches!(derive_input.data, Data::Struct(_)) {
+        abort!(Span::call_site(), "Cannot derive `{}` for `{}`", trait_name, ident;
+            note = ident.span() =>
+            "`#[safety_constraint(...)]` can only be used in structs"
+        )
+    };
+    parse_safety_expr_input(ident, derive_input).unwrap()
 }
 
 /// Parse the condition expressions in `#[safety_constraint(<cond>)]` attached to struct
