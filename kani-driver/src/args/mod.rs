@@ -137,10 +137,10 @@ pub struct VerificationArgs {
     /// If value supplied is 'inplace', Kani automatically adds the unit test to your source code.
     /// This option does not work with `--output-format old`.
     #[arg(
-    long,
-    conflicts_with_all(& ["visualize"]),
-    ignore_case = true,
-    value_enum
+        long,
+        conflicts_with_all(&["visualize"]),
+        ignore_case = true,
+        value_enum
     )]
     pub concrete_playback: Option<ConcretePlaybackMode>,
     /// Keep temporary files generated throughout Kani process. This is already the default
@@ -210,10 +210,10 @@ pub struct VerificationArgs {
     /// Pass through directly to CBMC; must be the last flag.
     /// This feature is unstable and it requires `--enable_unstable` to be used
     #[arg(
-    long,
-    allow_hyphen_values = true,
-    requires("enable_unstable"),
-    num_args(0..)
+        long,
+        allow_hyphen_values = true,
+        requires("enable_unstable"),
+        num_args(0..)
     )]
     // consumes everything
     pub cbmc_args: Vec<OsString>,
@@ -870,13 +870,13 @@ mod tests {
         let res = parse_unstable_disabled("--harness foo -Z stubbing").unwrap();
         assert!(res.verify_opts.is_stubbing_enabled());
 
-        // `-Z stubbing` cannot be called with `--concrete-playback`
+        // `-Z stubbing` can now be called with concrete playback.
         let res = parse_unstable_disabled(
             "--harness foo --concrete-playback=print -Z concrete-playback -Z stubbing",
         )
         .unwrap();
-        let err = res.validate().unwrap_err();
-        assert_eq!(err.kind(), ErrorKind::ArgumentConflict);
+        // Note that `res.validate()` fails because input file does not exist.
+        assert!(matches!(res.verify_opts.validate(), Ok(())));
     }
 
     #[test]

@@ -249,26 +249,19 @@ pub fn any_where<T: Arbitrary, F: FnOnce(&T) -> bool>(f: F) -> T {
 /// Note that SIZE_T must be equal the size of type T in bytes.
 #[inline(never)]
 #[cfg(not(feature = "concrete_playback"))]
-pub(crate) unsafe fn any_raw_internal<T: Copy>() -> T {
+unsafe fn any_raw_internal<T: Copy>() -> T {
     any_raw::<T>()
 }
 
 /// This is the same as [any_raw_internal] for verification flow, but not for concrete playback.
 #[inline(never)]
 #[cfg(not(feature = "concrete_playback"))]
-pub(crate) unsafe fn any_raw_array<T: Copy, const N: usize>() -> [T; N] {
+unsafe fn any_raw_array<T: Copy, const N: usize>() -> [T; N] {
     any_raw::<[T; N]>()
 }
 
 #[cfg(feature = "concrete_playback")]
-use concrete_playback::any_raw_internal;
-
-/// Iterate over `any_raw_internal` since CBMC produces assignment per element.
-#[inline(never)]
-#[cfg(feature = "concrete_playback")]
-pub(crate) unsafe fn any_raw_array<T: Copy, const N: usize>() -> [T; N] {
-    [(); N].map(|_| any_raw_internal::<T>())
-}
+use concrete_playback::{any_raw_array, any_raw_internal};
 
 /// This low-level function returns nondet bytes of size T.
 #[rustc_diagnostic_item = "KaniAnyRaw"]
