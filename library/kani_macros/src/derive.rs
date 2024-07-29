@@ -81,7 +81,7 @@ fn add_trait_bound_arbitrary(mut generics: Generics) -> Generics {
 ///    Self { x: kani::any(), y: kani::any() }
 /// }
 /// ```
-pub fn fn_any_body(ident: &Ident, data: &Data) -> TokenStream {
+fn fn_any_body(ident: &Ident, data: &Data) -> TokenStream {
     match data {
         Data::Struct(struct_data) => init_symbolic_item(ident, &struct_data.fields),
         Data::Enum(enum_data) => fn_any_enum(ident, enum_data),
@@ -115,7 +115,7 @@ pub fn fn_any_body(ident: &Ident, data: &Data) -> TokenStream {
 /// ```
 /// which allows us to refer to the struct fields without using `self`.
 /// Note that the actual stream is generated in the `field_refs_inner` function.
-pub fn field_refs(ident: &Ident, data: &Data) -> TokenStream {
+fn field_refs(ident: &Ident, data: &Data) -> TokenStream {
     match data {
         Data::Struct(struct_data) => field_refs_inner(ident, &struct_data.fields),
         Data::Enum(_) => unreachable!(),
@@ -149,7 +149,7 @@ fn field_refs_inner(_ident: &Ident, fields: &Fields) -> TokenStream {
     }
 }
 
-pub fn safe_body_default(ident: &Ident, data: &Data) -> TokenStream {
+fn safe_body_default(ident: &Ident, data: &Data) -> TokenStream {
     match data {
         Data::Struct(struct_data) => safe_body_default_inner(ident, &struct_data.fields),
         Data::Enum(_) => unreachable!(),
