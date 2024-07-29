@@ -87,7 +87,7 @@ impl GotocCodegenBackend {
         check_contract: Option<InternalDefId>,
         mut transformer: BodyTransformation,
     ) -> (GotocCtx<'tcx>, Vec<MonoItem>, Option<AssignsContract>) {
-        // This runs reachability analysis before global passes are applied. 
+        // This runs reachability analysis before global passes are applied.
         //
         // Alternatively, we could run reachability only once after the global passes are applied
         // and resolve the necessary dependencies inside the passes on the fly. This, however, has a

@@ -4,26 +4,29 @@
 //! Module containing multiple transformation passes that instrument the code to detect possible UB
 //! due to the accesses to uninitialized memory.
 
-use crate::kani_middle::find_fn_def;
-use crate::kani_middle::transform::body::CheckType;
-use crate::kani_middle::transform::body::{InsertPosition, MutableBody, SourceInstruction};
+use crate::kani_middle::{
+    find_fn_def,
+    transform::body::{CheckType, InsertPosition, MutableBody, SourceInstruction},
+};
 use relevant_instruction::{InitRelevantInstruction, MemoryInitOp};
 use rustc_middle::ty::TyCtxt;
 use rustc_smir::rustc_internal;
-use stable_mir::mir::mono::Instance;
-use stable_mir::mir::{
-    AggregateKind, BasicBlockIdx, ConstOperand, Mutability, Operand, Place, Rvalue,
+use stable_mir::{
+    mir::{
+        mono::Instance, AggregateKind, BasicBlockIdx, ConstOperand, Mutability, Operand, Place,
+        Rvalue,
+    },
+    ty::{FnDef, GenericArgKind, GenericArgs, MirConst, RigidTy, Ty, TyConst, TyKind, UintTy},
+    CrateDef,
 };
-use stable_mir::ty::{
-    FnDef, GenericArgKind, GenericArgs, MirConst, RigidTy, Ty, TyConst, TyKind, UintTy,
-};
-use stable_mir::CrateDef;
 use std::collections::{HashMap, HashSet};
 
+pub use delayed_ub::DelayedUbPass;
+pub use ptr_uninit::UninitPass;
 pub use ty_layout::{PointeeInfo, PointeeLayout};
 
-pub(crate) mod delayed_ub;
-pub(crate) mod ptr_uninit;
+mod delayed_ub;
+mod ptr_uninit;
 mod relevant_instruction;
 mod ty_layout;
 

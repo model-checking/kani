@@ -7,34 +7,31 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 
 use crate::args::ExtraChecks;
-use crate::kani_middle::reachability::CallGraph;
-use crate::kani_middle::transform::body::CheckType;
-use crate::kani_middle::transform::body::MutableBody;
-use crate::kani_middle::transform::check_uninit::UninitInstrumenter;
-use crate::kani_middle::transform::internal_mir::RustcInternalMir;
-use crate::kani_middle::transform::BodyTransformation;
-use crate::kani_middle::transform::GlobalPass;
-use crate::kani_middle::transform::TransformationResult;
+use crate::kani_middle::{
+    points_to::{GlobalMemLoc, LocalMemLoc, PointsToAnalysis, PointsToGraph},
+    reachability::CallGraph,
+    transform::{
+        body::{CheckType, MutableBody},
+        check_uninit::UninitInstrumenter,
+        internal_mir::RustcInternalMir,
+        BodyTransformation, GlobalPass, TransformationResult,
+    },
+};
 use crate::kani_queries::QueryDb;
-use initial_target_visitor::AnalysisTarget;
-use initial_target_visitor::InitialTargetVisitor;
+use initial_target_visitor::{AnalysisTarget, InitialTargetVisitor};
 use instrumentation_visitor::InstrumentationVisitor;
-use points_to_analysis::PointsToAnalysis;
-use points_to_graph::GlobalMemLoc;
-use points_to_graph::LocalMemLoc;
-use points_to_graph::PointsToGraph;
 use rustc_middle::ty::TyCtxt;
 use rustc_session::config::OutputType;
 use rustc_smir::rustc_internal;
-use stable_mir::mir::mono::{Instance, MonoItem};
-use stable_mir::mir::MirVisitor;
-use stable_mir::ty::FnDef;
-use stable_mir::CrateDef;
+use stable_mir::{
+    mir::mono::{Instance, MonoItem},
+    mir::MirVisitor,
+    ty::FnDef,
+    CrateDef,
+};
 
 mod initial_target_visitor;
 mod instrumentation_visitor;
-mod points_to_analysis;
-mod points_to_graph;
 
 #[derive(Debug)]
 pub struct DelayedUbPass {

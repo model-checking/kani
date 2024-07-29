@@ -5,11 +5,9 @@
 //! necessary aliasing information for instrumenting delayed UB later on.
 
 use crate::kani_middle::{
+    points_to::{GlobalMemLoc, LocalMemLoc, PointsToGraph},
     reachability::CallGraph,
-    transform::{
-        check_uninit::delayed_ub::points_to_graph::{GlobalMemLoc, LocalMemLoc, PointsToGraph},
-        internal_mir::RustcInternalMir,
-    },
+    transform::RustcInternalMir,
 };
 use rustc_ast::Mutability;
 use rustc_hir::def_id::DefId;

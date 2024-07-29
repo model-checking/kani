@@ -3,10 +3,12 @@
 //
 //! Utility functions that help calculate type layout.
 
-use stable_mir::abi::{FieldsShape, Scalar, TagEncoding, ValueAbi, VariantsShape};
-use stable_mir::target::{MachineInfo, MachineSize};
-use stable_mir::ty::{AdtKind, IndexedVal, RigidTy, Ty, TyKind, UintTy};
-use stable_mir::CrateDef;
+use stable_mir::{
+    abi::{FieldsShape, Scalar, TagEncoding, ValueAbi, VariantsShape},
+    target::{MachineInfo, MachineSize},
+    ty::{AdtKind, IndexedVal, RigidTy, Ty, TyKind, UintTy},
+    CrateDef,
+};
 
 /// Represents a chunk of data bytes in a data structure.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]

@@ -19,8 +19,7 @@
 use crate::kani_middle::codegen_units::CodegenUnit;
 use crate::kani_middle::reachability::CallGraph;
 use crate::kani_middle::transform::body::CheckType;
-use crate::kani_middle::transform::check_uninit::delayed_ub::DelayedUbPass;
-use crate::kani_middle::transform::check_uninit::ptr_uninit::UninitPass;
+use crate::kani_middle::transform::check_uninit::{DelayedUbPass, UninitPass};
 use crate::kani_middle::transform::check_values::ValidValuePass;
 use crate::kani_middle::transform::contracts::AnyModifiesPass;
 use crate::kani_middle::transform::kani_intrinsics::IntrinsicGeneratorPass;
@@ -32,6 +31,8 @@ use stable_mir::mir::mono::{Instance, MonoItem};
 use stable_mir::mir::Body;
 use std::collections::HashMap;
 use std::fmt::Debug;
+
+pub use internal_mir::RustcInternalMir;
 
 pub(crate) mod body;
 mod check_uninit;

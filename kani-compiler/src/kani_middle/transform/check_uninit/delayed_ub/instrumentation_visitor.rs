@@ -4,19 +4,23 @@
 //! Visitor that collects all instructions relevant to uninitialized memory access caused by delayed
 //! UB. In practice, that means collecting all instructions where the place is featured.
 
-use crate::kani_middle::transform::body::{InsertPosition, MutableBody, SourceInstruction};
-use crate::kani_middle::transform::check_uninit::delayed_ub::points_to_graph::{
-    GlobalMemLoc, PointsToGraph,
+use crate::kani_middle::{
+    points_to::{GlobalMemLoc, PointsToGraph},
+    transform::{
+        body::{InsertPosition, MutableBody, SourceInstruction},
+        check_uninit::{
+            relevant_instruction::{InitRelevantInstruction, MemoryInitOp},
+            TargetFinder,
+        },
+    },
 };
-use crate::kani_middle::transform::check_uninit::relevant_instruction::{
-    InitRelevantInstruction, MemoryInitOp,
-};
-use crate::kani_middle::transform::check_uninit::TargetFinder;
 use rustc_hir::def_id::DefId as InternalDefId;
 use rustc_middle::ty::TyCtxt;
 use rustc_smir::rustc_internal;
-use stable_mir::mir::visit::{Location, PlaceContext};
-use stable_mir::mir::{BasicBlockIdx, MirVisitor, Operand, Place, Statement, Terminator};
+use stable_mir::mir::{
+    visit::{Location, PlaceContext},
+    BasicBlockIdx, MirVisitor, Operand, Place, Statement, Terminator,
+};
 use std::collections::HashSet;
 
 pub struct InstrumentationVisitor<'a, 'tcx> {

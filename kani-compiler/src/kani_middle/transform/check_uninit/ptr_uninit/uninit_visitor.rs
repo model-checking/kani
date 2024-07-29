@@ -3,21 +3,25 @@
 //
 //! Visitor that collects all instructions relevant to uninitialized memory access.
 
-use crate::kani_middle::transform::body::{InsertPosition, MutableBody, SourceInstruction};
-use crate::kani_middle::transform::check_uninit::relevant_instruction::{
-    InitRelevantInstruction, MemoryInitOp,
+use crate::kani_middle::transform::{
+    body::{InsertPosition, MutableBody, SourceInstruction},
+    check_uninit::{
+        relevant_instruction::{InitRelevantInstruction, MemoryInitOp},
+        ty_layout::tys_layout_compatible,
+        TargetFinder,
+    },
 };
-use crate::kani_middle::transform::check_uninit::ty_layout::tys_layout_compatible;
-use crate::kani_middle::transform::check_uninit::TargetFinder;
-use stable_mir::mir::alloc::GlobalAlloc;
-use stable_mir::mir::mono::{Instance, InstanceKind};
-use stable_mir::mir::visit::{Location, PlaceContext};
-use stable_mir::mir::{
-    BasicBlockIdx, CastKind, LocalDecl, MirVisitor, Mutability, NonDivergingIntrinsic, Operand,
-    Place, PointerCoercion, ProjectionElem, Rvalue, Statement, StatementKind, Terminator,
-    TerminatorKind,
+use stable_mir::{
+    mir::{
+        alloc::GlobalAlloc,
+        mono::{Instance, InstanceKind},
+        visit::{Location, PlaceContext},
+        BasicBlockIdx, CastKind, LocalDecl, MirVisitor, Mutability, NonDivergingIntrinsic, Operand,
+        Place, PointerCoercion, ProjectionElem, Rvalue, Statement, StatementKind, Terminator,
+        TerminatorKind,
+    },
+    ty::{ConstantKind, RigidTy, TyKind},
 };
-use stable_mir::ty::{ConstantKind, RigidTy, TyKind};
 
 pub struct CheckUninitVisitor {
     locals: Vec<LocalDecl>,

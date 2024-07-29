@@ -4,6 +4,7 @@
 //! This module contains the visitor responsible for collecting initial analysis targets for delayed
 //! UB instrumentation.
 
+use crate::kani_middle::transform::check_uninit::ty_layout::tys_layout_compatible;
 use stable_mir::{
     mir::{
         alloc::GlobalAlloc,
@@ -15,8 +16,6 @@ use stable_mir::{
     ty::{ConstantKind, RigidTy, TyKind},
     CrateDef, DefId,
 };
-
-use crate::kani_middle::transform::check_uninit::ty_layout::tys_layout_compatible;
 
 /// Pointer, write through which might trigger delayed UB.
 pub enum AnalysisTarget {
