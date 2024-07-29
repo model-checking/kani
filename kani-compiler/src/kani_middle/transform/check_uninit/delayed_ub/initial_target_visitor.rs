@@ -99,12 +99,7 @@ impl MirVisitor for InitialTargetVisitor {
 
     fn visit_terminator(&mut self, term: &Terminator, location: Location) {
         if let TerminatorKind::Call { func, args, .. } = &term.kind {
-            let instance = match try_resolve_instance(self.body.locals(), func) {
-                Ok(instance) => instance,
-                Err(reason) => {
-                    panic!("{reason}");
-                }
-            };
+            let instance = try_resolve_instance(self.body.locals(), func).unwrap();
             if instance.kind == InstanceKind::Intrinsic {
                 match instance.intrinsic_name().unwrap().as_str() {
                     "copy" => {
@@ -150,6 +145,6 @@ fn try_resolve_instance(locals: &[LocalDecl], func: &Operand) -> Result<Instance
     let ty = func.ty(locals).unwrap();
     match ty.kind() {
         TyKind::RigidTy(RigidTy::FnDef(def, args)) => Ok(Instance::resolve(def, &args).unwrap()),
-        _ => Err(format!("Kani does not support reasoning about arguments to `{ty:?}`.")),
+        _ => Err(format!("Kani was not able to resolve the instance of the function operand `{ty:?}`. Currently, memory initialization checks in presence of function pointers and vtable calls are not supported. For more information about planned support, see https://github.com/model-checking/kani/issues/3300.")),
     }
 }
