@@ -3,7 +3,7 @@
 // kani-flags: -Zfunction-contracts
 
 /// The objective of this test is to show that the contracts for double can be replaced as a stub within the contracts for quadruple.
-/// This shows that we can generate kani::any() for Cell
+/// This shows that we can generate `kani::any()` for Cell.
 use std::cell::Cell;
 
 /// This struct is contains Cell which can be mutated
