@@ -63,7 +63,7 @@ pub enum HarnessKind {
 }
 
 impl HarnessAttributes {
-    /// Create a new harness with of the provided kind.
+    /// Create a new harness of the provided kind.
     pub fn new(kind: HarnessKind) -> HarnessAttributes {
         HarnessAttributes {
             kind,
