@@ -19,7 +19,7 @@ use rustc_middle::ty::TyCtxt;
 use rustc_smir::rustc_internal;
 use stable_mir::mir::{
     visit::{Location, PlaceContext},
-    BasicBlockIdx, MirVisitor, Operand, Place, Statement, Terminator,
+    BasicBlockIdx, MirVisitor, Operand, Place, Rvalue, Statement, Terminator,
 };
 use std::collections::HashSet;
 
@@ -100,6 +100,15 @@ impl<'a, 'tcx> MirVisitor for InstrumentationVisitor<'a, 'tcx> {
         if !(self.skip_next || self.target.is_some()) {
             self.current = SourceInstruction::Terminator { bb: self.current.bb() };
             self.super_terminator(term, location);
+        }
+    }
+
+    fn visit_rvalue(&mut self, rvalue: &Rvalue, location: Location) {
+        match rvalue {
+            Rvalue::AddressOf(..) | Rvalue::Ref(..) => {
+                // These operations are always legitimate for us.
+            }
+            _ => self.super_rvalue(rvalue, location),
         }
     }
 
