@@ -5,7 +5,7 @@
 /// The objective of this test is to check the modification of an UnsafeCell used as interior mutability in an immutable struct
 use std::cell::UnsafeCell;
 
-/// This struct is contains UnsafeCell which can be mutated
+/// This struct contains UnsafeCell which can be mutated
 struct InteriorMutability {
     x: UnsafeCell<u32>,
 }
