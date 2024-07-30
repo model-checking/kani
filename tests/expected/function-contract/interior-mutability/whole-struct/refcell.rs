@@ -13,7 +13,7 @@ struct InteriorMutability {
 #[kani::requires(unsafe{*im.x.as_ptr()} < 100)]
 #[kani::modifies(&im.x)]
 #[kani::ensures(|_| unsafe{*im.x.as_ptr()} < 101)]
-///im is an immutable reference with interior mutability
+/// `im` is an immutable reference with interior mutability
 fn modify(im: &InteriorMutability) {
     im.x.replace_with(|&mut old| old + 1);
 }
