@@ -12,7 +12,7 @@ struct InteriorMutability {
 #[kani::requires(unsafe{*im.x.get()} < 100)]
 #[kani::modifies(im.x.get())]
 #[kani::ensures(|_| unsafe{*im.x.get()} < 101)]
-///im is an immutable reference with interior mutability
+/// `im` is an immutable reference with interior mutability
 fn modify(im: &InteriorMutability) {
     unsafe { *im.x.get() += 1 }
 }
