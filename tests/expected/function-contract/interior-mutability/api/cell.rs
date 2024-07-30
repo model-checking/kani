@@ -5,7 +5,7 @@
 /// Mutating Cell via `as_ptr` in contracts
 use std::cell::Cell;
 
-/// This struct is contains Cell which can be mutated
+/// This struct contains Cell which can be mutated
 struct InteriorMutability {
     x: Cell<u32>,
 }
