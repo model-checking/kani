@@ -5,7 +5,7 @@
 /// The objective of this test is to check the modification of a Cell used as interior mutability in an immutable struct
 use std::cell::Cell;
 
-/// This struct is contains Cell which can be mutated
+/// This struct contains Cell which can be mutated
 struct InteriorMutability {
     x: Cell<u32>,
 }
