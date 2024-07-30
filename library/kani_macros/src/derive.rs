@@ -415,7 +415,7 @@ fn safety_conds_opt(
     if has_item_safety_constraint && has_field_safety_constraints {
         abort!(Span::call_site(), "Cannot derive `{}` for `{}`", trait_name, item_name;
         note = item_name.span() =>
-        "`#[safety_constraint(...)]` cannot be used in struct AND its fields"
+        "`#[safety_constraint(...)]` cannot be used in struct and its fields simultaneously"
         )
     }
 

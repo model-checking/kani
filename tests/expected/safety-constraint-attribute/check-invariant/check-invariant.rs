@@ -23,5 +23,5 @@ fn check_invariant() {
     // Assuming `point.x != point.y` here should be like assuming `false`.
     // The assertion should be unreachable because we're blocking the path.
     kani::assume(point.x != point.y);
-    assert!(false, "this assertion should unreachable");
+    assert!(false, "this assertion should be unreachable");
 }
