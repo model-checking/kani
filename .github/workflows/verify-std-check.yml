@@ -39,6 +39,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: kani
+          fetch-depth: 0
 
       - name: Setup Kani Dependencies
         uses: ./kani/.github/actions/setup
@@ -79,8 +80,10 @@ jobs:
             -Z mem-predicates -Z ptr-to-ref-cast-checks
 
       - name: Compare PR results
-        if: steps.check-head.outcome != 'success' && steps.check-head.output != github.check-base.output
+        if: steps.check-head.outcome != 'success' && steps.check-head.outcome != steps.check-base.outcome
         run: |
           echo "New failure introduced by this change"
+          echo "HEAD: ${{ steps.check-head.outcome }}"
+          echo "BASE: ${{ steps.check-base.outcome }}"
           exit 1
 
