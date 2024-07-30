@@ -5,7 +5,7 @@
 /// The objective of this test is to check the modification of a RefCell used as interior mutability in an immutable struct
 use std::cell::RefCell;
 
-/// This struct is contains Cell which can be mutated
+/// This struct contains Cell which can be mutated
 struct InteriorMutability {
     x: RefCell<u32>,
 }
