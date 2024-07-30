@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Zfunction-contracts
 
-/// Mutating Cell via as_ptr in contracts
+/// Mutating Cell via `as_ptr` in contracts
 use std::cell::Cell;
 
 /// This struct is contains Cell which can be mutated
