@@ -4,7 +4,7 @@
 
 use std::cell::UnsafeCell;
 
-/// This struct is contains UnsafeCell which can be mutated
+/// This struct contains UnsafeCell which can be mutated
 struct InteriorMutability {
     x: UnsafeCell<u32>,
 }
