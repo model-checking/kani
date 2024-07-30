@@ -1,0 +1,8 @@
+error: failed to resolve `<[char ; 10]>::foo`: Kani currently cannot resolve path including primitive types
+error: failed to resolve `<& [u32]>::foo`: Kani currently cannot resolve path including primitive types
+error: failed to resolve `<& [u32] as Foo>::foo`: Kani currently cannot resolve path including primitive types
+error: failed to resolve `<(i32 , i32) as Foo>::foo`: Kani currently cannot resolve path including primitive types
+error: failed to resolve `u8::foo`: Kani currently cannot resolve path including primitive types
+error: failed to resolve `<Bar as Foo>::bar`: unable to find `bar` inside trait `Foo`
+error: Kani currently does not support stubbing trait implementation.
+error: failed to resolve `<Bar>::foo`: Kani currently cannot resolve qualified bare function paths

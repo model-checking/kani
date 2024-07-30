@@ -6,7 +6,7 @@
 use std::collections::HashSet;
 
 use crate::kani_queries::QueryDb;
-use rustc_hir::{def::DefKind, def_id::LOCAL_CRATE};
+use rustc_hir::{def::DefKind, def_id::DefId as InternalDefId, def_id::LOCAL_CRATE};
 use rustc_middle::span_bug;
 use rustc_middle::ty::layout::{
     FnAbiError, FnAbiOf, FnAbiOfHelpers, FnAbiRequest, HasParamEnv, HasTyCtxt, LayoutError,
@@ -225,10 +225,16 @@ fn find_fn_def(tcx: TyCtxt, diagnostic: &str) -> Option<FnDef> {
         .all_diagnostic_items(())
         .name_to_id
         .get(&rustc_span::symbol::Symbol::intern(diagnostic))?;
-    let TyKind::RigidTy(RigidTy::FnDef(def, _)) =
-        rustc_internal::stable(tcx.type_of(attr_id)).value.kind()
-    else {
-        return None;
-    };
-    Some(def)
+    stable_fn_def(tcx, *attr_id)
+}
+
+/// Try to convert a internal DefId to a FnDef.
+pub fn stable_fn_def(tcx: TyCtxt, def_id: InternalDefId) -> Option<FnDef> {
+    if let TyKind::RigidTy(RigidTy::FnDef(def, _)) =
+        rustc_internal::stable(tcx.type_of(def_id)).value.kind()
+    {
+        Some(def)
+    } else {
+        None
+    }
 }
