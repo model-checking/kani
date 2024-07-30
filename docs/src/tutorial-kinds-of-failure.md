@@ -25,7 +25,7 @@ This property test will immediately find a failing case, thanks to Rust's built-
 But what if we change this function to use unsafe Rust?
 
 ```rust
-return unsafe { *a.get_unchecked(i % a.len() + 1) };
+return unsafe { *a.as_ptr().add(i % a.len() + 1) };
 ```
 
 Now the error becomes invisible to this test:
@@ -55,7 +55,7 @@ cargo kani --harness bound_check
 We still see a failure from Kani, even without Rust's runtime bounds checking.
 
 > Also, notice there were many checks in the verification output.
-> (At time of writing, 351.)
+> (At time of writing, 345.)
 > This is a result of using the standard library `Vec` implementation, which means our harness actually used quite a bit of code, short as it looks.
 > Kani is inserting a lot more checks than appear as asserts in our code, so the output can be large.
 
@@ -63,7 +63,7 @@ We get the following summary at the end:
 
 ```
 SUMMARY: 
- ** 1 of 351 failed
+ ** 1 of 345 failed (8 unreachable)
 Failed Checks: dereference failure: pointer outside object bounds
  File: "./src/bounds_check.rs", line 11, in bounds_check::get_wrapped
 
