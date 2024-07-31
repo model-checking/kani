@@ -18,7 +18,7 @@
   - [Experimental features](./reference/experimental/experimental-features.md)
     - [Coverage](./reference/experimental/coverage.md)
     - [Stubbing](./reference/experimental/stubbing.md)
-    - [Debugging verification failures](./reference/experimental/debugging-verification-failures.md)
+    - [Concrete Playback](./reference/experimental/concrete-playback.md)
 - [Application](./application.md)
   - [Comparison with other tools](./tool-comparison.md)
   - [Where to start on real code](./tutorial-real-code.md)

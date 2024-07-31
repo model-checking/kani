@@ -79,7 +79,7 @@ Consider trying a few more small exercises with this example:
 1. Exercise: Switch back to the normal/safe indexing operation and re-try Kani.
 How does Kani's output change, compared to the unsafe operation?
 (Try predicting the answer, then seeing if you got it right.)
-2. Exercise: [Remember how to get a trace from Kani?](./tutorial-first-steps.md#getting-a-trace) Find out what inputs it failed on.
+2. Exercise: Try Kani's experimental [concrete playback](reference/experimental/concrete-playback.md) feature on this example.
 3. Exercise: Fix the error, run Kani, and see a successful verification.
 4. Exercise: Try switching back to the unsafe code (now with the error fixed) and re-run Kani. Does it still verify successfully?
 
@@ -102,40 +102,21 @@ VERIFICATION:- FAILED
 <details>
 <summary>Click to see explanation for exercise 2</summary>
 
-Having run `cargo kani --harness bound_check --visualize --enable-unstable` and clicked on one of the failures to see a trace, there are three things to immediately notice:
-
-1. This trace is huge. Because the standard library `Vec` is involved, there's a lot going on.
-2. The top of the trace file contains some "trace navigation tips" that might be helpful in navigating the trace.
-3. There's a lot of generated code and it's really hard to just read the trace itself.
-
-To navigate this trace to find the information you need, we again recommend searching for things you expect to be somewhere in the trace:
-
-1. Search the page for `kani::any` or `<variable_of_interest> =` such as `size =` or `let size`.
-We can use this to find out what example values lead to a problem.
-In this case, where we just have a couple of `kani::any` values in our proof harness, we can learn a lot just by seeing what these are.
-In this trace we find (and the values you get may be different):
-
+`cargo kani -Z concrete-playback --concrete-playback=inplace --harness bound_check` produces the following test:
 ```
-Step 523: Function bound_check, File src/bounds_check.rs, Line 37
-<- kani::any::<usize>
-Step 524: Function bound_check, File src/bounds_check.rs, Line 37
-size = 1ul (00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000001)
-...
-Step 537: Function bound_check, File src/bounds_check.rs, Line 39
-<- kani::any::<usize>
-Step 538: Function bound_check, File src/bounds_check.rs, Line 39
-index = 18446744073709551615ul (11111111 11111111 11111111 11111111 11111111 11111111 11111111 11111111)
+rust
+#[test]
+fn kani_concrete_playback_bound_check_4752536404478138800() {
+    let concrete_vals: Vec<Vec<u8>> = vec![
+        // 1ul
+        vec![1, 0, 0, 0, 0, 0, 0, 0],
+        // 18446744073709551615ul
+        vec![255, 255, 255, 255, 255, 255, 255, 255],
+    ];
+    kani::concrete_playback_run(concrete_vals, bound_check);
+}
 ```
-
-You may see different values here, as it depends on the solver's behavior.
-
-2. Try searching for `failure:`. This will be near the end of the page.
-You can now search upwards from a failure to see what values certain variables had.
-Sometimes it can be helpful to change the source code to add intermediate variables, so their value is visible in the trace.
-For instance, you might want to compute the index before indexing into the array.
-That way you'd see in the trace exactly what value is being used.
-
-These two techniques should help you find both the nondeterministic inputs, and the values that were involved in the failing assertion.
+which indicates that substituting the concrete values `size = 1` and `index = 2^64` in our proof harness will produce the out of bounds access.
 
 </details>
 
@@ -239,6 +220,5 @@ In this section:
 
 1. We saw Kani spot out-of-bounds accesses.
 2. We saw Kani spot actually-unsafe dereferencing of a raw pointer to invalid memory.
-3. We got more experience reading the traces that Kani generates, to debug a failing proof harness.
 3. We saw Kani spot a division by zero error and an overflowing addition.
-5. As an exercise, we tried proving an assertion (finding the midpoint) that was not completely trivial.
+4. As an exercise, we tried proving an assertion (finding the midpoint) that was not completely trivial.

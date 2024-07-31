@@ -1,11 +1,6 @@
 # Concrete Playback
 
-When the result of a certain check comes back as a `FAILURE`,
-Kani offers different options to help debug:
-* `--concrete-playback`. This _experimental_ feature generates a Rust unit test case that plays back a failing
-proof harness using a concrete counterexample.
-* `--visualize`. This feature generates an HTML text-based trace that
-enumerates the execution steps leading to the check failure.
+When the result of a certain check comes back as a `FAILURE`, Kani offers the `concrete-playback` option to help debug. This feature generates a Rust unit test case that plays back a failing proof harness using a concrete counterexample.
 
 When concrete playback is enabled, Kani will generate unit tests for assertions that failed during verification,
 as well as cover statements that are reachable.
