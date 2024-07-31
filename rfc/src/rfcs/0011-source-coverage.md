@@ -307,6 +307,18 @@ discuss in [Future possibilities](#future-possibilities).
 
 #### Understanding the Rust coverage instrumentation
 
+The LLVM coverage instrumentation is implemented in the Rust compiler as a
+[MIR pass called `InstrumentCoverage`](https://rustc-dev-guide.rust-lang.org/llvm-coverage-instrumentation.html#mir-pass-instrumentcoverage).
+
+**Note: Explain what result is important for Kani first**
+
+The MIR pass first builds a coverage-specific version of the MIR Control Flow
+Graph (CFG) from the MIR. The initial version of this CFG is based on the MIR's
+`BasicBlock`s, which then gets refined by combining blocks that can be chained
+from a coverage-relevant point of view. The final version of the coverage CFG
+can then be used to compute the mix of `Counter`s and `Expression`s that
+represent the coverage information.
+
 #### Integrating the instrumentation into Kani
 
 ### The default coverage workflow
