@@ -27,8 +27,7 @@ done
 suite="perf"
 mode="cargo-kani-test"
 echo "Check compiletest suite=$suite mode=$mode"
-cargo run -p compiletest -- --suite $suite --mode $mode --no-fail-fast \
-  --kani-flag="--enable-unstable" --kani-flag="--cbmc-args" --kani-flag="--verbosity" --kani-flag="9"
+cargo run -p compiletest -- --suite $suite --mode $mode --no-fail-fast
 exit_code=$?
 
 echo "Cleaning up..."
