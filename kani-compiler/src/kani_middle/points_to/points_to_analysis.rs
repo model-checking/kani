@@ -1,8 +1,25 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-//! Implementation of points-to analysis using Rust's native dataflow framework. This provides
+//! Implementation of the points-to analysis using Rust's native dataflow framework. This provides
 //! necessary aliasing information for instrumenting delayed UB later on.
+//! 
+//! The analysis uses Rust's dataflow framework by implementing appropriate traits to leverage the
+//! existing fixpoint solver infrastructure. The main trait responsible for the dataflow analysis
+//! behavior is `rustc_mir_dataflow::Analysis`: it provides two methods that are responsible for
+//! handling statements and terminators, which we implement.
+//! 
+//! The analysis proceeds by looking at each instruction in the dataflow order and collecting all
+//! possible aliasing relations that the instruction introduces. If a terminator is a function call,
+//! the analysis recurs into the function and then joins the information retrieved from it into the
+//! original graph.
+//! 
+//! For each instruction, the analysis first resolves dereference projections for each place to
+//! determine which places it could point to. This is done by finding a set of successors in the
+//! graph for each dereference projection.
+//! 
+//! Then, the analysis adds the appropriate edges into the points-to graph. It proceeds until there
+//! is no new information to be discovered.
 
 use crate::kani_middle::{
     points_to::{GlobalMemLoc, LocalMemLoc, PointsToGraph},
@@ -30,7 +47,12 @@ pub struct PointsToAnalysis<'a, 'tcx> {
     def_id: DefId,
     body: Body<'tcx>,
     tcx: TyCtxt<'tcx>,
+    /// This will be used in the future to resolve function pointer and vtable calls. Currently, we
+    /// can resolve call graph edges just by looking at the terminators and erroring if we can't
+    /// resolve the callee.  
     call_graph: &'a CallGraph,
+    /// This graph should contain a subset of the points-to graph reachable from function arguments.
+    /// For the entry function it will be empty.
     initial_graph: PointsToGraph<'tcx>,
 }
 
@@ -45,12 +67,20 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
         initial_graph: PointsToGraph<'tcx>,
     ) -> PointsToGraph<'tcx> {
         let analysis = Self { body: body.clone(), tcx, def_id, call_graph, initial_graph };
+        // This creates a fixpoint solver using the initial graph, the body, and extra information
+        // and produces the cursor, which contains dataflow state for each instruction in the body.
         let mut cursor =
             analysis.into_engine(tcx, &body).iterate_to_fixpoint().into_results_cursor(&body);
+        // We collect dataflow state at each `Return` terminator to determine the full aliasing
+        // graph for the function. This is sound since those are the only places where the function
+        // finishes, so the dataflow state at those places will be a union of dataflow states
+        // preceding to it, which means every possible execution is taken into account.
         let mut results = PointsToGraph::empty();
         for (idx, bb) in body.basic_blocks.iter().enumerate() {
             if let TerminatorKind::Return = bb.terminator().kind {
+                // Switch the cursor to the end of the block ending with `Return`.
                 cursor.seek_to_block_end(idx.into());
+                // Retrieve the dataflow state and join into the results graph.
                 results.consume(cursor.get().clone());
             }
         }
