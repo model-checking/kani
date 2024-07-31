@@ -296,6 +296,19 @@ instrumentation-based coverage feature. In contrast, the
 chapter from the `rustc` development guide documents how the LLVM
 coverage instrumentation is performed in the Rust compiler.
 
+In this section, we will first summarize some information from the
+[LLVM Source-Based Code Coverage](https://rustc-dev-guide.rust-lang.org/llvm-coverage-instrumentation.html)
+chapter, limited to details which are relevant to the development of the
+source-based coverage feature in Kani. Then, we will explain how Kani taps into
+the Rust coverage instrumentation to perform its own coverage instrumentation
+and be able to report source-based code coverage results. This will also include
+mentions to current issues with this implementation, which we plan to further
+discuss in [Future possibilities](#future-possibilities).
+
+#### Understanding the Rust coverage instrumentation
+
+#### Integrating the instrumentation into Kani
+
 ### The default coverage workflow
 
 In this section, we describe the default `--coverage` workflow from a
