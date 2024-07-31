@@ -1,2 +1,1 @@
-Failed Checks: assertion failed: *p_subscoped == 7
 Failed Checks: dereference failure: dead object
