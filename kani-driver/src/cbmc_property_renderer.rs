@@ -162,7 +162,7 @@ enum CoverageStatus {
 const UNSUPPORTED_CONSTRUCT_DESC: &str = "is not currently supported by Kani";
 const UNWINDING_ASSERT_DESC: &str = "unwinding assertion loop";
 const UNWINDING_ASSERT_REC_DESC: &str = "recursion unwinding assertion";
-const DEFAULT_ASSERTION: &str = "assertion";
+const UNDEFINED_FUNCTION_DESC: &str = "undefined function should be unreachable";
 
 impl ParserItem {
     /// Determines if an item must be skipped or not.
@@ -618,8 +618,7 @@ fn modify_undefined_function_checks(mut properties: Vec<Property>) -> (Vec<Prope
     let mut has_unknown_location_checks = false;
     for prop in &mut properties {
         if let Some(function) = &prop.source_location.function
-            && prop.description == DEFAULT_ASSERTION
-            && prop.source_location.file.is_none()
+            && prop.description == UNDEFINED_FUNCTION_DESC
         {
             // Missing functions come with mangled names.
             // `demangle` produces the demangled version if it's a mangled name.
@@ -700,6 +699,7 @@ fn update_properties_with_reach_status(
 /// Update the results of `code_coverage` (NOT `cover`) properties.
 /// - `SUCCESS` -> `UNCOVERED`
 /// - `FAILURE` -> `COVERED`
+///
 /// Note that these statuses are intermediate statuses that aren't reported to
 /// users but rather internally consumed and reported finally as `PARTIAL`, `FULL`
 /// or `NONE` based on aggregated line coverage results.
@@ -720,9 +720,10 @@ fn update_results_of_code_covererage_checks(mut properties: Vec<Property>) -> Ve
 
 /// Update the results of cover properties.
 /// We encode cover(cond) as assert(!cond), so if the assertion
-/// fails, then the cover property is satisfied and vice versa.
+/// fails, then the cover property is satisfied and vice versa:
 /// - SUCCESS -> UNSATISFIABLE
 /// - FAILURE -> SATISFIED
+///
 /// Note that if the cover property was unreachable, its status at this point
 /// will be `CheckStatus::Unreachable` and not `CheckStatus::Success` since
 /// `update_properties_with_reach_status` is called beforehand

@@ -74,6 +74,9 @@ enum KaniAttributeKind {
     /// We use this attribute to properly instantiate `kani::any_modifies` in
     /// cases when recursion is present given our contracts instrumentation.
     Recursion,
+    /// Used to mark functions where generating automatic pointer checks should be disabled. This is
+    /// used later to automatically attach pragma statements to locations.
+    DisableChecks,
 }
 
 impl KaniAttributeKind {
@@ -93,7 +96,8 @@ impl KaniAttributeKind {
             | KaniAttributeKind::CheckedWith
             | KaniAttributeKind::Modifies
             | KaniAttributeKind::InnerCheck
-            | KaniAttributeKind::IsContractGenerated => false,
+            | KaniAttributeKind::IsContractGenerated
+            | KaniAttributeKind::DisableChecks => false,
         }
     }
 
@@ -198,10 +202,6 @@ impl<'tcx> KaniAttributes<'tcx> {
             .collect()
     }
 
-    pub(crate) fn is_contract_generated(&self) -> bool {
-        self.map.contains_key(&KaniAttributeKind::IsContractGenerated)
-    }
-
     pub(crate) fn has_recursion(&self) -> bool {
         self.map.contains_key(&KaniAttributeKind::Recursion)
     }
@@ -235,6 +235,11 @@ impl<'tcx> KaniAttributes<'tcx> {
     /// indicates a contract does exist but an error occurred during resolution.
     pub fn checked_with(&self) -> Option<Result<Symbol, ErrorGuaranteed>> {
         self.expect_maybe_one(KaniAttributeKind::CheckedWith)
+            .map(|target| expect_key_string_value(self.tcx.sess, target))
+    }
+
+    pub fn proof_for_contract(&self) -> Option<Result<Symbol, ErrorGuaranteed>> {
+        self.expect_maybe_one(KaniAttributeKind::ProofForContract)
             .map(|target| expect_key_string_value(self.tcx.sess, target))
     }
 
@@ -381,6 +386,10 @@ impl<'tcx> KaniAttributes<'tcx> {
                 KaniAttributeKind::InnerCheck => {
                     self.inner_check();
                 }
+                KaniAttributeKind::DisableChecks => {
+                    // Ignored here, because it should be an internal attribute. Actual validation
+                    // happens when pragmas are generated.
+                }
             }
         }
     }
@@ -489,6 +498,10 @@ impl<'tcx> KaniAttributes<'tcx> {
                 | KaniAttributeKind::InnerCheck
                 | KaniAttributeKind::ReplacedWith => {
                     self.tcx.dcx().span_err(self.tcx.def_span(self.item), format!("Contracts are not supported on harnesses. (Found the kani-internal contract attribute `{}`)", kind.as_ref()));
+                },
+                KaniAttributeKind::DisableChecks => {
+                    // Internal attribute which shouldn't exist here.
+                    unreachable!()
                 }
             };
             harness
@@ -627,12 +640,12 @@ fn parse_modify_values<'a>(
     std::iter::from_fn(move || {
         let tree = iter.next()?;
         let wrong_token_err =
-            || tcx.sess.psess.dcx.span_err(tree.span(), "Unexpected token. Expected identifier.");
+            || tcx.sess.dcx().span_err(tree.span(), "Unexpected token. Expected identifier.");
         let result = match tree {
             TokenTree::Token(token, _) => {
                 if let TokenKind::Ident(id, _) = &token.kind {
                     let hir = tcx.hir();
-                    let bid = hir.body_owned_by(local_def_id);
+                    let bid = hir.body_owned_by(local_def_id).id();
                     Some(
                         hir.body_param_names(bid)
                             .zip(mir.args_iter())
@@ -654,7 +667,7 @@ fn parse_modify_values<'a>(
         match iter.next() {
             None | Some(comma_tok!()) => (),
             Some(not_comma) => {
-                tcx.sess.psess.dcx.span_err(
+                tcx.sess.dcx().span_err(
                     not_comma.span(),
                     "Unexpected token, expected end of attribute or comma",
                 );
@@ -781,10 +794,10 @@ impl<'a> UnstableAttrParseError<'a> {
         tcx.dcx()
             .struct_span_err(
                 self.attr.span,
-                format!("failed to parse `#[kani::unstable]`: {}", self.reason),
+                format!("failed to parse `#[kani::unstable_feature]`: {}", self.reason),
             )
             .with_note(format!(
-                "expected format: #[kani::unstable({}, {}, {})]",
+                "expected format: #[kani::unstable_feature({}, {}, {})]",
                 r#"feature="<IDENTIFIER>""#, r#"issue="<ISSUE>""#, r#"reason="<DESCRIPTION>""#
             ))
             .emit()
@@ -1033,10 +1046,9 @@ fn attr_kind(tcx: TyCtxt, attr: &Attribute) -> Option<KaniAttributeKind> {
                     .intersperse("::")
                     .collect::<String>();
                 KaniAttributeKind::try_from(ident_str.as_str())
-                    .map_err(|err| {
+                    .inspect_err(|&err| {
                         debug!(?err, "attr_kind_failed");
                         tcx.dcx().span_err(attr.span, format!("unknown attribute `{ident_str}`"));
-                        err
                     })
                     .ok()
             } else {

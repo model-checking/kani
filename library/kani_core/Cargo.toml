@@ -1,0 +1,16 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+
+[package]
+name = "kani_core"
+version = "0.53.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+publish = false
+description = "Define core constructs to use with Kani"
+
+[dependencies]
+kani_macros = { path = "../kani_macros", features = ["no_core"] }
+
+[features]
+no_core=["kani_macros/no_core"]

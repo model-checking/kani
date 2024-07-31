@@ -1,5 +1,6 @@
 Checking harness pre_condition::harness_invalid_ptr...
-Failed Checks: Expected valid pointer, but found dangling pointer
+Failed Checks: Kani does not support reasoning about pointer to unallocated memory
+VERIFICATION:- SUCCESSFUL (encountered one or more panics as expected)
 
 Checking harness pre_condition::harness_stack_ptr...
 VERIFICATION:- SUCCESSFUL
@@ -7,5 +8,4 @@ VERIFICATION:- SUCCESSFUL
 Checking harness pre_condition::harness_head_ptr...
 VERIFICATION:- SUCCESSFUL
 
-Verification failed for - pre_condition::harness_invalid_ptr
-Complete - 2 successfully verified harnesses, 1 failures, 3 total
+Complete - 3 successfully verified harnesses, 0 failures, 3 total

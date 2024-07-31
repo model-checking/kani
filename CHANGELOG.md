@@ -4,9 +4,58 @@ This file contains notable changes (e.g. breaking changes, major changes, etc.) 
 
 This file was introduced starting Kani 0.23.0, so it only contains changes from version 0.23.0 onwards.
 
-## [0.51.0]
+## [0.53.0]
+
+### Major Changes
+* The `--visualize` option is being deprecated and will be removed in a future release. Consider using the `--concrete-playback` option instead.
+* The `-Z ptr-to-ref-cast-checks` option is being introduced to check pointer validity when casting raw pointers to references. The feature is currently behind an unstable flag but is expected to be stabilized in a future release once remaining performance issues have been resolved.
+* The `-Z uninit-checks` option is being introduced to check memory initialization. The feature is currently behind an unstable flag and also requires the `-Z ghost-state` option.
+
+### Breaking Changes
+* Remove support for the unstable argument `--function` by @celinval in https://github.com/model-checking/kani/pull/3278
+* Remove deprecated `--enable-stubbing` by @celinval in https://github.com/model-checking/kani/pull/3309
+
+### What's Changed
+
+* Change ensures into closures by @pi314mm in https://github.com/model-checking/kani/pull/3207
+* (Re)introduce `Invariant` trait by @adpaco-aws in https://github.com/model-checking/kani/pull/3190
+* Remove empty box creation from contracts impl by @celinval in https://github.com/model-checking/kani/pull/3233
+* Add a new verify-std subcommand to Kani by @celinval in https://github.com/model-checking/kani/pull/3231
+* Inject pointer validity check when casting raw pointers to references by @artemagvanian in https://github.com/model-checking/kani/pull/3221
+* Do not turn trivially diverging loops into assume(false) by @tautschnig in https://github.com/model-checking/kani/pull/3223
+* Fix "unused mut" warnings created by generated code. by @jsalzbergedu in https://github.com/model-checking/kani/pull/3247
+* Refactor stubbing so Kani compiler only invoke rustc once per crate by @celinval in https://github.com/model-checking/kani/pull/3245
+* Use cfg=kani_host for host crates by @tautschnig in https://github.com/model-checking/kani/pull/3244
+* Add intrinsics and Arbitrary support for no_core by @jaisnan in https://github.com/model-checking/kani/pull/3230
+* Contracts: Avoid attribute duplication and `const` function generation for constant function by @celinval in https://github.com/model-checking/kani/pull/3255
+* Fix contract of constant fn with effect feature by @celinval in https://github.com/model-checking/kani/pull/3259
+* Fix typed_swap for ZSTs by @tautschnig in https://github.com/model-checking/kani/pull/3256
+* Add a `#[derive(Invariant)]` macro by @adpaco-aws in https://github.com/model-checking/kani/pull/3250
+* Contracts: History Expressions via "old" monad by @pi314mm in https://github.com/model-checking/kani/pull/3232
+* Function Contracts: remove instances of _renamed by @pi314mm in https://github.com/model-checking/kani/pull/3274
+* Deprecate `--visualize` in favor of concrete playback by @celinval in https://github.com/model-checking/kani/pull/3281
+* Fix operand in fat pointer comparison by @pi314mm in https://github.com/model-checking/kani/pull/3297
+* Function Contracts: Closure Type Inference by @pi314mm in https://github.com/model-checking/kani/pull/3307
+* Add support for f16 and f128 for toolchain upgrade to 6/28 by @jaisnan in https://github.com/model-checking/kani/pull/3306
+* Towards Proving Memory Initialization by @artemagvanian in https://github.com/model-checking/kani/pull/3264
+* Rust toolchain upgraded to `nightly-2024-07-01` by @tautschnig @celinval @jaisnan @adpaco-aws
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.52.0...kani-0.53.0
+
+## [0.52.0]
 
 ## What's Changed
+* New section about linter configuraton checking in the doc by @remi-delmas-3000 in https://github.com/model-checking/kani/pull/3198
+* Fix `{,e}println!()` by @GrigorenkoPV in https://github.com/model-checking/kani/pull/3209
+* Contracts for a few core functions by @celinval in https://github.com/model-checking/kani/pull/3107
+* Add simple API for shadow memory by @zhassan-aws in https://github.com/model-checking/kani/pull/3200
+* Upgrade Rust toolchain to 2024-05-28 by @zhassan-aws @remi-delmas-3000 @qinheping
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.51.0...kani-0.52.0
+
+## [0.51.0]
+
+### What's Changed
 
 * Do not assume that ZST-typed symbols refer to unique objects by @tautschnig in https://github.com/model-checking/kani/pull/3134
 * Remove `kani::Arbitrary` from the `modifies` contract instrumentation by @feliperodri in https://github.com/model-checking/kani/pull/3169

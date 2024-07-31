@@ -1,0 +1,7 @@
+Checking harness mem::verify::check_swap_unit...
+
+Failed Checks: ptr NULL or writable up to size
+
+Summary:
+Verification failed for - mem::verify::check_swap_unit
+Complete - 6 successfully verified harnesses, 1 failures, 7 total.

@@ -9,8 +9,8 @@ use syn::{Expr, FnArg, ItemFn, Token};
 
 use super::{
     helpers::*,
-    shared::{make_unsafe_argument_copies, try_as_result_assign_mut},
-    ContractConditionsData, ContractConditionsHandler,
+    shared::{build_ensures, try_as_result_assign_mut},
+    ContractConditionsData, ContractConditionsHandler, INTERNAL_RESULT_IDENT,
 };
 
 const WRAPPER_ARG_PREFIX: &str = "_wrapper_arg_";
@@ -33,27 +33,27 @@ impl<'a> ContractConditionsHandler<'a> {
                     #(#inner)*
                 )
             }
-            ContractConditionsData::Ensures { argument_names, attr } => {
-                let (arg_copies, copy_clean) = make_unsafe_argument_copies(&argument_names);
+            ContractConditionsData::Ensures { attr } => {
+                let (remembers, ensures_clause) = build_ensures(attr);
 
                 // The code that enforces the postconditions and cleans up the shallow
                 // argument copies (with `mem::forget`).
                 let exec_postconditions = quote!(
-                    kani::assert(#attr, stringify!(#attr_copy));
-                    #copy_clean
+                    kani::assert(#ensures_clause, stringify!(#attr_copy));
                 );
 
                 assert!(matches!(
                     inner.pop(),
                     Some(syn::Stmt::Expr(syn::Expr::Path(pexpr), None))
-                        if pexpr.path.get_ident().map_or(false, |id| id == "result")
+                        if pexpr.path.get_ident().map_or(false, |id| id == INTERNAL_RESULT_IDENT)
                 ));
 
+                let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
                 quote!(
-                    #arg_copies
+                    #remembers
                     #(#inner)*
                     #exec_postconditions
-                    result
+                    #result
                 )
             }
             ContractConditionsData::Modifies { attr } => {
@@ -95,9 +95,10 @@ impl<'a> ContractConditionsHandler<'a> {
             } else {
                 quote!(#wrapper_name)
             };
+            let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
             syn::parse_quote!(
-                let result : #return_type = #wrapper_call(#(#args),*);
-                result
+                let #result : #return_type = #wrapper_call(#(#args),*);
+                #result
             )
         } else {
             self.annotated_fn.block.stmts.clone()
@@ -118,6 +119,8 @@ impl<'a> ContractConditionsHandler<'a> {
         }
         let body = self.make_check_body();
         let mut sig = self.annotated_fn.sig.clone();
+        // We use non-constant functions, thus, the wrapper cannot be constant.
+        sig.constness = None;
         if let Some(ident) = override_function_dent {
             sig.ident = ident;
         }
@@ -153,11 +156,19 @@ impl<'a> ContractConditionsHandler<'a> {
             let sig = &mut self.annotated_fn.sig;
             for (arg, arg_type) in wrapper_args.clone().zip(type_params) {
                 // Add the type parameter to the function signature's generic parameters list
+                let mut bounds: syn::punctuated::Punctuated<syn::TypeParamBound, syn::token::Plus> =
+                    syn::punctuated::Punctuated::new();
+                bounds.push(syn::TypeParamBound::Trait(syn::TraitBound {
+                    paren_token: None,
+                    modifier: syn::TraitBoundModifier::Maybe(Token![?](Span::call_site())),
+                    lifetimes: None,
+                    path: syn::Ident::new("Sized", Span::call_site()).into(),
+                }));
                 sig.generics.params.push(syn::GenericParam::Type(syn::TypeParam {
                     attrs: vec![],
                     ident: arg_type.clone(),
-                    colon_token: None,
-                    bounds: Default::default(),
+                    colon_token: Some(Token![:](Span::call_site())),
+                    bounds: bounds,
                     eq_token: None,
                     default: None,
                 }));

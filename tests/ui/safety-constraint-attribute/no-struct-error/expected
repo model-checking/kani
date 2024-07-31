@@ -1,0 +1,6 @@
+error: Cannot derive `Invariant` for `MyEnum`
+   |
+| #[derive(kani::Invariant)]
+   |          ^^^^^^^^^^^^^^^
+   |
+note: `#[safety_constraint(...)]` can only be used in structs

@@ -283,10 +283,10 @@ struct TypeVisitor<'a> {
 }
 
 impl<'a> TypeVisitor<'a> {
-    pub fn visit_variants(&mut self, def: AdtDef, args: &GenericArgs) -> ControlFlow<()> {
+    pub fn visit_variants(&mut self, def: AdtDef, _args: &GenericArgs) -> ControlFlow<()> {
         for variant in def.variants_iter() {
             for field in variant.fields() {
-                self.visit_ty(&field.ty_with_args(args))?
+                self.visit_ty(&field.ty())?
             }
         }
         ControlFlow::Continue(())
@@ -425,11 +425,11 @@ impl<'a> MirVisitor for BodyVisitor<'a> {
         self.super_projection_elem(elem, ptx, location)
     }
 
-    fn visit_constant(&mut self, constant: &Constant, location: Location) {
+    fn visit_mir_const(&mut self, constant: &MirConst, location: Location) {
         if constant.ty().kind().is_raw_ptr() {
             self.props.unsafe_static_access += 1;
         }
-        self.super_constant(constant, location)
+        self.super_mir_const(constant, location)
     }
 }
 
