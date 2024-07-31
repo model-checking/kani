@@ -1140,7 +1140,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// Mapping enums to CBMC types is rather complicated. There are a few cases to consider:
     /// 1. When there is only 0 or 1 variant, this is straightforward as the code shows
-    /// 2. When there are more variants, rust might decides to apply the typical encoding which
+    /// 2. When there are more variants, rust might decide to apply the typical encoding which
     ///    regard enums as tagged union, or an optimized form, called niche encoding.
     ///
     /// The direct encoding is straightforward. Enums are just mapped to C as a struct of union of structs.
@@ -1229,8 +1229,7 @@ impl<'tcx> GotocCtx<'tcx> {
                             }
                             let union_name = format!("{name}-union");
                             let union_pretty_name = format!("{pretty_name}-union");
-                            fields.push(DatatypeComponent::field(
-                                "cases",
+                            let cases =
                                 gcx.ensure_union(&union_name, &union_pretty_name, |ctx, name| {
                                     ctx.codegen_enum_cases(
                                         name,
@@ -1240,8 +1239,17 @@ impl<'tcx> GotocCtx<'tcx> {
                                         variants,
                                         initial_offset,
                                     )
-                                }),
-                            ));
+                                });
+                            let cases_size = Size::from_bytes(cases.sizeof(&gcx.symbol_table));
+                            fields.push(DatatypeComponent::field("cases", cases));
+                            // Check if any padding is needed for alignment. This is needed for
+                            // https://github.com/model-checking/kani/issues/2857 for example.
+                            let bytes_so_far = initial_offset + cases_size;
+                            if let Some(padding) =
+                                gcx.codegen_alignment_padding(bytes_so_far, &layout, fields.len())
+                            {
+                                fields.push(padding);
+                            }
                             fields
                         })
                     }
