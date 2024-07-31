@@ -21,8 +21,11 @@ where
 
 #[kani::proof]
 fn main() {
-    foo(|| {
-        yield 1;
-        return 2;
-    });
+    foo(
+        #[coroutine]
+        || {
+            yield 1;
+            return 2;
+        },
+    );
 }

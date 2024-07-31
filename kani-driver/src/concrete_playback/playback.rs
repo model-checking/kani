@@ -6,7 +6,7 @@
 use crate::args::common::Verbosity;
 use crate::args::playback_args::{CargoPlaybackArgs, KaniPlaybackArgs, MessageFormat};
 use crate::call_cargo::cargo_config_args;
-use crate::call_single_file::base_rustc_flags;
+use crate::call_single_file::{base_rustc_flags, LibConfig};
 use crate::session::{lib_playback_folder, setup_cargo_command, InstallType};
 use crate::{session, util};
 use anyhow::Result;
@@ -70,7 +70,7 @@ fn build_test(install: &InstallType, args: &KaniPlaybackArgs) -> Result<PathBuf>
         util::info_operation("Building", args.input.to_string_lossy().deref());
     }
 
-    let mut rustc_args = base_rustc_flags(lib_playback_folder()?);
+    let mut rustc_args = base_rustc_flags(LibConfig::new(lib_playback_folder()?));
     rustc_args.push("--test".into());
     rustc_args.push(OsString::from(&args.input));
     rustc_args.push(format!("--crate-name={TEST_BIN_NAME}").into());
@@ -96,7 +96,7 @@ fn cargo_test(args: CargoPlaybackArgs) -> Result<()> {
     let install = InstallType::new()?;
     let mut cmd = setup_cargo_command()?;
 
-    let rustc_args = base_rustc_flags(lib_playback_folder()?);
+    let rustc_args = base_rustc_flags(LibConfig::new(lib_playback_folder()?));
     let mut cargo_args: Vec<OsString> = vec!["test".into()];
 
     if args.playback.common_opts.verbose() {

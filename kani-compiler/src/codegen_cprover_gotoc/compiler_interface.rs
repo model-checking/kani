@@ -7,25 +7,24 @@ use crate::args::ReachabilityType;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::kani_middle::analysis;
 use crate::kani_middle::attributes::{is_test_harness_description, KaniAttributes};
-use crate::kani_middle::metadata::{canonical_mangled_name, gen_test_metadata};
+use crate::kani_middle::check_reachable_items;
+use crate::kani_middle::codegen_units::{CodegenUnit, CodegenUnits};
+use crate::kani_middle::metadata::gen_test_metadata;
 use crate::kani_middle::provide;
 use crate::kani_middle::reachability::{
     collect_reachable_items, filter_const_crate_items, filter_crate_items,
 };
-use crate::kani_middle::transform::BodyTransformation;
-use crate::kani_middle::{check_reachable_items, dump_mir_items};
+use crate::kani_middle::transform::{BodyTransformation, GlobalPasses};
 use crate::kani_queries::QueryDb;
 use cbmc::goto_program::Location;
 use cbmc::irep::goto_binary_serde::write_goto_binary_file;
-use cbmc::{InternString, RoundingMode};
+use cbmc::RoundingMode;
 use cbmc::{InternedString, MachineModel};
 use kani_metadata::artifact::convert_type;
 use kani_metadata::UnsupportedFeature;
 use kani_metadata::{ArtifactType, HarnessMetadata, KaniMetadata};
 use kani_metadata::{AssignsContract, CompilerArtifactStub};
-use rustc_codegen_ssa::back::archive::{
-    get_native_object_symbols, ArArchiveBuilder, ArchiveBuilder,
-};
+use rustc_codegen_ssa::back::archive::{ArArchiveBuilder, ArchiveBuilder, DEFAULT_OBJECT_READER};
 use rustc_codegen_ssa::back::metadata::create_wrapper_file;
 use rustc_codegen_ssa::traits::CodegenBackend;
 use rustc_codegen_ssa::{CodegenResults, CrateInfo};
@@ -49,7 +48,6 @@ use stable_mir::mir::mono::{Instance, MonoItem};
 use stable_mir::{CrateDef, DefId};
 use std::any::Any;
 use std::collections::BTreeMap;
-use std::collections::HashSet;
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::fs::File;
@@ -89,11 +87,33 @@ impl GotocCodegenBackend {
         check_contract: Option<InternalDefId>,
         mut transformer: BodyTransformation,
     ) -> (GotocCtx<'tcx>, Vec<MonoItem>, Option<AssignsContract>) {
-        let items = with_timer(
+        let (items, call_graph) = with_timer(
             || collect_reachable_items(tcx, &mut transformer, starting_items),
             "codegen reachability analysis",
         );
-        dump_mir_items(tcx, &items, &symtab_goto.with_extension("kani.mir"));
+
+        // Retrieve all instances from the currently codegened items.
+        let instances = items
+            .iter()
+            .filter_map(|item| match item {
+                MonoItem::Fn(instance) => Some(*instance),
+                MonoItem::Static(static_def) => {
+                    let instance: Instance = (*static_def).into();
+                    instance.has_body().then_some(instance)
+                }
+                MonoItem::GlobalAsm(_) => None,
+            })
+            .collect();
+
+        // Apply all transformation passes, including global passes.
+        let mut global_passes = GlobalPasses::new(&self.queries.lock().unwrap(), tcx);
+        global_passes.run_global_passes(
+            &mut transformer,
+            tcx,
+            starting_items,
+            instances,
+            call_graph,
+        );
 
         // Follow rustc naming convention (cx is abbrev for context).
         // https://rustc-dev-guide.rust-lang.org/conventions.html#naming-conventions
@@ -133,7 +153,7 @@ impl GotocCodegenBackend {
                                 format!(
                                     "codegen_function: {}\n{}",
                                     instance.name(),
-                                    gcx.symbol_name_stable(instance)
+                                    instance.mangled_name()
                                 ),
                                 instance.def,
                             );
@@ -231,43 +251,43 @@ impl CodegenBackend for GotocCodegenBackend {
             let base_filepath = tcx.output_filenames(()).path(OutputType::Object);
             let base_filename = base_filepath.as_path();
             let reachability = queries.args().reachability_analysis;
-            let mut transformer = BodyTransformation::new(&queries, tcx);
             let mut results = GotoCodegenResults::new(tcx, reachability);
             match reachability {
                 ReachabilityType::Harnesses => {
+                    let mut units = CodegenUnits::new(&queries, tcx);
+                    let mut modifies_instances = vec![];
                     // Cross-crate collecting of all items that are reachable from the crate harnesses.
-                    let harnesses = queries.target_harnesses();
-                    let mut items: HashSet<_> = HashSet::with_capacity(harnesses.len());
-                    items.extend(harnesses);
-                    let harnesses = filter_crate_items(tcx, |_, instance| {
-                        items.contains(&instance.mangled_name().intern())
-                    });
-                    for harness in harnesses {
-                        let model_path =
-                            queries.harness_model_path(&harness.mangled_name()).unwrap();
-                        let contract_metadata =
-                            contract_metadata_for_harness(tcx, harness.def.def_id()).unwrap();
-                        let (gcx, items, contract_info) = self.codegen_items(
-                            tcx,
-                            &[MonoItem::Fn(harness)],
-                            model_path,
-                            &results.machine_model,
-                            contract_metadata,
-                            transformer,
-                        );
-                        transformer = results.extend(gcx, items, None);
-                        if let Some(assigns_contract) = contract_info {
-                            self.queries.lock().unwrap().register_assigns_contract(
-                                canonical_mangled_name(harness).intern(),
-                                assigns_contract,
+                    for unit in units.iter() {
+                        // We reset the body cache for now because each codegen unit has different
+                        // configurations that affect how we transform the instance body.
+                        let mut transformer = BodyTransformation::new(&queries, tcx, &unit);
+                        for harness in &unit.harnesses {
+                            let model_path = units.harness_model_path(*harness).unwrap();
+                            let contract_metadata =
+                                contract_metadata_for_harness(tcx, harness.def.def_id()).unwrap();
+                            let (gcx, items, contract_info) = self.codegen_items(
+                                tcx,
+                                &[MonoItem::Fn(*harness)],
+                                model_path,
+                                &results.machine_model,
+                                contract_metadata,
+                                transformer,
                             );
+                            transformer = results.extend(gcx, items, None);
+                            if let Some(assigns_contract) = contract_info {
+                                modifies_instances.push((*harness, assigns_contract));
+                            }
                         }
                     }
+                    units.store_modifies(&modifies_instances);
+                    units.write_metadata(&queries, tcx);
                 }
                 ReachabilityType::Tests => {
                     // We're iterating over crate items here, so what we have to codegen is the "test description" containing the
                     // test closure that we want to execute
                     // TODO: Refactor this code so we can guarantee that the pair (test_fn, test_desc) actually match.
+                    let unit = CodegenUnit::default();
+                    let mut transformer = BodyTransformation::new(&queries, tcx, &unit);
                     let mut descriptions = vec![];
                     let harnesses = filter_const_crate_items(tcx, &mut transformer, |_, item| {
                         if is_test_harness_description(tcx, item.def) {
@@ -310,6 +330,8 @@ impl CodegenBackend for GotocCodegenBackend {
                 }
                 ReachabilityType::None => {}
                 ReachabilityType::PubFns => {
+                    let unit = CodegenUnit::default();
+                    let transformer = BodyTransformation::new(&queries, tcx, &unit);
                     let main_instance =
                         stable_mir::entry_fn().map(|main_fn| Instance::try_from(main_fn).unwrap());
                     let local_reachable = filter_crate_items(tcx, |_, instance| {
@@ -400,7 +422,7 @@ impl CodegenBackend for GotocCodegenBackend {
             debug!(?crate_type, ?out_path, "link");
             if *crate_type == CrateType::Rlib {
                 // Emit the `rlib` that contains just one file: `<crate>.rmeta`
-                let mut builder = Box::new(ArArchiveBuilder::new(sess, get_native_object_symbols));
+                let mut builder = Box::new(ArArchiveBuilder::new(sess, &DEFAULT_OBJECT_READER));
                 let tmp_dir = TempFileBuilder::new().prefix("kani").tempdir().unwrap();
                 let path = MaybeTempDir::new(tmp_dir, sess.opts.cg.save_temps);
                 let (metadata, _metadata_position) = create_wrapper_file(

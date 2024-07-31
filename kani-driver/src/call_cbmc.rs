@@ -153,6 +153,11 @@ impl KaniSession {
 
         args.push(file.to_owned().into_os_string());
 
+        // Make CBMC verbose by default to tell users about unwinding progress. This should be
+        // reviewed as CBMC's verbosity defaults evolve.
+        args.push("--verbosity".into());
+        args.push("9".into());
+
         Ok(args)
     }
 
@@ -160,18 +165,25 @@ impl KaniSession {
     pub fn cbmc_check_flags(&self) -> Vec<OsString> {
         let mut args = Vec::new();
 
-        if self.args.checks.memory_safety_on() {
-            args.push("--bounds-check".into());
-            args.push("--pointer-check".into());
+        // We assume that malloc cannot fail, see https://github.com/model-checking/kani/issues/891
+        args.push("--no-malloc-may-fail".into());
+
+        // With PR #2630 we generate the appropriate checks directly rather than relying on CBMC's
+        // checks (which are for C semantics).
+        args.push("--no-undefined-shift-check".into());
+        // With PR #647 we use Rust's `-C overflow-checks=on` instead of:
+        // --unsigned-overflow-check
+        // --signed-overflow-check
+        // So these options are deliberately skipped to avoid erroneously re-checking operations.
+        args.push("--no-signed-overflow-check".into());
+
+        if !self.args.checks.memory_safety_on() {
+            args.push("--no-bounds-check".into());
+            args.push("--no-pointer-check".into());
         }
         if self.args.checks.overflow_on() {
-            args.push("--div-by-zero-check".into());
             args.push("--float-overflow-check".into());
             args.push("--nan-check".into());
-            // With PR #647 we use Rust's `-C overflow-checks=on` instead of:
-            // --unsigned-overflow-check
-            // --signed-overflow-check
-            // So these options are deliberately skipped to avoid erroneously re-checking operations.
 
             // TODO: Implement conversion checks as an optional check.
             // They are a well defined operation in rust, but they may yield unexpected results to
@@ -179,10 +191,14 @@ impl KaniSession {
             // We might want to create a transformation pass instead of enabling CBMC since Kani
             // compiler sometimes rely on the bitwise conversion of signed <-> unsigned.
             // args.push("--conversion-check".into());
+        } else {
+            args.push("--no-div-by-zero-check".into());
         }
 
-        if self.args.checks.unwinding_on() {
-            args.push("--unwinding-assertions".into());
+        if !self.args.checks.unwinding_on() {
+            args.push("--no-unwinding-assertions".into());
+        } else {
+            args.push("--no-self-loops-to-assumptions".into());
         }
 
         if self.args.extra_pointer_checks {
@@ -190,7 +206,8 @@ impl KaniSession {
             // still catch any invalid dereference with --pointer-check. Thus, only enable them
             // if the user explicitly request them.
             args.push("--pointer-overflow-check".into());
-            args.push("--pointer-primitive-check".into());
+        } else {
+            args.push("--no-pointer-primitive-check".into());
         }
 
         args
@@ -400,7 +417,7 @@ pub fn resolve_unwind_value(
 #[cfg(test)]
 mod tests {
     use crate::args;
-    use crate::metadata::mock_proof_harness;
+    use crate::metadata::tests::mock_proof_harness;
     use clap::Parser;
 
     use super::*;

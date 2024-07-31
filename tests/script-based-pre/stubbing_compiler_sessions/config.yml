@@ -1,4 +1,0 @@
-# Copyright Kani Contributors
-# SPDX-License-Identifier: Apache-2.0 OR MIT
-script: check_compiler_sessions.sh
-expected: check_compiler_sessions.expected

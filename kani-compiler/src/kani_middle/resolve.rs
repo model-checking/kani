@@ -247,7 +247,7 @@ where
 /// Resolves an external crate name.
 fn resolve_external(tcx: TyCtxt, name: &str) -> Option<DefId> {
     debug!(?name, "resolve_external");
-    tcx.crates(()).iter().find_map(|crate_num| {
+    tcx.used_crates(()).iter().find_map(|crate_num| {
         let crate_name = tcx.crate_name(*crate_num);
         if crate_name.as_str() == name {
             Some(DefId { index: CRATE_DEF_INDEX, krate: *crate_num })
