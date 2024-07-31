@@ -9,9 +9,9 @@ use serde::{ser::SerializeStruct, Serialize, Serializer};
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::visit::{Location, PlaceContext, PlaceRef};
 use stable_mir::mir::{
-    Body, Constant, MirVisitor, Mutability, ProjectionElem, Safety, Terminator, TerminatorKind,
+    Body, MirVisitor, Mutability, ProjectionElem, Safety, Terminator, TerminatorKind,
 };
-use stable_mir::ty::{AdtDef, AdtKind, FnDef, GenericArgs, RigidTy, Ty, TyKind};
+use stable_mir::ty::{AdtDef, AdtKind, FnDef, GenericArgs, MirConst, RigidTy, Ty, TyKind};
 use stable_mir::visitor::{Visitable, Visitor};
 use stable_mir::{CrateDef, CrateItem};
 use std::collections::{HashMap, HashSet};
@@ -94,7 +94,7 @@ impl OverallStats {
                     return None;
                 };
                 let fn_sig = kind.fn_sig().unwrap();
-                let is_unsafe = fn_sig.skip_binder().unsafety == Safety::Unsafe;
+                let is_unsafe = fn_sig.skip_binder().safety == Safety::Unsafe;
                 self.fn_stats.get_mut(&item).unwrap().is_unsafe = Some(is_unsafe);
                 Some((item, is_unsafe))
             })
@@ -139,7 +139,7 @@ impl OverallStats {
                 };
                 let unsafe_ops = FnUnsafeOperations::new(item.name()).collect(&item.body());
                 let fn_sig = kind.fn_sig().unwrap();
-                let is_unsafe = fn_sig.skip_binder().unsafety == Safety::Unsafe;
+                let is_unsafe = fn_sig.skip_binder().safety == Safety::Unsafe;
                 self.fn_stats.get_mut(&item).unwrap().has_unsafe_ops =
                     Some(unsafe_ops.has_unsafe());
                 Some((is_unsafe, unsafe_ops))
@@ -387,7 +387,7 @@ impl<'a> MirVisitor for BodyVisitor<'a> {
         match &term.kind {
             TerminatorKind::Call { func, .. } => {
                 let fn_sig = func.ty(self.body.locals()).unwrap().kind().fn_sig().unwrap();
-                if fn_sig.value.unsafety == Safety::Unsafe {
+                if fn_sig.value.safety == Safety::Unsafe {
                     self.props.unsafe_call += 1;
                 }
             }

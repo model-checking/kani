@@ -94,7 +94,7 @@ summary=$results/summary.csv
 
 # write header
 echo -n "crate," > $summary
-tr -d [:digit:], < $results/alloc_scan_overall.csv \
+tr -d "[:digit:],;" < $results/alloc_scan_overall.csv \
     | tr -s '\n' ',' >> $summary
 echo "" >> $summary
 
@@ -104,7 +104,7 @@ for f in $results/*overall.csv; do
     fname=$(basename $f)
     crate=${fname%_scan_overall.csv}
     echo -n "$crate," >> $summary
-    tr -d [:alpha:]_, < $f | tr -s '\n' ',' \
+    tr -d [:alpha:]_,; < $f | tr -s '\n' ',' \
         >> $summary
     echo "" >> $summary
 done
