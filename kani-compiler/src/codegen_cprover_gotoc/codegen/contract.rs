@@ -17,8 +17,8 @@ impl<'tcx> GotocCtx<'tcx> {
     /// find or create the `AssignsContract` that needs to be enforced and attach it to the symbol
     /// for which it needs to be enforced.
     ///
-    /// 1. Gets the `#[kanitool::inner_check = "..."]` target, then resolves exactly one instance
-    ///    of it. Panics if there are more or less than one instance.
+    /// 1. Gets the `#[kanitool::modifies_wrapper = "..."]` target, then resolves exactly one
+    ///    instance of it. Panics if there are more or less than one instance.
     /// 2. The additional arguments for the inner checks are locations that may be modified.
     ///    Add them to the list of CBMC's assigns.
     /// 3. Returns the mangled name of the symbol it attached the contract to.
@@ -107,13 +107,13 @@ impl<'tcx> GotocCtx<'tcx> {
                 None
             })
         };
-        let outside_check = if contract_attrs.has_recursion {
-            find_closure(instance, contract_attrs.recursion_check.as_str())?
+        let check_instance = if contract_attrs.has_recursion {
+            let recursion_check = find_closure(instance, contract_attrs.recursion_check.as_str())?;
+            find_closure(recursion_check, contract_attrs.checked_with.as_str())?
         } else {
-            instance
+            find_closure(instance, contract_attrs.checked_with.as_str())?
         };
-        let check = find_closure(outside_check, contract_attrs.checked_with.as_str())?;
-        find_closure(check, contract_attrs.inner_check.as_str())
+        find_closure(check_instance, contract_attrs.modifies_wrapper.as_str())
     }
 
     /// Convert the Kani level contract into a CBMC level contract by creating a

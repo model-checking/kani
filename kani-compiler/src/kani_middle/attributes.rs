@@ -54,12 +54,12 @@ enum KaniAttributeKind {
     /// Attribute on a function that was auto-generated from expanding a
     /// function contract.
     IsContractGenerated,
-    /// A function used as the inner code of a contract check.
+    /// A function with contract expanded to include the write set as arguments.
     ///
     /// Contains the original body of the contracted function. The signature is
     /// expanded with additional pointer arguments that are not used in the function
     /// but referenced by the `modifies` annotation.
-    InnerCheck,
+    ModifiesWrapper,
     /// Attribute used to mark contracts for functions with recursion.
     /// We use this attribute to properly instantiate `kani::any_modifies` in
     /// cases when recursion is present given our contracts instrumentation.
@@ -92,7 +92,7 @@ impl KaniAttributeKind {
             | KaniAttributeKind::ReplacedWith
             | KaniAttributeKind::RecursionCheck
             | KaniAttributeKind::CheckedWith
-            | KaniAttributeKind::InnerCheck
+            | KaniAttributeKind::ModifiesWrapper
             | KaniAttributeKind::IsContractGenerated
             | KaniAttributeKind::DisableChecks => false,
         }
@@ -134,7 +134,7 @@ pub struct ContractAttributes {
     /// The name of the contract replacement.
     pub replaced_with: Symbol,
     /// The name of the inner check used to modify clauses.
-    pub inner_check: Symbol,
+    pub modifies_wrapper: Symbol,
 }
 
 impl<'tcx> std::fmt::Debug for KaniAttributes<'tcx> {
@@ -262,13 +262,13 @@ impl<'tcx> KaniAttributes<'tcx> {
         let recursion_check = self.attribute_value(KaniAttributeKind::RecursionCheck);
         let checked_with = self.attribute_value(KaniAttributeKind::CheckedWith);
         let replace_with = self.attribute_value(KaniAttributeKind::ReplacedWith);
-        let inner_check = self.attribute_value(KaniAttributeKind::InnerCheck);
+        let modifies_wrapper = self.attribute_value(KaniAttributeKind::ModifiesWrapper);
 
         let total = recursion_check
             .iter()
             .chain(&checked_with)
             .chain(&replace_with)
-            .chain(&inner_check)
+            .chain(&modifies_wrapper)
             .count();
         if total != 0 && total != 4 {
             self.tcx.sess.dcx().err(format!(
@@ -282,7 +282,7 @@ impl<'tcx> KaniAttributes<'tcx> {
             recursion_check: recursion_check?,
             checked_with: checked_with?,
             replaced_with: replace_with?,
-            inner_check: inner_check?,
+            modifies_wrapper: modifies_wrapper?,
         })
     }
 
@@ -373,7 +373,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                 }
                 KaniAttributeKind::FnMarker
                 | KaniAttributeKind::CheckedWith
-                | KaniAttributeKind::InnerCheck
+                | KaniAttributeKind::ModifiesWrapper
                 | KaniAttributeKind::RecursionCheck
                 | KaniAttributeKind::ReplacedWith => {
                     self.attribute_value(kind);
@@ -505,7 +505,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                 }
                 KaniAttributeKind::CheckedWith
                 | KaniAttributeKind::IsContractGenerated
-                | KaniAttributeKind::InnerCheck
+                | KaniAttributeKind::ModifiesWrapper
                 | KaniAttributeKind::RecursionCheck
                 | KaniAttributeKind::RecursionTracker
                 | KaniAttributeKind::ReplacedWith => {

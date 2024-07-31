@@ -78,31 +78,12 @@ impl TransformPass for AnyModifiesPass {
 impl AnyModifiesPass {
     /// Build the pass with non-extern function stubs.
     pub fn new(tcx: TyCtxt, unit: &CodegenUnit) -> AnyModifiesPass {
-        let item_fn_def = |item| {
-            let TyKind::RigidTy(RigidTy::FnDef(def, _)) =
-                rustc_internal::stable(tcx.type_of(item)).value.kind()
-            else {
-                unreachable!("Expected function, but found `{:?}`", tcx.def_path_str(item))
-            };
-            def
-        };
-        let kani_any =
-            tcx.get_diagnostic_item(rustc_span::symbol::Symbol::intern("KaniAny")).map(item_fn_def);
-        let kani_any_modifies = tcx
-            .get_diagnostic_item(rustc_span::symbol::Symbol::intern("KaniAnyModifies"))
-            .map(item_fn_def);
-        let kani_write_any = tcx
-            .get_diagnostic_item(rustc_span::symbol::Symbol::intern("KaniWriteAny"))
-            .map(item_fn_def);
-        let kani_write_any_slim = tcx
-            .get_diagnostic_item(rustc_span::symbol::Symbol::intern("KaniWriteAnySlim"))
-            .map(item_fn_def);
-        let kani_write_any_slice = tcx
-            .get_diagnostic_item(rustc_span::symbol::Symbol::intern("KaniWriteAnySlice"))
-            .map(item_fn_def);
-        let kani_write_any_str = tcx
-            .get_diagnostic_item(rustc_span::symbol::Symbol::intern("KaniWriteAnyStr"))
-            .map(item_fn_def);
+        let kani_any = find_fn_def(tcx, "KaniAny");
+        let kani_any_modifies = find_fn_def(tcx, "KaniAnyModifies");
+        let kani_write_any = find_fn_def(tcx, "KaniWriteAny");
+        let kani_write_any_slim = find_fn_def(tcx, "KaniWriteAnySlim");
+        let kani_write_any_slice = find_fn_def(tcx, "KaniWriteAnySlice");
+        let kani_write_any_str = find_fn_def(tcx, "KaniWriteAnyStr");
         let target_fn = if let Some(harness) = unit.harnesses.first() {
             let attributes = KaniAttributes::for_instance(tcx, *harness);
             let target_fn =
@@ -242,7 +223,7 @@ impl AnyModifiesPass {
 /// #[kanitool::recursion_check = "__kani_recursion_check_modify"]
 /// #[kanitool::checked_with = "__kani_check_modify"]
 /// #[kanitool::replaced_with = "__kani_replace_modify"]
-/// #[kanitool::inner_check = "__kani_modifies_modify"]
+/// #[kanitool::modifies_wrapper = "__kani_modifies_modify"]
 /// fn name_fn(ptr: &mut u32) {
 ///     #[kanitool::fn_marker = "kani_register_contract"]
 ///     pub const fn kani_register_contract<T, F: FnOnce() -> T>(f: F) -> T {
@@ -289,6 +270,8 @@ pub struct FunctionWithContractPass {
     /// are not to be used in this harness.
     /// In order to avoid bringing unnecessary logic, we clear their body.
     unused_closures: HashSet<ClosureDef>,
+    /// Cache KaniRunContract function used to implement contracts.
+    run_contract_fn: Option<FnDef>,
 }
 
 impl TransformPass for FunctionWithContractPass {
@@ -318,8 +301,7 @@ impl TransformPass for FunctionWithContractPass {
                 } else if KaniAttributes::for_instance(tcx, instance).fn_marker()
                     == Some(Symbol::intern("kani_register_contract"))
                 {
-                    let run = Instance::resolve(find_fn_def(tcx, "KaniRunContract").unwrap(), args)
-                        .unwrap();
+                    let run = Instance::resolve(self.run_contract_fn.unwrap(), args).unwrap();
                     (true, run.body().unwrap())
                 } else {
                     // Not a contract annotated function
@@ -357,9 +339,17 @@ impl FunctionWithContractPass {
                 .iter()
                 .map(|(_, def_id, _)| *def_id)
                 .collect();
-            FunctionWithContractPass { check_fn, replace_fns, unused_closures: Default::default() }
+            let run_contract_fn = find_fn_def(tcx, "KaniRunContract");
+            assert!(run_contract_fn.is_some(), "Failed to find Kani run contract function");
+            FunctionWithContractPass {
+                check_fn,
+                replace_fns,
+                unused_closures: Default::default(),
+                run_contract_fn,
+            }
         } else {
-            // Building the model for tests or public functions.
+            // If reachability mode is PubFns or Tests, we just remove any contract logic.
+            // Note that in this path there is no proof harness.
             FunctionWithContractPass::default()
         }
     }

@@ -10,7 +10,7 @@
 //! implements a state machine in order to be able to handle multiple attributes
 //! on the same function correctly.
 //!
-//! ## How the handling for `requires` and `ensures` works.
+//! ## How the handling for `requires`, `modifies`, and `ensures` works.
 //!
 //! Our aim is to generate a "check" function that can be used to verify the
 //! validity of the contract and a "replace" function that can be used as a
@@ -31,48 +31,19 @@
 //! addition, we also want to make sure to support non-contract attributes on
 //! functions with contracts.
 //!
-//! To this end we use a state machine with two states. The initial state is an "untouched"
-//! function with possibly multiple contract attributes, none of which have been
-//! expanded. When we expand the first (outermost) contract
-//! attribute on such a function we re-emit the function with a few closures defined
-//! in their body, which correspond to the "check", "recursive" and "replace" that enforce the
-//! condition carried by the attribute currently being expanded.
+//! To this end we generate attributes in a two-phase approach: initial and subsequent expansions.
 //!
-//! We also add new marker attributes to the original function to
-//! advance the state machine. The re-emitted original meanwhile is decorated with
-//! `kanitool::checked_with(name_of_generated_check_variable)` and an analogous
-//! `kanittool::replaced_with` attribute also.
-//! Each closure gets a `kanitool::is_contract_generated(<KIND>)` attributes.
-//! The next contract attribute that
-//! is expanded will detect the presence of these markers in the attributes of
-//! the item and be able to determine their position in the state machine this
-//! way.
+//! The initial expansion modifies the original function to contains all necessary instrumentation
+//! contracts need to be analyzed. It will do the following:
+//! 1. Annotate the function with extra `kanitool` attributes
+//! 2. Generate closures for each contract processing scenario (recursive check, simple check,
+//! replacement, and regular execution).
 //!
-//! Subsequent run, will expand the existing definitions with the condition being processed.
+//! Subsequent expansions will detect the existence of the extra `kanitool` attributes,
+//! and they will only expand the body of the closures generated in the initial phase.
 //!
 //! Note: We place marker attributes at the bottom of the attribute stack (innermost),
 //! otherwise they would not be visible to the future macro expansions.
-//!
-//! Below you can see a graphical rendering where boxes are states and each
-//! arrow represents the expansion of a `requires` or `ensures` macro.
-//!
-//! ```plain
-//!                           │ Start
-//!                           ▼
-//!                     ┌───────────┐
-//!                     │ Untouched │
-//!                     │ Function  │
-//!                     └─────┬─────┘
-//!                           │
-//!                           │  Annotate original + generate closures
-//!                           │
-//!                           ▼
-//!                    ┌──────────┐
-//!                    │ Original │◄─┐
-//!                    └──┬───────┘  │
-//!                       │          │ Expand
-//!                       └──────────┘ closures
-//! ```
 //!
 //! ## Check closure
 //!
@@ -160,7 +131,7 @@
 //! #[kanitool::recursion_check = "__kani_recursion_check_div"]
 //! #[kanitool::checked_with = "__kani_check_div"]
 //! #[kanitool::replaced_with = "__kani_replace_div"]
-//! #[kanitool::inner_check = "__kani_modifies_div"]
+//! #[kanitool::modifies_wrapper = "__kani_modifies_div"]
 //! fn div(dividend: u32, divisor: u32) -> u32 {
 //!     #[inline(never)]
 //!     #[kanitool::fn_marker = "kani_register_contract"]
@@ -293,7 +264,7 @@
 //! #[kanitool::recursion_check = "__kani_recursion_check_modify"]
 //! #[kanitool::checked_with = "__kani_check_modify"]
 //! #[kanitool::replaced_with = "__kani_replace_modify"]
-//! #[kanitool::inner_check = "__kani_modifies_modify"]
+//! #[kanitool::modifies_wrapper = "__kani_modifies_modify"]
 //! fn modify(ptr: &mut u32) {
 //!     #[inline(never)]
 //!     #[kanitool::fn_marker = "kani_register_contract"]

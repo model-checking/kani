@@ -41,7 +41,7 @@ impl<'a> ContractConditionsHandler<'a> {
             #[kanitool::recursion_check = #recursion_name]
             #[kanitool::checked_with = #check_name]
             #[kanitool::replaced_with = #replace_name]
-            #[kanitool::inner_check = #modifies_name]
+            #[kanitool::modifies_wrapper = #modifies_name]
             #vis #sig {
                 // Dummy function used to force the compiler to capture the environment.
                 // We cannot call closures inside constant functions.
