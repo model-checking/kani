@@ -13,7 +13,7 @@ const N: usize = 16;
 static mut SM: kani::shadow::ShadowMem<bool> = kani::shadow::ShadowMem::new(false);
 
 #[kani::proof]
-#[kani::unwind(17)]
+#[kani::unwind(31)]
 fn check_slice_init() {
     let arr: [char; N] = kani::any();
     // tag every element of the array as initialized
