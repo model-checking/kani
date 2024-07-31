@@ -7,9 +7,9 @@ use cbmc::InternedString;
 use rustc_middle::ty::Instance as InstanceInternal;
 use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::Instance;
-use stable_mir::mir::{Body, Local, LocalDecl};
+use stable_mir::mir::{visit::Location, visit::MirVisitor, Body, Local, LocalDecl, Rvalue};
 use stable_mir::CrateDef;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// This structure represents useful data about the function we are currently compiling.
 #[derive(Debug)]
@@ -26,12 +26,32 @@ pub struct CurrentFnCtx<'tcx> {
     locals: Vec<LocalDecl>,
     /// A list of pretty names for locals that corrspond to user variables.
     local_names: HashMap<Local, InternedString>,
+    /// Collection of variables that are used in a reference or address-of expression.
+    address_taken_locals: HashSet<Local>,
     /// The symbol name of the current function
     name: String,
     /// A human readable pretty name for the current function
     readable_name: String,
     /// A counter to enable creating temporary variables
     temp_var_counter: u64,
+}
+
+struct AddressTakenLocalsCollector {
+    /// Locals that appear in `Rvalue::Ref` or `Rvalue::AddressOf` expressions.
+    address_taken_locals: HashSet<Local>,
+}
+
+impl MirVisitor for AddressTakenLocalsCollector {
+    fn visit_rvalue(&mut self, rvalue: &Rvalue, _location: Location) {
+        match rvalue {
+            Rvalue::Ref(_, _, p) | Rvalue::AddressOf(_, p) => {
+                if p.projection.is_empty() {
+                    self.address_taken_locals.insert(p.local);
+                }
+            }
+            _ => (),
+        }
+    }
 }
 
 /// Constructor
@@ -46,6 +66,8 @@ impl<'tcx> CurrentFnCtx<'tcx> {
             .iter()
             .filter_map(|info| info.local().map(|local| (local, (&info.name).into())))
             .collect::<HashMap<_, _>>();
+        let mut visitor = AddressTakenLocalsCollector { address_taken_locals: HashSet::new() };
+        visitor.visit_body(body);
         Self {
             block: vec![],
             instance,
@@ -53,6 +75,7 @@ impl<'tcx> CurrentFnCtx<'tcx> {
             krate: instance.def.krate().name,
             locals,
             local_names,
+            address_taken_locals: visitor.address_taken_locals,
             name,
             readable_name,
             temp_var_counter: 0,
@@ -105,6 +128,10 @@ impl<'tcx> CurrentFnCtx<'tcx> {
 
     pub fn local_name(&self, local: Local) -> Option<InternedString> {
         self.local_names.get(&local).copied()
+    }
+
+    pub fn is_address_taken_local(&self, local: Local) -> bool {
+        self.address_taken_locals.contains(&local)
     }
 }
 
