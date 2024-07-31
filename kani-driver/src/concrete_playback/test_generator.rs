@@ -257,18 +257,20 @@ fn gen_test_doc(harness: &HarnessMetadata, property: &Property) -> String {
         property.description
     ));
     if !harness.attributes.stubs.is_empty() {
-doc_str.push_str(r#"/// 
+        doc_str.push_str(
+            r#"///
 /// # Warning
-/// 
-/// Concrete playback tests combined with stubs or contracts is highly 
+///
+/// Concrete playback tests combined with stubs or contracts is highly
 /// experimental, and subject to change.
-/// 
+///
 /// The original harness has stubs which are not applied to this test.
 /// This may cause a mismatch of non-deterministic values if the stub
 /// creates any non-deterministic value.
 /// The execution path may also differ, which can be used to refine the stub
 /// logic.
-"#);
+"#,
+        );
     }
     doc_str
 }

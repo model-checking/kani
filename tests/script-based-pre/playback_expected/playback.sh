@@ -22,8 +22,8 @@ run() {
 
 ROOT_DIR=$(git rev-parse --show-toplevel)
 MODIFIED_DIR=modified
-rm -rf $MODIFIED_DIR
-mkdir $MODIFIED_DIR
+rm -rf "${MODIFIED_DIR}"
+mkdir "${MODIFIED_DIR}"
 
 for rs in src/*.rs; do
   if [[ -e "${rs}" ]]; then

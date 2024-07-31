@@ -75,7 +75,7 @@ impl HarnessAttributes {
     }
 
     /// Return whether this is a proof harness.
-    pub fn is_proof(&self) -> bool {
+    pub fn is_proof_harness(&self) -> bool {
         matches!(self.kind, HarnessKind::Proof | HarnessKind::ProofForContract { .. })
     }
 }
