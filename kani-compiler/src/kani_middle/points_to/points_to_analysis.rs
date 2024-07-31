@@ -3,23 +3,26 @@
 
 //! Implementation of the points-to analysis using Rust's native dataflow framework. This provides
 //! necessary aliasing information for instrumenting delayed UB later on.
-//! 
+//!
 //! The analysis uses Rust's dataflow framework by implementing appropriate traits to leverage the
 //! existing fixpoint solver infrastructure. The main trait responsible for the dataflow analysis
 //! behavior is `rustc_mir_dataflow::Analysis`: it provides two methods that are responsible for
 //! handling statements and terminators, which we implement.
-//! 
+//!
 //! The analysis proceeds by looking at each instruction in the dataflow order and collecting all
 //! possible aliasing relations that the instruction introduces. If a terminator is a function call,
 //! the analysis recurs into the function and then joins the information retrieved from it into the
 //! original graph.
-//! 
+//!
 //! For each instruction, the analysis first resolves dereference projections for each place to
 //! determine which places it could point to. This is done by finding a set of successors in the
 //! graph for each dereference projection.
-//! 
+//!
 //! Then, the analysis adds the appropriate edges into the points-to graph. It proceeds until there
 //! is no new information to be discovered.
+//!
+//! Currently, the analysis is not field-sensitive: e.g., if a field of a place aliases to some
+//! other place, we treat it as if the place itself aliases to another place.
 
 use crate::kani_middle::{
     points_to::{GlobalMemLoc, LocalMemLoc, PointsToGraph},
@@ -41,8 +44,7 @@ use rustc_smir::rustc_internal;
 use rustc_span::source_map::Spanned;
 use std::collections::HashSet;
 
-/// Main points-to analysis object. Since this one will be created anew for each instance analysis,
-/// we need to make sure big data structures are not copied unnecessarily.
+/// Main points-to analysis object.
 pub struct PointsToAnalysis<'a, 'tcx> {
     def_id: DefId,
     body: Body<'tcx>,
@@ -52,7 +54,7 @@ pub struct PointsToAnalysis<'a, 'tcx> {
     /// resolve the callee.  
     call_graph: &'a CallGraph,
     /// This graph should contain a subset of the points-to graph reachable from function arguments.
-    /// For the entry function it will be empty.
+    /// For the entry function it will be empty (as it supposedly does not have any parameters).
     initial_graph: PointsToGraph<'tcx>,
 }
 
@@ -68,7 +70,8 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
     ) -> PointsToGraph<'tcx> {
         let analysis = Self { body: body.clone(), tcx, def_id, call_graph, initial_graph };
         // This creates a fixpoint solver using the initial graph, the body, and extra information
-        // and produces the cursor, which contains dataflow state for each instruction in the body.
+        // and solves the dataflow problem, producing the cursor, which contains dataflow state for
+        // each instruction in the body.
         let mut cursor =
             analysis.into_engine(tcx, &body).iterate_to_fixpoint().into_results_cursor(&body);
         // We collect dataflow state at each `Return` terminator to determine the full aliasing
@@ -89,18 +92,20 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
 }
 
 impl<'a, 'tcx> AnalysisDomain<'tcx> for PointsToAnalysis<'a, 'tcx> {
+    /// Dataflow state at each instruction.
     type Domain = PointsToGraph<'tcx>;
 
     type Direction = Forward;
 
     const NAME: &'static str = "PointsToAnalysis";
 
-    /// Dataflow state instantiated at the beginning of each basic block.
+    /// Dataflow state instantiated at the beginning of each basic block, before the state from
+    /// previous basic blocks gets joined into it.
     fn bottom_value(&self, _body: &Body<'tcx>) -> Self::Domain {
         PointsToGraph::empty()
     }
 
-    /// Dataflow state instantiated at the entry into the body, this should be the current dataflow
+    /// Dataflow state instantiated at the entry into the body; this should be the initial dataflow
     /// graph.
     fn initialize_start_block(&self, _body: &Body<'tcx>, state: &mut Self::Domain) {
         state.consume(self.initial_graph.clone());
@@ -121,11 +126,12 @@ impl<'a, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'tcx> {
         match &statement.kind {
             StatementKind::Assign(assign_box) => {
                 let (place, rvalue) = *assign_box.clone();
-                // Lvalue is `place`, which is already available to us.
+                // Resolve all dereference projections for the lvalue.
                 let lvalue_set = state.follow_from_place(place, self.def_id);
-                // Determine all places which the newly created rvalue could point to.
+                // Determine all places rvalue could point to.
                 let rvalue_set = match rvalue {
-                    // Using the operand unchanged.
+                    // Using the operand unchanged requires determining where it could point, which
+                    // `follow_rvalue` does.
                     Rvalue::Use(operand)
                     | Rvalue::ShallowInitBox(operand, _)
                     | Rvalue::Cast(_, operand, _)
@@ -190,17 +196,21 @@ impl<'a, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'tcx> {
                         HashSet::new()
                     }
                     Rvalue::Aggregate(_, operands) => {
-                        // Conservatively find a union of all places mentioned here.
+                        // Conservatively find a union of all places mentioned here and resolve
+                        // their pointees.
                         operands
                             .into_iter()
                             .flat_map(|operand| self.follow_rvalue(state, operand))
                             .collect()
                     }
                     Rvalue::CopyForDeref(place) => {
-                        // Use a place unchanged.
+                        // Resolve pointees of a place.
                         state.follow(&state.follow_from_place(place, self.def_id))
                     }
-                    Rvalue::ThreadLocalRef(def_id) => HashSet::from([GlobalMemLoc::Global(def_id)]),
+                    Rvalue::ThreadLocalRef(def_id) => {
+                        // We store a def_id of a static.
+                        HashSet::from([GlobalMemLoc::Global(def_id)])
+                    }
                 };
                 // Create an edge between all places which could be lvalue and all places rvalue
                 // could be pointing to.
@@ -241,6 +251,9 @@ impl<'a, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'tcx> {
         location: Location,
     ) -> TerminatorEdges<'mir, 'tcx> {
         if let TerminatorKind::Call { func, args, destination, .. } = &terminator.kind {
+            // Attempt to resolve callee. For now, we panic if the callee cannot be resolved (e.g.,
+            // if a function pointer call is used), but we could leverage the call graph to resolve
+            // it.
             let instance = match try_resolve_instance(&self.body, func, self.tcx) {
                 Ok(instance) => instance,
                 Err(reason) => {
@@ -248,7 +261,7 @@ impl<'a, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'tcx> {
                 }
             };
             match instance.def {
-                // Intrinsics could introduce aliasing edges we care about.
+                // Intrinsics could introduce aliasing edges we care about, so need to handle them.
                 InstanceKind::Intrinsic(def_id) => {
                     match self.tcx.intrinsic(def_id).unwrap().name.to_string().as_str() {
                         name if name.starts_with("atomic") => {
@@ -419,6 +432,7 @@ impl<'a, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'tcx> {
                             _ => {}
                         }
                     } else {
+                        // Otherwise, handle this as a regular function call.
                         self.apply_regular_call_effect(state, instance, args, destination);
                     }
                 }
@@ -427,7 +441,7 @@ impl<'a, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'tcx> {
         terminator.edges()
     }
 
-    // We probably should not care about this.
+    /// We don't care about this and just need to implement this to implement the trait.
     fn apply_call_return_effect(
         &mut self,
         _state: &mut Self::Domain,
@@ -456,7 +470,7 @@ fn try_resolve_instance<'tcx>(
 }
 
 impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
-    // Update the analysis state according to the operation, which is semantically equivalent to `*to = *from`.
+    /// Update the analysis state according to the operation, which is semantically equivalent to `*to = *from`.
     fn apply_copy_effect(
         &self,
         state: &mut PointsToGraph<'tcx>,
@@ -468,7 +482,7 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
         state.extend(&lvalue_set, &state.follow(&rvalue_set));
     }
 
-    // Find all places where the operand could point to at the current stage of the program.
+    /// Find all places where the operand could point to at the current stage of the program.
     fn follow_rvalue(
         &self,
         state: &mut PointsToGraph<'tcx>,
@@ -490,7 +504,7 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
         }
     }
 
-    // Find all places where the deref of the operand could point to at the current stage of the program.
+    /// Find all places where the deref of the operand could point to at the current stage of the program.
     fn follow_deref(
         &self,
         state: &mut PointsToGraph<'tcx>,
@@ -512,7 +526,7 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
         }
     }
 
-    // Update the analysis state according to the regular function call.
+    /// Update the analysis state according to the regular function call.
     fn apply_regular_call_effect(
         &mut self,
         state: &mut PointsToGraph<'tcx>,
@@ -528,7 +542,7 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
         };
 
         // In order to be efficient, create a new graph for the function call analysis, which only
-        // contains arguments and anything transitively reachable from them.
+        // contains arguments and statics and anything transitively reachable from them.
         let mut initial_graph = PointsToGraph::empty();
         for arg in args.iter() {
             match arg.node {
@@ -545,6 +559,7 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
         // the callee, add it to the graph.
         if self.tcx.is_closure_like(instance.def.def_id()) {
             // This means we encountered a closure call.
+            // Sanity check. The first argument is the closure itself and the second argument is the tupled arguments from the caller.
             assert!(args.len() == 2);
             // First, connect all upvars.
             let lvalue_set = HashSet::from([LocalMemLoc::Place(Place {

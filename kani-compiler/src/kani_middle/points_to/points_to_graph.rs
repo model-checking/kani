@@ -34,6 +34,7 @@ impl<'tcx> GlobalMemLoc<'tcx> {
         }
     }
 
+    /// Returns LocalMemLoc of the memory location if available.
     pub fn maybe_local_mem_loc(&self) -> Option<LocalMemLoc<'tcx>> {
         match self {
             GlobalMemLoc::Local(_, mem_loc) => Some(*mem_loc),
@@ -49,7 +50,7 @@ impl<'tcx> From<Place<'tcx>> for LocalMemLoc<'tcx> {
 }
 
 impl<'tcx> LocalMemLoc<'tcx> {
-    /// Generate a new alloc with increasing allocation id.
+    /// Register a new heap allocation site.
     pub fn new_alloc(def_id: DefId, location: Location) -> Self {
         LocalMemLoc::Alloc(def_id, location)
     }
@@ -92,7 +93,7 @@ impl<'tcx> PointsToGraph<'tcx> {
     }
 
     /// Collect all scalar places to which a given place can alias. This is needed to resolve all
-    /// deref-like projections.
+    /// dereference projections.
     pub fn follow_from_place(
         &self,
         place: Place<'tcx>,
@@ -144,7 +145,8 @@ impl<'tcx> PointsToGraph<'tcx> {
         std::fs::write(file_path, format!("digraph {{\n{}\n{}\n}}", nodes_str, edges_str)).unwrap();
     }
 
-    /// Find a transitive closure of the graph starting from a given place.
+    /// Find a transitive closure of the graph starting from a set of given locations; this also
+    /// includes statics.
     pub fn transitive_closure(&self, targets: HashSet<GlobalMemLoc<'tcx>>) -> PointsToGraph<'tcx> {
         let mut result = PointsToGraph::empty();
         // Working queue.
