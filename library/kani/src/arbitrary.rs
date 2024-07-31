@@ -31,7 +31,7 @@ macro_rules! trivial_arbitrary {
                 unsafe { crate::any_raw_internal::<Self>() }
             }
             fn any_array<const MAX_ARRAY_LENGTH: usize>() -> [Self; MAX_ARRAY_LENGTH] {
-                unsafe { crate::any_raw_internal::<[Self; MAX_ARRAY_LENGTH]>() }
+                unsafe { crate::any_raw_array::<Self, MAX_ARRAY_LENGTH>() }
             }
         }
     };

@@ -559,13 +559,6 @@ impl ValidateArgs for VerificationArgs {
                 --output-format=old.",
             ));
         }
-        if self.concrete_playback.is_some() && self.is_stubbing_enabled() {
-            // Concrete playback currently does not work with contracts or stubbing.
-            return Err(Error::raw(
-                ErrorKind::ArgumentConflict,
-                "Conflicting options: --concrete-playback isn't compatible with stubbing.",
-            ));
-        }
         if self.concrete_playback.is_some() && self.jobs() != Some(1) {
             // Concrete playback currently embeds a lot of assumptions about the order in which harnesses get called.
             return Err(Error::raw(
@@ -869,13 +862,13 @@ mod tests {
         let res = parse_unstable_disabled("--harness foo -Z stubbing").unwrap();
         assert!(res.verify_opts.is_stubbing_enabled());
 
-        // `-Z stubbing` cannot be called with `--concrete-playback`
+        // `-Z stubbing` can now be called with concrete playback.
         let res = parse_unstable_disabled(
             "--harness foo --concrete-playback=print -Z concrete-playback -Z stubbing",
         )
         .unwrap();
-        let err = res.validate().unwrap_err();
-        assert_eq!(err.kind(), ErrorKind::ArgumentConflict);
+        // Note that `res.validate()` fails because input file does not exist.
+        assert!(matches!(res.verify_opts.validate(), Ok(())));
     }
 
     #[test]
