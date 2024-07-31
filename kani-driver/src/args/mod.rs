@@ -276,7 +276,7 @@ pub struct VerificationArgs {
     pub synthesize_loop_contracts: bool,
 
     //Harness Output into individual files
-    #[arg(long, hide_short_help = true, requires("enable_unstable"))]
+    #[arg(long, hide_short_help = true)]
     pub output_into_files: bool,
 
     /// Randomize the layout of structures. This option can help catching code that relies on
