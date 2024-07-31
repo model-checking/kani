@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
 // Check we don't print temporary variables as part of CBMC messages.
-// cbmc-flags: --signed-overflow-check
 extern crate kani;
 
 use kani::any;

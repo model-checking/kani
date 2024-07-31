@@ -142,9 +142,11 @@ impl UninitPass {
         operation: MemoryInitOp,
         skip_first: &mut HashSet<usize>,
     ) {
-        if let MemoryInitOp::Unsupported { reason } = &operation {
+        if let MemoryInitOp::Unsupported { reason } | MemoryInitOp::TriviallyUnsafe { reason } =
+            &operation
+        {
             collect_skipped(&operation, body, skip_first);
-            self.unsupported_check(tcx, body, source, operation.position(), reason);
+            self.inject_assert_false(tcx, body, source, operation.position(), reason);
             return;
         };
 
@@ -166,7 +168,7 @@ impl UninitPass {
                         "Kani currently doesn't support checking memory initialization for pointers to `{pointee_ty}.",
                     );
                     collect_skipped(&operation, body, skip_first);
-                    self.unsupported_check(tcx, body, source, operation.position(), &reason);
+                    self.inject_assert_false(tcx, body, source, operation.position(), &reason);
                     return;
                 }
             }
@@ -181,7 +183,7 @@ impl UninitPass {
             | MemoryInitOp::SetRef { .. } => {
                 self.build_set(tcx, body, source, operation, pointee_ty_info, skip_first)
             }
-            MemoryInitOp::Unsupported { .. } => {
+            MemoryInitOp::Unsupported { .. } | MemoryInitOp::TriviallyUnsafe { .. } => {
                 unreachable!()
             }
         }
@@ -228,7 +230,7 @@ impl UninitPass {
                     *pointee_info.ty(),
                 );
                 collect_skipped(&operation, body, skip_first);
-                body.add_call(
+                body.insert_call(
                     &is_ptr_initialized_instance,
                     source,
                     operation.position(),
@@ -255,7 +257,7 @@ impl UninitPass {
                 let layout_operand =
                     mk_layout_operand(body, source, operation.position(), &element_layout);
                 collect_skipped(&operation, body, skip_first);
-                body.add_call(
+                body.insert_call(
                     &is_ptr_initialized_instance,
                     source,
                     operation.position(),
@@ -266,7 +268,7 @@ impl UninitPass {
             PointeeLayout::TraitObject => {
                 collect_skipped(&operation, body, skip_first);
                 let reason = "Kani does not support reasoning about memory initialization of pointers to trait objects.";
-                self.unsupported_check(tcx, body, source, operation.position(), reason);
+                self.inject_assert_false(tcx, body, source, operation.position(), reason);
                 return;
             }
         };
@@ -274,7 +276,7 @@ impl UninitPass {
         // Make sure all non-padding bytes are initialized.
         collect_skipped(&operation, body, skip_first);
         let ptr_operand_ty = ptr_operand.ty(body.locals()).unwrap();
-        body.add_check(
+        body.insert_check(
             tcx,
             &self.check_type,
             source,
@@ -343,7 +345,7 @@ impl UninitPass {
                     *pointee_info.ty(),
                 );
                 collect_skipped(&operation, body, skip_first);
-                body.add_call(
+                body.insert_call(
                     &set_ptr_initialized_instance,
                     source,
                     operation.position(),
@@ -370,7 +372,7 @@ impl UninitPass {
                 let layout_operand =
                     mk_layout_operand(body, source, operation.position(), &element_layout);
                 collect_skipped(&operation, body, skip_first);
-                body.add_call(
+                body.insert_call(
                     &set_ptr_initialized_instance,
                     source,
                     operation.position(),
@@ -392,7 +394,7 @@ impl UninitPass {
         };
     }
 
-    fn unsupported_check(
+    fn inject_assert_false(
         &self,
         tcx: TyCtxt,
         body: &mut MutableBody,
@@ -406,8 +408,8 @@ impl UninitPass {
             span,
             user_ty: None,
         }));
-        let result = body.new_assignment(rvalue, source, position);
-        body.add_check(tcx, &self.check_type, source, position, result, reason);
+        let result = body.insert_assignment(rvalue, source, position);
+        body.insert_check(tcx, &self.check_type, source, position, result, reason);
     }
 }
 
@@ -430,7 +432,7 @@ pub fn mk_layout_operand(
     layout_byte_mask: &[bool],
 ) -> Operand {
     Operand::Move(Place {
-        local: body.new_assignment(
+        local: body.insert_assignment(
             Rvalue::Aggregate(
                 AggregateKind::Array(Ty::bool_ty()),
                 layout_byte_mask
@@ -529,7 +531,7 @@ fn inject_memory_init_setup(
     )
     .unwrap();
 
-    new_body.add_call(
+    new_body.insert_call(
         &memory_initialization_init,
         &mut source,
         InsertPosition::Before,

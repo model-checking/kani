@@ -200,7 +200,7 @@ fn find_proof_harnesses<'a>(
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use kani_metadata::HarnessAttributes;
+    use kani_metadata::{HarnessAttributes, HarnessKind};
     use std::path::PathBuf;
 
     pub fn mock_proof_harness(
@@ -209,6 +209,8 @@ pub mod tests {
         krate: Option<&str>,
         model_file: Option<PathBuf>,
     ) -> HarnessMetadata {
+        let mut attributes = HarnessAttributes::new(HarnessKind::Proof);
+        attributes.unwind_value = unwind_value;
         HarnessMetadata {
             pretty_name: name.into(),
             mangled_name: name.into(),
@@ -216,7 +218,7 @@ pub mod tests {
             original_file: "<unknown>".into(),
             original_start_line: 0,
             original_end_line: 0,
-            attributes: HarnessAttributes { unwind_value, proof: true, ..Default::default() },
+            attributes,
             goto_file: model_file,
             contract: Default::default(),
         }
@@ -236,7 +238,7 @@ pub mod tests {
             find_proof_harnesses(
                 &BTreeSet::from([&"check_three".to_string()]),
                 &ref_harnesses,
-                false
+                false,
             )
             .len(),
             1
@@ -245,7 +247,7 @@ pub mod tests {
             find_proof_harnesses(
                 &BTreeSet::from([&"check_two".to_string()]),
                 &ref_harnesses,
-                false
+                false,
             )
             .first()
             .unwrap()
@@ -256,7 +258,7 @@ pub mod tests {
             find_proof_harnesses(
                 &BTreeSet::from([&"check_one".to_string()]),
                 &ref_harnesses,
-                false
+                false,
             )
             .first()
             .unwrap()
@@ -280,7 +282,7 @@ pub mod tests {
             find_proof_harnesses(
                 &BTreeSet::from([&"check_three".to_string()]),
                 &ref_harnesses,
-                true
+                true,
             )
             .is_empty()
         );
@@ -299,7 +301,7 @@ pub mod tests {
             find_proof_harnesses(
                 &BTreeSet::from([&"module::not_check_three".to_string()]),
                 &ref_harnesses,
-                true
+                true,
             )
             .first()
             .unwrap()
