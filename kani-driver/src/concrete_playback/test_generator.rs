@@ -6,10 +6,11 @@
 
 use crate::args::ConcretePlaybackMode;
 use crate::call_cbmc::VerificationResult;
+use crate::cbmc_output_parser::Property;
 use crate::session::KaniSession;
 use anyhow::{Context, Result};
 use concrete_vals_extractor::{extract_harness_values, ConcreteVal};
-use kani_metadata::HarnessMetadata;
+use kani_metadata::{HarnessKind, HarnessMetadata};
 use std::collections::hash_map::DefaultHasher;
 use std::ffi::OsString;
 use std::fs::{read_to_string, File};
@@ -32,7 +33,7 @@ impl KaniSession {
         };
 
         if let Ok(result_items) = &verification_result.results {
-            let harness_values: Vec<Vec<ConcreteVal>> = extract_harness_values(result_items);
+            let harness_values = extract_harness_values(result_items);
 
             if harness_values.is_empty() {
                 println!(
@@ -43,9 +44,9 @@ impl KaniSession {
             } else {
                 let mut unit_tests: Vec<UnitTest> = harness_values
                     .iter()
-                    .map(|concrete_vals| {
+                    .map(|(prop, concrete_vals)| {
                         let pretty_name = harness.get_harness_name_unqualified();
-                        format_unit_test(&pretty_name, &concrete_vals)
+                        format_unit_test(&pretty_name, &concrete_vals, gen_test_doc(harness, prop))
                     })
                     .collect();
                 unit_tests.dedup_by(|a, b| a.name == b.name);
@@ -168,6 +169,9 @@ impl KaniSession {
                 writeln!(temp_file, "{line}")?;
                 if curr_line_num == proof_harness_end_line {
                     for unit_test in unit_tests.iter() {
+                        // Write an empty line before the unit test.
+                        writeln!(temp_file)?;
+
                         for unit_test_line in unit_test.code.iter() {
                             curr_line_num += 1;
                             writeln!(temp_file, "{unit_test_line}")?;
@@ -176,7 +180,7 @@ impl KaniSession {
                 }
             }
 
-            // Renames are usually automic, so we won't corrupt the user's source file during a
+            // Renames are usually atomic, so we won't corrupt the user's source file during a
             // crash; but first flush all updates to disk, which persist wouldn't take care of.
             temp_file.as_file().sync_all()?;
             temp_file.persist(source_path).expect("Could not rename file");
@@ -231,8 +235,52 @@ impl KaniSession {
     }
 }
 
+fn gen_test_doc(harness: &HarnessMetadata, property: &Property) -> String {
+    let mut doc_str = match &harness.attributes.kind {
+        HarnessKind::Proof => {
+            format!("/// Test generated for harness `{}` \n", harness.pretty_name)
+        }
+        HarnessKind::ProofForContract { target_fn } => {
+            format!(
+                "/// Test generated for harness `{}` that checks contract for `{target_fn}`\n",
+                harness.pretty_name
+            )
+        }
+        HarnessKind::Test => {
+            unreachable!("Concrete playback for tests is not supported")
+        }
+    };
+    doc_str.push_str("///\n");
+    doc_str.push_str(&format!(
+        "/// Check for `{}`: \"{}\"\n",
+        property.property_class(),
+        property.description
+    ));
+    if !harness.attributes.stubs.is_empty() {
+        doc_str.push_str(
+            r#"///
+/// # Warning
+///
+/// Concrete playback tests combined with stubs or contracts is highly
+/// experimental, and subject to change.
+///
+/// The original harness has stubs which are not applied to this test.
+/// This may cause a mismatch of non-deterministic values if the stub
+/// creates any non-deterministic value.
+/// The execution path may also differ, which can be used to refine the stub
+/// logic.
+"#,
+        );
+    }
+    doc_str
+}
+
 /// Generate a formatted unit test from a list of concrete values.
-fn format_unit_test(harness_name: &str, concrete_vals: &[ConcreteVal]) -> UnitTest {
+fn format_unit_test(
+    harness_name: &str,
+    concrete_vals: &[ConcreteVal],
+    doc_str: String,
+) -> UnitTest {
     // Hash the concrete values along with the proof harness name.
     let mut hasher = DefaultHasher::new();
     harness_name.hash(&mut hasher);
@@ -241,6 +289,7 @@ fn format_unit_test(harness_name: &str, concrete_vals: &[ConcreteVal]) -> UnitTe
     let func_name = format!("kani_concrete_playback_{harness_name}_{hash}");
 
     let func_before_concrete_vals = [
+        doc_str,
         "#[test]".to_string(),
         format!("fn {func_name}() {{"),
         format!("{:<4}let concrete_vals: Vec<Vec<u8>> = vec![", " "),
@@ -324,7 +373,7 @@ mod concrete_vals_extractor {
     /// Extract a set of concrete values that trigger one assertion
     /// failure. Each element of the outer vector corresponds to
     /// inputs triggering one assertion failure or cover statement.
-    pub fn extract_harness_values(result_items: &[Property]) -> Vec<Vec<ConcreteVal>> {
+    pub fn extract_harness_values(result_items: &[Property]) -> Vec<(&Property, Vec<ConcreteVal>)> {
         result_items
             .iter()
             .filter(|prop| {
@@ -340,7 +389,7 @@ mod concrete_vals_extractor {
                 let concrete_vals: Vec<ConcreteVal> =
                     trace.iter().filter_map(&extract_from_trace_item).collect();
 
-                concrete_vals
+                (property, concrete_vals)
             })
             .collect()
     }
@@ -359,7 +408,7 @@ mod concrete_vals_extractor {
             {
                 if trace_item.step_type == "assignment"
                     && lhs.starts_with("goto_symex$$return_value")
-                    && func.starts_with("kani::any_raw_internal")
+                    && func.starts_with("kani::any_raw_")
                 {
                     let declared_width = width_u64 as usize;
                     let actual_width = bit_concrete_val.len();
@@ -484,9 +533,10 @@ mod tests {
     /// Since hashes can not be relied on in tests, this compares all parts of a unit test except the hash.
     #[test]
     fn format_unit_test_full_func() {
+        let doc_str = "/// Test documentation";
         let harness_name = "test_proof_harness";
         let concrete_vals = [ConcreteVal { byte_arr: vec![0, 0], interp_val: "0".to_string() }];
-        let unit_test = format_unit_test(harness_name, &concrete_vals);
+        let unit_test = format_unit_test(harness_name, &concrete_vals, doc_str.to_string());
         let full_func = unit_test.code;
         let split_unit_test_name = split_unit_test_name(&unit_test.name);
         let expected_after_func_name = vec![
@@ -498,18 +548,23 @@ mod tests {
             "}".to_string(),
         ];
 
-        assert_eq!(full_func[0], "#[test]");
+        assert_eq!(full_func[0], doc_str);
+        assert_eq!(full_func[1], "#[test]");
         assert_eq!(
             split_unit_test_name.before_hash,
             format!("kani_concrete_playback_{harness_name}")
         );
-        assert_eq!(full_func[1], format!("fn {}() {{", unit_test.name));
-        assert_eq!(full_func[2..], expected_after_func_name);
+        assert_eq!(full_func[2], format!("fn {}() {{", unit_test.name));
+        assert_eq!(full_func[3..], expected_after_func_name);
     }
 
     /// Generates a unit test and returns its hash.
     fn extract_hash_from_unit_test(harness_name: &str, concrete_vals: &[ConcreteVal]) -> String {
-        let unit_test = format_unit_test(harness_name, concrete_vals);
+        let unit_test = format_unit_test(
+            harness_name,
+            concrete_vals,
+            "/// Harness created for unit test".to_string(),
+        );
         split_unit_test_name(&unit_test.name).hash
     }
 
@@ -603,7 +658,7 @@ mod tests {
                 }),
             }]),
         }];
-        let concrete_vals = extract_harness_values(&processed_items).pop().unwrap();
+        let (_, concrete_vals) = extract_harness_values(&processed_items).pop().unwrap();
         let concrete_val = &concrete_vals[0];
 
         assert_eq!(concrete_val.byte_arr, vec![1, 3]);
