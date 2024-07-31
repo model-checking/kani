@@ -6,7 +6,7 @@
 use std::path::Path;
 
 use crate::kani_middle::attributes::test_harness_name;
-use kani_metadata::{ArtifactType, HarnessAttributes, HarnessMetadata};
+use kani_metadata::{ArtifactType, HarnessAttributes, HarnessKind, HarnessMetadata};
 use rustc_middle::ty::TyCtxt;
 use stable_mir::mir::mono::Instance;
 use stable_mir::CrateDef;
@@ -61,7 +61,7 @@ pub fn gen_test_metadata(
         original_file: loc.filename,
         original_start_line: loc.start_line,
         original_end_line: loc.end_line,
-        attributes: HarnessAttributes::default(),
+        attributes: HarnessAttributes::new(HarnessKind::Test),
         // TODO: This no longer needs to be an Option.
         goto_file: Some(model_file),
         contract: Default::default(),
