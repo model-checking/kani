@@ -132,7 +132,7 @@ impl ToIrep for DatatypeComponent {
         match self {
             DatatypeComponent::Field { name, typ } => Irep::just_named_sub(linear_map![
                 (IrepId::Name, Irep::just_string_id(name.to_string())),
-                (IrepId::PrettyName, Irep::just_string_id(name.to_string())),
+                (IrepId::CPrettyName, Irep::just_string_id(name.to_string())),
                 (IrepId::Type, typ.to_irep(mm)),
             ]),
             DatatypeComponent::Padding { name, bits } => Irep::just_named_sub(linear_map![
