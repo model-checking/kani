@@ -103,7 +103,7 @@ impl GlobalPass for DelayedUbPass {
                     let internal_body = body.internal_mir(tcx);
                     let internal_def_id = rustc_internal::internal(tcx, instance.def.def_id());
                     let results = run_points_to_analysis(
-                        internal_body.clone(),
+                        &internal_body,
                         tcx,
                         internal_def_id,
                         call_graph,

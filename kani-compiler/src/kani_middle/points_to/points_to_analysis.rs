@@ -47,7 +47,7 @@ use std::collections::HashSet;
 /// Main points-to analysis object.
 struct PointsToAnalysis<'a, 'tcx> {
     def_id: DefId,
-    body: Body<'tcx>,
+    body: &'a Body<'tcx>,
     tcx: TyCtxt<'tcx>,
     /// This will be used in the future to resolve function pointer and vtable calls. Currently, we
     /// can resolve call graph edges just by looking at the terminators and erroring if we can't
@@ -61,7 +61,7 @@ struct PointsToAnalysis<'a, 'tcx> {
 /// Public points-to analysis entry point. Performs the analysis on a body, outputting the graph
 /// containing aliasing information of the body itself and any body reachable from it.
 pub fn run_points_to_analysis<'tcx>(
-    body: Body<'tcx>,
+    body: &Body<'tcx>,
     tcx: TyCtxt<'tcx>,
     def_id: DefId,
     call_graph: &CallGraph,
@@ -73,18 +73,18 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
     /// Perform the analysis on a body, outputting the graph containing aliasing information of the
     /// body itself and any body reachable from it.
     pub fn run(
-        body: Body<'tcx>,
+        body: &'a Body<'tcx>,
         tcx: TyCtxt<'tcx>,
         def_id: DefId,
         call_graph: &'a CallGraph,
         initial_graph: PointsToGraph<'tcx>,
     ) -> PointsToGraph<'tcx> {
-        let analysis = Self { body: body.clone(), tcx, def_id, call_graph, initial_graph };
+        let analysis = Self { body, tcx, def_id, call_graph, initial_graph };
         // This creates a fixpoint solver using the initial graph, the body, and extra information
         // and solves the dataflow problem, producing the cursor, which contains dataflow state for
         // each instruction in the body.
         let mut cursor =
-            analysis.into_engine(tcx, &body).iterate_to_fixpoint().into_results_cursor(&body);
+            analysis.into_engine(tcx, body).iterate_to_fixpoint().into_results_cursor(body);
         // We collect dataflow state at each `Return` terminator to determine the full aliasing
         // graph for the function. This is sound since those are the only places where the function
         // finishes, so the dataflow state at those places will be a union of dataflow states
@@ -265,7 +265,7 @@ impl<'a, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'tcx> {
             // Attempt to resolve callee. For now, we panic if the callee cannot be resolved (e.g.,
             // if a function pointer call is used), but we could leverage the call graph to resolve
             // it.
-            let instance = match try_resolve_instance(&self.body, func, self.tcx) {
+            let instance = match try_resolve_instance(self.body, func, self.tcx) {
                 Ok(instance) => instance,
                 Err(reason) => {
                     unimplemented!("{reason}")
@@ -286,7 +286,7 @@ impl<'a, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'tcx> {
                                         "Unexpected number of arguments for `{name}`"
                                     );
                                     assert!(matches!(
-                                        args[0].node.ty(&self.body, self.tcx).kind(),
+                                        args[0].node.ty(self.body, self.tcx).kind(),
                                         TyKind::RawPtr(_, Mutability::Mut)
                                     ));
                                     let src_set = self.follow_rvalue(state, args[2].node.clone());
@@ -305,7 +305,7 @@ impl<'a, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'tcx> {
                                         "Unexpected number of arguments for `{name}`"
                                     );
                                     assert!(matches!(
-                                        args[0].node.ty(&self.body, self.tcx).kind(),
+                                        args[0].node.ty(self.body, self.tcx).kind(),
                                         TyKind::RawPtr(_, Mutability::Not)
                                     ));
                                     let src_set = self.follow_deref(state, args[0].node.clone());
@@ -322,7 +322,7 @@ impl<'a, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'tcx> {
                                         "Unexpected number of arguments for `{name}`"
                                     );
                                     assert!(matches!(
-                                        args[0].node.ty(&self.body, self.tcx).kind(),
+                                        args[0].node.ty(self.body, self.tcx).kind(),
                                         TyKind::RawPtr(_, Mutability::Mut)
                                     ));
                                     let dst_set = self.follow_deref(state, args[0].node.clone());
@@ -338,7 +338,7 @@ impl<'a, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'tcx> {
                                         "Unexpected number of arguments for `{name}`"
                                     );
                                     assert!(matches!(
-                                        args[0].node.ty(&self.body, self.tcx).kind(),
+                                        args[0].node.ty(self.body, self.tcx).kind(),
                                         TyKind::RawPtr(_, Mutability::Mut)
                                     ));
                                     let src_set = self.follow_rvalue(state, args[1].node.clone());
@@ -354,11 +354,11 @@ impl<'a, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'tcx> {
                         "copy" => {
                             assert_eq!(args.len(), 3, "Unexpected number of arguments for `copy`");
                             assert!(matches!(
-                                args[0].node.ty(&self.body, self.tcx).kind(),
+                                args[0].node.ty(self.body, self.tcx).kind(),
                                 TyKind::RawPtr(_, Mutability::Not)
                             ));
                             assert!(matches!(
-                                args[1].node.ty(&self.body, self.tcx).kind(),
+                                args[1].node.ty(self.body, self.tcx).kind(),
                                 TyKind::RawPtr(_, Mutability::Mut)
                             ));
                             self.apply_copy_effect(
@@ -371,11 +371,11 @@ impl<'a, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'tcx> {
                         "volatile_copy_memory" | "volatile_copy_nonoverlapping_memory" => {
                             assert_eq!(args.len(), 3, "Unexpected number of arguments for `copy`");
                             assert!(matches!(
-                                args[0].node.ty(&self.body, self.tcx).kind(),
+                                args[0].node.ty(self.body, self.tcx).kind(),
                                 TyKind::RawPtr(_, Mutability::Mut)
                             ));
                             assert!(matches!(
-                                args[1].node.ty(&self.body, self.tcx).kind(),
+                                args[1].node.ty(self.body, self.tcx).kind(),
                                 TyKind::RawPtr(_, Mutability::Not)
                             ));
                             self.apply_copy_effect(
@@ -392,7 +392,7 @@ impl<'a, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'tcx> {
                                 "Unexpected number of arguments for `volatile_load`"
                             );
                             assert!(matches!(
-                                args[0].node.ty(&self.body, self.tcx).kind(),
+                                args[0].node.ty(self.body, self.tcx).kind(),
                                 TyKind::RawPtr(_, Mutability::Not)
                             ));
                             // Destination of the return value.
@@ -408,7 +408,7 @@ impl<'a, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'tcx> {
                                 "Unexpected number of arguments for `volatile_store`"
                             );
                             assert!(matches!(
-                                args[0].node.ty(&self.body, self.tcx).kind(),
+                                args[0].node.ty(self.body, self.tcx).kind(),
                                 TyKind::RawPtr(_, Mutability::Mut)
                             ));
                             let lvalue_set = self.follow_deref(state, args[0].node.clone());
@@ -608,7 +608,7 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
 
         // Run the analysis.
         let new_result = PointsToAnalysis::run(
-            new_body,
+            &new_body,
             self.tcx,
             instance.def_id(),
             self.call_graph,
