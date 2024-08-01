@@ -75,7 +75,7 @@ impl GlobalPass for DelayedUbPass {
                         LocalMemLoc::Place(rustc_internal::internal(tcx, place)).with_def_id(def_id)
                     }
                     AnalysisTarget::Static(static_def) => {
-                        MemLoc::Global(rustc_internal::internal(tcx, static_def))
+                        MemLoc::Static(rustc_internal::internal(tcx, static_def))
                     }
                 })
             })

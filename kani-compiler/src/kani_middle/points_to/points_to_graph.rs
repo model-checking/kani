@@ -23,14 +23,14 @@ pub enum LocalMemLoc<'tcx> {
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum MemLoc<'tcx> {
     Local(DefId, LocalMemLoc<'tcx>),
-    Global(DefId),
+    Static(DefId),
 }
 
 impl<'tcx> MemLoc<'tcx> {
     /// Returns DefId of the memory location.
     pub fn def_id(&self) -> DefId {
         match self {
-            MemLoc::Local(def_id, _) | MemLoc::Global(def_id) => *def_id,
+            MemLoc::Local(def_id, _) | MemLoc::Static(def_id) => *def_id,
         }
     }
 
@@ -38,7 +38,7 @@ impl<'tcx> MemLoc<'tcx> {
     pub fn maybe_local_mem_loc(&self) -> Option<LocalMemLoc<'tcx>> {
         match self {
             MemLoc::Local(_, mem_loc) => Some(*mem_loc),
-            MemLoc::Global(_) => None,
+            MemLoc::Static(_) => None,
         }
     }
 }
@@ -161,7 +161,7 @@ impl<'tcx> PointsToGraph<'tcx> {
         // Working queue.
         let mut queue = VecDeque::from_iter(targets);
         // Add all statics, as they can be accessed at any point.
-        let statics = self.edges.keys().filter(|node| matches!(node, MemLoc::Global(_)));
+        let statics = self.edges.keys().filter(|node| matches!(node, MemLoc::Static(_)));
         queue.extend(statics);
         // Add all entries.
         while !queue.is_empty() {
