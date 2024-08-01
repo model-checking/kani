@@ -172,7 +172,7 @@ pub fn unstable_feature(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// In practice, only one type of specification is need. If the condition for
 /// the type safety invariant involves a relation between two or more struct
 /// fields, the struct-level attribute should be used. Otherwise, using the
-/// `#[safety_constraint(...)]` is recommended since it helps with readability.
+/// `#[safety_constraint(...)]` on field(s) is recommended since it helps with readability.
 ///
 /// For example, if we were defining a custom vector `MyVector` and wanted to
 /// specify that the inner vector's length is always less than or equal to its
