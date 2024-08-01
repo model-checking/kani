@@ -85,6 +85,8 @@ pub enum ExtraChecks {
     /// Check pointer validity when casting pointers to references.
     /// See https://github.com/model-checking/kani/issues/2975.
     PtrToRefCast,
+    /// Check for violations of pointer aliasing model
+    Aliasing,
     /// Check for using uninitialized memory.
     Uninit,
 }

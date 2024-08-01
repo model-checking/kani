@@ -19,6 +19,7 @@
 use crate::kani_middle::codegen_units::CodegenUnit;
 use crate::kani_middle::reachability::CallGraph;
 use crate::kani_middle::transform::body::CheckType;
+use crate::kani_middle::transform::check_aliasing::AliasingPass;
 use crate::kani_middle::transform::check_uninit::UninitPass;
 use crate::kani_middle::transform::check_values::ValidValuePass;
 use crate::kani_middle::transform::contracts::AnyModifiesPass;
@@ -33,6 +34,7 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 
 pub(crate) mod body;
+mod check_aliasing;
 mod check_uninit;
 mod check_values;
 mod contracts;
@@ -81,6 +83,11 @@ impl BodyTransformation {
                 check_type: CheckType::new_assert(tcx),
                 mem_init_fn_cache: HashMap::new(),
             },
+        );
+        // Check aliasing
+        transformer.add_pass(
+            queries,
+            AliasingPass { },
         );
         transformer.add_pass(
             queries,
