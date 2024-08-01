@@ -7,5 +7,5 @@
 mod points_to_analysis;
 mod points_to_graph;
 
-pub use points_to_analysis::PointsToAnalysis;
+pub use points_to_analysis::run_points_to_analysis;
 pub use points_to_graph::{GlobalMemLoc, LocalMemLoc, PointsToGraph};

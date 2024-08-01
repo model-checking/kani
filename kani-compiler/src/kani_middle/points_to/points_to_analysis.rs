@@ -45,7 +45,7 @@ use rustc_span::source_map::Spanned;
 use std::collections::HashSet;
 
 /// Main points-to analysis object.
-pub struct PointsToAnalysis<'a, 'tcx> {
+struct PointsToAnalysis<'a, 'tcx> {
     def_id: DefId,
     body: Body<'tcx>,
     tcx: TyCtxt<'tcx>,
@@ -56,6 +56,17 @@ pub struct PointsToAnalysis<'a, 'tcx> {
     /// This graph should contain a subset of the points-to graph reachable from function arguments.
     /// For the entry function it will be empty (as it supposedly does not have any parameters).
     initial_graph: PointsToGraph<'tcx>,
+}
+
+/// Public points-to analysis entry point. Performs the analysis on a body, outputting the graph
+/// containing aliasing information of the body itself and any body reachable from it.
+pub fn run_points_to_analysis<'tcx>(
+    body: Body<'tcx>,
+    tcx: TyCtxt<'tcx>,
+    def_id: DefId,
+    call_graph: &CallGraph,
+) -> PointsToGraph<'tcx> {
+    PointsToAnalysis::run(body, tcx, def_id, call_graph, PointsToGraph::empty())
 }
 
 impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
