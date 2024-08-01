@@ -74,7 +74,7 @@ A first proof will likely start in the following form:
 Running Kani on this simple starting point will help figure out:
 
 1. What unexpected constraints might be needed on your inputs (using `kani::assume`) to avoid "expected" failures.
-2. Whether you're over-constrained. Check the coverage report using `--visualize`. Ideally you'd see 100% coverage, and if not, it's usually because you've assumed too much (thus over-constraining the inputs).
+2. Whether you're over-constrained. Check the coverage report using `--coverage -Z line-coverage`. Ideally you'd see 100% coverage, and if not, it's usually because you've assumed too much (thus over-constraining the inputs).
 3. Whether Kani will support all the Rust features involved.
 4. Whether you've started with a tractable problem.
 (Remember to try setting `#[kani::unwind(1)]` to force early termination and work up from there.)
