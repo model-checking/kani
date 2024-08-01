@@ -6,8 +6,8 @@
 use crate::args::common::Verbosity;
 use crate::args::playback_args::{CargoPlaybackArgs, KaniPlaybackArgs, MessageFormat};
 use crate::call_cargo::cargo_config_args;
-use crate::call_single_file::base_rustc_flags;
-use crate::session::{lib_playback_folder, InstallType};
+use crate::call_single_file::{base_rustc_flags, LibConfig};
+use crate::session::{lib_playback_folder, setup_cargo_command, InstallType};
 use crate::{session, util};
 use anyhow::Result;
 use std::ffi::OsString;
@@ -17,8 +17,7 @@ use std::process::Command;
 use tracing::debug;
 
 pub fn playback_cargo(args: CargoPlaybackArgs) -> Result<()> {
-    let install = InstallType::new()?;
-    cargo_test(&install, args)
+    cargo_test(args)
 }
 
 pub fn playback_standalone(args: KaniPlaybackArgs) -> Result<()> {
@@ -71,7 +70,7 @@ fn build_test(install: &InstallType, args: &KaniPlaybackArgs) -> Result<PathBuf>
         util::info_operation("Building", args.input.to_string_lossy().deref());
     }
 
-    let mut rustc_args = base_rustc_flags(lib_playback_folder()?);
+    let mut rustc_args = base_rustc_flags(LibConfig::new(lib_playback_folder()?));
     rustc_args.push("--test".into());
     rustc_args.push(OsString::from(&args.input));
     rustc_args.push(format!("--crate-name={TEST_BIN_NAME}").into());
@@ -93,10 +92,11 @@ fn build_test(install: &InstallType, args: &KaniPlaybackArgs) -> Result<PathBuf>
 }
 
 /// Invokes cargo test using Kani compiler and the provided arguments.
-/// TODO: This should likely be inside KaniSession, but KaniSession requires `VerificationArgs` today.
-/// For now, we just use InstallType directly.
-fn cargo_test(install: &InstallType, args: CargoPlaybackArgs) -> Result<()> {
-    let rustc_args = base_rustc_flags(lib_playback_folder()?);
+fn cargo_test(args: CargoPlaybackArgs) -> Result<()> {
+    let install = InstallType::new()?;
+    let mut cmd = setup_cargo_command()?;
+
+    let rustc_args = base_rustc_flags(LibConfig::new(lib_playback_folder()?));
     let mut cargo_args: Vec<OsString> = vec!["test".into()];
 
     if args.playback.common_opts.verbose() {
@@ -123,9 +123,7 @@ fn cargo_test(install: &InstallType, args: CargoPlaybackArgs) -> Result<()> {
     }
 
     // Arguments that will only be passed to the target package.
-    let mut cmd = Command::new("cargo");
-    cmd.arg(session::toolchain_shorthand())
-        .args(&cargo_args)
+    cmd.args(&cargo_args)
         .env("RUSTC", &install.kani_compiler()?)
         // Use CARGO_ENCODED_RUSTFLAGS instead of RUSTFLAGS is preferred. See
         // https://doc.rust-lang.org/cargo/reference/environment-variables.html

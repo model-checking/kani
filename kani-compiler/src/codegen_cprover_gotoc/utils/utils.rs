@@ -125,7 +125,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// Best effort check if the struct represents a rust `std::marker::PhantomData`
-    fn assert_is_rust_phantom_data_like(&self, t: &Type) {
+    pub fn assert_is_rust_phantom_data_like(&self, t: &Type) {
         // TODO: A `std::marker::PhantomData` appears to be an empty struct, in the cases we've seen.
         // Is there something smarter we can do here?
         assert!(t.is_struct_like());
@@ -194,5 +194,5 @@ impl<'tcx> GotocCtx<'tcx> {
 }
 
 pub fn span_err(tcx: TyCtxt, span: Span, msg: String) {
-    tcx.dcx().span_err(rustc_internal::internal(span), msg);
+    tcx.dcx().span_err(rustc_internal::internal(tcx, span), msg);
 }

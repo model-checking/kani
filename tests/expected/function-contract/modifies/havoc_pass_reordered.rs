@@ -3,7 +3,7 @@
 // kani-flags: -Zfunction-contracts
 
 // These two are reordered in comparison to `havoc_pass` and we expect the test case to pass still
-#[kani::ensures(*dst == src)]
+#[kani::ensures(|result| *dst == src)]
 #[kani::modifies(dst)]
 fn copy(src: u32, dst: &mut u32) {
     *dst = src;

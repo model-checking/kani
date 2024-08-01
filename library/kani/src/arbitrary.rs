@@ -1,8 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-//! This module introduces the Arbitrary trait as well as implementation for primitive types and
-//! other std containers.
+//! This module introduces the `Arbitrary` trait as well as implementation for
+//! primitive types and other std containers.
 
 use std::{
     marker::{PhantomData, PhantomPinned},
@@ -16,12 +16,7 @@ where
     Self: Sized,
 {
     fn any() -> Self;
-    fn any_array<const MAX_ARRAY_LENGTH: usize>() -> [Self; MAX_ARRAY_LENGTH]
-    // the requirement defined in the where clause must appear on the `impl`'s method `any_array`
-    // but also on the corresponding trait's method
-    where
-        [(); std::mem::size_of::<[Self; MAX_ARRAY_LENGTH]>()]:,
-    {
+    fn any_array<const MAX_ARRAY_LENGTH: usize>() -> [Self; MAX_ARRAY_LENGTH] {
         [(); MAX_ARRAY_LENGTH].map(|_| Self::any())
     }
 }
@@ -33,20 +28,10 @@ macro_rules! trivial_arbitrary {
             #[inline(always)]
             fn any() -> Self {
                 // This size_of call does not use generic_const_exprs feature. It's inside a macro, and Self isn't generic.
-                unsafe { crate::any_raw_internal::<Self, { std::mem::size_of::<Self>() }>() }
+                unsafe { crate::any_raw_internal::<Self>() }
             }
-            fn any_array<const MAX_ARRAY_LENGTH: usize>() -> [Self; MAX_ARRAY_LENGTH]
-            where
-                // `generic_const_exprs` requires all potential errors to be reflected in the signature/header.
-                // We must repeat the expression in the header, to make sure that if the body can fail the header will also fail.
-                [(); { std::mem::size_of::<[$type; MAX_ARRAY_LENGTH]>() }]:,
-            {
-                unsafe {
-                    crate::any_raw_internal::<
-                        [Self; MAX_ARRAY_LENGTH],
-                        { std::mem::size_of::<[Self; MAX_ARRAY_LENGTH]>() },
-                    >()
-                }
+            fn any_array<const MAX_ARRAY_LENGTH: usize>() -> [Self; MAX_ARRAY_LENGTH] {
+                unsafe { crate::any_raw_array::<Self, MAX_ARRAY_LENGTH>() }
             }
         }
     };
@@ -66,10 +51,14 @@ trivial_arbitrary!(i64);
 trivial_arbitrary!(i128);
 trivial_arbitrary!(isize);
 
-// We do not constraint floating points values per type spec. Users must add assumptions to their
+// We do not constrain floating points values per type spec. Users must add assumptions to their
 // verification code if they want to eliminate NaN, infinite, or subnormal.
 trivial_arbitrary!(f32);
 trivial_arbitrary!(f64);
+
+// Similarly, we do not constraint values for non-standard floating types.
+trivial_arbitrary!(f16);
+trivial_arbitrary!(f128);
 
 trivial_arbitrary!(());
 
@@ -124,7 +113,6 @@ nonzero_arbitrary!(NonZeroIsize, isize);
 impl<T, const N: usize> Arbitrary for [T; N]
 where
     T: Arbitrary,
-    [(); std::mem::size_of::<[T; N]>()]:,
 {
     fn any() -> Self {
         T::any_array()

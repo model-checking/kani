@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use crate::codegen_cprover_gotoc::GotocCtx;
-use stable_mir::mir::{BasicBlock, BasicBlockIdx};
+use stable_mir::mir::{BasicBlock, BasicBlockIdx, Body};
+use std::collections::HashSet;
 use tracing::debug;
 
 pub fn bb_label(bb: BasicBlockIdx) -> String {
@@ -71,4 +72,33 @@ impl<'tcx> GotocCtx<'tcx> {
             }
         }
     }
+}
+
+/// Iterate over the basic blocks in reverse post-order.
+///
+/// The `reverse_postorder` function used before was internal to the compiler and reflected the
+/// internal body representation.
+///
+/// As we introduce transformations on the top of SMIR body, there will be not guarantee of a
+/// 1:1 relationship between basic blocks from internal body and monomorphic body from StableMIR.
+pub fn reverse_postorder(body: &Body) -> impl Iterator<Item = BasicBlockIdx> {
+    postorder(body, 0, &mut HashSet::with_capacity(body.blocks.len())).into_iter().rev()
+}
+
+fn postorder(
+    body: &Body,
+    bb: BasicBlockIdx,
+    visited: &mut HashSet<BasicBlockIdx>,
+) -> Vec<BasicBlockIdx> {
+    if visited.contains(&bb) {
+        return vec![];
+    }
+    visited.insert(bb);
+
+    let mut result = vec![];
+    for succ in body.blocks[bb].terminator.successors() {
+        result.append(&mut postorder(body, succ, visited));
+    }
+    result.push(bb);
+    result
 }

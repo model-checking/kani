@@ -4,12 +4,17 @@
 //! Module used to configure a compiler session.
 
 use crate::args::Arguments;
+use rustc_data_structures::sync::Lrc;
+use rustc_errors::emitter::Emitter;
 use rustc_errors::{
-    emitter::Emitter, emitter::HumanReadableErrorType, fallback_fluent_bundle, json::JsonEmitter,
-    ColorConfig, Diagnostic, TerminalUrl,
+    emitter::HumanReadableErrorType, fallback_fluent_bundle, json::JsonEmitter, ColorConfig,
+    DiagInner,
 };
 use rustc_session::config::ErrorOutputType;
 use rustc_session::EarlyDiagCtxt;
+use rustc_span::source_map::FilePathMapping;
+use rustc_span::source_map::SourceMap;
+use std::io;
 use std::io::IsTerminal;
 use std::panic;
 use std::sync::LazyLock;
@@ -24,7 +29,7 @@ const BUG_REPORT_URL: &str =
 
 // Custom panic hook when running under user friendly message format.
 #[allow(clippy::type_complexity)]
-static PANIC_HOOK: LazyLock<Box<dyn Fn(&panic::PanicInfo<'_>) + Sync + Send + 'static>> =
+static PANIC_HOOK: LazyLock<Box<dyn Fn(&panic::PanicHookInfo<'_>) + Sync + Send + 'static>> =
     LazyLock::new(|| {
         let hook = panic::take_hook();
         panic::set_hook(Box::new(|info| {
@@ -41,7 +46,7 @@ static PANIC_HOOK: LazyLock<Box<dyn Fn(&panic::PanicInfo<'_>) + Sync + Send + 's
 
 // Custom panic hook when executing under json error format `--error-format=json`.
 #[allow(clippy::type_complexity)]
-static JSON_PANIC_HOOK: LazyLock<Box<dyn Fn(&panic::PanicInfo<'_>) + Sync + Send + 'static>> =
+static JSON_PANIC_HOOK: LazyLock<Box<dyn Fn(&panic::PanicHookInfo<'_>) + Sync + Send + 'static>> =
     LazyLock::new(|| {
         let hook = panic::take_hook();
         panic::set_hook(Box::new(|info| {
@@ -49,18 +54,16 @@ static JSON_PANIC_HOOK: LazyLock<Box<dyn Fn(&panic::PanicInfo<'_>) + Sync + Send
             let msg = format!("Kani unexpectedly panicked at {info}.",);
             let fallback_bundle =
                 fallback_fluent_bundle(rustc_driver::DEFAULT_LOCALE_RESOURCES.to_vec(), false);
-            let mut emitter = JsonEmitter::basic(
+            let mut emitter = JsonEmitter::new(
+                Box::new(io::BufWriter::new(io::stderr())),
+                #[allow(clippy::arc_with_non_send_sync)]
+                Lrc::new(SourceMap::new(FilePathMapping::empty())),
+                fallback_bundle,
                 false,
                 HumanReadableErrorType::Default(ColorConfig::Never),
-                None,
-                fallback_bundle,
-                None,
-                false,
-                false,
-                TerminalUrl::No,
             );
-            let diagnostic = Diagnostic::new(rustc_errors::Level::Bug, msg);
-            emitter.emit_diagnostic(&diagnostic);
+            let diagnostic = DiagInner::new(rustc_errors::Level::Bug, msg);
+            emitter.emit_diagnostic(diagnostic);
             (*JSON_PANIC_HOOK)(info);
         }));
         hook

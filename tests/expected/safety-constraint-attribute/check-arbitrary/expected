@@ -1,0 +1,11 @@
+Check 1: check_arbitrary.assertion.1\
+         - Status: SUCCESS\
+         - Description: "assertion failed: point.x >= 0"
+
+Check 2: check_arbitrary.assertion.2\
+         - Status: SUCCESS\
+         - Description: "assertion failed: point.y >= 0"
+
+Check 3: check_arbitrary.assertion.3\
+         - Status: SUCCESS\
+         - Description: "assertion failed: point.is_safe()"

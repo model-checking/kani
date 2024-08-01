@@ -16,4 +16,6 @@ def main(args):
     args.suites_dir = run_result.out_prefix / run_result.out_symlink
     results = benchcomp.entry.collate.main(args)
 
+    results = benchcomp.entry.filter.main(args)
+
     benchcomp.entry.visualize.main(args)

@@ -107,6 +107,11 @@ impl SymbolTable {
         self.symbol_table.get(&name)
     }
 
+    pub fn lookup_mut<T: Into<InternedString>>(&mut self, name: T) -> Option<&mut Symbol> {
+        let name = name.into();
+        self.symbol_table.get_mut(&name)
+    }
+
     pub fn machine_model(&self) -> &MachineModel {
         &self.machine_model
     }

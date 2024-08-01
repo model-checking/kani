@@ -1,0 +1,6 @@
+error: Cannot derive `Invariant` for `Point`
+   |
+| #[derive(Invariant)]
+   |          ^^^^^^^^^
+   |
+note: `#[safety_constraint(...)]` cannot be used in struct and its fields simultaneously

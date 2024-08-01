@@ -3,7 +3,8 @@
 
 //! Checks that storing the result of a vector comparison in a vector of floats
 //! causes an error.
-#![feature(repr_simd, platform_intrinsics)]
+#![feature(repr_simd, core_intrinsics)]
+use std::intrinsics::simd::simd_eq;
 
 #[repr(simd)]
 #[allow(non_camel_case_types)]
@@ -24,14 +25,6 @@ pub struct u32x4(u32, u32, u32, u32);
 #[allow(non_camel_case_types)]
 #[derive(Clone, Copy, PartialEq)]
 pub struct f32x2(f32, f32);
-
-// From <https://github.com/rust-lang/rfcs/blob/master/text/1199-simd-infrastructure.md#comparisons>:
-// > The type checker ensures that `T` and `U` have the same length, and that
-// > `U` is appropriately "boolean"-y.
-// This means that `U` is allowed to be `i64` or `u64`, but not `f64`.
-extern "platform-intrinsic" {
-    fn simd_eq<T, U>(x: T, y: T) -> U;
-}
 
 #[kani::proof]
 fn main() {

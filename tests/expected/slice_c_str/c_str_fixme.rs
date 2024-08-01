@@ -1,3 +1,5 @@
+// Copyright Kani Contributors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
 #![feature(rustc_private)]
 #![feature(c_str_literals)]
 //! FIXME: <https://github.com/rust-lang/rust/issues/113333>

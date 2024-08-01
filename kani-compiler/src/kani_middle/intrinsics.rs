@@ -6,7 +6,7 @@ use rustc_index::IndexVec;
 use rustc_middle::mir::{Body, Const as mirConst, ConstValue, Operand, TerminatorKind};
 use rustc_middle::mir::{Local, LocalDecl};
 use rustc_middle::ty::{self, Ty, TyCtxt};
-use rustc_middle::ty::{Const, GenericArgsRef};
+use rustc_middle::ty::{Const, GenericArgsRef, IntrinsicDef};
 use rustc_span::source_map::Spanned;
 use rustc_span::symbol::{sym, Symbol};
 use tracing::{debug, trace};
@@ -33,8 +33,8 @@ impl<'tcx> ModelIntrinsics<'tcx> {
             let terminator = block.terminator_mut();
             if let TerminatorKind::Call { func, args, .. } = &mut terminator.kind {
                 let func_ty = func.ty(&self.local_decls, self.tcx);
-                if let Some((intrinsic_name, generics)) = resolve_rust_intrinsic(self.tcx, func_ty)
-                {
+                if let Some((intrinsic, generics)) = resolve_rust_intrinsic(self.tcx, func_ty) {
+                    let intrinsic_name = intrinsic.name;
                     trace!(?func, ?intrinsic_name, "run_pass");
                     if intrinsic_name == sym::simd_bitmask {
                         self.replace_simd_bitmask(func, args, generics)
@@ -57,7 +57,12 @@ impl<'tcx> ModelIntrinsics<'tcx> {
         let arg_ty = args[0].node.ty(&self.local_decls, tcx);
         if arg_ty.is_simd() {
             // Get the stub definition.
-            let stub_id = tcx.get_diagnostic_item(Symbol::intern("KaniModelSimdBitmask")).unwrap();
+            let Some(stub_id) = tcx.get_diagnostic_item(Symbol::intern("KaniModelSimdBitmask"))
+            else {
+                // This should only happen when verifying the standard library.
+                // We don't need to warn here, since the backend will print unsupported constructs.
+                return;
+            };
             debug!(?func, ?stub_id, "replace_simd_bitmask");
 
             // Get SIMD information from the type.
@@ -72,7 +77,7 @@ impl<'tcx> ModelIntrinsics<'tcx> {
             let Operand::Constant(fn_def) = func else { unreachable!() };
             fn_def.const_ = mirConst::from_value(
                 ConstValue::ZeroSized,
-                tcx.type_of(stub_id).instantiate(tcx, &new_gen_args),
+                tcx.type_of(stub_id).instantiate(tcx, &*new_gen_args),
             );
         } else {
             debug!(?arg_ty, "replace_simd_bitmask failed");
@@ -99,10 +104,10 @@ fn simd_len_and_type<'tcx>(tcx: TyCtxt<'tcx>, simd_ty: Ty<'tcx>) -> (Const<'tcx>
 fn resolve_rust_intrinsic<'tcx>(
     tcx: TyCtxt<'tcx>,
     func_ty: Ty<'tcx>,
-) -> Option<(Symbol, GenericArgsRef<'tcx>)> {
+) -> Option<(IntrinsicDef, GenericArgsRef<'tcx>)> {
     if let ty::FnDef(def_id, args) = *func_ty.kind() {
-        if tcx.is_intrinsic(def_id) {
-            return Some((tcx.item_name(def_id), args));
+        if let Some(symbol) = tcx.intrinsic(def_id) {
+            return Some((symbol, args));
         }
     }
     None

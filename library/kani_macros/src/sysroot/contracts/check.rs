@@ -9,9 +9,11 @@ use syn::{Expr, FnArg, ItemFn, Token};
 
 use super::{
     helpers::*,
-    shared::{make_unsafe_argument_copies, try_as_result_assign_mut},
-    ContractConditionsData, ContractConditionsHandler,
+    shared::{build_ensures, try_as_result_assign_mut},
+    ContractConditionsData, ContractConditionsHandler, INTERNAL_RESULT_IDENT,
 };
+
+const WRAPPER_ARG_PREFIX: &str = "_wrapper_arg_";
 
 impl<'a> ContractConditionsHandler<'a> {
     /// Create the body of a check function.
@@ -31,27 +33,27 @@ impl<'a> ContractConditionsHandler<'a> {
                     #(#inner)*
                 )
             }
-            ContractConditionsData::Ensures { argument_names, attr } => {
-                let (arg_copies, copy_clean) = make_unsafe_argument_copies(&argument_names);
+            ContractConditionsData::Ensures { attr } => {
+                let (remembers, ensures_clause) = build_ensures(attr);
 
                 // The code that enforces the postconditions and cleans up the shallow
                 // argument copies (with `mem::forget`).
                 let exec_postconditions = quote!(
-                    kani::assert(#attr, stringify!(#attr_copy));
-                    #copy_clean
+                    kani::assert(#ensures_clause, stringify!(#attr_copy));
                 );
 
                 assert!(matches!(
                     inner.pop(),
                     Some(syn::Stmt::Expr(syn::Expr::Path(pexpr), None))
-                        if pexpr.path.get_ident().map_or(false, |id| id == "result")
+                        if pexpr.path.get_ident().map_or(false, |id| id == INTERNAL_RESULT_IDENT)
                 ));
 
+                let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
                 quote!(
-                    #arg_copies
+                    #remembers
                     #(#inner)*
                     #exec_postconditions
-                    result
+                    #result
                 )
             }
             ContractConditionsData::Modifies { attr } => {
@@ -60,7 +62,11 @@ impl<'a> ContractConditionsHandler<'a> {
                 let wrapper_args = if let Some(wrapper_call_args) =
                     inner.iter_mut().find_map(|stmt| try_as_wrapper_call_args(stmt, &wrapper_name))
                 {
-                    let wrapper_args = make_wrapper_args(wrapper_call_args.len(), attr.len());
+                    let wrapper_args = make_wrapper_idents(
+                        wrapper_call_args.len(),
+                        attr.len(),
+                        WRAPPER_ARG_PREFIX,
+                    );
                     wrapper_call_args
                         .extend(wrapper_args.clone().map(|a| Expr::Verbatim(quote!(#a))));
                     wrapper_args
@@ -89,9 +95,10 @@ impl<'a> ContractConditionsHandler<'a> {
             } else {
                 quote!(#wrapper_name)
             };
+            let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
             syn::parse_quote!(
-                let result : #return_type = #wrapper_call(#(#args),*);
-                result
+                let #result : #return_type = #wrapper_call(#(#args),*);
+                #result
             )
         } else {
             self.annotated_fn.block.stmts.clone()
@@ -112,6 +119,8 @@ impl<'a> ContractConditionsHandler<'a> {
         }
         let body = self.make_check_body();
         let mut sig = self.annotated_fn.sig.clone();
+        // We use non-constant functions, thus, the wrapper cannot be constant.
+        sig.constness = None;
         if let Some(ident) = override_function_dent {
             sig.ident = ident;
         }
@@ -124,20 +133,51 @@ impl<'a> ContractConditionsHandler<'a> {
 
     /// Emit a modifies wrapper, possibly augmenting a prior, existing one.
     ///
-    /// We only augment if this clause is a `modifies` clause. In that case we
-    /// expand its signature with one new argument of type `&impl Arbitrary` for
-    /// each expression in the clause.
+    /// We only augment if this clause is a `modifies` clause. Before,
+    /// we annotated the wrapper arguments with `impl kani::Arbitrary`,
+    /// so Rust would infer the proper types for each argument.
+    /// We want to remove the restriction that these arguments must
+    /// implement `kani::Arbitrary` for checking. Now, we annotate each
+    /// argument with a generic type parameter, so the compiler can
+    /// continue inferring the correct types.
     pub fn emit_augmented_modifies_wrapper(&mut self) {
         if let ContractConditionsData::Modifies { attr } = &self.condition_type {
-            let wrapper_args = make_wrapper_args(self.annotated_fn.sig.inputs.len(), attr.len());
+            let wrapper_args = make_wrapper_idents(
+                self.annotated_fn.sig.inputs.len(),
+                attr.len(),
+                WRAPPER_ARG_PREFIX,
+            );
+            // Generate a unique type parameter identifier
+            let type_params = make_wrapper_idents(
+                self.annotated_fn.sig.inputs.len(),
+                attr.len(),
+                "WrapperArgType",
+            );
             let sig = &mut self.annotated_fn.sig;
-            for arg in wrapper_args.clone() {
+            for (arg, arg_type) in wrapper_args.clone().zip(type_params) {
+                // Add the type parameter to the function signature's generic parameters list
+                let mut bounds: syn::punctuated::Punctuated<syn::TypeParamBound, syn::token::Plus> =
+                    syn::punctuated::Punctuated::new();
+                bounds.push(syn::TypeParamBound::Trait(syn::TraitBound {
+                    paren_token: None,
+                    modifier: syn::TraitBoundModifier::Maybe(Token![?](Span::call_site())),
+                    lifetimes: None,
+                    path: syn::Ident::new("Sized", Span::call_site()).into(),
+                }));
+                sig.generics.params.push(syn::GenericParam::Type(syn::TypeParam {
+                    attrs: vec![],
+                    ident: arg_type.clone(),
+                    colon_token: Some(Token![:](Span::call_site())),
+                    bounds: bounds,
+                    eq_token: None,
+                    default: None,
+                }));
                 let lifetime = syn::Lifetime { apostrophe: Span::call_site(), ident: arg.clone() };
                 sig.inputs.push(FnArg::Typed(syn::PatType {
                     attrs: vec![],
                     colon_token: Token![:](Span::call_site()),
                     pat: Box::new(syn::Pat::Verbatim(quote!(#arg))),
-                    ty: Box::new(syn::Type::Verbatim(quote!(&#lifetime impl kani::Arbitrary))),
+                    ty: Box::new(syn::parse_quote! { &#arg_type }),
                 }));
                 sig.generics.params.push(syn::GenericParam::Lifetime(syn::LifetimeParam {
                     lifetime,
@@ -146,6 +186,7 @@ impl<'a> ContractConditionsHandler<'a> {
                     attrs: vec![],
                 }));
             }
+
             self.output.extend(quote!(#[kanitool::modifies(#(#wrapper_args),*)]))
         }
         self.emit_common_header();
@@ -191,10 +232,14 @@ fn try_as_wrapper_call_args<'a>(
     }
 }
 
-/// Make `num` [`Ident`]s with the names `_wrapper_arg_{i}` with `i` starting at `low` and
+/// Make `num` [`Ident`]s with the names `prefix{i}` with `i` starting at `low` and
 /// increasing by one each time.
-fn make_wrapper_args(low: usize, num: usize) -> impl Iterator<Item = syn::Ident> + Clone {
-    (low..).map(|i| Ident::new(&format!("_wrapper_arg_{i}"), Span::mixed_site())).take(num)
+fn make_wrapper_idents(
+    low: usize,
+    num: usize,
+    prefix: &'static str,
+) -> impl Iterator<Item = syn::Ident> + Clone + 'static {
+    (low..).map(move |i| Ident::new(&format!("{prefix}{i}"), Span::mixed_site())).take(num)
 }
 
 #[cfg(test)]

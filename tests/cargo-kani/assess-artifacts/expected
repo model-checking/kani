@@ -3,7 +3,7 @@ Analyzed 1 packages
  Unsupported feature |   Crates | Instances
                      | impacted |    of use
 ---------------------+----------+-----------
- try                 |        1 |         2
+ catch_unwind        |        1 |         2
 ============================================
 =========================================
  Reason for failure    | Number of tests

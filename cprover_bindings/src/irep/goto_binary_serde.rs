@@ -11,7 +11,7 @@ use std::io::{self, BufReader};
 use std::io::{BufWriter, Bytes, Error, ErrorKind, Read, Write};
 use std::path::Path;
 
-/// Writes a symbol table to a file in goto binary format in version 5.
+/// Writes a symbol table to a file in goto binary format in version 6.
 ///
 /// In CBMC, the serialization rules are defined in :
 /// - src/goto-programs/write_goto_binary.h
@@ -26,7 +26,7 @@ pub fn write_goto_binary_file(filename: &Path, source: &crate::goto_program::Sym
     serializer.write_file(irep_symbol_table);
 }
 
-/// Reads a symbol table from a file expected to be in goto binary format in version 5.
+/// Reads a symbol table from a file expected to be in goto binary format in version 6.
 //
 /// In CBMC, the deserialization rules are defined in :
 /// - src/goto-programs/read_goto_binary.h
@@ -78,11 +78,9 @@ pub fn read_goto_binary_file(filename: &Path) -> io::Result<()> {
 /// [NumberedIrep] from its unique number.
 ///
 /// In practice:
-/// - the forward directon from [IrepKey] to unique numbers is
-/// implemented using a `HashMap<IrepKey,usize>`
-/// - the inverse direction from unique numbers to [NumberedIrep] is implemented
-/// using a `Vec<NumberedIrep>` called the `index` that stores [NumberedIrep]
-/// under their unique number.
+/// - the forward directon from [IrepKey] to unique numbers is implemented using a `HashMap<IrepKey,usize>`
+/// - the inverse direction from unique numbers to [NumberedIrep] is implemented usign a `Vec<NumberedIrep>`
+///   called the `index` that stores [NumberedIrep] under their unique number.
 ///
 /// Earlier we said that an [NumberedIrep] is conceptually a pair formed of
 /// an [IrepKey] and its unique number. It is represented using only
@@ -542,7 +540,7 @@ where
         assert!(written == 4);
 
         // Write goto binary version
-        self.write_usize_varenc(5);
+        self.write_usize_varenc(6);
     }
 
     /// Writes the symbol table using the GOTO binary file format to the byte stream.
@@ -923,12 +921,12 @@ where
 
         // Read goto binary version
         let goto_binary_version = self.read_usize_varenc()?;
-        if goto_binary_version != 5 {
+        if goto_binary_version != 6 {
             return Err(Error::new(
                 ErrorKind::Other,
                 format!(
                     "Unsupported GOTO binary version: {}. Supported version: {}",
-                    goto_binary_version, 5
+                    goto_binary_version, 6
                 ),
             ));
         }

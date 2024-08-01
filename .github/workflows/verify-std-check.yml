@@ -1,0 +1,89 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+#
+# This workflow will try to build and run the `verify-rust-std` repository.
+#
+# This check should be optional, but it has been added to help provide
+# visibility to when a PR may break the `verify-rust-std` repository.
+#
+# We expect toolchain updates to potentially break this workflow in cases where
+# the version tracked in the `verify-rust-std` is not compatible with newer
+# versions of the Rust toolchain.
+#
+# Changes unrelated to the toolchain should match the current status of main.
+
+name: Check Std Verification
+on:
+  pull_request:
+  workflow_call:
+
+env:
+  RUST_BACKTRACE: 1
+
+jobs:
+  verify-std:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        # Kani does not support windows.
+        os: [ ubuntu-22.04, macos-14 ]
+    steps:
+      - name: Checkout Library
+        uses: actions/checkout@v4
+        with:
+          repository: model-checking/verify-rust-std
+          path: verify-rust-std
+          submodules: true
+
+      - name: Checkout `Kani`
+        uses: actions/checkout@v4
+        with:
+          path: kani
+          fetch-depth: 0
+
+      - name: Setup Kani Dependencies
+        uses: ./kani/.github/actions/setup
+        with:
+          os: ${{ matrix.os }}
+          kani_dir: kani
+
+      - name: Build Kani
+        working-directory: kani
+        run: |
+          cargo build-dev
+          echo "$(pwd)/scripts" >> $GITHUB_PATH
+
+      - name: Run verification with HEAD
+        id: check-head
+        working-directory: verify-rust-std
+        continue-on-error: true
+        run: |
+          kani verify-std -Z unstable-options ./library --target-dir ${{ runner.temp }} -Z function-contracts \
+            -Z mem-predicates -Z ptr-to-ref-cast-checks
+
+      # If the head failed, check if it's a new failure.
+      - name: Checkout base
+        working-directory: kani
+        if: steps.check-head.outcome != 'success' && github.event_name == 'pull_request'
+        run: |
+          BASE_REF=${{ github.event.pull_request.base.sha }}
+          git checkout ${BASE_REF}
+          cargo build-dev
+
+      - name: Run verification with BASE
+        id: check-base
+        if: steps.check-head.outcome != 'success' && github.event_name == 'pull_request'
+        working-directory: verify-rust-std
+        continue-on-error: true
+        run: |
+          kani verify-std -Z unstable-options ./library --target-dir ${{ runner.temp }} -Z function-contracts \
+            -Z mem-predicates -Z ptr-to-ref-cast-checks
+
+      - name: Compare PR results
+        if: steps.check-head.outcome != 'success' && steps.check-head.outcome != steps.check-base.outcome
+        run: |
+          echo "New failure introduced by this change"
+          echo "HEAD: ${{ steps.check-head.outcome }}"
+          echo "BASE: ${{ steps.check-base.outcome }}"
+          exit 1
+

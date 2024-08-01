@@ -100,8 +100,6 @@ impl ValidateArgs for PlaybackArgs {
 
 #[cfg(test)]
 mod tests {
-    use clap::Parser;
-
     use super::*;
 
     #[test]

@@ -4,7 +4,7 @@
 
 #![allow(unreachable_code, unused_variables)]
 
-#[kani::ensures(true)]
+#[kani::ensures(|result| true)]
 fn allowed_mut_ref(t: &mut bool) {}
 
 #[kani::proof_for_contract(allowed_mut_ref)]
