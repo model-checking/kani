@@ -14,7 +14,8 @@ use std::collections::{HashMap, HashSet, VecDeque};
 /// A node in the points-to graph, which could be a place on the stack or a heap allocation.
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum LocalMemLoc<'tcx> {
-    /// Using a combination of DefId + Location implements allocation-site abstraction.
+    /// Using a combination of DefId of the function where the allocation took place + Location
+    /// implements allocation-site abstraction.
     Alloc(DefId, Location),
     Place(Place<'tcx>),
 }
