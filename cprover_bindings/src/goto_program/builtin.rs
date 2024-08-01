@@ -4,6 +4,8 @@
 use self::BuiltinFn::*;
 use super::{Expr, Location, Symbol, Type};
 
+use std::fmt::Display;
+
 #[derive(Debug, Clone, Copy)]
 pub enum BuiltinFn {
     Abort,
@@ -67,9 +69,9 @@ pub enum BuiltinFn {
     Unlink,
 }
 
-impl ToString for BuiltinFn {
-    fn to_string(&self) -> String {
-        match self {
+impl Display for BuiltinFn {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let func = match self {
             Abort => "abort",
             Assert => "assert",
             CProverAssume => "__CPROVER_assume",
@@ -129,8 +131,8 @@ impl ToString for BuiltinFn {
             Trunc => "trunc",
             Truncf => "truncf",
             Unlink => "unlink",
-        }
-        .to_string()
+        };
+        write!(f, "{func}")
     }
 }
 

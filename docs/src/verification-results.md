@@ -38,7 +38,7 @@ Check 4: success_example.assertion.4
 ```
 
 2. `FAILURE`: This indicates that the check failed (i.e., the property doesn't
-hold). In this case, please see the [debugging verification failures](./debugging-verification-failures.md)
+hold). In this case, please see the [concrete playback](./experimental/concrete-playback.md)
 section for more help.
 
 Example:

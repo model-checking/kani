@@ -3,7 +3,8 @@
 
 //! Checks that the `simd_shl` and `simd_shr` intrinsics are supported and they
 //! return the expected results.
-#![feature(repr_simd, platform_intrinsics)]
+#![feature(repr_simd, core_intrinsics)]
+use std::intrinsics::simd::{simd_shl, simd_shr};
 
 #[repr(simd)]
 #[allow(non_camel_case_types)]
@@ -14,11 +15,6 @@ pub struct i32x2(i32, i32);
 #[allow(non_camel_case_types)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct u32x2(u32, u32);
-
-extern "platform-intrinsic" {
-    fn simd_shl<T>(x: T, y: T) -> T;
-    fn simd_shr<T>(x: T, y: T) -> T;
-}
 
 #[kani::proof]
 fn test_simd_shl() {

@@ -98,7 +98,11 @@ pub enum ExprValue {
     // {}
     EmptyUnion,
     /// `1.0f`
+    Float16Constant(f16),
+    /// `1.0f`
     FloatConstant(f32),
+    /// `Float 128 example`
+    Float128Constant(f128),
     /// `function(arguments)`
     FunctionCall {
         function: Expr,
@@ -126,6 +130,10 @@ pub enum ExprValue {
     Nondet,
     /// `NULL`
     PointerConstant(u64),
+    ReadOk {
+        ptr: Expr,
+        size: Expr,
+    },
     // `op++` etc
     SelfOp {
         op: SelfOperator,
@@ -136,6 +144,7 @@ pub enum ExprValue {
     /// `({ op1; op2; ...})`
     StatementExpression {
         statements: Vec<Stmt>,
+        location: Location,
     },
     /// A raw string constant. Note that you normally actually want a pointer to the first element.
     /// `"s"`
@@ -385,6 +394,7 @@ impl Expr {
             source.is_integer() || source.is_pointer() || source.is_bool()
         } else if target.is_integer() {
             source.is_c_bool()
+                || source.is_bool()
                 || source.is_integer()
                 || source.is_floating_point()
                 || source.is_pointer()
@@ -575,6 +585,28 @@ impl Expr {
         expr!(EmptyUnion, typ)
     }
 
+    /// `3.14f`
+    pub fn float16_constant(c: f16) -> Self {
+        expr!(Float16Constant(c), Type::float16())
+    }
+
+    /// `union {_Float16 f; uint16_t bp} u = {.bp = 0x1234}; >>> u.f <<<`
+    pub fn float16_constant_from_bitpattern(bp: u16) -> Self {
+        let c = f16::from_bits(bp);
+        Self::float16_constant(c)
+    }
+
+    /// `3.14159265358979323846264338327950288L`
+    pub fn float128_constant(c: f128) -> Self {
+        expr!(Float128Constant(c), Type::float128())
+    }
+
+    /// `union {_Float128 f; __uint128_t bp} u = {.bp = 0x1234}; >>> u.f <<<`
+    pub fn float128_constant_from_bitpattern(bp: u128) -> Self {
+        let c = f128::from_bits(bp);
+        Self::float128_constant(c)
+    }
+
     /// `1.0f`
     pub fn float_constant(c: f32) -> Self {
         expr!(FloatConstant(c), Type::float())
@@ -717,6 +749,14 @@ impl Expr {
         expr!(Nondet, typ)
     }
 
+    /// `read_ok(ptr, size)`
+    pub fn read_ok(ptr: Expr, size: Expr) -> Self {
+        assert_eq!(*ptr.typ(), Type::void_pointer());
+        assert_eq!(*size.typ(), Type::size_t());
+
+        expr!(ReadOk { ptr, size }, Type::bool())
+    }
+
     /// `e.g. NULL`
     pub fn pointer_constant(c: u64, typ: Type) -> Self {
         assert!(typ.is_pointer());
@@ -726,10 +766,10 @@ impl Expr {
     /// <https://gcc.gnu.org/onlinedocs/gcc/Statement-Exprs.html>
     /// e.g. `({ int y = foo (); int z; if (y > 0) z = y; else z = - y; z; })`
     /// `({ op1; op2; ...})`
-    pub fn statement_expression(ops: Vec<Stmt>, typ: Type) -> Self {
+    pub fn statement_expression(ops: Vec<Stmt>, typ: Type, loc: Location) -> Self {
         assert!(!ops.is_empty());
         assert_eq!(ops.last().unwrap().get_expression().unwrap().typ, typ);
-        expr!(StatementExpression { statements: ops }, typ)
+        expr!(StatementExpression { statements: ops, location: loc }, typ).with_location(loc)
     }
 
     /// Internal helper function for Struct initalizer
@@ -1042,6 +1082,7 @@ impl Expr {
     ///     <https://github.com/rust-lang/rfcs/blob/master/text/1199-simd-infrastructure.md#comparisons>).
     ///     The signedness doesn't matter, as the result for each element is
     ///     either "all ones" (true) or "all zeros" (false).
+    ///
     /// For example, one can use `simd_eq` on two `f64x4` vectors and assign the
     /// result to a `u64x4` vector. But it's not possible to assign it to: (1) a
     /// `u64x2` because they don't have the same length; or (2) another `f64x4`
@@ -1318,11 +1359,11 @@ impl Expr {
     fn unop_return_type(op: UnaryOperator, arg: &Expr) -> Type {
         match op {
             Bitnot | BitReverse | Bswap | UnaryMinus => arg.typ.clone(),
-            CountLeadingZeros { .. } | CountTrailingZeros { .. } => arg.typ.clone(),
+            CountLeadingZeros { .. } | CountTrailingZeros { .. } => Type::unsigned_int(32),
             ObjectSize | PointerObject => Type::size_t(),
             PointerOffset => Type::ssize_t(),
             IsDynamicObject | IsFinite | Not => Type::bool(),
-            Popcount => arg.typ.clone(),
+            Popcount => Type::unsigned_int(32),
         }
     }
     /// Private helper function to make unary operators
@@ -1652,7 +1693,7 @@ impl Expr {
                         continue;
                     }
                     let name = field.name();
-                    exprs.insert(name, self.clone().member(&name.to_string(), symbol_table));
+                    exprs.insert(name, self.clone().member(name.to_string(), symbol_table));
                 }
             }
         }

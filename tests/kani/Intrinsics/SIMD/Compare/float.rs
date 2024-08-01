@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 //! Checks that intrinsics for SIMD vectors of signed integers are supported
-#![feature(repr_simd, platform_intrinsics)]
+#![feature(repr_simd, core_intrinsics)]
+use std::intrinsics::simd::*;
 
 #[repr(simd)]
 #[allow(non_camel_case_types)]
@@ -18,17 +19,6 @@ pub struct i64x2(i64, i64);
 #[allow(non_camel_case_types)]
 #[derive(Clone, Copy, PartialEq)]
 pub struct i32x2(i32, i32);
-
-// The predicate type U in the functions below must
-// be a SIMD type, otherwise we get a compilation error
-extern "platform-intrinsic" {
-    fn simd_eq<T, U>(x: T, y: T) -> U;
-    fn simd_ne<T, U>(x: T, y: T) -> U;
-    fn simd_lt<T, U>(x: T, y: T) -> U;
-    fn simd_le<T, U>(x: T, y: T) -> U;
-    fn simd_gt<T, U>(x: T, y: T) -> U;
-    fn simd_ge<T, U>(x: T, y: T) -> U;
-}
 
 macro_rules! assert_cmp {
     ($res_cmp: ident, $simd_cmp: ident, $x: expr, $y: expr, $($res: expr),+) => {

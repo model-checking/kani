@@ -247,7 +247,7 @@ where
 /// Resolves an external crate name.
 fn resolve_external(tcx: TyCtxt, name: &str) -> Option<DefId> {
     debug!(?name, "resolve_external");
-    tcx.crates(()).iter().find_map(|crate_num| {
+    tcx.used_crates(()).iter().find_map(|crate_num| {
         let crate_name = tcx.crate_name(*crate_num);
         if crate_name.as_str() == name {
             Some(DefId { index: CRATE_DEF_INDEX, krate: *crate_num })
@@ -399,8 +399,11 @@ fn resolve_in_type<'tcx>(
     name: &str,
 ) -> Result<DefId, ResolveError<'tcx>> {
     debug!(?name, ?type_id, "resolve_in_type");
+    let missing_item_err =
+        || ResolveError::MissingItem { tcx, base: type_id, unresolved: name.to_string() };
     // Try the inherent `impl` blocks (i.e., non-trait `impl`s).
     tcx.inherent_impls(type_id)
+        .map_err(|_| missing_item_err())?
         .iter()
         .flat_map(|impl_id| tcx.associated_item_def_ids(impl_id))
         .cloned()
@@ -409,9 +412,5 @@ fn resolve_in_type<'tcx>(
             let last = item_path.split("::").last().unwrap();
             last == name
         })
-        .ok_or_else(|| ResolveError::MissingItem {
-            tcx,
-            base: type_id,
-            unresolved: name.to_string(),
-        })
+        .ok_or_else(missing_item_err)
 }

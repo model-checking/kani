@@ -26,7 +26,7 @@ Common to both `kani` and `cargo kani` are many command-line flags:
  * `--concrete-playback=[print|inplace]`: _Experimental_, `--enable-unstable` feature that generates a Rust unit test case
  that plays back a failing proof harness using a concrete counterexample.
  If used with `print`, Kani will only print the unit test to stdout.
- If used with `inplace`, Kani will automatically add the unit test to the user's source code, next to the proof harness. For more detailed instructions, see the [debugging verification failures](./debugging-verification-failures.md) section.
+ If used with `inplace`, Kani will automatically add the unit test to the user's source code, next to the proof harness. For more detailed instructions, see the [concrete playback](./experimental/concrete-playback.md) section.
 
  * `--visualize`: _Experimental_, `--enable-unstable` feature that generates an HTML report providing traces (i.e., counterexamples) for each failure found by Kani.
 
@@ -68,12 +68,23 @@ default-unwind = 1
 
 The options here are the same as on the command line (`cargo kani --help`), and flags (that is, command line arguments that don't take a value) are enabled by setting them to `true`.
 
+Starting with Rust 1.80 (or nightly-2024-05-05), every reachable #[cfg] will be automatically checked that they match the expected config names and values.
+To avoid warnings on `cfg(kani)`, we recommend adding the `check-cfg` lint config in your crate's `Cargo.toml` as follows:
+
+```toml
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
+```
+
+For more information please consult this [blog post](https://blog.rust-lang.org/2024/05/06/check-cfg.html).
+
 ## The build process
 
-When Kani builds your code, it does two important things:
+When Kani builds your code, it does three important things:
 
-1. It sets `cfg(kani)`.
+1. It sets `cfg(kani)` for target crate compilation (including dependencies).
 2. It injects the `kani` crate.
+3. It sets `cfg(kani_host)` for host build targets such as any build script and procedural macro crates.
 
 A proof harness (which you can [learn more about in the tutorial](./kani-tutorial.md)), is a function annotated with `#[kani::proof]` much like a test is annotated with `#[test]`.
 But you may experience a similar problem using Kani as you would with `dev-dependencies`: if you try writing `#[kani::proof]` directly in your code, `cargo build` will fail because it doesn't know what the `kani` crate is.

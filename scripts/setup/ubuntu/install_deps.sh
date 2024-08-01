@@ -16,6 +16,7 @@ DEPS=(
   gpg-agent
   jq
   libssl-dev
+  lld
   lsb-release
   make
   ninja-build

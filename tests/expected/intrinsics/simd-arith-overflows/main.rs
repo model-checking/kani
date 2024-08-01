@@ -2,18 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 //! This test ensures we detect overflows in SIMD arithmetic operations
-#![feature(repr_simd, platform_intrinsics)]
+#![feature(repr_simd, core_intrinsics)]
+use std::intrinsics::simd::{simd_add, simd_mul, simd_sub};
 
 #[repr(simd)]
 #[allow(non_camel_case_types)]
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct i8x2(i8, i8);
-
-extern "platform-intrinsic" {
-    fn simd_add<T>(x: T, y: T) -> T;
-    fn simd_sub<T>(x: T, y: T) -> T;
-    fn simd_mul<T>(x: T, y: T) -> T;
-}
 
 #[kani::proof]
 fn main() {

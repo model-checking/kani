@@ -1,2 +1,2 @@
-error: Failed to compile lib `compilation-error`
+error: Failed to compile lib `compilation_error`
 error: Failed to assess project: Failed to build all targets

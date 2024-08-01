@@ -16,6 +16,7 @@ desktop.ini
 Session.vim
 .cproject
 .idea
+toolchains/
 *.iml
 .vscode
 .project
@@ -47,6 +48,10 @@ no_llvm_build
 /tmp/
 # Created by default with `src/ci/docker/run.sh`
 /obj/
+# Created by kani-compiler
+*.rlib
+*.rmeta
+*.mir
 
 ## Temporary files
 *~
@@ -73,10 +78,8 @@ package-lock.json
 tests/rustdoc-gui/src/**.lock
 
 # Before adding new lines, see the comment at the top.
-/.litani_cache_dir
 /.ninja_deps
 /.ninja_log
-/tests/bookrunner
 *Cargo.lock
 tests/kani-dependency-test/diamond-dependency/build
 tests/kani-multicrate/type-mismatch/mismatch/target
