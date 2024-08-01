@@ -310,14 +310,47 @@ discuss in [Future possibilities](#future-possibilities).
 The LLVM coverage instrumentation is implemented in the Rust compiler as a
 [MIR pass called `InstrumentCoverage`](https://rustc-dev-guide.rust-lang.org/llvm-coverage-instrumentation.html#mir-pass-instrumentcoverage).
 
-**Note: Explain what result is important for Kani first**
-
 The MIR pass first builds a coverage-specific version of the MIR Control Flow
 Graph (CFG) from the MIR. The initial version of this CFG is based on the MIR's
 `BasicBlock`s, which then gets refined by combining blocks that can be chained
-from a coverage-relevant point of view. The final version of the coverage CFG
-can then be used to compute the mix of `Counter`s and `Expression`s that
-represent the coverage information.
+from a coverage-relevant point of view. The final version of the coverage CFG is
+then used to determine where to inject the
+[`StatementKind::Coverage`](https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/enum.StatementKind.html#variant.Coverage)
+statements in order to measure coverage for a single region coverage span.
+
+The injection of `StatementKind::Coverage` statements is the main result we are
+interested in for the integration with Kani. Additionally, the instrumentation
+will also attach the
+[`FunctionCoverageInfo`](https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/coverage/struct.FunctionCoverageInfo.html)
+structure to each function's body.[^note-coverage-info]
+This result is also needed at the moment because coverage statements do not
+include information on the code region they are supposed to cover.
+However, `FunctionCoverageInfo` contains the
+[coverage mappings](https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/coverage/struct.Mapping.html),
+which represent the relation between
+[coverage counters](https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/coverage/enum.CovTerm.html)
+and code regions.
+
+As explained in [MIR Pass:
+`InstrumentCoverage`](https://rustc-dev-guide.rust-lang.org/llvm-coverage-instrumentation.html#mir-pass-instrumentcoverage),
+many coverage statements will not be converted into a physical
+counter[^note-physical-counter]. Instead, they will be converted into a
+*coverage-counter expression* that can be calculated based on other coverage
+counters. We highly recommend looking at the example in [MIR Pass:
+`InstrumentCoverage`](https://rustc-dev-guide.rust-lang.org/llvm-coverage-instrumentation.html#mir-pass-instrumentcoverage)
+to better understand how this works. This optimization is mainly done for
+performance reasons because incrementing a physical counter causes a
+non-negligible overhead, especially within loops. Fortunately, the Rust coverage
+instrumentation also computes the mix of `Counter`s and `Expression`s that make
+up the coverage statements.
+
+[^note-coverage-info]: It is important to note that the StableMIR interface does
+    not include `FunctionCoverageInfo` in function bodies. Because of that, we
+    need to pull it from the internal `rustc` function bodies.
+
+[^note-physical-counter]: By *physical counter*, we refer to a global program
+variable that is initialized to zero and incremented by one each time that the
+execution goes through.
 
 #### Integrating the instrumentation into Kani
 
