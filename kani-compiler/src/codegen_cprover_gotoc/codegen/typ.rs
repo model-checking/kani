@@ -1229,7 +1229,8 @@ impl<'tcx> GotocCtx<'tcx> {
                             }
                             let union_name = format!("{name}-union");
                             let union_pretty_name = format!("{pretty_name}-union");
-                            let cases =
+                            fields.push(DatatypeComponent::field(
+                                "cases",
                                 gcx.ensure_union(&union_name, &union_pretty_name, |ctx, name| {
                                     ctx.codegen_enum_cases(
                                         name,
@@ -1239,15 +1240,23 @@ impl<'tcx> GotocCtx<'tcx> {
                                         variants,
                                         initial_offset,
                                     )
-                                });
-                            let cases_size = Size::from_bytes(cases.sizeof(&gcx.symbol_table));
-                            fields.push(DatatypeComponent::field("cases", cases));
+                                }),
+                            ));
                             // Check if any padding is needed for alignment. This is needed for
                             // https://github.com/model-checking/kani/issues/2857 for example.
-                            let bytes_so_far = initial_offset + cases_size;
-                            if let Some(padding) =
-                                gcx.codegen_alignment_padding(bytes_so_far, &layout, fields.len())
-                            {
+                            // The logic for determining the maximum variant size is taken from:
+                            // https://github.com/rust-lang/rust/blob/e60ebb2f2c1facba87e7971798f3cbdfd309cd23/compiler/rustc_session/src/code_stats.rs#L166
+                            let max_variant_size = variants
+                                .iter()
+                                .map(|l: &LayoutS<FieldIdx, VariantIdx>| l.size)
+                                .max()
+                                .unwrap();
+                            let max_variant_size = std::cmp::max(max_variant_size, discr_offset);
+                            if let Some(padding) = gcx.codegen_alignment_padding(
+                                max_variant_size,
+                                &layout,
+                                fields.len(),
+                            ) {
                                 fields.push(padding);
                             }
                             fields
