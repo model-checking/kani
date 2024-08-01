@@ -62,12 +62,21 @@ impl<'tcx> LocalMemLoc<'tcx> {
 }
 
 /// Graph data structure that stores the current results of the point-to analysis. The graph is
-/// directed, so having an edge between two places means that one is pointing to the other. For
-/// example, `a = &b` would translate to `a --> b` and `a = b` to `a --> {all pointees of b}`.
+/// directed, so having an edge between two places means that one is pointing to the other. 
+/// 
+/// For example:
+/// - `a = &b` would translate to `a --> b`
+/// - `a = b` would translate to `a --> {all pointees of b}` (if `a` and `b` are pointers /
+///   references)
 ///
-/// Note that the aliasing is stored between places with no projections, which is sound but can be
-/// imprecise. I.e., if two places have an edge in the graph, could mean that some scalar sub-places
-/// (e.g. _1.0) of the places alias, too, but not the deref ones.
+/// Note that the aliasing is not field-sensitive, since the nodes in the graph are places with no
+/// projections, which is sound but can be imprecise.
+/// 
+/// For example:
+/// ```
+/// let ref_pair = (&a, &b); // Will add `ref_pair --> (a | b)` edges into the graph.
+/// let first = ref_pair.0; // Will add `first -> (a | b)`, which is an overapproximation.
+/// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PointsToGraph<'tcx> {
     /// A hash map of node --> {nodes} edges.
