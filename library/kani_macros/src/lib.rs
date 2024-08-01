@@ -165,7 +165,7 @@ pub fn unstable_feature(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// ### Adding `#[safety_constraint(...)]` to the struct as opposed to its fields
 ///
 /// As mentioned earlier, the `#[safety_constraint(...)]` attribute can be added
-/// to to either the struct or its fields, but not to both. Adding the
+/// to either the struct or its fields, but not to both. Adding the
 /// `#[safety_constraint(...)]` attribute to both the struct and its fields will
 /// result in an error.
 ///
@@ -188,7 +188,7 @@ pub fn unstable_feature(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// ```
 ///
 /// However, if we were defining a struct whose fields are not related in any
-/// way, we would prefer using the `#[safety_constraint(...)]` attribute in its
+/// way, we would prefer using the `#[safety_constraint(...)]` attribute on its
 /// fields:
 ///
 /// ```rust
@@ -262,7 +262,7 @@ pub fn derive_arbitrary(item: TokenStream) -> TokenStream {
 /// ### Adding `#[safety_constraint(...)]` to the struct as opposed to its fields
 ///
 /// As mentioned earlier, the `#[safety_constraint(...)]` attribute can be added
-/// to to either the struct or its fields, but not to both. Adding the
+/// to either the struct or its fields, but not to both. Adding the
 /// `#[safety_constraint(...)]` attribute to both the struct and its fields will
 /// result in an error.
 ///
@@ -285,7 +285,7 @@ pub fn derive_arbitrary(item: TokenStream) -> TokenStream {
 /// ```
 ///
 /// However, if we were defining a struct whose fields are not related in any
-/// way, we would prefer using the `#[safety_constraint(...)]` attribute in its
+/// way, we would prefer using the `#[safety_constraint(...)]` attribute on its
 /// fields:
 ///
 /// ```rust
