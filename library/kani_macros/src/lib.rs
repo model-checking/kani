@@ -115,7 +115,7 @@ pub fn unstable_feature(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// For example, the `check_positive` harness in this code is expected to
 /// pass:
 ///
-/// ```
+/// ```rust
 /// #[derive(kani::Arbitrary)]
 /// struct AlwaysPositive {
 ///     #[safety_constraint(*inner >= 0)]
@@ -133,7 +133,7 @@ pub fn unstable_feature(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// results when the values are over-constrained. For example, in this code
 /// the `check_positive` harness will pass too:
 ///
-/// ```
+/// ```rust
 /// #[derive(kani::Arbitrary)]
 /// struct AlwaysPositive {
 ///     #[safety_constraint(*inner >= 0 && *inner < i32::MIN)]
@@ -178,7 +178,7 @@ pub fn unstable_feature(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// specify that the inner vector's length is always less than or equal to its
 /// capacity, we should do it as follows:
 ///
-/// ```
+/// ```rust
 /// #[derive(Arbitrary)]
 /// #[safety_constraint(vector.len() <= *capacity)]
 /// struct MyVector<T> {
@@ -191,7 +191,7 @@ pub fn unstable_feature(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// way, we would prefer using the `#[safety_constraint(...)]` attribute in its
 /// fields:
 ///
-/// ```
+/// ```rust
 /// #[derive(Arbitrary)]
 /// struct PositivePoint {
 ///     #[safety_constraint(*x >= 0)]
@@ -221,7 +221,7 @@ pub fn derive_arbitrary(item: TokenStream) -> TokenStream {
 /// For example, the `check_positive` harness in this code is expected to
 /// fail:
 ///
-/// ```
+/// ```rust
 /// #[derive(kani::Invariant)]
 /// struct AlwaysPositive {
 ///     #[safety_constraint(*inner >= 0)]
@@ -246,7 +246,7 @@ pub fn derive_arbitrary(item: TokenStream) -> TokenStream {
 /// For example, for the `AlwaysPositive` struct from above, we will generate
 /// the following implementation:
 ///
-/// ```
+/// ```rust
 /// impl kani::Invariant for AlwaysPositive {
 ///     fn is_safe(&self) -> bool {
 ///         let obj = self;
@@ -275,7 +275,7 @@ pub fn derive_arbitrary(item: TokenStream) -> TokenStream {
 /// specify that the inner vector's length is always less than or equal to its
 /// capacity, we should do it as follows:
 ///
-/// ```
+/// ```rust
 /// #[derive(Invariant)]
 /// #[safety_constraint(vector.len() <= *capacity)]
 /// struct MyVector<T> {
@@ -288,7 +288,7 @@ pub fn derive_arbitrary(item: TokenStream) -> TokenStream {
 /// way, we would prefer using the `#[safety_constraint(...)]` attribute in its
 /// fields:
 ///
-/// ```
+/// ```rust
 /// #[derive(Invariant)]
 /// struct PositivePoint {
 ///     #[safety_constraint(*x >= 0)]
