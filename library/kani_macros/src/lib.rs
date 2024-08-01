@@ -161,6 +161,45 @@ pub fn unstable_feature(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// As usual, we recommend users to defend against these behaviors by using
 /// `kani::cover!(...)` checks and watching out for unreachable assertions in
 /// their project's code.
+///
+/// ### Adding `#[safety_constraint(...)]` to the struct as opposed to its fields
+///
+/// As mentioned earlier, the `#[safety_constraint(...)]` attribute can be added
+/// to to either the struct or its fields, but not to both. Adding the
+/// `#[safety_constraint(...)]` attribute to both the struct and its fields will
+/// result in an error.
+///
+/// In practice, only one type of specification is need. If the condition for
+/// the type safety invariant involves a relation between two or more struct
+/// fields, the struct-level attribute should be used. Otherwise, using the
+/// `#[safety_constraint(...)]` is recommended since it helps with readability.
+///
+/// For example, if we were defining a custom vector `MyVector` and wanted to
+/// specify that the inner vector's length is always less than or equal to its
+/// capacity, we should do it as follows:
+///
+/// ```
+/// #[derive(Arbitrary)]
+/// #[safety_constraint(vector.len() <= *capacity)]
+/// struct MyVector<T> {
+///     vector: Vec<T>,
+///     capacity: usize,
+/// }
+/// ```
+///
+/// However, if we were defining a struct whose fields are not related in any
+/// way, we would prefer using the `#[safety_constraint(...)]` attribute in its
+/// fields:
+///
+/// ```
+/// #[derive(Arbitrary)]
+/// struct PositivePoint {
+///     #[safety_constraint(*x >= 0)]
+///     x: i32,
+///     #[safety_constraint(*y >= 0)]
+///     y: i32,
+/// }
+/// ```
 #[proc_macro_error]
 #[proc_macro_derive(Arbitrary, attributes(safety_constraint))]
 pub fn derive_arbitrary(item: TokenStream) -> TokenStream {
@@ -219,6 +258,45 @@ pub fn derive_arbitrary(item: TokenStream) -> TokenStream {
 ///
 /// Note: the assignments to `obj` and `inner` are made so that we can treat the
 /// fields as if they were references.
+///
+/// ### Adding `#[safety_constraint(...)]` to the struct as opposed to its fields
+///
+/// As mentioned earlier, the `#[safety_constraint(...)]` attribute can be added
+/// to to either the struct or its fields, but not to both. Adding the
+/// `#[safety_constraint(...)]` attribute to both the struct and its fields will
+/// result in an error.
+///
+/// In practice, only one type of specification is need. If the condition for
+/// the type safety invariant involves a relation between two or more struct
+/// fields, the struct-level attribute should be used. Otherwise, using the
+/// `#[safety_constraint(...)]` is recommended since it helps with readability.
+///
+/// For example, if we were defining a custom vector `MyVector` and wanted to
+/// specify that the inner vector's length is always less than or equal to its
+/// capacity, we should do it as follows:
+///
+/// ```
+/// #[derive(Invariant)]
+/// #[safety_constraint(vector.len() <= *capacity)]
+/// struct MyVector<T> {
+///     vector: Vec<T>,
+///     capacity: usize,
+/// }
+/// ```
+///
+/// However, if we were defining a struct whose fields are not related in any
+/// way, we would prefer using the `#[safety_constraint(...)]` attribute in its
+/// fields:
+///
+/// ```
+/// #[derive(Invariant)]
+/// struct PositivePoint {
+///     #[safety_constraint(*x >= 0)]
+///     x: i32,
+///     #[safety_constraint(*y >= 0)]
+///     y: i32,
+/// }
+/// ```
 #[proc_macro_error]
 #[proc_macro_derive(Invariant, attributes(safety_constraint))]
 pub fn derive_invariant(item: TokenStream) -> TokenStream {
