@@ -12,6 +12,7 @@
 //[nomiropt]compile-flags: -Z mir-opt-level=0
 
 #![feature(coroutines, coroutine_trait)]
+#![feature(stmt_expr_attributes)]
 
 use std::ops::Coroutine;
 use std::pin::Pin;
@@ -41,7 +42,8 @@ fn main() {
 }
 
 fn t1() {
-    let mut a = || {
+    let mut a = #[coroutine]
+    || {
         let b = B;
         if test() {
             drop(b);
@@ -57,7 +59,8 @@ fn t1() {
 }
 
 fn t2() {
-    let mut a = || {
+    let mut a = #[coroutine]
+    || {
         let b = B;
         if test2() {
             drop(b);

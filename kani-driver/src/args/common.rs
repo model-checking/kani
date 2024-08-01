@@ -51,6 +51,7 @@ pub trait Verbosity {
     /// Note that `debug() == true` must imply `verbose() == true`.
     fn verbose(&self) -> bool;
     /// Whether we should emit debug messages.
+    #[allow(unused)]
     fn debug(&self) -> bool;
     /// Whether any verbosity was selected.
     fn is_set(&self) -> bool;

@@ -10,7 +10,7 @@
 mod parser;
 mod sysroot;
 
-use crate::sysroot::{build_bin, build_lib, kani_playback_lib, kani_sysroot_lib};
+use crate::sysroot::{build_bin, build_lib, kani_no_core_lib, kani_playback_lib, kani_sysroot_lib};
 use anyhow::{bail, Result};
 use clap::Parser;
 use std::{ffi::OsString, path::Path, process::Command};
@@ -19,7 +19,13 @@ fn main() -> Result<()> {
     let args = parser::ArgParser::parse();
 
     match args.subcommand {
-        parser::Commands::BuildDev(build_parser) => build_lib(&build_bin(&build_parser.args)?),
+        parser::Commands::BuildDev(build_parser) => {
+            let bin_folder = &build_bin(&build_parser.args)?;
+            if !build_parser.skip_libs {
+                build_lib(&bin_folder)?;
+            }
+            Ok(())
+        }
         parser::Commands::Bundle(bundle_parser) => {
             let version_string = bundle_parser.version;
             let kani_string = format!("kani-{version_string}");
@@ -96,9 +102,11 @@ fn bundle_kani(dir: &Path) -> Result<()> {
     // 4. Pre-compiled library files
     cp_dir(&kani_sysroot_lib(), dir)?;
     cp_dir(&kani_playback_lib().parent().unwrap(), dir)?;
+    cp_dir(&kani_no_core_lib().parent().unwrap(), dir)?;
 
-    // 5. Record the exact toolchain we use
+    // 5. Record the exact toolchain and rustc version we use
     std::fs::write(dir.join("rust-toolchain-version"), env!("RUSTUP_TOOLCHAIN"))?;
+    std::fs::write(dir.join("rustc-version"), get_rustc_version()?)?;
 
     // 6. Include a licensing note
     cp(Path::new("tools/build-kani/license-notes.txt"), dir)?;
@@ -179,6 +187,13 @@ fn cp(src: &Path, dst: &Path) -> Result<()> {
     let dst = dst.join(src.file_name().unwrap());
     std::fs::copy(src, dst)?;
     Ok(())
+}
+
+/// Record version of rustc being used to build Kani
+fn get_rustc_version() -> Result<String> {
+    let output = Command::new("rustc").arg("--version").output();
+    let rustc_version = String::from_utf8(output.unwrap().stdout)?;
+    Ok(rustc_version)
 }
 
 /// Copy files from `src` to  `dst` that respect the given pattern.

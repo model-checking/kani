@@ -11,7 +11,7 @@ use std::intrinsics::{cttz, cttz_nonzero};
 // the same for any value
 macro_rules! test_cttz {
     ( $fn_name:ident, $ty:ty ) => {
-        fn $fn_name(x: $ty) -> $ty {
+        fn $fn_name(x: $ty) -> u32 {
             let mut count = 0;
             let num_bits = <$ty>::BITS;
             for i in 0..num_bits {

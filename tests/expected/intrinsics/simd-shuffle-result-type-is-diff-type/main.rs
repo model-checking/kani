@@ -3,7 +3,8 @@
 
 //! Checks that Kani triggers an error when the result type doesn't have the
 //! subtype expected from a `simd_shuffle` call.
-#![feature(repr_simd, platform_intrinsics)]
+#![feature(repr_simd, core_intrinsics)]
+use std::intrinsics::simd::simd_shuffle;
 
 #[repr(simd)]
 #[allow(non_camel_case_types)]
@@ -14,10 +15,6 @@ pub struct i64x2(i64, i64);
 #[allow(non_camel_case_types)]
 #[derive(Clone, Copy, PartialEq)]
 pub struct f64x2(f64, f64);
-
-extern "platform-intrinsic" {
-    fn simd_shuffle<T, I, U>(x: T, y: T, idx: I) -> U;
-}
 
 #[kani::proof]
 fn main() {

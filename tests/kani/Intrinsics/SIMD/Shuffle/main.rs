@@ -3,7 +3,8 @@
 
 //! Checks that `simd_shuffle` and `simd_shuffleN` (where `N` is a length) are
 //! supported and return the expected results.
-#![feature(repr_simd, platform_intrinsics)]
+#![feature(repr_simd, core_intrinsics)]
+use std::intrinsics::simd::simd_shuffle;
 
 #[repr(simd)]
 #[allow(non_camel_case_types)]
@@ -14,10 +15,6 @@ pub struct i64x2(i64, i64);
 #[allow(non_camel_case_types)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct i64x4(i64, i64, i64, i64);
-
-extern "platform-intrinsic" {
-    fn simd_shuffle<T, U, V>(x: T, y: T, idx: U) -> V;
-}
 
 #[kani::proof]
 fn main() {

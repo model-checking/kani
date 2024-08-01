@@ -32,20 +32,26 @@ jobs:
           os: ${{ matrix.os }}
           kani_dir: 'kani'
 
-      - name: Build Kani
-        working-directory: ./kani
-        run: cargo build-dev
-
       - name: Checkout CBMC under "cbmc"
         uses: actions/checkout@v4
         with:
           repository: diffblue/cbmc
           path: cbmc
 
-      - name: Build CBMC
+      - name: Build CBMC (Linux)
+        if: ${{ startsWith(matrix.os, 'ubuntu') }}
         working-directory: ./cbmc
         run: |
           cmake -S . -Bbuild -DWITH_JBMC=OFF -Dsat_impl="minisat2;cadical"
+          cmake --build build -- -j 4
+          # Prepend the bin directory to $PATH
+          echo "${GITHUB_WORKSPACE}/cbmc/build/bin" >> $GITHUB_PATH
+
+      - name: Build CBMC (macOS)
+        if: ${{ startsWith(matrix.os, 'macos') }}
+        working-directory: ./cbmc
+        run: |
+          cmake -S . -Bbuild -DWITH_JBMC=OFF -Dsat_impl="minisat2;cadical" -DCMAKE_CXX_COMPILER=$(which clang++)
           cmake --build build -- -j 4
           # Prepend the bin directory to $PATH
           echo "${GITHUB_WORKSPACE}/cbmc/build/bin" >> $GITHUB_PATH

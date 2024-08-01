@@ -6,7 +6,7 @@
 
 struct HidesAPointer(*mut u32);
 
-#[kani::ensures(true)]
+#[kani::ensures(|result| true)]
 fn hidden_pointer(h: HidesAPointer) {}
 
 #[kani::proof_for_contract(hidden_pointer)]

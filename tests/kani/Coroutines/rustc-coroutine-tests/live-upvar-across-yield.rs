@@ -9,6 +9,7 @@
 // run-pass
 
 #![feature(coroutines, coroutine_trait)]
+#![feature(stmt_expr_attributes)]
 
 use std::ops::Coroutine;
 use std::pin::Pin;
@@ -16,7 +17,8 @@ use std::pin::Pin;
 #[kani::proof]
 fn main() {
     let b = |_| 3;
-    let mut a = || {
+    let mut a = #[coroutine]
+    || {
         b(yield);
     };
     Pin::new(&mut a).resume(());

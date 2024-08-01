@@ -7,20 +7,29 @@
 // Used for rustc_diagnostic_item.
 // Note: We could use a kanitool attribute instead.
 #![feature(rustc_attrs)]
-// This is required for the optimized version of `any_array()`
-#![feature(generic_const_exprs)]
-#![allow(incomplete_features)]
 // Used to model simd.
 #![feature(repr_simd)]
+#![feature(generic_const_exprs)]
+#![allow(incomplete_features)]
 // Features used for tests only.
-#![cfg_attr(test, feature(platform_intrinsics, portable_simd))]
-// Required for rustc_diagnostic_item
+#![cfg_attr(test, feature(core_intrinsics, portable_simd))]
+// Required for `rustc_diagnostic_item` and `core_intrinsics`
 #![allow(internal_features)]
+// Required for implementing memory predicates.
+#![feature(ptr_metadata)]
+#![feature(f16)]
+#![feature(f128)]
+
+// Allow us to use `kani::` to access crate features.
+extern crate self as kani;
 
 pub mod arbitrary;
 #[cfg(feature = "concrete_playback")]
 mod concrete_playback;
 pub mod futures;
+pub mod invariant;
+pub mod mem;
+pub mod shadow;
 pub mod slice;
 pub mod tuple;
 pub mod vec;
@@ -28,16 +37,20 @@ pub mod vec;
 #[doc(hidden)]
 pub mod internal;
 
+mod mem_init;
 mod models;
 
 pub use arbitrary::Arbitrary;
 #[cfg(feature = "concrete_playback")]
 pub use concrete_playback::concrete_playback_run;
+pub use invariant::Invariant;
+
 #[cfg(not(feature = "concrete_playback"))]
 /// NOP `concrete_playback` for type checking during verification mode.
 pub fn concrete_playback_run<F: Fn()>(_: Vec<Vec<u8>>, _: F) {
     unreachable!("Concrete playback does not work during verification")
 }
+
 pub use futures::{block_on, block_on_with_spawn, spawn, yield_now, RoundRobin};
 
 /// Creates an assumption that will be valid after this statement run. Note that the assumption
@@ -80,18 +93,12 @@ pub fn assume(cond: bool) {
 /// `implies!(premise => conclusion)` means that if the `premise` is true, so
 /// must be the `conclusion`.
 ///
-/// This simply expands to `!premise || conclusion` and is intended to be used
-/// in function contracts to make them more readable, as the concept of an
-/// implication is more natural to think about than its expansion.
-///
-/// For further convenience multiple comma separated premises are allowed, and
-/// are joined with `||` in the expansion. E.g. `implies!(a, b => c)` expands to
-/// `!a || !b || c` and says that `c` is true if both `a` and `b` are true (see
-/// also [Horn Clauses](https://en.wikipedia.org/wiki/Horn_clause)).
+/// This simply expands to `!premise || conclusion` and is intended to make checks more readable,
+/// as the concept of an implication is more natural to think about than its expansion.
 #[macro_export]
 macro_rules! implies {
-    ($($premise:expr),+ => $conclusion:expr) => {
-        $(!$premise)||+ || ($conclusion)
+    ($premise:expr => $conclusion:expr) => {
+        !($premise) || ($conclusion)
     };
 }
 
@@ -116,6 +123,30 @@ pub const fn assert(cond: bool, msg: &'static str) {
 #[inline(never)]
 #[rustc_diagnostic_item = "KaniAssert"]
 pub const fn assert(cond: bool, msg: &'static str) {
+    assert!(cond, "{}", msg);
+}
+
+/// Creates an assertion of the specified condition, but does not assume it afterwards.
+///
+/// # Example:
+///
+/// ```rust
+/// let x: bool = kani::any();
+/// let y = !x;
+/// kani::check(x || y, "ORing a boolean variable with its negation must be true")
+/// ```
+#[cfg(not(feature = "concrete_playback"))]
+#[inline(never)]
+#[rustc_diagnostic_item = "KaniCheck"]
+pub const fn check(cond: bool, msg: &'static str) {
+    let _ = cond;
+    let _ = msg;
+}
+
+#[cfg(feature = "concrete_playback")]
+#[inline(never)]
+#[rustc_diagnostic_item = "KaniCheck"]
+pub const fn check(cond: bool, msg: &'static str) {
     assert!(cond, "{}", msg);
 }
 
@@ -158,9 +189,25 @@ pub const fn cover(_cond: bool, _msg: &'static str) {}
 /// Note: This is a safe construct and can only be used with types that implement the `Arbitrary`
 /// trait. The Arbitrary trait is used to build a symbolic value that represents all possible
 /// valid values for type `T`.
+#[rustc_diagnostic_item = "KaniAny"]
 #[inline(always)]
 pub fn any<T: Arbitrary>() -> T {
     T::any()
+}
+
+/// This function is only used for function contract instrumentation.
+/// It behaves exaclty like `kani::any<T>()`, except it will check for the trait bounds
+/// at compilation time. It allows us to avoid type checking errors while using function
+/// contracts only for verification.
+#[rustc_diagnostic_item = "KaniAnyModifies"]
+#[inline(never)]
+#[doc(hidden)]
+pub fn any_modifies<T>() -> T {
+    // This function should not be reacheable.
+    // Users must include `#[kani::recursion]` in any function contracts for recursive functions;
+    // otherwise, this might not be properly instantiate. We mark this as unreachable to make
+    // sure Kani doesn't report any false positives.
+    unreachable!()
 }
 
 /// This creates a symbolic *valid* value of type `T`.
@@ -202,28 +249,26 @@ pub fn any_where<T: Arbitrary, F: FnOnce(&T) -> bool>(f: F) -> T {
 /// Note that SIZE_T must be equal the size of type T in bytes.
 #[inline(never)]
 #[cfg(not(feature = "concrete_playback"))]
-pub(crate) unsafe fn any_raw_internal<T, const SIZE_T: usize>() -> T {
-    any_raw_inner::<T>()
+unsafe fn any_raw_internal<T: Copy>() -> T {
+    any_raw::<T>()
 }
 
+/// This is the same as [any_raw_internal] for verification flow, but not for concrete playback.
 #[inline(never)]
-#[cfg(feature = "concrete_playback")]
-pub(crate) unsafe fn any_raw_internal<T, const SIZE_T: usize>() -> T {
-    concrete_playback::any_raw_internal::<T, SIZE_T>()
+#[cfg(not(feature = "concrete_playback"))]
+unsafe fn any_raw_array<T: Copy, const N: usize>() -> [T; N] {
+    any_raw::<[T; N]>()
 }
+
+#[cfg(feature = "concrete_playback")]
+use concrete_playback::{any_raw_array, any_raw_internal};
 
 /// This low-level function returns nondet bytes of size T.
 #[rustc_diagnostic_item = "KaniAnyRaw"]
 #[inline(never)]
 #[allow(dead_code)]
-fn any_raw_inner<T>() -> T {
-    // while we could use `unreachable!()` or `panic!()` as the body of this
-    // function, both cause Kani to produce a warning on any program that uses
-    // kani::any() (see https://github.com/model-checking/kani/issues/2010).
-    // This function is handled via a hook anyway, so we just need to put a body
-    // that rustc does not complain about. An infinite loop works out nicely.
-    #[allow(clippy::empty_loop)]
-    loop {}
+fn any_raw<T: Copy>() -> T {
+    kani_intrinsic()
 }
 
 /// Function used to generate panic with a static message as this is the only one currently
@@ -239,6 +284,20 @@ pub const fn panic(message: &'static str) -> ! {
     panic!("{}", message)
 }
 
+/// An empty body that can be used to define Kani intrinsic functions.
+///
+/// A Kani intrinsic is a function that is interpreted by Kani compiler.
+/// While we could use `unreachable!()` or `panic!()` as the body of a kani intrinsic
+/// function, both cause Kani to produce a warning since we don't support caller location.
+/// (see https://github.com/model-checking/kani/issues/2010).
+///
+/// This function is dead, since its caller is always  handled via a hook anyway,
+/// so we just need to put a body that rustc does not complain about.
+/// An infinite loop works out nicely.
+fn kani_intrinsic<T>() -> T {
+    #[allow(clippy::empty_loop)]
+    loop {}
+}
 /// A macro to check if a condition is satisfiable at a specific location in the
 /// code.
 ///
@@ -297,5 +356,7 @@ pub use core::assert as __kani__workaround_core_assert;
 
 // Kani proc macros must be in a separate crate
 pub use kani_macros::*;
+
+pub(crate) use kani_macros::unstable_feature as unstable;
 
 pub mod contracts;

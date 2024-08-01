@@ -51,14 +51,14 @@
 //! approximation of the result of division for instance could be this:
 //!
 //! ```
-//! #[ensures(result <= dividend)]
+//! #[ensures(|result : &u32| *result <= dividend)]
 //! ```
 //!
 //! This is called a postcondition and it also has access to the arguments and
 //! is expressed in regular Rust code. The same restrictions apply as did for
-//! [`requires`][macro@requires]. In addition to the arguments the postcondition
-//! also has access to the value returned from the function in a variable called
-//! `result`.
+//! [`requires`][macro@requires]. In addition to the postcondition is expressed
+//! as a closure where the value returned from the function is passed to this
+//! closure by reference.
 //!
 //! You may combine as many [`requires`][macro@requires] and
 //! [`ensures`][macro@ensures] attributes on a single function as you please.
@@ -67,7 +67,7 @@
 //!
 //! ```
 //! #[kani::requires(divisor != 0)]
-//! #[kani::ensures(result <= dividend)]
+//! #[kani::ensures(|result : &u32| *result <= dividend)]
 //! fn my_div(dividend: u32, divisor: u32) -> u32 {
 //!   dividend / divisor
 //! }
@@ -225,4 +225,27 @@
 //! Rust pointer type (`&T`, `&mut T`, `*const T` or `*mut T`). In addition `T`
 //! must implement [`Arbitrary`](super::Arbitrary). This is used to assign
 //! `kani::any()` to the location when the function is used in a `stub_verified`.
+//!
+//! ## History Expressions
+//!
+//! Additionally, an ensures clause is allowed to refer to the state of the function arguments before function execution and perform simple computations on them
+//! via an `old` monad. Any instance of `old(computation)` will evaluate the
+//! computation before the function is called. It is required that this computation
+//! is effect free and closed with respect to the function arguments.
+//!
+//! For example, the following code passes kani tests:
+//!
+//! ```
+//! #[kani::modifies(a)]
+//! #[kani::ensures(|result| old(*a).wrapping_add(1) == *a)]
+//! #[kani::ensures(|result : &u32| old(*a).wrapping_add(1) == *result)]
+//! fn add1(a : &mut u32) -> u32 {
+//!     *a=a.wrapping_add(1);
+//!     *a
+//! }
+//! ```
+//!
+//! Here, the value stored in `a` is precomputed and remembered after the function
+//! is called, even though the contents of `a` changed during the function execution.
+//!
 pub use super::{ensures, modifies, proof_for_contract, requires, stub_verified};

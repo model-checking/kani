@@ -1,8 +1,8 @@
 - **Feature Name:** Function Contracts
 - **Feature Request Issue:** [#2652](https://github.com/model-checking/kani/issues/2652) and [Milestone](https://github.com/model-checking/kani/milestone/31)
 - **RFC PR:** [#2620](https://github.com/model-checking/kani/pull/2620)
-- **Status:** Under Review 
-- **Version:** 0
+- **Status:** Unstable
+- **Version:** 1
 - **Proof-of-concept:** [features/contracts](https://github.com/model-checking/kani/tree/features/contracts)
 - **Feature Gate:** `-Zfunction-contracts`, enforced by compile time error[^gate]
 
@@ -65,7 +65,7 @@ fn my_div(dividend: u32, divisor: u32) -> u32 {
 
    ```rs
    #[kani::requires(divisor != 0)]
-   #[kani::ensures(result <= dividend)]
+   #[kani::ensures(|result : &u32| *result <= dividend)]
    fn my_div(dividend: u32, divisor: u32) -> u32 {
      dividend / divisor
    }
@@ -79,8 +79,7 @@ fn my_div(dividend: u32, divisor: u32) -> u32 {
 
    Conditions in contracts are Rust expressions which reference the
    function arguments and, in case of `ensures`, the return value of the
-   function. The return value is a special variable called `result` (see [open
-   questions](#open-questions) on a discussion about (re)naming). Syntactically
+   function. The return value is passed into the ensures closure statement by reference. Syntactically
    Kani supports any Rust expression, including function calls, defining types
    etc. However they must be side-effect free (see also side effects
    [here](#changes-to-other-components)) or Kani will throw a compile error.
@@ -132,8 +131,8 @@ fn my_div(dividend: u32, divisor: u32) -> u32 {
      let dividend = kani::any();
      let divisor = kani::any();
      kani::assume(divisor != 0); // requires
-     let result = my_div(dividend, divisor);
-     kani::assert(result <= dividend); // ensures
+     let result_kani_internal = my_div(dividend, divisor);
+     kani::assert((|result : &u32| *result <= dividend)(result_kani_internal)); // ensures
    }
    ```
 
@@ -306,7 +305,7 @@ available to `ensures`. It is used like so:
 
 ```rs
 impl<T> Vec<T> {
-  #[kani::ensures(old(self.is_empty()) || result.is_some())]
+  #[kani::ensures(|result : &Option<T>| old(self.is_empty()) || result.is_some())]
   fn pop(&mut self) -> Option<T> {
     ...
   }
@@ -324,8 +323,8 @@ Note also that `old` is syntax, not a function and implemented as an extraction
 and lifting during code generation. It can reference e.g. `pop`'s arguments but
 not local variables. Compare the following
 
-**Invalid ❌:** `#[kani::ensures({ let x = self.is_empty(); old(x) } || result.is_some())]`</br>
-**Valid ✅:** `#[kani::ensures(old({ let x = self.is_empty(); x }) || result.is_some())]`
+**Invalid ❌:** `#[kani::ensures(|result : &Option<T>| { let x = self.is_empty(); old(x) } || result.is_some())]`</br>
+**Valid ✅:** `#[kani::ensures(|result : &Option<T>| old({ let x = self.is_empty(); x }) || result.is_some())]`
 
 And it will only be recognized as `old(...)`, not as `let old1 = old; old1(...)` etc.
 
@@ -410,7 +409,7 @@ the below example:
 
 ```rs
 impl<T> Vec<T> {
-  #[kani::ensures(self.is_empty() || self.len() == old(self.len()) - 1)]
+  #[kani::ensures(|result : &Option<T>| self.is_empty() || self.len() == old(self.len()) - 1)]
   fn pop(&mut self) -> Option<T> {
     ...
   }
@@ -425,8 +424,8 @@ following:
 impl<T> Vec<T> {
   fn check_pop(&mut self) -> Option<T> {
     let old_1 = self.len();
-    let result = Self::pop(self);
-    kani::assert(self.is_empty() || self.len() == old_1 - 1)
+    let result_kani_internal = Self::pop(self);
+    kani::assert((|result : &Option<T>| self.is_empty() || self.len() == old_1 - 1)(result_kani_internal))
   }
 }
 ```
@@ -450,7 +449,7 @@ sensible contract for it might look as follows:
 
 ```rs
 impl<T> Vec<T> {
-  #[ensures(self.len() == result.0.len() + result.1.len())]
+  #[ensures(|result : &(&mut [T], &mut [T])| self.len() == result.0.len() + result.1.len())]
   fn split_at_mut(&mut self, i: usize) -> (&mut [T], &mut [T]) {
     ...
   }
@@ -549,6 +548,49 @@ This is the technical portion of the RFC. Please provide high level details of t
 
 <!-- For Developers -->
 <!-- `old` discussion here -->
+
+We developed the `old` contract for history expressions via understanding it as a [modality](https://en.wikipedia.org/wiki/Monad_(functional_programming)) originating from [Moggi 1991](https://www.sciencedirect.com/science/article/pii/0890540191900524).
+The `old` monad links the "language of the past" to the "language of the present".
+Implementing the full generality of the monad is rather difficult, so we focus on a particular usage of the monad.
+
+We have an external syntax representation which is what the user inputs. We then parse this and logically manipulate it as a monad, prefixing all the `bind` operations. We then output the final compiled macro output as Rust code.
+
+In particular, if we have an ensures statement like
+```rust
+#[kani::ensures(old(*ptr)+1==*ptr)]
+```
+Then we comprehend this as syntax for the statement (not within Rust)
+```
+bind (*ptr : O(u32)) (|remember : u32| remember + 1 == *ptr)
+```
+Here, the `O(u32)` is taking the type of the past `u32` and converting it into a type in the present `O(u32)` while the bind operation lets you use the value of the past `u32` to express a type in the present `bool`.
+
+This then gets compiled to (within Rust)
+```rust
+let remember = *ptr;
+let result = ...;
+kani::assert(remember + 1 == *ptr)
+```
+This means that the underlying principle of the monad is there, but external syntax appears to be less like a monad because otherwise it would be too difficult to implement, and the user most likely only cares about this particular construction of prefixing all the `bind` operations.
+
+This construction requires that `old` expressions are closed with resprect to the input parameters. This is due to the lifting into the prefixed `bind` operations.
+
+A major drawback is that eta expansion fails. If we eta expand a function f, it becomes |x|f(x). Note that eta expansions guarantee that the original f and the |x|f(x) are equivalent which makes a lot of sense since you’re just calling the same function. However, we have that `old(y)` is not equivalent to `(|x|old(x))(y)`. `y` is a closed expression, so the first statement works. `x` is a bound variable, so it is an open expression, so compilation will fail.
+
+The reason for this restriction is that the user will most likely only want to use this particular prefixed `bind` structure for their code, so exposing the concept of monads to the user level would only confuse the user. It is also simpler from an implementation perspective to limit the monad to this particular usage.
+
+As for nested old, such as `old(old(*ptr)+*ptr)`, it is reasonable to interpret this as syntax representing
+```
+bind (bind(*ptr)(|remember_1| remember_1 + *ptr)) (|remember_0| ...)
+```
+which compiles to
+```rust
+let remember_1 = *ptr;
+let remember_0 = remember_1 + *ptr;
+let result = ...;
+...
+```
+so the restriction is just a matter of there not being implementation support for this kind of statement rather than the theory itself. It is not particularly useful to implement this because we claim that there should be no effectful computation within the contracts, so you can substitute the `remember_1` into the second line without worrying about the effects. Hence, we opt for simply restricting this behavior instead of implementing it. (Note: it can be implemented by changing `denier.visit_expr_mut(e);` into `self.visit_expr_mut(e);`)
 
 <!-- 
 - What are the pros and cons of this design?
@@ -894,3 +936,4 @@ times larger than what they expect the function will touch).
 [^stubcheck]: Kani cannot report the occurrence of a contract function to check
     in abstracted functions as errors, because the mechanism is needed to verify
     mutually recursive functions.
+
