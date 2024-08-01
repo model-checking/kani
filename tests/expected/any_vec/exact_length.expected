@@ -1,7 +1,7 @@
 Checking harness check_access_length_17...
 
 Failed Checks: assumption failed\
-in <usize as std::slice::SliceIndex<[Dummy]>>::get_unchecked
+in <usize as std::slice::SliceIndex<[u8]>>::get_unchecked
 
 Checking harness check_access_length_zero...
 

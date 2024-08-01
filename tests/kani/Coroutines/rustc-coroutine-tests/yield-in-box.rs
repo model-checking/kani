@@ -10,6 +10,7 @@
 // Test that box-statements with yields in them work.
 
 #![feature(coroutines, coroutine_trait)]
+#![feature(stmt_expr_attributes)]
 use std::ops::Coroutine;
 use std::ops::CoroutineState;
 use std::pin::Pin;
@@ -17,6 +18,7 @@ use std::pin::Pin;
 #[kani::proof]
 fn main() {
     let x = 0i32;
+    #[coroutine]
     || {
         //~ WARN unused coroutine that must be used
         let y = 2u32;
@@ -28,7 +30,8 @@ fn main() {
         }
     };
 
-    let mut g = |_| Box::new(yield);
+    let mut g = #[coroutine]
+    |_| Box::new(yield);
     assert_eq!(Pin::new(&mut g).resume(1), CoroutineState::Yielded(()));
     assert_eq!(Pin::new(&mut g).resume(2), CoroutineState::Complete(Box::new(2)));
 }

@@ -3,7 +3,7 @@
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::kani_middle::attributes::KaniAttributes;
 use cbmc::goto_program::FunctionContract;
-use cbmc::goto_program::Lambda;
+use cbmc::goto_program::{Expr, Lambda, Location, Type};
 use kani_metadata::AssignsContract;
 use rustc_hir::def_id::DefId as InternalDefId;
 use rustc_smir::rustc_internal;
@@ -11,6 +11,8 @@ use stable_mir::mir::mono::{Instance, MonoItem};
 use stable_mir::mir::Local;
 use stable_mir::CrateDef;
 use tracing::debug;
+
+use stable_mir::ty::{RigidTy, TyKind};
 
 impl<'tcx> GotocCtx<'tcx> {
     /// Given the `proof_for_contract` target `function_under_contract` and the reachable `items`,
@@ -35,11 +37,50 @@ impl<'tcx> GotocCtx<'tcx> {
     ) -> AssignsContract {
         let tcx = self.tcx;
         let function_under_contract_attrs = KaniAttributes::for_item(tcx, function_under_contract);
-        let wrapped_fn = function_under_contract_attrs.inner_check().unwrap().unwrap();
 
+        let recursion_wrapper_id =
+            function_under_contract_attrs.checked_with_id().unwrap().unwrap();
+        let expected_name = format!("{}::REENTRY", tcx.item_name(recursion_wrapper_id));
+        let mut recursion_tracker = items.iter().filter_map(|i| match i {
+            MonoItem::Static(recursion_tracker)
+                if (*recursion_tracker).name().contains(expected_name.as_str()) =>
+            {
+                Some(*recursion_tracker)
+            }
+            _ => None,
+        });
+
+        let recursion_tracker_def = recursion_tracker
+            .next()
+            .expect("There should be at least one recursion tracker (REENTRY) in scope");
+        assert!(
+            recursion_tracker.next().is_none(),
+            "Only one recursion tracker (REENTRY) may be in scope"
+        );
+
+        let span_of_recursion_wrapper = tcx.def_span(recursion_wrapper_id);
+        let location_of_recursion_wrapper = self.codegen_span(&span_of_recursion_wrapper);
+        // The name and location for the recursion tracker should match the exact information added
+        // to the symbol table, otherwise our contract instrumentation will silently failed.
+        // This happens because Kani relies on `--nondet-static-exclude` from CBMC to properly
+        // handle this tracker. CBMC silently fails if there is no match in the symbol table
+        // that correspond to the argument of this flag.
+        // More details at https://github.com/model-checking/kani/pull/3045.
+        let full_recursion_tracker_name = format!(
+            "{}:{}",
+            location_of_recursion_wrapper
+                .filename()
+                .expect("recursion location wrapper should have a file name"),
+            // We must use the pretty name of the tracker instead of the mangled name.
+            // This restrictions comes from `--nondet-static-exclude` in CBMC.
+            // Mode details at https://github.com/diffblue/cbmc/issues/8225.
+            recursion_tracker_def.name(),
+        );
+
+        let wrapped_fn = function_under_contract_attrs.inner_check().unwrap().unwrap();
         let mut instance_under_contract = items.iter().filter_map(|i| match i {
             MonoItem::Fn(instance @ Instance { def, .. })
-                if wrapped_fn == rustc_internal::internal(def.def_id()) =>
+                if wrapped_fn == rustc_internal::internal(tcx, def.def_id()) =>
             {
                 Some(*instance)
             }
@@ -56,28 +97,21 @@ impl<'tcx> GotocCtx<'tcx> {
             vec![]
         });
         self.attach_modifies_contract(instance_of_check, assigns_contract);
+        let wrapper_name = instance_of_check.mangled_name();
 
-        let wrapper_name = self.symbol_name_stable(instance_of_check);
-
-        let recursion_wrapper_id =
-            function_under_contract_attrs.checked_with_id().unwrap().unwrap();
-        let span_of_recursion_wrapper = tcx.def_span(recursion_wrapper_id);
-        let location_of_recursion_wrapper = self.codegen_span(&span_of_recursion_wrapper);
-
-        let full_name = format!(
-            "{}:{}::REENTRY",
-            location_of_recursion_wrapper
-                .filename()
-                .expect("recursion location wrapper should have a file name"),
-            tcx.item_name(recursion_wrapper_id),
-        );
-
-        AssignsContract { recursion_tracker: full_name, contracted_function_name: wrapper_name }
+        AssignsContract {
+            recursion_tracker: full_recursion_tracker_name,
+            contracted_function_name: wrapper_name,
+        }
     }
 
     /// Convert the Kani level contract into a CBMC level contract by creating a
     /// CBMC lambda.
-    fn codegen_modifies_contract(&mut self, modified_places: Vec<Local>) -> FunctionContract {
+    fn codegen_modifies_contract(
+        &mut self,
+        modified_places: Vec<Local>,
+        loc: Location,
+    ) -> FunctionContract {
         let goto_annotated_fn_name = self.current_fn().name();
         let goto_annotated_fn_typ = self
             .symbol_table
@@ -86,15 +120,89 @@ impl<'tcx> GotocCtx<'tcx> {
             .typ
             .clone();
 
+        let shadow_memory_assign = self
+            .tcx
+            .all_diagnostic_items(())
+            .name_to_id
+            .get(&rustc_span::symbol::Symbol::intern("KaniMemoryInitializationState"))
+            .map(|attr_id| {
+                self.tcx
+                    .symbol_name(rustc_middle::ty::Instance::mono(self.tcx, *attr_id))
+                    .name
+                    .to_string()
+            })
+            .and_then(|shadow_memory_table| self.symbol_table.lookup(&shadow_memory_table).cloned())
+            .map(|shadow_memory_symbol| {
+                vec![Lambda::as_contract_for(
+                    &goto_annotated_fn_typ,
+                    None,
+                    shadow_memory_symbol.to_expr(),
+                )]
+            })
+            .unwrap_or_default();
+
         let assigns = modified_places
             .into_iter()
             .map(|local| {
-                Lambda::as_contract_for(
-                    &goto_annotated_fn_typ,
-                    None,
-                    self.codegen_place_stable(&local.into()).unwrap().goto_expr.dereference(),
-                )
+                if self.is_fat_pointer_stable(self.local_ty_stable(local)) {
+                    let unref = match self.local_ty_stable(local).kind() {
+                        TyKind::RigidTy(RigidTy::Ref(_, ty, _)) => ty,
+                        kind => unreachable!("{:?} is not a reference", kind),
+                    };
+                    let size = match unref.kind() {
+                        TyKind::RigidTy(RigidTy::Slice(elt_type)) => {
+                            elt_type.layout().unwrap().shape().size.bytes()
+                        }
+                        TyKind::RigidTy(RigidTy::Str) => 1,
+                        // For adt, see https://rust-lang.zulipchat.com/#narrow/stream/182449-t-compiler.2Fhelp
+                        TyKind::RigidTy(RigidTy::Adt(..)) => {
+                            todo!("Adt fat pointers not implemented")
+                        }
+                        kind => unreachable!("Generating a slice fat pointer to {:?}", kind),
+                    };
+                    Lambda::as_contract_for(
+                        &goto_annotated_fn_typ,
+                        None,
+                        Expr::symbol_expression(
+                            "__CPROVER_object_upto",
+                            Type::code(
+                                vec![
+                                    Type::empty()
+                                        .to_pointer()
+                                        .as_parameter(None, Some("ptr".into())),
+                                    Type::size_t().as_parameter(None, Some("size".into())),
+                                ],
+                                Type::empty(),
+                            ),
+                        )
+                        .call(vec![
+                            self.codegen_place_stable(&local.into(), loc)
+                                .unwrap()
+                                .goto_expr
+                                .member("data", &self.symbol_table)
+                                .cast_to(Type::empty().to_pointer()),
+                            self.codegen_place_stable(&local.into(), loc)
+                                .unwrap()
+                                .goto_expr
+                                .member("len", &self.symbol_table)
+                                .mul(Expr::size_constant(
+                                    size.try_into().unwrap(),
+                                    &self.symbol_table,
+                                )),
+                        ]),
+                    )
+                } else {
+                    Lambda::as_contract_for(
+                        &goto_annotated_fn_typ,
+                        None,
+                        self.codegen_place_stable(&local.into(), loc)
+                            .unwrap()
+                            .goto_expr
+                            .dereference(),
+                    )
+                }
             })
+            .chain(shadow_memory_assign)
             .collect();
 
         FunctionContract::new(assigns)
@@ -110,7 +218,8 @@ impl<'tcx> GotocCtx<'tcx> {
         assert!(self.current_fn.is_none());
         let body = instance.body().unwrap();
         self.set_current_fn(instance, &body);
-        let goto_contract = self.codegen_modifies_contract(modified_places);
+        let goto_contract =
+            self.codegen_modifies_contract(modified_places, self.codegen_span_stable(body.span));
         let name = self.current_fn().name();
 
         self.symbol_table.attach_contract(name, goto_contract);

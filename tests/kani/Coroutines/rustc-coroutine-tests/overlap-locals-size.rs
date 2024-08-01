@@ -9,10 +9,12 @@
 // run-pass
 
 #![feature(coroutines)]
+#![feature(stmt_expr_attributes)]
 
 #[kani::proof]
 fn main() {
-    let a = || {
+    let a = #[coroutine]
+    || {
         {
             let w: i32 = 4;
             yield;

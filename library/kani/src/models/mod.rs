@@ -127,11 +127,8 @@ mod intrinsics {
 #[cfg(test)]
 mod test {
     use super::intrinsics as kani_intrinsic;
+    use std::intrinsics::simd::*;
     use std::{fmt::Debug, simd::*};
-
-    extern "platform-intrinsic" {
-        fn simd_bitmask<T, U>(x: T) -> U;
-    }
 
     /// Test that the `simd_bitmask` model is equivalent to the intrinsic for all true and all false
     /// masks with lanes represented using i16.

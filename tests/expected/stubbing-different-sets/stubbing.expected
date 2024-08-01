@@ -1,0 +1,19 @@
+Checking harness check_indirect_all_identity...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness check_all_identity_2...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness check_all_identity...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness check_decrement_is_increment...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness check_decrement...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness check_identity...
+VERIFICATION:- SUCCESSFUL
+
+Complete - 6 successfully verified harnesses, 0 failures, 6 total.

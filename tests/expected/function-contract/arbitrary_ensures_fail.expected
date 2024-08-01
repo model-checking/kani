@@ -1,6 +1,6 @@
 assertion\
 - Status: FAILURE\
-- Description: "result == x"\
+- Description: "|result : &u32| *result == x"\
 in function max 
 
 VERIFICATION:- FAILED

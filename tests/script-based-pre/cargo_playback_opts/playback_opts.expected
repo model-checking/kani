@@ -1,6 +1,6 @@
 [TEST] Only codegen test...
   Executable unittests src/lib.rs
 [TEST] Only codegen test...
-    Finished test
+    Finished `test`
 [TEST] Executable
 debug/deps/sample_crate-

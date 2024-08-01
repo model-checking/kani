@@ -8,6 +8,7 @@
 void  free(void *ptr);
 void *memcpy(void *dst, const void *src, size_t n);
 void *calloc(size_t nmemb, size_t size);
+void *malloc(size_t size);
 
 typedef __CPROVER_bool bool;
 

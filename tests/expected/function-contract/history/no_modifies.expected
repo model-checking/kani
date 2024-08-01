@@ -1,0 +1,5 @@
+assertion\
+	 - Status: SUCCESS\
+	 - Description: "|result : &u32| old(val) == val && old(val.wrapping_add(1)) == *result"\
+
+VERIFICATION:- SUCCESSFUL

@@ -1,0 +1,7 @@
+Check 1: check_abstract_value.assertion.1\
+         - Status: SUCCESS\
+         - Description: "assertion failed: value.is_safe()"
+
+VERIFICATION:- SUCCESSFUL
+
+Complete - 1 successfully verified harnesses, 0 failures, 1 total.

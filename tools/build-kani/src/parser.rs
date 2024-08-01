@@ -17,6 +17,10 @@ pub struct BuildDevParser {
     /// Arguments to be passed down to cargo when building cargo binaries.
     #[clap(value_name = "ARG", allow_hyphen_values = true)]
     pub args: Vec<String>,
+    /// Do not re-build Kani libraries. Only use this if you know there has been no changes to Kani
+    /// libraries or the underlying Rust compiler.
+    #[clap(long)]
+    pub skip_libs: bool,
 }
 
 #[derive(Args, Debug, Eq, PartialEq)]

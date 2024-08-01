@@ -17,7 +17,7 @@ impl<'a> kani::Arbitrary for ArbitraryPointer<&'a mut bool> {
     }
 }
 
-#[kani::ensures(true)]
+#[kani::ensures(|result| true)]
 fn allowed_mut_return_ref<'a>() -> ArbitraryPointer<&'a mut bool> {
     ArbitraryPointer(unsafe { &mut B as &'a mut bool })
 }
