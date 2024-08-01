@@ -115,7 +115,7 @@ pub fn unstable_feature(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// For example, the `check_positive` harness in this code is expected to
 /// pass:
 ///
-/// ```rs
+/// ```
 /// #[derive(kani::Arbitrary)]
 /// struct AlwaysPositive {
 ///     #[safety_constraint(*inner >= 0)]
@@ -133,7 +133,7 @@ pub fn unstable_feature(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// results when the values are over-constrained. For example, in this code
 /// the `check_positive` harness will pass too:
 ///
-/// ```rs
+/// ```
 /// #[derive(kani::Arbitrary)]
 /// struct AlwaysPositive {
 ///     #[safety_constraint(*inner >= 0 && *inner < i32::MIN)]
@@ -221,7 +221,7 @@ pub fn derive_arbitrary(item: TokenStream) -> TokenStream {
 /// For example, the `check_positive` harness in this code is expected to
 /// fail:
 ///
-/// ```rs
+/// ```
 /// #[derive(kani::Invariant)]
 /// struct AlwaysPositive {
 ///     #[safety_constraint(*inner >= 0)]
@@ -246,7 +246,7 @@ pub fn derive_arbitrary(item: TokenStream) -> TokenStream {
 /// For example, for the `AlwaysPositive` struct from above, we will generate
 /// the following implementation:
 ///
-/// ```rs
+/// ```
 /// impl kani::Invariant for AlwaysPositive {
 ///     fn is_safe(&self) -> bool {
 ///         let obj = self;
