@@ -14,8 +14,7 @@ use crate::kani_middle::{
         },
     },
 };
-use rustc_hir::def_id::DefId as InternalDefId;
-use rustc_middle::ty::TyCtxt;
+use rustc_middle::ty::{Instance as InternalInstance, TyCtxt};
 use rustc_smir::rustc_internal;
 use stable_mir::mir::{
     visit::{Location, PlaceContext},
@@ -37,7 +36,7 @@ pub struct InstrumentationVisitor<'a, 'tcx> {
     points_to: &'a PointsToGraph<'tcx>,
     /// The list of places we should be looking for, ignoring others
     analysis_targets: &'a HashSet<MemLoc<'tcx>>,
-    current_def_id: InternalDefId,
+    current_instance: InternalInstance<'tcx>,
     tcx: TyCtxt<'tcx>,
 }
 
@@ -60,7 +59,7 @@ impl<'a, 'tcx> InstrumentationVisitor<'a, 'tcx> {
     pub fn new(
         points_to: &'a PointsToGraph<'tcx>,
         analysis_targets: &'a HashSet<MemLoc<'tcx>>,
-        current_def_id: InternalDefId,
+        current_instance: InternalInstance<'tcx>,
         tcx: TyCtxt<'tcx>,
     ) -> Self {
         Self {
@@ -69,7 +68,7 @@ impl<'a, 'tcx> InstrumentationVisitor<'a, 'tcx> {
             target: None,
             points_to,
             analysis_targets,
-            current_def_id,
+            current_instance,
             tcx,
         }
     }
@@ -116,7 +115,7 @@ impl<'a, 'tcx> MirVisitor for InstrumentationVisitor<'a, 'tcx> {
         // Match the place by whatever it is pointing to and find an intersection with the targets.
         if self
             .points_to
-            .follow_from_place(rustc_internal::internal(self.tcx, place), self.current_def_id)
+            .follow_from_place(rustc_internal::internal(self.tcx, place), self.current_instance)
             .intersection(&self.analysis_targets)
             .next()
             .is_some()

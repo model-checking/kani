@@ -25,12 +25,11 @@
 //! other place, we treat it as if the place itself aliases to another place.
 
 use crate::kani_middle::{
-    points_to::{MemLoc, LocalMemLoc, PointsToGraph},
+    points_to::{MemLoc, PointsToGraph},
     reachability::CallGraph,
     transform::RustcInternalMir,
 };
 use rustc_ast::Mutability;
-use rustc_hir::def_id::DefId;
 use rustc_middle::{
     mir::{
         BasicBlock, BinOp, Body, CallReturnPlaces, Location, NonDivergingIntrinsic, Operand, Place,
@@ -46,7 +45,7 @@ use std::collections::HashSet;
 
 /// Main points-to analysis object.
 struct PointsToAnalysis<'a, 'tcx> {
-    def_id: DefId,
+    instance: Instance<'tcx>,
     body: &'a Body<'tcx>,
     tcx: TyCtxt<'tcx>,
     /// This will be used in the future to resolve function pointer and vtable calls. Currently, we
@@ -63,10 +62,10 @@ struct PointsToAnalysis<'a, 'tcx> {
 pub fn run_points_to_analysis<'tcx>(
     body: &Body<'tcx>,
     tcx: TyCtxt<'tcx>,
-    def_id: DefId,
+    instance: Instance<'tcx>,
     call_graph: &CallGraph,
 ) -> PointsToGraph<'tcx> {
-    PointsToAnalysis::run(body, tcx, def_id, call_graph, PointsToGraph::empty())
+    PointsToAnalysis::run(body, tcx, instance, call_graph, PointsToGraph::empty())
 }
 
 impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
@@ -75,11 +74,11 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
     pub fn run(
         body: &'a Body<'tcx>,
         tcx: TyCtxt<'tcx>,
-        def_id: DefId,
+        instance: Instance<'tcx>,
         call_graph: &'a CallGraph,
         initial_graph: PointsToGraph<'tcx>,
     ) -> PointsToGraph<'tcx> {
-        let analysis = Self { body, tcx, def_id, call_graph, initial_graph };
+        let analysis = Self { body, tcx, instance, call_graph, initial_graph };
         // This creates a fixpoint solver using the initial graph, the body, and extra information
         // and solves the dataflow problem, producing the cursor, which contains dataflow state for
         // each instruction in the body.
@@ -95,7 +94,7 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
                 // Switch the cursor to the end of the block ending with `Return`.
                 cursor.seek_to_block_end(idx.into());
                 // Retrieve the dataflow state and join into the results graph.
-                results.consume(cursor.get().clone());
+                results.merge(cursor.get().clone());
             }
         }
         results
@@ -119,7 +118,7 @@ impl<'a, 'tcx> AnalysisDomain<'tcx> for PointsToAnalysis<'a, 'tcx> {
     /// Dataflow state instantiated at the entry into the body; this should be the initial dataflow
     /// graph.
     fn initialize_start_block(&self, _body: &Body<'tcx>, state: &mut Self::Domain) {
-        state.consume(self.initial_graph.clone());
+        state.merge(self.initial_graph.clone());
     }
 }
 
@@ -138,7 +137,7 @@ impl<'a, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'tcx> {
             StatementKind::Assign(assign_box) => {
                 let (place, rvalue) = *assign_box.clone();
                 // Resolve all dereference projections for the lvalue.
-                let lvalue_set = state.follow_from_place(place, self.def_id);
+                let lvalue_set = state.follow_from_place(place, self.instance);
                 // Determine all places rvalue could point to.
                 let rvalue_set = match rvalue {
                     // Using the operand unchanged requires determining where it could point, which
@@ -150,7 +149,7 @@ impl<'a, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'tcx> {
                     Rvalue::Ref(_, _, place) | Rvalue::AddressOf(_, place) => {
                         // Here, a reference to a place is created, which leaves the place
                         // unchanged.
-                        state.follow_from_place(place, self.def_id)
+                        state.follow_from_place(place, self.instance)
                     }
                     Rvalue::BinaryOp(bin_op, operands) => {
                         match bin_op {
@@ -216,11 +215,11 @@ impl<'a, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'tcx> {
                     }
                     Rvalue::CopyForDeref(place) => {
                         // Resolve pointees of a place.
-                        state.follow(&state.follow_from_place(place, self.def_id))
+                        state.successors(&state.follow_from_place(place, self.instance))
                     }
                     Rvalue::ThreadLocalRef(def_id) => {
                         // We store a def_id of a static.
-                        HashSet::from([MemLoc::Static(def_id)])
+                        HashSet::from([MemLoc::new_static_allocation(def_id)])
                     }
                 };
                 // Create an edge between all places which could be lvalue and all places rvalue
@@ -292,8 +291,8 @@ impl<'a, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'tcx> {
                                     let src_set = self.follow_rvalue(state, args[2].node.clone());
                                     let dst_set = self.follow_deref(state, args[0].node.clone());
                                     let destination_set =
-                                        state.follow_from_place(*destination, self.def_id);
-                                    state.extend(&destination_set, &state.follow(&dst_set));
+                                        state.follow_from_place(*destination, self.instance);
+                                    state.extend(&destination_set, &state.successors(&dst_set));
                                     state.extend(&dst_set, &src_set);
                                 }
                                 // All `atomic_load` intrinsics take `src` as an argument.
@@ -310,8 +309,8 @@ impl<'a, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'tcx> {
                                     ));
                                     let src_set = self.follow_deref(state, args[0].node.clone());
                                     let destination_set =
-                                        state.follow_from_place(*destination, self.def_id);
-                                    state.extend(&destination_set, &state.follow(&src_set));
+                                        state.follow_from_place(*destination, self.instance);
+                                    state.extend(&destination_set, &state.successors(&src_set));
                                 }
                                 // All `atomic_store` intrinsics take `dst, val` as arguments.
                                 // This is equivalent to `*dst = val`.
@@ -344,8 +343,8 @@ impl<'a, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'tcx> {
                                     let src_set = self.follow_rvalue(state, args[1].node.clone());
                                     let dst_set = self.follow_deref(state, args[0].node.clone());
                                     let destination_set =
-                                        state.follow_from_place(*destination, self.def_id);
-                                    state.extend(&destination_set, &state.follow(&dst_set));
+                                        state.follow_from_place(*destination, self.instance);
+                                    state.extend(&destination_set, &state.successors(&dst_set));
                                     state.extend(&dst_set, &src_set);
                                 }
                             };
@@ -396,9 +395,9 @@ impl<'a, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'tcx> {
                                 TyKind::RawPtr(_, Mutability::Not)
                             ));
                             // Destination of the return value.
-                            let lvalue_set = state.follow_from_place(*destination, self.def_id);
+                            let lvalue_set = state.follow_from_place(*destination, self.instance);
                             let rvalue_set = self.follow_deref(state, args[0].node.clone());
-                            state.extend(&lvalue_set, &state.follow(&rvalue_set));
+                            state.extend(&lvalue_set, &state.successors(&rvalue_set));
                         }
                         // Semantically equivalent *a = b.
                         "volatile_store" | "unaligned_volatile_store" => {
@@ -434,10 +433,12 @@ impl<'a, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'tcx> {
                             // This is an internal function responsible for heap allocation,
                             // which creates a new node we need to add to the points-to graph.
                             "alloc::alloc::__rust_alloc" | "alloc::alloc::__rust_alloc_zeroed" => {
-                                let lvalue_set = state.follow_from_place(*destination, self.def_id);
-                                let rvalue_set =
-                                    HashSet::from([LocalMemLoc::new_alloc(self.def_id, location)
-                                        .with_def_id(self.def_id)]);
+                                let lvalue_set =
+                                    state.follow_from_place(*destination, self.instance);
+                                let rvalue_set = HashSet::from([MemLoc::new_heap_allocation(
+                                    self.instance,
+                                    location,
+                                )]);
                                 state.extend(&lvalue_set, &rvalue_set);
                             }
                             _ => {}
@@ -490,7 +491,7 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
     ) {
         let lvalue_set = self.follow_deref(state, to);
         let rvalue_set = self.follow_deref(state, from);
-        state.extend(&lvalue_set, &state.follow(&rvalue_set));
+        state.extend(&lvalue_set, &state.successors(&rvalue_set));
     }
 
     /// Find all places where the operand could point to at the current stage of the program.
@@ -502,12 +503,12 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
         match operand {
             Operand::Copy(place) | Operand::Move(place) => {
                 // Find all places which are pointed to by the place.
-                state.follow(&state.follow_from_place(place, self.def_id))
+                state.successors(&state.follow_from_place(place, self.instance))
             }
             Operand::Constant(const_operand) => {
                 // Constants could point to a static, so need to check for that.
                 if let Some(static_def_id) = const_operand.check_static_ptr(self.tcx) {
-                    HashSet::from([MemLoc::Static(static_def_id)])
+                    HashSet::from([MemLoc::new_static_allocation(static_def_id)])
                 } else {
                     HashSet::new()
                 }
@@ -524,12 +525,12 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
         match operand {
             Operand::Copy(place) | Operand::Move(place) => state.follow_from_place(
                 place.project_deeper(&[ProjectionElem::Deref], self.tcx),
-                self.def_id,
+                self.instance,
             ),
             Operand::Constant(const_operand) => {
                 // Constants could point to a static, so need to check for that.
                 if let Some(static_def_id) = const_operand.check_static_ptr(self.tcx) {
-                    HashSet::from([MemLoc::Static(static_def_id)])
+                    HashSet::from([MemLoc::new_static_allocation(static_def_id)])
                 } else {
                     HashSet::new()
                 }
@@ -541,7 +542,7 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
     fn apply_regular_call_effect(
         &mut self,
         state: &mut PointsToGraph<'tcx>,
-        instance: Instance,
+        instance: Instance<'tcx>,
         args: &[Spanned<Operand<'tcx>>],
         destination: &Place<'tcx>,
     ) {
@@ -558,8 +559,8 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
         for arg in args.iter() {
             match arg.node {
                 Operand::Copy(place) | Operand::Move(place) => {
-                    initial_graph.consume(
-                        state.transitive_closure(state.follow_from_place(place, self.def_id)),
+                    initial_graph.merge(
+                        state.transitive_closure(state.follow_from_place(place, self.instance)),
                     );
                 }
                 Operand::Constant(_) => {}
@@ -573,21 +574,22 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
             // Sanity check. The first argument is the closure itself and the second argument is the tupled arguments from the caller.
             assert!(args.len() == 2);
             // First, connect all upvars.
-            let lvalue_set = HashSet::from([LocalMemLoc::Place(Place {
-                local: 1usize.into(),
-                projection: List::empty(),
-            })
-            .with_def_id(instance.def_id())]);
+            let lvalue_set = HashSet::from([MemLoc::new_stack_allocation(
+                instance,
+                Place { local: 1usize.into(), projection: List::empty() },
+            )]);
             let rvalue_set = self.follow_rvalue(state, args[0].node.clone());
             initial_graph.extend(&lvalue_set, &rvalue_set);
             // Then, connect the argument tuple to each of the spread arguments.
             let spread_arg_operand = args[1].node.clone();
             for i in 0..new_body.arg_count {
-                let lvalue_set = HashSet::from([LocalMemLoc::Place(Place {
-                    local: (i + 1).into(), // Since arguments in the callee are starting with 1, account for that.
-                    projection: List::empty(),
-                })
-                .with_def_id(instance.def_id())]);
+                let lvalue_set = HashSet::from([MemLoc::new_stack_allocation(
+                    instance,
+                    Place {
+                        local: (i + 1).into(), // Since arguments in the callee are starting with 1, account for that.
+                        projection: List::empty(),
+                    },
+                )]);
                 // This conservatively assumes all arguments alias to all parameters. This can be
                 // improved by supporting scalar places.
                 let rvalue_set = self.follow_rvalue(state, spread_arg_operand.clone());
@@ -596,34 +598,30 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
         } else {
             // Otherwise, simply connect all arguments to parameters.
             for (i, arg) in args.iter().enumerate() {
-                let lvalue_set = HashSet::from([LocalMemLoc::Place(Place {
-                    local: (i + 1).into(), // Since arguments in the callee are starting with 1, account for that.
-                    projection: List::empty(),
-                })
-                .with_def_id(instance.def_id())]);
+                let lvalue_set = HashSet::from([MemLoc::new_stack_allocation(
+                    instance,
+                    Place {
+                        local: (i + 1).into(), // Since arguments in the callee are starting with 1, account for that.
+                        projection: List::empty(),
+                    },
+                )]);
                 let rvalue_set = self.follow_rvalue(state, arg.node.clone());
                 initial_graph.extend(&lvalue_set, &rvalue_set);
             }
         }
 
         // Run the analysis.
-        let new_result = PointsToAnalysis::run(
-            &new_body,
-            self.tcx,
-            instance.def_id(),
-            self.call_graph,
-            initial_graph,
-        );
+        let new_result =
+            PointsToAnalysis::run(&new_body, self.tcx, instance, self.call_graph, initial_graph);
         // Merge the results into the current state.
-        state.consume(new_result);
+        state.merge(new_result);
 
         // Connect the return value to the return destination.
-        let lvalue_set = state.follow_from_place(*destination, self.def_id);
-        let rvalue_set = HashSet::from([LocalMemLoc::Place(Place {
-            local: 0usize.into(),
-            projection: List::empty(),
-        })
-        .with_def_id(instance.def_id())]);
-        state.extend(&lvalue_set, &state.follow(&rvalue_set));
+        let lvalue_set = state.follow_from_place(*destination, self.instance);
+        let rvalue_set = HashSet::from([MemLoc::new_stack_allocation(
+            instance,
+            Place { local: 0usize.into(), projection: List::empty() },
+        )]);
+        state.extend(&lvalue_set, &state.successors(&rvalue_set));
     }
 }

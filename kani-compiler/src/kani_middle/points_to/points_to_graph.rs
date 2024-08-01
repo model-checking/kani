@@ -6,65 +6,41 @@
 use rustc_hir::def_id::DefId;
 use rustc_middle::{
     mir::{Location, Place, ProjectionElem},
-    ty::List,
+    ty::{Instance, List},
 };
 use rustc_mir_dataflow::{fmt::DebugWithContext, JoinSemiLattice};
 use std::collections::{HashMap, HashSet, VecDeque};
 
-/// A node in the points-to graph, which could be a place on the stack or a heap allocation.
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
-pub enum LocalMemLoc<'tcx> {
-    /// Using a combination of DefId of the function where the allocation took place + Location
-    /// implements allocation-site abstraction.
-    Alloc(DefId, Location),
-    Place(Place<'tcx>),
-}
-
-/// A node tagged with a DefId, to differentiate between places across different functions.
+/// A node in the points-to graph, which could be a place on the stack, a heap allocation, or a static.
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum MemLoc<'tcx> {
-    Local(DefId, LocalMemLoc<'tcx>),
+    Stack(Instance<'tcx>, Place<'tcx>),
+    /// Using a combination of the instance of the function where the allocation took place and the
+    /// location of the allocation inside this function implements allocation-site abstraction.
+    Heap(Instance<'tcx>, Location),
     Static(DefId),
 }
 
 impl<'tcx> MemLoc<'tcx> {
-    /// Returns DefId of the memory location.
-    pub fn def_id(&self) -> DefId {
-        match self {
-            MemLoc::Local(def_id, _) | MemLoc::Static(def_id) => *def_id,
-        }
+    /// Create a memory location representing a new heap allocation site.
+    pub fn new_heap_allocation(instance: Instance<'tcx>, location: Location) -> Self {
+        MemLoc::Heap(instance, location)
     }
 
-    /// Returns LocalMemLoc of the memory location if available.
-    pub fn maybe_local_mem_loc(&self) -> Option<LocalMemLoc<'tcx>> {
-        match self {
-            MemLoc::Local(_, mem_loc) => Some(*mem_loc),
-            MemLoc::Static(_) => None,
-        }
-    }
-}
-
-impl<'tcx> From<Place<'tcx>> for LocalMemLoc<'tcx> {
-    fn from(value: Place<'tcx>) -> Self {
-        LocalMemLoc::Place(value)
-    }
-}
-
-impl<'tcx> LocalMemLoc<'tcx> {
-    /// Register a new heap allocation site.
-    pub fn new_alloc(def_id: DefId, location: Location) -> Self {
-        LocalMemLoc::Alloc(def_id, location)
+    /// Create a memory location representing a new stack allocation.
+    pub fn new_stack_allocation(instance: Instance<'tcx>, place: Place<'tcx>) -> Self {
+        MemLoc::Stack(instance, place)
     }
 
-    /// Tag the node with a DefId.
-    pub fn with_def_id(&self, def_id: DefId) -> MemLoc<'tcx> {
-        MemLoc::Local(def_id, *self)
+    /// Create a memory location representing a new static allocation.
+    pub fn new_static_allocation(static_def: DefId) -> Self {
+        MemLoc::Static(static_def)
     }
 }
 
 /// Graph data structure that stores the current results of the point-to analysis. The graph is
-/// directed, so having an edge between two places means that one is pointing to the other. 
-/// 
+/// directed, so having an edge between two places means that one is pointing to the other.
+///
 /// For example:
 /// - `a = &b` would translate to `a --> b`
 /// - `a = b` would translate to `a --> {all pointees of b}` (if `a` and `b` are pointers /
@@ -72,7 +48,7 @@ impl<'tcx> LocalMemLoc<'tcx> {
 ///
 /// Note that the aliasing is not field-sensitive, since the nodes in the graph are places with no
 /// projections, which is sound but can be imprecise.
-/// 
+///
 /// For example:
 /// ```
 /// let ref_pair = (&a, &b); // Will add `ref_pair --> (a | b)` edges into the graph.
@@ -90,7 +66,7 @@ impl<'tcx> PointsToGraph<'tcx> {
     }
 
     /// Collect all nodes which have incoming edges from `nodes`.
-    pub fn follow(&self, nodes: &HashSet<MemLoc<'tcx>>) -> HashSet<MemLoc<'tcx>> {
+    pub fn successors(&self, nodes: &HashSet<MemLoc<'tcx>>) -> HashSet<MemLoc<'tcx>> {
         nodes.iter().flat_map(|node| self.edges.get(node).cloned().unwrap_or_default()).collect()
     }
 
@@ -107,15 +83,15 @@ impl<'tcx> PointsToGraph<'tcx> {
     pub fn follow_from_place(
         &self,
         place: Place<'tcx>,
-        current_def_id: DefId,
+        instance: Instance<'tcx>,
     ) -> HashSet<MemLoc<'tcx>> {
-        let place_or_alloc: LocalMemLoc =
-            Place { local: place.local, projection: List::empty() }.into();
-        let mut node_set = HashSet::from([place_or_alloc.with_def_id(current_def_id)]);
+        let place_without_projections = Place { local: place.local, projection: List::empty() };
+        let mut node_set =
+            HashSet::from([MemLoc::new_stack_allocation(instance, place_without_projections)]);
         for projection in place.projection {
             match projection {
                 ProjectionElem::Deref => {
-                    node_set = self.follow(&node_set);
+                    node_set = self.successors(&node_set);
                 }
                 ProjectionElem::Field(..)
                 | ProjectionElem::Index(..)
@@ -183,7 +159,7 @@ impl<'tcx> PointsToGraph<'tcx> {
     }
 
     // Merge the other graph into self, consuming it.
-    pub fn consume(&mut self, other: PointsToGraph<'tcx>) {
+    pub fn merge(&mut self, other: PointsToGraph<'tcx>) {
         for (from, to) in other.edges {
             let existing_to = self.edges.entry(from).or_default();
             existing_to.extend(to);

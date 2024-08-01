@@ -8,7 +8,7 @@ use std::collections::HashSet;
 
 use crate::args::ExtraChecks;
 use crate::kani_middle::{
-    points_to::{run_points_to_analysis, MemLoc, LocalMemLoc, PointsToGraph},
+    points_to::{run_points_to_analysis, MemLoc, PointsToGraph},
     reachability::CallGraph,
     transform::{
         body::{CheckType, MutableBody},
@@ -27,7 +27,6 @@ use stable_mir::{
     mir::mono::{Instance, MonoItem},
     mir::MirVisitor,
     ty::FnDef,
-    CrateDef,
 };
 
 mod initial_target_visitor;
@@ -64,18 +63,18 @@ impl GlobalPass for DelayedUbPass {
         let targets: HashSet<_> = instances
             .iter()
             .flat_map(|instance| {
-                let def_id = rustc_internal::internal(tcx, instance.def.def_id());
                 let body = instance.body().unwrap();
                 let mut visitor = InitialTargetVisitor::new(body.clone());
                 visitor.visit_body(&body);
                 // Convert all places into the format of aliasing graph for later comparison.
                 visitor.into_targets().into_iter().map(move |analysis_target| match analysis_target
                 {
-                    AnalysisTarget::Place(place) => {
-                        LocalMemLoc::Place(rustc_internal::internal(tcx, place)).with_def_id(def_id)
-                    }
+                    AnalysisTarget::Place(place) => MemLoc::new_stack_allocation(
+                        rustc_internal::internal(tcx, instance),
+                        rustc_internal::internal(tcx, place),
+                    ),
                     AnalysisTarget::Static(static_def) => {
-                        MemLoc::Static(rustc_internal::internal(tcx, static_def))
+                        MemLoc::new_static_allocation(rustc_internal::internal(tcx, static_def))
                     }
                 })
             })
@@ -101,14 +100,10 @@ impl GlobalPass for DelayedUbPass {
                     // Dataflow analysis does not yet work with StableMIR, so need to perform backward
                     // conversion.
                     let internal_body = body.internal_mir(tcx);
-                    let internal_def_id = rustc_internal::internal(tcx, instance.def.def_id());
-                    let results = run_points_to_analysis(
-                        &internal_body,
-                        tcx,
-                        internal_def_id,
-                        call_graph,
-                    );
-                    global_points_to_graph.consume(results);
+                    let internal_instance = rustc_internal::internal(tcx, instance);
+                    let results =
+                        run_points_to_analysis(&internal_body, tcx, internal_instance, call_graph);
+                    global_points_to_graph.merge(results);
                 }
             }
 
@@ -124,7 +119,7 @@ impl GlobalPass for DelayedUbPass {
 
             // Instrument each instance based on the final targets we found.
             for instance in instances {
-                let internal_def_id = rustc_internal::internal(tcx, instance.def.def_id());
+                let internal_instance = rustc_internal::internal(tcx, instance);
                 let mut instrumenter = UninitInstrumenter {
                     check_type: self.check_type.clone(),
                     mem_init_fn_cache: &mut self.mem_init_fn_cache,
@@ -135,7 +130,7 @@ impl GlobalPass for DelayedUbPass {
                 let target_finder = InstrumentationVisitor::new(
                     &global_points_to_graph,
                     &analysis_targets,
-                    internal_def_id,
+                    internal_instance,
                     tcx,
                 );
                 let (instrumentation_added, body) =

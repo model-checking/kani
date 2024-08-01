@@ -8,4 +8,4 @@ mod points_to_analysis;
 mod points_to_graph;
 
 pub use points_to_analysis::run_points_to_analysis;
-pub use points_to_graph::{MemLoc, LocalMemLoc, PointsToGraph};
+pub use points_to_graph::{MemLoc, PointsToGraph};
