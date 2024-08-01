@@ -26,7 +26,7 @@ Common to both `kani` and `cargo kani` are many command-line flags:
  * `--concrete-playback=[print|inplace]`: _Experimental_, `--enable-unstable` feature that generates a Rust unit test case
  that plays back a failing proof harness using a concrete counterexample.
  If used with `print`, Kani will only print the unit test to stdout.
- If used with `inplace`, Kani will automatically add the unit test to the user's source code, next to the proof harness. For more detailed instructions, see the [debugging verification failures](./debugging-verification-failures.md) section.
+ If used with `inplace`, Kani will automatically add the unit test to the user's source code, next to the proof harness. For more detailed instructions, see the [concrete playback](./experimental/concrete-playback.md) section.
 
  * `--visualize`: _Experimental_, `--enable-unstable` feature that generates an HTML report providing traces (i.e., counterexamples) for each failure found by Kani.
 

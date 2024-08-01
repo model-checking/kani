@@ -14,7 +14,7 @@ use crate::kani_middle::reachability::filter_crate_items;
 use crate::kani_middle::resolve::expect_resolve_fn;
 use crate::kani_middle::stubbing::{check_compatibility, harness_stub_map};
 use crate::kani_queries::QueryDb;
-use kani_metadata::{ArtifactType, AssignsContract, HarnessMetadata, KaniMetadata};
+use kani_metadata::{ArtifactType, AssignsContract, HarnessKind, HarnessMetadata, KaniMetadata};
 use rustc_hir::def_id::DefId;
 use rustc_middle::ty::TyCtxt;
 use rustc_session::config::OutputType;
@@ -105,7 +105,7 @@ impl CodegenUnits {
     /// Generate [KaniMetadata] for the target crate.
     fn generate_metadata(&self) -> KaniMetadata {
         let (proof_harnesses, test_harnesses) =
-            self.harness_info.values().cloned().partition(|md| md.attributes.proof);
+            self.harness_info.values().cloned().partition(|md| md.attributes.is_proof_harness());
         KaniMetadata {
             crate_name: self.crate_info.name.clone(),
             proof_harnesses,
@@ -170,8 +170,8 @@ fn extract_contracts(
 ) -> BTreeSet<ContractUsage> {
     let def = harness.def;
     let mut result = BTreeSet::new();
-    if let Some(check) = &metadata.attributes.for_contract {
-        if let Ok(check_def) = expect_resolve_fn(tcx, def, check, "proof_for_contract") {
+    if let HarnessKind::ProofForContract { target_fn } = &metadata.attributes.kind {
+        if let Ok(check_def) = expect_resolve_fn(tcx, def, target_fn, "proof_for_contract") {
             result.insert(ContractUsage::Check(check_def.def_id().to_index()));
         }
     }

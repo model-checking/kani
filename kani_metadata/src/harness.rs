@@ -39,10 +39,10 @@ pub struct HarnessMetadata {
 }
 
 /// The attributes added by the user to control how a harness is executed.
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct HarnessAttributes {
     /// Whether the harness has been annotated with proof.
-    pub proof: bool,
+    pub kind: HarnessKind,
     /// Whether the harness is expected to panic or not.
     pub should_panic: bool,
     /// Optional data to store solver.
@@ -51,11 +51,37 @@ pub struct HarnessAttributes {
     pub unwind_value: Option<u32>,
     /// The stubs used in this harness.
     pub stubs: Vec<Stub>,
-    /// The name of the function with contract that is being verified if this is a proof for
-    /// contract.
-    pub for_contract: Option<String>,
     /// The name of the functions being stubbed by their contract.
     pub verified_stubs: Vec<String>,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
+pub enum HarnessKind {
+    /// Function was annotated with `#[kani::proof]`.
+    Proof,
+    /// Function was annotated with `#[kani::proof_for_contract(target_fn)]`.
+    ProofForContract { target_fn: String },
+    /// This is a test harness annotated with `#[test]`.
+    Test,
+}
+
+impl HarnessAttributes {
+    /// Create a new harness of the provided kind.
+    pub fn new(kind: HarnessKind) -> HarnessAttributes {
+        HarnessAttributes {
+            kind,
+            should_panic: false,
+            solver: None,
+            unwind_value: None,
+            stubs: vec![],
+            verified_stubs: vec![],
+        }
+    }
+
+    /// Return whether this is a proof harness.
+    pub fn is_proof_harness(&self) -> bool {
+        matches!(self.kind, HarnessKind::Proof | HarnessKind::ProofForContract { .. })
+    }
 }
 
 /// The stubbing type.

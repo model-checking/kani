@@ -93,6 +93,7 @@ impl KaniSession {
     fn add_library(&self, file: &Path) -> Result<()> {
         let args: Vec<OsString> = vec![
             "--add-library".into(),
+            "--no-malloc-may-fail".into(),
             file.to_owned().into_os_string(), // input
             file.to_owned().into_os_string(), // output
         ];
@@ -171,6 +172,7 @@ impl KaniSession {
             (&harness.mangled_name).into(),
             "--enforce-contract".into(),
             assigns.contracted_function_name.as_str().into(),
+            "--no-malloc-may-fail".into(),
             file.into(),
             file.into(),
         ];

@@ -29,7 +29,7 @@ mod verify {
     use core::kani;
     #[kani::proof]
     fn check_non_zero() {
-        let orig: u32 = kani::any_raw_inner();
+        let orig: u32 = kani::any();
         if let Some(val) = core::num::NonZeroU32::new(orig) {
             assert!(orig == val.into());
         } else {

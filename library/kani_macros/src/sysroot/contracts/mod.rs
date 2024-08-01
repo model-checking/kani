@@ -395,7 +395,7 @@
 use proc_macro::TokenStream;
 use proc_macro2::{Ident, TokenStream as TokenStream2};
 use quote::quote;
-use syn::{parse_macro_input, Expr, ExprClosure, ItemFn};
+use syn::{parse_macro_input, parse_quote, Expr, ExprClosure, ItemFn};
 
 mod bootstrap;
 mod check;
@@ -446,15 +446,12 @@ passthrough!(stub_verified, false);
 
 pub fn proof_for_contract(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = proc_macro2::TokenStream::from(attr);
-    let ItemFn { attrs, vis, sig, block } = parse_macro_input!(item as ItemFn);
+    let mut fn_item = parse_macro_input!(item as ItemFn);
+    fn_item.block.stmts.insert(0, parse_quote!(kani::internal::init_contracts();));
     quote!(
         #[allow(dead_code)]
         #[kanitool::proof_for_contract = stringify!(#args)]
-        #(#attrs)*
-        #vis #sig {
-            kani::internal::init_contracts();
-            #block
-        }
+        #fn_item
     )
     .into()
 }

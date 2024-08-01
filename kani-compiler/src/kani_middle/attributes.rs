@@ -4,7 +4,7 @@
 
 use std::collections::BTreeMap;
 
-use kani_metadata::{CbmcSolver, HarnessAttributes, Stub};
+use kani_metadata::{CbmcSolver, HarnessAttributes, HarnessKind, Stub};
 use rustc_ast::{
     attr, AttrArgs, AttrArgsEq, AttrKind, Attribute, ExprKind, LitKind, MetaItem, MetaItemKind,
     NestedMetaItem,
@@ -310,7 +310,7 @@ impl<'tcx> KaniAttributes<'tcx> {
     /// the session and emit all errors found.
     pub(super) fn check_attributes(&self) {
         // Check that all attributes are correctly used and well formed.
-        let is_harness = self.is_harness();
+        let is_harness = self.is_proof_harness();
         for (&kind, attrs) in self.map.iter() {
             let local_error = |msg| self.tcx.dcx().span_err(attrs[0].span, msg);
 
@@ -465,7 +465,7 @@ impl<'tcx> KaniAttributes<'tcx> {
 
     /// Is this item a harness? (either `proof` or `proof_for_contract`
     /// attribute are present)
-    fn is_harness(&self) -> bool {
+    fn is_proof_harness(&self) -> bool {
         self.map.contains_key(&KaniAttributeKind::Proof)
             || self.map.contains_key(&KaniAttributeKind::ProofForContract)
     }
@@ -480,13 +480,18 @@ impl<'tcx> KaniAttributes<'tcx> {
             panic!("Expected a local item, but got: {:?}", self.item);
         };
         trace!(?self, "extract_harness_attributes");
-        assert!(self.is_harness());
-        self.map.iter().fold(HarnessAttributes::default(), |mut harness, (kind, attributes)| {
+        assert!(self.is_proof_harness());
+        let harness_attrs = if let Some(Ok(harness)) = self.proof_for_contract() {
+            HarnessAttributes::new(HarnessKind::ProofForContract { target_fn: harness.to_string() })
+        } else {
+            HarnessAttributes::new(HarnessKind::Proof)
+        };
+        self.map.iter().fold(harness_attrs, |mut harness, (kind, attributes)| {
             match kind {
                 KaniAttributeKind::ShouldPanic => harness.should_panic = true,
                 KaniAttributeKind::Recursion => {
                     self.tcx.dcx().span_err(self.tcx.def_span(self.item), "The attribute `kani::recursion` should only be used in combination with function contracts.");
-                },
+                }
                 KaniAttributeKind::Solver => {
                     harness.solver = parse_solver(self.tcx, attributes[0]);
                 }
@@ -496,7 +501,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                 KaniAttributeKind::Unwind => {
                     harness.unwind_value = parse_unwind(self.tcx, attributes[0])
                 }
-                KaniAttributeKind::Proof => harness.proof = true,
+                KaniAttributeKind::Proof => { /* no-op */ }
                 KaniAttributeKind::ProofForContract => self.handle_proof_for_contract(&mut harness),
                 KaniAttributeKind::StubVerified => self.handle_stub_verified(&mut harness),
                 KaniAttributeKind::Unstable => {
@@ -510,7 +515,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                 | KaniAttributeKind::RecursionTracker
                 | KaniAttributeKind::ReplacedWith => {
                     self.tcx.dcx().span_err(self.tcx.def_span(self.item), format!("Contracts are not supported on harnesses. (Found the kani-internal contract attribute `{}`)", kind.as_ref()));
-                },
+                }
                 KaniAttributeKind::DisableChecks => {
                     // Internal attribute which shouldn't exist here.
                     unreachable!()
@@ -529,6 +534,9 @@ impl<'tcx> KaniAttributes<'tcx> {
             None => return, // This error was already emitted
             Some(values) => values,
         };
+        assert!(matches!(
+                &harness.kind, HarnessKind::ProofForContract { target_fn }
+                if *target_fn == name.to_string()));
         if KaniAttributes::for_item(self.tcx, id).contract_attributes().is_none() {
             dcx.struct_span_err(
                 span,
@@ -539,9 +547,7 @@ impl<'tcx> KaniAttributes<'tcx> {
             )
             .with_span_note(self.tcx.def_span(id), "Try adding a contract to this function.")
             .emit();
-            return;
         }
-        harness.for_contract = Some(name.to_string());
     }
 
     fn handle_stub_verified(&self, harness: &mut HarnessAttributes) {
@@ -555,13 +561,13 @@ impl<'tcx> KaniAttributes<'tcx> {
                             self.item_name(),
                         ),
                     )
-                    .with_span_note(
-                        self.tcx.def_span(def_id),
-                        format!(
-                            "Try adding a contract to this function or use the unsound `{}` attribute instead.",
-                            KaniAttributeKind::Stub.as_ref(),
+                        .with_span_note(
+                            self.tcx.def_span(def_id),
+                            format!(
+                                "Try adding a contract to this function or use the unsound `{}` attribute instead.",
+                                KaniAttributeKind::Stub.as_ref(),
+                            ),
                         )
-                    )
                     .emit();
                 return;
             }
@@ -603,7 +609,7 @@ fn has_kani_attribute<F: Fn(KaniAttributeKind) -> bool>(
     tcx.get_attrs_unchecked(def_id).iter().filter_map(|a| attr_kind(tcx, a)).any(predicate)
 }
 
-/// Same as [`KaniAttributes::is_harness`] but more efficient because less
+/// Same as [`KaniAttributes::is_proof_harness`] but more efficient because less
 /// attribute parsing is performed.
 pub fn is_proof_harness(tcx: TyCtxt, instance: InstanceStable) -> bool {
     let def_id = rustc_internal::internal(tcx, instance.def.def_id());
@@ -810,7 +816,7 @@ fn parse_stubs(tcx: TyCtxt, harness: DefId, attributes: &[&Attribute]) -> Vec<St
             Err(error_span) => {
                 tcx.dcx().span_err(
                     error_span,
-                        "attribute `kani::stub` takes two path arguments; found argument that is not a path",
+                    "attribute `kani::stub` takes two path arguments; found argument that is not a path",
                 );
                 None
             }
@@ -824,9 +830,9 @@ fn parse_solver(tcx: TyCtxt, attr: &Attribute) -> Option<CbmcSolver> {
     const ATTRIBUTE: &str = "#[kani::solver]";
     let invalid_arg_err = |attr: &Attribute| {
         tcx.dcx().span_err(
-                attr.span,
-                format!("invalid argument for `{ATTRIBUTE}` attribute, expected one of the supported solvers (e.g. `kissat`) or a SAT solver binary (e.g. `bin=\"<SAT_SOLVER_BINARY>\"`)")
-            )
+            attr.span,
+            format!("invalid argument for `{ATTRIBUTE}` attribute, expected one of the supported solvers (e.g. `kissat`) or a SAT solver binary (e.g. `bin=\"<SAT_SOLVER_BINARY>\"`)"),
+        )
     };
 
     let attr_args = attr.meta_item_list().unwrap();
