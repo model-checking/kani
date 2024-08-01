@@ -590,8 +590,7 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
                         projection: List::empty(),
                     },
                 )]);
-                // This conservatively assumes all arguments alias to all parameters. This can be
-                // improved by supporting scalar places.
+                // This conservatively assumes all arguments alias to all parameters.
                 let rvalue_set = self.follow_rvalue(state, spread_arg_operand.clone());
                 initial_graph.extend(&lvalue_set, &rvalue_set);
             }
