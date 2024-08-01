@@ -144,8 +144,7 @@ impl<'tcx> PointsToGraph<'tcx> {
         let statics = self.edges.keys().filter(|node| matches!(node, MemLoc::Static(_)));
         queue.extend(statics);
         // Add all entries.
-        while !queue.is_empty() {
-            let next_target = queue.pop_front().unwrap();
+        while let Some(next_target) = queue.pop_front() {
             result.edges.entry(next_target).or_insert_with(|| {
                 let outgoing_edges =
                     self.edges.get(&next_target).cloned().unwrap_or(HashSet::new());
