@@ -25,7 +25,7 @@
 //! other place, we treat it as if the place itself aliases to another place.
 
 use crate::kani_middle::{
-    points_to::{GlobalMemLoc, LocalMemLoc, PointsToGraph},
+    points_to::{MemLoc, LocalMemLoc, PointsToGraph},
     reachability::CallGraph,
     transform::RustcInternalMir,
 };
@@ -220,7 +220,7 @@ impl<'a, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'tcx> {
                     }
                     Rvalue::ThreadLocalRef(def_id) => {
                         // We store a def_id of a static.
-                        HashSet::from([GlobalMemLoc::Global(def_id)])
+                        HashSet::from([MemLoc::Global(def_id)])
                     }
                 };
                 // Create an edge between all places which could be lvalue and all places rvalue
@@ -498,7 +498,7 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
         &self,
         state: &mut PointsToGraph<'tcx>,
         operand: Operand<'tcx>,
-    ) -> HashSet<GlobalMemLoc<'tcx>> {
+    ) -> HashSet<MemLoc<'tcx>> {
         match operand {
             Operand::Copy(place) | Operand::Move(place) => {
                 // Find all places which are pointed to by the place.
@@ -507,7 +507,7 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
             Operand::Constant(const_operand) => {
                 // Constants could point to a static, so need to check for that.
                 if let Some(static_def_id) = const_operand.check_static_ptr(self.tcx) {
-                    HashSet::from([GlobalMemLoc::Global(static_def_id)])
+                    HashSet::from([MemLoc::Global(static_def_id)])
                 } else {
                     HashSet::new()
                 }
@@ -520,7 +520,7 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
         &self,
         state: &mut PointsToGraph<'tcx>,
         operand: Operand<'tcx>,
-    ) -> HashSet<GlobalMemLoc<'tcx>> {
+    ) -> HashSet<MemLoc<'tcx>> {
         match operand {
             Operand::Copy(place) | Operand::Move(place) => state.follow_from_place(
                 place.project_deeper(&[ProjectionElem::Deref], self.tcx),
@@ -529,7 +529,7 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
             Operand::Constant(const_operand) => {
                 // Constants could point to a static, so need to check for that.
                 if let Some(static_def_id) = const_operand.check_static_ptr(self.tcx) {
-                    HashSet::from([GlobalMemLoc::Global(static_def_id)])
+                    HashSet::from([MemLoc::Global(static_def_id)])
                 } else {
                     HashSet::new()
                 }

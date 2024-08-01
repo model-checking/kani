@@ -21,24 +21,24 @@ pub enum LocalMemLoc<'tcx> {
 
 /// A node tagged with a DefId, to differentiate between places across different functions.
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
-pub enum GlobalMemLoc<'tcx> {
+pub enum MemLoc<'tcx> {
     Local(DefId, LocalMemLoc<'tcx>),
     Global(DefId),
 }
 
-impl<'tcx> GlobalMemLoc<'tcx> {
+impl<'tcx> MemLoc<'tcx> {
     /// Returns DefId of the memory location.
     pub fn def_id(&self) -> DefId {
         match self {
-            GlobalMemLoc::Local(def_id, _) | GlobalMemLoc::Global(def_id) => *def_id,
+            MemLoc::Local(def_id, _) | MemLoc::Global(def_id) => *def_id,
         }
     }
 
     /// Returns LocalMemLoc of the memory location if available.
     pub fn maybe_local_mem_loc(&self) -> Option<LocalMemLoc<'tcx>> {
         match self {
-            GlobalMemLoc::Local(_, mem_loc) => Some(*mem_loc),
-            GlobalMemLoc::Global(_) => None,
+            MemLoc::Local(_, mem_loc) => Some(*mem_loc),
+            MemLoc::Global(_) => None,
         }
     }
 }
@@ -56,8 +56,8 @@ impl<'tcx> LocalMemLoc<'tcx> {
     }
 
     /// Tag the node with a DefId.
-    pub fn with_def_id(&self, def_id: DefId) -> GlobalMemLoc<'tcx> {
-        GlobalMemLoc::Local(def_id, *self)
+    pub fn with_def_id(&self, def_id: DefId) -> MemLoc<'tcx> {
+        MemLoc::Local(def_id, *self)
     }
 }
 
@@ -80,7 +80,7 @@ impl<'tcx> LocalMemLoc<'tcx> {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PointsToGraph<'tcx> {
     /// A hash map of node --> {nodes} edges.
-    edges: HashMap<GlobalMemLoc<'tcx>, HashSet<GlobalMemLoc<'tcx>>>,
+    edges: HashMap<MemLoc<'tcx>, HashSet<MemLoc<'tcx>>>,
 }
 
 impl<'tcx> PointsToGraph<'tcx> {
@@ -89,12 +89,12 @@ impl<'tcx> PointsToGraph<'tcx> {
     }
 
     /// Collect all nodes which have incoming edges from `nodes`.
-    pub fn follow(&self, nodes: &HashSet<GlobalMemLoc<'tcx>>) -> HashSet<GlobalMemLoc<'tcx>> {
+    pub fn follow(&self, nodes: &HashSet<MemLoc<'tcx>>) -> HashSet<MemLoc<'tcx>> {
         nodes.iter().flat_map(|node| self.edges.get(node).cloned().unwrap_or_default()).collect()
     }
 
     /// For each node in `from`, add an edge to each node in `to`.
-    pub fn extend(&mut self, from: &HashSet<GlobalMemLoc<'tcx>>, to: &HashSet<GlobalMemLoc<'tcx>>) {
+    pub fn extend(&mut self, from: &HashSet<MemLoc<'tcx>>, to: &HashSet<MemLoc<'tcx>>) {
         for node in from.iter() {
             let node_pointees = self.edges.entry(*node).or_default();
             node_pointees.extend(to.iter());
@@ -107,7 +107,7 @@ impl<'tcx> PointsToGraph<'tcx> {
         &self,
         place: Place<'tcx>,
         current_def_id: DefId,
-    ) -> HashSet<GlobalMemLoc<'tcx>> {
+    ) -> HashSet<MemLoc<'tcx>> {
         let place_or_alloc: LocalMemLoc =
             Place { local: place.local, projection: List::empty() }.into();
         let mut node_set = HashSet::from([place_or_alloc.with_def_id(current_def_id)]);
@@ -156,12 +156,12 @@ impl<'tcx> PointsToGraph<'tcx> {
 
     /// Find a transitive closure of the graph starting from a set of given locations; this also
     /// includes statics.
-    pub fn transitive_closure(&self, targets: HashSet<GlobalMemLoc<'tcx>>) -> PointsToGraph<'tcx> {
+    pub fn transitive_closure(&self, targets: HashSet<MemLoc<'tcx>>) -> PointsToGraph<'tcx> {
         let mut result = PointsToGraph::empty();
         // Working queue.
         let mut queue = VecDeque::from_iter(targets);
         // Add all statics, as they can be accessed at any point.
-        let statics = self.edges.keys().filter(|node| matches!(node, GlobalMemLoc::Global(_)));
+        let statics = self.edges.keys().filter(|node| matches!(node, MemLoc::Global(_)));
         queue.extend(statics);
         // Add all entries.
         while !queue.is_empty() {
@@ -177,7 +177,7 @@ impl<'tcx> PointsToGraph<'tcx> {
     }
 
     /// Retrieve all places to which a given place is pointing to.
-    pub fn pointees_of(&self, target: &GlobalMemLoc<'tcx>) -> HashSet<GlobalMemLoc<'tcx>> {
+    pub fn pointees_of(&self, target: &MemLoc<'tcx>) -> HashSet<MemLoc<'tcx>> {
         self.edges.get(&target).unwrap_or(&HashSet::new()).clone()
     }
 

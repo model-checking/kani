@@ -5,7 +5,7 @@
 //! UB. In practice, that means collecting all instructions where the place is featured.
 
 use crate::kani_middle::{
-    points_to::{GlobalMemLoc, PointsToGraph},
+    points_to::{MemLoc, PointsToGraph},
     transform::{
         body::{InsertPosition, MutableBody, SourceInstruction},
         check_uninit::{
@@ -36,7 +36,7 @@ pub struct InstrumentationVisitor<'a, 'tcx> {
     /// Aliasing analysis data.
     points_to: &'a PointsToGraph<'tcx>,
     /// The list of places we should be looking for, ignoring others
-    analysis_targets: &'a HashSet<GlobalMemLoc<'tcx>>,
+    analysis_targets: &'a HashSet<MemLoc<'tcx>>,
     current_def_id: InternalDefId,
     tcx: TyCtxt<'tcx>,
 }
@@ -59,7 +59,7 @@ impl<'a, 'tcx> TargetFinder for InstrumentationVisitor<'a, 'tcx> {
 impl<'a, 'tcx> InstrumentationVisitor<'a, 'tcx> {
     pub fn new(
         points_to: &'a PointsToGraph<'tcx>,
-        analysis_targets: &'a HashSet<GlobalMemLoc<'tcx>>,
+        analysis_targets: &'a HashSet<MemLoc<'tcx>>,
         current_def_id: InternalDefId,
         tcx: TyCtxt<'tcx>,
     ) -> Self {

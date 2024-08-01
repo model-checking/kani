@@ -8,7 +8,7 @@ use std::collections::HashSet;
 
 use crate::args::ExtraChecks;
 use crate::kani_middle::{
-    points_to::{run_points_to_analysis, GlobalMemLoc, LocalMemLoc, PointsToGraph},
+    points_to::{run_points_to_analysis, MemLoc, LocalMemLoc, PointsToGraph},
     reachability::CallGraph,
     transform::{
         body::{CheckType, MutableBody},
@@ -75,7 +75,7 @@ impl GlobalPass for DelayedUbPass {
                         LocalMemLoc::Place(rustc_internal::internal(tcx, place)).with_def_id(def_id)
                     }
                     AnalysisTarget::Static(static_def) => {
-                        GlobalMemLoc::Global(rustc_internal::internal(tcx, static_def))
+                        MemLoc::Global(rustc_internal::internal(tcx, static_def))
                     }
                 })
             })
