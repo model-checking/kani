@@ -108,7 +108,7 @@ impl GlobalPass for DelayedUbPass {
                 }
             }
 
-            // Since analysis targets are *pointers*, need to get its followers for instrumentation.
+            // Since analysis targets are *pointers*, need to get its successors for instrumentation.
             for target in targets.iter() {
                 analysis_targets.extend(global_points_to_graph.pointees_of(target));
             }

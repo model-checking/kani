@@ -137,19 +137,19 @@ impl<'a, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'tcx> {
             StatementKind::Assign(assign_box) => {
                 let (place, rvalue) = *assign_box.clone();
                 // Resolve all dereference projections for the lvalue.
-                let lvalue_set = state.follow_from_place(place, self.instance);
+                let lvalue_set = state.resolve_place(place, self.instance);
                 // Determine all places rvalue could point to.
                 let rvalue_set = match rvalue {
                     // Using the operand unchanged requires determining where it could point, which
-                    // `follow_rvalue` does.
+                    // `successors_for_operand` does.
                     Rvalue::Use(operand)
                     | Rvalue::ShallowInitBox(operand, _)
                     | Rvalue::Cast(_, operand, _)
-                    | Rvalue::Repeat(operand, ..) => self.follow_rvalue(state, operand),
-                    Rvalue::Ref(_, _, place) | Rvalue::AddressOf(_, place) => {
+                    | Rvalue::Repeat(operand, ..) => self.successors_for_operand(state, operand),
+                    Rvalue::Ref(_, _, ref_place) | Rvalue::AddressOf(_, ref_place) => {
                         // Here, a reference to a place is created, which leaves the place
                         // unchanged.
-                        state.follow_from_place(place, self.instance)
+                        state.resolve_place(ref_place, self.instance)
                     }
                     Rvalue::BinaryOp(bin_op, operands) => {
                         match bin_op {
@@ -157,7 +157,7 @@ impl<'a, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'tcx> {
                                 // Offsetting a pointer should still be within the boundaries of the
                                 // same object, so we can simply use the operand unchanged.
                                 let (ptr, _) = *operands.clone();
-                                self.follow_rvalue(state, ptr)
+                                self.successors_for_operand(state, ptr)
                             }
                             BinOp::Add
                             | BinOp::AddUnchecked
@@ -181,8 +181,8 @@ impl<'a, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'tcx> {
                                 // track them. We assume that even shifted addresses will be within
                                 // the same original object.
                                 let (l_operand, r_operand) = *operands.clone();
-                                let l_operand_set = self.follow_rvalue(state, l_operand);
-                                let r_operand_set = self.follow_rvalue(state, r_operand);
+                                let l_operand_set = self.successors_for_operand(state, l_operand);
+                                let r_operand_set = self.successors_for_operand(state, r_operand);
                                 l_operand_set.union(&r_operand_set).cloned().collect()
                             }
                             BinOp::Eq
@@ -199,7 +199,7 @@ impl<'a, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'tcx> {
                     }
                     Rvalue::UnaryOp(_, operand) => {
                         // The same story from BinOp applies here, too. Need to track those things.
-                        self.follow_rvalue(state, operand)
+                        self.successors_for_operand(state, operand)
                     }
                     Rvalue::Len(..) | Rvalue::NullaryOp(..) | Rvalue::Discriminant(..) => {
                         // All of those should yield a constant.
@@ -210,12 +210,12 @@ impl<'a, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'tcx> {
                         // their pointees.
                         operands
                             .into_iter()
-                            .flat_map(|operand| self.follow_rvalue(state, operand))
+                            .flat_map(|operand| self.successors_for_operand(state, operand))
                             .collect()
                     }
                     Rvalue::CopyForDeref(place) => {
                         // Resolve pointees of a place.
-                        state.successors(&state.follow_from_place(place, self.instance))
+                        state.successors(&state.resolve_place(place, self.instance))
                     }
                     Rvalue::ThreadLocalRef(def_id) => {
                         // We store a def_id of a static.
@@ -288,10 +288,12 @@ impl<'a, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'tcx> {
                                         args[0].node.ty(self.body, self.tcx).kind(),
                                         TyKind::RawPtr(_, Mutability::Mut)
                                     ));
-                                    let src_set = self.follow_rvalue(state, args[2].node.clone());
-                                    let dst_set = self.follow_deref(state, args[0].node.clone());
+                                    let src_set =
+                                        self.successors_for_operand(state, args[2].node.clone());
+                                    let dst_set =
+                                        self.successors_for_deref(state, args[0].node.clone());
                                     let destination_set =
-                                        state.follow_from_place(*destination, self.instance);
+                                        state.resolve_place(*destination, self.instance);
                                     state.extend(&destination_set, &state.successors(&dst_set));
                                     state.extend(&dst_set, &src_set);
                                 }
@@ -307,9 +309,10 @@ impl<'a, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'tcx> {
                                         args[0].node.ty(self.body, self.tcx).kind(),
                                         TyKind::RawPtr(_, Mutability::Not)
                                     ));
-                                    let src_set = self.follow_deref(state, args[0].node.clone());
+                                    let src_set =
+                                        self.successors_for_deref(state, args[0].node.clone());
                                     let destination_set =
-                                        state.follow_from_place(*destination, self.instance);
+                                        state.resolve_place(*destination, self.instance);
                                     state.extend(&destination_set, &state.successors(&src_set));
                                 }
                                 // All `atomic_store` intrinsics take `dst, val` as arguments.
@@ -324,8 +327,10 @@ impl<'a, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'tcx> {
                                         args[0].node.ty(self.body, self.tcx).kind(),
                                         TyKind::RawPtr(_, Mutability::Mut)
                                     ));
-                                    let dst_set = self.follow_deref(state, args[0].node.clone());
-                                    let val_set = self.follow_rvalue(state, args[1].node.clone());
+                                    let dst_set =
+                                        self.successors_for_deref(state, args[0].node.clone());
+                                    let val_set =
+                                        self.successors_for_operand(state, args[1].node.clone());
                                     state.extend(&dst_set, &val_set);
                                 }
                                 // All other `atomic` intrinsics take `dst, src` as arguments.
@@ -340,10 +345,12 @@ impl<'a, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'tcx> {
                                         args[0].node.ty(self.body, self.tcx).kind(),
                                         TyKind::RawPtr(_, Mutability::Mut)
                                     ));
-                                    let src_set = self.follow_rvalue(state, args[1].node.clone());
-                                    let dst_set = self.follow_deref(state, args[0].node.clone());
+                                    let src_set =
+                                        self.successors_for_operand(state, args[1].node.clone());
+                                    let dst_set =
+                                        self.successors_for_deref(state, args[0].node.clone());
                                     let destination_set =
-                                        state.follow_from_place(*destination, self.instance);
+                                        state.resolve_place(*destination, self.instance);
                                     state.extend(&destination_set, &state.successors(&dst_set));
                                     state.extend(&dst_set, &src_set);
                                 }
@@ -395,8 +402,8 @@ impl<'a, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'tcx> {
                                 TyKind::RawPtr(_, Mutability::Not)
                             ));
                             // Destination of the return value.
-                            let lvalue_set = state.follow_from_place(*destination, self.instance);
-                            let rvalue_set = self.follow_deref(state, args[0].node.clone());
+                            let lvalue_set = state.resolve_place(*destination, self.instance);
+                            let rvalue_set = self.successors_for_deref(state, args[0].node.clone());
                             state.extend(&lvalue_set, &state.successors(&rvalue_set));
                         }
                         // Semantically equivalent *a = b.
@@ -410,8 +417,9 @@ impl<'a, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'tcx> {
                                 args[0].node.ty(self.body, self.tcx).kind(),
                                 TyKind::RawPtr(_, Mutability::Mut)
                             ));
-                            let lvalue_set = self.follow_deref(state, args[0].node.clone());
-                            let rvalue_set = self.follow_rvalue(state, args[1].node.clone());
+                            let lvalue_set = self.successors_for_deref(state, args[0].node.clone());
+                            let rvalue_set =
+                                self.successors_for_operand(state, args[1].node.clone());
                             state.extend(&lvalue_set, &rvalue_set);
                         }
                         _ => {
@@ -433,8 +441,7 @@ impl<'a, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'tcx> {
                             // This is an internal function responsible for heap allocation,
                             // which creates a new node we need to add to the points-to graph.
                             "alloc::alloc::__rust_alloc" | "alloc::alloc::__rust_alloc_zeroed" => {
-                                let lvalue_set =
-                                    state.follow_from_place(*destination, self.instance);
+                                let lvalue_set = state.resolve_place(*destination, self.instance);
                                 let rvalue_set = HashSet::from([MemLoc::new_heap_allocation(
                                     self.instance,
                                     location,
@@ -489,13 +496,13 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
         from: Operand<'tcx>,
         to: Operand<'tcx>,
     ) {
-        let lvalue_set = self.follow_deref(state, to);
-        let rvalue_set = self.follow_deref(state, from);
+        let lvalue_set = self.successors_for_deref(state, to);
+        let rvalue_set = self.successors_for_deref(state, from);
         state.extend(&lvalue_set, &state.successors(&rvalue_set));
     }
 
     /// Find all places where the operand could point to at the current stage of the program.
-    fn follow_rvalue(
+    fn successors_for_operand(
         &self,
         state: &mut PointsToGraph<'tcx>,
         operand: Operand<'tcx>,
@@ -503,7 +510,7 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
         match operand {
             Operand::Copy(place) | Operand::Move(place) => {
                 // Find all places which are pointed to by the place.
-                state.successors(&state.follow_from_place(place, self.instance))
+                state.successors(&state.resolve_place(place, self.instance))
             }
             Operand::Constant(const_operand) => {
                 // Constants could point to a static, so need to check for that.
@@ -517,13 +524,13 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
     }
 
     /// Find all places where the deref of the operand could point to at the current stage of the program.
-    fn follow_deref(
+    fn successors_for_deref(
         &self,
         state: &mut PointsToGraph<'tcx>,
         operand: Operand<'tcx>,
     ) -> HashSet<MemLoc<'tcx>> {
         match operand {
-            Operand::Copy(place) | Operand::Move(place) => state.follow_from_place(
+            Operand::Copy(place) | Operand::Move(place) => state.resolve_place(
                 place.project_deeper(&[ProjectionElem::Deref], self.tcx),
                 self.instance,
             ),
@@ -559,9 +566,8 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
         for arg in args.iter() {
             match arg.node {
                 Operand::Copy(place) | Operand::Move(place) => {
-                    initial_graph.join(
-                        &state.transitive_closure(state.follow_from_place(place, self.instance)),
-                    );
+                    initial_graph
+                        .join(&state.transitive_closure(state.resolve_place(place, self.instance)));
                 }
                 Operand::Constant(_) => {}
             }
@@ -578,7 +584,7 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
                 instance,
                 Place { local: 1usize.into(), projection: List::empty() },
             )]);
-            let rvalue_set = self.follow_rvalue(state, args[0].node.clone());
+            let rvalue_set = self.successors_for_operand(state, args[0].node.clone());
             initial_graph.extend(&lvalue_set, &rvalue_set);
             // Then, connect the argument tuple to each of the spread arguments.
             let spread_arg_operand = args[1].node.clone();
@@ -591,7 +597,7 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
                     },
                 )]);
                 // This conservatively assumes all arguments alias to all parameters.
-                let rvalue_set = self.follow_rvalue(state, spread_arg_operand.clone());
+                let rvalue_set = self.successors_for_operand(state, spread_arg_operand.clone());
                 initial_graph.extend(&lvalue_set, &rvalue_set);
             }
         } else {
@@ -604,7 +610,7 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
                         projection: List::empty(),
                     },
                 )]);
-                let rvalue_set = self.follow_rvalue(state, arg.node.clone());
+                let rvalue_set = self.successors_for_operand(state, arg.node.clone());
                 initial_graph.extend(&lvalue_set, &rvalue_set);
             }
         }
@@ -616,7 +622,7 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
         state.join(&new_result);
 
         // Connect the return value to the return destination.
-        let lvalue_set = state.follow_from_place(*destination, self.instance);
+        let lvalue_set = state.resolve_place(*destination, self.instance);
         let rvalue_set = HashSet::from([MemLoc::new_stack_allocation(
             instance,
             Place { local: 0usize.into(), projection: List::empty() },

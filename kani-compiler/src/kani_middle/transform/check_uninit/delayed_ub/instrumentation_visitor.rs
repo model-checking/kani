@@ -115,7 +115,7 @@ impl<'a, 'tcx> MirVisitor for InstrumentationVisitor<'a, 'tcx> {
         // Match the place by whatever it is pointing to and find an intersection with the targets.
         if self
             .points_to
-            .follow_from_place(rustc_internal::internal(self.tcx, place), self.current_instance)
+            .resolve_place(rustc_internal::internal(self.tcx, place), self.current_instance)
             .intersection(&self.analysis_targets)
             .next()
             .is_some()

@@ -14,6 +14,9 @@ use std::collections::{HashMap, HashSet, VecDeque};
 /// A node in the points-to graph, which could be a place on the stack, a heap allocation, or a static.
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum MemLoc<'tcx> {
+    /// Notice that the type of `Place` here is not restricted to references or pointers. For
+    /// example, we propagate aliasing information for values derived from casting a pointer to a
+    /// usize in order to ensure soundness, as it could later be casted back to a pointer.
     Stack(Instance<'tcx>, Place<'tcx>),
     /// Using a combination of the instance of the function where the allocation took place and the
     /// location of the allocation inside this function implements allocation-site abstraction.
@@ -83,7 +86,7 @@ impl<'tcx> PointsToGraph<'tcx> {
     /// We automatically resolve dereference projections here (by finding successors for each
     /// dereference projection we encounter), which is valid as long as we do it for every place we
     /// add to the graph.
-    pub fn follow_from_place(
+    pub fn resolve_place(
         &self,
         place: Place<'tcx>,
         instance: Instance<'tcx>,
