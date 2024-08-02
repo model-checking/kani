@@ -211,8 +211,8 @@ sinf32 | Partial | Results are overapproximated; [this test](https://github.com/
 sinf64 | Partial | Results are overapproximated; [this test](https://github.com/model-checking/kani/blob/main/tests/kani/Intrinsics/Math/Trigonometry/sinf64.rs) explains how |
 size_of | Yes | |
 size_of_val | Yes | |
-sqrtf32 | No | |
-sqrtf64 | No | |
+sqrtf32 | Partial | Results are overapproximated |
+sqrtf64 | Partial | Results are overapproximated |
 sub_with_overflow | Yes | |
 transmute | Partial | Doesn't check [all UB conditions](https://doc.rust-lang.org/nomicon/transmutes.html) |
 truncf32 | Yes | |
