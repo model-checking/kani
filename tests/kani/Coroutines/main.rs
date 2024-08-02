@@ -10,7 +10,6 @@ use std::ops::{Coroutine, CoroutineState};
 use std::pin::Pin;
 
 #[kani::proof]
-#[kani::unwind(3)]
 fn main() {
     let mut add_one = #[coroutine]
     |mut resume: u8| {
