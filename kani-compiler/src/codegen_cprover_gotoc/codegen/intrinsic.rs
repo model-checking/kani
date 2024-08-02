@@ -447,8 +447,8 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             "floorf32" => codegen_simple_intrinsic!(Floorf),
             "floorf64" => codegen_simple_intrinsic!(Floor),
-            "fmaf32" => unstable_codegen!(codegen_simple_intrinsic!(Fmaf)),
-            "fmaf64" => unstable_codegen!(codegen_simple_intrinsic!(Fma)),
+            "fmaf32" => codegen_simple_intrinsic!(Fmaf),
+            "fmaf64" => codegen_simple_intrinsic!(Fma),
             "fmul_fast" => {
                 let fargs_clone = fargs.clone();
                 let binop_stmt = codegen_intrinsic_binop!(mul);
@@ -490,8 +490,8 @@ impl<'tcx> GotocCtx<'tcx> {
             ),
             "powf32" => codegen_simple_intrinsic!(Powf),
             "powf64" => codegen_simple_intrinsic!(Pow),
-            "powif32" => unstable_codegen!(codegen_simple_intrinsic!(Powif)),
-            "powif64" => unstable_codegen!(codegen_simple_intrinsic!(Powi)),
+            "powif32" => codegen_simple_intrinsic!(Powif),
+            "powif64" => codegen_simple_intrinsic!(Powi),
             "pref_align_of" => codegen_intrinsic_const!(),
             "ptr_guaranteed_cmp" => self.codegen_ptr_guaranteed_cmp(fargs, place, loc),
             "ptr_offset_from" => self.codegen_ptr_offset_from(fargs, place, loc),
