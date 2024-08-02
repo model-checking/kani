@@ -40,7 +40,7 @@ use rustc_middle::{
 };
 use rustc_mir_dataflow::{Analysis, AnalysisDomain, Forward, JoinSemiLattice};
 use rustc_smir::rustc_internal;
-use rustc_span::source_map::Spanned;
+use rustc_span::{source_map::Spanned, DUMMY_SP};
 use std::collections::HashSet;
 
 /// Main points-to analysis object.
@@ -479,12 +479,13 @@ fn try_resolve_instance<'tcx>(
     let ty = func.ty(body, tcx);
     match ty.kind() {
         TyKind::FnDef(def, args) => {
-            match Instance::try_resolve(tcx, ParamEnv::reveal_all(), *def, &args) {
-                Ok(Some(instance)) => Ok(instance),
-                _ => Err(format!("Kani does not support reasoning about arguments to `{ty:?}`.")),
-            }
+            // Span here is used for error-reporting, which we don't expect to encounter anyway, so
+            // it is ok to use a dummy.
+            Ok(Instance::expect_resolve(tcx, ParamEnv::reveal_all(), *def, &args, DUMMY_SP))
         }
-        _ => Err(format!("Kani does not support reasoning about arguments to `{ty:?}`.")),
+        _ => Err(format!(
+            "Kani was not able to resolve the instance of the function operand `{ty:?}`. Currently, memory initialization checks in presence of function pointers and vtable calls are not supported. For more information about planned support, see https://github.com/model-checking/kani/issues/3300."
+        )),
     }
 }
 
