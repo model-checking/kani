@@ -166,10 +166,10 @@ forget | Yes | |
 frem_fast | No | |
 fsub_fast | Yes | |
 likely | Yes | |
-log10f32 | No | |
-log10f64 | No | |
-log2f32 | No | |
-log2f64 | No | |
+log10f32 | Partial | Results are overapproximated |
+log10f64 | Partial | Results are overapproximated |
+log2f32 | Partial | Results are overapproximated |
+log2f64 | Partial | Results are overapproximated |
 logf32 | Partial | Results are overapproximated |
 logf64 | Partial | Results are overapproximated |
 maxnumf32 | Yes | |

@@ -466,10 +466,10 @@ impl<'tcx> GotocCtx<'tcx> {
                 self.codegen_expr_to_place_stable(place, Expr::c_false(), loc)
             }
             "likely" => self.codegen_expr_to_place_stable(place, fargs.remove(0), loc),
-            "log10f32" => unstable_codegen!(codegen_simple_intrinsic!(Log10f)),
-            "log10f64" => unstable_codegen!(codegen_simple_intrinsic!(Log10)),
-            "log2f32" => unstable_codegen!(codegen_simple_intrinsic!(Log2f)),
-            "log2f64" => unstable_codegen!(codegen_simple_intrinsic!(Log2)),
+            "log10f32" => codegen_simple_intrinsic!(Log10f),
+            "log10f64" => codegen_simple_intrinsic!(Log10),
+            "log2f32" => codegen_simple_intrinsic!(Log2f),
+            "log2f64" => codegen_simple_intrinsic!(Log2),
             "logf32" => codegen_simple_intrinsic!(Logf),
             "logf64" => codegen_simple_intrinsic!(Log),
             "maxnumf32" => codegen_simple_intrinsic!(Fmaxf),
