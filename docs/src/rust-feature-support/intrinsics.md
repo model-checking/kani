@@ -187,8 +187,8 @@ nontemporal_store | No | |
 offset | Partial | Doesn't check [all UB conditions](https://doc.rust-lang.org/std/primitive.pointer.html#safety-2) |
 powf32 | Partial | Results are overapproximated |
 powf64 | Partial | Results are overapproximated |
-powif32 | No | |
-powif64 | No | |
+powif32 | Partial | Results are overapproximated |
+powif64 | Partial | Results are overapproximated |
 pref_align_of | Yes | |
 prefetch_read_data | No | |
 prefetch_read_instruction | No | |
