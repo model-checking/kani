@@ -139,89 +139,7 @@ impl<'a, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'tcx> {
                 // Resolve all dereference projections for the lvalue.
                 let lvalue_set = state.resolve_place(place, self.instance);
                 // Determine all places rvalue could point to.
-                let rvalue_set = match rvalue {
-                    // Using the operand unchanged requires determining where it could point, which
-                    // `successors_for_operand` does.
-                    Rvalue::Use(operand)
-                    | Rvalue::ShallowInitBox(operand, _)
-                    | Rvalue::Cast(_, operand, _)
-                    | Rvalue::Repeat(operand, ..) => self.successors_for_operand(state, operand),
-                    Rvalue::Ref(_, _, ref_place) | Rvalue::AddressOf(_, ref_place) => {
-                        // Here, a reference to a place is created, which leaves the place
-                        // unchanged.
-                        state.resolve_place(ref_place, self.instance)
-                    }
-                    Rvalue::BinaryOp(bin_op, operands) => {
-                        match bin_op {
-                            BinOp::Offset => {
-                                // Offsetting a pointer should still be within the boundaries of the
-                                // same object, so we can simply use the operand unchanged.
-                                let (ptr, _) = *operands.clone();
-                                self.successors_for_operand(state, ptr)
-                            }
-                            BinOp::Add
-                            | BinOp::AddUnchecked
-                            | BinOp::AddWithOverflow
-                            | BinOp::Sub
-                            | BinOp::SubUnchecked
-                            | BinOp::SubWithOverflow
-                            | BinOp::Mul
-                            | BinOp::MulUnchecked
-                            | BinOp::MulWithOverflow
-                            | BinOp::Div
-                            | BinOp::Rem
-                            | BinOp::BitXor
-                            | BinOp::BitAnd
-                            | BinOp::BitOr
-                            | BinOp::Shl
-                            | BinOp::ShlUnchecked
-                            | BinOp::Shr
-                            | BinOp::ShrUnchecked => {
-                                // While unlikely, those could be pointer addresses, so we need to
-                                // track them. We assume that even shifted addresses will be within
-                                // the same original object.
-                                let (l_operand, r_operand) = *operands.clone();
-                                let l_operand_set = self.successors_for_operand(state, l_operand);
-                                let r_operand_set = self.successors_for_operand(state, r_operand);
-                                l_operand_set.union(&r_operand_set).cloned().collect()
-                            }
-                            BinOp::Eq
-                            | BinOp::Lt
-                            | BinOp::Le
-                            | BinOp::Ne
-                            | BinOp::Ge
-                            | BinOp::Gt
-                            | BinOp::Cmp => {
-                                // None of those could yield an address as the result.
-                                HashSet::new()
-                            }
-                        }
-                    }
-                    Rvalue::UnaryOp(_, operand) => {
-                        // The same story from BinOp applies here, too. Need to track those things.
-                        self.successors_for_operand(state, operand)
-                    }
-                    Rvalue::Len(..) | Rvalue::NullaryOp(..) | Rvalue::Discriminant(..) => {
-                        // All of those should yield a constant.
-                        HashSet::new()
-                    }
-                    Rvalue::Aggregate(_, operands) => {
-                        // Conservatively find a union of all places mentioned here and resolve
-                        // their pointees.
-                        operands
-                            .into_iter()
-                            .flat_map(|operand| self.successors_for_operand(state, operand))
-                            .collect()
-                    }
-                    Rvalue::CopyForDeref(place) => {
-                        // Resolve pointees of a place.
-                        state.successors(&state.resolve_place(place, self.instance))
-                    }
-                    Rvalue::ThreadLocalRef(def_id) => {
-                        // We store a def_id of a static.
-                        HashSet::from([MemLoc::new_static_allocation(def_id)])
-                    }
-                };
+                let rvalue_set = self.successors_for_rvalue(state, rvalue);
                 // Create an edge between all places which could be lvalue and all places rvalue
                 // could be pointing to.
                 state.extend(&lvalue_set, &rvalue_set);
@@ -629,5 +547,96 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
             Place { local: 0usize.into(), projection: List::empty() },
         )]);
         state.extend(&lvalue_set, &state.successors(&rvalue_set));
+    }
+
+    /// Find all places where the rvalue could point to at the current stage of the program.
+    fn successors_for_rvalue(
+        &self,
+        state: &mut PointsToGraph<'tcx>,
+        rvalue: Rvalue<'tcx>,
+    ) -> HashSet<MemLoc<'tcx>> {
+        match rvalue {
+            // Using the operand unchanged requires determining where it could point, which
+            // `successors_for_operand` does.
+            Rvalue::Use(operand)
+            | Rvalue::ShallowInitBox(operand, _)
+            | Rvalue::Cast(_, operand, _)
+            | Rvalue::Repeat(operand, ..) => self.successors_for_operand(state, operand),
+            Rvalue::Ref(_, _, ref_place) | Rvalue::AddressOf(_, ref_place) => {
+                // Here, a reference to a place is created, which leaves the place
+                // unchanged.
+                state.resolve_place(ref_place, self.instance)
+            }
+            Rvalue::BinaryOp(bin_op, operands) => {
+                match bin_op {
+                    BinOp::Offset => {
+                        // Offsetting a pointer should still be within the boundaries of the
+                        // same object, so we can simply use the operand unchanged.
+                        let (ptr, _) = *operands.clone();
+                        self.successors_for_operand(state, ptr)
+                    }
+                    BinOp::Add
+                    | BinOp::AddUnchecked
+                    | BinOp::AddWithOverflow
+                    | BinOp::Sub
+                    | BinOp::SubUnchecked
+                    | BinOp::SubWithOverflow
+                    | BinOp::Mul
+                    | BinOp::MulUnchecked
+                    | BinOp::MulWithOverflow
+                    | BinOp::Div
+                    | BinOp::Rem
+                    | BinOp::BitXor
+                    | BinOp::BitAnd
+                    | BinOp::BitOr
+                    | BinOp::Shl
+                    | BinOp::ShlUnchecked
+                    | BinOp::Shr
+                    | BinOp::ShrUnchecked => {
+                        // While unlikely, those could be pointer addresses, so we need to
+                        // track them. We assume that even shifted addresses will be within
+                        // the same original object.
+                        let (l_operand, r_operand) = *operands.clone();
+                        let l_operand_set = self.successors_for_operand(state, l_operand);
+                        let r_operand_set = self.successors_for_operand(state, r_operand);
+                        l_operand_set.union(&r_operand_set).cloned().collect()
+                    }
+                    BinOp::Eq
+                    | BinOp::Lt
+                    | BinOp::Le
+                    | BinOp::Ne
+                    | BinOp::Ge
+                    | BinOp::Gt
+                    | BinOp::Cmp => {
+                        // None of those could yield an address as the result.
+                        HashSet::new()
+                    }
+                }
+            }
+            Rvalue::UnaryOp(_, operand) => {
+                // The same story from BinOp applies here, too. Need to track those things.
+                self.successors_for_operand(state, operand)
+            }
+            Rvalue::Len(..) | Rvalue::NullaryOp(..) | Rvalue::Discriminant(..) => {
+                // All of those should yield a constant.
+                HashSet::new()
+            }
+            Rvalue::Aggregate(_, operands) => {
+                // Conservatively find a union of all places mentioned here and resolve
+                // their pointees.
+                operands
+                    .into_iter()
+                    .flat_map(|operand| self.successors_for_operand(state, operand))
+                    .collect()
+            }
+            Rvalue::CopyForDeref(place) => {
+                // Resolve pointees of a place.
+                state.successors(&state.resolve_place(place, self.instance))
+            }
+            Rvalue::ThreadLocalRef(def_id) => {
+                // We store a def_id of a static.
+                HashSet::from([MemLoc::new_static_allocation(def_id)])
+            }
+        }
     }
 }
