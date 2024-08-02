@@ -130,10 +130,11 @@ Filename                                             Regions    Missed Regions  
 TOTAL                                                      9                 3    66.67%           3                 1    66.67%          14                 4    71.43%           0                 0         -
 ```
 
-[^note-source]: The LLVM project refers to their own coverage feature as "source-based code coverage".
-It's not rare to see the term "region coverage" being used instead to refer to the same thing.
-That's because LLVM's source-based code coverage feature can report coverage for code regions,
-but other coverage frameworks don't support the concept of code regions.
+[^note-source]: The LLVM project refers to their own coverage feature as
+   "source-based code coverage". It's not rare to see the term "region coverage"
+   being used instead to refer to the same thing. That's because LLVM's
+   source-based code coverage feature can report coverage for code regions, but
+   other coverage frameworks don't support the concept of code regions.
 
 ### The Kani coverage workflow
 
@@ -243,16 +244,21 @@ This time, the command will generate a `coverage-report` folder including a
 browsable HTML webpage that highlights the regions covered in the source
 according to the coverage results in `my-coverage.kanicov`.
 
-[^note-export]: The `llvm-cov` tool includes the option [`gcov`](https://llvm.org/docs/CommandGuide/llvm-cov.html#llvm-cov-gcov) to export into GCC's coverage format [Gcov](https://en.wikipedia.org/wiki/Gcov),
-and the option [`export`](https://llvm.org/docs/CommandGuide/llvm-cov.html#llvm-cov-export) to export into the LCOV format.
-I'd strongly recommend against adding format-specific options to `kani-cov`
-unless there are technical reasons to do so.
+[^note-export]: The `llvm-cov` tool includes the option
+   [`gcov`](https://llvm.org/docs/CommandGuide/llvm-cov.html#llvm-cov-gcov) to
+   export into GCC's coverage format [Gcov](https://en.wikipedia.org/wiki/Gcov),
+   and the option
+   [`export`](https://llvm.org/docs/CommandGuide/llvm-cov.html#llvm-cov-export)
+   to export into the LCOV format. I'd strongly recommend against adding
+   format-specific options to `kani-cov` unless there are technical reasons to
+   do so.
 
-[^note-exclude]: Options to exclude certain coverage results (e.g, from the standard library) will likely be part of this option.
+[^note-exclude]: Options to exclude certain coverage results (e.g, from the
+   standard library) will likely be part of this option.
 
 [^note-snapshot]: Source code snapshots are necessary to produce coverage
-reports for items that otherwise are unreachable or have been sliced away during
-the compilation process.
+   reports for items that otherwise are unreachable or have been sliced away
+   during the compilation process.
 
 #### Integration with the Kani VS Code Extension
 
@@ -345,12 +351,12 @@ instrumentation also computes the mix of `Counter`s and `Expression`s that make
 up the coverage statements.
 
 [^note-coverage-info]: It is important to note that the StableMIR interface does
-    not include `FunctionCoverageInfo` in function bodies. Because of that, we
-    need to pull it from the internal `rustc` function bodies.
+   not include `FunctionCoverageInfo` in function bodies. Because of that, we
+   need to pull it from the internal `rustc` function bodies.
 
 [^note-physical-counter]: By *physical counter*, we refer to a global program
-variable that is initialized to zero and incremented by one each time that the
-execution goes through.
+   variable that is initialized to zero and incremented by one each time that
+   the execution goes through.
 
 #### Integrating the instrumentation into Kani
 
@@ -390,10 +396,12 @@ scale.
 In addition, Kani will produce two types of coverage results:
  1. A coverage summary
 
-[^note-kanimap]: Note that the `.kanimap` generation isn't implemented in [#3119](https://github.com/model-checking/kani/pull/3119).
-The [draft implementation of `kani-cov`](https://github.com/model-checking/kani/pull/3121)
-simply reads the source files referred to by the code coverage checks, but it
-doesn't get information about code trimmed out by the MIR linker.
+[^note-kanimap]: Note that the `.kanimap` generation isn't implemented in
+   [#3119](https://github.com/model-checking/kani/pull/3119). The [draft
+   implementation of
+   `kani-cov`](https://github.com/model-checking/kani/pull/3121) simply reads
+   the source files referred to by the code coverage checks, but it doesn't get
+   information about code trimmed out by the MIR linker.
 
 ## Rationale and alternatives
 
@@ -407,7 +415,8 @@ based on the Gcov format. The Gcov format is line-based so it's not able
 to report region coverage results.
 In other words, it's not as advanced nor precise as the source-based implementation.
 
-[^note-benchmarks]: Actual performance benchmarks to follow in [#3119](https://github.com/model-checking/kani/pull/3119).
+[^note-benchmarks]: Actual performance benchmarks to follow in
+   [#3119](https://github.com/model-checking/kani/pull/3119).
 
 ## Open questions
 
