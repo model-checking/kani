@@ -159,14 +159,6 @@ impl<'tcx> PointsToGraph<'tcx> {
     pub fn pointees_of(&self, target: &MemLoc<'tcx>) -> HashSet<MemLoc<'tcx>> {
         self.edges.get(&target).unwrap_or(&HashSet::new()).clone()
     }
-
-    // Merge the other graph into self, consuming it.
-    pub fn merge(&mut self, other: PointsToGraph<'tcx>) {
-        for (from, to) in other.edges {
-            let existing_to = self.edges.entry(from).or_default();
-            existing_to.extend(to);
-        }
-    }
 }
 
 /// Since we are performing the analysis using a dataflow, we need to implement a proper monotonous
@@ -178,22 +170,11 @@ impl<'tcx> JoinSemiLattice for PointsToGraph<'tcx> {
         let mut updated = false;
         // Check every node in the other graph.
         for (from, to) in other.edges.iter() {
-            // If node already exists in the original graph.
-            if self.edges.contains_key(from) {
-                // Check if there are any edges that are in the other graph but not in the original
-                // graph.
-                let difference: HashSet<_> =
-                    to.difference(self.edges.get(from).unwrap()).cloned().collect();
-                if !difference.is_empty() {
-                    updated = true;
-                    // Add all edges to the original graph.
-                    self.edges.get_mut(from).unwrap().extend(difference);
-                }
-            } else {
-                // If node does not exist, add the node and all edges from it.
-                self.edges.insert(*from, to.clone());
-                updated = true;
-            }
+            let existing_to = self.edges.entry(from.clone()).or_default();
+            let initial_size = existing_to.len();
+            existing_to.extend(to);
+            let new_size = existing_to.len();
+            updated |= initial_size != new_size;
         }
         updated
     }

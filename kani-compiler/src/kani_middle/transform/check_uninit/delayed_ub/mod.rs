@@ -21,6 +21,7 @@ use crate::kani_queries::QueryDb;
 use initial_target_visitor::{AnalysisTarget, InitialTargetVisitor};
 use instrumentation_visitor::InstrumentationVisitor;
 use rustc_middle::ty::TyCtxt;
+use rustc_mir_dataflow::JoinSemiLattice;
 use rustc_session::config::OutputType;
 use rustc_smir::rustc_internal;
 use stable_mir::{
@@ -103,7 +104,7 @@ impl GlobalPass for DelayedUbPass {
                     let internal_instance = rustc_internal::internal(tcx, instance);
                     let results =
                         run_points_to_analysis(&internal_body, tcx, internal_instance, call_graph);
-                    global_points_to_graph.merge(results);
+                    global_points_to_graph.join(&results);
                 }
             }
 

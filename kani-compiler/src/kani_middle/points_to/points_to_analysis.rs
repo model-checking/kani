@@ -38,7 +38,7 @@ use rustc_middle::{
     },
     ty::{Instance, InstanceKind, List, ParamEnv, TyCtxt, TyKind},
 };
-use rustc_mir_dataflow::{Analysis, AnalysisDomain, Forward};
+use rustc_mir_dataflow::{Analysis, AnalysisDomain, Forward, JoinSemiLattice};
 use rustc_smir::rustc_internal;
 use rustc_span::source_map::Spanned;
 use std::collections::HashSet;
@@ -94,7 +94,7 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
                 // Switch the cursor to the end of the block ending with `Return`.
                 cursor.seek_to_block_end(idx.into());
                 // Retrieve the dataflow state and join into the results graph.
-                results.merge(cursor.get().clone());
+                results.join(&cursor.get().clone());
             }
         }
         results
@@ -118,7 +118,7 @@ impl<'a, 'tcx> AnalysisDomain<'tcx> for PointsToAnalysis<'a, 'tcx> {
     /// Dataflow state instantiated at the entry into the body; this should be the initial dataflow
     /// graph.
     fn initialize_start_block(&self, _body: &Body<'tcx>, state: &mut Self::Domain) {
-        state.merge(self.initial_graph.clone());
+        state.join(&self.initial_graph.clone());
     }
 }
 
@@ -559,8 +559,8 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
         for arg in args.iter() {
             match arg.node {
                 Operand::Copy(place) | Operand::Move(place) => {
-                    initial_graph.merge(
-                        state.transitive_closure(state.follow_from_place(place, self.instance)),
+                    initial_graph.join(
+                        &state.transitive_closure(state.follow_from_place(place, self.instance)),
                     );
                 }
                 Operand::Constant(_) => {}
@@ -613,7 +613,7 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
         let new_result =
             PointsToAnalysis::run(&new_body, self.tcx, instance, self.call_graph, initial_graph);
         // Merge the results into the current state.
-        state.merge(new_result);
+        state.join(&new_result);
 
         // Connect the return value to the return destination.
         let lvalue_set = state.follow_from_place(*destination, self.instance);
