@@ -346,9 +346,16 @@ counters. We highly recommend looking at the example in [MIR Pass:
 `InstrumentCoverage`](https://rustc-dev-guide.rust-lang.org/llvm-coverage-instrumentation.html#mir-pass-instrumentcoverage)
 to better understand how this works. This optimization is mainly done for
 performance reasons because incrementing a physical counter causes a
-non-negligible overhead, especially within loops. Fortunately, the Rust coverage
-instrumentation also computes the mix of `Counter`s and `Expression`s that make
-up the coverage statements.
+non-negligible overhead, especially within loops.
+
+The `StatementKind::Coverage` statements that are injected by the Rust coverage
+instrumentation contain a [`CoverageKind`](https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/coverage/enum.CoverageKind.html) field indicating the type of coverage counter. The variant
+[`CounterIncrement`](https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/coverage/enum.CoverageKind.html#variant.CounterIncrement)
+represents physical counters, while
+[`ExpressionUsed`](https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/coverage/enum.CoverageKind.html#variant.ExpressionUsed)
+represents the counter expressions that we just discussed.
+Other variants such as `SpanMarker` or `BlockMarker` are not relevant to this
+work since they should have been erased after the `InstrumentCoverage` pass.
 
 [^note-coverage-info]: It is important to note that the StableMIR interface does
    not include `FunctionCoverageInfo` in function bodies. Because of that, we
