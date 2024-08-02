@@ -1,9 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// https://github.com/model-checking/kani/issues/555
-// kani-flags: --no-undefined-function-checks
-
 // This regression test is in response to issue #135.
 // The type of the second parameter to powi is a `CInteger`, but
 // the type of `2` here is a `u32`. This test ensures that
