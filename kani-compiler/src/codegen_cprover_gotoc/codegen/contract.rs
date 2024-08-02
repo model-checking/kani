@@ -8,27 +8,23 @@ use kani_metadata::AssignsContract;
 use rustc_hir::def_id::DefId as InternalDefId;
 use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::{Instance, MonoItem};
-use stable_mir::mir::Local;
+use stable_mir::mir::{Local, VarDebugInfoContents};
+use stable_mir::ty::{FnDef, RigidTy, TyKind};
 use stable_mir::CrateDef;
-use tracing::debug;
-
-use stable_mir::ty::{RigidTy, TyKind};
 
 impl<'tcx> GotocCtx<'tcx> {
     /// Given the `proof_for_contract` target `function_under_contract` and the reachable `items`,
     /// find or create the `AssignsContract` that needs to be enforced and attach it to the symbol
     /// for which it needs to be enforced.
     ///
-    /// 1. Gets the `#[kanitool::inner_check = "..."]` target, then resolves exactly one instance
-    ///    of it. Panics if there are more or less than one instance.
-    /// 2. Expects that a `#[kanitool::modifies(...)]` is placed on the `inner_check` function,
-    ///    turns it into a CBMC contract and attaches it to the symbol for the previously resolved
-    ///    instance.
+    /// 1. Gets the `#[kanitool::modifies_wrapper = "..."]` target, then resolves exactly one
+    ///    instance of it. Panics if there are more or less than one instance.
+    /// 2. The additional arguments for the inner checks are locations that may be modified.
+    ///    Add them to the list of CBMC's assigns.
     /// 3. Returns the mangled name of the symbol it attached the contract to.
-    /// 4. Resolves the `#[kanitool::checked_with = "..."]` target from `function_under_contract`
-    ///    which has `static mut REENTRY : bool` declared inside.
-    /// 5. Returns the full path to this constant that `--nondet-static-exclude` expects which is
-    ///    comprised of the file path that `checked_with` is located in, the name of the
+    /// 4. Returns the full path to the static marked with `#[kanitool::recursion_tracker]` which
+    ///    is passed to the `--nondet-static-exclude` argument.
+    ///    This flag expects the file path that `checked_with` is located in, the name of the
     ///    `checked_with` function and the name of the constant (`REENTRY`).
     pub fn handle_check_contract(
         &mut self,
@@ -36,86 +32,101 @@ impl<'tcx> GotocCtx<'tcx> {
         items: &[MonoItem],
     ) -> AssignsContract {
         let tcx = self.tcx;
-        let function_under_contract_attrs = KaniAttributes::for_item(tcx, function_under_contract);
+        let modify = items
+            .iter()
+            .find_map(|item| {
+                // Find the instance under contract
+                let MonoItem::Fn(instance) = *item else { return None };
+                if rustc_internal::internal(tcx, instance.def.def_id()) == function_under_contract {
+                    self.find_modifies(instance)
+                } else {
+                    None
+                }
+            })
+            .unwrap();
+        self.attach_modifies_contract(modify);
+        let recursion_tracker = self.find_recursion_tracker(items);
+        AssignsContract { recursion_tracker, contracted_function_name: modify.mangled_name() }
+    }
 
-        let recursion_wrapper_id =
-            function_under_contract_attrs.checked_with_id().unwrap().unwrap();
-        let expected_name = format!("{}::REENTRY", tcx.item_name(recursion_wrapper_id));
-        let mut recursion_tracker = items.iter().filter_map(|i| match i {
-            MonoItem::Static(recursion_tracker)
-                if (*recursion_tracker).name().contains(expected_name.as_str()) =>
+    /// The name and location for the recursion tracker should match the exact information added
+    /// to the symbol table, otherwise our contract instrumentation will silently failed.
+    /// This happens because Kani relies on `--nondet-static-exclude` from CBMC to properly
+    /// handle this tracker. CBMC silently fails if there is no match in the symbol table
+    /// that correspond to the argument of this flag.
+    /// More details at https://github.com/model-checking/kani/pull/3045.
+    ///
+    /// We must use the pretty name of the tracker instead of the mangled name.
+    /// This restriction comes from `--nondet-static-exclude` in CBMC.
+    /// Mode details at https://github.com/diffblue/cbmc/issues/8225.
+    fn find_recursion_tracker(&mut self, items: &[MonoItem]) -> Option<String> {
+        // Return item tagged with `#[kanitool::recursion_tracker]`
+        let mut recursion_trackers = items.iter().filter_map(|item| {
+            let MonoItem::Static(static_item) = item else { return None };
+            if !static_item
+                .attrs_by_path(&["kanitool".into(), "recursion_tracker".into()])
+                .is_empty()
             {
-                Some(*recursion_tracker)
+                let span = static_item.span();
+                let loc = self.codegen_span_stable(span);
+                Some(format!(
+                    "{}:{}",
+                    loc.filename().expect("recursion location wrapper should have a file name"),
+                    static_item.name(),
+                ))
+            } else {
+                None
             }
-            _ => None,
         });
 
-        let recursion_tracker_def = recursion_tracker
-            .next()
-            .expect("There should be at least one recursion tracker (REENTRY) in scope");
+        let recursion_tracker = recursion_trackers.next();
         assert!(
-            recursion_tracker.next().is_none(),
-            "Only one recursion tracker (REENTRY) may be in scope"
+            recursion_trackers.next().is_none(),
+            "Expected up to one recursion tracker (`REENTRY`) in scope"
         );
+        recursion_tracker
+    }
 
-        let span_of_recursion_wrapper = tcx.def_span(recursion_wrapper_id);
-        let location_of_recursion_wrapper = self.codegen_span(&span_of_recursion_wrapper);
-        // The name and location for the recursion tracker should match the exact information added
-        // to the symbol table, otherwise our contract instrumentation will silently failed.
-        // This happens because Kani relies on `--nondet-static-exclude` from CBMC to properly
-        // handle this tracker. CBMC silently fails if there is no match in the symbol table
-        // that correspond to the argument of this flag.
-        // More details at https://github.com/model-checking/kani/pull/3045.
-        let full_recursion_tracker_name = format!(
-            "{}:{}",
-            location_of_recursion_wrapper
-                .filename()
-                .expect("recursion location wrapper should have a file name"),
-            // We must use the pretty name of the tracker instead of the mangled name.
-            // This restrictions comes from `--nondet-static-exclude` in CBMC.
-            // Mode details at https://github.com/diffblue/cbmc/issues/8225.
-            recursion_tracker_def.name(),
-        );
-
-        let wrapped_fn = function_under_contract_attrs.inner_check().unwrap().unwrap();
-        let mut instance_under_contract = items.iter().filter_map(|i| match i {
-            MonoItem::Fn(instance @ Instance { def, .. })
-                if wrapped_fn == rustc_internal::internal(tcx, def.def_id()) =>
-            {
-                Some(*instance)
-            }
-            _ => None,
-        });
-        let instance_of_check = instance_under_contract.next().unwrap();
-        assert!(
-            instance_under_contract.next().is_none(),
-            "Only one instance of a checked function may be in scope"
-        );
-        let attrs_of_wrapped_fn = KaniAttributes::for_item(tcx, wrapped_fn);
-        let assigns_contract = attrs_of_wrapped_fn.modifies_contract().unwrap_or_else(|| {
-            debug!(?instance_of_check, "had no assigns contract specified");
-            vec![]
-        });
-        self.attach_modifies_contract(instance_of_check, assigns_contract);
-        let wrapper_name = instance_of_check.mangled_name();
-
-        AssignsContract {
-            recursion_tracker: full_recursion_tracker_name,
-            contracted_function_name: wrapper_name,
-        }
+    /// Find the modifies recursively since we may have a recursion wrapper.
+    /// I.e.: [recursion_wrapper ->]? check -> modifies.
+    fn find_modifies(&mut self, instance: Instance) -> Option<Instance> {
+        let contract_attrs =
+            KaniAttributes::for_instance(self.tcx, instance).contract_attributes()?;
+        let mut find_closure = |inside: Instance, name: &str| {
+            let body = self.transformer.body(self.tcx, inside);
+            body.var_debug_info.iter().find_map(|var_info| {
+                if var_info.name.as_str() == name {
+                    let ty = match &var_info.value {
+                        VarDebugInfoContents::Place(place) => place.ty(body.locals()).unwrap(),
+                        VarDebugInfoContents::Const(const_op) => const_op.ty(),
+                    };
+                    if let TyKind::RigidTy(RigidTy::Closure(def, args)) = ty.kind() {
+                        return Some(Instance::resolve(FnDef(def.def_id()), &args).unwrap());
+                    }
+                }
+                None
+            })
+        };
+        let check_instance = if contract_attrs.has_recursion {
+            let recursion_check = find_closure(instance, contract_attrs.recursion_check.as_str())?;
+            find_closure(recursion_check, contract_attrs.checked_with.as_str())?
+        } else {
+            find_closure(instance, contract_attrs.checked_with.as_str())?
+        };
+        find_closure(check_instance, contract_attrs.modifies_wrapper.as_str())
     }
 
     /// Convert the Kani level contract into a CBMC level contract by creating a
     /// CBMC lambda.
     fn codegen_modifies_contract(
         &mut self,
-        modified_places: Vec<Local>,
+        goto_annotated_fn_name: &str,
+        modifies: Instance,
         loc: Location,
     ) -> FunctionContract {
-        let goto_annotated_fn_name = self.current_fn().name();
         let goto_annotated_fn_typ = self
             .symbol_table
-            .lookup(&goto_annotated_fn_name)
+            .lookup(goto_annotated_fn_name)
             .unwrap_or_else(|| panic!("Function '{goto_annotated_fn_name}' is not declared"))
             .typ
             .clone();
@@ -141,13 +152,24 @@ impl<'tcx> GotocCtx<'tcx> {
             })
             .unwrap_or_default();
 
-        let assigns = modified_places
+        // The last argument is a tuple with addresses that can be modified.
+        let modifies_local = Local::from(modifies.fn_abi().unwrap().args.len());
+        let modifies_ty = self.local_ty_stable(modifies_local);
+        let modifies_args =
+            self.codegen_place_stable(&modifies_local.into(), loc).unwrap().goto_expr;
+        let TyKind::RigidTy(RigidTy::Tuple(modifies_tys)) = modifies_ty.kind() else {
+            unreachable!("found {:?}", modifies_ty.kind())
+        };
+        let assigns: Vec<_> = modifies_tys
             .into_iter()
-            .map(|local| {
-                if self.is_fat_pointer_stable(self.local_ty_stable(local)) {
-                    let unref = match self.local_ty_stable(local).kind() {
-                        TyKind::RigidTy(RigidTy::Ref(_, ty, _)) => ty,
-                        kind => unreachable!("{:?} is not a reference", kind),
+            .enumerate()
+            .map(|(idx, ty)| {
+                assert!(ty.kind().is_any_ptr(), "Expected pointer, but found {}", ty);
+                let ptr = modifies_args.clone().member(idx.to_string(), &self.symbol_table);
+                if self.is_fat_pointer_stable(ty) {
+                    let unref = match ty.kind() {
+                        TyKind::RigidTy(RigidTy::RawPtr(pointee_ty, _)) => pointee_ty,
+                        kind => unreachable!("Expected a raw pointer, but found {:?}", kind),
                     };
                     let size = match unref.kind() {
                         TyKind::RigidTy(RigidTy::Slice(elt_type)) => {
@@ -176,30 +198,17 @@ impl<'tcx> GotocCtx<'tcx> {
                             ),
                         )
                         .call(vec![
-                            self.codegen_place_stable(&local.into(), loc)
-                                .unwrap()
-                                .goto_expr
+                            ptr.clone()
                                 .member("data", &self.symbol_table)
                                 .cast_to(Type::empty().to_pointer()),
-                            self.codegen_place_stable(&local.into(), loc)
-                                .unwrap()
-                                .goto_expr
-                                .member("len", &self.symbol_table)
-                                .mul(Expr::size_constant(
-                                    size.try_into().unwrap(),
-                                    &self.symbol_table,
-                                )),
+                            ptr.member("len", &self.symbol_table).mul(Expr::size_constant(
+                                size.try_into().unwrap(),
+                                &self.symbol_table,
+                            )),
                         ]),
                     )
                 } else {
-                    Lambda::as_contract_for(
-                        &goto_annotated_fn_typ,
-                        None,
-                        self.codegen_place_stable(&local.into(), loc)
-                            .unwrap()
-                            .goto_expr
-                            .dereference(),
-                    )
+                    Lambda::as_contract_for(&goto_annotated_fn_typ, None, ptr.dereference())
                 }
             })
             .chain(shadow_memory_assign)
@@ -212,17 +221,19 @@ impl<'tcx> GotocCtx<'tcx> {
     /// `instance` must have previously been declared.
     ///
     /// This merges with any previously attached contracts.
-    pub fn attach_modifies_contract(&mut self, instance: Instance, modified_places: Vec<Local>) {
+    pub fn attach_modifies_contract(&mut self, instance: Instance) {
         // This should be safe, since the contract is pretty much evaluated as
         // though it was the first (or last) assertion in the function.
         assert!(self.current_fn.is_none());
-        let body = instance.body().unwrap();
+        let body = self.transformer.body(self.tcx, instance);
         self.set_current_fn(instance, &body);
-        let goto_contract =
-            self.codegen_modifies_contract(modified_places, self.codegen_span_stable(body.span));
-        let name = self.current_fn().name();
-
-        self.symbol_table.attach_contract(name, goto_contract);
-        self.reset_current_fn()
+        let mangled_name = instance.mangled_name();
+        let goto_contract = self.codegen_modifies_contract(
+            &mangled_name,
+            instance,
+            self.codegen_span_stable(instance.def.span()),
+        );
+        self.symbol_table.attach_contract(&mangled_name, goto_contract);
+        self.reset_current_fn();
     }
 }
