@@ -47,5 +47,5 @@ jobs:
     name: Verification Benchmarks
     needs: auto-label
     permissions: {}
-    if: contains(needs.auto-label.outputs.all-labels, 'Z-BenchCI')
+    if: ${{ contains(needs.auto-label.outputs.all-labels, 'Z-BenchCI') && github.event_name != 'merge_group' }}
     uses: ./.github/workflows/bench.yml
