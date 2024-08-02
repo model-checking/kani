@@ -74,6 +74,18 @@ macro_rules! cover {
     };
 }
 
+/// `implies!(premise => conclusion)` means that if the `premise` is true, so
+/// must be the `conclusion`.
+///
+/// This simply expands to `!premise || conclusion` and is intended to make checks more readable,
+/// as the concept of an implication is more natural to think about than its expansion.
+#[macro_export]
+macro_rules! implies {
+    ($premise:expr => $conclusion:expr) => {
+        !($premise) || ($conclusion)
+    };
+}
+
 pub(crate) use kani_macros::unstable_feature as unstable;
 
 pub mod contracts;
