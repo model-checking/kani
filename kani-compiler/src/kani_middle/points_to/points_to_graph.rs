@@ -170,7 +170,7 @@ impl<'tcx> JoinSemiLattice for PointsToGraph<'tcx> {
         let mut updated = false;
         // Check every node in the other graph.
         for (from, to) in other.edges.iter() {
-            let existing_to = self.edges.entry(from.clone()).or_default();
+            let existing_to = self.edges.entry(*from).or_default();
             let initial_size = existing_to.len();
             existing_to.extend(to);
             let new_size = existing_to.len();
