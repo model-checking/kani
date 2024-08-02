@@ -1140,7 +1140,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// Mapping enums to CBMC types is rather complicated. There are a few cases to consider:
     /// 1. When there is only 0 or 1 variant, this is straightforward as the code shows
-    /// 2. When there are more variants, rust might decides to apply the typical encoding which
+    /// 2. When there are more variants, rust might decide to apply the typical encoding which
     ///    regard enums as tagged union, or an optimized form, called niche encoding.
     ///
     /// The direct encoding is straightforward. Enums are just mapped to C as a struct of union of structs.
@@ -1242,6 +1242,23 @@ impl<'tcx> GotocCtx<'tcx> {
                                     )
                                 }),
                             ));
+                            // Check if any padding is needed for alignment. This is needed for
+                            // https://github.com/model-checking/kani/issues/2857 for example.
+                            // The logic for determining the maximum variant size is taken from:
+                            // https://github.com/rust-lang/rust/blob/e60ebb2f2c1facba87e7971798f3cbdfd309cd23/compiler/rustc_session/src/code_stats.rs#L166
+                            let max_variant_size = variants
+                                .iter()
+                                .map(|l: &LayoutS<FieldIdx, VariantIdx>| l.size)
+                                .max()
+                                .unwrap();
+                            let max_variant_size = std::cmp::max(max_variant_size, discr_offset);
+                            if let Some(padding) = gcx.codegen_alignment_padding(
+                                max_variant_size,
+                                &layout,
+                                fields.len(),
+                            ) {
+                                fields.push(padding);
+                            }
                             fields
                         })
                     }
