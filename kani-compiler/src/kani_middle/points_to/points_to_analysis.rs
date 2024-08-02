@@ -341,8 +341,9 @@ impl<'a, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'tcx> {
                             state.extend(&lvalue_set, &rvalue_set);
                         }
                         _ => {
-                            // TODO: go through the list of intrinsics and make sure none have
-                            // slipped; I am sure we still missing some.
+                            // TODO: this probably does not handle all relevant intrinsics, so more
+                            // need to be added. For more information, see:
+                            // https://github.com/model-checking/kani/issues/3300
                             if self.tcx.is_mir_available(def_id) {
                                 self.apply_regular_call_effect(state, instance, args, destination);
                             }
