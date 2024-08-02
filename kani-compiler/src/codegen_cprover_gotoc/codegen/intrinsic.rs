@@ -447,8 +447,8 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             "floorf32" => codegen_simple_intrinsic!(Floorf),
             "floorf64" => codegen_simple_intrinsic!(Floor),
-            "fmaf32" => unstable_codegen!(codegen_simple_intrinsic!(Fmaf)),
-            "fmaf64" => unstable_codegen!(codegen_simple_intrinsic!(Fma)),
+            "fmaf32" => codegen_simple_intrinsic!(Fmaf),
+            "fmaf64" => codegen_simple_intrinsic!(Fma),
             "fmul_fast" => {
                 let fargs_clone = fargs.clone();
                 let binop_stmt = codegen_intrinsic_binop!(mul);
