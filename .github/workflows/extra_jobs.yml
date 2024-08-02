@@ -18,7 +18,9 @@
 # See <https://github.com/actions/labeler/issues/121> for more details.
 
 name: Kani Extra
-on: pull_request_target
+on:
+  pull_request_target:
+  merge_group:
 
 jobs:
   # Keep this job minimal since it requires extra permission
