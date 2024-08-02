@@ -78,11 +78,11 @@ impl<'tcx> PointsToGraph<'tcx> {
         }
     }
 
-    /// Collect all places to which a given place can alias. 
-    /// 
+    /// Collect all places to which a given place can alias.
+    ///
     /// We automatically resolve dereference projections here (by finding successors for each
     /// dereference projection we encounter), which is valid as long as we do it for every place we
-    /// add to the graph. 
+    /// add to the graph.
     pub fn follow_from_place(
         &self,
         place: Place<'tcx>,
