@@ -41,6 +41,7 @@ use rustc_middle::{
 use rustc_mir_dataflow::{Analysis, AnalysisDomain, Forward, JoinSemiLattice};
 use rustc_smir::rustc_internal;
 use rustc_span::{source_map::Spanned, DUMMY_SP};
+use stable_mir::mir::{mono::Instance as StableInstance, Body as StableBody};
 use std::collections::HashSet;
 
 /// Main points-to analysis object.
@@ -60,12 +61,22 @@ struct PointsToAnalysis<'a, 'tcx> {
 /// Public points-to analysis entry point. Performs the analysis on a body, outputting the graph
 /// containing aliasing information of the body itself and any body reachable from it.
 pub fn run_points_to_analysis<'tcx>(
-    body: &Body<'tcx>,
+    body: &StableBody,
     tcx: TyCtxt<'tcx>,
-    instance: Instance<'tcx>,
+    instance: StableInstance,
     call_graph: &CallGraph,
 ) -> PointsToGraph<'tcx> {
-    PointsToAnalysis::run(body, tcx, instance, call_graph, PointsToGraph::empty())
+    // Dataflow analysis does not yet work with StableMIR, so need to perform backward
+    // conversion.
+    let internal_instance = rustc_internal::internal(tcx, instance);
+    let internal_body = body.internal_mir(tcx);
+    PointsToAnalysis::run(
+        &internal_body,
+        tcx,
+        internal_instance,
+        call_graph,
+        PointsToGraph::empty(),
+    )
 }
 
 impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {

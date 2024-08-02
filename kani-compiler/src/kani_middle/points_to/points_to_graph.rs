@@ -6,9 +6,14 @@
 use rustc_hir::def_id::DefId;
 use rustc_middle::{
     mir::{Location, Place, ProjectionElem},
-    ty::{Instance, List},
+    ty::{Instance, List, TyCtxt},
 };
 use rustc_mir_dataflow::{fmt::DebugWithContext, JoinSemiLattice};
+use rustc_smir::rustc_internal;
+use stable_mir::mir::{
+    mono::{Instance as StableInstance, StaticDef},
+    Place as StablePlace,
+};
 use std::collections::{HashMap, HashSet, VecDeque};
 
 /// A node in the points-to graph, which could be a place on the stack, a heap allocation, or a static.
@@ -38,6 +43,23 @@ impl<'tcx> MemLoc<'tcx> {
     /// Create a memory location representing a new static allocation.
     pub fn new_static_allocation(static_def: DefId) -> Self {
         MemLoc::Static(static_def)
+    }
+
+    /// Create a memory location representing a new stack allocation from StableMIR values.
+    pub fn from_stable_stack_allocation(
+        instance: StableInstance,
+        place: StablePlace,
+        tcx: TyCtxt<'tcx>,
+    ) -> Self {
+        let internal_instance = rustc_internal::internal(tcx, instance);
+        let internal_place = rustc_internal::internal(tcx, place);
+        Self::new_stack_allocation(internal_instance, internal_place)
+    }
+
+    /// Create a memory location representing a new static allocation from StableMIR values.
+    pub fn from_stable_static_allocation(static_def: StaticDef, tcx: TyCtxt<'tcx>) -> Self {
+        let static_def_id = rustc_internal::internal(tcx, static_def);
+        Self::new_static_allocation(static_def_id)
     }
 }
 
@@ -111,6 +133,18 @@ impl<'tcx> PointsToGraph<'tcx> {
             }
         }
         node_set
+    }
+
+    /// Stable interface for `resolve_place`.
+    pub fn resolve_place_stable(
+        &self,
+        place: StablePlace,
+        instance: StableInstance,
+        tcx: TyCtxt<'tcx>,
+    ) -> HashSet<MemLoc<'tcx>> {
+        let internal_place = rustc_internal::internal(tcx, place);
+        let internal_instance = rustc_internal::internal(tcx, instance);
+        self.resolve_place(internal_place, internal_instance)
     }
 
     /// Dump the graph into a file using the graphviz format for later visualization.

@@ -14,9 +14,9 @@ use crate::kani_middle::{
         },
     },
 };
-use rustc_middle::ty::{Instance as InternalInstance, TyCtxt};
-use rustc_smir::rustc_internal;
+use rustc_middle::ty::TyCtxt;
 use stable_mir::mir::{
+    mono::Instance,
     visit::{Location, PlaceContext},
     BasicBlockIdx, MirVisitor, Operand, Place, Rvalue, Statement, Terminator,
 };
@@ -36,7 +36,7 @@ pub struct InstrumentationVisitor<'a, 'tcx> {
     points_to: &'a PointsToGraph<'tcx>,
     /// The list of places we should be looking for, ignoring others
     analysis_targets: &'a HashSet<MemLoc<'tcx>>,
-    current_instance: InternalInstance<'tcx>,
+    current_instance: Instance,
     tcx: TyCtxt<'tcx>,
 }
 
@@ -59,7 +59,7 @@ impl<'a, 'tcx> InstrumentationVisitor<'a, 'tcx> {
     pub fn new(
         points_to: &'a PointsToGraph<'tcx>,
         analysis_targets: &'a HashSet<MemLoc<'tcx>>,
-        current_instance: InternalInstance<'tcx>,
+        current_instance: Instance,
         tcx: TyCtxt<'tcx>,
     ) -> Self {
         Self {
@@ -115,7 +115,7 @@ impl<'a, 'tcx> MirVisitor for InstrumentationVisitor<'a, 'tcx> {
         // Match the place by whatever it is pointing to and find an intersection with the targets.
         if self
             .points_to
-            .resolve_place(rustc_internal::internal(self.tcx, place), self.current_instance)
+            .resolve_place_stable(place.clone(), self.current_instance, self.tcx)
             .intersection(&self.analysis_targets)
             .next()
             .is_some()
