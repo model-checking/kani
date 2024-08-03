@@ -51,7 +51,6 @@ pub use futures::{block_on, block_on_with_spawn, spawn, yield_now, RoundRobin};
 pub use kani_macros::*;
 
 // Declare common Kani API such as assume, assert
-// #[cfg(not(feature = "no_core"))]
 kani_core::kani_lib!(kani);
 
 // Used to bind `core::assert` to a different name to avoid possible name conflicts if a
