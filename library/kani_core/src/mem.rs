@@ -36,6 +36,7 @@
 //! The way Kani tracks provenance is not enough to check if the address was the result of a cast
 //! from a non-zero integer literal.
 
+#[allow(clippy::crate_in_macro_def)]
 #[macro_export]
 macro_rules! kani_mem {
     ($core:tt) => {
@@ -56,7 +57,6 @@ macro_rules! kani_mem {
         /// This function will panic today if the pointer is not null, and it points to an unallocated or
         /// deallocated memory location. This is an existing Kani limitation.
         /// See <https://github.com/model-checking/kani/issues/2690> for more details.
-        #[allow(clippy::crate_in_macro_def)]
         #[crate::kani::unstable_feature(
             feature = "mem-predicates",
             issue = 2690,
@@ -84,7 +84,6 @@ macro_rules! kani_mem {
         /// This function will panic today if the pointer is not null, and it points to an unallocated or
         /// deallocated memory location. This is an existing Kani limitation.
         /// See <https://github.com/model-checking/kani/issues/2690> for more details.
-        #[allow(clippy::crate_in_macro_def)]
         #[crate::kani::unstable_feature(
             feature = "mem-predicates",
             issue = 2690,
@@ -111,7 +110,6 @@ macro_rules! kani_mem {
         /// This function will panic today if the pointer is not null, and it points to an unallocated or
         /// deallocated memory location. This is an existing Kani limitation.
         /// See <https://github.com/model-checking/kani/issues/2690> for more details.
-        #[allow(clippy::crate_in_macro_def)]
         #[crate::kani::unstable_feature(
             feature = "mem-predicates",
             issue = 2690,
@@ -144,7 +142,6 @@ macro_rules! kani_mem {
         /// This function will panic today if the pointer is not null, and it points to an unallocated or
         /// deallocated memory location. This is an existing Kani limitation.
         /// See <https://github.com/model-checking/kani/issues/2690> for more details.
-        #[allow(clippy::crate_in_macro_def)]
         #[crate::kani::unstable_feature(
             feature = "mem-predicates",
             issue = 2690,
@@ -322,7 +319,6 @@ macro_rules! kani_mem {
 
         /// Get the object ID of the given pointer.
         #[doc(hidden)]
-        #[allow(clippy::crate_in_macro_def)]
         #[crate::kani::unstable_feature(
             feature = "ghost-state",
             issue = 3184,
@@ -336,7 +332,6 @@ macro_rules! kani_mem {
 
         /// Get the object offset of the given pointer.
         #[doc(hidden)]
-        #[allow(clippy::crate_in_macro_def)]
         #[crate::kani::unstable_feature(
             feature = "ghost-state",
             issue = 3184,
