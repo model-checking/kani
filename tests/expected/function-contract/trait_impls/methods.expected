@@ -1,0 +1,17 @@
+Checking harness check_next_y...
+
+Status: SUCCESS\
+Description: "|result| result.y == old(self.y) + 1"\
+in function Point::next_y
+
+VERIFICATION:- SUCCESSFUL
+
+Checking harness check_add_x...
+
+Status: SUCCESS\
+Description: "|_| val < 0 || self.x >= old(self.x)"\
+in function Point::add_x
+
+VERIFICATION:- SUCCESSFUL
+
+Complete - 2 successfully verified harnesses, 0 failures, 2 total.

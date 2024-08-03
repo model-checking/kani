@@ -12,12 +12,13 @@
   - [Failures that Kani can spot](./tutorial-kinds-of-failure.md)
   - [Loop unwinding](./tutorial-loop-unwinding.md)
   - [Nondeterministic variables](./tutorial-nondeterministic-variables.md)
-  - [Debugging verification failures](./debugging-verification-failures.md)
 
 - [Reference](./reference.md)
   - [Attributes](./reference/attributes.md)
-  - [Stubbing](./reference/stubbing.md)
-
+  - [Experimental features](./reference/experimental/experimental-features.md)
+    - [Coverage](./reference/experimental/coverage.md)
+    - [Stubbing](./reference/experimental/stubbing.md)
+    - [Concrete Playback](./reference/experimental/concrete-playback.md)
 - [Application](./application.md)
   - [Comparison with other tools](./tool-comparison.md)
   - [Where to start on real code](./tutorial-real-code.md)
