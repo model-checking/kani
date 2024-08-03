@@ -51,7 +51,7 @@ cat ${TMP_DIR}/std_lib.rs >> ${TMP_DIR}/library/std/src/lib.rs
 
 echo "[TEST] Run kani verify-std"
 export RUST_BACKTRACE=1
-kani verify-std -Z unstable-options "${TMP_DIR}/library" --target-dir "${TMP_DIR}/target" -Z function-contracts -Z stubbing
+kani verify-std -Z unstable-options "${TMP_DIR}/library" --target-dir "${TMP_DIR}/target" -Z function-contracts -Z stubbing -Z mem-predicates
 
 # Cleanup
 rm -r ${TMP_DIR}

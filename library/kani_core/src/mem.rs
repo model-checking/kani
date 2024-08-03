@@ -56,13 +56,7 @@ macro_rules! kani_mem {
         /// This function will panic today if the pointer is not null, and it points to an unallocated or
         /// deallocated memory location. This is an existing Kani limitation.
         /// See <https://github.com/model-checking/kani/issues/2690> for more details.
-        // TODO: Add this back! We might need to rename the attribute.
-        //#[crate::unstable(
-        //    feature = "mem-predicates",
-        //    issue = 2690,
-        //    reason = "experimental memory predicate API"
-        //)]
-        #[crate::unstable(
+        #[crate::kani::unstable_feature(
             feature = "mem-predicates",
             issue = 2690,
             reason = "experimental memory predicate API"
@@ -89,13 +83,7 @@ macro_rules! kani_mem {
         /// This function will panic today if the pointer is not null, and it points to an unallocated or
         /// deallocated memory location. This is an existing Kani limitation.
         /// See <https://github.com/model-checking/kani/issues/2690> for more details.
-        // TODO: Add this back! We might need to rename the attribute.
-        //#[crate::unstable(
-        //    feature = "mem-predicates",
-        //    issue = 2690,
-        //    reason = "experimental memory predicate API"
-        //)]
-        #[crate::unstable(
+        #[crate::kani::unstable_feature(
             feature = "mem-predicates",
             issue = 2690,
             reason = "experimental memory predicate API"
@@ -121,12 +109,7 @@ macro_rules! kani_mem {
         /// This function will panic today if the pointer is not null, and it points to an unallocated or
         /// deallocated memory location. This is an existing Kani limitation.
         /// See <https://github.com/model-checking/kani/issues/2690> for more details.
-        //#[crate::unstable(
-        //    feature = "mem-predicates",
-        //    issue = 2690,
-        //    reason = "experimental memory predicate API"
-        //)]
-        #[crate::unstable(
+        #[crate::kani::unstable_feature(
             feature = "mem-predicates",
             issue = 2690,
             reason = "experimental memory predicate API"
@@ -158,13 +141,7 @@ macro_rules! kani_mem {
         /// This function will panic today if the pointer is not null, and it points to an unallocated or
         /// deallocated memory location. This is an existing Kani limitation.
         /// See <https://github.com/model-checking/kani/issues/2690> for more details.
-        // TODO: Add this back! We might need to rename the attribute.
-        //#[crate::unstable(
-        //    feature = "mem-predicates",
-        //    issue = 2690,
-        //    reason = "experimental memory predicate API"
-        //)]
-        #[crate::unstable(
+        #[crate::kani::unstable_feature(
             feature = "mem-predicates",
             issue = 2690,
             reason = "experimental memory predicate API"
@@ -340,9 +317,8 @@ macro_rules! kani_mem {
         }
 
         /// Get the object ID of the given pointer.
-        // TODO: Add this back later, as there is no unstable attribute here.
         #[doc(hidden)]
-        #[crate::unstable(
+        #[crate::kani::unstable_feature(
             feature = "ghost-state",
             issue = 3184,
             reason = "experimental ghost state/shadow memory API"
@@ -354,9 +330,8 @@ macro_rules! kani_mem {
         }
 
         /// Get the object offset of the given pointer.
-        // TODO: Add this back later, as there is no unstable attribute here.
         #[doc(hidden)]
-        #[crate::unstable(
+        #[crate::kani::unstable_feature(
             feature = "ghost-state",
             issue = 3184,
             reason = "experimental ghost state/shadow memory API"
