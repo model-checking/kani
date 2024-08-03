@@ -93,6 +93,8 @@ pub enum UnstableFeature {
     PtrToRefCastChecks,
     /// Automatically check that uninitialized memory is not used.
     UninitChecks,
+    /// Check the pointer aliasing model
+    Aliasing,
     /// Enable an unstable option or subcommand.
     UnstableOptions,
 }
