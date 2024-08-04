@@ -643,10 +643,9 @@ impl ValidateArgs for VerificationArgs {
             ));
         }
 
-        if self.output_into_files 
-            && !self.common_args.unstable_features.contains(UnstableFeature::UnstableOptions) 
-        { 
-
+        if self.output_into_files
+            && !self.common_args.unstable_features.contains(UnstableFeature::UnstableOptions)
+        {
             if self.common_args.enable_unstable {
                 print_deprecated(&self.common_args, "`--enable-unstable`", "-Z unstable-options");
             } else {
@@ -656,7 +655,7 @@ impl ValidateArgs for VerificationArgs {
                 unstable options support.",
                 ));
             }
-        } 
+        }
 
         Ok(())
     }

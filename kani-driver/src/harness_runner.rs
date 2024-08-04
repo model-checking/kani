@@ -14,8 +14,8 @@ use crate::session::KaniSession;
 use std::fs::File;
 use std::io::Write;
 
-use std::path::PathBuf;
 use std::env::current_dir;
+use std::path::PathBuf;
 
 /// A HarnessRunner is responsible for checking all proof harnesses. The data in this structure represents
 /// "background information" that the controlling driver (e.g. cargo-kani or kani) computed.
@@ -107,14 +107,17 @@ impl<'sess, 'pr> HarnessRunner<'sess, 'pr> {
 }
 
 impl KaniSession {
-
     fn process_output(&self, result: &VerificationResult, harness: &HarnessMetadata) {
         if self.should_print_output() {
             if self.args.output_into_files {
                 self.write_output_to_file(result, harness);
-            } 
+            }
 
-            let output = result.render(&self.args.output_format, harness.attributes.should_panic, self.args.coverage);
+            let output = result.render(
+                &self.args.output_format,
+                harness.attributes.should_panic,
+                self.args.coverage,
+            );
             println!("{}", output);
         }
     }
@@ -131,20 +134,26 @@ impl KaniSession {
 
         std::fs::create_dir_all(prefix).unwrap();
         let mut file = File::create(&file_name).unwrap();
-        let file_output = result.render(&OutputFormat::Regular, harness.attributes.should_panic, self.args.coverage);
+        let file_output = result.render(
+            &OutputFormat::Regular,
+            harness.attributes.should_panic,
+            self.args.coverage,
+        );
 
         if let Err(e) = writeln!(file, "{}", file_output) {
-            eprintln!("Failed to write to file {}: {}", file_name.into_os_string().into_string().unwrap(), e);
+            eprintln!(
+                "Failed to write to file {}: {}",
+                file_name.into_os_string().into_string().unwrap(),
+                e
+            );
         }
     }
 
     fn result_output_dir(&self) -> Result<PathBuf> {
-        let target_dir = self.args.target_dir
-            .clone()
-            .map_or_else(|| current_dir(), |dir| Ok(dir))?;
+        let target_dir =
+            self.args.target_dir.clone().map_or_else(current_dir, Ok)?;
         Ok(target_dir.join("kani_results"))
     }
-
 
     /// Run the verification process for a single harness
     pub(crate) fn check_harness(
@@ -164,7 +173,7 @@ impl KaniSession {
         } else {
             let mut result = self.with_timer(|| self.run_cbmc(binary, harness), "run_cbmc")?;
 
-            self.process_output(&result, harness); 
+            self.process_output(&result, harness);
             self.gen_and_add_concrete_playback(harness, &mut result)?;
             Ok(result)
         }
