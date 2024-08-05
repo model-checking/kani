@@ -158,8 +158,8 @@ impl<'a, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'tcx> {
             StatementKind::Intrinsic(non_diverging_intrinsic) => {
                 match *non_diverging_intrinsic.clone() {
                     NonDivergingIntrinsic::CopyNonOverlapping(copy_nonoverlapping) => {
-                        // Copy between `*const a` and `*mut b` is semantically equivalent to *b =
-                        // *a with respect to aliasing.
+                        // Copy between the values pointed by `*const a` and `*mut b` is
+                        // semantically equivalent to *b = *a with respect to aliasing.
                         self.apply_copy_effect(
                             state,
                             copy_nonoverlapping.src.clone(),
