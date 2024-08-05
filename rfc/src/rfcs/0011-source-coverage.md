@@ -348,7 +348,7 @@ to better understand how this works. This optimization is mainly done for
 performance reasons because incrementing a physical counter causes a
 non-negligible overhead, especially within loops.
 
-The `StatementKind::Coverage` statements that are injected by the Rust coverage
+The (`StatementKind::`)`Coverage` statements that are injected by the Rust coverage
 instrumentation contain a [`CoverageKind`](https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/coverage/enum.CoverageKind.html) field indicating the type of coverage counter. The variant
 [`CounterIncrement`](https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/coverage/enum.CoverageKind.html#variant.CounterIncrement)
 represents physical counters, while
@@ -366,6 +366,52 @@ work since they should have been erased after the `InstrumentCoverage` pass.
    the execution goes through.
 
 #### Integrating the instrumentation into Kani
+
+Now that we have explained what the Rust coverage instrumentation does at a high
+level, we should be ready to discuss how it can be used from Kani. Here, we will
+follow an approach where, during the codegen stage, we generate a Kani
+reachability check for each code region and, after the verification stage, we
+postprocess the information in those checks to generate the coverage
+information. So this section will essentially be a retelling of the
+implementation in [#3119](https://github.com/model-checking/kani/pull/3119), and
+we will discuss variations/extensions of this approach in the
+[appropriate](#rationale-and-alternatives) [sections](#future-possibilities).
+
+Clearly, the first step is adding `-C instrument-coverage` to the `rustc` flags
+we use when calling the compiler to codegen. This flag enables the Rust coverage
+instrumentation that we discussed earlier, resulting in
+ 1. the injection of
+    [`Coverage`](https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/enum.StatementKind.html#variant.Coverage)
+    statements in the MIR code, and
+ 2. the inclusion of [`FunctionCoverageInfo`](https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/coverage/struct.FunctionCoverageInfo.html) in function bodies.
+
+The next step is handling the `Coverage` statements from `codegen_statement`.
+
+Each `Coverage` statement contains opaque coverage
+information[^note-opaque-coverage] of the
+[`CoverageKind`](https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/coverage/enum.CoverageKind.html)
+type which can be processed to determine the type of coverage counter
+(`CounterIncrement` for physical counters, `ExpressionUsed` for counter
+expressions) and the ID number of the counter. These two pieces of information allow us to
+uniquely identify the counter within a given function. For example,
+`CounterIncrement(0)` would generally refer to the first physical counter in the
+function.
+
+Unfortunately, the `CoverageKind` information does not tell us anything about
+the code region that the counter covers. However, the code region information
+can be pulled from the coverage mappings included in the `FunctionCoverageInfo`
+that is attached to the (internal) function body. Note that the coverage
+mappings includes information about all the coverage counters in a function,
+even for counters which have been dropped. Matching the `CoverageKind`
+information with that of the counters in the coverage mappings allows us to
+retrieve the code region for any counter.
+
+
+[^note-opaque-coverage]: The Rust compiler uses the `Opaque` type to prevent
+others from interfacing with unstable types (e.g., the `Coverage` type
+[here](https://github.com/rust-lang/rust/blob/f7eefec4e03f5ba723fbc04d94dbc1203b7c9bff/compiler/stable_mir/src/mir/body.rs#L389)).
+Nonetheless, this can be worked around by serializing its contents and parsing
+it back into an internal data type.
 
 ### The default coverage workflow
 
