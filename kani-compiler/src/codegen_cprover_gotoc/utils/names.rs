@@ -45,10 +45,6 @@ impl<'tcx> GotocCtx<'tcx> {
         (name, base_name)
     }
 
-    pub fn initializer_fn_name(var_name: &str) -> String {
-        format!("{var_name}_init")
-    }
-
     /// The name for a tuple field
     pub fn tuple_fld_name(n: usize) -> String {
         format!("{n}")

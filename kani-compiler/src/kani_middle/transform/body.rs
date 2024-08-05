@@ -17,13 +17,9 @@ pub struct MutableBody {
 
     /// Declarations of locals within the function.
     ///
-    /// The first local is the return value pointer, followed by `arg_count`
-    /// locals for the function arguments, followed by any user-declared
-    /// variables and temporaries.
+    /// The first local is the return value pointer, followed by locals for the function arguments,
+    /// followed by any user-declared variables and temporaries.
     locals: Vec<LocalDecl>,
-
-    /// The number of arguments this function takes.
-    arg_count: usize,
 
     /// Debug information pertaining to user variables, including captures.
     var_debug_info: Vec<VarDebugInfo>,
@@ -54,15 +50,10 @@ impl MutableBody {
         &self.locals
     }
 
-    pub fn arg_count(&self) -> usize {
-        self.arg_count
-    }
-
     /// Create a mutable body from the original MIR body.
     pub fn from(body: Body) -> Self {
         MutableBody {
             locals: body.locals().to_vec(),
-            arg_count: body.arg_locals().len(),
             spread_arg: body.spread_arg(),
             blocks: body.blocks,
             var_debug_info: body.var_debug_info,
@@ -72,14 +63,7 @@ impl MutableBody {
 
     /// Create the new body consuming this mutable body.
     pub fn into(self) -> Body {
-        Body::new(
-            self.blocks,
-            self.locals,
-            self.arg_count,
-            self.var_debug_info,
-            self.spread_arg,
-            self.span,
-        )
+        Body::new(self.blocks, self.locals, self.var_debug_info, self.spread_arg, self.span)
     }
 
     /// Add a new local to the body with the given attributes.
