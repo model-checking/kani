@@ -322,31 +322,6 @@ impl MutableBody {
         };
     }
 
-    /// Insert basic block before or after the source instruction and update `source` accordingly. If
-    /// `InsertPosition` is `InsertPosition::Before`, `source` will point to the same instruction as
-    /// before. If `InsertPosition` is `InsertPosition::After`, `source` will point to the
-    /// terminator of the newly inserted basic block.
-    pub fn insert_bb(
-        &mut self,
-        mut bb: BasicBlock,
-        source: &mut SourceInstruction,
-        position: InsertPosition,
-    ) {
-        // Splitting adds 1 block, so the added block index is len + 1;
-        let split_bb_idx = self.blocks().len();
-        let inserted_bb_idx = self.blocks().len() + 1;
-        // Update the terminator of the basic block to point at the remaining part of the split
-        // basic block.
-        let target = get_mut_target_ref(&mut bb.terminator);
-        *target = split_bb_idx;
-        let new_term = Terminator {
-            kind: TerminatorKind::Goto { target: inserted_bb_idx },
-            span: source.span(&self.blocks),
-        };
-        self.split_bb(source, position, new_term);
-        self.blocks.push(bb);
-    }
-
     pub fn insert_terminator(
         &mut self,
         source: &mut SourceInstruction,
