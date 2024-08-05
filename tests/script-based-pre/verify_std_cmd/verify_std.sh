@@ -21,47 +21,7 @@ STD_PATH="${SYSROOT}/lib/rustlib/src/rust/library"
 cp -r "${STD_PATH}" "${TMP_DIR}"
 
 # Insert a small harness in one of the standard library modules.
-CORE_CODE='
-#[cfg(kani)]
-kani_core::kani_lib!(core);
-
-#[cfg(kani)]
-#[unstable(feature = "kani", issue = "none")]
-pub mod verify {
-    use crate::kani;
-
-    #[kani::proof]
-    pub fn harness() {
-        kani::assert(true, "yay");
-    }
-
-    #[kani::proof_for_contract(fake_function)]
-    fn dummy_proof() {
-        fake_function(true);
-    }
-
-    /// Add a `rustc_diagnostic_item` to ensure this works.
-    /// See <https://github.com/model-checking/kani/issues/3251> for more details.
-    #[kani::requires(x == true)]
-    #[rustc_diagnostic_item = "fake_function"]
-    fn fake_function(x: bool) -> bool {
-        x
-    }
-
-    #[kani::proof_for_contract(dummy_read)]
-    fn check_dummy_read() {
-        let val: char = kani::any();
-        assert_eq!(unsafe { dummy_read(&val) }, val);
-    }
-
-    /// Ensure we can verify constant functions.
-    #[kani::requires(kani::mem::can_dereference(ptr))]
-    #[rustc_diagnostic_item = "dummy_read"]
-    const unsafe fn dummy_read<T: Copy>(ptr: *const T) -> T {
-        *ptr
-    }
-}
-'
+CORE_CODE=$(cat verify_core.rs)
 
 STD_CODE='
 #[cfg(kani)]
@@ -69,7 +29,7 @@ mod verify {
     use core::kani;
     #[kani::proof]
     fn check_non_zero() {
-        let orig: u32 = kani::any_raw_inner();
+        let orig: u32 = kani::any();
         if let Some(val) = core::num::NonZeroU32::new(orig) {
             assert!(orig == val.into());
         } else {

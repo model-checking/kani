@@ -25,7 +25,7 @@ This property test will immediately find a failing case, thanks to Rust's built-
 But what if we change this function to use unsafe Rust?
 
 ```rust
-return unsafe { *a.get_unchecked(i % a.len() + 1) };
+return unsafe { *a.as_ptr().add(i % a.len() + 1) };
 ```
 
 Now the error becomes invisible to this test:
@@ -55,7 +55,7 @@ cargo kani --harness bound_check
 We still see a failure from Kani, even without Rust's runtime bounds checking.
 
 > Also, notice there were many checks in the verification output.
-> (At time of writing, 351.)
+> (At time of writing, 345.)
 > This is a result of using the standard library `Vec` implementation, which means our harness actually used quite a bit of code, short as it looks.
 > Kani is inserting a lot more checks than appear as asserts in our code, so the output can be large.
 
@@ -63,7 +63,7 @@ We get the following summary at the end:
 
 ```
 SUMMARY: 
- ** 1 of 351 failed
+ ** 1 of 345 failed (8 unreachable)
 Failed Checks: dereference failure: pointer outside object bounds
  File: "./src/bounds_check.rs", line 11, in bounds_check::get_wrapped
 
@@ -79,71 +79,44 @@ Consider trying a few more small exercises with this example:
 1. Exercise: Switch back to the normal/safe indexing operation and re-try Kani.
 How does Kani's output change, compared to the unsafe operation?
 (Try predicting the answer, then seeing if you got it right.)
-2. Exercise: [Remember how to get a trace from Kani?](./tutorial-first-steps.md#getting-a-trace) Find out what inputs it failed on.
+2. Exercise: Try Kani's experimental [concrete playback](reference/experimental/concrete-playback.md) feature on this example.
 3. Exercise: Fix the error, run Kani, and see a successful verification.
 4. Exercise: Try switching back to the unsafe code (now with the error fixed) and re-run Kani. Does it still verify successfully?
 
 <details>
 <summary>Click to see explanation for exercise 1</summary>
 
-Having switched back to the safe indexing operation, Kani reports two failures:
+Having switched back to the safe indexing operation, Kani reports a bounds check failure:
 
 ```
-SUMMARY: 
- ** 2 of 350 failed
+SUMMARY:
+ ** 1 of 343 failed (8 unreachable)
 Failed Checks: index out of bounds: the length is less than or equal to the given index
- File: "./src/bounds_check.rs", line 11, in bounds_check::get_wrapped
-Failed Checks: dereference failure: pointer outside object bounds
- File: "./src/bounds_check.rs", line 11, in bounds_check::get_wrapped
+ File: "src/bounds_check.rs", line 11, in bounds_check::get_wrapped
 
 VERIFICATION:- FAILED
 ```
-
-The first is Rust's runtime bounds checking for the safe indexing operation.
-The second is Kani's check to ensure the pointer operation is actually safe.
-This pattern (two checks for similar issues in safe Rust code) is common to see, and we'll see it again in the next section.
-
-> **NOTE**: While Kani will always be checking for both properties, [in the future the output here may change](https://github.com/model-checking/kani/issues/1349).
-> You might have noticed that the bad pointer dereference can't happen, since the bounds check would panic first.
-> In the future, Kani's output may report only the bounds checking failure in this example.
 
 </details>
 
 <details>
 <summary>Click to see explanation for exercise 2</summary>
 
-Having run `cargo kani --harness bound_check --visualize` and clicked on one of the failures to see a trace, there are three things to immediately notice:
-
-1. This trace is huge. Because the standard library `Vec` is involved, there's a lot going on.
-2. The top of the trace file contains some "trace navigation tips" that might be helpful in navigating the trace.
-3. There's a lot of generated code and it's really hard to just read the trace itself.
-
-To navigate this trace to find the information you need, we again recommend searching for things you expect to be somewhere in the trace:
-
-1. Search the page for `kani::any` or `<variable_of_interest> =` such as `size =` or `let size`.
-We can use this to find out what example values lead to a problem.
-In this case, where we just have a couple of `kani::any` values in our proof harness, we can learn a lot just by seeing what these are.
-In this trace we find (and the values you get may be different):
-
+`cargo kani -Z concrete-playback --concrete-playback=inplace --harness bound_check` produces the following test:
 ```
-Step 36: Function bound_check, File src/bounds_check.rs, Line 37
-let size: usize = kani::any();
-size = 2464ul
-
-Step 39: Function bound_check, File src/bounds_check.rs, Line 39
-let index: usize = kani::any();
-index = 2463ul
+rust
+#[test]
+fn kani_concrete_playback_bound_check_4752536404478138800() {
+    let concrete_vals: Vec<Vec<u8>> = vec![
+        // 1ul
+        vec![1, 0, 0, 0, 0, 0, 0, 0],
+        // 18446744073709551615ul
+        vec![255, 255, 255, 255, 255, 255, 255, 255],
+    ];
+    kani::concrete_playback_run(concrete_vals, bound_check);
+}
 ```
-
-You may see different values here, as it depends on the solver's behavior.
-
-2. Try searching for `failure:`. This will be near the end of the page.
-You can now search upwards from a failure to see what values certain variables had.
-Sometimes it can be helpful to change the source code to add intermediate variables, so their value is visible in the trace.
-For instance, you might want to compute the index before indexing into the array.
-That way you'd see in the trace exactly what value is being used.
-
-These two techniques should help you find both the nondeterministic inputs, and the values that were involved in the failing assertion.
+which indicates that substituting the concrete values `size = 1` and `index = 2^64` in our proof harness will produce the out of bounds access.
 
 </details>
 
@@ -247,6 +220,5 @@ In this section:
 
 1. We saw Kani spot out-of-bounds accesses.
 2. We saw Kani spot actually-unsafe dereferencing of a raw pointer to invalid memory.
-3. We got more experience reading the traces that Kani generates, to debug a failing proof harness.
 3. We saw Kani spot a division by zero error and an overflowing addition.
-5. As an exercise, we tried proving an assertion (finding the midpoint) that was not completely trivial.
+4. As an exercise, we tried proving an assertion (finding the midpoint) that was not completely trivial.

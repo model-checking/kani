@@ -1,0 +1,9 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+[package]
+name = "iss2857"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sec1 = "0.7.3"

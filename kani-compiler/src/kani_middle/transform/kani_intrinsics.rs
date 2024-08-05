@@ -13,13 +13,17 @@ use crate::kani_middle::transform::body::{
     CheckType, InsertPosition, MutableBody, SourceInstruction,
 };
 use crate::kani_middle::transform::check_uninit::PointeeInfo;
+use crate::kani_middle::transform::check_uninit::{
+    get_mem_init_fn_def, mk_layout_operand, resolve_mem_init_fn, PointeeLayout,
+};
 use crate::kani_middle::transform::check_values::{build_limits, ty_validity_per_offset};
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
 use rustc_middle::ty::TyCtxt;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{
-    BinOp, Body, ConstOperand, Operand, Place, Rvalue, Statement, StatementKind, RETURN_LOCAL,
+    BinOp, Body, ConstOperand, Operand, Place, Rvalue, Statement, StatementKind, TerminatorKind,
+    RETURN_LOCAL,
 };
 use stable_mir::target::MachineInfo;
 use stable_mir::ty::{FnDef, MirConst, RigidTy, Ty, TyKind, UintTy};
@@ -27,10 +31,6 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use strum_macros::AsRefStr;
 use tracing::trace;
-
-use super::check_uninit::{
-    get_mem_init_fn_def, mk_layout_operand, resolve_mem_init_fn, PointeeLayout,
-};
 
 /// Generate the body for a few Kani intrinsics.
 #[derive(Debug)]
@@ -86,7 +86,7 @@ impl IntrinsicGeneratorPass {
     /// ```
     fn valid_value_body(&self, tcx: TyCtxt, body: Body) -> Body {
         let mut new_body = MutableBody::from(body);
-        new_body.clear_body();
+        new_body.clear_body(TerminatorKind::Return);
 
         // Initialize return variable with True.
         let ret_var = RETURN_LOCAL;
@@ -136,11 +136,11 @@ impl IntrinsicGeneratorPass {
                     user_ty: None,
                 }));
                 let result =
-                    new_body.new_assignment(rvalue, &mut terminator, InsertPosition::Before);
+                    new_body.insert_assignment(rvalue, &mut terminator, InsertPosition::Before);
                 let reason = format!(
                     "Kani currently doesn't support checking validity of `{target_ty}`. {msg}"
                 );
-                new_body.add_check(
+                new_body.insert_check(
                     tcx,
                     &self.check_type,
                     &mut terminator,
@@ -163,7 +163,7 @@ impl IntrinsicGeneratorPass {
     /// ```
     fn is_initialized_body(&mut self, tcx: TyCtxt, body: Body) -> Body {
         let mut new_body = MutableBody::from(body);
-        new_body.clear_body();
+        new_body.clear_body(TerminatorKind::Return);
 
         // Initialize return variable with True.
         let ret_var = RETURN_LOCAL;
@@ -212,7 +212,7 @@ impl IntrinsicGeneratorPass {
                             InsertPosition::Before,
                             &layout,
                         );
-                        new_body.add_call(
+                        new_body.insert_call(
                             &is_ptr_initialized_instance,
                             &mut terminator,
                             InsertPosition::Before,
@@ -242,7 +242,7 @@ impl IntrinsicGeneratorPass {
                             InsertPosition::Before,
                             &element_layout,
                         );
-                        new_body.add_call(
+                        new_body.insert_call(
                             &is_ptr_initialized_instance,
                             &mut terminator,
                             InsertPosition::Before,
@@ -256,14 +256,14 @@ impl IntrinsicGeneratorPass {
                             span,
                             user_ty: None,
                         }));
-                        let result = new_body.new_assignment(
+                        let result = new_body.insert_assignment(
                             rvalue,
                             &mut terminator,
                             InsertPosition::Before,
                         );
                         let reason: &str = "Kani does not support reasoning about memory initialization of pointers to trait objects.";
 
-                        new_body.add_check(
+                        new_body.insert_check(
                             tcx,
                             &self.check_type,
                             &mut terminator,
@@ -282,11 +282,11 @@ impl IntrinsicGeneratorPass {
                     user_ty: None,
                 }));
                 let result =
-                    new_body.new_assignment(rvalue, &mut terminator, InsertPosition::Before);
+                    new_body.insert_assignment(rvalue, &mut terminator, InsertPosition::Before);
                 let reason = format!(
                     "Kani currently doesn't support checking memory initialization of `{target_ty}`. {msg}"
                 );
-                new_body.add_check(
+                new_body.insert_check(
                     tcx,
                     &self.check_type,
                     &mut terminator,

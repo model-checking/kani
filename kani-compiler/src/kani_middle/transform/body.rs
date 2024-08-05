@@ -54,6 +54,10 @@ impl MutableBody {
         &self.locals
     }
 
+    pub fn arg_count(&self) -> usize {
+        self.arg_count
+    }
+
     /// Create a mutable body from the original MIR body.
     pub fn from(body: Body) -> Self {
         MutableBody {
@@ -88,16 +92,20 @@ impl MutableBody {
 
     pub fn new_str_operand(&mut self, msg: &str, span: Span) -> Operand {
         let literal = MirConst::from_str(msg);
-        Operand::Constant(ConstOperand { span, user_ty: None, const_: literal })
+        self.new_const_operand(literal, span)
     }
 
-    pub fn new_const_operand(&mut self, val: u128, uint_ty: UintTy, span: Span) -> Operand {
+    pub fn new_uint_operand(&mut self, val: u128, uint_ty: UintTy, span: Span) -> Operand {
         let literal = MirConst::try_from_uint(val, uint_ty).unwrap();
+        self.new_const_operand(literal, span)
+    }
+
+    fn new_const_operand(&mut self, literal: MirConst, span: Span) -> Operand {
         Operand::Constant(ConstOperand { span, user_ty: None, const_: literal })
     }
 
     /// Create a raw pointer of `*mut type` and return a new local where that value is stored.
-    pub fn new_cast_ptr(
+    pub fn insert_ptr_cast(
         &mut self,
         from: Operand,
         pointee_ty: Ty,
@@ -108,13 +116,13 @@ impl MutableBody {
         assert!(from.ty(self.locals()).unwrap().kind().is_raw_ptr());
         let target_ty = Ty::new_ptr(pointee_ty, mutability);
         let rvalue = Rvalue::Cast(CastKind::PtrToPtr, from, target_ty);
-        self.new_assignment(rvalue, source, position)
+        self.insert_assignment(rvalue, source, position)
     }
 
     /// Add a new assignment for the given binary operation.
     ///
     /// Return the local where the result is saved.
-    pub fn new_binary_op(
+    pub fn insert_binary_op(
         &mut self,
         bin_op: BinOp,
         lhs: Operand,
@@ -123,13 +131,13 @@ impl MutableBody {
         position: InsertPosition,
     ) -> Local {
         let rvalue = Rvalue::BinaryOp(bin_op, lhs, rhs);
-        self.new_assignment(rvalue, source, position)
+        self.insert_assignment(rvalue, source, position)
     }
 
     /// Add a new assignment.
     ///
-    /// Return  local where the result is saved.
-    pub fn new_assignment(
+    /// Return the local where the result is saved.
+    pub fn insert_assignment(
         &mut self,
         rvalue: Rvalue,
         source: &mut SourceInstruction,
@@ -143,12 +151,26 @@ impl MutableBody {
         result
     }
 
+    /// Add a new assignment to an existing place.
+    pub fn assign_to(
+        &mut self,
+        place: Place,
+        rvalue: Rvalue,
+        source: &mut SourceInstruction,
+        position: InsertPosition,
+    ) {
+        let span = source.span(&self.blocks);
+        let stmt = Statement { kind: StatementKind::Assign(place, rvalue), span };
+        self.insert_stmt(stmt, source, position);
+    }
+
     /// Add a new assert to the basic block indicated by the given index.
     ///
     /// The new assertion will have the same span as the source instruction, and the basic block
-    /// will be split. The source instruction will be adjusted to point to the first instruction in
-    /// the new basic block.
-    pub fn add_check(
+    /// will be split. If `InsertPosition` is `InsertPosition::Before`, `source` will point to the
+    /// same instruction as before. If `InsertPosition` is `InsertPosition::After`, `source` will
+    /// point to the new terminator.
+    pub fn insert_check(
         &mut self,
         tcx: TyCtxt,
         check_type: &CheckType,
@@ -183,7 +205,7 @@ impl MutableBody {
                     unwind: UnwindAction::Terminate,
                 };
                 let terminator = Terminator { kind, span };
-                self.split_bb(source, position, terminator);
+                self.insert_terminator(source, position, terminator);
             }
             CheckType::Panic | CheckType::NoCore => {
                 tcx.sess
@@ -199,10 +221,11 @@ impl MutableBody {
 
     /// Add a new call to the basic block indicated by the given index.
     ///
-    /// The new call will have the same span as the source instruction, and the basic block
-    /// will be split. The source instruction will be adjusted to point to the first instruction in
-    /// the new basic block.
-    pub fn add_call(
+    /// The new call will have the same span as the source instruction, and the basic block will be
+    /// split. If `InsertPosition` is `InsertPosition::Before`, `source` will point to the same
+    /// instruction as before. If `InsertPosition` is `InsertPosition::After`, `source` will point
+    /// to the new terminator.
+    pub fn insert_call(
         &mut self,
         callee: &Instance,
         source: &mut SourceInstruction,
@@ -222,13 +245,14 @@ impl MutableBody {
             unwind: UnwindAction::Terminate,
         };
         let terminator = Terminator { kind, span };
-        self.split_bb(source, position, terminator);
+        self.insert_terminator(source, position, terminator);
     }
 
-    /// Split a basic block and use the new terminator in the basic block that was split.
-    ///
-    /// The source is updated to point to the same instruction which is now in the new basic block.
-    pub fn split_bb(
+    /// Split a basic block and use the new terminator in the basic block that was split. If
+    /// `InsertPosition` is `InsertPosition::Before`, `source` will point to the same instruction as
+    /// before. If `InsertPosition` is `InsertPosition::After`, `source` will point to the new
+    /// terminator.
+    fn split_bb(
         &mut self,
         source: &mut SourceInstruction,
         position: InsertPosition,
@@ -245,6 +269,7 @@ impl MutableBody {
     }
 
     /// Split a basic block right before the source location.
+    /// `source` will point to the same instruction as before after the function is done.
     fn split_bb_before(&mut self, source: &mut SourceInstruction, new_term: Terminator) {
         let new_bb_idx = self.blocks.len();
         let (idx, bb) = match source {
@@ -268,6 +293,7 @@ impl MutableBody {
     }
 
     /// Split a basic block right after the source location.
+    /// `source` will point to the new terminator after the function is done.
     fn split_bb_after(&mut self, source: &mut SourceInstruction, mut new_term: Terminator) {
         let new_bb_idx = self.blocks.len();
         match source {
@@ -275,39 +301,69 @@ impl MutableBody {
             // and move the remaining statements into the new one.
             SourceInstruction::Statement { idx, bb } => {
                 let (orig_idx, orig_bb) = (*idx, *bb);
-                *idx = 0;
-                *bb = new_bb_idx;
                 let old_term = mem::replace(&mut self.blocks[orig_bb].terminator, new_term);
                 let bb_stmts = &mut self.blocks[orig_bb].statements;
                 let remaining = bb_stmts.split_off(orig_idx + 1);
                 let new_bb = BasicBlock { statements: remaining, terminator: old_term };
                 self.blocks.push(new_bb);
+                // Update the source to point at the terminator.
+                *source = SourceInstruction::Terminator { bb: orig_bb };
             }
             // Make the terminator at `source` point at the new block,
             // the terminator of which is a simple Goto instruction.
             SourceInstruction::Terminator { bb } => {
-                let current_terminator = &mut self.blocks.get_mut(*bb).unwrap().terminator;
-                // Kani can only instrument function calls like this.
-                match (&mut current_terminator.kind, &mut new_term.kind) {
-                    (
-                        TerminatorKind::Call { target: Some(target_bb), .. },
-                        TerminatorKind::Call { target: Some(new_target_bb), .. },
-                    ) => {
-                        // Set the new terminator to point where previous terminator pointed.
-                        *new_target_bb = *target_bb;
-                        // Point the current terminator to the new terminator's basic block.
-                        *target_bb = new_bb_idx;
-                        // Update the current poisition.
-                        *bb = new_bb_idx;
-                        self.blocks.push(BasicBlock { statements: vec![], terminator: new_term });
-                    }
-                    _ => unimplemented!("Kani can only split blocks after calls."),
-                };
+                let current_term = &mut self.blocks.get_mut(*bb).unwrap().terminator;
+                let target_bb = get_mut_target_ref(current_term);
+                let new_target_bb = get_mut_target_ref(&mut new_term);
+                // Set the new terminator to point where previous terminator pointed.
+                *new_target_bb = *target_bb;
+                // Point the current terminator to the new terminator's basic block.
+                *target_bb = new_bb_idx;
+                // Update the source to point at the terminator.
+                *bb = new_bb_idx;
+                self.blocks.push(BasicBlock { statements: vec![], terminator: new_term });
             }
         };
     }
 
-    /// Insert statement before or after the source instruction and update the source as needed.
+    /// Insert basic block before or after the source instruction and update `source` accordingly. If
+    /// `InsertPosition` is `InsertPosition::Before`, `source` will point to the same instruction as
+    /// before. If `InsertPosition` is `InsertPosition::After`, `source` will point to the
+    /// terminator of the newly inserted basic block.
+    pub fn insert_bb(
+        &mut self,
+        mut bb: BasicBlock,
+        source: &mut SourceInstruction,
+        position: InsertPosition,
+    ) {
+        // Splitting adds 1 block, so the added block index is len + 1;
+        let split_bb_idx = self.blocks().len();
+        let inserted_bb_idx = self.blocks().len() + 1;
+        // Update the terminator of the basic block to point at the remaining part of the split
+        // basic block.
+        let target = get_mut_target_ref(&mut bb.terminator);
+        *target = split_bb_idx;
+        let new_term = Terminator {
+            kind: TerminatorKind::Goto { target: inserted_bb_idx },
+            span: source.span(&self.blocks),
+        };
+        self.split_bb(source, position, new_term);
+        self.blocks.push(bb);
+    }
+
+    pub fn insert_terminator(
+        &mut self,
+        source: &mut SourceInstruction,
+        position: InsertPosition,
+        terminator: Terminator,
+    ) {
+        self.split_bb(source, position, terminator);
+    }
+
+    /// Insert statement before or after the source instruction and update the source as needed. If
+    /// `InsertPosition` is `InsertPosition::Before`, `source` will point to the same instruction as
+    /// before. If `InsertPosition` is `InsertPosition::After`, `source` will point to the
+    /// newly inserted statement.
     pub fn insert_stmt(
         &mut self,
         new_stmt: Statement,
@@ -338,22 +394,18 @@ impl MutableBody {
                     SourceInstruction::Terminator { bb } => {
                         // Create a new basic block, as we need to append a statement after the terminator.
                         let current_terminator = &mut self.blocks.get_mut(*bb).unwrap().terminator;
-                        // Kani can only instrument function calls in this way.
-                        match &mut current_terminator.kind {
-                            TerminatorKind::Call { target: Some(target_bb), .. } => {
-                                *source = SourceInstruction::Statement { idx: 0, bb: new_bb_idx };
-                                let new_bb = BasicBlock {
-                                    statements: vec![new_stmt],
-                                    terminator: Terminator {
-                                        kind: TerminatorKind::Goto { target: *target_bb },
-                                        span,
-                                    },
-                                };
-                                *target_bb = new_bb_idx;
-                                self.blocks.push(new_bb);
-                            }
-                            _ => unimplemented!("Kani can only insert statements after calls."),
+                        // Update target of the terminator.
+                        let target_bb = get_mut_target_ref(current_terminator);
+                        *source = SourceInstruction::Statement { idx: 0, bb: new_bb_idx };
+                        let new_bb = BasicBlock {
+                            statements: vec![new_stmt],
+                            terminator: Terminator {
+                                kind: TerminatorKind::Goto { target: *target_bb },
+                                span,
+                            },
                         };
+                        *target_bb = new_bb_idx;
+                        self.blocks.push(new_bb);
                     }
                 }
             }
@@ -367,11 +419,20 @@ impl MutableBody {
     /// by the compiler. This function allow us to delete the dummy body before
     /// creating a new one.
     ///
-    /// Note: We do not prune the local variables today for simplicity.
-    pub fn clear_body(&mut self) {
+    /// Keep all the locals untouched, so they can be reused by the passes if needed.
+    pub fn clear_body(&mut self, kind: TerminatorKind) {
         self.blocks.clear();
-        let terminator = Terminator { kind: TerminatorKind::Return, span: self.span };
+        let terminator = Terminator { kind, span: self.span };
         self.blocks.push(BasicBlock { statements: Vec::default(), terminator })
+    }
+
+    /// Replace a terminator from the given basic block
+    pub fn replace_terminator(
+        &mut self,
+        source_instruction: &SourceInstruction,
+        new_term: Terminator,
+    ) {
+        self.blocks.get_mut(source_instruction.bb()).unwrap().terminator = new_term;
     }
 }
 
@@ -432,6 +493,12 @@ impl SourceInstruction {
         match *self {
             SourceInstruction::Statement { idx, bb } => blocks[bb].statements[idx].span,
             SourceInstruction::Terminator { bb } => blocks[bb].terminator.span,
+        }
+    }
+
+    pub fn bb(&self) -> BasicBlockIdx {
+        match *self {
+            SourceInstruction::Statement { bb, .. } | SourceInstruction::Terminator { bb } => bb,
         }
     }
 }
@@ -572,5 +639,17 @@ pub trait MutMirVisitor {
             Rvalue::ThreadLocalRef(_) => {}
             Rvalue::NullaryOp(..) => {}
         }
+    }
+}
+
+fn get_mut_target_ref(terminator: &mut Terminator) -> &mut BasicBlockIdx {
+    match &mut terminator.kind {
+        TerminatorKind::Assert { target, .. }
+        | TerminatorKind::Drop { target, .. }
+        | TerminatorKind::Goto { target }
+        | TerminatorKind::Call { target: Some(target), .. } => target,
+        _ => unimplemented!(
+            "Kani can only insert instructions after terminators that have a `target` field."
+        ),
     }
 }

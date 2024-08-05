@@ -7,11 +7,10 @@
 // Used for rustc_diagnostic_item.
 // Note: We could use a kanitool attribute instead.
 #![feature(rustc_attrs)]
-// This is required for the optimized version of `any_array()`
-#![feature(generic_const_exprs)]
-#![allow(incomplete_features)]
 // Used to model simd.
 #![feature(repr_simd)]
+#![feature(generic_const_exprs)]
+#![allow(incomplete_features)]
 // Features used for tests only.
 #![cfg_attr(test, feature(core_intrinsics, portable_simd))]
 // Required for `rustc_diagnostic_item` and `core_intrinsics`
@@ -20,6 +19,9 @@
 #![feature(ptr_metadata)]
 #![feature(f16)]
 #![feature(f128)]
+
+// Allow us to use `kani::` to access crate features.
+extern crate self as kani;
 
 pub mod arbitrary;
 #[cfg(feature = "concrete_playback")]
@@ -48,6 +50,7 @@ pub use invariant::Invariant;
 pub fn concrete_playback_run<F: Fn()>(_: Vec<Vec<u8>>, _: F) {
     unreachable!("Concrete playback does not work during verification")
 }
+
 pub use futures::{block_on, block_on_with_spawn, spawn, yield_now, RoundRobin};
 
 /// Creates an assumption that will be valid after this statement run. Note that the assumption
@@ -246,21 +249,25 @@ pub fn any_where<T: Arbitrary, F: FnOnce(&T) -> bool>(f: F) -> T {
 /// Note that SIZE_T must be equal the size of type T in bytes.
 #[inline(never)]
 #[cfg(not(feature = "concrete_playback"))]
-pub(crate) unsafe fn any_raw_internal<T, const SIZE_T: usize>() -> T {
-    any_raw_inner::<T>()
+unsafe fn any_raw_internal<T: Copy>() -> T {
+    any_raw::<T>()
 }
 
+/// This is the same as [any_raw_internal] for verification flow, but not for concrete playback.
 #[inline(never)]
-#[cfg(feature = "concrete_playback")]
-pub(crate) unsafe fn any_raw_internal<T, const SIZE_T: usize>() -> T {
-    concrete_playback::any_raw_internal::<T, SIZE_T>()
+#[cfg(not(feature = "concrete_playback"))]
+unsafe fn any_raw_array<T: Copy, const N: usize>() -> [T; N] {
+    any_raw::<[T; N]>()
 }
+
+#[cfg(feature = "concrete_playback")]
+use concrete_playback::{any_raw_array, any_raw_internal};
 
 /// This low-level function returns nondet bytes of size T.
 #[rustc_diagnostic_item = "KaniAnyRaw"]
 #[inline(never)]
 #[allow(dead_code)]
-fn any_raw_inner<T>() -> T {
+fn any_raw<T: Copy>() -> T {
     kani_intrinsic()
 }
 
