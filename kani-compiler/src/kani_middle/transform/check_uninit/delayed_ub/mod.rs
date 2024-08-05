@@ -101,9 +101,7 @@ impl GlobalPass for DelayedUbPass {
             }
 
             // Since analysis targets are *pointers*, need to get its successors for instrumentation.
-            for target in targets.iter() {
-                analysis_targets.extend(global_points_to_graph.pointees_of(target));
-            }
+            analysis_targets.extend(global_points_to_graph.successors(&targets));
 
             // If we are generating MIR, generate the points-to graph as well.
             if tcx.sess.opts.output_types.contains_key(&OutputType::Mir) {
