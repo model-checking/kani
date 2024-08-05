@@ -1,6 +1,5 @@
 .assertion\
 - Status: SUCCESS\
 - Description: "ptr NULL or writable up to size"\
-in function __CPROVER_contracts_car_set_insert
 
 VERIFICATION:- SUCCESSFUL
