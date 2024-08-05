@@ -29,7 +29,7 @@ const BUG_REPORT_URL: &str =
 
 // Custom panic hook when running under user friendly message format.
 #[allow(clippy::type_complexity)]
-static PANIC_HOOK: LazyLock<Box<dyn Fn(&panic::PanicInfo<'_>) + Sync + Send + 'static>> =
+static PANIC_HOOK: LazyLock<Box<dyn Fn(&panic::PanicHookInfo<'_>) + Sync + Send + 'static>> =
     LazyLock::new(|| {
         let hook = panic::take_hook();
         panic::set_hook(Box::new(|info| {
@@ -46,7 +46,7 @@ static PANIC_HOOK: LazyLock<Box<dyn Fn(&panic::PanicInfo<'_>) + Sync + Send + 's
 
 // Custom panic hook when executing under json error format `--error-format=json`.
 #[allow(clippy::type_complexity)]
-static JSON_PANIC_HOOK: LazyLock<Box<dyn Fn(&panic::PanicInfo<'_>) + Sync + Send + 'static>> =
+static JSON_PANIC_HOOK: LazyLock<Box<dyn Fn(&panic::PanicHookInfo<'_>) + Sync + Send + 'static>> =
     LazyLock::new(|| {
         let hook = panic::take_hook();
         panic::set_hook(Box::new(|info| {
