@@ -13,6 +13,9 @@ use crate::kani_middle::transform::body::{
     CheckType, InsertPosition, MutableBody, SourceInstruction,
 };
 use crate::kani_middle::transform::check_uninit::PointeeInfo;
+use crate::kani_middle::transform::check_uninit::{
+    get_mem_init_fn_def, mk_layout_operand, resolve_mem_init_fn, PointeeLayout,
+};
 use crate::kani_middle::transform::check_values::{build_limits, ty_validity_per_offset};
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
@@ -28,10 +31,6 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use strum_macros::AsRefStr;
 use tracing::trace;
-
-use super::check_uninit::{
-    get_mem_init_fn_def, mk_layout_operand, resolve_mem_init_fn, PointeeLayout,
-};
 
 /// Generate the body for a few Kani intrinsics.
 #[derive(Debug)]

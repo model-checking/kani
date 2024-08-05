@@ -87,6 +87,13 @@ impl GotocCodegenBackend {
         check_contract: Option<InternalDefId>,
         mut transformer: BodyTransformation,
     ) -> (GotocCtx<'tcx>, Vec<MonoItem>, Option<AssignsContract>) {
+        // This runs reachability analysis before global passes are applied.
+        //
+        // Alternatively, we could run reachability only once after the global passes are applied
+        // and resolve the necessary dependencies inside the passes on the fly. This, however, has a
+        // disadvantage of not having a precomputed call graph for the global passes to use. The
+        // call graph could be used, for example, in resolving function pointer or vtable calls for
+        // global passes that need this.
         let (items, call_graph) = with_timer(
             || collect_reachable_items(tcx, &mut transformer, starting_items),
             "codegen reachability analysis",
@@ -113,6 +120,13 @@ impl GotocCodegenBackend {
             starting_items,
             instances,
             call_graph,
+        );
+
+        // Re-collect reachable items after global transformations were applied. This is necessary
+        // since global pass could add extra calls to instrumentation.
+        let (items, _) = with_timer(
+            || collect_reachable_items(tcx, &mut transformer, starting_items),
+            "codegen reachability analysis (second pass)",
         );
 
         // Follow rustc naming convention (cx is abbrev for context).
@@ -260,8 +274,8 @@ impl CodegenBackend for GotocCodegenBackend {
                     for unit in units.iter() {
                         // We reset the body cache for now because each codegen unit has different
                         // configurations that affect how we transform the instance body.
-                        let mut transformer = BodyTransformation::new(&queries, tcx, &unit);
                         for harness in &unit.harnesses {
+                            let transformer = BodyTransformation::new(&queries, tcx, &unit);
                             let model_path = units.harness_model_path(*harness).unwrap();
                             let contract_metadata =
                                 contract_metadata_for_harness(tcx, harness.def.def_id());
@@ -273,7 +287,7 @@ impl CodegenBackend for GotocCodegenBackend {
                                 contract_metadata,
                                 transformer,
                             );
-                            transformer = results.extend(gcx, items, None);
+                            results.extend(gcx, items, None);
                             if let Some(assigns_contract) = contract_info {
                                 modifies_instances.push((*harness, assigns_contract));
                             }
