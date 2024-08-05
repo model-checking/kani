@@ -205,6 +205,21 @@ impl IntrinsicGeneratorPass {
                     PointeeLayout::Sized { layout } => {
                         if layout.is_empty() {
                             // Encountered a ZST, so we can short-circut here.
+                            // Initialize return variable with True.
+                            let span = new_body.locals()[ret_var].span;
+                            let assign = StatementKind::Assign(
+                                Place::from(ret_var),
+                                Rvalue::Use(Operand::Constant(ConstOperand {
+                                    span,
+                                    user_ty: None,
+                                    const_: MirConst::from_bool(true),
+                                })),
+                            );
+                            new_body.insert_stmt(
+                                Statement { kind: assign, span },
+                                &mut source,
+                                InsertPosition::Before,
+                            );
                             return new_body.into();
                         }
                         let is_ptr_initialized_instance = resolve_mem_init_fn(
