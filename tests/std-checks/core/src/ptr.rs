@@ -89,8 +89,6 @@ mod verify {
         let _rf = unsafe { contracts::as_ref(&non_null) };
     }
 
-    /// FIX-ME: Modifies clause fail with pointer to ZST.
-    /// <https://github.com/model-checking/kani/issues/3181>
     #[kani::proof_for_contract(contracts::replace)]
     pub fn check_replace_unit() {
         check_replace_impl::<()>();

@@ -32,6 +32,7 @@ pub mod codegen_units;
 pub mod coercion;
 mod intrinsics;
 pub mod metadata;
+pub mod points_to;
 pub mod provide;
 pub mod reachability;
 pub mod resolve;

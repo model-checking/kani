@@ -19,7 +19,7 @@
 use crate::kani_middle::codegen_units::CodegenUnit;
 use crate::kani_middle::reachability::CallGraph;
 use crate::kani_middle::transform::body::CheckType;
-use crate::kani_middle::transform::check_uninit::UninitPass;
+use crate::kani_middle::transform::check_uninit::{DelayedUbPass, UninitPass};
 use crate::kani_middle::transform::check_values::ValidValuePass;
 use crate::kani_middle::transform::contracts::{AnyModifiesPass, FunctionWithContractPass};
 use crate::kani_middle::transform::kani_intrinsics::IntrinsicGeneratorPass;
@@ -32,11 +32,14 @@ use stable_mir::mir::Body;
 use std::collections::HashMap;
 use std::fmt::Debug;
 
+pub use internal_mir::RustcInternalMir;
+
 pub(crate) mod body;
 mod check_uninit;
 mod check_values;
 mod contracts;
 mod dump_mir_pass;
+mod internal_mir;
 mod kani_intrinsics;
 mod stubs;
 
@@ -192,6 +195,7 @@ pub struct GlobalPasses {
 impl GlobalPasses {
     pub fn new(queries: &QueryDb, tcx: TyCtxt) -> Self {
         let mut global_passes = GlobalPasses { global_passes: vec![] };
+        global_passes.add_global_pass(queries, DelayedUbPass::new(CheckType::new_assert(tcx)));
         global_passes.add_global_pass(queries, DumpMirPass::new(tcx));
         global_passes
     }
