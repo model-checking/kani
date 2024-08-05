@@ -112,19 +112,40 @@ impl<'a, 'tcx> MirVisitor for InstrumentationVisitor<'a, 'tcx> {
     }
 
     fn visit_place(&mut self, place: &Place, ptx: PlaceContext, location: Location) {
+        // In order to check whether we should get-instrument the place, see if it resolves to the
+        // analysis target.
+        let needs_get = {
+            self.points_to
+                .resolve_place_stable(place.clone(), self.current_instance, self.tcx)
+                .intersection(&self.analysis_targets)
+                .next()
+                .is_some()
+        };
+
         // In order to check whether we should set-instrument the place, we need to figure out if
         // the place has a common ancestor of the same level with the target.
         //
-        // This is needed because instrumenting the place only if it points to the target could give
+        // This is needed because instrumenting the place only if it resolves to the target could give
         // false positives in presence of some aliasing relations.
         //
-        // Here is a simple example, imagine the following aliasing graph: 
+        // Here is a simple example:
+        // ```
+        // fn foo(val_1: u32, val_2: u32, flag: bool) {
+        //   let reference = if flag {
+        //     &val_1
+        //   } else {
+        //     &val_2
+        //   };
+        //   let _ = *reference;
+        // }
+        // ```
+        // It yields the following aliasing graph:
         //
-        // `place_a <-- place_b --> place_c` 
+        // `val_1 <-- reference --> val_2`
         //
-        // If `place_a` is a legitimate instrumentation target, we would get-instrument an
-        // instruction that reads from `(*place_b)`, but that could mean that `place_c` is checked,
-        // too. Hence, if we don't set-instrument `place_c` we will get a false-positive.
+        // If `val_1` is a legitimate instrumentation target, we would get-instrument an instruction
+        // that reads from `*reference`, but that could mean that `val_2` is checked, too. Hence,
+        // if we don't set-instrument `val_2` we will get a false-positive.
         let needs_set = {
             let mut has_common_ancestor = false;
             let mut self_ancestors =
@@ -141,16 +162,6 @@ impl<'a, 'tcx> MirVisitor for InstrumentationVisitor<'a, 'tcx> {
             }
 
             has_common_ancestor
-        };
-
-        // In order to check whether we should get-instrument the place, finding the intersection
-        // with analysis targets is enough.
-        let needs_get = {
-            self.points_to
-                .resolve_place_stable(place.clone(), self.current_instance, self.tcx)
-                .intersection(&self.analysis_targets)
-                .next()
-                .is_some()
         };
 
         // If we are mutating the place, initialize it.
