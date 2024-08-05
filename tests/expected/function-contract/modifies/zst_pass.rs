@@ -2,8 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Zfunction-contracts
 
-// #[kani::requires(assert_valid_ptr(dst) && has_valid_value(dst))]
-#[kani::requires(true)]
 #[kani::modifies(dst)]
 pub unsafe fn replace<T>(dst: *mut T, src: T) -> T {
     std::ptr::replace(dst, src)
