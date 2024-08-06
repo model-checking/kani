@@ -7,8 +7,8 @@ extern crate kani;
 pub mod contracts {
     use kani::{mem::*, requires};
 
-    /// The actual pre-condition is more complicated: 
-    /// 
+    /// The actual pre-condition is more complicated:
+    ///
     /// "For non-zero-sized values, ... a value: *mut T that has been allocated with the Global
     /// allocator with Layout::for_value(&*value) may be converted into a box using
     /// Box::<T>::from_raw(value)."
