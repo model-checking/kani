@@ -45,6 +45,11 @@ pub enum PropertyClass {
     ///
     /// SPECIAL BEHAVIOR: "Errors" for this type of assertion just mean "reachable" not failure.
     Cover,
+    /// See [GotocCtx::codegen_cover] below. Generally just an `assert(false)` that's not an error.
+    ///
+    /// SPECIAL BEHAVIOR: Same as PropertyClass::Cover, except unreachable or unsatisfiable  
+    /// conditions cause verification failure.
+    CoverOrFail,
     /// The class of checks used for code coverage instrumentation. Only needed
     /// when working on coverage-related features.
     ///
@@ -145,6 +150,16 @@ impl<'tcx> GotocCtx<'tcx> {
         // https://github.com/diffblue/cbmc/issues/6613). So for now use
         // assert(!cond).
         self.codegen_assert(cond.not(), PropertyClass::Cover, msg, loc)
+    }
+
+    /// Generate code to cover the given condition at the current location
+    pub fn codegen_cover_or_fail(&self, cond: Expr, msg: &str, span: SpanStable) -> Stmt {
+        let loc = self.codegen_caller_span_stable(span);
+        // Should use Stmt::cover, but currently this doesn't work with CBMC
+        // unless it is run with '--cover cover' (see
+        // https://github.com/diffblue/cbmc/issues/6613). So for now use
+        // assert(!cond).
+        self.codegen_assert(cond.not(), PropertyClass::CoverOrFail, msg, loc)
     }
 
     /// Generate a cover statement for code coverage reports.

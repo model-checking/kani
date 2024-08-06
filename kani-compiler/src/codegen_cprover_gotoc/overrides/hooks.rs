@@ -79,6 +79,47 @@ impl GotocHook for Cover {
     }
 }
 
+/// A hook for Kani's `cover_or_fail` function (declared in `library/kani/src/lib.rs`).
+/// The function takes two arguments: a condition expression (bool) and a
+/// message (&'static str).
+/// The hook codegens the function as a cover property that checks whether the
+/// condition is satisfiable. If the condition is undetermined, unreachable,
+/// or unsatisfiable, verification fails.
+struct CoverOrFail;
+impl GotocHook for CoverOrFail {
+    fn hook_applies(&self, tcx: TyCtxt, instance: Instance) -> bool {
+        matches_function(tcx, instance.def, "KaniCoverOrFail")
+    }
+
+    fn handle(
+        &self,
+        gcx: &mut GotocCtx,
+        _instance: Instance,
+        mut fargs: Vec<Expr>,
+        _assign_to: &Place,
+        target: Option<BasicBlockIdx>,
+        span: Span,
+    ) -> Stmt {
+        assert_eq!(fargs.len(), 2);
+        let cond = fargs.remove(0).cast_to(Type::bool());
+        let msg = fargs.remove(0);
+        let msg = gcx.extract_const_message(&msg).unwrap();
+        let target = target.unwrap();
+        let caller_loc = gcx.codegen_caller_span_stable(span);
+
+        let (msg, reach_stmt) = gcx.codegen_reachability_check(msg, span);
+
+        Stmt::block(
+            vec![
+                reach_stmt,
+                gcx.codegen_cover_or_fail(cond, &msg, span),
+                Stmt::goto(bb_label(target), caller_loc),
+            ],
+            caller_loc,
+        )
+    }
+}
+
 struct Assume;
 impl GotocHook for Assume {
     fn hook_applies(&self, tcx: TyCtxt, instance: Instance) -> bool {
@@ -547,6 +588,7 @@ pub fn fn_hooks() -> GotocHooks {
             Rc::new(Assert),
             Rc::new(Check),
             Rc::new(Cover),
+            Rc::new(CoverOrFail),
             Rc::new(Nondet),
             Rc::new(IsAllocated),
             Rc::new(PointerObject),

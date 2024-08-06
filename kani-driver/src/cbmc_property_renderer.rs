@@ -247,8 +247,9 @@ fn format_item_terse(_item: &ParserItem) -> Option<String> {
 ///
 /// This function reports the results of normal checks (e.g. assertions and
 /// arithmetic overflow checks) and cover properties (specified using the
-/// `kani::cover` macro) separately. Cover properties currently do not impact
-/// the overall verification success or failure.
+/// `kani::cover` or `kani::cover_or_fail` macros) separately.
+/// The results of `kani::cover` do not affect overall verification success or failure,
+/// while any unreachable or unsatisfiable `kani::cover_or_fail`s will trigger verification failure.
 ///
 /// TODO: We could `write!` to `result_str` instead
 /// <https://github.com/model-checking/kani/issues/1480>

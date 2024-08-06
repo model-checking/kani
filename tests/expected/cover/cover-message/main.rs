@@ -13,7 +13,7 @@ fn cover_match() {
     let x = kani::any();
     match foo(x) {
         Ok(y) if x > 20 => kani::cover!(y > 20, "y may be greater than 20"), // satisfiable
-        Ok(y) => kani::cover!(y > 10, "y may be greater than 10"),           // unsatisfiable
-        Err(_s) => kani::cover!(true, "foo may return Err"),                 // satisfiable
+        Ok(y) => kani::cover!(y > 10, "y may be greater than 10"),  // unsatisfiable
+        Err(_s) => kani::cover!(true, "foo may return Err"),        // satisfiable
     }
 }

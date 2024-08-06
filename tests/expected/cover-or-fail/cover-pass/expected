@@ -1,0 +1,11 @@
+Status: SATISFIED\
+Description: "cover condition: sorted == arr"\
+main.rs:12:5 in function cover_sorted
+
+Status: SATISFIED\
+Description: "cover condition: sorted != arr"\
+main.rs:13:5 in function cover_sorted
+
+ ** 2 of 2 cover properties satisfied
+
+VERIFICATION:- SUCCESSFUL
