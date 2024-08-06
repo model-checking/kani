@@ -6,6 +6,7 @@
 // Enumeration of all intrinsics we support right now, with the last option being a catch-all. This
 // way, adding an intrinsic would highlight all places where they are used.
 #[allow(unused)]
+#[derive(Clone, Copy, Debug)]
 pub enum Intrinsic<'a> {
     AddWithOverflow,
     ArithOffset,

@@ -3,12 +3,15 @@
 //
 //! Visitor that collects all instructions relevant to uninitialized memory access.
 
-use crate::kani_middle::transform::{
-    body::{InsertPosition, MutableBody, SourceInstruction},
-    check_uninit::{
-        relevant_instruction::{InitRelevantInstruction, MemoryInitOp},
-        ty_layout::tys_layout_compatible_to_size,
-        TargetFinder,
+use crate::{
+    intrinsics::Intrinsic,
+    kani_middle::transform::{
+        body::{InsertPosition, MutableBody, SourceInstruction},
+        check_uninit::{
+            relevant_instruction::{InitRelevantInstruction, MemoryInitOp},
+            ty_layout::tys_layout_compatible_to_size,
+            TargetFinder,
+        },
     },
 };
 use stable_mir::{
@@ -16,8 +19,8 @@ use stable_mir::{
         alloc::GlobalAlloc,
         mono::{Instance, InstanceKind},
         visit::{Location, PlaceContext},
-        BasicBlockIdx, CastKind, LocalDecl, MirVisitor, Mutability, NonDivergingIntrinsic, Operand,
-        Place, PointerCoercion, ProjectionElem, Rvalue, Statement, StatementKind, Terminator,
+        BasicBlockIdx, CastKind, LocalDecl, MirVisitor, NonDivergingIntrinsic, Operand, Place,
+        PointerCoercion, ProjectionElem, Rvalue, Statement, StatementKind, Terminator,
         TerminatorKind,
     },
     ty::{ConstantKind, RigidTy, TyKind},
@@ -182,46 +185,30 @@ impl MirVisitor for CheckUninitVisitor {
                     };
                     match instance.kind {
                         InstanceKind::Intrinsic => {
-                            match instance.intrinsic_name().unwrap().as_str() {
+                            match Intrinsic::from_str(instance.intrinsic_name().unwrap().as_str()) {
                                 intrinsic_name if can_skip_intrinsic(intrinsic_name) => {
                                     /* Intrinsics that can be safely skipped */
                                 }
-                                name if name.starts_with("atomic") => {
-                                    let num_args = match name {
-                                        // All `atomic_cxchg` intrinsics take `dst, old, src` as arguments.
-                                        name if name.starts_with("atomic_cxchg") => 3,
-                                        // All `atomic_load` intrinsics take `src` as an argument.
-                                        name if name.starts_with("atomic_load") => 1,
-                                        // All other `atomic` intrinsics take `dst, src` as arguments.
-                                        _ => 2,
-                                    };
-                                    assert_eq!(
-                                        args.len(),
-                                        num_args,
-                                        "Unexpected number of arguments for `{name}`"
-                                    );
-                                    assert!(matches!(
-                                        args[0].ty(&self.locals).unwrap().kind(),
-                                        TyKind::RigidTy(RigidTy::RawPtr(..))
-                                    ));
+                                Intrinsic::AtomicAnd(_)
+                                | Intrinsic::AtomicCxchg(_)
+                                | Intrinsic::AtomicCxchgWeak(_)
+                                | Intrinsic::AtomicLoad(_)
+                                | Intrinsic::AtomicMax(_)
+                                | Intrinsic::AtomicMin(_)
+                                | Intrinsic::AtomicNand(_)
+                                | Intrinsic::AtomicOr(_)
+                                | Intrinsic::AtomicStore(_)
+                                | Intrinsic::AtomicUmax(_)
+                                | Intrinsic::AtomicUmin(_)
+                                | Intrinsic::AtomicXadd(_)
+                                | Intrinsic::AtomicXchg(_)
+                                | Intrinsic::AtomicXor(_)
+                                | Intrinsic::AtomicXsub(_) => {
                                     self.push_target(MemoryInitOp::Check {
                                         operand: args[0].clone(),
                                     });
                                 }
-                                "compare_bytes" => {
-                                    assert_eq!(
-                                        args.len(),
-                                        3,
-                                        "Unexpected number of arguments for `compare_bytes`"
-                                    );
-                                    assert!(matches!(
-                                        args[0].ty(&self.locals).unwrap().kind(),
-                                        TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Not))
-                                    ));
-                                    assert!(matches!(
-                                        args[1].ty(&self.locals).unwrap().kind(),
-                                        TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Not))
-                                    ));
+                                Intrinsic::CompareBytes => {
                                     self.push_target(MemoryInitOp::CheckSliceChunk {
                                         operand: args[0].clone(),
                                         count: args[2].clone(),
@@ -231,22 +218,7 @@ impl MirVisitor for CheckUninitVisitor {
                                         count: args[2].clone(),
                                     });
                                 }
-                                "copy"
-                                | "volatile_copy_memory"
-                                | "volatile_copy_nonoverlapping_memory" => {
-                                    assert_eq!(
-                                        args.len(),
-                                        3,
-                                        "Unexpected number of arguments for `copy`"
-                                    );
-                                    assert!(matches!(
-                                        args[0].ty(&self.locals).unwrap().kind(),
-                                        TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Not))
-                                    ));
-                                    assert!(matches!(
-                                        args[1].ty(&self.locals).unwrap().kind(),
-                                        TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Mut))
-                                    ));
+                                Intrinsic::Copy => {
                                     self.push_target(MemoryInitOp::CheckSliceChunk {
                                         operand: args[0].clone(),
                                         count: args[2].clone(),
@@ -258,20 +230,20 @@ impl MirVisitor for CheckUninitVisitor {
                                         position: InsertPosition::After,
                                     });
                                 }
-                                "typed_swap" => {
-                                    assert_eq!(
-                                        args.len(),
-                                        2,
-                                        "Unexpected number of arguments for `typed_swap`"
-                                    );
-                                    assert!(matches!(
-                                        args[0].ty(&self.locals).unwrap().kind(),
-                                        TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Mut))
-                                    ));
-                                    assert!(matches!(
-                                        args[1].ty(&self.locals).unwrap().kind(),
-                                        TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Mut))
-                                    ));
+                                Intrinsic::VolatileCopyMemory
+                                | Intrinsic::VolatileCopyNonOverlappingMemory => {
+                                    self.push_target(MemoryInitOp::CheckSliceChunk {
+                                        operand: args[1].clone(),
+                                        count: args[2].clone(),
+                                    });
+                                    self.push_target(MemoryInitOp::SetSliceChunk {
+                                        operand: args[0].clone(),
+                                        count: args[2].clone(),
+                                        value: true,
+                                        position: InsertPosition::After,
+                                    });
+                                }
+                                Intrinsic::TypedSwap => {
                                     self.push_target(MemoryInitOp::Check {
                                         operand: args[0].clone(),
                                     });
@@ -279,46 +251,19 @@ impl MirVisitor for CheckUninitVisitor {
                                         operand: args[1].clone(),
                                     });
                                 }
-                                "volatile_load" | "unaligned_volatile_load" => {
-                                    assert_eq!(
-                                        args.len(),
-                                        1,
-                                        "Unexpected number of arguments for `volatile_load`"
-                                    );
-                                    assert!(matches!(
-                                        args[0].ty(&self.locals).unwrap().kind(),
-                                        TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Not))
-                                    ));
+                                Intrinsic::VolatileLoad | Intrinsic::UnalignedVolatileLoad => {
                                     self.push_target(MemoryInitOp::Check {
                                         operand: args[0].clone(),
                                     });
                                 }
-                                "volatile_store" => {
-                                    assert_eq!(
-                                        args.len(),
-                                        2,
-                                        "Unexpected number of arguments for `volatile_store`"
-                                    );
-                                    assert!(matches!(
-                                        args[0].ty(&self.locals).unwrap().kind(),
-                                        TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Mut))
-                                    ));
+                                Intrinsic::VolatileStore => {
                                     self.push_target(MemoryInitOp::Set {
                                         operand: args[0].clone(),
                                         value: true,
                                         position: InsertPosition::After,
                                     });
                                 }
-                                "write_bytes" => {
-                                    assert_eq!(
-                                        args.len(),
-                                        3,
-                                        "Unexpected number of arguments for `write_bytes`"
-                                    );
-                                    assert!(matches!(
-                                        args[0].ty(&self.locals).unwrap().kind(),
-                                        TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Mut))
-                                    ));
+                                Intrinsic::WriteBytes => {
                                     self.push_target(MemoryInitOp::SetSliceChunk {
                                         operand: args[0].clone(),
                                         count: args[2].clone(),
@@ -328,7 +273,7 @@ impl MirVisitor for CheckUninitVisitor {
                                 }
                                 intrinsic => {
                                     self.push_target(MemoryInitOp::Unsupported {
-                                    reason: format!("Kani does not support reasoning about memory initialization of intrinsic `{intrinsic}`."),
+                                    reason: format!("Kani does not support reasoning about memory initialization of intrinsic `{intrinsic:?}`."),
                                 });
                                 }
                             }
@@ -519,131 +464,130 @@ impl MirVisitor for CheckUninitVisitor {
 
 /// Determines if the intrinsic has no memory initialization related function and hence can be
 /// safely skipped.
-fn can_skip_intrinsic(intrinsic_name: &str) -> bool {
-    match intrinsic_name {
-        "add_with_overflow"
-        | "arith_offset"
-        | "assert_inhabited"
-        | "assert_mem_uninitialized_valid"
-        | "assert_zero_valid"
-        | "assume"
-        | "bitreverse"
-        | "black_box"
-        | "breakpoint"
-        | "bswap"
-        | "caller_location"
-        | "ceilf32"
-        | "ceilf64"
-        | "copysignf32"
-        | "copysignf64"
-        | "cosf32"
-        | "cosf64"
-        | "ctlz"
-        | "ctlz_nonzero"
-        | "ctpop"
-        | "cttz"
-        | "cttz_nonzero"
-        | "discriminant_value"
-        | "exact_div"
-        | "exp2f32"
-        | "exp2f64"
-        | "expf32"
-        | "expf64"
-        | "fabsf32"
-        | "fabsf64"
-        | "fadd_fast"
-        | "fdiv_fast"
-        | "floorf32"
-        | "floorf64"
-        | "fmaf32"
-        | "fmaf64"
-        | "fmul_fast"
-        | "forget"
-        | "fsub_fast"
-        | "is_val_statically_known"
-        | "likely"
-        | "log10f32"
-        | "log10f64"
-        | "log2f32"
-        | "log2f64"
-        | "logf32"
-        | "logf64"
-        | "maxnumf32"
-        | "maxnumf64"
-        | "min_align_of"
-        | "min_align_of_val"
-        | "minnumf32"
-        | "minnumf64"
-        | "mul_with_overflow"
-        | "nearbyintf32"
-        | "nearbyintf64"
-        | "needs_drop"
-        | "powf32"
-        | "powf64"
-        | "powif32"
-        | "powif64"
-        | "pref_align_of"
-        | "raw_eq"
-        | "rintf32"
-        | "rintf64"
-        | "rotate_left"
-        | "rotate_right"
-        | "roundf32"
-        | "roundf64"
-        | "saturating_add"
-        | "saturating_sub"
-        | "sinf32"
-        | "sinf64"
-        | "sqrtf32"
-        | "sqrtf64"
-        | "sub_with_overflow"
-        | "truncf32"
-        | "truncf64"
-        | "type_id"
-        | "type_name"
-        | "unchecked_div"
-        | "unchecked_rem"
-        | "unlikely"
-        | "vtable_size"
-        | "vtable_align"
-        | "wrapping_add"
-        | "wrapping_mul"
-        | "wrapping_sub" => {
+fn can_skip_intrinsic(intrinsic: Intrinsic) -> bool {
+    match intrinsic {
+        Intrinsic::AddWithOverflow
+        | Intrinsic::ArithOffset
+        | Intrinsic::AssertInhabited
+        | Intrinsic::AssertMemUninitializedValid
+        | Intrinsic::AssertZeroValid
+        | Intrinsic::Assume
+        | Intrinsic::Bitreverse
+        | Intrinsic::BlackBox
+        | Intrinsic::Breakpoint
+        | Intrinsic::Bswap
+        | Intrinsic::CeilF32
+        | Intrinsic::CeilF64
+        | Intrinsic::CopySignF32
+        | Intrinsic::CopySignF64
+        | Intrinsic::CosF32
+        | Intrinsic::CosF64
+        | Intrinsic::Ctlz
+        | Intrinsic::CtlzNonZero
+        | Intrinsic::Ctpop
+        | Intrinsic::Cttz
+        | Intrinsic::CttzNonZero
+        | Intrinsic::DiscriminantValue
+        | Intrinsic::ExactDiv
+        | Intrinsic::Exp2F32
+        | Intrinsic::Exp2F64
+        | Intrinsic::ExpF32
+        | Intrinsic::ExpF64
+        | Intrinsic::FabsF32
+        | Intrinsic::FabsF64
+        | Intrinsic::FaddFast
+        | Intrinsic::FdivFast
+        | Intrinsic::FloorF32
+        | Intrinsic::FloorF64
+        | Intrinsic::FmafF32
+        | Intrinsic::FmafF64
+        | Intrinsic::FmulFast
+        | Intrinsic::Forget
+        | Intrinsic::FsubFast
+        | Intrinsic::IsValStaticallyKnown
+        | Intrinsic::Likely
+        | Intrinsic::Log10F32
+        | Intrinsic::Log10F64
+        | Intrinsic::Log2F32
+        | Intrinsic::Log2F64
+        | Intrinsic::LogF32
+        | Intrinsic::LogF64
+        | Intrinsic::MaxNumF32
+        | Intrinsic::MaxNumF64
+        | Intrinsic::MinAlignOf
+        | Intrinsic::MinAlignOfVal
+        | Intrinsic::MinNumF32
+        | Intrinsic::MinNumF64
+        | Intrinsic::MulWithOverflow
+        | Intrinsic::NearbyIntF32
+        | Intrinsic::NearbyIntF64
+        | Intrinsic::NeedsDrop
+        | Intrinsic::PowF32
+        | Intrinsic::PowF64
+        | Intrinsic::PowIF32
+        | Intrinsic::PowIF64
+        | Intrinsic::PrefAlignOf
+        | Intrinsic::RawEq
+        | Intrinsic::RintF32
+        | Intrinsic::RintF64
+        | Intrinsic::RotateLeft
+        | Intrinsic::RotateRight
+        | Intrinsic::RoundF32
+        | Intrinsic::RoundF64
+        | Intrinsic::SaturatingAdd
+        | Intrinsic::SaturatingSub
+        | Intrinsic::SinF32
+        | Intrinsic::SinF64
+        | Intrinsic::SqrtF32
+        | Intrinsic::SqrtF64
+        | Intrinsic::SubWithOverflow
+        | Intrinsic::TruncF32
+        | Intrinsic::TruncF64
+        | Intrinsic::TypeId
+        | Intrinsic::TypeName
+        | Intrinsic::UncheckedDiv
+        | Intrinsic::UncheckedRem
+        | Intrinsic::Unlikely
+        | Intrinsic::VtableSize
+        | Intrinsic::VtableAlign
+        | Intrinsic::WrappingAdd
+        | Intrinsic::WrappingMul
+        | Intrinsic::WrappingSub => {
             /* Intrinsics that do not interact with memory initialization. */
             true
         }
-        "ptr_guaranteed_cmp" | "ptr_offset_from" | "ptr_offset_from_unsigned" | "size_of_val" => {
+        Intrinsic::PtrGuaranteedCmp
+        | Intrinsic::PtrOffsetFrom
+        | Intrinsic::PtrOffsetFromUnsigned
+        | Intrinsic::SizeOfVal => {
             /* AFAICS from the documentation, none of those require the pointer arguments to be actually initialized. */
             true
         }
-        name if name.starts_with("simd") => {
+        Intrinsic::SimdAdd
+        | Intrinsic::SimdAnd
+        | Intrinsic::SimdDiv
+        | Intrinsic::SimdRem
+        | Intrinsic::SimdEq
+        | Intrinsic::SimdExtract
+        | Intrinsic::SimdGe
+        | Intrinsic::SimdGt
+        | Intrinsic::SimdInsert
+        | Intrinsic::SimdLe
+        | Intrinsic::SimdLt
+        | Intrinsic::SimdMul
+        | Intrinsic::SimdNe
+        | Intrinsic::SimdOr
+        | Intrinsic::SimdShl
+        | Intrinsic::SimdShr
+        | Intrinsic::SimdShuffle(_)
+        | Intrinsic::SimdSub
+        | Intrinsic::SimdXor => {
             /* SIMD operations */
             true
         }
-        name if name.starts_with("atomic_fence")
-            || name.starts_with("atomic_singlethreadfence") =>
-        {
+        Intrinsic::AtomicFence(_) | Intrinsic::AtomicSingleThreadFence(_) => {
             /* Atomic fences */
             true
-        }
-        "copy_nonoverlapping" => unreachable!(
-            "Expected `core::intrinsics::unreachable` to be handled by `StatementKind::CopyNonOverlapping`"
-        ),
-        "offset" => unreachable!(
-            "Expected `core::intrinsics::unreachable` to be handled by `BinOp::OffSet`"
-        ),
-        "unreachable" => unreachable!(
-            "Expected `std::intrinsics::unreachable` to be handled by `TerminatorKind::Unreachable`"
-        ),
-        "transmute" | "transmute_copy" | "unchecked_add" | "unchecked_mul" | "unchecked_shl"
-        | "size_of" | "unchecked_shr" | "unchecked_sub" => {
-            unreachable!("Expected intrinsic to be lowered before codegen")
-        }
-        "catch_unwind" => {
-            unimplemented!("")
-        }
-        "retag_box_to_raw" => {
-            unreachable!("This was removed in the latest Rust version.")
         }
         _ => {
             /* Everything else */
