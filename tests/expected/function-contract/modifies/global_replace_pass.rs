@@ -5,7 +5,7 @@
 static mut PTR: u32 = 0;
 
 #[kani::modifies(&mut PTR)]
-#[kani::ensures(PTR == src)]
+#[kani::ensures(|result| PTR == src)]
 unsafe fn modify(src: u32) {
     PTR = src;
 }

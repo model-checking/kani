@@ -8,6 +8,7 @@
 name: Release Bundle
 on:
   pull_request:
+  merge_group:
   push:
     branches:
       - 'main'
@@ -16,6 +17,7 @@ on:
 
 env:
   RUST_BACKTRACE: 1
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
 
 jobs:
   build_bundle_macos:
@@ -43,6 +45,32 @@ jobs:
         with:
           os: macos-13
           arch: x86_64-apple-darwin
+
+  build_bundle_macos_aarch64:
+    name: BuildBundle-MacOs-ARM
+    runs-on: macos-14
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.bundle.outputs.version }}
+      bundle: ${{ steps.bundle.outputs.bundle }}
+      package: ${{ steps.bundle.outputs.package }}
+      crate_version: ${{ steps.bundle.outputs.crate_version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Kani Dependencies
+        uses: ./.github/actions/setup
+        with:
+          os: macos-14
+
+      - name: Build bundle
+        id: bundle
+        uses: ./.github/actions/build-bundle
+        with:
+          os: macos-14
+          arch: aarch64-apple-darwin
 
   build_bundle_linux:
     name: BuildBundle-Linux
@@ -77,12 +105,16 @@ jobs:
           apt-get install -y software-properties-common apt-utils
           add-apt-repository ppa:git-core/ppa
           add-apt-repository ppa:deadsnakes/ppa
+          add-apt-repository ppa:ubuntu-toolchain-r/test
           apt-get update
           apt-get install -y \
-            build-essential bash-completion curl lsb-release sudo g++ gcc flex \
+            build-essential bash-completion curl lsb-release sudo g++-9 gcc-9 flex \
             bison make patch git python3.7 python3.7-dev python3.7-distutils
+          update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-9 110 \
+            --slave /usr/bin/g++ g++ /usr/bin/g++-9
+          ln -sf cpp-9 /usr/bin/cpp
           update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.7 1
-          curl -s https://bootstrap.pypa.io/get-pip.py -o get-pip.py
+          curl -s https://bootstrap.pypa.io/pip/3.7/get-pip.py -o get-pip.py
           python3 get-pip.py --force-reinstall
           rm get-pip.py
 
@@ -180,7 +212,7 @@ jobs:
 
       - name: Run cargo-kani tests after moving
         run: |
-          for dir in function multiple-harnesses verbose; do
+          for dir in supported-lib-types/rlib multiple-harnesses verbose; do
             >&2 echo "Running test $dir"
             pushd ${{ github.workspace }}/../post-setup-tests/cargo-ui/$dir
             cargo kani
@@ -296,7 +328,7 @@ jobs:
     if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/kani-') }}
     name: Release
     runs-on: ubuntu-20.04
-    needs: [build_bundle_macos, build_bundle_linux, test_bundle, test_alt_platform]
+    needs: [build_bundle_macos, build_bundle_macos_aarch64, build_bundle_linux, test_bundle, test_alt_platform]
     permissions:
       contents: write
     outputs:
@@ -328,6 +360,11 @@ jobs:
         with:
           name: ${{ needs.build_bundle_macos.outputs.bundle }}
 
+      - name: Download MacOS ARM bundle
+        uses: actions/download-artifact@v3
+        with:
+          name: ${{ needs.build_bundle_macos_aarch64.outputs.bundle }}
+
       - name: Download Linux bundle
         uses: actions/download-artifact@v3
         with:
@@ -341,7 +378,7 @@ jobs:
         with:
           name: kani-${{ env.TAG_VERSION }}
           tag: kani-${{ env.TAG_VERSION }}
-          artifacts: "${{ needs.build_bundle_linux.outputs.bundle }},${{ needs.build_bundle_macos.outputs.bundle }}"
+          artifacts: "${{ needs.build_bundle_linux.outputs.bundle }},${{ needs.build_bundle_macos.outputs.bundle }},${{ needs.build_bundle_macos_aarch64.outputs.bundle }}"
           body: |
             Kani Rust verifier release bundle version ${{ env.TAG_VERSION }}.
           draft: true
@@ -384,7 +421,7 @@ jobs:
           OWNER: '${{ github.repository_owner }}'
 
       - name: Build and push
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: scripts/ci/Dockerfile.bundle-release-20-04

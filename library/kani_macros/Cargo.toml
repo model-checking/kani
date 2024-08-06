@@ -3,7 +3,7 @@
 
 [package]
 name = "kani_macros"
-version = "0.51.0"
+version = "0.53.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 publish = false
@@ -15,8 +15,11 @@ proc-macro = true
 proc-macro2 = "1.0"
 proc-macro-error = "1.0.4"
 quote = "1.0.20"
-syn = { version = "2.0.18", features = ["full", "visit-mut", "visit"] }
+syn = { version = "2.0.18", features = ["full", "visit-mut", "visit", "extra-traits"] }
 
 [package.metadata.rust-analyzer]
 # This package uses rustc crates.
-rustc_private=true
+rustc_private = true
+
+[features]
+no_core = []

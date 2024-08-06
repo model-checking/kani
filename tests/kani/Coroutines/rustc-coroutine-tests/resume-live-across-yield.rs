@@ -9,6 +9,7 @@
 // run-pass
 
 #![feature(coroutines, coroutine_trait)]
+#![feature(stmt_expr_attributes)]
 
 use std::ops::{Coroutine, CoroutineState};
 use std::pin::Pin;
@@ -28,7 +29,8 @@ impl Drop for Dropper {
 #[kani::proof]
 #[kani::unwind(16)]
 fn main() {
-    let mut g = |mut _d| {
+    let mut g = #[coroutine]
+    |mut _d| {
         _d = yield;
         _d
     };

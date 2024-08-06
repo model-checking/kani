@@ -82,13 +82,7 @@ impl KaniSession {
     /// Determine which symbols Kani should codegen (i.e. by slicing away symbols
     /// that are considered unreachable.)
     pub fn reachability_mode(&self) -> ReachabilityMode {
-        if self.codegen_tests {
-            ReachabilityMode::Tests
-        } else if self.args.function.is_some() {
-            ReachabilityMode::AllPubFns
-        } else {
-            ReachabilityMode::ProofHarnesses
-        }
+        if self.codegen_tests { ReachabilityMode::Tests } else { ReachabilityMode::ProofHarnesses }
     }
 }
 
@@ -97,8 +91,6 @@ impl KaniSession {
 pub enum ReachabilityMode {
     #[strum(to_string = "harnesses")]
     ProofHarnesses,
-    #[strum(to_string = "pub_fns")]
-    AllPubFns,
     Tests,
 }
 
@@ -278,6 +270,11 @@ pub fn lib_folder() -> Result<PathBuf> {
 /// Return the path for the folder where the pre-compiled rust libraries are located.
 pub fn lib_playback_folder() -> Result<PathBuf> {
     Ok(base_folder()?.join("playback/lib"))
+}
+
+/// Return the path for the folder where the pre-compiled rust libraries with no_core.
+pub fn lib_no_core_folder() -> Result<PathBuf> {
+    Ok(base_folder()?.join("no_core/lib"))
 }
 
 /// Return the base folder for the entire kani installation.

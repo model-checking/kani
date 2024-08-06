@@ -1,0 +1,52 @@
+std::ptr::read::<std::mem::MaybeUninit<u8>>.assertion.1\
+	 - Status: FAILURE\
+	 - Description: "Kani currently doesn't support checking memory initialization for pointers to `std::mem::MaybeUninit<u8>."
+
+std::ptr::read::<std::mem::MaybeUninit<u8>>.assertion.2\
+	 - Status: FAILURE\
+	 - Description: "Kani currently doesn't support checking memory initialization for pointers to `std::mem::MaybeUninit<u8>."
+
+std::ptr::write::<std::mem::MaybeUninit<u8>>.assertion.1\
+	 - Status: FAILURE\
+	 - Description: "Kani currently doesn't support checking memory initialization for pointers to `std::mem::MaybeUninit<u8>."
+
+std::ptr::write::<std::mem::MaybeUninit<u8>>.assertion.2\
+	 - Status: FAILURE\
+	 - Description: "Kani currently doesn't support checking memory initialization for pointers to `std::mem::MaybeUninit<u8>."
+
+check_typed_swap.assertion.1\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `*mut u8`"
+
+check_typed_swap.assertion.2\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `*mut u8`"
+
+check_volatile_load.assertion.1\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `*const u8`"
+
+check_compare_bytes.assertion.1\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `*const u8`"
+
+check_compare_bytes.assertion.2\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `*const u8`"
+
+std::intrinsics::copy::<u8>.assertion.1\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `*const u8`"
+
+std::intrinsics::copy_nonoverlapping::<u8>.assertion.1\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `*const u8`"
+
+Summary:
+Verification failed for - check_typed_swap_safe
+Verification failed for - check_typed_swap
+Verification failed for - check_volatile_load
+Verification failed for - check_compare_bytes
+Verification failed for - check_copy
+Verification failed for - check_copy_nonoverlapping
+Complete - 5 successfully verified harnesses, 6 failures, 11 total.

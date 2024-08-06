@@ -3,6 +3,7 @@
 name: Kani CI
 on:
   pull_request:
+  merge_group:
   push:
     # Not just any push, as that includes tags.
     # We don't want to re-trigger this workflow when tagging an existing commit.
@@ -17,7 +18,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macos-13, ubuntu-20.04, ubuntu-22.04]
+        os: [macos-13, ubuntu-20.04, ubuntu-22.04, macos-14]
     steps:
       - name: Checkout Kani
         uses: actions/checkout@v4

@@ -11,6 +11,7 @@
 // run-pass
 
 #![feature(coroutines, coroutine_trait)]
+#![feature(stmt_expr_attributes)]
 
 use std::ops::{Coroutine, CoroutineState};
 use std::pin::Pin;
@@ -22,7 +23,8 @@ fn take<T>(_: T) {}
 #[kani::proof]
 fn main() {
     let x = false;
-    let mut gen1 = || {
+    let mut gen1 = #[coroutine]
+    || {
         yield;
         take(x);
     };

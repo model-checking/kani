@@ -4,8 +4,8 @@
 //! Check that Kani can identify UB when using niche attribute for a custom operation.
 #![feature(rustc_attrs)]
 
-use std::mem;
 use std::mem::size_of;
+use std::{mem, ptr};
 
 /// A possible implementation for a system of rating that defines niche.
 /// A Rating represents the number of stars of a given product (1..=5).
@@ -76,6 +76,25 @@ pub fn check_invalid_transmute() {
 pub fn check_invalid_transmute_copy() {
     let any: u8 = kani::any();
     let _rating: Rating = unsafe { mem::transmute_copy(&any) };
+}
+
+/// This code does not trigger UB, and verification should succeed.
+///
+/// FIX-ME: This is not supported today, and we fail due to unsupported check.
+#[kani::proof]
+#[kani::should_panic]
+pub fn check_copy_nonoverlap() {
+    let stars = kani::any_where(|s: &u8| *s == 0 || *s > 5);
+    let mut rating: Rating = kani::any();
+    unsafe { ptr::copy_nonoverlapping(&stars as *const _ as *const Rating, &mut rating, 1) };
+}
+
+#[kani::proof]
+#[kani::should_panic]
+pub fn check_copy_nonoverlap_ub() {
+    let any: u8 = kani::any();
+    let mut rating: Rating = kani::any();
+    unsafe { ptr::copy_nonoverlapping(&any as *const _ as *const Rating, &mut rating, 1) };
 }
 
 #[kani::proof]
