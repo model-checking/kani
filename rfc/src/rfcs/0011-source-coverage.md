@@ -406,9 +406,9 @@ counters which have been dropped. Matching the `CoverageKind` information with
 that of the counters in the coverage mappings allows us to retrieve the code
 region for any counter.
 
-Using all this data, we generate a coverage check that maintains the essence of
-the coverage checks described in the
-[RFC for line coverage](https://model-checking.github.io/kani/rfc/rfcs/0008-line-coverage.html):
+Using all this data, for each coverage statement[^note-expression-integration] we generate a coverage check
+that maintains the essence of the coverage checks described in the [RFC for line
+coverage](https://model-checking.github.io/kani/rfc/rfcs/0008-line-coverage.html):
 
 > Coverage checks are a new class of checks similar to [`cover` checks](https://model-checking.github.io/kani/rfc/rfcs/0003-cover-statement.html).
 > The main difference is that users cannot directly interact with coverage checks (i.e., they cannot add or remove them manually).
@@ -458,6 +458,12 @@ others from interfacing with unstable types (e.g., the `Coverage` type
 [here](https://github.com/rust-lang/rust/blob/f7eefec4e03f5ba723fbc04d94dbc1203b7c9bff/compiler/stable_mir/src/mir/body.rs#L389)).
 Nonetheless, this can be worked around by serializing its contents and parsing
 it back into an internal data type.
+
+[^note-expression-integration]: We could follow an alternative approach where we
+do not instrument each coverage statement, but only those that correspond to
+physical counters. Unfortunately, doing so would lead to incorrect coverage
+results due to the arithmetic nature of expression-based counters. We elaborate
+on this topic in the later parts of this document.
 
 ### The default coverage workflow
 
