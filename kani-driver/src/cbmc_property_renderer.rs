@@ -826,7 +826,7 @@ fn annotate_properties_with_reach_results(
         let check_id_str = format!("[{check_id}]");
         // Get the status and insert into `reach_map`
         let status = reach_check.status;
-        reach_map.entry(check_id_str).or_insert(Vec::new()).push(status);
+        reach_map.entry(check_id_str).or_default().push(status);
     }
 
     for prop in properties.iter_mut() {
