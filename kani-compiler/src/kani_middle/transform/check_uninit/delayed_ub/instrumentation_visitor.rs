@@ -146,6 +146,8 @@ impl<'a, 'tcx> MirVisitor for InstrumentationVisitor<'a, 'tcx> {
         // If `val_1` is a legitimate instrumentation target, we would get-instrument an instruction
         // that reads from `*reference`, but that could mean that `val_2` is checked, too. Hence,
         // if we don't set-instrument `val_2` we will get a false-positive.
+        //
+        // See `tests/expected/uninit/delayed-ub-overapprox.rs` for a more specific example.
         let needs_set = {
             let mut has_common_ancestor = false;
             let mut self_ancestors =
