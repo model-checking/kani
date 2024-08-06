@@ -2,6 +2,8 @@ Status: UNREACHABLE\
 Description: "cover location"\
 in function my_function
 
- ** 0 of 1 cover properties satisfied (1 unreachable)
+Status: UNREACHABLE\
+Description: "cover location"\
+in function test
 
 VERIFICATION:- FAILED
