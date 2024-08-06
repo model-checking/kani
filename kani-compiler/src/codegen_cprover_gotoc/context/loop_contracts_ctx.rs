@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use crate::codegen_cprover_gotoc::codegen::bb_label;
-use cbmc::goto_program::{CIntType, Expr, Stmt, StmtBody, Type};
+use cbmc::goto_program::{CIntType, Expr, Location, Stmt, StmtBody, Type};
 use stable_mir::mir::BasicBlockIdx;
 use std::collections::HashSet;
 
@@ -73,7 +73,7 @@ impl LoopContractsCtx {
 impl LoopContractsCtx {
     /// Returns the current block as a statement expression.
     /// Exit loop latch block.
-    pub fn extract_block(&mut self) -> Expr {
+    pub fn extract_block(&mut self, loc: Location) -> Expr {
         assert!(self.loop_invariant_lhs.is_some());
         self.stage = LoopContractsStage::UserCode;
         self.invariants_block.push(self.loop_invariant_lhs.as_ref().unwrap().clone());
@@ -85,6 +85,7 @@ impl LoopContractsCtx {
         Expr::statement_expression(
             std::mem::take(&mut self.invariants_block),
             Type::CInteger(CIntType::Bool),
+            loc,
         )
         .cast_to(Type::bool())
         .and(Expr::bool_true())

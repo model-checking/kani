@@ -39,6 +39,15 @@ impl KaniSession {
 
         self.instrument_contracts(harness, output)?;
 
+        if self
+            .args
+            .common_args
+            .unstable_features
+            .contains(kani_metadata::UnstableFeature::LoopContracts)
+        {
+            self.instrument_loop_contracts(output)?;
+        }
+
         if self.args.checks.undefined_function_on() {
             self.add_library(output)?;
             self.undefined_functions(output)?;
@@ -180,6 +189,18 @@ impl KaniSession {
             args.push("--nondet-static-exclude".into());
             args.push(tracker.as_str().into());
         }
+        self.call_goto_instrument(&args)
+    }
+
+    /// Apply annotated loop contracts.
+    pub fn instrument_loop_contracts(&self, file: &Path) -> Result<()> {
+        let args: Vec<OsString> = vec![
+            "--apply-loop-contracts".into(),
+            "--loop-contracts-no-unwind".into(),
+            "--disable-loop-contracts-side-effect-check".into(),
+            file.into(),
+            file.into(),
+        ];
         self.call_goto_instrument(&args)
     }
 

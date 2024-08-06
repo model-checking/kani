@@ -186,7 +186,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 {
                     Stmt::goto_with_loop_inv(
                         bb_label(*target),
-                        self.loop_contracts_ctx.extract_block(),
+                        self.loop_contracts_ctx.extract_block(loc),
                         loc,
                     )
                 } else {
