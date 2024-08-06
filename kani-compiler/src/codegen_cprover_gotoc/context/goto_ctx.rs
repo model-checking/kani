@@ -139,17 +139,6 @@ impl<'tcx> GotocCtx<'tcx> {
         sym
     }
 
-    // Generate a Symbol Expression representing a function variable from the MIR
-    pub fn gen_function_local_variable(
-        &mut self,
-        c: u64,
-        fname: &str,
-        t: Type,
-        loc: Location,
-    ) -> Symbol {
-        self.gen_stack_variable(c, fname, "var", t, loc)
-    }
-
     /// Given a counter `c` a function name `fname, and a prefix `prefix`, generates a new function local variable
     /// It is an error to reuse an existing `c`, `fname` `prefix` tuple.
     fn gen_stack_variable(
