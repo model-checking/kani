@@ -398,14 +398,60 @@ uniquely identify the counter within a given function. For example,
 function.
 
 Unfortunately, the `CoverageKind` information does not tell us anything about
-the code region that the counter covers. However, the code region information
-can be pulled from the coverage mappings included in the `FunctionCoverageInfo`
-that is attached to the (internal) function body. Note that the coverage
-mappings includes information about all the coverage counters in a function,
-even for counters which have been dropped. Matching the `CoverageKind`
-information with that of the counters in the coverage mappings allows us to
-retrieve the code region for any counter.
+the code region that the counter covers. However, data about the code region can
+be pulled from the coverage mappings included in the `FunctionCoverageInfo` that
+is attached to the (internal) function body. Note that the coverage mappings
+includes information about all the coverage counters in a function, even for
+counters which have been dropped. Matching the `CoverageKind` information with
+that of the counters in the coverage mappings allows us to retrieve the code
+region for any counter.
 
+Using all this data, we generate a coverage check that maintains the essence of
+the coverage checks described in the
+[RFC for line coverage](https://model-checking.github.io/kani/rfc/rfcs/0008-line-coverage.html):
+
+> Coverage checks are a new class of checks similar to [`cover` checks](https://model-checking.github.io/kani/rfc/rfcs/0003-cover-statement.html).
+> The main difference is that users cannot directly interact with coverage checks (i.e., they cannot add or remove them manually).
+> Coverage checks are encoded as an `assert(false)` statement (to test reachability) with a fixed description.
+> In addition, coverage checks are:
+>  * Hidden from verification results.
+>  * Postprocessed to produce coverage results.
+
+Therefore, the last step is to postprocess the results from coverage checks to
+produce coverage results. This is not too complicated to do since the checks
+already include the counter information (type + ID) and the function name in
+the check's description. If the span of the code region is also included
+(this is what [#3119](https://github.com/model-checking/kani/pull/3119) is
+currently doing), we can directly generate a primitive output like this:
+
+```
+<file_path> (<function_name>)
+ * <region_start> - <region_end> <status>
+ * ...
+ * <region_start> - <region_end> <status>
+```
+
+For example, for the test case in
+[#3119](https://github.com/model-checking/kani/pull/3119) we report this:
+
+```
+src/main.rs (main)
+ * 14:1 - 19:2 COVERED
+
+src/main.rs (test_cov)
+ * 5:1 - 6:15 COVERED
+ * 6:19 - 6:28 UNCOVERED
+ * 7:9 - 7:13 COVERED
+ * 9:9 - 9:14 UNCOVERED
+ * 11:1 - 11:2 COVERED
+```
+
+> **NOTE: This section has been written according to the implementation in
+> [#3119](https://github.com/model-checking/kani/pull/3119), which currently
+> produces a text-based output like the one shown above. There is ongoing work to
+> store the coverage mappings in a separate file (as described in the next
+> section), which would save us the need to attach code region data to the
+> coverage checks.**
 
 [^note-opaque-coverage]: The Rust compiler uses the `Opaque` type to prevent
 others from interfacing with unstable types (e.g., the `Coverage` type
