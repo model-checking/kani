@@ -10,6 +10,8 @@ publish = false
 
 [dependencies]
 kani_macros = { path = "../kani_macros" }
+kani_core = { path = "../kani_core" }
 
 [features]
 concrete_playback = []
+no_core=["kani_macros/no_core"]
