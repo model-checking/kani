@@ -13,7 +13,7 @@ unsafe fn small_slice_eq(x: &[u8], y: &[u8]) -> bool {
     unsafe {
         let (mut px, mut py) = (x.as_ptr(), y.as_ptr());
         let (pxend, pyend) = (px.add(x.len() - 4), py.add(y.len() - 4));
-        #[kani::loop_invariant( px as isize >= x.as_ptr() as isize 
+        #[kani::loop_invariant( px as isize >= x.as_ptr() as isize
         && py as isize >= y.as_ptr() as isize
         && px as isize - x.as_ptr() as isize == (py as isize - y.as_ptr() as isize))]
         while px < pxend {
@@ -24,17 +24,18 @@ unsafe fn small_slice_eq(x: &[u8], y: &[u8]) -> bool {
             }
             px = px.add(4);
             py = py.add(4);
-        };
+        }
         let vx = (pxend as *const u32).read_unaligned();
         let vy = (pyend as *const u32).read_unaligned();
         vx == vy
     }
 }
+
 #[kani::proof]
 fn main() {
-    let mut a = [1;2000];
-    let mut b = [1;2000];
-    unsafe{
-    small_slice_eq(&mut a, &mut b);
+    let mut a = [1; 2000];
+    let mut b = [1; 2000];
+    unsafe {
+        small_slice_eq(&mut a, &mut b);
     }
 }

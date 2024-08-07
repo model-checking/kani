@@ -63,8 +63,7 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
             note = "for now, loop contracts is only supported for while-loops.";
         ),
     }
-
     quote!(
-        #loop_stmt;)
+        {#loop_stmt})
     .into()
 }
