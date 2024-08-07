@@ -27,7 +27,7 @@ use anyhow::Result;
 use console::style;
 use pathdiff::diff_paths;
 use rustc_demangle::demangle;
-use serde::{Deserialize, Deserializer};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use std::env;
 use std::io::{BufRead, BufReader};
@@ -321,7 +321,7 @@ impl std::fmt::Display for TraceData {
     }
 }
 
-#[derive(Copy, Clone, Debug, Deserialize, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum CheckStatus {
     Failure,

@@ -4,12 +4,12 @@
 use crate::args::OutputFormat;
 use crate::call_cbmc::{FailedProperties, VerificationStatus};
 use crate::cbmc_output_parser::{CheckStatus, ParserItem, Property, TraceItem};
+use crate::coverage::cov_results::{fmt_coverage_results, CoverageResults};
 use console::style;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use rustc_demangle::demangle;
-use std::collections::{BTreeMap, HashMap};
-use strum_macros::{AsRefStr, Display};
+use std::collections::HashMap;
 
 type CbmcAltDescriptions = HashMap<&'static str, Vec<(&'static str, Option<&'static str>)>>;
 
@@ -149,15 +149,6 @@ static CBMC_ALT_DESCRIPTIONS: Lazy<CbmcAltDescriptions> = Lazy::new(|| {
     // map.insert("precondition_instance": vec![]);
     map
 });
-
-#[derive(PartialEq, Eq, AsRefStr, Clone, Copy, Display)]
-#[strum(serialize_all = "UPPERCASE")]
-// The status of coverage reported by Kani
-enum CoverageStatus {
-    Full,
-    Partial,
-    None,
-}
 
 const UNSUPPORTED_CONSTRUCT_DESC: &str = "is not currently supported by Kani";
 const UNWINDING_ASSERT_DESC: &str = "unwinding assertion loop";
@@ -435,66 +426,28 @@ pub fn format_result(
 /// results
 pub fn format_coverage(
     properties: &[Property],
+    cov_results: &CoverageResults,
     status: VerificationStatus,
     should_panic: bool,
     failed_properties: FailedProperties,
     show_checks: bool,
 ) -> String {
-    let (coverage_checks, non_coverage_checks): (Vec<Property>, Vec<Property>) =
+    let (_coverage_checks, non_coverage_checks): (Vec<Property>, Vec<Property>) =
         properties.iter().cloned().partition(|x| x.property_class() == "code_coverage");
 
     let verification_output =
         format_result(&non_coverage_checks, status, should_panic, failed_properties, show_checks);
-    let coverage_output = format_result_coverage(&coverage_checks);
-    let result = format!("{}\n{}", verification_output, coverage_output);
+    let new_coverage_output = format_result_new_coverage(cov_results);
+    let result = format!("{}\n{}", verification_output, new_coverage_output);
 
     result
 }
 
-/// Generate coverage result from all coverage properties (i.e., checks with `code_coverage` property class).
-/// Loops through each of the checks with the `code_coverage` property class on a line and gives:
-///  - A status `FULL` if all checks pertaining to a line number are `COVERED`
-///  - A status `NONE` if all checks related to a line are `UNCOVERED`
-///  - Otherwise (i.e., if the line contains both) it reports `PARTIAL`.
-///
-/// Used when the user requests coverage information with `--coverage`.
-/// Output is tested through the `coverage-based` testing suite, not the regular
-/// `expected` suite.
-fn format_result_coverage(properties: &[Property]) -> String {
+fn format_result_new_coverage(cov_results: &CoverageResults) -> String {
     let mut formatted_output = String::new();
-    formatted_output.push_str("\nCoverage Results:\n");
+    formatted_output.push_str("\nCoverage Results (NEW):\n");
 
-    let mut coverage_results: BTreeMap<String, BTreeMap<usize, CoverageStatus>> =
-        BTreeMap::default();
-    for prop in properties {
-        let src = prop.source_location.clone();
-        let file_entries = coverage_results.entry(src.file.unwrap()).or_default();
-        let check_status = if prop.status == CheckStatus::Covered {
-            CoverageStatus::Full
-        } else {
-            CoverageStatus::None
-        };
-
-        // Create Map<file, Map<line, status>>
-        file_entries
-            .entry(src.line.unwrap().parse().unwrap())
-            .and_modify(|line_status| {
-                if *line_status != check_status {
-                    *line_status = CoverageStatus::Partial
-                }
-            })
-            .or_insert(check_status);
-    }
-
-    // Create formatted string that is returned to the user as output
-    for (file, checks) in coverage_results.iter() {
-        for (line_number, coverage_status) in checks {
-            formatted_output.push_str(&format!("{}, {}, {}\n", file, line_number, coverage_status));
-        }
-        formatted_output.push('\n');
-    }
-
-    formatted_output
+    fmt_coverage_results(&cov_results).expect("error: couldn't format coverage results")
 }
 
 /// Attempts to build a message for a failed property with as much detailed

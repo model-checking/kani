@@ -206,7 +206,7 @@ impl KaniSession {
         })
     }
 
-    fn cargo_metadata(&self, build_target: &str) -> Result<Metadata> {
+    pub fn cargo_metadata(&self, build_target: &str) -> Result<Metadata> {
         let mut cmd = MetadataCommand::new();
 
         // restrict metadata command to host platform. References:
