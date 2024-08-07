@@ -6,3 +6,4 @@
 extern crate kani;
 
 mod boxed;
+mod sync;
