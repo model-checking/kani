@@ -363,7 +363,7 @@ work since they should have been erased after the `InstrumentCoverage` pass.
 
 [^note-physical-counter]: By *physical counter*, we refer to a global program
    variable that is initialized to zero and incremented by one each time that
-   the execution goes through.
+   the execution passes through.
 
 #### Integrating the instrumentation into Kani
 
@@ -523,6 +523,8 @@ In other words, it's not as advanced nor precise as the source-based implementat
 [^note-benchmarks]: Actual performance benchmarks to follow in
    [#3119](https://github.com/model-checking/kani/pull/3119).
 
+### Optimization with coverage-counter expressions
+
 ## Open questions
 
  - Do we want to instrument dependencies by default? Preliminary benchmarking results show a slowdown of 100% and greater.
@@ -534,6 +536,45 @@ In other words, it's not as advanced nor precise as the source-based implementat
 
 ### Integration with LLVM
 
-We don't pursue an integration with the LLVM framework in this RFC.
-We recommend against doing so at this time due to various technical limitations.
-In a future revision, I'll explain these limitations and how we can make steps to overcome them.
+As part of this work, we explored a potential integration with the LLVM
+framework. The idea behind such an integration would essentially involve
+producing coverage results in formats compatible with the LLVM framework (e.g.,
+the `.profraw` format). The main advantage of integrating with the LLVM
+framework in this way is that we would not need a tool like `kani-cov` to
+aggregate coverage results; we could just use LLVM tools such as `llvm-profdata`
+and `llvm-cov` to consume them.
+
+However, at this time we recommend against integrating with LLVM due to these reasons:
+ 1. Generating the instrumented binary used in the [LLVM coverage
+ workflow](#the-llvm-code-coverage-workflow) requires a standard `rustc`
+ compilation with `--cfg kani` in addition to other flags including `-C
+ instrument-coverage`. This is likely to result in compilation errors since the
+ standard `rustc` backend cannot produce code for Kani APIs, for example.
+ 2. Producing the `.profraw` files requires executing the instrumented binary at
+ least once. This would be an issue for Rust projects which assume a particular
+ environment for their execution.
+ 3. There are no stable interfaces to create or modify files in formats
+ compatible with the LLVM framework. Even though the documentation for the [LLVM
+ Code Coverage Mapping Format](https://llvm.org/docs/CoverageMappingFormat.html)
+ is excellent, the easiest way to interact with files on these format is through
+ LLVM tools (e.g.,
+ [`llvm-cov`](https://github.com/llvm/llvm-project/tree/main/llvm/tools/llvm-cov))
+ which bring in many other LLVM dependencies. During our exploration, we
+ attempted to decode and re-encode files in the `.profraw` to set the counter
+ data to the values obtained during verification. To this end, we tried tools
+ like [`llvm-profparser`](https://github.com/xd009642/llvm-profparser/) which
+ can be used as a replacement for `llvm-profdata` and `llvm-cov` but failed to
+ parse coverage files emitted by the Rust compiler (this is also related to the
+ next point). Another crate that we used is
+ [`coverage-dump`](https://github.com/rust-lang/rust/tree/master/src/tools/coverage-dump),
+ a recent tool in the Rust compiler used for testing purposes. `coverage-dump`
+ extracts coverage mappings from LLVM IR assembly files (i.e., human-readable
+ `*.ll` files) but does not work with the binary-encoded formats. Finally, we
+ also built some ad-hoc tooling to perform these modifications but it soon
+ became evident that we would need to develop it further in order to handle any
+ program.
+ 4. LLVM releases a new version approximately every six months. This would
+ likely result in another "toolchain update" problem for Kani in order to
+ provide compatibility with newer LLVM versions. Moreover, the Rust compiler
+ supplies their own version of LLVM tools (`rust-profdata`, `rust-cov`, etc.)
+ which are fully compatible with coverage-related artifacts produced by `rustc`.
