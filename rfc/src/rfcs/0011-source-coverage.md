@@ -283,7 +283,17 @@ format or integrate Kani with LLVM tools as discussed in [Integration with LLVM]
 
 ## Detailed Design
 
-Note: This section is still being worked on. Feel free to ignore it for now.
+In this section, we provide more details on:
+ - The Rust coverage instrumentation and how it can be integrated into
+ Kani to produce source-based code coverage results.
+ - The proposed coverage workflow to be run by default in Kani when the
+   `--coverage` option is used.
+
+This information is mostly intended as a reference for Kani contributors.
+Currently, the Rust coverage instrumentation continues to be developed. Because
+of that, Rust toolchain upgrades may result in breaking changes to our own
+coverage feature. This section should help developers to understand the general
+approach and resolve such issues by themselves.
 
 ### The Rust coverage instrumentation
 
@@ -464,7 +474,7 @@ physical counters. Unfortunately, doing so would lead to incorrect coverage
 results due to the arithmetic nature of expression-based counters. We elaborate
 on this topic in the later parts of this document.
 
-### The default coverage workflow
+### The default coverage workflow in Kani
 
 In this section, we describe the default `--coverage` workflow from a
 developer's point of view. This will hopefully help developers understand how
