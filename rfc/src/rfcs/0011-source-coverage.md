@@ -202,8 +202,8 @@ coverage-related needs. The `cov` subcommand will just call the `kani-cov` tool,
 which is expected to be shipped along the rest of Kani binaries.
 
 We suggest that the subcommand initially offers two options:
- 1. An option to merge the coverage results from one or more files and a source
-    code snapshot[^note-snapshot] into a single file.
+ 1. An option to merge the coverage results from one or more files and coverage
+    mappings[^note-snapshot] into a single file.
  2. An option to produce coverage outputs from coverage results, including summaries
  or coverage reports in human-readable formats (e.g., HTML).
 
@@ -255,9 +255,9 @@ according to the coverage results in `my-coverage.kanicov`.
 [^note-exclude]: Options to exclude certain coverage results (e.g, from the
    standard library) will likely be part of this option.
 
-[^note-snapshot]: Source code snapshots are necessary to produce coverage
-   reports for items that otherwise are unreachable or have been sliced away
-   during the compilation process.
+[^note-snapshot]: Coverage mappings essentially provide a snapshot of the source
+   code reports for items that otherwise are unreachable or have been sliced
+   away during the compilation process.
 
 #### Integration with the Kani VS Code Extension
 
