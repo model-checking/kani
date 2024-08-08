@@ -209,10 +209,8 @@ impl<'a, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'tcx> {
                         self.apply_regular_call_effect(state, instance, args, destination);
                     } else {
                         // Check all of the other intrinsics.
-                        match Intrinsic::from_str(
-                            self.tcx.intrinsic(def_id).unwrap().name.to_string().as_str(),
-                        ) {
-                            intrinsic if is_identity_aliasing_intrinsic(intrinsic) => {
+                        match Intrinsic::from_instance(&rustc_internal::stable(instance)) {
+                            intrinsic if is_identity_aliasing_intrinsic(intrinsic.clone()) => {
                                 // Treat the intrinsic as an aggregate, taking a union of all of the
                                 // arguments' aliases.
                                 let destination_set =

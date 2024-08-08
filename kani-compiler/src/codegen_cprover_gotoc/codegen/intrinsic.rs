@@ -290,7 +290,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }};
         }
 
-        let intrinsic = Intrinsic::from_str(intrinsic_str);
+        let intrinsic = Intrinsic::from_instance(&instance);
 
         match intrinsic {
             Intrinsic::AddWithOverflow => {
@@ -498,8 +498,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 self.codegen_simd_shift_with_distance_check(fargs, intrinsic_str, place, loc)
             }
             Intrinsic::SimdShuffle(stripped) => {
-                assert!(fargs.len() == 3, "`simd_shuffle` had unexpected arguments {fargs:?}");
-                let n: u64 = self.simd_shuffle_length(stripped, farg_types, span);
+                let n: u64 = self.simd_shuffle_length(stripped.as_str(), farg_types, span);
                 self.codegen_intrinsic_simd_shuffle(fargs, place, farg_types, ret_ty, n, span)
             }
             Intrinsic::SimdSub => self.codegen_simd_op_with_overflow(
@@ -556,7 +555,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             // Unimplemented
             Intrinsic::Unimplemented { name, issue_link } => {
-                self.codegen_unimplemented_stmt(name, loc, issue_link)
+                self.codegen_unimplemented_stmt(&name, loc, &issue_link)
             }
         }
     }

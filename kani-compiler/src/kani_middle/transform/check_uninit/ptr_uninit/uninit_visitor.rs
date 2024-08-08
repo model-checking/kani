@@ -185,8 +185,8 @@ impl MirVisitor for CheckUninitVisitor {
                     };
                     match instance.kind {
                         InstanceKind::Intrinsic => {
-                            match Intrinsic::from_str(instance.intrinsic_name().unwrap().as_str()) {
-                                intrinsic_name if can_skip_intrinsic(intrinsic_name) => {
+                            match Intrinsic::from_instance(&instance) {
+                                intrinsic_name if can_skip_intrinsic(intrinsic_name.clone()) => {
                                     /* Intrinsics that can be safely skipped */
                                 }
                                 Intrinsic::AtomicAnd(_)

@@ -104,7 +104,7 @@ impl MirVisitor for InitialTargetVisitor {
         if let TerminatorKind::Call { func, args, .. } = &term.kind {
             let instance = try_resolve_instance(self.body.locals(), func).unwrap();
             if instance.kind == InstanceKind::Intrinsic {
-                match Intrinsic::from_str(instance.intrinsic_name().unwrap().as_str()) {
+                match Intrinsic::from_instance(&instance) {
                     Intrinsic::Copy => {
                         // Here, `dst` is the second argument.
                         self.push_operand(&args[1]);

@@ -3,34 +3,39 @@
 
 //! Single source of truth about which intrinsics we support.
 
+use stable_mir::{
+    mir::{mono::Instance, Mutability},
+    ty::{FloatTy, IntTy, RigidTy, TyKind, UintTy},
+};
+
 // Enumeration of all intrinsics we support right now, with the last option being a catch-all. This
 // way, adding an intrinsic would highlight all places where they are used.
 #[allow(unused)]
-#[derive(Clone, Copy, Debug)]
-pub enum Intrinsic<'a> {
+#[derive(Clone, Debug)]
+pub enum Intrinsic {
     AddWithOverflow,
     ArithOffset,
     AssertInhabited,
     AssertMemUninitializedValid,
     AssertZeroValid,
     Assume,
-    AtomicAnd(&'a str),
-    AtomicCxchg(&'a str),
-    AtomicCxchgWeak(&'a str),
-    AtomicFence(&'a str),
-    AtomicLoad(&'a str),
-    AtomicMax(&'a str),
-    AtomicMin(&'a str),
-    AtomicNand(&'a str),
-    AtomicOr(&'a str),
-    AtomicSingleThreadFence(&'a str),
-    AtomicStore(&'a str),
-    AtomicUmax(&'a str),
-    AtomicUmin(&'a str),
-    AtomicXadd(&'a str),
-    AtomicXchg(&'a str),
-    AtomicXor(&'a str),
-    AtomicXsub(&'a str),
+    AtomicAnd(String),
+    AtomicCxchg(String),
+    AtomicCxchgWeak(String),
+    AtomicFence(String),
+    AtomicLoad(String),
+    AtomicMax(String),
+    AtomicMin(String),
+    AtomicNand(String),
+    AtomicOr(String),
+    AtomicSingleThreadFence(String),
+    AtomicStore(String),
+    AtomicUmax(String),
+    AtomicUmin(String),
+    AtomicXadd(String),
+    AtomicXchg(String),
+    AtomicXor(String),
+    AtomicXsub(String),
     Bitreverse,
     BlackBox,
     Breakpoint,
@@ -119,7 +124,7 @@ pub enum Intrinsic<'a> {
     SimdOr,
     SimdShl,
     SimdShr,
-    SimdShuffle(&'a str),
+    SimdShuffle(String),
     SimdSub,
     SimdXor,
     SizeOfVal,
@@ -146,213 +151,623 @@ pub enum Intrinsic<'a> {
     WrappingMul,
     WrappingSub,
     WriteBytes,
-    Unimplemented { name: &'a str, issue_link: &'a str },
+    Unimplemented { name: String, issue_link: String },
 }
 
-impl<'a> Intrinsic<'a> {
-    pub fn from_str(intrinsic_str: &'a str) -> Self {
-        match intrinsic_str {
-            "add_with_overflow" => Self::AddWithOverflow,
-            "arith_offset" => Self::ArithOffset,
-            "assert_inhabited" => Self::AssertInhabited,
-            "assert_mem_uninitialized_valid" => Self::AssertMemUninitializedValid,
-            "assert_zero_valid" => Self::AssertZeroValid,
-            "assume" => Self::Assume,
+/// Assert that top-level types of a function signature match the given patterns.
+macro_rules! assert_sig_matches {
+    ($sig:expr, $($input_type:pat),* => $output_type:pat) => {
+        let inputs = $sig.inputs();
+        let output = $sig.output();
+        #[allow(unused_mut)]
+        let mut index = 0;
+        $(
+            #[allow(unused_assignments)]
+            {
+                assert!(matches!(inputs[index].kind(), TyKind::RigidTy($input_type)));
+                index += 1;
+            }
+        )*
+        assert!(inputs.len() == index);
+        assert!(matches!(output.kind(), TyKind::RigidTy($output_type)));
+    }
+}
+
+impl Intrinsic {
+    /// Create an intrinsic enum from a given intrinsic instance, shallowly validating the argument types.
+    pub fn from_instance(intrinsic_instance: &Instance) -> Self {
+        let intrinsic_str = intrinsic_instance.intrinsic_name().unwrap();
+        let sig = intrinsic_instance.ty().kind().fn_sig().unwrap().skip_binder();
+        match intrinsic_str.as_str() {
+            "add_with_overflow" => {
+                assert_sig_matches!(sig, _, _ => RigidTy::Tuple(_));
+                Self::AddWithOverflow
+            }
+            "arith_offset" => {
+                assert_sig_matches!(sig,
+                    RigidTy::RawPtr(_, Mutability::Not),
+                    RigidTy::Int(IntTy::Isize)
+                    => RigidTy::RawPtr(_, Mutability::Not));
+                Self::ArithOffset
+            }
+            "assert_inhabited" => {
+                assert_sig_matches!(sig, => RigidTy::Tuple(_));
+                Self::AssertInhabited
+            }
+            "assert_mem_uninitialized_valid" => {
+                assert_sig_matches!(sig, => RigidTy::Tuple(_));
+                Self::AssertMemUninitializedValid
+            }
+            "assert_zero_valid" => {
+                assert_sig_matches!(sig, => RigidTy::Tuple(_));
+                Self::AssertZeroValid
+            }
+            "assume" => {
+                assert_sig_matches!(sig, RigidTy::Bool => RigidTy::Tuple(_));
+                Self::Assume
+            }
             name if name.starts_with("atomic_and") => {
-                Self::AtomicAnd(name.strip_prefix("atomic_and_").unwrap())
+                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
+                Self::AtomicAnd(name.strip_prefix("atomic_and_").unwrap().into())
             }
             name if name.starts_with("atomic_cxchgweak") => {
-                Self::AtomicCxchgWeak(name.strip_prefix("atomic_cxchgweak_").unwrap())
+                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _, _ => RigidTy::Tuple(_));
+                Self::AtomicCxchgWeak(name.strip_prefix("atomic_cxchgweak_").unwrap().into())
             }
             name if name.starts_with("atomic_cxchg") => {
-                Self::AtomicCxchg(name.strip_prefix("atomic_cxchg_").unwrap())
+                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _, _ => RigidTy::Tuple(_));
+                Self::AtomicCxchg(name.strip_prefix("atomic_cxchg_").unwrap().into())
             }
             name if name.starts_with("atomic_fence") => {
-                Self::AtomicFence(name.strip_prefix("atomic_fence_").unwrap())
+                assert_sig_matches!(sig, => RigidTy::Tuple(_));
+                Self::AtomicFence(name.strip_prefix("atomic_fence_").unwrap().into())
             }
             name if name.starts_with("atomic_load") => {
-                Self::AtomicLoad(name.strip_prefix("atomic_load_").unwrap())
+                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Not) => _);
+                Self::AtomicLoad(name.strip_prefix("atomic_load_").unwrap().into())
             }
             name if name.starts_with("atomic_max") => {
-                Self::AtomicMax(name.strip_prefix("atomic_max_").unwrap())
+                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
+                Self::AtomicMax(name.strip_prefix("atomic_max_").unwrap().into())
             }
             name if name.starts_with("atomic_min") => {
-                Self::AtomicMin(name.strip_prefix("atomic_min_").unwrap())
+                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
+                Self::AtomicMin(name.strip_prefix("atomic_min_").unwrap().into())
             }
             name if name.starts_with("atomic_nand") => {
-                Self::AtomicNand(name.strip_prefix("atomic_nand_").unwrap())
+                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
+                Self::AtomicNand(name.strip_prefix("atomic_nand_").unwrap().into())
             }
             name if name.starts_with("atomic_or") => {
-                Self::AtomicOr(name.strip_prefix("atomic_or_").unwrap())
+                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
+                Self::AtomicOr(name.strip_prefix("atomic_or_").unwrap().into())
             }
-            name if name.starts_with("atomic_singlethreadfence") => Self::AtomicSingleThreadFence(
-                name.strip_prefix("atomic_singlethreadfence_").unwrap(),
-            ),
+            name if name.starts_with("atomic_singlethreadfence") => {
+                assert_sig_matches!(sig, => RigidTy::Tuple(_));
+                Self::AtomicSingleThreadFence(
+                    name.strip_prefix("atomic_singlethreadfence_").unwrap().into(),
+                )
+            }
             name if name.starts_with("atomic_store") => {
-                Self::AtomicStore(name.strip_prefix("atomic_store_").unwrap())
+                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => RigidTy::Tuple(_));
+                Self::AtomicStore(name.strip_prefix("atomic_store_").unwrap().into())
             }
             name if name.starts_with("atomic_umax") => {
-                Self::AtomicUmax(name.strip_prefix("atomic_umax_").unwrap())
+                assert_sig_matches!(sig,
+                    RigidTy::RawPtr(_, Mutability::Mut),
+                    _
+                    => _);
+                Self::AtomicUmax(name.strip_prefix("atomic_umax_").unwrap().into())
             }
             name if name.starts_with("atomic_umin") => {
-                Self::AtomicUmin(name.strip_prefix("atomic_umin_").unwrap())
+                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
+                Self::AtomicUmin(name.strip_prefix("atomic_umin_").unwrap().into())
             }
             name if name.starts_with("atomic_xadd") => {
-                Self::AtomicXadd(name.strip_prefix("atomic_xadd_").unwrap())
+                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
+                Self::AtomicXadd(name.strip_prefix("atomic_xadd_").unwrap().into())
             }
             name if name.starts_with("atomic_xchg") => {
-                Self::AtomicXchg(name.strip_prefix("atomic_xchg_").unwrap())
+                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
+                Self::AtomicXchg(name.strip_prefix("atomic_xchg_").unwrap().into())
             }
             name if name.starts_with("atomic_xor") => {
-                Self::AtomicXor(name.strip_prefix("atomic_xor_").unwrap())
+                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
+                Self::AtomicXor(name.strip_prefix("atomic_xor_").unwrap().into())
             }
             name if name.starts_with("atomic_xsub") => {
-                Self::AtomicXsub(name.strip_prefix("atomic_xsub_").unwrap())
+                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
+                Self::AtomicXsub(name.strip_prefix("atomic_xsub_").unwrap().into())
             }
-            "bitreverse" => Self::Bitreverse,
-            "black_box" => Self::BlackBox,
-            "breakpoint" => Self::Breakpoint,
-            "bswap" => Self::Bswap,
-            "caller_location" => Self::Unimplemented {
-                name: intrinsic_str,
-                issue_link: "https://github.com/model-checking/kani/issues/374",
-            },
-            "catch_unwind" => Self::Unimplemented {
-                name: intrinsic_str,
-                issue_link: "https://github.com/model-checking/kani/issues/267",
-            },
-            "ceilf32" => Self::CeilF32,
-            "ceilf64" => Self::CeilF64,
-            "compare_bytes" => Self::CompareBytes,
-            "copy" => Self::Copy,
+            "bitreverse" => {
+                assert_sig_matches!(sig, _ => _);
+                Self::Bitreverse
+            }
+            "black_box" => {
+                assert_sig_matches!(sig, _ => _);
+                Self::BlackBox
+            }
+            "breakpoint" => {
+                assert_sig_matches!(sig, => RigidTy::Tuple(_));
+                Self::Breakpoint
+            }
+            "bswap" => {
+                assert_sig_matches!(sig, _ => _);
+                Self::Bswap
+            }
+            "caller_location" => {
+                assert_sig_matches!(sig, => RigidTy::Ref(_, _, Mutability::Not));
+                Self::Unimplemented {
+                    name: intrinsic_str,
+                    issue_link: "https://github.com/model-checking/kani/issues/374".into(),
+                }
+            }
+            "catch_unwind" => {
+                assert_sig_matches!(sig, RigidTy::FnPtr(_), RigidTy::RawPtr(_, Mutability::Mut), RigidTy::FnPtr(_) => RigidTy::Int(IntTy::I32));
+                Self::Unimplemented {
+                    name: intrinsic_str,
+                    issue_link: "https://github.com/model-checking/kani/issues/267".into(),
+                }
+            }
+            "ceilf32" => {
+                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
+                Self::CeilF32
+            }
+            "ceilf64" => {
+                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
+                Self::CeilF64
+            }
+            "compare_bytes" => {
+                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Not), RigidTy::RawPtr(_, Mutability::Not), RigidTy::Uint(UintTy::Usize) => RigidTy::Int(IntTy::I32));
+                Self::CompareBytes
+            }
+            "copy" => {
+                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Not), RigidTy::RawPtr(_, Mutability::Mut), RigidTy::Uint(UintTy::Usize) => RigidTy::Tuple(_));
+                Self::Copy
+            }
             "copy_nonoverlapping" => unreachable!(
                 "Expected `core::intrinsics::unreachable` to be handled by `StatementKind::CopyNonOverlapping`"
             ),
-            "copysignf32" => Self::CopySignF32,
-            "copysignf64" => Self::CopySignF64,
-            "cosf32" => Self::CosF32,
-            "cosf64" => Self::CosF64,
-            "ctlz" => Self::Ctlz,
-            "ctlz_nonzero" => Self::CtlzNonZero,
-            "ctpop" => Self::Ctpop,
-            "cttz" => Self::Cttz,
-            "cttz_nonzero" => Self::CttzNonZero,
-            "discriminant_value" => Self::DiscriminantValue,
-            "exact_div" => Self::ExactDiv,
-            "exp2f32" => Self::Exp2F32,
-            "exp2f64" => Self::Exp2F64,
-            "expf32" => Self::ExpF32,
-            "expf64" => Self::ExpF64,
-            "fabsf32" => Self::FabsF32,
-            "fabsf64" => Self::FabsF64,
-            "fadd_fast" => Self::FaddFast,
-            "fdiv_fast" => Self::FdivFast,
-            "floorf32" => Self::FloorF32,
-            "floorf64" => Self::FloorF64,
-            "fmaf32" => Self::FmafF32,
-            "fmaf64" => Self::FmafF64,
-            "fmul_fast" => Self::FmulFast,
-            "forget" => Self::Forget,
-            "fsub_fast" => Self::FsubFast,
-            "is_val_statically_known" => Self::IsValStaticallyKnown,
-            "likely" => Self::Likely,
-            "log10f32" => Self::Log10F32,
-            "log10f64" => Self::Log10F64,
-            "log2f32" => Self::Log2F32,
-            "log2f64" => Self::Log2F64,
-            "logf32" => Self::LogF32,
-            "logf64" => Self::LogF64,
-            "maxnumf32" => Self::MaxNumF32,
-            "maxnumf64" => Self::MaxNumF64,
-            "min_align_of" => Self::MinAlignOf,
-            "min_align_of_val" => Self::MinAlignOfVal,
-            "minnumf32" => Self::MinNumF32,
-            "minnumf64" => Self::MinNumF64,
-            "mul_with_overflow" => Self::MulWithOverflow,
-            "nearbyintf32" => Self::NearbyIntF32,
-            "nearbyintf64" => Self::NearbyIntF64,
-            "needs_drop" => Self::NeedsDrop,
+            "copysignf32" => {
+                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32), RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
+                Self::CopySignF32
+            }
+            "copysignf64" => {
+                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64), RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
+                Self::CopySignF64
+            }
+            "cosf32" => {
+                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
+                Self::CosF32
+            }
+            "cosf64" => {
+                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
+                Self::CosF64
+            }
+            "ctlz" => {
+                assert_sig_matches!(sig, _ => RigidTy::Uint(UintTy::U32));
+                Self::Ctlz
+            }
+            "ctlz_nonzero" => {
+                assert_sig_matches!(sig, _ => RigidTy::Uint(UintTy::U32));
+                Self::CtlzNonZero
+            }
+            "ctpop" => {
+                assert_sig_matches!(sig, _ => RigidTy::Uint(UintTy::U32));
+                Self::Ctpop
+            }
+            "cttz" => {
+                assert_sig_matches!(sig, _ => RigidTy::Uint(UintTy::U32));
+                Self::Cttz
+            }
+            "cttz_nonzero" => {
+                assert_sig_matches!(sig, _ => RigidTy::Uint(UintTy::U32));
+                Self::CttzNonZero
+            }
+            "discriminant_value" => {
+                assert_sig_matches!(sig, RigidTy::Ref(_, _, Mutability::Not) => _);
+                Self::DiscriminantValue
+            }
+            "exact_div" => {
+                assert_sig_matches!(sig, _, _ => _);
+                Self::ExactDiv
+            }
+            "exp2f32" => {
+                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
+                Self::Exp2F32
+            }
+            "exp2f64" => {
+                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
+                Self::Exp2F64
+            }
+            "expf32" => {
+                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
+                Self::ExpF32
+            }
+            "expf64" => {
+                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
+                Self::ExpF64
+            }
+            "fabsf32" => {
+                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
+                Self::FabsF32
+            }
+            "fabsf64" => {
+                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
+                Self::FabsF64
+            }
+            "fadd_fast" => {
+                assert_sig_matches!(sig, _, _ => _);
+                Self::FaddFast
+            }
+            "fdiv_fast" => {
+                assert_sig_matches!(sig, _, _ => _);
+                Self::FdivFast
+            }
+            "floorf32" => {
+                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
+                Self::FloorF32
+            }
+            "floorf64" => {
+                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
+                Self::FloorF64
+            }
+            "fmaf32" => {
+                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32), RigidTy::Float(FloatTy::F32), RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
+                Self::FmafF32
+            }
+            "fmaf64" => {
+                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64), RigidTy::Float(FloatTy::F64), RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
+                Self::FmafF64
+            }
+            "fmul_fast" => {
+                assert_sig_matches!(sig, _, _ => _);
+                Self::FmulFast
+            }
+            "forget" => {
+                assert_sig_matches!(sig, _ => RigidTy::Tuple(_));
+                Self::Forget
+            }
+            "fsub_fast" => {
+                assert_sig_matches!(sig, _, _ => _);
+                Self::FsubFast
+            }
+            "is_val_statically_known" => {
+                assert_sig_matches!(sig, _ => RigidTy::Bool);
+                Self::IsValStaticallyKnown
+            }
+            "likely" => {
+                assert_sig_matches!(sig, RigidTy::Bool => RigidTy::Bool);
+                Self::Likely
+            }
+            "log10f32" => {
+                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
+                Self::Log10F32
+            }
+            "log10f64" => {
+                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
+                Self::Log10F64
+            }
+            "log2f32" => {
+                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
+                Self::Log2F32
+            }
+            "log2f64" => {
+                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
+                Self::Log2F64
+            }
+            "logf32" => {
+                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
+                Self::LogF32
+            }
+            "logf64" => {
+                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
+                Self::LogF64
+            }
+            "maxnumf32" => {
+                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32), RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
+                Self::MaxNumF32
+            }
+            "maxnumf64" => {
+                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64), RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
+                Self::MaxNumF64
+            }
+            "min_align_of" => {
+                assert_sig_matches!(sig, => RigidTy::Uint(UintTy::Usize));
+                Self::MinAlignOf
+            }
+            "min_align_of_val" => {
+                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Not) => RigidTy::Uint(UintTy::Usize));
+                Self::MinAlignOfVal
+            }
+            "minnumf32" => {
+                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32), RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
+                Self::MinNumF32
+            }
+            "minnumf64" => {
+                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64), RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
+                Self::MinNumF64
+            }
+            "mul_with_overflow" => {
+                assert_sig_matches!(sig, _, _ => RigidTy::Tuple(_));
+                Self::MulWithOverflow
+            }
+            "nearbyintf32" => {
+                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
+                Self::NearbyIntF32
+            }
+            "nearbyintf64" => {
+                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
+                Self::NearbyIntF64
+            }
+            "needs_drop" => {
+                assert_sig_matches!(sig, => RigidTy::Bool);
+                Self::NeedsDrop
+            }
             // As of https://github.com/rust-lang/rust/pull/110822 the `offset` intrinsic is lowered to `mir::BinOp::Offset`
             "offset" => unreachable!(
                 "Expected `core::intrinsics::unreachable` to be handled by `BinOp::OffSet`"
             ),
-            "powf32" => Self::PowF32,
-            "powf64" => Self::PowF64,
-            "powif32" => Self::PowIF32,
-            "powif64" => Self::PowIF64,
-            "pref_align_of" => Self::PrefAlignOf,
-            "ptr_guaranteed_cmp" => Self::PtrGuaranteedCmp,
-            "ptr_offset_from" => Self::PtrOffsetFrom,
-            "ptr_offset_from_unsigned" => Self::PtrOffsetFromUnsigned,
-            "raw_eq" => Self::RawEq,
-            "retag_box_to_raw" => Self::RetagBoxToRaw,
-            "rintf32" => Self::RintF32,
-            "rintf64" => Self::RintF64,
-            "rotate_left" => Self::RotateLeft,
-            "rotate_right" => Self::RotateRight,
-            "roundf32" => Self::RoundF32,
-            "roundf64" => Self::RoundF64,
-            "saturating_add" => Self::SaturatingAdd,
-            "saturating_sub" => Self::SaturatingSub,
-            "sinf32" => Self::SinF32,
-            "sinf64" => Self::SinF64,
-            "simd_add" => Self::SimdAdd,
-            "simd_and" => Self::SimdAnd,
-            "simd_div" => Self::SimdDiv,
-            "simd_rem" => Self::SimdRem,
-            "simd_eq" => Self::SimdEq,
-            "simd_extract" => Self::SimdExtract,
-            "simd_ge" => Self::SimdGe,
-            "simd_gt" => Self::SimdGt,
-            "simd_insert" => Self::SimdInsert,
-            "simd_le" => Self::SimdLe,
-            "simd_lt" => Self::SimdLt,
-            "simd_mul" => Self::SimdMul,
-            "simd_ne" => Self::SimdNe,
-            "simd_or" => Self::SimdOr,
-            "simd_shl" => Self::SimdShl,
-            "simd_shr" => Self::SimdShr,
-            name if name.starts_with("simd_shuffle") => {
-                Self::SimdShuffle(name.strip_prefix("simd_shuffle").unwrap())
+            "powf32" => {
+                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32), RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
+                Self::PowF32
             }
-            "simd_sub" => Self::SimdSub,
-            "simd_xor" => Self::SimdXor,
+            "powf64" => {
+                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64), RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
+                Self::PowF64
+            }
+            "powif32" => {
+                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32), RigidTy::Int(IntTy::I32) => RigidTy::Float(FloatTy::F32));
+                Self::PowIF32
+            }
+            "powif64" => {
+                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64), RigidTy::Int(IntTy::I32) => RigidTy::Float(FloatTy::F64));
+                Self::PowIF64
+            }
+            "pref_align_of" => {
+                assert_sig_matches!(sig, => RigidTy::Uint(UintTy::Usize));
+                Self::PrefAlignOf
+            }
+            "ptr_guaranteed_cmp" => {
+                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Not), RigidTy::RawPtr(_, Mutability::Not) => RigidTy::Uint(UintTy::U8));
+                Self::PtrGuaranteedCmp
+            }
+            "ptr_offset_from" => {
+                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Not), RigidTy::RawPtr(_, Mutability::Not) => RigidTy::Int(IntTy::Isize));
+                Self::PtrOffsetFrom
+            }
+            "ptr_offset_from_unsigned" => {
+                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Not), RigidTy::RawPtr(_, Mutability::Not) => RigidTy::Uint(UintTy::Usize));
+                Self::PtrOffsetFromUnsigned
+            }
+            "raw_eq" => {
+                assert_sig_matches!(sig, RigidTy::Ref(_, _, Mutability::Not), RigidTy::Ref(_, _, Mutability::Not) => RigidTy::Bool);
+                Self::RawEq
+            }
+            "rintf32" => {
+                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
+                Self::RintF32
+            }
+            "rintf64" => {
+                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
+                Self::RintF64
+            }
+            "rotate_left" => {
+                assert_sig_matches!(sig, _, RigidTy::Uint(UintTy::U32) => _);
+                Self::RotateLeft
+            }
+            "rotate_right" => {
+                assert_sig_matches!(sig, _, RigidTy::Uint(UintTy::U32) => _);
+                Self::RotateRight
+            }
+            "roundf32" => {
+                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
+                Self::RoundF32
+            }
+            "roundf64" => {
+                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
+                Self::RoundF64
+            }
+            "saturating_add" => {
+                assert_sig_matches!(sig, _, _ => _);
+                Self::SaturatingAdd
+            }
+            "saturating_sub" => {
+                assert_sig_matches!(sig, _, _ => _);
+                Self::SaturatingSub
+            }
+            "sinf32" => {
+                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
+                Self::SinF32
+            }
+            "sinf64" => {
+                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
+                Self::SinF64
+            }
+            "simd_add" => {
+                assert_sig_matches!(sig, _, _ => _);
+                Self::SimdAdd
+            }
+            "simd_and" => {
+                assert_sig_matches!(sig, _, _ => _);
+                Self::SimdAnd
+            }
+            "simd_div" => {
+                assert_sig_matches!(sig, _, _ => _);
+                Self::SimdDiv
+            }
+            "simd_rem" => {
+                assert_sig_matches!(sig, _, _ => _);
+                Self::SimdRem
+            }
+            "simd_eq" => {
+                assert_sig_matches!(sig, _, _ => _);
+                Self::SimdEq
+            }
+            "simd_extract" => {
+                assert_sig_matches!(sig, _, RigidTy::Uint(UintTy::U32) => _);
+                Self::SimdExtract
+            }
+            "simd_ge" => {
+                assert_sig_matches!(sig, _, _ => _);
+                Self::SimdGe
+            }
+            "simd_gt" => {
+                assert_sig_matches!(sig, _, _ => _);
+                Self::SimdGt
+            }
+            "simd_insert" => {
+                assert_sig_matches!(sig, _, RigidTy::Uint(UintTy::U32), _ => _);
+                Self::SimdInsert
+            }
+            "simd_le" => {
+                assert_sig_matches!(sig, _, _ => _);
+                Self::SimdLe
+            }
+            "simd_lt" => {
+                assert_sig_matches!(sig, _, _ => _);
+                Self::SimdLt
+            }
+            "simd_mul" => {
+                assert_sig_matches!(sig, _, _ => _);
+                Self::SimdMul
+            }
+            "simd_ne" => {
+                assert_sig_matches!(sig, _, _ => _);
+                Self::SimdNe
+            }
+            "simd_or" => {
+                assert_sig_matches!(sig, _, _ => _);
+                Self::SimdOr
+            }
+            "simd_shl" => {
+                assert_sig_matches!(sig, _, _ => _);
+                Self::SimdShl
+            }
+            "simd_shr" => {
+                assert_sig_matches!(sig, _, _ => _);
+                Self::SimdShr
+            }
+            name if name.starts_with("simd_shuffle") => {
+                assert_sig_matches!(sig, _, _, _ => _);
+                Self::SimdShuffle(name.strip_prefix("simd_shuffle").unwrap().into())
+            }
+            "simd_sub" => {
+                assert_sig_matches!(sig, _, _ => _);
+                Self::SimdSub
+            }
+            "simd_xor" => {
+                assert_sig_matches!(sig, _, _ => _);
+                Self::SimdXor
+            }
             "size_of" => unreachable!(),
-            "size_of_val" => Self::SizeOfVal,
-            "sqrtf32" => Self::SqrtF32,
-            "sqrtf64" => Self::SqrtF64,
-            "sub_with_overflow" => Self::SubWithOverflow,
-            "transmute" => Self::Transmute,
-            "truncf32" => Self::TruncF32,
-            "truncf64" => Self::TruncF64,
-            "type_id" => Self::TypeId,
-            "type_name" => Self::TypeName,
-            "typed_swap" => Self::TypedSwap,
-            "unaligned_volatile_load" => Self::UnalignedVolatileLoad,
+            "size_of_val" => {
+                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Not) => RigidTy::Uint(UintTy::Usize));
+                Self::SizeOfVal
+            }
+            "sqrtf32" => {
+                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
+                Self::SqrtF32
+            }
+            "sqrtf64" => {
+                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
+                Self::SqrtF64
+            }
+            "sub_with_overflow" => {
+                assert_sig_matches!(sig, _, _ => RigidTy::Tuple(_));
+                Self::SubWithOverflow
+            }
+            "transmute" => {
+                assert_sig_matches!(sig, _ => _);
+                Self::Transmute
+            }
+            "truncf32" => {
+                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
+                Self::TruncF32
+            }
+            "truncf64" => {
+                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
+                Self::TruncF64
+            }
+            "type_id" => {
+                assert_sig_matches!(sig, => RigidTy::Uint(UintTy::U128));
+                Self::TypeId
+            }
+            "type_name" => {
+                assert_sig_matches!(sig, => RigidTy::Ref(_, _, Mutability::Not));
+                Self::TypeName
+            }
+            "typed_swap" => {
+                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), RigidTy::RawPtr(_, Mutability::Mut) => RigidTy::Tuple(_));
+                Self::TypedSwap
+            }
+            "unaligned_volatile_load" => {
+                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Not) => _);
+                Self::UnalignedVolatileLoad
+            }
             "unchecked_add" | "unchecked_mul" | "unchecked_shl" | "unchecked_shr"
             | "unchecked_sub" => {
                 unreachable!("Expected intrinsic `{intrinsic_str}` to be lowered before codegen")
             }
-            "unchecked_div" => Self::UncheckedDiv,
-            "unchecked_rem" => Self::UncheckedRem,
-            "unlikely" => Self::Unlikely,
+            "unchecked_div" => {
+                assert_sig_matches!(sig, _, _ => _);
+                Self::UncheckedDiv
+            }
+            "unchecked_rem" => {
+                assert_sig_matches!(sig, _, _ => _);
+                Self::UncheckedRem
+            }
+            "unlikely" => {
+                assert_sig_matches!(sig, RigidTy::Bool => RigidTy::Bool);
+                Self::Unlikely
+            }
             "unreachable" => unreachable!(
                 "Expected `std::intrinsics::unreachable` to be handled by `TerminatorKind::Unreachable`"
             ),
-            "volatile_copy_memory" => Self::VolatileCopyMemory,
-            "volatile_copy_nonoverlapping_memory" => Self::VolatileCopyNonOverlappingMemory,
-            "volatile_load" => Self::VolatileLoad,
-            "volatile_store" => Self::VolatileStore,
-            "vtable_size" => Self::VtableSize,
-            "vtable_align" => Self::VtableAlign,
-            "wrapping_add" => Self::WrappingAdd,
-            "wrapping_mul" => Self::WrappingMul,
-            "wrapping_sub" => Self::WrappingSub,
-            "write_bytes" => Self::WriteBytes,
+            "volatile_copy_memory" => {
+                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), RigidTy::RawPtr(_, Mutability::Not), RigidTy::Uint(UintTy::Usize) => RigidTy::Tuple(_));
+                Self::VolatileCopyMemory
+            }
+            "volatile_copy_nonoverlapping_memory" => {
+                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), RigidTy::RawPtr(_, Mutability::Not), RigidTy::Uint(UintTy::Usize) => RigidTy::Tuple(_));
+                Self::VolatileCopyNonOverlappingMemory
+            }
+            "volatile_load" => {
+                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Not) => _);
+                Self::VolatileLoad
+            }
+            "volatile_store" => {
+                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => RigidTy::Tuple(_));
+                Self::VolatileStore
+            }
+            "vtable_size" => {
+                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Not) => RigidTy::Uint(UintTy::Usize));
+                Self::VtableSize
+            }
+            "vtable_align" => {
+                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Not) => RigidTy::Uint(UintTy::Usize));
+                Self::VtableAlign
+            }
+            "wrapping_add" => {
+                assert_sig_matches!(sig, _, _ => _);
+                Self::WrappingAdd
+            }
+            "wrapping_mul" => {
+                assert_sig_matches!(sig, _, _ => _);
+                Self::WrappingMul
+            }
+            "wrapping_sub" => {
+                assert_sig_matches!(sig, _, _ => _);
+                Self::WrappingSub
+            }
+            "write_bytes" => {
+                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), RigidTy::Uint(UintTy::U8), RigidTy::Uint(UintTy::Usize) => RigidTy::Tuple(_));
+                Self::WriteBytes
+            }
             // Unimplemented
             _ => Self::Unimplemented {
                 name: intrinsic_str,
-                issue_link: "https://github.com/model-checking/kani/issues/new/choose",
+                issue_link: "https://github.com/model-checking/kani/issues/new/choose".into(),
             },
         }
     }
