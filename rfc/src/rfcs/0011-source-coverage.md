@@ -532,8 +532,6 @@ In other words, it's not as advanced nor precise as the source-based implementat
 [^note-benchmarks]: Actual performance benchmarks to follow in
    [#3119](https://github.com/model-checking/kani/pull/3119).
 
-### Optimization with coverage-counter expressions
-
 ## Open questions
 
  - Do we want to instrument dependencies by default? Preliminary benchmarking results show a slowdown of 100% and greater.
@@ -587,3 +585,26 @@ However, at this time we recommend against integrating with LLVM due to these re
  provide compatibility with newer LLVM versions. Moreover, the Rust compiler
  supplies their own version of LLVM tools (`rust-profdata`, `rust-cov`, etc.)
  which are fully compatible with coverage-related artifacts produced by `rustc`.
+
+
+### Optimization with coverage-counter expressions
+
+In the [subsection related to the
+integration](#integrating-the-instrumentation-into-kani), we noted that we could
+follow an alternative approach where we only instrument coverage statements that
+correspond to physical counters. In fact, this would be the logical choice since
+the replacement of physical counters by expression-based counters would also be
+a performance optimization for us. However, the expressions used for
+expression-based counters are built with the arithmetic operators `Add` and
+`Sub`. On the other hand, the coverage checks performed by Kani have a boolean
+meaning: you either cover a region or you do not.
+
+It is not difficult to find cases where these two notions for coverage counters
+are incompatible. For example
+
+
+[^note-expression-integration]: We could follow an alternative approach where we
+do not instrument each coverage statement, but only those that correspond to
+physical counters. Unfortunately, doing so would lead to incorrect coverage
+results due to the arithmetic nature of expression-based counters. We elaborate
+on this topic in the later parts of this document.
