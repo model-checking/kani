@@ -40,6 +40,11 @@ pub fn concrete_playback_run<F: Fn()>(mut local_concrete_vals: Vec<Vec<u8>>, pro
     });
 }
 
+/// Iterate over `any_raw_internal` since CBMC produces assignment per element.
+pub(crate) unsafe fn any_raw_array<T: Copy, const N: usize>() -> [T; N] {
+    [(); N].map(|_| crate::any_raw_internal::<T>())
+}
+
 /// Concrete playback implementation of
 /// kani::any_raw_internal. Because CBMC does not bother putting in
 /// Zero-Sized Types, those are defaulted to an empty vector.

@@ -1,5 +1,0 @@
-Failed Checks: Kani does not support reasoning about memory initialization in presence of mutable raw pointer casts that could cause delayed UB.
-
-VERIFICATION:- FAILED
-
-Complete - 0 successfully verified harnesses, 1 failures, 1 total.

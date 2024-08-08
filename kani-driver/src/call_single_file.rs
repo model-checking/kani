@@ -135,10 +135,6 @@ impl KaniSession {
             flags.push("--ub-check=validity".into())
         }
 
-        if self.args.common_args.unstable_features.contains(UnstableFeature::PtrToRefCastChecks) {
-            flags.push("--ub-check=ptr_to_ref_cast".into())
-        }
-
         if self.args.common_args.unstable_features.contains(UnstableFeature::UninitChecks) {
             // Automatically enable shadow memory, since the version of uninitialized memory checks
             // without non-determinism depends on it.
