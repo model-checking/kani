@@ -17,11 +17,14 @@ In our first attempt to add a coverage feature fully managed by Kani, we introdu
 (see [RFC: Line coverage](0008-line-coverage.md) for more details).
 This option has since then allowed us to gather more data around the expectations for a coverage feature in Kani.
 
-For example, the line coverage output we produced was not easy to interpret without knowing some implementation details.
-Aside from that, the feature requested in [#2795](https://github.com/model-checking/kani/issues/2795)
-alludes to the need of providing coverage-specific tooling in Kani.
-Nevertheless, as captured in [#2640](https://github.com/model-checking/kani/issues/2640),
-source-based coverage results provide the clearest and most precise coverage information.
+For example, the line coverage output we produced was not easy to interpret
+without knowing some implementation details.
+Aside from that, the feature requested in
+[#2795](https://github.com/model-checking/kani/issues/2795) alludes to the need
+of providing coverage-specific tooling in Kani.
+Nevertheless, as captured in
+[#2640](https://github.com/model-checking/kani/issues/2640), source-based
+coverage results provide the clearest and most precise coverage information.
 
 In this RFC, we propose an integration with [Rust's source-based code coverage
 instrumentation](https://doc.rust-lang.org/rustc/instrument-coverage.html).
@@ -41,13 +44,17 @@ LLVM toolchain.
 
 ## User Experience
 
-The proposed experience is partially inspired by that of the most popular coverage frameworks.
-First, let's delve into the LLVM coverage workflow, followed by an explanation of our proposal.
+The proposed experience is partially inspired by that of the most popular
+coverage frameworks.
+First, let us delve into the LLVM coverage workflow, followed by an explanation
+of our proposal.
 
 ### The LLVM code coverage workflow
 
 The LLVM project is home to one of the most popular code coverage frameworks.
-The workflow associated to the LLVM framework is described in the documentation for [source-based code coverage](https://clang.llvm.org/docs/SourceBasedCodeCoverage.html)[^note-source], but we briefly describe it here to better relate it with our proposal.
+The workflow associated to the LLVM framework is described in the documentation for
+[source-based code coverage](https://clang.llvm.org/docs/SourceBasedCodeCoverage.html)[^note-source],
+but we briefly describe it here to better relate it with our proposal.
 
 In short, the LLVM code coverage workflow follows three steps:
  1. **Compiling with coverage enabled.** This causes the compiler to generate an instrumented program.
@@ -69,20 +76,24 @@ RUSTFLAGS='-Cinstrument-coverage' cargo run
 This should populate the directory with at least one `.profraw` file.
 Each `.profraw` file corresponds to a specific source code file in your project.
 
-At this point, we'll have produced the artifacts that we generally require for the LLVM tools:
+At this point, we will have produced the artifacts that we generally require for
+the LLVM tools:
  1. **The instrumented binary** which, in addition to the instrumented program,
  contains additional information (e.g., the coverage mappings) required to
  interpret the profiling results.
  2. **The `.profraw` files** which essentially includes the profiling results
- (counter and expression values) for each function of the corresponding source
- code file.
+ (e.g., counter values) for each function of the corresponding source code file.
 
 For step 3, the commands will depend on what kind of results we want.
-Most likely we will have to merge the `.profraw` files and produce a `.profdata` file as follows:
+Most likely we will have to merge the `.profraw` files and produce a `.profdata`
+file as follows:
 
 ```sh
 llvm-profdata merge -sparse *.profraw -o output.profdata
 ```
+
+The resulting `.profdata` file will contain the aggregated coverage results from
+the `.profraw` files passed to the `merge` command.
 
 Then, we can use a command such as
 
@@ -111,31 +122,35 @@ TOTAL                                                      9                 3  
 ```
 
 [^note-source]: The LLVM project refers to their own coverage feature as
-   "source-based code coverage". It's not rare to see the term "region coverage"
-   being used instead to refer to the same thing. That's because LLVM's
-   source-based code coverage feature can report coverage for code regions, but
-   other coverage frameworks don't support the concept of code regions.
+   *source-based code coverage*. It is not rare to see the term *region
+   coverage* being used instead to refer to the same thing. That is because
+   LLVM's source-based code coverage feature can report coverage for code
+   regions, but other coverage frameworks do not support the concept of code
+   regions.
 
 ### The Kani coverage workflow
 
-The two main components of the Kani coverage workflow will be the following:
- 1. The existing `--coverage` flag that drives the coverage workflow in Kani and
-    produces basic coverage results by default.
+The two main components of the Kani coverage workflow that we propose are the
+following:
+ 1. The existing `--coverage` flag that drives the coverage workflow in Kani,
+    emits raw coverage data (as in the `.profraw` files), and produces basic
+    coverage results by default.
  2. A new subcommand `cov` that allows users to further process raw coverage
     information emitted by Kani to produce customized coverage results (i.e.,
     different to the ones produced by default with the `--coverage` option).
+    The `cov` subcommand is an alias for the `kani-cov` tool.
 
-In constrast to the LLVM workflow, where human-readable coverage results can
+In contrast to the LLVM workflow, where human-readable coverage results can
 be produced only after a sequence of LLVM tool commands, we provide some
 coverage results by default.
 This aligns better with our UX philosophy, and removes the need for a wrapper
 around our coverage features like
 [`cargo-llvm-cov`](https://github.com/taiki-e/cargo-llvm-cov).
-Alternatively, the `cov` subcommand offers the ability required to
-produce more specific coverage results if needed.
-We anticipate the `cov` subcommand being particularly useful in less
-standard project setups, giving the users the flexibility required to produce
-coverage results tailored to their specific needs.
+Alternatively, the `cov` subcommand offers the ability of producing more
+specific coverage results if needed.
+We anticipate the `cov` subcommand being particularly useful in less standard
+project setups, giving the users the flexibility required to produce coverage
+results tailored to their specific needs.
 
 In the following, we describe each one of these components in more detail.
 
@@ -182,23 +197,28 @@ Hence, the `cov` subcommand corresponds to the set of LLVM tools
 (`llvm-profdata`, `llvm-cov`, etc.) that are used to produce coverage outputs
 through the LLVM coverage workflow.
 
-In contrast to LLVM, we'll have a single subcommand for all Kani coverage-related needs.
+In contrast to LLVM, we will have a single subcommand for all Kani
+coverage-related needs. The `cov` subcommand will just call the `kani-cov` tool,
+which is expected to be shipped along the rest of Kani binaries.
+
 We suggest that the subcommand initially offers two options:
  1. An option to merge the coverage results from one or more files and a source
     code snapshot[^note-snapshot] into a single file.
  2. An option to produce coverage outputs from coverage results, including summaries
  or coverage reports in human-readable formats (e.g., HTML).
 
-Let's assume that we've run `cargo kani --coverage -Zsource-coverage` and
-generated coverage files in the `my-coverage` folder. Then, we'd use `cargo kani cov`
-as follows to combine the coverage results[^note-exclude] for all harnesses:
+Let's assume that we have run `cargo kani --coverage -Zsource-coverage` and
+generated coverage files in the `my-coverage` folder. Then, we would use `cargo
+kani cov` as follows to combine the coverage results[^note-exclude] for all
+harnesses:
 
 ```sh
 cargo kani cov --merge my-coverage/*.kaniraw -o my-coverage.kanicov
 ```
 
-Let's say the user is first interested in reading a coverage summary through the terminal.
-They will have to use the `report` command for that:
+Let's say the user is first interested in reading a coverage summary through the
+terminal.
+They can use the `--summary` option for that:
 
 ```sh
 cargo kani cov --summary my-coverage/default.kanimap -instr-profile=my-coverage.kanicov
@@ -214,7 +234,7 @@ The command could print a coverage summary like:
 ```
 
 Now, let's say the user wants to produce an HTML report of the coverage results.
-They will have to use the `--report` command for that:
+They will have to use the `--report` option for that:
 
 ```sh
 cargo kani cov --report my-coverage/default.kanimap -format=html -instr-profile=my-coverage.kanicov -o coverage-report
@@ -229,9 +249,8 @@ according to the coverage results in `my-coverage.kanicov`.
    export into GCC's coverage format [Gcov](https://en.wikipedia.org/wiki/Gcov),
    and the option
    [`export`](https://llvm.org/docs/CommandGuide/llvm-cov.html#llvm-cov-export)
-   to export into the LCOV format. I'd strongly recommend against adding
-   format-specific options to `kani-cov` unless there are technical reasons to
-   do so.
+   to export into the LCOV format. These may be good options to consider for
+   `kani-cov` in the future but we should focus on basic formats for now.
 
 [^note-exclude]: Options to exclude certain coverage results (e.g, from the
    standard library) will likely be part of this option.
@@ -245,8 +264,8 @@ according to the coverage results in `my-coverage.kanicov`.
 We will update the coverage feature of the
 [Kani VS Code Extension](https://github.com/model-checking/kani-vscode-extension)
 to follow this new coverage workflow.
-In other words, the extension will first run Kani with the `-cov` option and
-use `kani-cov` to produce a `.kanicov` file with the coverage results.
+In other words, the extension will first run Kani with the `--coverage` option and
+use `kani cov` to produce a `.kanicov` file with the coverage results.
 The extension will consume the source-based code coverage results and
 highlight region coverage in the source code seen from VS Code.
 
