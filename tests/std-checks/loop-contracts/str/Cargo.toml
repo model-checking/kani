@@ -1,0 +1,13 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+[package]
+name = "verify-loop-contracts-core-str"
+version = "0.1.0"
+edition = "2021"
+description = "This crate contains loop contracts and harnesses for core library"
+
+[package.metadata.kani]
+unstable = { }
+
+[package.metadata.kani.flags]
+output-format = "terse"
