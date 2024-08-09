@@ -236,14 +236,6 @@ impl Intrinsic {
                     issue_link: "https://github.com/model-checking/kani/issues/267".into(),
                 }
             }
-            "ceilf32" => {
-                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
-                Self::CeilF32
-            }
-            "ceilf64" => {
-                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
-                Self::CeilF64
-            }
             "compare_bytes" => {
                 assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Not), RigidTy::RawPtr(_, Mutability::Not), RigidTy::Uint(UintTy::Usize) => RigidTy::Int(IntTy::I32));
                 Self::CompareBytes
@@ -255,22 +247,6 @@ impl Intrinsic {
             "copy_nonoverlapping" => unreachable!(
                 "Expected `core::intrinsics::unreachable` to be handled by `StatementKind::CopyNonOverlapping`"
             ),
-            "copysignf32" => {
-                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32), RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
-                Self::CopySignF32
-            }
-            "copysignf64" => {
-                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64), RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
-                Self::CopySignF64
-            }
-            "cosf32" => {
-                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
-                Self::CosF32
-            }
-            "cosf64" => {
-                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
-                Self::CosF64
-            }
             "ctlz" => {
                 assert_sig_matches!(sig, _ => RigidTy::Uint(UintTy::U32));
                 Self::Ctlz
@@ -299,30 +275,6 @@ impl Intrinsic {
                 assert_sig_matches!(sig, _, _ => _);
                 Self::ExactDiv
             }
-            "exp2f32" => {
-                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
-                Self::Exp2F32
-            }
-            "exp2f64" => {
-                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
-                Self::Exp2F64
-            }
-            "expf32" => {
-                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
-                Self::ExpF32
-            }
-            "expf64" => {
-                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
-                Self::ExpF64
-            }
-            "fabsf32" => {
-                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
-                Self::FabsF32
-            }
-            "fabsf64" => {
-                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
-                Self::FabsF64
-            }
             "fadd_fast" => {
                 assert_sig_matches!(sig, _, _ => _);
                 Self::FaddFast
@@ -330,22 +282,6 @@ impl Intrinsic {
             "fdiv_fast" => {
                 assert_sig_matches!(sig, _, _ => _);
                 Self::FdivFast
-            }
-            "floorf32" => {
-                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
-                Self::FloorF32
-            }
-            "floorf64" => {
-                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
-                Self::FloorF64
-            }
-            "fmaf32" => {
-                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32), RigidTy::Float(FloatTy::F32), RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
-                Self::FmafF32
-            }
-            "fmaf64" => {
-                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64), RigidTy::Float(FloatTy::F64), RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
-                Self::FmafF64
             }
             "fmul_fast" => {
                 assert_sig_matches!(sig, _, _ => _);
@@ -367,38 +303,6 @@ impl Intrinsic {
                 assert_sig_matches!(sig, RigidTy::Bool => RigidTy::Bool);
                 Self::Likely
             }
-            "log10f32" => {
-                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
-                Self::Log10F32
-            }
-            "log10f64" => {
-                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
-                Self::Log10F64
-            }
-            "log2f32" => {
-                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
-                Self::Log2F32
-            }
-            "log2f64" => {
-                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
-                Self::Log2F64
-            }
-            "logf32" => {
-                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
-                Self::LogF32
-            }
-            "logf64" => {
-                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
-                Self::LogF64
-            }
-            "maxnumf32" => {
-                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32), RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
-                Self::MaxNumF32
-            }
-            "maxnumf64" => {
-                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64), RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
-                Self::MaxNumF64
-            }
             "min_align_of" => {
                 assert_sig_matches!(sig, => RigidTy::Uint(UintTy::Usize));
                 Self::MinAlignOf
@@ -407,25 +311,9 @@ impl Intrinsic {
                 assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Not) => RigidTy::Uint(UintTy::Usize));
                 Self::MinAlignOfVal
             }
-            "minnumf32" => {
-                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32), RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
-                Self::MinNumF32
-            }
-            "minnumf64" => {
-                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64), RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
-                Self::MinNumF64
-            }
             "mul_with_overflow" => {
                 assert_sig_matches!(sig, _, _ => RigidTy::Tuple(_));
                 Self::MulWithOverflow
-            }
-            "nearbyintf32" => {
-                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
-                Self::NearbyIntF32
-            }
-            "nearbyintf64" => {
-                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
-                Self::NearbyIntF64
             }
             "needs_drop" => {
                 assert_sig_matches!(sig, => RigidTy::Bool);
@@ -435,22 +323,6 @@ impl Intrinsic {
             "offset" => unreachable!(
                 "Expected `core::intrinsics::unreachable` to be handled by `BinOp::OffSet`"
             ),
-            "powf32" => {
-                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32), RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
-                Self::PowF32
-            }
-            "powf64" => {
-                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64), RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
-                Self::PowF64
-            }
-            "powif32" => {
-                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32), RigidTy::Int(IntTy::I32) => RigidTy::Float(FloatTy::F32));
-                Self::PowIF32
-            }
-            "powif64" => {
-                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64), RigidTy::Int(IntTy::I32) => RigidTy::Float(FloatTy::F64));
-                Self::PowIF64
-            }
             "pref_align_of" => {
                 assert_sig_matches!(sig, => RigidTy::Uint(UintTy::Usize));
                 Self::PrefAlignOf
@@ -471,14 +343,6 @@ impl Intrinsic {
                 assert_sig_matches!(sig, RigidTy::Ref(_, _, Mutability::Not), RigidTy::Ref(_, _, Mutability::Not) => RigidTy::Bool);
                 Self::RawEq
             }
-            "rintf32" => {
-                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
-                Self::RintF32
-            }
-            "rintf64" => {
-                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
-                Self::RintF64
-            }
             "rotate_left" => {
                 assert_sig_matches!(sig, _, RigidTy::Uint(UintTy::U32) => _);
                 Self::RotateLeft
@@ -486,14 +350,6 @@ impl Intrinsic {
             "rotate_right" => {
                 assert_sig_matches!(sig, _, RigidTy::Uint(UintTy::U32) => _);
                 Self::RotateRight
-            }
-            "roundf32" => {
-                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
-                Self::RoundF32
-            }
-            "roundf64" => {
-                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
-                Self::RoundF64
             }
             "saturating_add" => {
                 assert_sig_matches!(sig, _, _ => _);
@@ -503,98 +359,10 @@ impl Intrinsic {
                 assert_sig_matches!(sig, _, _ => _);
                 Self::SaturatingSub
             }
-            "sinf32" => {
-                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
-                Self::SinF32
-            }
-            "sinf64" => {
-                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
-                Self::SinF64
-            }
-            "simd_add" => {
-                assert_sig_matches!(sig, _, _ => _);
-                Self::SimdAdd
-            }
-            "simd_and" => {
-                assert_sig_matches!(sig, _, _ => _);
-                Self::SimdAnd
-            }
-            "simd_div" => {
-                assert_sig_matches!(sig, _, _ => _);
-                Self::SimdDiv
-            }
-            "simd_rem" => {
-                assert_sig_matches!(sig, _, _ => _);
-                Self::SimdRem
-            }
-            "simd_eq" => {
-                assert_sig_matches!(sig, _, _ => _);
-                Self::SimdEq
-            }
-            "simd_extract" => {
-                assert_sig_matches!(sig, _, RigidTy::Uint(UintTy::U32) => _);
-                Self::SimdExtract
-            }
-            "simd_ge" => {
-                assert_sig_matches!(sig, _, _ => _);
-                Self::SimdGe
-            }
-            "simd_gt" => {
-                assert_sig_matches!(sig, _, _ => _);
-                Self::SimdGt
-            }
-            "simd_insert" => {
-                assert_sig_matches!(sig, _, RigidTy::Uint(UintTy::U32), _ => _);
-                Self::SimdInsert
-            }
-            "simd_le" => {
-                assert_sig_matches!(sig, _, _ => _);
-                Self::SimdLe
-            }
-            "simd_lt" => {
-                assert_sig_matches!(sig, _, _ => _);
-                Self::SimdLt
-            }
-            "simd_mul" => {
-                assert_sig_matches!(sig, _, _ => _);
-                Self::SimdMul
-            }
-            "simd_ne" => {
-                assert_sig_matches!(sig, _, _ => _);
-                Self::SimdNe
-            }
-            "simd_or" => {
-                assert_sig_matches!(sig, _, _ => _);
-                Self::SimdOr
-            }
-            "simd_shl" => {
-                assert_sig_matches!(sig, _, _ => _);
-                Self::SimdShl
-            }
-            "simd_shr" => {
-                assert_sig_matches!(sig, _, _ => _);
-                Self::SimdShr
-            }
-            "simd_sub" => {
-                assert_sig_matches!(sig, _, _ => _);
-                Self::SimdSub
-            }
-            "simd_xor" => {
-                assert_sig_matches!(sig, _, _ => _);
-                Self::SimdXor
-            }
             "size_of" => unreachable!(),
             "size_of_val" => {
                 assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Not) => RigidTy::Uint(UintTy::Usize));
                 Self::SizeOfVal
-            }
-            "sqrtf32" => {
-                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
-                Self::SqrtF32
-            }
-            "sqrtf64" => {
-                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
-                Self::SqrtF64
             }
             "sub_with_overflow" => {
                 assert_sig_matches!(sig, _, _ => RigidTy::Tuple(_));
@@ -603,14 +371,6 @@ impl Intrinsic {
             "transmute" => {
                 assert_sig_matches!(sig, _ => _);
                 Self::Transmute
-            }
-            "truncf32" => {
-                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
-                Self::TruncF32
-            }
-            "truncf64" => {
-                assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
-                Self::TruncF64
             }
             "type_id" => {
                 assert_sig_matches!(sig, => RigidTy::Uint(UintTy::U128));
@@ -687,70 +447,352 @@ impl Intrinsic {
                 assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), RigidTy::Uint(UintTy::U8), RigidTy::Uint(UintTy::Usize) => RigidTy::Tuple(_));
                 Self::WriteBytes
             }
-            name => {
-                if let Some(suffix) = name.strip_prefix("atomic_and_") {
-                    assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
-                    Self::AtomicAnd(suffix.into())
-                } else if let Some(suffix) = name.strip_prefix("atomic_cxchgweak_") {
-                    assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _, _ => RigidTy::Tuple(_));
-                    Self::AtomicCxchgWeak(suffix.into())
-                } else if let Some(suffix) = name.strip_prefix("atomic_cxchg_") {
-                    assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _, _ => RigidTy::Tuple(_));
-                    Self::AtomicCxchg(suffix.into())
-                } else if let Some(suffix) = name.strip_prefix("atomic_fence_") {
-                    assert_sig_matches!(sig, => RigidTy::Tuple(_));
-                    Self::AtomicFence(suffix.into())
-                } else if let Some(suffix) = name.strip_prefix("atomic_load_") {
-                    assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Not) => _);
-                    Self::AtomicLoad(suffix.into())
-                } else if let Some(suffix) = name.strip_prefix("atomic_max_") {
-                    assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
-                    Self::AtomicMax(suffix.into())
-                } else if let Some(suffix) = name.strip_prefix("atomic_min_") {
-                    assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
-                    Self::AtomicMin(suffix.into())
-                } else if let Some(suffix) = name.strip_prefix("atomic_nand_") {
-                    assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
-                    Self::AtomicNand(suffix.into())
-                } else if let Some(suffix) = name.strip_prefix("atomic_or_") {
-                    assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
-                    Self::AtomicOr(suffix.into())
-                } else if let Some(suffix) = name.strip_prefix("atomic_singlethreadfence_") {
-                    assert_sig_matches!(sig, => RigidTy::Tuple(_));
-                    Self::AtomicSingleThreadFence(suffix.into())
-                } else if let Some(suffix) = name.strip_prefix("atomic_store_") {
-                    assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => RigidTy::Tuple(_));
-                    Self::AtomicStore(suffix.into())
-                } else if let Some(suffix) = name.strip_prefix("atomic_umax_") {
-                    assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
-                    Self::AtomicUmax(suffix.into())
-                } else if let Some(suffix) = name.strip_prefix("atomic_umin_") {
-                    assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
-                    Self::AtomicUmin(suffix.into())
-                } else if let Some(suffix) = name.strip_prefix("atomic_xadd_") {
-                    assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
-                    Self::AtomicXadd(suffix.into())
-                } else if let Some(suffix) = name.strip_prefix("atomic_xchg_") {
-                    assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
-                    Self::AtomicXchg(suffix.into())
-                } else if let Some(suffix) = name.strip_prefix("atomic_xor_") {
-                    assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
-                    Self::AtomicXor(suffix.into())
-                } else if let Some(suffix) = name.strip_prefix("atomic_xsub_") {
-                    assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
-                    Self::AtomicXsub(suffix.into())
-                } else if let Some(suffix) = name.strip_prefix("simd_shuffle") {
-                    assert_sig_matches!(sig, _, _, _ => _);
-                    Self::SimdShuffle(suffix.into())
-                } else {
-                    // Unimplemented intrinsics.
-                    Self::Unimplemented {
-                        name: intrinsic_str,
-                        issue_link: "https://github.com/model-checking/kani/issues/new/choose"
-                            .into(),
-                    }
-                }
+            _ => try_match_atomic(intrinsic_instance)
+                .or_else(|| try_match_simd(intrinsic_instance))
+                .or_else(|| try_match_f32(intrinsic_instance))
+                .or_else(|| try_match_f64(intrinsic_instance))
+                .unwrap_or(Self::Unimplemented {
+                    name: intrinsic_str,
+                    issue_link: "https://github.com/model-checking/kani/issues/new/choose".into(),
+                }),
+        }
+    }
+}
+
+/// Match atomic intrinsics by instance, returning an instance of the intrinsics enum if the match
+/// is successful.
+fn try_match_atomic(intrinsic_instance: &Instance) -> Option<Intrinsic> {
+    let intrinsic_str = intrinsic_instance.intrinsic_name().unwrap();
+    let sig = intrinsic_instance.ty().kind().fn_sig().unwrap().skip_binder();
+    if let Some(suffix) = intrinsic_str.strip_prefix("atomic_and_") {
+        assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
+        Some(Intrinsic::AtomicAnd(suffix.into()))
+    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_cxchgweak_") {
+        assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _, _ => RigidTy::Tuple(_));
+        Some(Intrinsic::AtomicCxchgWeak(suffix.into()))
+    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_cxchg_") {
+        assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _, _ => RigidTy::Tuple(_));
+        Some(Intrinsic::AtomicCxchg(suffix.into()))
+    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_fence_") {
+        assert_sig_matches!(sig, => RigidTy::Tuple(_));
+        Some(Intrinsic::AtomicFence(suffix.into()))
+    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_load_") {
+        assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Not) => _);
+        Some(Intrinsic::AtomicLoad(suffix.into()))
+    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_max_") {
+        assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
+        Some(Intrinsic::AtomicMax(suffix.into()))
+    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_min_") {
+        assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
+        Some(Intrinsic::AtomicMin(suffix.into()))
+    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_nand_") {
+        assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
+        Some(Intrinsic::AtomicNand(suffix.into()))
+    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_or_") {
+        assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
+        Some(Intrinsic::AtomicOr(suffix.into()))
+    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_singlethreadfence_") {
+        assert_sig_matches!(sig, => RigidTy::Tuple(_));
+        Some(Intrinsic::AtomicSingleThreadFence(suffix.into()))
+    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_store_") {
+        assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => RigidTy::Tuple(_));
+        Some(Intrinsic::AtomicStore(suffix.into()))
+    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_umax_") {
+        assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
+        Some(Intrinsic::AtomicUmax(suffix.into()))
+    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_umin_") {
+        assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
+        Some(Intrinsic::AtomicUmin(suffix.into()))
+    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_xadd_") {
+        assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
+        Some(Intrinsic::AtomicXadd(suffix.into()))
+    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_xchg_") {
+        assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
+        Some(Intrinsic::AtomicXchg(suffix.into()))
+    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_xor_") {
+        assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
+        Some(Intrinsic::AtomicXor(suffix.into()))
+    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_xsub_") {
+        assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
+        Some(Intrinsic::AtomicXsub(suffix.into()))
+    } else {
+        None
+    }
+}
+
+/// Match SIMD intrinsics by instance, returning an instance of the intrinsics enum if the match
+/// is successful.
+fn try_match_simd(intrinsic_instance: &Instance) -> Option<Intrinsic> {
+    let intrinsic_str = intrinsic_instance.intrinsic_name().unwrap();
+    let sig = intrinsic_instance.ty().kind().fn_sig().unwrap().skip_binder();
+    match intrinsic_str.as_str() {
+        "simd_add" => {
+            assert_sig_matches!(sig, _, _ => _);
+            Some(Intrinsic::SimdAdd)
+        }
+        "simd_and" => {
+            assert_sig_matches!(sig, _, _ => _);
+            Some(Intrinsic::SimdAnd)
+        }
+        "simd_div" => {
+            assert_sig_matches!(sig, _, _ => _);
+            Some(Intrinsic::SimdDiv)
+        }
+        "simd_rem" => {
+            assert_sig_matches!(sig, _, _ => _);
+            Some(Intrinsic::SimdRem)
+        }
+        "simd_eq" => {
+            assert_sig_matches!(sig, _, _ => _);
+            Some(Intrinsic::SimdEq)
+        }
+        "simd_extract" => {
+            assert_sig_matches!(sig, _, RigidTy::Uint(UintTy::U32) => _);
+            Some(Intrinsic::SimdExtract)
+        }
+        "simd_ge" => {
+            assert_sig_matches!(sig, _, _ => _);
+            Some(Intrinsic::SimdGe)
+        }
+        "simd_gt" => {
+            assert_sig_matches!(sig, _, _ => _);
+            Some(Intrinsic::SimdGt)
+        }
+        "simd_insert" => {
+            assert_sig_matches!(sig, _, RigidTy::Uint(UintTy::U32), _ => _);
+            Some(Intrinsic::SimdInsert)
+        }
+        "simd_le" => {
+            assert_sig_matches!(sig, _, _ => _);
+            Some(Intrinsic::SimdLe)
+        }
+        "simd_lt" => {
+            assert_sig_matches!(sig, _, _ => _);
+            Some(Intrinsic::SimdLt)
+        }
+        "simd_mul" => {
+            assert_sig_matches!(sig, _, _ => _);
+            Some(Intrinsic::SimdMul)
+        }
+        "simd_ne" => {
+            assert_sig_matches!(sig, _, _ => _);
+            Some(Intrinsic::SimdNe)
+        }
+        "simd_or" => {
+            assert_sig_matches!(sig, _, _ => _);
+            Some(Intrinsic::SimdOr)
+        }
+        "simd_shl" => {
+            assert_sig_matches!(sig, _, _ => _);
+            Some(Intrinsic::SimdShl)
+        }
+        "simd_shr" => {
+            assert_sig_matches!(sig, _, _ => _);
+            Some(Intrinsic::SimdShr)
+        }
+        "simd_sub" => {
+            assert_sig_matches!(sig, _, _ => _);
+            Some(Intrinsic::SimdSub)
+        }
+        "simd_xor" => {
+            assert_sig_matches!(sig, _, _ => _);
+            Some(Intrinsic::SimdXor)
+        }
+        name => {
+            if let Some(suffix) = name.strip_prefix("simd_shuffle") {
+                assert_sig_matches!(sig, _, _, _ => _);
+                Some(Intrinsic::SimdShuffle(suffix.into()))
+            } else {
+                None
             }
         }
+    }
+}
+
+/// Match f32 arithmetic intrinsics by instance, returning an instance of the intrinsics enum if the match
+/// is successful.
+fn try_match_f32(intrinsic_instance: &Instance) -> Option<Intrinsic> {
+    let intrinsic_str = intrinsic_instance.intrinsic_name().unwrap();
+    let sig = intrinsic_instance.ty().kind().fn_sig().unwrap().skip_binder();
+    match intrinsic_str.as_str() {
+        "ceilf32" => {
+            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
+            Some(Intrinsic::CeilF32)
+        }
+        "copysignf32" => {
+            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32), RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
+            Some(Intrinsic::CopySignF32)
+        }
+        "cosf32" => {
+            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
+            Some(Intrinsic::CosF32)
+        }
+        "exp2f32" => {
+            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
+            Some(Intrinsic::Exp2F32)
+        }
+        "expf32" => {
+            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
+            Some(Intrinsic::ExpF32)
+        }
+        "fabsf32" => {
+            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
+            Some(Intrinsic::FabsF32)
+        }
+        "floorf32" => {
+            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
+            Some(Intrinsic::FloorF32)
+        }
+        "fmaf32" => {
+            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32), RigidTy::Float(FloatTy::F32), RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
+            Some(Intrinsic::FmafF32)
+        }
+        "log10f32" => {
+            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
+            Some(Intrinsic::Log10F32)
+        }
+        "log2f32" => {
+            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
+            Some(Intrinsic::Log2F32)
+        }
+        "logf32" => {
+            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
+            Some(Intrinsic::LogF32)
+        }
+        "maxnumf32" => {
+            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32), RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
+            Some(Intrinsic::MaxNumF32)
+        }
+        "minnumf32" => {
+            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32), RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
+            Some(Intrinsic::MinNumF32)
+        }
+        "nearbyintf32" => {
+            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
+            Some(Intrinsic::NearbyIntF32)
+        }
+        "powf32" => {
+            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32), RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
+            Some(Intrinsic::PowF32)
+        }
+        "powif32" => {
+            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32), RigidTy::Int(IntTy::I32) => RigidTy::Float(FloatTy::F32));
+            Some(Intrinsic::PowIF32)
+        }
+        "rintf32" => {
+            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
+            Some(Intrinsic::RintF32)
+        }
+        "roundf32" => {
+            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
+            Some(Intrinsic::RoundF32)
+        }
+        "sinf32" => {
+            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
+            Some(Intrinsic::SinF32)
+        }
+        "sqrtf32" => {
+            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
+            Some(Intrinsic::SqrtF32)
+        }
+        "truncf32" => {
+            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
+            Some(Intrinsic::TruncF32)
+        }
+        _ => None,
+    }
+}
+
+/// Match f64 arithmetic intrinsics by instance, returning an instance of the intrinsics enum if the match
+/// is successful.
+fn try_match_f64(intrinsic_instance: &Instance) -> Option<Intrinsic> {
+    let intrinsic_str = intrinsic_instance.intrinsic_name().unwrap();
+    let sig = intrinsic_instance.ty().kind().fn_sig().unwrap().skip_binder();
+    match intrinsic_str.as_str() {
+        "ceilf64" => {
+            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
+            Some(Intrinsic::CeilF64)
+        }
+        "copysignf64" => {
+            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64), RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
+            Some(Intrinsic::CopySignF64)
+        }
+        "cosf64" => {
+            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
+            Some(Intrinsic::CosF64)
+        }
+        "exp2f64" => {
+            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
+            Some(Intrinsic::Exp2F64)
+        }
+        "expf64" => {
+            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
+            Some(Intrinsic::ExpF64)
+        }
+        "fabsf64" => {
+            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
+            Some(Intrinsic::FabsF64)
+        }
+        "floorf64" => {
+            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
+            Some(Intrinsic::FloorF64)
+        }
+        "fmaf64" => {
+            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64), RigidTy::Float(FloatTy::F64), RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
+            Some(Intrinsic::FmafF64)
+        }
+        "log10f64" => {
+            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
+            Some(Intrinsic::Log10F64)
+        }
+        "log2f64" => {
+            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
+            Some(Intrinsic::Log2F64)
+        }
+        "logf64" => {
+            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
+            Some(Intrinsic::LogF64)
+        }
+        "maxnumf64" => {
+            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64), RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
+            Some(Intrinsic::MaxNumF64)
+        }
+        "minnumf64" => {
+            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64), RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
+            Some(Intrinsic::MinNumF64)
+        }
+        "nearbyintf64" => {
+            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
+            Some(Intrinsic::NearbyIntF64)
+        }
+        "powf64" => {
+            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64), RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
+            Some(Intrinsic::PowF64)
+        }
+        "powif64" => {
+            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64), RigidTy::Int(IntTy::I32) => RigidTy::Float(FloatTy::F64));
+            Some(Intrinsic::PowIF64)
+        }
+        "rintf64" => {
+            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
+            Some(Intrinsic::RintF64)
+        }
+        "roundf64" => {
+            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
+            Some(Intrinsic::RoundF64)
+        }
+        "sinf64" => {
+            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
+            Some(Intrinsic::SinF64)
+        }
+        "sqrtf64" => {
+            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
+            Some(Intrinsic::SqrtF64)
+        }
+        "truncf64" => {
+            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
+            Some(Intrinsic::TruncF64)
+        }
+        _ => None,
     }
 }
