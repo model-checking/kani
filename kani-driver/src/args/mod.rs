@@ -267,6 +267,10 @@ pub struct VerificationArgs {
     )]
     pub synthesize_loop_contracts: bool,
 
+    //Harness Output into individual files
+    #[arg(long, hide_short_help = true)]
+    pub output_into_files: bool,
+
     /// Randomize the layout of structures. This option can help catching code that relies on
     /// a specific layout chosen by the compiler that is not guaranteed to be stable in the future.
     /// If a value is given, it will be used as the seed for randomization
@@ -622,6 +626,20 @@ impl ValidateArgs for VerificationArgs {
                 "The `--coverage` argument is unstable and requires `-Z \
             line-coverage` to be used.",
             ));
+        }
+
+        if self.output_into_files
+            && !self.common_args.unstable_features.contains(UnstableFeature::UnstableOptions)
+        {
+            if self.common_args.enable_unstable {
+                print_deprecated(&self.common_args, "`--enable-unstable`", "-Z unstable-options");
+            } else {
+                return Err(Error::raw(
+                    ErrorKind::MissingRequiredArgument,
+                    "The `--output-into-files` argument is unstable and requires `-Z unstable-options` to enable \
+                unstable options support.",
+                ));
+            }
         }
 
         Ok(())
