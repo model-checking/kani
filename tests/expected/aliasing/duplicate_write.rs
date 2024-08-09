@@ -1,3 +1,4 @@
+// kani-flags: -Zaliasing
 #![allow(internal_features)]
 #![feature(rustc_attrs)]
 #![feature(vec_into_raw_parts)]
@@ -480,12 +481,12 @@ fn main() {
 
     local = 0;
     temp_ref = &mut local;
-    raw_pointer = local as *mut i32;
+    raw_pointer = temp_ref as *mut i32;
     unsafe {
-        ref_from_raw_1 = &*temp_ref;
-        ref_from_raw_1 = 0;
-        ref_from_raw_2 = &*temp_ref;
-        ref_from_raw_2 = 1;
-        ref_from_raw_1 = 1;
+        ref_from_raw_1 = &mut *raw_pointer;
+        *ref_from_raw_1 = 0;
+        ref_from_raw_2 = &mut *raw_pointer;
+        *ref_from_raw_2 = 1;
+        *ref_from_raw_1 = 2;
     }
 }
