@@ -85,17 +85,11 @@ impl MirVisitor for CheckUninitVisitor {
             match &stmt.kind {
                 StatementKind::Intrinsic(NonDivergingIntrinsic::CopyNonOverlapping(copy)) => {
                     self.super_statement(stmt, location);
-                    // Source is a *const T and it must be initialized.
-                    self.push_target(MemoryInitOp::CheckSliceChunk {
-                        operand: copy.src.clone(),
+                    // Copy memory initialization state from `src` to `dst`.
+                    self.push_target(MemoryInitOp::Copy {
+                        from: copy.src.clone(),
+                        to: copy.dst.clone(),
                         count: copy.count.clone(),
-                    });
-                    // Destination is a *mut T so it gets initialized.
-                    self.push_target(MemoryInitOp::SetSliceChunk {
-                        operand: copy.dst.clone(),
-                        count: copy.count.clone(),
-                        value: true,
-                        position: InsertPosition::After,
                     });
                 }
                 StatementKind::Assign(place, rvalue) => {
@@ -231,9 +225,7 @@ impl MirVisitor for CheckUninitVisitor {
                                         count: args[2].clone(),
                                     });
                                 }
-                                "copy"
-                                | "volatile_copy_memory"
-                                | "volatile_copy_nonoverlapping_memory" => {
+                                "copy" => {
                                     assert_eq!(
                                         args.len(),
                                         3,
@@ -247,15 +239,33 @@ impl MirVisitor for CheckUninitVisitor {
                                         args[1].ty(&self.locals).unwrap().kind(),
                                         TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Mut))
                                     ));
-                                    self.push_target(MemoryInitOp::CheckSliceChunk {
-                                        operand: args[0].clone(),
+                                    // Copy memory initialization state from `src` to `dst`.
+                                    self.push_target(MemoryInitOp::Copy {
+                                        from: args[0].clone(),
+                                        to: args[1].clone(),
                                         count: args[2].clone(),
                                     });
-                                    self.push_target(MemoryInitOp::SetSliceChunk {
-                                        operand: args[1].clone(),
+                                }
+                                // Here, `dst` is arg[0] and `src` is arg[1], so need to swap the order.
+                                "volatile_copy_memory" | "volatile_copy_nonoverlapping_memory" => {
+                                    assert_eq!(
+                                        args.len(),
+                                        3,
+                                        "Unexpected number of arguments for `volatile_copy`"
+                                    );
+                                    assert!(matches!(
+                                        args[0].ty(&self.locals).unwrap().kind(),
+                                        TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Mut))
+                                    ));
+                                    assert!(matches!(
+                                        args[1].ty(&self.locals).unwrap().kind(),
+                                        TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Not))
+                                    ));
+                                    // Copy memory initialization state from `src` to `dst`.
+                                    self.push_target(MemoryInitOp::Copy {
+                                        from: args[1].clone(),
+                                        to: args[0].clone(),
                                         count: args[2].clone(),
-                                        value: true,
-                                        position: InsertPosition::After,
                                     });
                                 }
                                 "typed_swap" => {

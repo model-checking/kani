@@ -178,6 +178,9 @@ impl<'a> UninitInstrumenter<'a> {
             | MemoryInitOp::SetRef { .. } => {
                 self.build_set(tcx, body, source, operation, pointee_ty_info, skip_first)
             }
+            MemoryInitOp::Copy { .. } => {
+                self.build_copy(tcx, body, source, operation, pointee_ty_info, skip_first)
+            }
             MemoryInitOp::Unsupported { .. } | MemoryInitOp::TriviallyUnsafe { .. } => {
                 unreachable!()
             }
@@ -395,6 +398,38 @@ impl<'a> UninitInstrumenter<'a> {
                 unreachable!("Cannot change the initialization state of a trait object directly.");
             }
         };
+    }
+
+    /// Copy memory initialization state from one pointer to the other.
+    fn build_copy(
+        &mut self,
+        tcx: TyCtxt,
+        body: &mut MutableBody,
+        source: &mut SourceInstruction,
+        operation: MemoryInitOp,
+        pointee_info: PointeeInfo,
+        skip_first: &mut HashSet<usize>,
+    ) {
+        let ret_place = Place {
+            local: body.new_local(Ty::new_tuple(&[]), source.span(body.blocks()), Mutability::Not),
+            projection: vec![],
+        };
+        let PointeeLayout::Sized { layout } = pointee_info.layout() else { unreachable!() };
+        let copy_init_state_instance = resolve_mem_init_fn(
+            get_mem_init_fn_def(tcx, "KaniCopyInitState", &mut self.mem_init_fn_cache),
+            layout.len(),
+            *pointee_info.ty(),
+        );
+        collect_skipped(&operation, body, skip_first);
+        let position = operation.position();
+        let MemoryInitOp::Copy { from, to, count } = operation else { unreachable!() };
+        body.insert_call(
+            &copy_init_state_instance,
+            source,
+            position,
+            vec![from, to, count],
+            ret_place.clone(),
+        );
     }
 
     fn inject_assert_false(
