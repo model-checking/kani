@@ -63,6 +63,27 @@ impl<'tcx> MemLoc<'tcx> {
     }
 }
 
+/// Data structure to keep track of both successors and ancestors of the node.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct NodeData<'tcx> {
+    successors: HashSet<MemLoc<'tcx>>,
+    ancestors: HashSet<MemLoc<'tcx>>,
+}
+
+impl<'tcx> NodeData<'tcx> {
+    /// Merge two instances of NodeData together, return true if the original one was updated and
+    /// false otherwise.
+    fn merge(&mut self, other: Self) -> bool {
+        let successors_before = self.successors.len();
+        let ancestors_before = self.ancestors.len();
+        self.successors.extend(other.successors);
+        self.ancestors.extend(other.ancestors);
+        let successors_after = self.successors.len();
+        let ancestors_after = self.ancestors.len();
+        successors_before != successors_after || ancestors_before != ancestors_after
+    }
+}
+
 /// Graph data structure that stores the current results of the point-to analysis. The graph is
 /// directed, so having an edge between two places means that one is pointing to the other.
 ///
@@ -82,24 +103,39 @@ impl<'tcx> MemLoc<'tcx> {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PointsToGraph<'tcx> {
     /// A hash map of node --> {nodes} edges.
-    edges: HashMap<MemLoc<'tcx>, HashSet<MemLoc<'tcx>>>,
+    nodes: HashMap<MemLoc<'tcx>, NodeData<'tcx>>,
 }
 
 impl<'tcx> PointsToGraph<'tcx> {
     pub fn empty() -> Self {
-        Self { edges: HashMap::new() }
+        Self { nodes: HashMap::new() }
     }
 
     /// Collect all nodes which have incoming edges from `nodes`.
     pub fn successors(&self, nodes: &HashSet<MemLoc<'tcx>>) -> HashSet<MemLoc<'tcx>> {
-        nodes.iter().flat_map(|node| self.edges.get(node).cloned().unwrap_or_default()).collect()
+        nodes
+            .iter()
+            .flat_map(|node| self.nodes.get(node).cloned().unwrap_or_default().successors)
+            .collect()
     }
 
-    /// For each node in `from`, add an edge to each node in `to`.
+    /// Collect all nodes which have outgoing edges to `nodes`.
+    pub fn ancestors(&self, nodes: &HashSet<MemLoc<'tcx>>) -> HashSet<MemLoc<'tcx>> {
+        nodes
+            .iter()
+            .flat_map(|node| self.nodes.get(node).cloned().unwrap_or_default().ancestors)
+            .collect()
+    }
+
+    /// For each node in `from`, add an edge to each node in `to` (and the reverse for ancestors).
     pub fn extend(&mut self, from: &HashSet<MemLoc<'tcx>>, to: &HashSet<MemLoc<'tcx>>) {
         for node in from.iter() {
-            let node_pointees = self.edges.entry(*node).or_default();
-            node_pointees.extend(to.iter());
+            let node_pointees = self.nodes.entry(*node).or_default();
+            node_pointees.successors.extend(to.iter());
+        }
+        for node in to.iter() {
+            let node_pointees = self.nodes.entry(*node).or_default();
+            node_pointees.ancestors.extend(from.iter());
         }
     }
 
@@ -150,16 +186,16 @@ impl<'tcx> PointsToGraph<'tcx> {
     /// Dump the graph into a file using the graphviz format for later visualization.
     pub fn dump(&self, file_path: &str) {
         let mut nodes: Vec<String> =
-            self.edges.keys().map(|from| format!("\t\"{:?}\"", from)).collect();
+            self.nodes.keys().map(|from| format!("\t\"{:?}\"", from)).collect();
         nodes.sort();
         let nodes_str = nodes.join("\n");
 
         let mut edges: Vec<String> = self
-            .edges
+            .nodes
             .iter()
             .flat_map(|(from, to)| {
                 let from = format!("\"{:?}\"", from);
-                to.iter().map(move |to| {
+                to.successors.iter().map(move |to| {
                     let to = format!("\"{:?}\"", to);
                     format!("\t{} -> {}", from.clone(), to)
                 })
@@ -178,23 +214,17 @@ impl<'tcx> PointsToGraph<'tcx> {
         // Working queue.
         let mut queue = VecDeque::from_iter(targets);
         // Add all statics, as they can be accessed at any point.
-        let statics = self.edges.keys().filter(|node| matches!(node, MemLoc::Static(_)));
+        let statics = self.nodes.keys().filter(|node| matches!(node, MemLoc::Static(_)));
         queue.extend(statics);
         // Add all entries.
         while let Some(next_target) = queue.pop_front() {
-            result.edges.entry(next_target).or_insert_with(|| {
-                let outgoing_edges =
-                    self.edges.get(&next_target).cloned().unwrap_or(HashSet::new());
-                queue.extend(outgoing_edges.iter());
+            result.nodes.entry(next_target).or_insert_with(|| {
+                let outgoing_edges = self.nodes.get(&next_target).cloned().unwrap_or_default();
+                queue.extend(outgoing_edges.successors.iter());
                 outgoing_edges.clone()
             });
         }
         result
-    }
-
-    /// Retrieve all places to which a given place is pointing to.
-    pub fn pointees_of(&self, target: &MemLoc<'tcx>) -> HashSet<MemLoc<'tcx>> {
-        self.edges.get(&target).unwrap_or(&HashSet::new()).clone()
     }
 }
 
@@ -206,12 +236,10 @@ impl<'tcx> JoinSemiLattice for PointsToGraph<'tcx> {
     fn join(&mut self, other: &Self) -> bool {
         let mut updated = false;
         // Check every node in the other graph.
-        for (from, to) in other.edges.iter() {
-            let existing_to = self.edges.entry(*from).or_default();
-            let initial_size = existing_to.len();
-            existing_to.extend(to);
-            let new_size = existing_to.len();
-            updated |= initial_size != new_size;
+        for (node, data) in other.nodes.iter() {
+            let existing_node = self.nodes.entry(*node).or_default();
+            let changed = existing_node.merge(data.clone());
+            updated |= changed;
         }
         updated
     }
