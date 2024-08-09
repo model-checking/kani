@@ -1,0 +1,21 @@
+#!/usr/bin/env python3
+
+import re
+import sys
+
+pat = re.compile(r".+~include (?P<path>.+)</p>")
+ok = True
+for line in sys.stdin:
+    m = pat.match(line)
+    if not m:
+        print(line, end="")
+        continue
+    print(f"including {m['path']}", file=sys.stderr)
+    try:
+        with open(m["path"]) as included:
+            for line in included:
+                print(line, end="")
+    except FileNotFoundError:
+        ok = False
+        print(f"ERROR: File not found: {m['path']}", file=sys.stderr)
+sys.exit(0 if ok else 1)
