@@ -1,4 +1,4 @@
-// kani-flags: -Zaliasing
+// kani-flags: -Zghost-state -Zaliasing
 #![allow(internal_features)]
 #![feature(rustc_attrs)]
 #![feature(vec_into_raw_parts)]
@@ -10,57 +10,49 @@
 #![feature(const_trait_impl)]
 #![cfg_attr(not(kani), feature(register_tool))]
 #![cfg_attr(not(kani), register_tool(kani))]
-use std::ptr::null;
-use std::ptr::addr_of;
-use std::convert::TryInto;
 
-const MAX_NUM_OBJECTS: usize = 1024;
-const MAX_OBJECT_SIZE: usize = 64;
+#[derive(Copy, Clone)]
+#[rustc_diagnostic_item = "KaniAliasingChecked"]
+struct AliasingChecked { amount: usize }
 
 const STACK_DEPTH: usize = 15;
 type PointerTag = u8;
 
+extern crate kani;
+use kani::shadow::ShadowMem;
+
+#[inline(never)]
+fn get_checked() -> AliasingChecked {
+    static mut CHECKED: AliasingChecked = AliasingChecked { amount: 0 };
+    unsafe { CHECKED.amount = CHECKED.amount.wrapping_add(1);  CHECKED }
+}
+
 #[cfg(any(kani))]
 fn assume(b: bool) {
+    let checked = get_checked();
+    let _ = checked;
     kani::assume(b);
 }
 
+
 #[cfg(not(kani))]
 fn assume(b: bool) {
+    let checked: AliasingChecked = get_checked();
+    let _ = checked;
     assert!(b);
-}
-
-#[cfg(any(kani))]
-fn pointer_object<T>(ptr: *const T) -> usize {
-    kani::mem::pointer_object(ptr)
-}
-
-#[cfg(not(kani))]
-fn pointer_object<T>(ptr: *const T) -> usize {
-    ptr as usize
-}
-
-#[cfg(any(kani))]
-fn pointer_offset<T>(_ptr: *const T) -> usize {
-    0
-}
-
-#[cfg(not(kani))]
-fn pointer_offset<T>(ptr: *const T) -> usize {
-    0
 }
 
 /// The stacked borrows state.
 pub mod sstate {
     use super::*;
     /// Associate every pointer object with a tag
-    static mut TAGS: [[PointerTag; MAX_OBJECT_SIZE]; MAX_NUM_OBJECTS] =
-                     [[0; MAX_OBJECT_SIZE]; MAX_NUM_OBJECTS];
+    static mut TAGS: ShadowMem<PointerTag> = ShadowMem::new(0);
     /// Next pointer id: the next pointer id in sequence
     static mut NEXT_TAG: PointerTag = 0;
 
     #[non_exhaustive]
     struct Access;
+    #[allow(unused)]
     impl Access {
         pub(self) const READ: bool = false;
         pub(self) const WRITE: bool = true;
@@ -75,13 +67,14 @@ pub mod sstate {
         pub(self) const DISABLED: u8 = 3;
 
         pub(self) fn grants(access: bool, tag: u8) -> bool {
+            let checked: AliasingChecked = get_checked();
+            let _ = checked;
             tag != Self::DISABLED && (access != Access::WRITE || tag != Self::SHAREDRO)
         }
     }
 
     /// Associate every pointer object with a permission
-    static mut PERMS: [[PointerTag; MAX_OBJECT_SIZE]; MAX_NUM_OBJECTS] =
-                      [[Permission::UNIQUE; MAX_OBJECT_SIZE]; MAX_NUM_OBJECTS];
+    static mut PERMS: ShadowMem<u8> = ShadowMem::new(0);
 
     pub(super) mod monitors {
         static mut STATE: bool = false;
@@ -141,6 +134,8 @@ pub mod sstate {
         /// An N+1th monitor is allocated as a "garbage"
         /// area to be used when no monitor is picked.
         pub fn prepare_monitors() {
+            let checked: AliasingChecked = get_checked();
+            let _ = checked;
             unsafe {
                 OBJECT = 0usize;
                     // vec![0usize; size].into_raw_parts().0 as *const ();
@@ -160,6 +155,8 @@ pub mod sstate {
         /// Initialize local when track local is true, picking a monitor,
         /// and setting its object and offset to within pointer.
         pub(super) unsafe fn track_local<U>(tag: u8, pointer: *const U) {
+            let checked: AliasingChecked = get_checked();
+            let _ = checked;
             // Decide whether to initialize the stacks
             // for location:location+size_of(U).
             // Offset has already been picked earlier.
@@ -188,7 +185,7 @@ pub mod sstate {
                 // }
                 if demonic_nondet() && STATE == MonitorState::UNINIT {
                     STATE = MonitorState::INIT;
-                    OBJECT = pointer_object(pointer);
+                    OBJECT =  kani::mem::pointer_object(pointer);
                     assume(OFFSET < std::mem::size_of::<U>());
                     STACK_TAGS[STACK_TOP] = tag;
                     STACK_PERMS[STACK_TOP] = Permission::UNIQUE;
@@ -199,6 +196,8 @@ pub mod sstate {
 
         /// Push a tag with a permission perm at pointer
         pub(super) fn push<U>(tag: u8, perm: u8, pointer: *const U) {
+            let checked: AliasingChecked = get_checked();
+            let _ = checked;
             // Decide whether to initialize the stacks
             // for location:location+size_of(U).
             // Offset has already been picked earlier.
@@ -214,8 +213,8 @@ pub mod sstate {
 
                 // let mut i = sstate_config::MONITORS.try_into().unwrap();
                 if STATE == MonitorState::INIT &&
-                   OBJECT == pointer_object(pointer) &&
-                   OFFSET == pointer_offset(pointer)
+                   OBJECT == kani::mem::pointer_object(pointer) &&
+                   OFFSET == kani::mem::pointer_offset(pointer)
                 {
                     STACK_TAGS[STACK_TOP + 1] = tag;
                     STACK_PERMS[STACK_TOP + 1] = perm;
@@ -225,6 +224,8 @@ pub mod sstate {
         }
 
         pub(super) fn stack_check<U>(tag: u8, access: bool, address: *const U) {
+            let checked: AliasingChecked = get_checked();
+            let _ = checked;
             unsafe {
                 use self::*;
                 // let states      = get_states();
@@ -235,8 +236,8 @@ pub mod sstate {
                 // let tops        = get_stack_tops();
                 // let mut i = sstate_config::MONITORS.try_into().unwrap();
                 if STATE == MonitorState::INIT &&
-                   OFFSET == pointer_offset(address) &&
-                   OBJECT == pointer_object(address) {
+                   OFFSET == kani::mem::pointer_offset(address) &&
+                   OBJECT == kani::mem::pointer_object(address) {
                    let mut found = false;
                    let mut j = 0;
                    let mut new_top = 0;
@@ -252,6 +253,8 @@ pub mod sstate {
                        }
                        j += 1;
                    }
+                   STACK_TOP = new_top;
+                   assert!(found, "Stack violated.");
                 }
                 // while i > 0 {
                 //     {
@@ -271,16 +274,22 @@ pub mod sstate {
 
     #[rustc_diagnostic_item = "KaniInitializeSState"]
     pub fn initialize() {
+        let checked: AliasingChecked = get_checked();
+        let _ = checked;
         self::monitors::prepare_monitors();
     }
 
     /// Run a stack check on the pointer value at the given location.
     pub fn stack_check<U>(tag: u8, access: bool, address: *const U) {
+        let checked: AliasingChecked = get_checked();
+        let _ = checked;
         self::monitors::stack_check(tag, access, address)
     }
 
     /// Push the permissions at the given location
     pub fn push<U>(tag: u8, perm: u8, address: *const U) {
+        let checked: AliasingChecked = get_checked();
+        let _ = checked;
         self::monitors::push(tag, perm, address)
     }
 
@@ -294,20 +303,25 @@ pub mod sstate {
     /// set to true after the first write, a track flag set to the value
     /// of a query to a demonic nondeterminism oracle (when this feature is used)
     /// and a reference to the stack location.
+    #[rustc_diagnostic_item = "KaniInitializeLocal"]
     pub fn initialize_local<U>(pointer: *const U) {
+        let checked: AliasingChecked = get_checked();
+        let _ = checked;
         unsafe {
             let tag = NEXT_TAG;
-            TAGS[pointer_object(pointer)][pointer_offset(pointer)] = NEXT_TAG;
-            PERMS[pointer_object(pointer)][pointer_offset(pointer)] = Permission::UNIQUE;
+            TAGS.set(pointer, tag);
+            PERMS.set(pointer, Permission::UNIQUE);
             NEXT_TAG += 1;
             monitors::track_local(tag, pointer);
         }
     }
 
     pub fn use_2<T>(ptr: *const T) {
+        let checked: AliasingChecked = get_checked();
+        let _ = checked;
         unsafe {
-            let tag = TAGS[pointer_object(ptr)][pointer_offset(ptr)];
-            let perm = PERMS[pointer_object(ptr)][pointer_offset(ptr)];
+            let tag = TAGS.get(ptr);
+            // let perm = PERMS[pointer_object(ptr)][pointer_offset(ptr)];
             for i in 0..std::mem::size_of::<T>() {
                 stack_check(tag, Access::WRITE, ptr.byte_add(i));
             }
@@ -317,6 +331,8 @@ pub mod sstate {
     /// Make a new mutable reference at the rvalue.
     /// Associate the tag with the lvalue.
     pub fn new_mut_ref<T>(lvalue: *const &mut T, rvalue: &mut T) {
+        let checked: AliasingChecked = get_checked();
+        let _ = checked;
         unsafe {
             // use_2 the rvalue
             use_2(rvalue as *const T);
@@ -331,6 +347,8 @@ pub mod sstate {
     /// Make a raw mutable reference at the rvalue.
     /// Associate the tag with the lvalue.
     pub fn new_mut_raw<T>(lvalue: *const *mut T, rvalue: *mut T) {
+        let checked: AliasingChecked = get_checked();
+        let _ = checked;
         unsafe {
             // use_2 the rvalue
             use_2(rvalue as *const T);
@@ -345,45 +363,18 @@ pub mod sstate {
 
 
 
-type PointerValueKind = u32;
-/* Uninitialized pointer tag */
-const KIND_UNINITIALIZED: PointerValueKind = 0;
-/* Pointer tag with ID */
-const KIND_IDENTIFIED: PointerValueKind = 1;
-/* Tag == none -- e.g. shared mutable reference */
-const KIND_NONE: PointerValueKind = 2;
-
-static mut POINTER_PERMISSIONS: [[PointerValueKind; MAX_OBJECT_SIZE]; MAX_NUM_OBJECTS] =
-    [[KIND_UNINITIALIZED; MAX_OBJECT_SIZE]; MAX_NUM_OBJECTS];
-
-static mut POINTER_TAGS: [[usize; MAX_OBJECT_SIZE]; MAX_NUM_OBJECTS] =
-    [[0; MAX_OBJECT_SIZE]; MAX_NUM_OBJECTS];
-
-static mut POINTER_SIZE: [[usize; MAX_OBJECT_SIZE]; MAX_NUM_OBJECTS] =
-    [[0; MAX_OBJECT_SIZE]; MAX_NUM_OBJECTS];
-
 #[cfg(any(kani))]
 fn demonic_nondet() -> bool {
+    let checked: AliasingChecked = get_checked();
+    let _ = checked;
     kani::any::<bool>()
 }
 
 #[cfg(not(kani))]
 fn demonic_nondet() -> bool {
+    let checked: AliasingChecked = get_checked();
+    let _ = checked;
     true
-}
-
-fn track_local() -> bool {
-    demonic_nondet()
-}
-
-#[cfg(not(kani))]
-fn any_usize() -> usize {
-    0
-}
-
-#[cfg(any(kani))]
-fn any_usize() -> usize {
-    kani::any()
 }
 
 // #[rustc_diagnostic_item = "KaniPushUnique"]
@@ -470,6 +461,7 @@ fn any_usize() -> usize {
 //         push_shared(pointer.byte_offset(i as isize), kind, tag, KIND_SHARED_RW);
 //     }
 // }
+
 
 #[kani::proof]
 fn main() {

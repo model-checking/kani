@@ -87,7 +87,7 @@ impl BodyTransformation {
         // Check aliasing
         transformer.add_pass(
             queries,
-            AliasingPass { },
+            AliasingPass::new(),
         );
         transformer.add_pass(
             queries,

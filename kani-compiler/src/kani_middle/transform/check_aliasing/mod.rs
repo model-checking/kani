@@ -11,7 +11,7 @@ use rustc_middle::ty::TyCtxt;
 use stable_mir::mir::mono::Instance;
 use std::fmt::Debug;
 use stable_mir::ty::{
-    FnDef, GenericArgKind, GenericArgs, Region, RegionKind, RigidTy, Ty, TyKind, Span
+    AdtDef, GenericArgKind, GenericArgs, Region, RegionKind, RigidTy, Span, Ty, TyKind
 };
 use stable_mir::mir::{
     BasicBlockIdx, Body, Local, LocalDecl, Mutability, Place, TerminatorKind, UnwindAction
@@ -19,7 +19,34 @@ use stable_mir::mir::{
 use stable_mir::{CrateDef, Error};
 use stable_mir::mir::{BasicBlock, BorrowKind, MirVisitor, MutBorrowKind, Operand, ProjectionElem, Rvalue, Statement, StatementKind, Terminator, VarDebugInfo
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use tracing::trace;
+
+fn instrumented_flag_def(tcx: &TyCtxt) -> AdtDef {
+    let attr_id = tcx
+        .all_diagnostic_items(())
+        .name_to_id
+        .get(&rustc_span::symbol::Symbol::intern("KaniAliasingChecked")).unwrap();
+    if let TyKind::RigidTy(RigidTy::Adt(def, _)) =
+        rustc_smir::rustc_internal::stable(tcx.type_of(attr_id)).value.kind() {
+            def
+        } else {
+            panic!("Failure")
+        }
+}
+
+fn instrumented_flag_type(tcx: &TyCtxt) -> Ty {
+    let attr_id = tcx
+        .all_diagnostic_items(())
+        .name_to_id
+        .get(&rustc_span::symbol::Symbol::intern("KaniAliasingChecked")).unwrap();
+    if let TyKind::RigidTy(ty) =
+        rustc_smir::rustc_internal::stable(tcx.type_of(attr_id)).value.kind() {
+            Ty::from_rigid_kind(ty)
+        } else {
+            panic!("Failure")
+        }
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FunctionSignature {
@@ -59,9 +86,15 @@ pub struct StackedBorrowsPass {
 }
 
 /// Instrument the code with checks for uninitialized memory.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct AliasingPass {
     cache: FunctionInstanceCache,
+}
+
+impl AliasingPass {
+    pub fn new() -> AliasingPass {
+        Default::default()
+    }
 }
 
 struct InitializedPassState<'tcx, 'cache> {
@@ -99,9 +132,17 @@ impl TransformPass for AliasingPass {
     }
 
     fn transform(&mut self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
-        let pass = InitializedPassState::new(body, tcx, &mut self.cache);
-        let out = pass.collect_locals().collect_body().finalize();
-        (true, out)
+        trace!(function=?instance.name(), "transform: aliasing pass");
+        let mut visitor = CheckInstrumented::new(&tcx);
+        visitor.visit_body(&body);
+        if visitor.is_instrumented || instance.name().contains("kani") || instance.name().contains("std::mem::size_of") || instance.name().contains("core::num") || instance.name().contains("std::ptr") || instance.name().contains("get_checked") {
+            // unsafe {ALREADY_INSTRUMENTED_COUNT += 1};
+            (false, body)
+        } else {
+            let pass = InitializedPassState::new(body, tcx, &mut self.cache);
+            let out = pass.collect_locals().collect_body().finalize();
+            (true, out)
+        }
     }
 }
 
@@ -125,8 +166,13 @@ struct BodyMutationPassState<'tcx, 'cache> {
 }
 
 impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
+    fn mark_instrumented(&mut self) -> Local {
+        let ty = instrumented_flag_type(&self.tcx);
+        self.body.new_local(ty, Mutability::Not)
+    }
+
     fn assign_ref(
-        &mut self,
+        body: &mut CachedBodyMutator,
         lvalue: Local,
         rvalue: Local,
         span: Span) {
@@ -136,7 +182,7 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
         let lvalue = Place::from(lvalue);
         let rvalue = Rvalue::Ref(region, borrow, Place::from(rvalue));
         let kind = StatementKind::Assign(lvalue, rvalue);
-        self.body.insert_statement(Statement { kind, span });
+        body.insert_statement(Statement { kind, span });
     }
 
     fn instrument_local(
@@ -146,10 +192,12 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
         // Initialize the constants
         let ty = self.body.local(local).ty;
         let ref_ty = Ty::new_ref(Region { kind: RegionKind::ReErased }, ty, Mutability::Not );
+        let span = self.body.span().clone();
         let body = &mut self.body;
         let local_ref = self.meta_stack.entry(local).or_insert_with(|| body.new_local(ref_ty, Mutability::Not));
+        Self::assign_ref(body, *local_ref, local, span);
         let instance = self.cache.register(&self.tcx, FunctionSignature::new("KaniInitializeLocal", &[GenericArgKind::Type(ty)]))?;
-        body.call(instance, [local, *local_ref].to_vec(), body.unit);
+        body.call(instance, [*local_ref].to_vec(), body.unit);
         Ok(())
     }
 
@@ -277,6 +325,7 @@ impl<'tcx, 'cache> BodyMutationPassState<'tcx, 'cache> {
     }
 
     fn finalize(mut self) -> Body {
+        self.instrumentation_data.mark_instrumented();
         self.instrument_locals().unwrap();
         self.instrumentation_data.body.finalize_prologue();
         self.instrument_instructions().unwrap();
@@ -350,6 +399,26 @@ impl<'tcx, 'cache> LocalPassState<'tcx, 'cache> {
         BodyMutationPassState {
             values,
             instrumentation_data
+        }
+    }
+}
+
+struct CheckInstrumented {
+    marker: AdtDef,
+    is_instrumented: bool,
+}
+
+impl CheckInstrumented {
+    fn new(tcx: &TyCtxt) -> CheckInstrumented {
+        CheckInstrumented { marker: instrumented_flag_def(tcx), is_instrumented: false }
+    }
+}
+
+impl MirVisitor for CheckInstrumented {
+    fn visit_local_decl(&mut self, _: Local, decl: &LocalDecl) {
+        let LocalDecl { ty, .. } = decl;
+        if let TyKind::RigidTy(RigidTy::Adt(def, _)) = ty.kind() {
+            self.is_instrumented = self.is_instrumented || self.marker == def;
         }
     }
 }
@@ -532,8 +601,13 @@ impl BodyMutator {
 
     fn new_index(&self) -> MutatorIndex {
         let len = self.blocks.len();
-        let bb = len - 1;
-        let idx = if len > 0 { self.blocks[bb].statements.len() - 1 } else { 0 };
+        let bb = std::cmp::max(len, 1) - 1;
+        let idx = if len > 0 {
+            std::cmp::max(self.blocks[bb].statements.len(), 1)
+             - 1
+        } else {
+            0
+        };
         let span = self.span;
         MutatorIndex { bb, idx, span }
     }
@@ -544,8 +618,13 @@ impl BodyMutator {
             status = MutatorIndexStatus::Remaining;
         }
         if index.idx > 0 {
-            index.span = self.blocks[index.bb]
-                .statements[index.idx].span;
+            if index.idx < self.blocks[index.bb].statements.len() {
+                index.span = self.blocks[index.bb]
+                    .statements[index.idx].span;
+            } else {
+                index.span = self.blocks[index.bb]
+                    .terminator.span;
+            }
             index.idx -= 1;
         } else if index.bb > 0 {
             index.bb -= 1;
