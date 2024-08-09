@@ -4,14 +4,17 @@
 //! This module contains the visitor responsible for collecting initial analysis targets for delayed
 //! UB instrumentation.
 
-use crate::kani_middle::transform::check_uninit::ty_layout::tys_layout_equal_to_size;
+use crate::{
+    intrinsics::Intrinsic,
+    kani_middle::transform::check_uninit::ty_layout::tys_layout_equal_to_size,
+};
 use stable_mir::{
     mir::{
         alloc::GlobalAlloc,
         mono::{Instance, InstanceKind, StaticDef},
         visit::Location,
-        Body, CastKind, LocalDecl, MirVisitor, Mutability, NonDivergingIntrinsic, Operand, Place,
-        Rvalue, Statement, StatementKind, Terminator, TerminatorKind,
+        Body, CastKind, LocalDecl, MirVisitor, NonDivergingIntrinsic, Operand, Place, Rvalue,
+        Statement, StatementKind, Terminator, TerminatorKind,
     },
     ty::{ConstantKind, RigidTy, TyKind},
 };
@@ -101,34 +104,12 @@ impl MirVisitor for InitialTargetVisitor {
         if let TerminatorKind::Call { func, args, .. } = &term.kind {
             let instance = try_resolve_instance(self.body.locals(), func).unwrap();
             if instance.kind == InstanceKind::Intrinsic {
-                match instance.intrinsic_name().unwrap().as_str() {
-                    "copy" => {
-                        assert_eq!(args.len(), 3, "Unexpected number of arguments for `copy`");
-                        assert!(matches!(
-                            args[0].ty(self.body.locals()).unwrap().kind(),
-                            TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Not))
-                        ));
-                        assert!(matches!(
-                            args[1].ty(self.body.locals()).unwrap().kind(),
-                            TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Mut))
-                        ));
+                match Intrinsic::from_instance(&instance) {
+                    Intrinsic::Copy => {
                         // Here, `dst` is the second argument.
                         self.push_operand(&args[1]);
                     }
-                    "volatile_copy_memory" | "volatile_copy_nonoverlapping_memory" => {
-                        assert_eq!(
-                            args.len(),
-                            3,
-                            "Unexpected number of arguments for `volatile_copy`"
-                        );
-                        assert!(matches!(
-                            args[0].ty(self.body.locals()).unwrap().kind(),
-                            TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Mut))
-                        ));
-                        assert!(matches!(
-                            args[1].ty(self.body.locals()).unwrap().kind(),
-                            TyKind::RigidTy(RigidTy::RawPtr(_, Mutability::Not))
-                        ));
+                    Intrinsic::VolatileCopyMemory | Intrinsic::VolatileCopyNonOverlappingMemory => {
                         // Here, `dst` is the first argument.
                         self.push_operand(&args[0]);
                     }
