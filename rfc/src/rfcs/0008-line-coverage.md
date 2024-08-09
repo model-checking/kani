@@ -1,7 +1,7 @@
 - **Feature Name:** Line coverage (`line-coverage`)
 - **Feature Request Issue:** <https://github.com/model-checking/kani/issues/2610>
 - **RFC PR:** <https://github.com/model-checking/kani/pull/2609>
-- **Status:** Unstable
+- **Status:** Cancelled
 - **Version:** 0
 - **Proof-of-concept:** <https://github.com/model-checking/kani/pull/2609> (Kani) + <https://github.com/model-checking/kani-vscode-extension/pull/122> (Kani VS Code Extension)
 
