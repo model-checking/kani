@@ -206,79 +206,6 @@ impl Intrinsic {
                 assert_sig_matches!(sig, RigidTy::Bool => RigidTy::Tuple(_));
                 Self::Assume
             }
-            name if name.starts_with("atomic_and") => {
-                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
-                Self::AtomicAnd(name.strip_prefix("atomic_and_").unwrap().into())
-            }
-            name if name.starts_with("atomic_cxchgweak") => {
-                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _, _ => RigidTy::Tuple(_));
-                Self::AtomicCxchgWeak(name.strip_prefix("atomic_cxchgweak_").unwrap().into())
-            }
-            name if name.starts_with("atomic_cxchg") => {
-                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _, _ => RigidTy::Tuple(_));
-                Self::AtomicCxchg(name.strip_prefix("atomic_cxchg_").unwrap().into())
-            }
-            name if name.starts_with("atomic_fence") => {
-                assert_sig_matches!(sig, => RigidTy::Tuple(_));
-                Self::AtomicFence(name.strip_prefix("atomic_fence_").unwrap().into())
-            }
-            name if name.starts_with("atomic_load") => {
-                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Not) => _);
-                Self::AtomicLoad(name.strip_prefix("atomic_load_").unwrap().into())
-            }
-            name if name.starts_with("atomic_max") => {
-                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
-                Self::AtomicMax(name.strip_prefix("atomic_max_").unwrap().into())
-            }
-            name if name.starts_with("atomic_min") => {
-                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
-                Self::AtomicMin(name.strip_prefix("atomic_min_").unwrap().into())
-            }
-            name if name.starts_with("atomic_nand") => {
-                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
-                Self::AtomicNand(name.strip_prefix("atomic_nand_").unwrap().into())
-            }
-            name if name.starts_with("atomic_or") => {
-                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
-                Self::AtomicOr(name.strip_prefix("atomic_or_").unwrap().into())
-            }
-            name if name.starts_with("atomic_singlethreadfence") => {
-                assert_sig_matches!(sig, => RigidTy::Tuple(_));
-                Self::AtomicSingleThreadFence(
-                    name.strip_prefix("atomic_singlethreadfence_").unwrap().into(),
-                )
-            }
-            name if name.starts_with("atomic_store") => {
-                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => RigidTy::Tuple(_));
-                Self::AtomicStore(name.strip_prefix("atomic_store_").unwrap().into())
-            }
-            name if name.starts_with("atomic_umax") => {
-                assert_sig_matches!(sig,
-                    RigidTy::RawPtr(_, Mutability::Mut),
-                    _
-                    => _);
-                Self::AtomicUmax(name.strip_prefix("atomic_umax_").unwrap().into())
-            }
-            name if name.starts_with("atomic_umin") => {
-                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
-                Self::AtomicUmin(name.strip_prefix("atomic_umin_").unwrap().into())
-            }
-            name if name.starts_with("atomic_xadd") => {
-                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
-                Self::AtomicXadd(name.strip_prefix("atomic_xadd_").unwrap().into())
-            }
-            name if name.starts_with("atomic_xchg") => {
-                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
-                Self::AtomicXchg(name.strip_prefix("atomic_xchg_").unwrap().into())
-            }
-            name if name.starts_with("atomic_xor") => {
-                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
-                Self::AtomicXor(name.strip_prefix("atomic_xor_").unwrap().into())
-            }
-            name if name.starts_with("atomic_xsub") => {
-                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
-                Self::AtomicXsub(name.strip_prefix("atomic_xsub_").unwrap().into())
-            }
             "bitreverse" => {
                 assert_sig_matches!(sig, _ => _);
                 Self::Bitreverse
@@ -648,10 +575,6 @@ impl Intrinsic {
                 assert_sig_matches!(sig, _, _ => _);
                 Self::SimdShr
             }
-            name if name.starts_with("simd_shuffle") => {
-                assert_sig_matches!(sig, _, _, _ => _);
-                Self::SimdShuffle(name.strip_prefix("simd_shuffle").unwrap().into())
-            }
             "simd_sub" => {
                 assert_sig_matches!(sig, _, _ => _);
                 Self::SimdSub
@@ -764,11 +687,70 @@ impl Intrinsic {
                 assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), RigidTy::Uint(UintTy::U8), RigidTy::Uint(UintTy::Usize) => RigidTy::Tuple(_));
                 Self::WriteBytes
             }
-            // Unimplemented
-            _ => Self::Unimplemented {
-                name: intrinsic_str,
-                issue_link: "https://github.com/model-checking/kani/issues/new/choose".into(),
-            },
+            name => {
+                if let Some(suffix) = name.strip_prefix("atomic_and_") {
+                    assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
+                    Self::AtomicAnd(suffix.into())
+                } else if let Some(suffix) = name.strip_prefix("atomic_cxchgweak_") {
+                    assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _, _ => RigidTy::Tuple(_));
+                    Self::AtomicCxchgWeak(suffix.into())
+                } else if let Some(suffix) = name.strip_prefix("atomic_cxchg_") {
+                    assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _, _ => RigidTy::Tuple(_));
+                    Self::AtomicCxchg(suffix.into())
+                } else if let Some(suffix) = name.strip_prefix("atomic_fence_") {
+                    assert_sig_matches!(sig, => RigidTy::Tuple(_));
+                    Self::AtomicFence(suffix.into())
+                } else if let Some(suffix) = name.strip_prefix("atomic_load_") {
+                    assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Not) => _);
+                    Self::AtomicLoad(suffix.into())
+                } else if let Some(suffix) = name.strip_prefix("atomic_max_") {
+                    assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
+                    Self::AtomicMax(suffix.into())
+                } else if let Some(suffix) = name.strip_prefix("atomic_min_") {
+                    assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
+                    Self::AtomicMin(suffix.into())
+                } else if let Some(suffix) = name.strip_prefix("atomic_nand_") {
+                    assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
+                    Self::AtomicNand(suffix.into())
+                } else if let Some(suffix) = name.strip_prefix("atomic_or_") {
+                    assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
+                    Self::AtomicOr(suffix.into())
+                } else if let Some(suffix) = name.strip_prefix("atomic_singlethreadfence_") {
+                    assert_sig_matches!(sig, => RigidTy::Tuple(_));
+                    Self::AtomicSingleThreadFence(suffix.into())
+                } else if let Some(suffix) = name.strip_prefix("atomic_store_") {
+                    assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => RigidTy::Tuple(_));
+                    Self::AtomicStore(suffix.into())
+                } else if let Some(suffix) = name.strip_prefix("atomic_umax_") {
+                    assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
+                    Self::AtomicUmax(suffix.into())
+                } else if let Some(suffix) = name.strip_prefix("atomic_umin_") {
+                    assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
+                    Self::AtomicUmin(suffix.into())
+                } else if let Some(suffix) = name.strip_prefix("atomic_xadd_") {
+                    assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
+                    Self::AtomicXadd(suffix.into())
+                } else if let Some(suffix) = name.strip_prefix("atomic_xchg_") {
+                    assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
+                    Self::AtomicXchg(suffix.into())
+                } else if let Some(suffix) = name.strip_prefix("atomic_xor_") {
+                    assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
+                    Self::AtomicXor(suffix.into())
+                } else if let Some(suffix) = name.strip_prefix("atomic_xsub_") {
+                    assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
+                    Self::AtomicXsub(suffix.into())
+                } else if let Some(suffix) = name.strip_prefix("simd_shuffle") {
+                    assert_sig_matches!(sig, _, _, _ => _);
+                    Self::SimdShuffle(suffix.into())
+                } else {
+                    // Unimplemented intrinsics.
+                    Self::Unimplemented {
+                        name: intrinsic_str,
+                        issue_link: "https://github.com/model-checking/kani/issues/new/choose"
+                            .into(),
+                    }
+                }
+            }
         }
     }
 }
