@@ -176,6 +176,16 @@ macro_rules! kani_intrinsics {
         #[rustc_diagnostic_item = "KaniCover"]
         pub const fn cover(_cond: bool, _msg: &'static str) {}
 
+        /// Creates a cover property with the specified condition and message.
+        /// Provides the same functionality as `kani::cover` with the additional constraint that
+        /// unreachability or unsatisfiability causes verification failure.
+        /// See `kani::cover` for examples.
+        /// This function is called by the [`cover_or_fail!`] macro. The macro is more
+        /// convenient to use.
+        #[inline(never)]
+        #[rustc_diagnostic_item = "KaniCoverOrFail"]
+        pub const fn cover_or_fail(_cond: bool, _msg: &'static str) {}
+
         /// This creates an symbolic *valid* value of type `T`. You can assign the return value of this
         /// function to a variable that you want to make symbolic.
         ///

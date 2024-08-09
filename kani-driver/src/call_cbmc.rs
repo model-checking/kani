@@ -386,8 +386,13 @@ fn verification_outcome_from_properties(
 
 /// Determines the `FailedProperties` variant that corresponds to an array of properties
 fn determine_failed_properties(properties: &[Property]) -> FailedProperties {
-    let failed_properties: Vec<&Property> =
-        properties.iter().filter(|prop| prop.status == CheckStatus::Failure).collect();
+    let failed_properties: Vec<&Property> = properties
+        .iter()
+        .filter(|prop| {
+            prop.status == CheckStatus::Failure
+                || (prop.is_cover_or_fail_property() && prop.status != CheckStatus::Satisfied)
+        })
+        .collect();
     // Return `FAILURE` if there isn't at least one failed property
     if failed_properties.is_empty() {
         FailedProperties::None

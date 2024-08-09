@@ -1,0 +1,16 @@
+Status: UNREACHABLE\
+Description: "cover condition: x == 2"\
+in function cover_unreachable
+
+Status: UNREACHABLE\
+Description: "Unreachable with a message"\
+in function cover_unreachable
+
+Status: SATISFIED\
+Description: "cover condition: x == 5"\
+in function cover_unreachable
+
+
+ ** 1 of 3 cover properties satisfied (2 unreachable)
+
+VERIFICATION:- FAILED

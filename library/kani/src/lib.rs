@@ -73,6 +73,19 @@ macro_rules! cover {
     };
 }
 
+#[macro_export]
+macro_rules! cover_or_fail {
+    () => {
+        kani::cover_or_fail(true, "cover location");
+    };
+    ($cond:expr $(,)?) => {
+        kani::cover_or_fail($cond, concat!("cover condition: ", stringify!($cond)));
+    };
+    ($cond:expr, $msg:literal) => {
+        kani::cover_or_fail($cond, $msg);
+    };
+}
+
 /// `implies!(premise => conclusion)` means that if the `premise` is true, so
 /// must be the `conclusion`.
 ///
