@@ -16,10 +16,10 @@ use stable_mir::ty::{
 use stable_mir::mir::{
     BasicBlockIdx, Body, Local, LocalDecl, Mutability, Place, TerminatorKind, UnwindAction
 };
-use stable_mir::{CrateDef, Error};
+use stable_mir::Error;
 use stable_mir::mir::{BasicBlock, BorrowKind, MirVisitor, MutBorrowKind, Operand, ProjectionElem, Rvalue, Statement, StatementKind, Terminator, VarDebugInfo
 };
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use tracing::trace;
 
 fn instrumented_flag_def(tcx: &TyCtxt) -> AdtDef {
@@ -115,6 +115,28 @@ impl<'tcx, 'cache> InitializedPassState<'tcx, 'cache> {
     }
 }
 
+/// Functions containing any of the following in their
+/// prefix or in their name will be ignored.
+/// This allows skipping instrumenting functions that
+/// are called by the instrumentation functions.
+const IGNORED_FUNCTIONS: &'static [&'static str] = &[
+    "kani", // Skip kani functions
+    "std::mem::size_of", // skip size_of::<T>
+    "core::num", // Skip numerical ops (like .wrapping_add)
+    "std::ptr", // Skip pointer manipulation functions
+    "get_checked" // Skip "get checked", which gives a flag
+                  // specifying whether the function is checked.
+];
+
+// Currently, the above list of functions is too
+// coarse-grained; because all kani functions
+// are skipped, all std::ptr functions are
+// skipped, and kani functions are skipped,
+// this pass cannot be used to verify functions
+// in those modules, despite the fact that
+// only some of those functions in those modules
+// are called by the instrumented code.
+
 impl TransformPass for AliasingPass {
     fn transformation_type() -> TransformationType
     where
@@ -136,7 +158,6 @@ impl TransformPass for AliasingPass {
         let mut visitor = CheckInstrumented::new(&tcx);
         visitor.visit_body(&body);
         if visitor.is_instrumented || instance.name().contains("kani") || instance.name().contains("std::mem::size_of") || instance.name().contains("core::num") || instance.name().contains("std::ptr") || instance.name().contains("get_checked") {
-            // unsafe {ALREADY_INSTRUMENTED_COUNT += 1};
             (false, body)
         } else {
             let pass = InitializedPassState::new(body, tcx, &mut self.cache);
@@ -178,41 +199,53 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
         span: Span) {
         let kind = RegionKind::ReErased;
         let region = Region { kind };
-        let borrow = BorrowKind::Mut { kind: MutBorrowKind::Default };
+        let borrow_kind = BorrowKind::Shared;
         let lvalue = Place::from(lvalue);
-        let rvalue = Rvalue::Ref(region, borrow, Place::from(rvalue));
+        let rvalue = Rvalue::Ref(region, borrow_kind, Place::from(rvalue));
         let kind = StatementKind::Assign(lvalue, rvalue);
         body.insert_statement(Statement { kind, span });
     }
 
+    fn assign_ptr(
+        body: &mut CachedBodyMutator,
+        lvalue: Local,
+        rvalue: Local,
+        span: Span) {
+        let lvalue = Place::from(lvalue);
+        let rvalue = Rvalue::AddressOf(Mutability::Not, Place::from(rvalue));
+        let kind = StatementKind::Assign(lvalue, rvalue);
+        body.insert_statement(Statement { kind, span });
+    }
+
+    /// For some local, say let x: T;
+    /// instrument it with the functions that initialize the stack:
+    /// let ptr_x: *const T = &raw const x;
+    /// initialize_local(ptr_x);
     fn instrument_local(
         &mut self,
         local: usize,
     ) -> Result<(), Error> {
-        // Initialize the constants
         let ty = self.body.local(local).ty;
-        let ref_ty = Ty::new_ref(Region { kind: RegionKind::ReErased }, ty, Mutability::Not );
+        let ptr_ty = Ty::new_ptr(ty, Mutability::Not);
         let span = self.body.span().clone();
         let body = &mut self.body;
-        let local_ref = self.meta_stack.entry(local).or_insert_with(|| body.new_local(ref_ty, Mutability::Not));
-        Self::assign_ref(body, *local_ref, local, span);
+        let local_ptr = self.meta_stack.entry(local).or_insert_with(|| body.new_local(ptr_ty, Mutability::Not));
+        Self::assign_ptr(body, *local_ptr, local, span);
         let instance = self.cache.register(&self.tcx, FunctionSignature::new("KaniInitializeLocal", &[GenericArgKind::Type(ty)]))?;
-        body.call(instance, [*local_ref].to_vec(), body.unit);
+        body.call(instance, [*local_ptr].to_vec(), body.unit);
         Ok(())
     }
 
     // get back to this one
-    // fn instrument_new_stack_reference(&mut self, idx: &MutatorIndex, to: Local, from: Local) -> Result<(), Error> {
-    //     // Initialize the constants
-    //     let ty_from = self.body.local(from).ty;
-    //     let ty_to = self.body.local(from).ty;
-    //     let from_metadata = self.meta_stack.get(&from).unwrap().clone();
-    //     let to_metadata = self.meta_value.get(&to).unwrap().clone();
-    //     let instance = self.cache.register(&self.tcx, FunctionSignature::new("KaniNewMutableRef", &[GenericArgKind::Type(ty_from), GenericArgKind::Type(ty_to)]))?;
-    //     self.body.call(instance, [&from_metadata.0 as &[Local], &to_metadata.0].concat(), self.body.unit);
-    //     self.body.split(idx);
-    //     Ok(())
-    // }
+    fn instrument_new_stack_reference(&mut self, idx: &MutatorIndex, lvalue: Local, referent: Local) -> Result<(), Error> {
+        // Initialize the constants
+        let ty = self.body.local(referent).ty;
+        let lvalue_ref = self.meta_stack.get(&lvalue).unwrap();
+        let instance = self.cache.register(&self.tcx, FunctionSignature::new("KaniNewMutRef", &[GenericArgKind::Type(ty)]))?;
+        self.body.call(instance, vec![*lvalue_ref, lvalue], self.body.unit);
+        self.body.split(idx);
+        Ok(())
+    }
 
     // And this one
     // fn instrument_new_raw_from_ref(&mut self, idx: &MutatorIndex, to: Local, from: Local) -> Result<(), Error> {
@@ -236,8 +269,8 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
                         match projection[..] {
                             [] => {
                                 // Direct reference to the stack local
-                                // self.instrument_new_stack_reference(idx, to.local, *local)
-                                Ok(())
+                                // x = &y
+                                self.instrument_new_stack_reference(idx, to.local, *local)
                             }
                             [ProjectionElem::Deref] => {
                                 // to = &*from
@@ -245,16 +278,27 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
                                 Ok(())
                             }
                             _ => {
+                                // In the future, field accesses can be handled here
                                 Ok(())
                             }
                         }
                     }
                     StatementKind::Assign(to, Rvalue::AddressOf(Mutability::Mut, from)) => {
-                        // to = &raw *from
-                        if self.body.local(from.local).ty.kind().is_ref() {
-                            // let _ = self.instrument_new_raw_from_ref(idx, to.local, from.local);
+                        let Place { local, projection } = from;
+                        match projection[..] {
+                            [] => {
+                                // x = &raw y;
+                                Ok(())
+                            },
+                            [ProjectionElem::Deref] => {
+                                // to = &raw *from
+                                // new mut raw
+                                Ok(())
+                            },
+                            _ => {
+                                Ok(())
+                            }
                         }
-                        Ok(())
                     }
                     StatementKind::Assign(to, Rvalue::Ref(_, _, from)) => {
                         // immutable reference
@@ -312,7 +356,6 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
         Ok(())
     }
 }
-
 
 impl<'tcx, 'cache> BodyMutationPassState<'tcx, 'cache> {
     fn instrument_locals(&mut self) -> Result<(), Error> {
