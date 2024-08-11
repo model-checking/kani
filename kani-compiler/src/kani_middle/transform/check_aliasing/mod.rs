@@ -236,7 +236,6 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
         Ok(())
     }
 
-    // get back to this one
     fn instrument_new_stack_reference(&mut self, idx: &MutatorIndex, lvalue: Local, referent: Local) -> Result<(), Error> {
         // Initialize the constants
         let ty = self.body.local(referent).ty;
@@ -248,17 +247,19 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
     }
 
     // And this one
-    // fn instrument_new_raw_from_ref(&mut self, idx: &MutatorIndex, to: Local, from: Local) -> Result<(), Error> {
-    //     // Initialize the constants
-    //     let ty_from = self.body.local(from).ty;
-    //     let ty_to = self.body.local(from).ty;
-    //     let from_metadata = self.meta_value.get(&from).unwrap().clone();
-    //     let to_metadata = self.meta_value_mut.get(&to).unwrap().clone();
-    //     let instance = self.cache.register(&self.tcx, FunctionSignature::new("KaniNewMutableRaw", &[GenericArgKind::Type(ty_from), GenericArgKind::Type(ty_to)]))?;
-    //     self.body.call(instance, [&from_metadata.0 as &[Local], &to_metadata.0].concat(), self.body.unit);
-    //     self.body.split(idx);
-    //     Ok(())
-    // }
+    fn instrument_new_raw_from_ref(&mut self, idx: &MutatorIndex, lvalue: Local, referent: Local) -> Result<(), Error> {
+        // Initialize the constants
+        if let TyKind::RigidTy(RigidTy::Ref(_, ty, _)) =
+            self.body.local(referent).ty.kind() {
+            let lvalue_ref = self.meta_stack.get(&lvalue).unwrap();
+            let instance = self.cache.register(&self.tcx, FunctionSignature::new("KaniNewMutRaw", &[GenericArgKind::Type(ty)]))?;
+            self.body.call(instance, vec![*lvalue_ref, lvalue], self.body.unit);
+            self.body.split(idx);
+            Ok(())
+        } else {
+            panic!("At this time only dereferences of refs are handled here.");
+        }
+    }
 
     fn instrument_index(&mut self, _values: &Vec<Local>, idx: &MutatorIndex) -> Result<(), Error> {
         match self.body.inspect(idx) {
@@ -292,8 +293,8 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
                             },
                             [ProjectionElem::Deref] => {
                                 // to = &raw *from
-                                // new mut raw
-                                Ok(())
+                                // (raw) reborrow
+                                self.instrument_new_raw_from_ref(idx, to.local, *local)
                             },
                             _ => {
                                 Ok(())

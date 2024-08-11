@@ -328,8 +328,8 @@ pub mod sstate {
         }
     }
 
-    /// Make a new mutable reference at the rvalue.
-    /// Associate the tag with the lvalue.
+    /// Make a new mutable reference at the rvalue (pointer_value).
+    /// Associate the tag with the lvalue (location).
     #[rustc_diagnostic_item = "KaniNewMutRef"]
     pub fn new_mut_ref<T>(location: *const &mut T, pointer_value: &mut T) {
         let checked: AliasingChecked = get_checked();
@@ -339,24 +339,21 @@ pub mod sstate {
             use_2(pointer_value as *const T);
             // Then associate the lvalue and push it
             push(NEXT_TAG, Permission::UNIQUE, location);
-            // TAGS[pointer_object(lvalue)][pointer_offset(lvalue)] = NEXT_TAG;
-            // PERMS[pointer_object(lvalue)][pointer_offset(lvalue)] = Permission::UNIQUE;
             NEXT_TAG += 1;
         }
     }
 
-    /// Make a raw mutable reference at the rvalue.
-    /// Associate the tag with the lvalue.
-    pub fn new_mut_raw<T>(lvalue: *const *mut T, rvalue: *mut T) {
+    /// Make a raw mutable reference at the rvalue (pointer_value).
+    /// Associate the tag with the lvalue (location).
+    #[rustc_diagnostic_item = "KaniNewMutRaw"]
+    pub fn new_mut_raw<T>(location: *const *mut T, pointer_value: *mut T) {
         let checked: AliasingChecked = get_checked();
         let _ = checked;
         unsafe {
             // use_2 the rvalue
-            use_2(rvalue as *const T);
+            use_2(pointer_value);
             // Then associate the lvalue and push it
-            push(NEXT_TAG, Permission::SHAREDRW, lvalue);
-            // TAGS[pointer_object(lvalue)][pointer_offset(lvalue)] = NEXT_TAG;
-            // PERMS[pointer_object(lvalue)][pointer_offset(lvalue)] = Permission::SHAREDRW;
+            push(NEXT_TAG, Permission::SHAREDRW, location);
             NEXT_TAG += 1;
         }
     }
