@@ -85,13 +85,7 @@ pub fn build_lib(bin_folder: &Path) -> Result<()> {
 fn build_verification_lib(compiler_path: &Path) -> Result<()> {
     let extra_args =
         ["-Z", "build-std=panic_abort,std,test", "--config", "profile.dev.panic=\"abort\""];
-    let compiler_args = [
-        "--kani-compiler",
-        "-Cllvm-args=--ignore-global-asm --build-std",
-        "-Cinstrument-coverage",
-        "-Z",
-        "no-profiler-runtime",
-    ];
+    let compiler_args = ["--kani-compiler", "-Cllvm-args=--ignore-global-asm --build-std"];
     let packages = ["std", "kani", "kani_macros"];
     let artifacts = build_kani_lib(compiler_path, &packages, &extra_args, &compiler_args)?;
     copy_artifacts(&artifacts, &kani_sysroot_lib(), true)
