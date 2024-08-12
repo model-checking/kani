@@ -149,14 +149,14 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// Generate a cover statement for code coverage reports.
-    pub fn codegen_coverage(&self, info: &str, span: SpanStable, code_region: CodeRegion) -> Stmt {
+    pub fn codegen_coverage(&self, counter_data: &str, span: SpanStable, code_region: CodeRegion) -> Stmt {
         let loc = self.codegen_caller_span_stable(span);
         // Should use Stmt::cover, but currently this doesn't work with CBMC
         // unless it is run with '--cover cover' (see
         // https://github.com/diffblue/cbmc/issues/6613). So for now use
         // `assert(false)`.
-        let fmt = format!("{info} - {code_region:?}");
-        self.codegen_assert(Expr::bool_false(), PropertyClass::CodeCoverage, &fmt, loc)
+        let msg = format!("{counter_data} - {code_region:?}");
+        self.codegen_assert(Expr::bool_false(), PropertyClass::CodeCoverage, &msg, loc)
     }
 
     // The above represent the basic operations we can perform w.r.t. assert/assume/cover
