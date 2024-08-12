@@ -253,8 +253,8 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
             self.body.local(referent).ty.kind() {
             let lvalue_ref = self.meta_stack.get(&lvalue).unwrap();
             let instance = self.cache.register(&self.tcx, FunctionSignature::new("KaniNewMutRaw", &[GenericArgKind::Type(ty)]))?;
-            // self.body.call(instance, vec![*lvalue_ref, lvalue], self.body.unit);
-            // self.body.split(idx);
+            self.body.call(instance, vec![*lvalue_ref, lvalue], self.body.unit);
+            self.body.split(idx);
             Ok(())
         } else {
             panic!("At this time only dereferences of refs are handled here.");
