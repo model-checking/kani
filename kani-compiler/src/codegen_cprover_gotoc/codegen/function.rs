@@ -248,7 +248,7 @@ pub mod rustc_smir {
         let body = tcx.instance_mir(rustc_middle::ty::InstanceKind::Item(instance_def));
         let cov_info = &body.function_coverage_info.clone().unwrap();
         // NOTE: This helps see coverage mappings a given function
-        // println!("COVERAGE: {:?}", &cov_info.mappings);
+        println!("MAPPINGS: {:?}", &cov_info.mappings);
         use rustc_middle::mir::coverage::MappingKind::Code;
         for mapping in &cov_info.mappings {
             let Code(term) = mapping.kind else { todo!() };

@@ -9,8 +9,6 @@ use crate::harness_runner::HarnessResult;
 use crate::project::Project;
 use crate::KaniSession;
 use anyhow::{bail, Result};
-use cargo_metadata::Package;
-use chrono::Local;
 
 impl KaniSession {
     /// Saves metadata required for coverage-related features.
@@ -61,7 +59,11 @@ impl KaniSession {
     }
 
     /// Saves raw coverage check results required for coverage-related features.
-    pub fn save_coverage_results(&self, results: &Vec<HarnessResult>, stamp: &String) -> Result<()> {
+    pub fn save_coverage_results(
+        &self,
+        results: &Vec<HarnessResult>,
+        stamp: &String,
+    ) -> Result<()> {
         let build_target = env!("TARGET");
         let metadata = self.cargo_metadata(build_target)?;
         let target_dir = self
@@ -72,7 +74,7 @@ impl KaniSession {
             .clone()
             .join("kani");
 
-            let outdir = target_dir.join(build_target).join(format!("kanicov_{stamp}"));
+        let outdir = target_dir.join(build_target).join(format!("kanicov_{stamp}"));
 
         // This directory should have been created by `save_coverage_metadata`,
         // so now we expect it to exist.
