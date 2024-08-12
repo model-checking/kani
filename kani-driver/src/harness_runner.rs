@@ -192,12 +192,23 @@ impl KaniSession {
             }
         }
 
+        if self.args.coverage {
+            self.show_coverage_summary()?;
+        }
+
         if failing > 0 {
             // Failure exit code without additional error message
             drop(self);
             std::process::exit(1);
         }
 
+        Ok(())
+    }
+
+    /// Show a coverage summary.
+    ///
+    /// This is just a placeholder for now.
+    fn show_coverage_summary(&self) -> Result<()> {
         Ok(())
     }
 }
