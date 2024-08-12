@@ -1,4 +1,4 @@
 error[E0277]: the trait bound `Void: kani::Arbitrary` is not satisfied
-    |\
-14  |     let _wrapper: Wrapper<Void> = kani::any();\
-    |                                   ^^^^^^^^^^^ the trait `kani::Arbitrary` is not implemented for `Void`, which is required by `Wrapper<Void>: kani::Arbitrary`\
+|\
+|     let _wrapper: Wrapper<Void> = kani::any();\
+|                                   ^^^^^^^^^^^ the trait `kani::Arbitrary` is not implemented for `Void`, which is required by `Wrapper<Void>: kani::Arbitrary`\

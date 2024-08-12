@@ -39,6 +39,7 @@ extern crate tempfile;
 mod args;
 #[cfg(feature = "cprover")]
 mod codegen_cprover_gotoc;
+mod intrinsics;
 mod kani_compiler;
 mod kani_middle;
 mod kani_queries;

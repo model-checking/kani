@@ -92,7 +92,7 @@ checksum = "b048fb63fd8b5923fc5aa7b340d8e156aec7ec02f0c78fa8a6ddc2613f6f71de"
 
 [[package]]
 name = "build-kani"
-version = "0.53.0"
+version = "0.54.0"
 dependencies = [
  "anyhow",
  "cargo_metadata",
@@ -234,7 +234,7 @@ dependencies = [
 
 [[package]]
 name = "cprover_bindings"
-version = "0.53.0"
+version = "0.54.0"
 dependencies = [
  "lazy_static",
  "linear-map",
@@ -432,14 +432,15 @@ checksum = "49f1f14873335454500d59611f1cf4a4b0f786f9ac11f4312a78e4cf2566695b"
 
 [[package]]
 name = "kani"
-version = "0.53.0"
+version = "0.54.0"
 dependencies = [
+ "kani_core",
  "kani_macros",
 ]
 
 [[package]]
 name = "kani-compiler"
-version = "0.53.0"
+version = "0.54.0"
 dependencies = [
  "clap",
  "cprover_bindings",
@@ -460,7 +461,7 @@ dependencies = [
 
 [[package]]
 name = "kani-driver"
-version = "0.53.0"
+version = "0.54.0"
 dependencies = [
  "anyhow",
  "cargo_metadata",
@@ -488,7 +489,7 @@ dependencies = [
 
 [[package]]
 name = "kani-verifier"
-version = "0.53.0"
+version = "0.54.0"
 dependencies = [
  "anyhow",
  "home",
@@ -497,14 +498,14 @@ dependencies = [
 
 [[package]]
 name = "kani_core"
-version = "0.53.0"
+version = "0.54.0"
 dependencies = [
  "kani_macros",
 ]
 
 [[package]]
 name = "kani_macros"
-version = "0.53.0"
+version = "0.54.0"
 dependencies = [
  "proc-macro-error",
  "proc-macro2",
@@ -514,7 +515,7 @@ dependencies = [
 
 [[package]]
 name = "kani_metadata"
-version = "0.53.0"
+version = "0.54.0"
 dependencies = [
  "clap",
  "cprover_bindings",
@@ -990,9 +991,9 @@ dependencies = [
 
 [[package]]
 name = "serde_test"
-version = "1.0.176"
+version = "1.0.177"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5a2f49ace1498612d14f7e0b8245519584db8299541dfe31a06374a828d620ab"
+checksum = "7f901ee573cab6b3060453d2d5f0bae4e6d628c23c0a962ff9b5f1d7c8d4f1ed"
 dependencies = [
  "serde",
 ]
@@ -1033,7 +1034,7 @@ checksum = "3c5e1a9a646d36c3599cd173a41282daf47c44583ad367b8e6837255952e5c67"
 
 [[package]]
 name = "std"
-version = "0.53.0"
+version = "0.54.0"
 dependencies = [
  "kani",
 ]
@@ -1097,15 +1098,15 @@ dependencies = [
 
 [[package]]
 name = "tempfile"
-version = "3.11.0"
+version = "3.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b8fcd239983515c23a32fb82099f97d0b11b8c72f654ed659363a95c3dad7a53"
+checksum = "04cbcdd0c794ebb0d4cf35e88edd2f7d2c4c3e9a5a6dab322839b321c6a87a64"
 dependencies = [
  "cfg-if",
  "fastrand",
  "once_cell",
  "rustix",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
