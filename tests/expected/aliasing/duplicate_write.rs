@@ -238,6 +238,7 @@ pub mod sstate {
         }
     }
 
+    #[rustc_diagnostic_item = "KaniWriteThroughPointer"]
     pub fn use_2<T>(ptr: *const T) {
         let checked: AliasingChecked = get_checked();
         let _ = checked;
@@ -257,9 +258,10 @@ pub mod sstate {
         let checked: AliasingChecked = get_checked();
         let _ = checked;
         unsafe {
-            // use_2 the rvalue
+            // use_2 the rvalue in the case it is set
             use_2(pointer_value as *const T);
             // Then associate the lvalue and push it
+            TAGS.set(location, NEXT_TAG);
             push(NEXT_TAG, Permission::UNIQUE, location);
             NEXT_TAG += 1;
         }
@@ -275,6 +277,7 @@ pub mod sstate {
             // use_2 the rvalue
             use_2(pointer_value);
             // Then associate the lvalue and push it
+            TAGS.set(location, NEXT_TAG);
             push(NEXT_TAG, Permission::SHAREDRW, location);
             NEXT_TAG += 1;
         }

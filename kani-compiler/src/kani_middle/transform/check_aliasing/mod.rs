@@ -157,7 +157,7 @@ impl TransformPass for AliasingPass {
         trace!(function=?instance.name(), "transform: aliasing pass");
         let mut visitor = CheckInstrumented::new(&tcx);
         visitor.visit_body(&body);
-        if visitor.is_instrumented || instance.name().contains("kani") || instance.name().contains("std::mem::size_of") || instance.name().contains("core::num") || instance.name().contains("std::ptr") || instance.name().contains("get_checked") {
+        if visitor.is_instrumented || !(instance.name().contains("main")) /* for now, just check main for efficiency */ {
             (false, body)
         } else {
             let pass = InitializedPassState::new(body, tcx, &mut self.cache);
@@ -246,7 +246,7 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
         Ok(())
     }
 
-    // And this one
+
     fn instrument_new_raw_from_ref(&mut self, idx: &MutatorIndex, lvalue: Local, referent: Local) -> Result<(), Error> {
         // Initialize the constants
         if let TyKind::RigidTy(RigidTy::Ref(_, ty, _)) =
@@ -254,6 +254,21 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
             let lvalue_ref = self.meta_stack.get(&lvalue).unwrap();
             let instance = self.cache.register(&self.tcx, FunctionSignature::new("KaniNewMutRaw", &[GenericArgKind::Type(ty)]))?;
             self.body.call(instance, vec![*lvalue_ref, lvalue], self.body.unit);
+            self.body.split(idx);
+            Ok(())
+        } else {
+            panic!("At this time only dereferences of refs are handled here.");
+        }
+    }
+
+    fn instrument_write_through_pointer(&mut self, idx: &MutatorIndex, lvalue: Local) -> Result<(), Error> {
+        // Initialize the constants
+        if let TyKind::RigidTy(RigidTy::Ref(_, ty, _)) | TyKind::RigidTy(RigidTy::RawPtr(ty, _)) = self.body.local(lvalue).ty.kind() {
+            let lvalue_ref = self.meta_stack.get(&lvalue).unwrap();
+            let ty = Ty::from_rigid_kind(RigidTy::RawPtr(ty, Mutability::Not));
+            let instance = self.cache.register(&self.tcx, FunctionSignature::new("KaniWriteThroughPointer", &[GenericArgKind::Type(ty)]))?;
+            /* Limitation: calls use_2 on a reference or pointer, when use_2's input type is a pointer */
+            self.body.call(instance, vec![*lvalue_ref], self.body.unit);
             self.body.split(idx);
             Ok(())
         } else {
@@ -313,7 +328,7 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
                             }
                             [ProjectionElem::Deref] => {
                                 // *x = rvalue
-                                eprintln!("assignment through reference not yet handled");
+                                self.instrument_write_through_pointer(idx, to.local)?;
                                 Ok(())
                             }
                             _ => {
@@ -542,7 +557,11 @@ impl CachedBodyMutator {
     }
 
     fn local(&self, idx: usize) -> &LocalDecl {
-        &self.body.locals[idx]
+        if idx > self.body.locals.len() {
+            &self.body.ghost_locals[idx - self.body.locals.len()]
+        } else {
+            &self.body.locals[idx]
+        }
     }
 
     fn new_local(&mut self, ty: Ty, mutability: Mutability) -> Local {
