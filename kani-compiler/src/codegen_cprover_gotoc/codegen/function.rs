@@ -244,16 +244,14 @@ pub mod rustc_smir {
         instance: Instance,
     ) -> Option<CodeRegion> {
         let instance_def = rustc_smir::rustc_internal::internal(tcx, instance.def.def_id());
-        // let body = tcx.instance_mir(rustc_middle::ty::InstanceDef::Item(instance_def));
         let body = tcx.instance_mir(rustc_middle::ty::InstanceKind::Item(instance_def));
         let cov_info = &body.function_coverage_info.clone().unwrap();
-        // NOTE: This helps see coverage mappings a given function
-        println!("MAPPINGS: {:?}", &cov_info.mappings);
+        // println!("MAPPINGS: {:?}", &cov_info.mappings);
         use rustc_middle::mir::coverage::MappingKind::Code;
         for mapping in &cov_info.mappings {
             let Code(term) = mapping.kind else { todo!() };
             if term == coverage {
-                println!("COVERAGE: {:?}", mapping.code_region.clone());
+                // println!("COVERAGE: {:?}", mapping.code_region.clone());
                 return Some(mapping.code_region.clone());
             }
         }
