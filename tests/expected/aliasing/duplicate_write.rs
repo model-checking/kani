@@ -92,29 +92,6 @@ pub mod sstate {
         }
 
         use super::*;
-        // pub fn get_objects() -> *mut usize {
-        //     unsafe { OBJECTS as *mut usize }
-        // }
-
-        // fn get_offsets() -> *mut usize {
-        //     unsafe { OFFSETS as *mut usize }
-        // }
-
-        // fn get_states() -> *mut bool {
-        //     unsafe { STATES as *mut bool }
-        // }
-
-        // fn get_stack_tops() -> *mut usize {
-        //     unsafe { STACK_TOPS as *mut usize }
-        // }
-
-        // fn get_stack_ids() -> *mut [PointerTag; STACK_DEPTH] {
-        //     unsafe { STACK_TAGS as *mut [PointerTag; STACK_DEPTH] }
-        // }
-
-        // fn get_stack_permissions() -> *mut [u8; STACK_DEPTH] {
-        //     unsafe { STACK_TAGS as *mut [u8; STACK_DEPTH] }
-        // }
 
         /// Monitors:
         /// If there are K bytes in the address space,
@@ -138,17 +115,11 @@ pub mod sstate {
             let _ = checked;
             unsafe {
                 OBJECT = 0usize;
-                    // vec![0usize; size].into_raw_parts().0 as *const ();
                 OFFSET = 0usize;
-                    // vec![0usize; size].into_raw_parts().0 as *const ();
                 STATE = MonitorState::UNINIT;
-                    // vec![MonitorState::UNINIT; size].into_raw_parts().0 as *const ();
                 STACK_TAGS = [NEXT_TAG; STACK_DEPTH];
-                    // vec![[NEXT_TAG; STACK_DEPTH]; size].into_raw_parts().0 as *const ();
                 STACK_PERMS = [Permission::UNIQUE; STACK_DEPTH];
-                    // vec![[Permission::UNIQUE; STACK_DEPTH]; size].into_raw_parts().0 as *const ();
                 STACK_TOP = 0usize;
-                    // vec![0usize; size].into_raw_parts().0 as *const ();
             }
         }
 
@@ -161,28 +132,6 @@ pub mod sstate {
             // for location:location+size_of(U).
             // Offset has already been picked earlier.
             unsafe {
-                // Pick a monitor nondeterministically
-                // use self::*;
-                // let states      = get_states();
-                // let objects     = get_objects();
-                // let offsets     = get_offsets();
-                // let stack_ids   = get_stack_ids();
-                // let stack_perms = get_stack_permissions();
-                // let tops        = get_stack_tops();
-
-                // let mut i = sstate_config::MONITORS.try_into().unwrap();
-                // while i > 0 {
-                //     i -= 1;
-                //     if demonic_nondet() && *states.offset(i) == MonitorState::UNINIT {
-                //         let top = *tops.offset(i);
-                //         *states.offset(i) = MonitorState::INIT;
-                //         *objects.offset(i) = pointer_object(pointer);
-                //         assume(*offsets.offset(i) == 0 ||
-                //                *offsets.offset(i) < std::mem::size_of::<U>());
-                //         (*stack_ids.offset(i))[0] = tag;
-                //         (*stack_perms.offset(i))[0] = Permission::UNIQUE;
-                //     }
-                // }
                 if demonic_nondet() && STATE == MonitorState::UNINIT {
                     STATE = MonitorState::INIT;
                     OBJECT =  kani::mem::pointer_object(pointer);
@@ -204,14 +153,6 @@ pub mod sstate {
             unsafe {
                 // Pick a monitor nondeterministically
                 use self::*;
-                // let states      = get_states();
-                // let objects     = get_objects();
-                // let offsets     = get_offsets();
-                // let stack_ids   = get_stack_ids();
-                // let stack_perms = get_stack_permissions();
-                // let tops        = get_stack_tops();
-
-                // let mut i = sstate_config::MONITORS.try_into().unwrap();
                 if STATE == MonitorState::INIT &&
                    OBJECT == kani::mem::pointer_object(pointer) &&
                    OFFSET == kani::mem::pointer_offset(pointer)
@@ -228,13 +169,6 @@ pub mod sstate {
             let _ = checked;
             unsafe {
                 use self::*;
-                // let states      = get_states();
-                // let objects     = get_objects();
-                // let offsets     = get_offsets();
-                // let stack_ids   = get_stack_ids();
-                // let stack_perms = get_stack_permissions();
-                // let tops        = get_stack_tops();
-                // let mut i = sstate_config::MONITORS.try_into().unwrap();
                 if STATE == MonitorState::INIT &&
                    OFFSET == kani::mem::pointer_offset(address) &&
                    OBJECT == kani::mem::pointer_object(address) {
@@ -256,18 +190,6 @@ pub mod sstate {
                    STACK_TOP = new_top;
                    assert!(found, "Stack violated.");
                 }
-                // while i > 0 {
-                //     {
-                //         let top = *tops.offset(i);
-                //         let mut found = false;
-                //         let mut j = STACK_DEPTH;
-                //         let mut new_top = 0;
-                //         while j > 0 {
-                //         }
-                //         assert!(found, "Stack violated.");
-                //         *tops.offset(i) = new_top;
-                //     }
-                // }
             }
         }
     }
@@ -374,92 +296,6 @@ fn demonic_nondet() -> bool {
     let _ = checked;
     true
 }
-
-// #[rustc_diagnostic_item = "KaniPushUnique"]
-// fn push_unique<U>(pointer: *const U, kind: &mut usize, tag: &mut usize) {
-//     push(
-//         pointer,
-//         &mut POINTER_PERMISSIONS[SSTATE_MONITOR_OBJECT][SSTATE_MONITOR_OFFSET],
-//         &mut POINTER_TAGS[SSTATE_MONITOR_OBJECT][SSTATE_MONITOR_OBJECT],
-//         KIND_UNIQUE,
-//     );
-// }
-
-// pub fn push<U>(pointer: *const U, kind: &mut usize, tag: &mut usize, create: PointerValueKind) {
-//     unsafe {
-//         *tag = 0;
-//         if monitored(pointer) {
-//             if create == KIND_SHARED_RW {
-//                 *tag = SSTATE_NEXT_TAG;
-//                 SSTATE_NEXT_TAG += 1;
-//             }
-//             *kind = create;
-//             let top = STATE_STACK_TOPS;
-//             assert!(top < STACK_DEPTH);
-//             SSTATE_STACK_PERMS[top] = *kind;
-//             SSTATE_STACK_TAGS[top] = *tag;
-//             SSTATE_STACK_TOPS += 1;
-//         }
-//     }
-// }
-
-// #[rustc_diagnostic_item = "KaniUse2"]
-// fn use_2<U>(pointer: *const U) {
-//     unsafe {
-//         if monitored(pointer) {
-//             let top = SSTATE_STACK_TOPS;
-//             let mut found = false;
-//             assert!(kind != KIND_UNINITIALIZED);
-//             let needle_kind = POINTER_PERMISSIONS[pointer_object(pointer)][pointer_offset(pointer)];
-//             let needle_id = POINTER_IDS[pointer_object(pointer)][pointer_offset(pointer)];
-//             let mut i = 0;
-//             let mut new_top = 0;
-//             while (i < STACK_DEPTH) && (i < top) {
-//                 if SSTATE_STACK_PERMS[i] == to_find && SSTATE_STACK_TAGS[i] == id {
-//                     new_top = i + 1;
-//                     found = true;
-//                 }
-//                 i += 1;
-//             }
-//             SSTATE_STACK_TOPS = new_top;
-//             if kind != KIND_UNINITIALIZED {
-//             } else {
-//                 let mut i = 0;
-//                 let mut new_top = 0;
-//                 while (i < STACK_DEPTH) && (i < top) {
-//                     if SSTATE_STACK_PERMS[i] == KIND_SHARED_RW {
-//                         new_top = i + 1;
-//                         found = true;
-//                     }
-//                     i += 1;
-//                 }
-//                 SSTATE_STACK_TOPS = new_top;
-//             }
-//             assert!(found, "Stack violated.");
-//         }
-//     }
-// }
-
-// #[rustc_diagnostic_item = "KaniNewMutableRef"]
-// fn new_mut_ref<U, T>(reference: *const U, referent: *const T) {
-//     use_2(referent);
-//     assert!(
-//         std::mem::size_of_val(unsafe { &*reference })
-//             < std::mem::size_of_val(unsafe { &*referent })
-//     );
-//     for i in 0..std::mem::size_of_val(unsafe { &*reference }) {
-//         push_shared(pointer.byte_offset(i as isize), kind, tag, KIND_SHARED_RW);
-//     }
-// }
-
-// #[rustc_diagnostic_item = "KaniNewMutableRaw"]
-// fn new_mutable_raw<U, T>(pointer: *const U, pointee: *const T) {
-//     use_2(pointee);
-//     for i in 0..std::mem::size_of_val(unsafe { &*pointer }) {
-//         push_shared(pointer.byte_offset(i as isize), kind, tag, KIND_SHARED_RW);
-//     }
-// }
-
 
 #[kani::proof]
 fn main() {

@@ -253,8 +253,8 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
             self.body.local(referent).ty.kind() {
             let lvalue_ref = self.meta_stack.get(&lvalue).unwrap();
             let instance = self.cache.register(&self.tcx, FunctionSignature::new("KaniNewMutRaw", &[GenericArgKind::Type(ty)]))?;
-            self.body.call(instance, vec![*lvalue_ref, lvalue], self.body.unit);
-            self.body.split(idx);
+            // self.body.call(instance, vec![*lvalue_ref, lvalue], self.body.unit);
+            // self.body.split(idx);
             Ok(())
         } else {
             panic!("At this time only dereferences of refs are handled here.");
@@ -265,74 +265,77 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
         match self.body.inspect(idx) {
             Instruction::Stmt(Statement { kind, ..} ) => {
                 match kind {
-                    StatementKind::Assign(to, Rvalue::Ref(_, BorrowKind::Mut { .. }, from)) => {
-                        let Place { local, projection } = from;
-                        match projection[..] {
+                    StatementKind::Assign(to, rvalue) => {
+                        match to.projection[..] {
                             [] => {
-                                // Direct reference to the stack local
-                                // x = &y
-                                self.instrument_new_stack_reference(idx, to.local, *local)
+                                // Assignment directly to local
+                                match rvalue {
+                                    Rvalue::Ref(_, BorrowKind::Mut { .. }, from) => {
+                                        match from.projection[..] {
+                                            [] => {
+                                                // Direct reference to the stack local
+                                                // x = &y
+                                                self.instrument_new_stack_reference(idx, to.local, from.local)?;
+                                                Ok(())
+                                            },
+                                            [ProjectionElem::Deref] => {
+                                                // Reborrow
+                                                // x = &*y
+                                                Ok(())
+                                            },
+                                            _ => {
+                                                eprintln!("Field projections not yet handled");
+                                                Ok(())
+                                            }
+                                        }
+                                    },
+                                    Rvalue::AddressOf(Mutability::Mut, from) => {
+                                        match from.projection[..] {
+                                            [] => {
+                                                // x = &raw y
+                                                eprintln!("addr of not yet handled");
+                                                Ok(())
+                                            },
+                                            [ProjectionElem::Deref] => {
+                                                self.instrument_new_raw_from_ref(idx, to.local, from.local)?;
+                                                Ok(())
+                                            },
+                                            _ => {
+                                                Ok(())
+                                            }
+                                        }
+                                    },
+                                    _ => {
+                                        eprintln!("Rvalue kind: {:?} not yet handled", rvalue);
+                                        Ok(())
+                                    }
+                                }
                             }
                             [ProjectionElem::Deref] => {
-                                // to = &*from
-                                // (Reborrow)
+                                // *x = rvalue
+                                eprintln!("assignment through reference not yet handled");
                                 Ok(())
                             }
                             _ => {
-                                // In the future, field accesses can be handled here
+                                eprintln!("Field assignment not yet handled");
                                 Ok(())
                             }
                         }
-                    }
-                    StatementKind::Assign(to, Rvalue::AddressOf(Mutability::Mut, from)) => {
-                        let Place { local, projection } = from;
-                        match projection[..] {
-                            [] => {
-                                // x = &raw y;
-                                Ok(())
-                            },
-                            [ProjectionElem::Deref] => {
-                                // to = &raw *from
-                                // (raw) reborrow
-                                self.instrument_new_raw_from_ref(idx, to.local, *local)
-                            },
-                            _ => {
-                                Ok(())
-                            }
-                        }
-                    }
-                    StatementKind::Assign(to, Rvalue::Ref(_, _, from)) => {
-                        // immutable reference
-                        (to, from);
-                        Ok(())
-                    }
-                    StatementKind::Assign(to, Rvalue::Use(Operand::Copy(from))) => {
-                        // TODO impl use local
-                        (to, from);
-                        Ok(())
-                    }
-                    StatementKind::Assign(to, Rvalue::Use(Operand::Move(from))) => {
-                        // TODO impl move local
-                        (to, from);
-                        Ok(())
-                    }
-                    StatementKind::Assign(_, Rvalue::Use(Operand::Constant(_))) => {
-                        // load from static memory, ignore
-                        Ok(())
-                    }
-                    StatementKind::Assign(place, rvalue) => {eprintln!("not yet implemented: {kind:?}"); Ok(())},
-                    StatementKind::Retag(_, _) => {eprintln!("not yet implemented: {kind:?}"); Ok(())},
-                    StatementKind::FakeRead(_, _) => {eprintln!("not yet implemented: {kind:?}"); Ok(())},
-                    StatementKind::SetDiscriminant { place, variant_index } => {eprintln!("not yet implemented: {kind:?}"); Ok(())},
-                    StatementKind::Deinit(_) => {eprintln!("not yet implemented: {kind:?}"); Ok(())},
-                    StatementKind::StorageLive(_) => {eprintln!("not yet implemented: {kind:?}"); Ok(())},
-                    StatementKind::StorageDead(_) => {eprintln!("not yet implemented: {kind:?}"); Ok(())},
-                    StatementKind::PlaceMention(_) => {eprintln!("not yet implemented: {kind:?}"); Ok(())},
-                    StatementKind::AscribeUserType { place, projections, variance } => {eprintln!("not yet implemented: {kind:?}"); Ok(())},
-                    StatementKind::Coverage(_) => {eprintln!("not yet implemented: {kind:?}"); Ok(())},
-                    StatementKind::Intrinsic(_) => {eprintln!("not yet implemented: {kind:?}"); Ok(())},
-                    StatementKind::ConstEvalCounter => {eprintln!("not yet implemented: {kind:?}"); Ok(())},
-                    StatementKind::Nop => {eprintln!("not yet implemented: {kind:?}"); Ok(())},
+                    },
+                    // The following are not yet handled, however, no info is printed
+                    // to avoid blowups:
+                    StatementKind::Retag(_, _) => Ok(()),
+                    StatementKind::FakeRead(_, _) => Ok(()),
+                    StatementKind::SetDiscriminant { .. } => Ok(()),
+                    StatementKind::Deinit(_) => Ok(()),
+                    StatementKind::StorageLive(_) => Ok(()),
+                    StatementKind::StorageDead(_) => Ok(()),
+                    StatementKind::PlaceMention(_) => Ok(()),
+                    StatementKind::AscribeUserType { .. } => Ok(()),
+                    StatementKind::Coverage(_) => Ok(()),
+                    StatementKind::Intrinsic(_) => Ok(()),
+                    StatementKind::ConstEvalCounter => Ok(()),
+                    StatementKind::Nop => Ok(()),
                 }
             }
             Instruction::Term(_) => Ok(()),
