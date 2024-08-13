@@ -246,14 +246,6 @@ pub struct VerificationArgs {
     #[arg(long, hide_short_help = true, requires("enable_unstable"))]
     pub ignore_global_asm: bool,
 
-    /// Ignore lifetimes of local variables. This effectively extends their
-    /// lifetimes to the function scope, and hence may cause Kani to miss
-    /// undefined behavior resulting from using the variable after it dies.
-    /// This option may impact the soundness of the analysis and may cause false
-    /// proofs and/or counterexamples
-    #[arg(long, hide_short_help = true, requires("enable_unstable"))]
-    pub ignore_locals_lifetime: bool,
-
     /// Write the GotoC symbol table to a file in JSON format instead of goto binary format.
     #[arg(long, hide_short_help = true)]
     pub write_json_symtab: bool,
@@ -568,13 +560,6 @@ impl ValidateArgs for VerificationArgs {
                 --output-format=old.",
             ));
         }
-        if self.concrete_playback.is_some() && self.is_stubbing_enabled() {
-            // Concrete playback currently does not work with contracts or stubbing.
-            return Err(Error::raw(
-                ErrorKind::ArgumentConflict,
-                "Conflicting options: --concrete-playback isn't compatible with stubbing.",
-            ));
-        }
         if self.concrete_playback.is_some() && self.jobs() != Some(1) {
             // Concrete playback currently embeds a lot of assumptions about the order in which harnesses get called.
             return Err(Error::raw(
@@ -878,13 +863,13 @@ mod tests {
         let res = parse_unstable_disabled("--harness foo -Z stubbing").unwrap();
         assert!(res.verify_opts.is_stubbing_enabled());
 
-        // `-Z stubbing` cannot be called with `--concrete-playback`
+        // `-Z stubbing` can now be called with concrete playback.
         let res = parse_unstable_disabled(
             "--harness foo --concrete-playback=print -Z concrete-playback -Z stubbing",
         )
         .unwrap();
-        let err = res.validate().unwrap_err();
-        assert_eq!(err.kind(), ErrorKind::ArgumentConflict);
+        // Note that `res.validate()` fails because input file does not exist.
+        assert!(matches!(res.verify_opts.validate(), Ok(())));
     }
 
     #[test]

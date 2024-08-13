@@ -3,10 +3,12 @@
 //
 //! Utility functions that help calculate type layout.
 
-use stable_mir::abi::{FieldsShape, Scalar, TagEncoding, ValueAbi, VariantsShape};
-use stable_mir::target::{MachineInfo, MachineSize};
-use stable_mir::ty::{AdtKind, IndexedVal, RigidTy, Ty, TyKind, UintTy};
-use stable_mir::CrateDef;
+use stable_mir::{
+    abi::{FieldsShape, Scalar, TagEncoding, ValueAbi, VariantsShape},
+    target::{MachineInfo, MachineSize},
+    ty::{AdtKind, IndexedVal, RigidTy, Ty, TyKind, UintTy},
+    CrateDef,
+};
 
 /// Represents a chunk of data bytes in a data structure.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
@@ -331,4 +333,49 @@ fn data_bytes_for_ty(
         FieldsShape::Union(_) => Err(format!("Unsupported {ty:?}")),
         FieldsShape::Array { .. } => Ok(vec![]),
     }
+}
+
+/// Returns true if `to_ty` has a smaller or equal size and padding bytes in `from_ty` are padding
+/// bytes in `to_ty`.
+pub fn tys_layout_compatible_to_size(from_ty: &Ty, to_ty: &Ty) -> bool {
+    tys_layout_cmp_to_size(from_ty, to_ty, |from_byte, to_byte| from_byte || !to_byte)
+}
+
+/// Returns true if `to_ty` has a smaller or equal size and padding bytes in `from_ty` are padding
+/// bytes in `to_ty`.
+pub fn tys_layout_equal_to_size(from_ty: &Ty, to_ty: &Ty) -> bool {
+    tys_layout_cmp_to_size(from_ty, to_ty, |from_byte, to_byte| from_byte == to_byte)
+}
+
+/// Returns true if `to_ty` has a smaller or equal size and comparator function returns true for all
+/// byte initialization value pairs up to size.
+fn tys_layout_cmp_to_size(from_ty: &Ty, to_ty: &Ty, cmp: impl Fn(bool, bool) -> bool) -> bool {
+    // Retrieve layouts to assess compatibility.
+    let from_ty_info = PointeeInfo::from_ty(*from_ty);
+    let to_ty_info = PointeeInfo::from_ty(*to_ty);
+    if let (Ok(from_ty_info), Ok(to_ty_info)) = (from_ty_info, to_ty_info) {
+        let from_ty_layout = match from_ty_info.layout() {
+            PointeeLayout::Sized { layout } => layout,
+            PointeeLayout::Slice { element_layout } => element_layout,
+            PointeeLayout::TraitObject => return false,
+        };
+        let to_ty_layout = match to_ty_info.layout() {
+            PointeeLayout::Sized { layout } => layout,
+            PointeeLayout::Slice { element_layout } => element_layout,
+            PointeeLayout::TraitObject => return false,
+        };
+        // Ensure `to_ty_layout` does not have a larger size.
+        if to_ty_layout.len() <= from_ty_layout.len() {
+            // Check data and padding bytes pair-wise.
+            if from_ty_layout.iter().zip(to_ty_layout.iter()).all(
+                |(from_ty_layout_byte, to_ty_layout_byte)| {
+                    // Run comparator on each pair.
+                    cmp(*from_ty_layout_byte, *to_ty_layout_byte)
+                },
+            ) {
+                return true;
+            }
+        }
+    };
+    false
 }

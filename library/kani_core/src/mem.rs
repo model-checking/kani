@@ -36,6 +36,7 @@
 //! The way Kani tracks provenance is not enough to check if the address was the result of a cast
 //! from a non-zero integer literal.
 
+#[allow(clippy::crate_in_macro_def)]
 #[macro_export]
 macro_rules! kani_mem {
     ($core:tt) => {
@@ -56,12 +57,11 @@ macro_rules! kani_mem {
         /// This function will panic today if the pointer is not null, and it points to an unallocated or
         /// deallocated memory location. This is an existing Kani limitation.
         /// See <https://github.com/model-checking/kani/issues/2690> for more details.
-        // TODO: Add this back! We might need to rename the attribute.
-        //#[crate::unstable(
-        //    feature = "mem-predicates",
-        //    issue = 2690,
-        //    reason = "experimental memory predicate API"
-        //)]
+        #[crate::kani::unstable_feature(
+            feature = "mem-predicates",
+            issue = 2690,
+            reason = "experimental memory predicate API"
+        )]
         pub fn can_write<T>(ptr: *mut T) -> bool
         where
             T: ?Sized,
@@ -84,12 +84,11 @@ macro_rules! kani_mem {
         /// This function will panic today if the pointer is not null, and it points to an unallocated or
         /// deallocated memory location. This is an existing Kani limitation.
         /// See <https://github.com/model-checking/kani/issues/2690> for more details.
-        // TODO: Add this back! We might need to rename the attribute.
-        //#[crate::unstable(
-        //    feature = "mem-predicates",
-        //    issue = 2690,
-        //    reason = "experimental memory predicate API"
-        //)]
+        #[crate::kani::unstable_feature(
+            feature = "mem-predicates",
+            issue = 2690,
+            reason = "experimental memory predicate API"
+        )]
         pub fn can_write_unaligned<T>(ptr: *const T) -> bool
         where
             T: ?Sized,
@@ -111,11 +110,11 @@ macro_rules! kani_mem {
         /// This function will panic today if the pointer is not null, and it points to an unallocated or
         /// deallocated memory location. This is an existing Kani limitation.
         /// See <https://github.com/model-checking/kani/issues/2690> for more details.
-        //#[crate::unstable(
-        //    feature = "mem-predicates",
-        //    issue = 2690,
-        //    reason = "experimental memory predicate API"
-        //)]
+        #[crate::kani::unstable_feature(
+            feature = "mem-predicates",
+            issue = 2690,
+            reason = "experimental memory predicate API"
+        )]
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
         pub fn can_dereference<T>(ptr: *const T) -> bool
         where
@@ -143,12 +142,11 @@ macro_rules! kani_mem {
         /// This function will panic today if the pointer is not null, and it points to an unallocated or
         /// deallocated memory location. This is an existing Kani limitation.
         /// See <https://github.com/model-checking/kani/issues/2690> for more details.
-        // TODO: Add this back! We might need to rename the attribute.
-        //#[crate::unstable(
-        //    feature = "mem-predicates",
-        //    issue = 2690,
-        //    reason = "experimental memory predicate API"
-        //)]
+        #[crate::kani::unstable_feature(
+            feature = "mem-predicates",
+            issue = 2690,
+            reason = "experimental memory predicate API"
+        )]
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
         pub fn can_read_unaligned<T>(ptr: *const T) -> bool
         where
@@ -180,7 +178,7 @@ macro_rules! kani_mem {
                 // Note that this branch can't be tested in concrete execution as `is_read_ok` needs to be
                 // stubbed.
                 // We first assert that the data_ptr
-                assert!(
+                super::assert(
                     unsafe { is_allocated(data_ptr, 0) },
                     "Kani does not support reasoning about pointer to unallocated memory",
                 );
@@ -320,30 +318,28 @@ macro_rules! kani_mem {
         }
 
         /// Get the object ID of the given pointer.
-        // TODO: Add this back later, as there is no unstable attribute here.
-        // #[doc(hidden)]
-        // #[crate::unstable(
-        //     feature = "ghost-state",
-        //     issue = 3184,
-        //     reason = "experimental ghost state/shadow memory API"
-        // )]
+        #[doc(hidden)]
+        #[crate::kani::unstable_feature(
+            feature = "ghost-state",
+            issue = 3184,
+            reason = "experimental ghost state/shadow memory API"
+        )]
         #[rustc_diagnostic_item = "KaniPointerObject"]
         #[inline(never)]
-        pub(crate) fn pointer_object<T: ?Sized>(_ptr: *const T) -> usize {
+        pub fn pointer_object<T: ?Sized>(_ptr: *const T) -> usize {
             kani_intrinsic()
         }
 
         /// Get the object offset of the given pointer.
-        // TODO: Add this back later, as there is no unstable attribute here.
-        // #[doc(hidden)]
-        // #[crate::unstable(
-        //     feature = "ghost-state",
-        //     issue = 3184,
-        //     reason = "experimental ghost state/shadow memory API"
-        // )]
+        #[doc(hidden)]
+        #[crate::kani::unstable_feature(
+            feature = "ghost-state",
+            issue = 3184,
+            reason = "experimental ghost state/shadow memory API"
+        )]
         #[rustc_diagnostic_item = "KaniPointerOffset"]
         #[inline(never)]
-        pub(crate) fn pointer_offset<T: ?Sized>(_ptr: *const T) -> usize {
+        pub fn pointer_offset<T: ?Sized>(_ptr: *const T) -> usize {
             kani_intrinsic()
         }
     };

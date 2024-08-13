@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 #[kani::proof]
-#[kani::unwind(4)]
 // ANCHOR: success_example
 fn success_example() {
     let mut sum = 0;

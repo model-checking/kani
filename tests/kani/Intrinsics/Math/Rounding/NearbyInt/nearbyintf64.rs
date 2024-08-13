@@ -50,7 +50,6 @@ fn test_conc_sci() {
 }
 
 #[kani::proof]
-#[kani::solver(minisat)]
 fn test_towards_nearest() {
     let x: f64 = kani::any();
     kani::assume(!x.is_nan());
@@ -89,7 +88,6 @@ fn test_towards_nearest() {
 }
 
 #[kani::proof]
-#[kani::solver(minisat)]
 fn test_diff_half_one() {
     let x: f64 = kani::any();
     kani::assume(!x.is_nan());
