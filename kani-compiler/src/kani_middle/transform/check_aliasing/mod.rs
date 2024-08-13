@@ -236,44 +236,57 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
         Ok(())
     }
 
-    fn instrument_new_stack_reference(&mut self, idx: &MutatorIndex, lvalue: Local, referent: Local) -> Result<(), Error> {
+    fn instrument_new_stack_reference(&mut self, idx: &MutatorIndex, lvalue: Local, rvalue: Local) -> Result<(), Error> {
         // Initialize the constants
-        let ty = self.body.local(referent).ty;
+        let ty = self.body.local(rvalue).ty;
         let lvalue_ref = self.meta_stack.get(&lvalue).unwrap();
-        let instance = self.cache.register(&self.tcx, FunctionSignature::new("KaniNewMutRef", &[GenericArgKind::Type(ty)]))?;
-        self.body.call(instance, vec![*lvalue_ref, lvalue], self.body.unit);
+        let rvalue_ref = self.meta_stack.get(&rvalue).unwrap();
+        let instance = self.cache.register(&self.tcx, FunctionSignature::new("KaniNewMutRefFromValue", &[GenericArgKind::Type(ty)]))?;
+        self.body.call(instance, vec![*lvalue_ref, *rvalue_ref], self.body.unit);
         self.body.split(idx);
         Ok(())
     }
 
-
-    fn instrument_new_raw_from_ref(&mut self, idx: &MutatorIndex, lvalue: Local, referent: Local) -> Result<(), Error> {
+    fn instrument_stack_check_ref(&mut self, idx: &MutatorIndex, place: Local) -> Result<(), Error> {
         // Initialize the constants
-        if let TyKind::RigidTy(RigidTy::Ref(_, ty, _)) =
-            self.body.local(referent).ty.kind() {
-            let lvalue_ref = self.meta_stack.get(&lvalue).unwrap();
-            let instance = self.cache.register(&self.tcx, FunctionSignature::new("KaniNewMutRaw", &[GenericArgKind::Type(ty)]))?;
-            self.body.call(instance, vec![*lvalue_ref, lvalue], self.body.unit);
-            self.body.split(idx);
-            Ok(())
-        } else {
-            panic!("At this time only dereferences of refs are handled here.");
-        }
+        let ty = self.body.local(place).ty;
+        let place_ref = self.meta_stack.get(&place).unwrap();
+        let instance = self.cache.register(&self.tcx, FunctionSignature::new("KaniStackCheckRef", &[GenericArgKind::Type(ty)]))?;
+        self.body.call(instance, vec![*place_ref], self.body.unit);
+        self.body.split(idx);
+        Ok(())
     }
 
-    fn instrument_write_through_pointer(&mut self, idx: &MutatorIndex, lvalue: Local) -> Result<(), Error> {
+    fn instrument_stack_check_ptr(&mut self, idx: &MutatorIndex, place: Local) -> Result<(), Error> {
         // Initialize the constants
-        if let TyKind::RigidTy(RigidTy::Ref(_, ty, _)) | TyKind::RigidTy(RigidTy::RawPtr(ty, _)) = self.body.local(lvalue).ty.kind() {
-            let lvalue_ref = self.meta_stack.get(&lvalue).unwrap();
-            let ty = Ty::from_rigid_kind(RigidTy::RawPtr(ty, Mutability::Not));
-            let instance = self.cache.register(&self.tcx, FunctionSignature::new("KaniWriteThroughPointer", &[GenericArgKind::Type(ty)]))?;
-            /* Limitation: calls use_2 on a reference or pointer, when use_2's input type is a pointer */
-            self.body.call(instance, vec![*lvalue_ref], self.body.unit);
-            self.body.split(idx);
-            Ok(())
-        } else {
-            panic!("At this time only dereferences of refs are handled here.");
-        }
+        let ty = self.body.local(place).ty;
+        let place_ref = self.meta_stack.get(&place).unwrap();
+        let instance = self.cache.register(&self.tcx, FunctionSignature::new("KaniStackCheckPtr", &[GenericArgKind::Type(ty)]))?;
+        self.body.call(instance, vec![*place_ref], self.body.unit);
+        self.body.split(idx);
+        Ok(())
+    }
+
+    fn instrument_new_mut_ref_from_raw(&mut self, idx: &MutatorIndex, created: Local, raw: Local) -> Result<(), Error> {
+        // Initialize the constants
+        let ty = self.body.local(created).ty;
+        let created_ref = self.meta_stack.get(&created).unwrap();
+        let reference_ref = self.meta_stack.get(&raw).unwrap();
+        let instance = self.cache.register(&self.tcx, FunctionSignature::new("KaniNewMutRefFromRaw", &[GenericArgKind::Type(ty)]))?;
+        self.body.call(instance, vec![*created_ref, *reference_ref], self.body.unit);
+        self.body.split(idx);
+        Ok(())
+    }
+
+    fn instrument_new_mut_raw_from_ref(&mut self, idx: &MutatorIndex, created: Local, reference: Local) -> Result<(), Error> {
+        // Initialize the constants
+        let ty = self.body.local(created).ty;
+        let created_ref = self.meta_stack.get(&created).unwrap();
+        let reference_ref = self.meta_stack.get(&reference).unwrap();
+        let instance = self.cache.register(&self.tcx, FunctionSignature::new("KaniNewMutRawFromRef", &[GenericArgKind::Type(ty)]))?;
+        self.body.call(instance, vec![*created_ref, *reference_ref], self.body.unit);
+        self.body.split(idx);
+        Ok(())
     }
 
     fn instrument_index(&mut self, _values: &Vec<Local>, idx: &MutatorIndex) -> Result<(), Error> {
@@ -288,14 +301,20 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
                                     Rvalue::Ref(_, BorrowKind::Mut { .. }, from) => {
                                         match from.projection[..] {
                                             [] => {
-                                                // Direct reference to the stack local
+                                                // Direct reference to stack local
                                                 // x = &y
                                                 self.instrument_new_stack_reference(idx, to.local, from.local)?;
                                                 Ok(())
                                             },
                                             [ProjectionElem::Deref] => {
                                                 // Reborrow
-                                                // x = &*y
+                                                // x : &mut T = &*(y : *mut T)
+                                                let from = from.local; // Copy to avoid borrow
+                                                let to = to.local;     // Copy to avoid borrow
+                                                if self.body.local(to).ty.kind().is_raw_ptr() {
+                                                    self.instrument_stack_check_ref(idx, from)?;
+                                                    self.instrument_new_mut_ref_from_raw(idx, to, from)?;
+                                                }
                                                 Ok(())
                                             },
                                             _ => {
@@ -312,7 +331,13 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
                                                 Ok(())
                                             },
                                             [ProjectionElem::Deref] => {
-                                                self.instrument_new_raw_from_ref(idx, to.local, from.local)?;
+                                                // x = &raw mut *(y: &mut T)
+                                                let from = from.local; // Copy to avoid borrow
+                                                let to = to.local; // Copy to avoid borrow
+                                                if self.body.local(to).ty.kind().is_ref() {
+                                                    self.instrument_stack_check_ref(idx, from)?;
+                                                    self.instrument_new_mut_raw_from_ref(idx, to, from)?;
+                                                }
                                                 Ok(())
                                             },
                                             _ => {
@@ -328,7 +353,12 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
                             }
                             [ProjectionElem::Deref] => {
                                 // *x = rvalue
-                                self.instrument_write_through_pointer(idx, to.local)?;
+                                let to = to.local;
+                                if self.body.local(to).ty.kind().is_ref() {
+                                    self.instrument_stack_check_ref(idx, to);
+                                } else if self.body.local(to).ty.kind().is_raw_ptr() {
+                                    self.instrument_stack_check_ptr(idx, to);
+                                }
                                 Ok(())
                             }
                             _ => {

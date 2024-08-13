@@ -1,60 +1,11 @@
 // kani-flags: -Zghost-state -Zaliasing
-#![feature(register_tool)]
+#![cfg_attr(not(kani), feature(register_tool))]
+#![cfg_attr(not(kani), register_tool(kani))]
 #![feature(rustc_attrs)]
-mod stackfns_ignore;
-use stackfns_ignore::*;
+#![allow(internal_features)]
+#![feature(vec_into_raw_parts)]
 
-macro_rules! initialize {
-    () => {
-        #[cfg(not(kani))]
-        sstate::initialize();
-    }
-}
-
-macro_rules! initialize_local {
-    ($place:ident) => {
-        #[cfg(not(kani))]
-        initialize_local(std::ptr::addr_of!($place));
-    }
-}
-
-macro_rules! new_mut_ref_from_value {
-    ($reference:ident) => {
-        #[cfg(not(kani))]
-        new_mut_ref_from_value(std::ptr::addr_of!($reference),
-                               $reference);
-    }
-}
-
-macro_rules! stack_check_ref {
-    ($reference:ident) => {
-        #[cfg(not(kani))]
-        stack_check_ref(std::ptr::addr_of!($reference));
-    }
-}
-
-macro_rules! new_mut_raw_from_ref {
-    ($pointer: ident, $reference: ident) => {
-        #[cfg(not(kani))]
-        new_mut_raw_from_ref(std::ptr::addr_of!($pointer),
-                             std::ptr::addr_of!($reference));
-    }
-}
-
-macro_rules! new_mut_ref_from_raw {
-    ($pointer: ident, $reference: ident) => {
-        #[cfg(not(kani))]
-        new_mut_ref_from_raw(std::ptr::addr_of!($pointer),
-                             std::ptr::addr_of!($reference));
-    }
-}
-
-macro_rules! stack_check_ptr {
-    ($pointer: ident) => {
-        #[cfg(not(kani))]
-        stack_check_ptr(std::ptr::addr_of!($pointer));
-    }
-}
+include!{"./stackfns.txt"}
 
 #[cfg_attr(any(kani), kani::proof)]
 fn main() {
@@ -69,9 +20,9 @@ fn main() {
     initialize_local!(local);
     temp_ref = &mut local;
     initialize_local!(temp_ref);
+    new_mut_ref_from_value!(temp_ref);
     raw_pointer = temp_ref as *mut i32;
     initialize_local!(raw_pointer);
-    new_mut_ref_from_value!(temp_ref);
     stack_check_ref!(temp_ref);
     new_mut_raw_from_ref!(raw_pointer, temp_ref);
     unsafe {
