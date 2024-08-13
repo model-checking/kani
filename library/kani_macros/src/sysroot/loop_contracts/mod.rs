@@ -10,6 +10,23 @@ use proc_macro_error::abort_call_site;
 use quote::quote;
 use syn::{Expr, Stmt};
 
+/// Expand loop contracts macros.
+///
+/// A while loop of the form
+/// ``` rust
+///  while guard {
+///      body
+///  }
+/// ```
+/// will be annotated as
+/// ``` rust
+///  while guard{
+///      body
+///      kani::kani_loop_invariant_begin_marker();
+///      let __kani_loop_invariant: bool = inv;
+///      kani::kani_loop_invariant_end_marker();
+///  }
+/// ```
 pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut loop_stmt: Stmt = syn::parse(item.clone()).unwrap();
 
@@ -17,21 +34,6 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
     match loop_stmt {
         Stmt::Expr(ref mut e, _) => match e {
             Expr::While(ref mut ew) => {
-                // A while loop of the form
-                // ``` rust
-                //  while guard {
-                //      body
-                //  }
-                // ```
-                // is annotated as
-                // ``` rust
-                //  while guard{
-                //      body
-                //      kani::kani_loop_invariant_begin_marker();
-                //      let __kani_loop_invariant: bool = inv;
-                //      kani::kani_loop_invariant_end_marker();
-                //  }
-                // ```
                 let mut to_parse = quote!(
                      let __kani_loop_invariant: bool = );
                 to_parse.extend(TokenStream2::from(attr.clone()));

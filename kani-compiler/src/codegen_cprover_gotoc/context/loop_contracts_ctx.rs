@@ -32,7 +32,6 @@ pub struct LoopContractsCtx {
 ///     of the next backward jumping we codegen.
 ///     We enter this state when codegen for `KaniLoopInvariantEnd`.
 ///     We exit this state when codegen for the first backward jumping.
-#[allow(dead_code)]
 #[derive(Debug, PartialEq)]
 enum LoopContractsStage {
     /// Codegen for user code as usual
@@ -95,7 +94,7 @@ impl LoopContractsCtx {
     /// and return `skip`. Otherwise, do nothing and return `s`.
     pub fn push_onto_block(&mut self, s: Stmt) -> Stmt {
         if self.stage == LoopContractsStage::InvariantBlock {
-            // Attach the lable to the first Stmt in that block and reset it.
+            // Attach the label to the first `Stmt` in that block and reset it.
             let to_push = if self.current_bbidx_label.is_none() {
                 s.clone()
             } else {

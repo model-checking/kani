@@ -841,6 +841,7 @@ fn annotate_properties_with_reach_results(
             // Update the reachability status of the property
             if let Some(reach_status) = reach_status_opt {
                 for status in reach_status {
+                    // Report if any copy of `prop` is not success.
                     if prop.reach.is_none()
                         || prop.reach.unwrap() == CheckStatus::Satisfied
                         || prop.reach.unwrap() == CheckStatus::Success

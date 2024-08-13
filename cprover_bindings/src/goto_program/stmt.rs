@@ -84,6 +84,8 @@ pub enum StmtBody {
     /// `goto dest;`
     Goto {
         dest: InternedString,
+        // The loop invariants annotated to the goto, which can be
+        // applied as loop contracts in CBMC if it is a backward goto.
         loop_invariants: Option<Expr>,
     },
     /// `if (i) { t } else { e }`
