@@ -217,6 +217,16 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
         body.insert_statement(Statement { kind, span });
     }
 
+    /// Initialize the monitors
+    fn instrument_initialize(
+        &mut self,
+    ) -> Result<(), Error> {
+        let instance = self.cache.register(&self.tcx, FunctionSignature::new("KaniInitializeSState", &[]))?;
+        let body = &mut self.body;
+        body.call(instance, [].to_vec(), body.unit);
+        Ok(())
+    }
+
     /// For some local, say let x: T;
     /// instrument it with the functions that initialize the stack:
     /// let ptr_x: *const T = &raw const x;
@@ -247,9 +257,8 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
         Ok(())
     }
 
-    fn instrument_stack_check_ref(&mut self, idx: &MutatorIndex, place: Local) -> Result<(), Error> {
+    fn instrument_stack_check_ref(&mut self, idx: &MutatorIndex, place: Local, ty: Ty) -> Result<(), Error> {
         // Initialize the constants
-        let ty = self.body.local(place).ty;
         let place_ref = self.meta_stack.get(&place).unwrap();
         let instance = self.cache.register(&self.tcx, FunctionSignature::new("KaniStackCheckRef", &[GenericArgKind::Type(ty)]))?;
         self.body.call(instance, vec![*place_ref], self.body.unit);
@@ -257,9 +266,8 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
         Ok(())
     }
 
-    fn instrument_stack_check_ptr(&mut self, idx: &MutatorIndex, place: Local) -> Result<(), Error> {
+    fn instrument_stack_check_ptr(&mut self, idx: &MutatorIndex, place: Local, ty: Ty) -> Result<(), Error> {
         // Initialize the constants
-        let ty = self.body.local(place).ty;
         let place_ref = self.meta_stack.get(&place).unwrap();
         let instance = self.cache.register(&self.tcx, FunctionSignature::new("KaniStackCheckPtr", &[GenericArgKind::Type(ty)]))?;
         self.body.call(instance, vec![*place_ref], self.body.unit);
@@ -294,70 +302,82 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
             Instruction::Stmt(Statement { kind, ..} ) => {
                 match kind {
                     StatementKind::Assign(to, rvalue) => {
-                        match to.projection[..] {
-                            [] => {
-                                // Assignment directly to local
-                                match rvalue {
-                                    Rvalue::Ref(_, BorrowKind::Mut { .. }, from) => {
-                                        match from.projection[..] {
-                                            [] => {
-                                                // Direct reference to stack local
-                                                // x = &y
-                                                self.instrument_new_stack_reference(idx, to.local, from.local)?;
-                                                Ok(())
-                                            },
-                                            [ProjectionElem::Deref] => {
-                                                // Reborrow
-                                                // x : &mut T = &*(y : *mut T)
-                                                let from = from.local; // Copy to avoid borrow
-                                                let to = to.local;     // Copy to avoid borrow
-                                                if self.body.local(to).ty.kind().is_raw_ptr() {
-                                                    self.instrument_stack_check_ref(idx, from)?;
-                                                    self.instrument_new_mut_ref_from_raw(idx, to, from)?;
-                                                }
-                                                Ok(())
-                                            },
-                                            _ => {
-                                                eprintln!("Field projections not yet handled");
-                                                Ok(())
-                                            }
-                                        }
+                        let to = to.clone();
+                        match rvalue {
+                            Rvalue::Ref(_, BorrowKind::Mut { .. }, from) => {
+                                match from.projection[..] {
+                                    [] => {
+                                        // Direct reference to stack local
+                                        // x = &y
+                                        self.instrument_new_stack_reference(idx, to.local, from.local)?;
                                     },
-                                    Rvalue::AddressOf(Mutability::Mut, from) => {
-                                        match from.projection[..] {
-                                            [] => {
-                                                // x = &raw y
-                                                eprintln!("addr of not yet handled");
-                                                Ok(())
+                                    [ProjectionElem::Deref] => {
+                                        // Reborrow
+                                        // x : &mut T = &*(y : *mut T)
+                                        let from = from.local; // Copy to avoid borrow
+                                        let to = to.local;     // Copy to avoid borrow
+                                        match self.body.local(to).ty.kind() {
+                                            TyKind::RigidTy(RigidTy::Ref(_, ty, _)) => {
+                                                eprintln!("Reborrow from reference not yet handled");
                                             },
-                                            [ProjectionElem::Deref] => {
-                                                // x = &raw mut *(y: &mut T)
-                                                let from = from.local; // Copy to avoid borrow
-                                                let to = to.local; // Copy to avoid borrow
-                                                if self.body.local(to).ty.kind().is_ref() {
-                                                    self.instrument_stack_check_ref(idx, from)?;
-                                                    self.instrument_new_mut_raw_from_ref(idx, to, from)?;
-                                                }
-                                                Ok(())
+                                            TyKind::RigidTy(RigidTy::RawPtr(ty, _)) => {
+                                                self.instrument_stack_check_ref(idx, from, ty)?;
+                                                self.instrument_new_mut_ref_from_raw(idx, to, from)?;
                                             },
-                                            _ => {
-                                                Ok(())
-                                            }
+                                            _ => {}
                                         }
                                     },
                                     _ => {
-                                        eprintln!("Rvalue kind: {:?} not yet handled", rvalue);
-                                        Ok(())
+                                        eprintln!("Field projections not yet handled");
                                     }
                                 }
+                            },
+                            Rvalue::AddressOf(Mutability::Mut, from) => {
+                                match from.projection[..] {
+                                    [] => {
+                                        // x = &raw y
+                                        eprintln!("addr of not yet handled");
+                                    },
+                                    [ProjectionElem::Deref] => {
+                                        // x = &raw mut *(y: &mut T)
+                                        let from = from.local; // Copy to avoid borrow
+                                        let to = to.local; // Copy to avoid borrow
+                                        match self.body.local(to).ty.kind() {
+                                            TyKind::RigidTy(RigidTy::Ref(_, ty, _)) => {
+                                                self.instrument_stack_check_ref(idx, from, ty)?;
+                                                self.instrument_new_mut_raw_from_ref(idx, to, from)?;
+                                            },
+                                            TyKind::RigidTy(RigidTy::RawPtr(ty, _)) => {
+                                                eprintln!("Pointer to pointer casts not yet handled");
+                                            }
+                                            _ => {}
+                                        }
+                                    },
+                                    _ => {
+                                    }
+                                }
+                            },
+                            _ => {
+                                eprintln!("Rvalue kind: {:?} not yet handled", rvalue);
+                            }
+                        }
+                        match to.projection[..] {
+                            [] => {
+                                // Assignment directly to local
+                                Ok(())
                             }
                             [ProjectionElem::Deref] => {
                                 // *x = rvalue
                                 let to = to.local;
-                                if self.body.local(to).ty.kind().is_ref() {
-                                    self.instrument_stack_check_ref(idx, to);
-                                } else if self.body.local(to).ty.kind().is_raw_ptr() {
-                                    self.instrument_stack_check_ptr(idx, to);
+                                println!("Self body local to is: {:?}", self.body.local(to));
+                                match self.body.local(to).ty.kind() {
+                                    TyKind::RigidTy(RigidTy::Ref(_, ty, _)) => {
+                                        self.instrument_stack_check_ref(idx, to, ty)?;
+                                    },
+                                    TyKind::RigidTy(RigidTy::RawPtr(ty, _)) => {
+                                        self.instrument_stack_check_ptr(idx, to, ty)?;
+                                    }
+                                    _ => {}
                                 }
                                 Ok(())
                             }
@@ -389,6 +409,7 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
 
     fn instrument_locals(&mut self,
                          values: &Vec<Local>) -> Result<(), Error> {
+        self.instrument_initialize()?;
         for local in values {
             self.instrument_local(*local)?
         }
