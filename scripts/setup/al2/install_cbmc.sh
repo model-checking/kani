@@ -93,6 +93,7 @@ cat > varargs.patch << "EOF"
    }
 
 EOF
+patch -p1 < varargs.patch
 
 cmake3 -S . -Bbuild -DWITH_JBMC=OFF -Dsat_impl="minisat2;cadical" \
   -DCMAKE_C_COMPILER=gcc10-cc -DCMAKE_CXX_COMPILER=gcc10-c++ \
