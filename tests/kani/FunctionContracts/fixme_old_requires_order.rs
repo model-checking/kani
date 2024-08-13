@@ -13,6 +13,5 @@ pub fn next(mut val: i32) -> i32 {
 
 #[kani::proof_for_contract(next)]
 pub fn check_next() {
-    // let _ = next(kani::any_where(|val: &i32| *val < i32::MAX));
     let _ = next(kani::any());
 }

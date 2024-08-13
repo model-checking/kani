@@ -20,7 +20,7 @@ use std::pin::Pin;
 use std::rc::Rc;
 use std::sync::Arc;
 
-/// Type representing a valid ASCII value going from `0..=128`.
+/// Type representing a valid ASCII value going from `0..128`.
 #[derive(Copy, Clone, PartialEq, Eq)]
 #[rustc_layout_scalar_valid_range_start(0)]
 #[rustc_layout_scalar_valid_range_end(128)]
