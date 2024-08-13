@@ -82,11 +82,17 @@ In this case, Kani verifies that the loop invariant `x >= 1` is inductive, i.e.,
 
 Also, once Kani proved that the loop invariant is inductive, it can safely use the loop
 invariants to abstract the loop out of the verification process.
-The idea is, instead of exploring all possible branches of the loop, Kani can safely
-substitute the loops with any of program states that satisfy the loop invariants and
-the negation of the loop guard. The requirement of satisfying the negation of the loop
-guard comes from the fact that a path exits the loop must fail the loop guard.
-After the loop is abstracted, the program will be equivalent to the following:
+The idea is, instead of exploring all possible branches of the loop, Kani only needs to
+prove those branches reached from an arbitrary program state that satisfies the loop contracts,
+after the execution of one iteration of the loop.
+
+So, for loops without break statements, proving post-loops properties with loop contracts is
+equivalent to proving the properties with the loop abstracted out as assuming the post-states
+of the loops should satisfying the disjunction of the invariant and the negation of the loop guard.
+The requirement of satisfying the negation of the loop guard comes from the fact that a path
+exits loops without break statements must fail the loop guard.
+
+For example, applying loop contracts in `simple_loop` function is equivalent to the following:
 ```rs
 fn simple_loop_transformed() {
     let mut x: u64 = kani::any_where(|i| *i >= 1);
