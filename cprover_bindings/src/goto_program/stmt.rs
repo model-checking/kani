@@ -291,17 +291,6 @@ impl Stmt {
         stmt!(Goto { dest, loop_invariants: None }, loc)
     }
 
-    /// `goto dest;` with loop invariant
-    pub fn goto_with_loop_inv<T: Into<InternedString>>(
-        dest: T,
-        loop_invariants: Expr,
-        loc: Location,
-    ) -> Self {
-        let dest = dest.into();
-        assert!(!dest.is_empty());
-        stmt!(Goto { dest, loop_invariants: Some(loop_invariants) }, loc)
-    }
-
     /// `if (i) { t } else { e }` or `if (i) { t }`
     pub fn if_then_else(i: Expr, t: Stmt, e: Option<Stmt>, loc: Location) -> Self {
         assert!(i.typ().is_bool());
@@ -340,6 +329,16 @@ impl Stmt {
         let label = label.into();
         assert!(!label.is_empty());
         stmt!(Label { label, body: self }, *self.location())
+    }
+
+    /// `goto dest;` with loop invariant
+    pub fn with_loop_contracts(self, inv: Expr) -> Self {
+        if let Goto { dest, loop_invariants } = self.body() {
+            assert!(loop_invariants.is_none());
+            stmt!(Goto { dest: *dest, loop_invariants: Some(inv) }, *self.location())
+        } else {
+            unreachable!("Loop contracts should be annotated only to goto stmt")
+        }
     }
 }
 

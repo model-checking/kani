@@ -5,7 +5,7 @@
 
 //! Check if loop contracts are correctly applied. The flag --no-standard-checks should be
 //! removed once same_object predicate is supported in loop contracts.
-//! This function is originally the std function 
+//! This function is originally the std function
 //! https://github.com/rust-lang/rust/blob/master/library/core/src/str/pattern.rs#L1885
 
 #![feature(stmt_expr_attributes)]

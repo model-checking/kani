@@ -184,11 +184,8 @@ impl<'tcx> GotocCtx<'tcx> {
                 if self.loop_contracts_ctx.loop_contracts_enabled()
                     && self.loop_contracts_ctx.is_loop_latch(target)
                 {
-                    Stmt::goto_with_loop_inv(
-                        bb_label(*target),
-                        self.loop_contracts_ctx.extract_block(loc),
-                        loc,
-                    )
+                    Stmt::goto(bb_label(*target), loc)
+                        .with_loop_contracts(self.loop_contracts_ctx.extract_block(loc))
                 } else {
                     Stmt::goto(bb_label(*target), loc)
                 }
