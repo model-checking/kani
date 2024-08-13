@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// kani-flags:
+// kani-flags: -Z loop-contracts
 
 //! Check if loop contracts is correctly applied.
 
