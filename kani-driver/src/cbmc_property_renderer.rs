@@ -4,7 +4,7 @@
 use crate::args::OutputFormat;
 use crate::call_cbmc::{FailedProperties, VerificationStatus};
 use crate::cbmc_output_parser::{CheckStatus, ParserItem, Property, TraceItem};
-use crate::coverage::cov_results::{fmt_coverage_results, CoverageResults};
+use crate::coverage::cov_results::CoverageResults;
 use console::style;
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -437,17 +437,10 @@ pub fn format_coverage(
 
     let verification_output =
         format_result(&non_coverage_checks, status, should_panic, failed_properties, show_checks);
-    let new_coverage_output = format_result_new_coverage(cov_results);
-    let result = format!("{}\n{}", verification_output, new_coverage_output);
+    let cov_results_intro = "Source-based code coverage results:";
+    let result = format!("{}\n{}\n\n{}", verification_output, cov_results_intro, cov_results);
 
     result
-}
-
-fn format_result_new_coverage(cov_results: &CoverageResults) -> String {
-    let mut formatted_output = String::new();
-    formatted_output.push_str("\nCoverage Results (NEW):\n");
-
-    fmt_coverage_results(&cov_results).expect("error: couldn't format coverage results")
 }
 
 /// Attempts to build a message for a failed property with as much detailed

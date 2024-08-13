@@ -60,7 +60,7 @@ pub struct VerificationResult {
     pub runtime: Duration,
     /// Whether concrete playback generated a test
     pub generated_concrete_test: bool,
-    /// The coverage results?
+    /// The coverage results
     pub coverage_results: Option<CoverageResults>,
 }
 

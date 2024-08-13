@@ -2,11 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use crate::cbmc_output_parser::CheckStatus;
-use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::fmt::{self, Write};
-use std::{collections::BTreeMap, fmt::Display};
+use std::{collections::BTreeMap, fmt, fmt::Display};
 
+/// The coverage data maps a function name to a set of coverage checks.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CoverageResults {
     pub data: BTreeMap<String, Vec<CoverageCheck>>,
@@ -17,31 +16,33 @@ impl CoverageResults {
         Self { data }
     }
 }
-pub fn fmt_coverage_results(coverage_results: &CoverageResults) -> Result<String> {
-    let mut fmt_string = String::new();
-    for (file, checks) in coverage_results.data.iter() {
-        let mut checks_by_function: BTreeMap<String, Vec<CoverageCheck>> = BTreeMap::new();
 
-        // // Group checks by function
-        for check in checks {
-            // Insert the check into the vector corresponding to its function
-            checks_by_function
-                .entry(check.function.clone())
-                .or_insert_with(Vec::new)
-                .push(check.clone());
-        }
+impl fmt::Display for CoverageResults {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        for (file, checks) in self.data.iter() {
+            let mut checks_by_function: BTreeMap<String, Vec<CoverageCheck>> = BTreeMap::new();
 
-        for (function, checks) in checks_by_function {
-            writeln!(fmt_string, "{file} ({function})")?;
-            let mut sorted_checks: Vec<CoverageCheck> = checks.to_vec();
-            sorted_checks.sort_by(|a, b| a.region.start.cmp(&b.region.start));
-            for check in sorted_checks.iter() {
-                writeln!(fmt_string, " * {} {}", check.region, check.status)?;
+            // Group checks by function
+            for check in checks {
+                // Insert the check into the vector corresponding to its function
+                checks_by_function
+                    .entry(check.function.clone())
+                    .or_insert_with(Vec::new)
+                    .push(check.clone());
             }
-            writeln!(fmt_string, "")?;
+
+            for (function, checks) in checks_by_function {
+                writeln!(f, "{file} ({function})")?;
+                let mut sorted_checks: Vec<CoverageCheck> = checks.to_vec();
+                sorted_checks.sort_by(|a, b| a.region.start.cmp(&b.region.start));
+                for check in sorted_checks.iter() {
+                    writeln!(f, " * {} {}", check.region, check.status)?;
+                }
+                writeln!(f, "")?;
+            }
         }
+        Ok(())
     }
-    Ok(fmt_string)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -61,6 +62,12 @@ impl CoverageCheck {
     ) -> Self {
         Self { function, term, region, status }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum CoverageTerm {
+    Counter(u32),
+    Expression(u32),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -89,10 +96,4 @@ impl CoverageRegion {
         let end = (str_splits2[0].parse().unwrap(), str_splits2[1].parse().unwrap());
         Self { file, start, end }
     }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum CoverageTerm {
-    Counter(u32),
-    Expression(u32),
 }
