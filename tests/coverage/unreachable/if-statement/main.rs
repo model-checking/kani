@@ -5,7 +5,7 @@ fn check_number(num: i32) -> &'static str {
     if num > 0 {
         // The next line is partially covered
         if num % 2 == 0 { "Positive and Even" } else { "Positive and Odd" }
-    } else if num < 0 { // From here on, only the terminator is covered
+    } else if num < 0 {
         "Negative"
     } else {
         "Zero"
