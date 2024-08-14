@@ -1,13 +1,9 @@
 Source-based code coverage results:
 
-tests/coverage/reachable/overflow/reachable_pass/test.rs (main)
- * 12:1 - 17:2 COVERED\
+test.rs (main)\
+ * 12:1 - 17:2 COVERED
 
-tests/coverage/reachable/overflow/reachable_pass/test.rs (reduce)
+test.rs (reduce)\
  * 7:1 - 8:16 COVERED\
  * 8:19 - 8:27 COVERED\
- * 8:37 - 8:38 COVERED\
-
-Verification Time: 0.052936167s
-
-error: could not find project metadata required for coverage metadata
+ * 8:37 - 8:38 COVERED

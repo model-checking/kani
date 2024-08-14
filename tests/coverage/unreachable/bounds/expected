@@ -6,4 +6,4 @@ test.rs (get)\
  * 5:44 - 5:46 COVERED
 
 test.rs (main)\
- * 9:1 - 12:2 COVERED
+ * 9:1 - 11:2 COVERED

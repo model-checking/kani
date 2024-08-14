@@ -1,4 +1,4 @@
 Source-based code coverage results:
 
 main.rs (check_assume_assert)\
- * 4:1 - 8:2 COVERED
+ * 10:1 - 14:2 COVERED
