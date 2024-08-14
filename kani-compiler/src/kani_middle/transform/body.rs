@@ -310,16 +310,16 @@ impl MutableBody {
                 // Update the source to point at the terminator.
                 *source = SourceInstruction::Terminator { bb: orig_bb };
             }
-            // Make the terminator at `source` point at the new block,
-            // the terminator of which is a simple Goto instruction.
+            // Make the terminator at `source` point at the new block, the terminator of which is
+            // provided by the caller.
             SourceInstruction::Terminator { bb } => {
                 let current_term = &mut self.blocks.get_mut(*bb).unwrap().terminator;
                 let target_bb = get_mut_target_ref(current_term);
                 let new_target_bb = get_mut_target_ref(&mut new_term);
-                // Set the new terminator to point where previous terminator pointed.
-                *new_target_bb = *target_bb;
-                // Point the current terminator to the new terminator's basic block.
-                *target_bb = new_bb_idx;
+                // Swap the targets of the newly inserted terminator and the original one. This is
+                // an easy way to make the original terminator point to the new basic block with the
+                // new terminator.
+                std::mem::swap(new_target_bb, target_bb);
                 // Update the source to point at the terminator.
                 *bb = new_bb_idx;
                 self.blocks.push(BasicBlock { statements: vec![], terminator: new_term });
@@ -502,6 +502,10 @@ impl SourceInstruction {
         match *self {
             SourceInstruction::Statement { bb, .. } | SourceInstruction::Terminator { bb } => bb,
         }
+    }
+
+    pub fn is_terminator(&self) -> bool {
+        matches!(self, SourceInstruction::Terminator { .. })
     }
 }
 
