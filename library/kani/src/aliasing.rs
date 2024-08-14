@@ -1,10 +1,10 @@
 const STACK_DEPTH: usize = 15;
 type PointerTag = u8;
 
-use crate::shadow::ShadowMem;
 use crate::mem::pointer_object;
 use crate::mem::pointer_offset;
-use crate::{assume, any};
+use crate::shadow::ShadowMem;
+use crate::{any, assume};
 
 /// The stacked borrows state.
 pub mod sstate {
@@ -25,7 +25,7 @@ pub mod sstate {
     #[non_exhaustive]
     struct Permission;
     impl Permission {
-        pub(self) const UNIQUE:   u8 = 0;
+        pub(self) const UNIQUE: u8 = 0;
         pub(self) const SHAREDRW: u8 = 1;
         pub(self) const SHAREDRO: u8 = 2;
         pub(self) const DISABLED: u8 = 3;
@@ -108,9 +108,9 @@ pub mod sstate {
             // Offset has already been picked earlier.
             unsafe {
                 use self::*;
-                if STATE == MonitorState::INIT &&
-                   OBJECT == pointer_object(pointer) &&
-                   OFFSET == pointer_offset(pointer)
+                if STATE == MonitorState::INIT
+                    && OBJECT == pointer_object(pointer)
+                    && OFFSET == pointer_offset(pointer)
                 {
                     STACK_TAGS[STACK_TOP] = tag;
                     STACK_PERMS[STACK_TOP] = perm;
@@ -122,26 +122,27 @@ pub mod sstate {
         pub(super) fn stack_check<U>(tag: u8, access: bool, address: *const U) {
             unsafe {
                 use self::*;
-                if STATE == MonitorState::INIT &&
-                   OFFSET == pointer_offset(address) &&
-                   OBJECT == pointer_object(address) {
-                   let mut found = false;
-                   let mut j = 0;
-                   let mut new_top = 0;
-                   assert!(STACK_TOP < STACK_DEPTH);
-                   while j < STACK_DEPTH {
-                       if j < STACK_TOP {
-                           let id = STACK_TAGS[j];
-                           let kind = STACK_PERMS[j];
-                           if Permission::grants(access, kind) && id == tag {
-                               new_top = j + 1;
-                               found = true;
-                           }
-                       }
-                       j += 1;
-                   }
-                   STACK_TOP = new_top;
-                   crate::assert(found, "Stack violated.");
+                if STATE == MonitorState::INIT
+                    && OFFSET == pointer_offset(address)
+                    && OBJECT == pointer_object(address)
+                {
+                    let mut found = false;
+                    let mut j = 0;
+                    let mut new_top = 0;
+                    assert!(STACK_TOP < STACK_DEPTH);
+                    while j < STACK_DEPTH {
+                        if j < STACK_TOP {
+                            let id = STACK_TAGS[j];
+                            let kind = STACK_PERMS[j];
+                            if Permission::grants(access, kind) && id == tag {
+                                new_top = j + 1;
+                                found = true;
+                            }
+                        }
+                        j += 1;
+                    }
+                    STACK_TOP = new_top;
+                    crate::assert(found, "Stack violated.");
                 }
             }
         }
@@ -218,7 +219,10 @@ pub mod sstate {
     /// tag, running a stack check on the tag associated with the reference, accessed by
     /// pointer_to_ref, and pushing the tag to the original location.
     #[rustc_diagnostic_item = "KaniNewMutRawFromRef"]
-    pub fn new_mut_raw_from_ref<T>(pointer_to_created: *const *mut T, pointer_to_ref: *const &mut T) {
+    pub fn new_mut_raw_from_ref<T>(
+        pointer_to_created: *const *mut T,
+        pointer_to_ref: *const &mut T,
+    ) {
         unsafe {
             // Then associate the lvalue and push it
             TAGS.set(pointer_to_created, NEXT_TAG);
@@ -232,7 +236,10 @@ pub mod sstate {
     /// tag, running a stack check on the tag associated with the reference, accessed by
     /// pointer_to_ref, and pushing the tag to the original location.
     #[rustc_diagnostic_item = "KaniNewMutRefFromRaw"]
-    pub fn new_mut_ref_from_raw<T>(pointer_to_created: *const &mut T, pointer_to_ref: *const *mut T) {
+    pub fn new_mut_ref_from_raw<T>(
+        pointer_to_created: *const &mut T,
+        pointer_to_ref: *const *mut T,
+    ) {
         unsafe {
             // Then associate the lvalue and push it
             TAGS.set(pointer_to_created, NEXT_TAG);
