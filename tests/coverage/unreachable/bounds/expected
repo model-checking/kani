@@ -1,4 +1,9 @@
-coverage/unreachable/bounds/test.rs, 5, PARTIAL
-coverage/unreachable/bounds/test.rs, 6, FULL
-coverage/unreachable/bounds/test.rs, 11, FULL
-coverage/unreachable/bounds/test.rs, 12, FULL
+Source-based code coverage results:
+
+test.rs (get)\
+ * 4:1 - 5:23 COVERED\
+ * 5:26 - 5:34 UNCOVERED\
+ * 5:44 - 5:46 COVERED
+
+test.rs (main)\
+ * 9:1 - 12:2 COVERED

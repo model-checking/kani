@@ -1,5 +1,9 @@
-coverage/reachable/overflow/reachable_fail/test.rs, 8, PARTIAL
-coverage/reachable/overflow/reachable_fail/test.rs, 9, FULL
-coverage/reachable/overflow/reachable_fail/test.rs, 13, FULL
-coverage/reachable/overflow/reachable_fail/test.rs, 14, PARTIAL
-coverage/reachable/overflow/reachable_fail/test.rs, 15, NONE
+Source-based code coverage results:
+
+test.rs (cond_reduce)\
+ * 7:1 - 8:18 COVERED\
+ * 8:21 - 8:27 COVERED\
+ * 8:37 - 8:38 UNCOVERED
+
+test.rs (main)\
+ * 12:1 - 15:2 COVERED

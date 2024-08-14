@@ -1,10 +1,14 @@
-coverage/unreachable/variant/main.rs, 15, FULL
-coverage/unreachable/variant/main.rs, 16, NONE
-coverage/unreachable/variant/main.rs, 17, NONE
-coverage/unreachable/variant/main.rs, 18, FULL
-coverage/unreachable/variant/main.rs, 19, NONE
-coverage/unreachable/variant/main.rs, 21, NONE
-coverage/unreachable/variant/main.rs, 23, FULL
-coverage/unreachable/variant/main.rs, 27, FULL
-coverage/unreachable/variant/main.rs, 28, FULL
-coverage/unreachable/variant/main.rs, 29, FULL
+Source-based code coverage results:
+
+main.rs (main)\
+ * 26:1 - 29:2 COVERED
+
+main.rs (print_direction)\
+ * 14:1 - 14:36 COVERED\
+ * 15:11 - 15:14 UNCOVERED\
+ * 16:26 - 16:47 UNCOVERED\
+ * 17:28 - 17:51 UNCOVERED\
+ * 18:28 - 18:51 COVERED\
+ * 19:34 - 19:63 UNCOVERED\
+ * 21:14 - 21:45 UNCOVERED\
+ * 23:1 - 23:2 COVERED

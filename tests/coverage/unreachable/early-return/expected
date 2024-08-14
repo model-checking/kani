@@ -1,10 +1,12 @@
-coverage/unreachable/early-return/main.rs, 5, PARTIAL
-coverage/unreachable/early-return/main.rs, 6, FULL
-coverage/unreachable/early-return/main.rs, 7, FULL
-coverage/unreachable/early-return/main.rs, 10, NONE
-coverage/unreachable/early-return/main.rs, 11, PARTIAL
-coverage/unreachable/early-return/main.rs, 15, FULL
-coverage/unreachable/early-return/main.rs, 16, FULL
-coverage/unreachable/early-return/main.rs, 17, FULL
-coverage/unreachable/early-return/main.rs, 18, FULL
-coverage/unreachable/early-return/main.rs, 19, FULL
+Source-based code coverage results:
+
+main.rs (find_index)\
+ * 4:1 - 4:59 COVERED\
+ * 5:10 - 5:21 COVERED\
+ * 7:20 - 7:31 COVERED\
+ * 8:10 - 8:11 COVERED\
+ * 10:5 - 10:9 UNCOVERED\
+ * 11:1 - 11:2 COVERED
+
+main.rs (main)\
+ * 14:1 - 19:2 COVERED

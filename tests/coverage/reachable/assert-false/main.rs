@@ -1,7 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-//! Check that the assert is reported as `PARTIAL` for having both `COVERED` and `UNCOVERED` coverage checks
 fn any_bool() -> bool {
     kani::any()
 }

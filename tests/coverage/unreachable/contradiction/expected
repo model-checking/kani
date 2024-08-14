@@ -1,7 +1,9 @@
-coverage/unreachable/contradiction/main.rs, 5, FULL
-coverage/unreachable/contradiction/main.rs, 6, FULL
-coverage/unreachable/contradiction/main.rs, 7, FULL
-coverage/unreachable/contradiction/main.rs, 8, PARTIAL
-coverage/unreachable/contradiction/main.rs, 9, NONE
-coverage/unreachable/contradiction/main.rs, 12, FULL
-coverage/unreachable/contradiction/main.rs, 14, FULL
+Source-based code coverage results:
+
+main.rs (contradiction)\
+ * 4:1 - 7:13 COVERED\
+ * 8:12 - 8:17 COVERED\
+ * 8:18 - 10:10 UNCOVERED\
+ * 10:10 - 10:11 COVERED\
+ * 11:12 - 13:6 COVERED\
+ * 14:1 - 14:2 COVERED

@@ -1,16 +1,11 @@
-coverage/unreachable/check_id/main.rs, 5, FULL
-coverage/unreachable/check_id/main.rs, 6, PARTIAL
-coverage/unreachable/check_id/main.rs, 8, NONE
-coverage/unreachable/check_id/main.rs, 10, FULL
-coverage/unreachable/check_id/main.rs, 14, FULL
-coverage/unreachable/check_id/main.rs, 15, FULL
-coverage/unreachable/check_id/main.rs, 16, FULL
-coverage/unreachable/check_id/main.rs, 17, FULL
-coverage/unreachable/check_id/main.rs, 18, FULL
-coverage/unreachable/check_id/main.rs, 19, FULL
-coverage/unreachable/check_id/main.rs, 20, FULL
-coverage/unreachable/check_id/main.rs, 21, FULL
-coverage/unreachable/check_id/main.rs, 22, FULL
-coverage/unreachable/check_id/main.rs, 23, FULL
-coverage/unreachable/check_id/main.rs, 24, PARTIAL
-coverage/unreachable/check_id/main.rs, 25, NONE
+Source-based code coverage results:
+
+main.rs (foo)\
+ * 4:1 - 6:13 COVERED\
+ * 6:14 - 9:6 UNCOVERED\
+ * 9:6 - 9:7 COVERED
+
+main.rs (main)\
+ * 13:1 - 14:24 COVERED\
+ * 15:30 - 15:32 COVERED\
+ * 15:42 - 15:44 COVERED

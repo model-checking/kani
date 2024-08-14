@@ -7,6 +7,5 @@ fn get(s: &[i16], index: usize) -> i16 {
 
 #[kani::proof]
 fn main() {
-    //get(&[7, -83, 19], 2);
     get(&[5, 206, -46, 321, 8], 8);
 }

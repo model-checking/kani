@@ -1,4 +1,10 @@
-coverage/unreachable/debug-assert/main.rs, 6, PARTIAL
-coverage/unreachable/debug-assert/main.rs, 7, PARTIAL
-coverage/unreachable/debug-assert/main.rs, 8, NONE
-coverage/unreachable/debug-assert/main.rs, 10, NONE
+Source-based code coverage results:
+
+tests/coverage/unreachable/debug-assert/main.rs (main)
+ * 5:1 - 5:11 COVERED\
+ * 6:9 - 6:10 COVERED\
+ * 6:14 - 6:18 COVERED\
+ * 7:30 - 7:71 UNCOVERED\
+ * 8:9 - 8:23 UNCOVERED\
+ * 8:25 - 8:53 UNCOVERED\
+ * 10:1 - 10:2 UNCOVERED

@@ -1,8 +1,12 @@
-coverage/reachable/assert-false/main.rs, 6, FULL
-coverage/reachable/assert-false/main.rs, 7, FULL
-coverage/reachable/assert-false/main.rs, 11, PARTIAL
-coverage/reachable/assert-false/main.rs, 12, PARTIAL
-coverage/reachable/assert-false/main.rs, 15, PARTIAL
-coverage/reachable/assert-false/main.rs, 16, FULL
-coverage/reachable/assert-false/main.rs, 17, PARTIAL
-coverage/reachable/assert-false/main.rs, 19, FULL
+Source-based code coverage results:
+
+main.rs (any_bool)\
+ * 4:1 - 6:2 COVERED
+
+main.rs (main)\
+ * 9:1 - 10:18 COVERED\
+ * 10:19 - 12:6 COVERED\
+ * 12:6 - 12:7 COVERED\
+ * 15:13 - 16:32 COVERED\
+ * 17:6 - 17:7 COVERED\
+ * 18:1 - 18:2 COVERED

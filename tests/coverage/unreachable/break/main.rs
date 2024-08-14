@@ -7,7 +7,7 @@ fn find_positive(nums: &[i32]) -> Option<i32> {
             return Some(num);
         }
     }
-    // This part is unreachable if there is at least one positive number.
+    // `None` is unreachable because there is at least one positive number.
     None
 }
 

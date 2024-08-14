@@ -1,4 +1,9 @@
-coverage/reachable/div-zero/reachable_pass/test.rs, 5, PARTIAL
-coverage/reachable/div-zero/reachable_pass/test.rs, 6, FULL
-coverage/reachable/div-zero/reachable_pass/test.rs, 10, FULL
-coverage/reachable/div-zero/reachable_pass/test.rs, 11, FULL
+Source-based code coverage results:
+
+test.rs (div)\
+ * 4:1 - 5:14 COVERED\
+ * 5:17 - 5:22 COVERED\
+ * 5:32 - 5:33 UNCOVERED
+
+test.rs (main)\
+ * 9:1 - 11:2 COVERED

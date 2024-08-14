@@ -1,4 +1,4 @@
-coverage/unreachable/assume_assert/main.rs, 5, FULL
-coverage/unreachable/assume_assert/main.rs, 6, FULL
-coverage/unreachable/assume_assert/main.rs, 7, NONE
-coverage/unreachable/assume_assert/main.rs, 8, NONE
+Source-based code coverage results:
+
+main.rs (check_assume_assert)\
+ * 4:1 - 8:2 COVERED

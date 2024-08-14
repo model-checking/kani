@@ -1,8 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-//! Checks that Kani reports the correct coverage results (`FULL` for all lines)
-//! in a case where arithmetic overflow failures are prevented.
+//! Checks that Kani reports all regions as `COVERED` as expected in this case
+//! where arithmetic overflow failures are prevented.
 
 fn reduce(x: u32) -> u32 {
     if x > 1000 { x - 1000 } else { x }

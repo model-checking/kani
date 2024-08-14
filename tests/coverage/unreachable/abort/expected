@@ -1,7 +1,13 @@
-coverage/unreachable/abort/main.rs, 10, PARTIAL
-coverage/unreachable/abort/main.rs, 11, FULL
-coverage/unreachable/abort/main.rs, 13, FULL
-coverage/unreachable/abort/main.rs, 15, FULL
-coverage/unreachable/abort/main.rs, 17, NONE
-coverage/unreachable/abort/main.rs, 20, NONE
-coverage/unreachable/abort/main.rs, 21, NONE
+Source-based code coverage results:
+
+main.rs (main)\
+ * 9:1 - 9:11 COVERED\
+ * 10:9 - 10:10 COVERED\
+ * 10:14 - 10:18 COVERED\
+ * 13:13 - 13:29 COVERED\
+ * 14:10 - 15:18 COVERED\
+ * 17:13 - 17:29 UNCOVERED\
+ * 18:10 - 18:11 COVERED\
+ * 20:5 - 20:12 UNCOVERED\
+ * 20:20 - 20:41 UNCOVERED\
+ * 21:1 - 21:2 UNCOVERED

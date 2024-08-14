@@ -5,11 +5,11 @@
 //! arithmetic overflow failure (caused by the second call to `cond_reduce`).
 
 fn cond_reduce(thresh: u32, x: u32) -> u32 {
-    if x > thresh { x - 50 } else { x } // PARTIAL: some cases are `COVERED`, others are not
+    if x > thresh { x - 50 } else { x }
 }
 
 #[kani::proof]
 fn main() {
     cond_reduce(60, 70);
     cond_reduce(40, 42);
-} // NONE: Caused by the arithmetic overflow failure from the second call to `cond_reduce`
+}

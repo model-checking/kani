@@ -1,4 +1,7 @@
-coverage/reachable/bounds/reachable_fail/test.rs, 5, PARTIAL
-coverage/reachable/bounds/reachable_fail/test.rs, 6, NONE
-coverage/reachable/bounds/reachable_fail/test.rs, 10, PARTIAL
-coverage/reachable/bounds/reachable_fail/test.rs, 11, NONE
+Source-based code coverage results:
+
+test.rs (get)
+ * 4:1 - 6:2 COVERED
+
+test.rs (main)
+ * 9:1 - 11:2 COVERED

@@ -1,6 +1,6 @@
-coverage/unreachable/vectors/main.rs, 8, FULL
-coverage/unreachable/vectors/main.rs, 11, FULL
-coverage/unreachable/vectors/main.rs, 13, PARTIAL
-coverage/unreachable/vectors/main.rs, 15, NONE
-coverage/unreachable/vectors/main.rs, 17, FULL
-coverage/unreachable/vectors/main.rs, 19, FULL
+Source-based code coverage results:
+
+main.rs (main)\
+ * 7:1 - 11:39 COVERED\
+ * 13:17 - 13:22 UNCOVERED\
+ * 16:12 - 18:6 COVERED

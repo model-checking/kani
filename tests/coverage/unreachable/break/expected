@@ -1,9 +1,13 @@
-coverage/unreachable/break/main.rs, 5, PARTIAL
-coverage/unreachable/break/main.rs, 6, FULL
-coverage/unreachable/break/main.rs, 7, FULL
-coverage/unreachable/break/main.rs, 11, NONE
-coverage/unreachable/break/main.rs, 12, PARTIAL
-coverage/unreachable/break/main.rs, 16, FULL
-coverage/unreachable/break/main.rs, 17, FULL
-coverage/unreachable/break/main.rs, 18, FULL
-coverage/unreachable/break/main.rs, 19, FULL
+Source-based code coverage results:
+
+main.rs (find_positive)\
+ * 4:1 - 4:47 COVERED\
+ * 5:10 - 5:13 COVERED\
+ * 5:17 - 5:21 COVERED\
+ * 7:20 - 7:29 COVERED\
+ * 8:10 - 8:11 COVERED\
+ * 11:5 - 11:9 UNCOVERED\
+ * 12:1 - 12:2 COVERED
+
+main.rs (main)\
+ * 15:1 - 19:2 COVERED

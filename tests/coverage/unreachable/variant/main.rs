@@ -12,7 +12,7 @@ enum Direction {
 }
 
 fn print_direction(dir: Direction) {
-    match dir {
+    match dir { // For some reason, `dir`'s span is reported as `UNCOVERED` too
         Direction::Up => println!("Going up!"),
         Direction::Down => println!("Going down!"),
         Direction::Left => println!("Going left!"),
