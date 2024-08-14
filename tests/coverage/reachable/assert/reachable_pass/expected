@@ -1,0 +1,9 @@
+Source-based code coverage results:
+
+test.rs (main)\
+ * 5:1 - 6:34 COVERED\
+ * 7:14 - 9:6 COVERED\
+ * 9:6 - 9:7 UNCOVERED
+
+test.rs (main::{closure#0})\
+ * 6:40 - 6:49 COVERED
