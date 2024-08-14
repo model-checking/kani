@@ -23,6 +23,7 @@
 // Allow us to use `kani::` to access crate features.
 extern crate self as kani;
 
+pub mod aliasing;
 pub mod arbitrary;
 #[cfg(feature = "concrete_playback")]
 mod concrete_playback;

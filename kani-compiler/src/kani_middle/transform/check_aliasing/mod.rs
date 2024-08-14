@@ -11,42 +11,15 @@ use rustc_middle::ty::TyCtxt;
 use stable_mir::mir::mono::Instance;
 use std::fmt::Debug;
 use stable_mir::ty::{
-    AdtDef, GenericArgKind, GenericArgs, Region, RegionKind, RigidTy, Span, Ty, TyKind
+    GenericArgKind, GenericArgs, RigidTy, Span, Ty, TyKind
 };
 use stable_mir::mir::{
     BasicBlockIdx, Body, Local, LocalDecl, Mutability, Place, TerminatorKind, UnwindAction
 };
 use stable_mir::Error;
-use stable_mir::mir::{BasicBlock, BorrowKind, MirVisitor, MutBorrowKind, Operand, ProjectionElem, Rvalue, Statement, StatementKind, Terminator, VarDebugInfo
-};
+use stable_mir::mir::{BasicBlock, BorrowKind, MirVisitor, Operand, ProjectionElem, Rvalue, Statement, StatementKind, Terminator, VarDebugInfo};
 use std::collections::HashMap;
 use tracing::trace;
-
-fn instrumented_flag_def(tcx: &TyCtxt) -> AdtDef {
-    let attr_id = tcx
-        .all_diagnostic_items(())
-        .name_to_id
-        .get(&rustc_span::symbol::Symbol::intern("KaniAliasingChecked")).unwrap();
-    if let TyKind::RigidTy(RigidTy::Adt(def, _)) =
-        rustc_smir::rustc_internal::stable(tcx.type_of(attr_id)).value.kind() {
-            def
-        } else {
-            panic!("Failure")
-        }
-}
-
-fn instrumented_flag_type(tcx: &TyCtxt) -> Ty {
-    let attr_id = tcx
-        .all_diagnostic_items(())
-        .name_to_id
-        .get(&rustc_span::symbol::Symbol::intern("KaniAliasingChecked")).unwrap();
-    if let TyKind::RigidTy(ty) =
-        rustc_smir::rustc_internal::stable(tcx.type_of(attr_id)).value.kind() {
-            Ty::from_rigid_kind(ty)
-        } else {
-            panic!("Failure")
-        }
-}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FunctionSignature {
@@ -80,10 +53,6 @@ impl FunctionInstance {
 
 #[derive(Default, Debug)]
 pub struct FunctionInstanceCache(Vec<FunctionInstance>);
-
-pub struct StackedBorrowsPass {
-    cache: FunctionInstanceCache,
-}
 
 /// Instrument the code with checks for uninitialized memory.
 #[derive(Debug, Default)]
@@ -119,20 +88,38 @@ impl<'tcx, 'cache> InitializedPassState<'tcx, 'cache> {
 /// prefix or in their name will be ignored.
 /// This allows skipping instrumenting functions that
 /// are called by the instrumentation functions.
-const IGNORED_FUNCTIONS: &'static [&'static str] = &[
+const ALIASING_BLACKLIST: &'static [&'static str] = &[
     "kani", // Skip kani functions
     "std::mem::size_of", // skip size_of::<T>
     "core::num", // Skip numerical ops (like .wrapping_add)
     "std::ptr", // Skip pointer manipulation functions
-    "get_checked" // Skip "get checked", which gives a flag
-                  // specifying whether the function is checked.
+    "KaniInitializeSState",
+    "KaniInitializeLocal",
+    "KaniStackCheckPtr",
+    "KaniStackCheckRef",
+    "KaniNewMutRefFromValue",
+    "KaniNewMutRawFromRef",
+    "KaniNewMutRefFromRaw",
+    "std::array",
+    "std::ops",
+    "core::panicking",
+    "std::rt",
+    "std::panic",
+    "core::panic",
+    "std::fmt",
+    "std::iter",
+    "core::ub_checks",
+    "std::cmp",
+    "core::slice",
+    "std::mem",
+    // This blacklist needs expansion.
 ];
 
 // Currently, the above list of functions is too
 // coarse-grained; because all kani functions
-// are skipped, all std::ptr functions are
-// skipped, and kani functions are skipped,
-// this pass cannot be used to verify functions
+// are skipped, many std modules are skipped,
+// and kani functions are skipped, this pass
+// cannot be used to verify functions
 // in those modules, despite the fact that
 // only some of those functions in those modules
 // are called by the instrumented code.
@@ -155,9 +142,7 @@ impl TransformPass for AliasingPass {
 
     fn transform(&mut self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
         trace!(function=?instance.name(), "transform: aliasing pass");
-        let mut visitor = CheckInstrumented::new(&tcx);
-        visitor.visit_body(&body);
-        if visitor.is_instrumented || !(instance.name().contains("main")) /* for now, just check main for efficiency */ {
+        if ALIASING_BLACKLIST.iter().fold(false, |blacklisted, member| blacklisted || instance.name().contains(member)) {
             (false, body)
         } else {
             let pass = InitializedPassState::new(body, tcx, &mut self.cache);
@@ -187,25 +172,6 @@ struct BodyMutationPassState<'tcx, 'cache> {
 }
 
 impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
-    fn mark_instrumented(&mut self) -> Local {
-        let ty = instrumented_flag_type(&self.tcx);
-        self.body.new_local(ty, Mutability::Not)
-    }
-
-    fn assign_ref(
-        body: &mut CachedBodyMutator,
-        lvalue: Local,
-        rvalue: Local,
-        span: Span) {
-        let kind = RegionKind::ReErased;
-        let region = Region { kind };
-        let borrow_kind = BorrowKind::Shared;
-        let lvalue = Place::from(lvalue);
-        let rvalue = Rvalue::Ref(region, borrow_kind, Place::from(rvalue));
-        let kind = StatementKind::Assign(lvalue, rvalue);
-        body.insert_statement(Statement { kind, span });
-    }
-
     fn assign_ptr(
         body: &mut CachedBodyMutator,
         lvalue: Local,
@@ -317,7 +283,7 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
                                         let from = from.local; // Copy to avoid borrow
                                         let to = to.local;     // Copy to avoid borrow
                                         match self.body.local(to).ty.kind() {
-                                            TyKind::RigidTy(RigidTy::Ref(_, ty, _)) => {
+                                            TyKind::RigidTy(RigidTy::Ref(_, _ty, _)) => {
                                                 eprintln!("Reborrow from reference not yet handled");
                                             },
                                             TyKind::RigidTy(RigidTy::RawPtr(ty, _)) => {
@@ -347,7 +313,7 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
                                                 self.instrument_stack_check_ref(idx, from, ty)?;
                                                 self.instrument_new_mut_raw_from_ref(idx, to, from)?;
                                             },
-                                            TyKind::RigidTy(RigidTy::RawPtr(ty, _)) => {
+                                            TyKind::RigidTy(RigidTy::RawPtr(_ty, _)) => {
                                                 eprintln!("Pointer to pointer casts not yet handled");
                                             }
                                             _ => {}
@@ -438,7 +404,6 @@ impl<'tcx, 'cache> BodyMutationPassState<'tcx, 'cache> {
     }
 
     fn finalize(mut self) -> Body {
-        self.instrumentation_data.mark_instrumented();
         self.instrument_locals().unwrap();
         self.instrumentation_data.body.finalize_prologue();
         self.instrument_instructions().unwrap();
@@ -516,26 +481,6 @@ impl<'tcx, 'cache> LocalPassState<'tcx, 'cache> {
     }
 }
 
-struct CheckInstrumented {
-    marker: AdtDef,
-    is_instrumented: bool,
-}
-
-impl CheckInstrumented {
-    fn new(tcx: &TyCtxt) -> CheckInstrumented {
-        CheckInstrumented { marker: instrumented_flag_def(tcx), is_instrumented: false }
-    }
-}
-
-impl MirVisitor for CheckInstrumented {
-    fn visit_local_decl(&mut self, _: Local, decl: &LocalDecl) {
-        let LocalDecl { ty, .. } = decl;
-        if let TyKind::RigidTy(RigidTy::Adt(def, _)) = ty.kind() {
-            self.is_instrumented = self.is_instrumented || self.marker == def;
-        }
-    }
-}
-
 struct CollectLocalVisitor {
     values: Vec<Local>,
 }
@@ -565,10 +510,6 @@ impl MirVisitor for CollectLocalVisitor {
 }
 
 impl FunctionInstanceCache {
-    fn new() -> Self {
-        Self (Vec::new())
-    }
-
     fn register(&mut self, ctx: &TyCtxt, sig: FunctionSignature) -> Result<&Instance, Error> {
         let FunctionInstanceCache(cache) = self;
         for i in 0..cache.len() {
@@ -639,10 +580,6 @@ impl CachedBodyMutator {
         self.body.ghost_statements.push(stmt);
     }
 
-    fn assign_ref(&mut self, lvalue: Local, rvalue: Local) {
-        self.body.assign_ref(lvalue, rvalue)
-    }
-
     fn new_index(&mut self) -> MutatorIndex {
         self.body.new_index()
     }
@@ -683,6 +620,7 @@ enum MutatorIndexStatus {
 
 enum Instruction<'a> {
     Stmt(&'a Statement),
+    #[allow(unused)]
     Term(&'a Terminator)
 }
 
@@ -769,21 +707,6 @@ impl BodyMutator {
         }
         let term = std::mem::replace(&mut self.blocks[index.bb].terminator, term);
         self.insert_bb(term);
-    }
-
-    fn insert_statement(&mut self, stmt: Statement) {
-        self.ghost_statements.push(stmt);
-    }
-
-    fn assign_ref(&mut self, lvalue: Local, rvalue: Local) {
-        let kind = RegionKind::ReErased;
-        let region = Region { kind };
-        let borrow = BorrowKind::Mut { kind: MutBorrowKind::Default };
-        let lvalue = Place::from(lvalue);
-        let rvalue = Rvalue::Ref(region, borrow, Place::from(rvalue));
-        let kind = StatementKind::Assign(lvalue, rvalue);
-        let span = self.span;
-        self.insert_statement(Statement { kind, span });
     }
 
     fn next_block(&self) -> usize {

@@ -1,103 +1,10 @@
-// kani-flags: -Zghost-state -Zaliasing
-// Copyright Jacob Salzberg
-// SPDX-License-Identifier: Apache-2.0
-
-// Basic test from the stacked borrows paper
-#[rustc_diagnostic_item = "KaniAliasingChecked"]
-#[derive(Copy, Clone, Debug)]
-pub struct AliasingChecked { amount: usize }
-
 const STACK_DEPTH: usize = 15;
 type PointerTag = u8;
 
-#[cfg(kani)]
-extern crate kani;
-
-#[cfg(kani)]
-use kani::shadow::ShadowMem;
-
-#[cfg(not(kani))]
-use std::collections::HashMap;
-#[cfg(not(kani))]
-#[derive(Debug)]
-struct ShadowMem<T>{
-    mem: Option<HashMap<usize, T>>,
-    default: T
-}
-#[cfg(not(kani))]
-static mut FOUND_POINTERS: Option<HashMap<*const u8, usize>> = None;
-#[cfg(not(kani))]
-static mut FOUND_POINTERS_TOP: usize = 0;
-
-#[cfg(not(kani))]
-impl<T> ShadowMem<T> where T: Copy {
-    #[inline(always)]
-    const fn new(v: T) -> Self {
-        ShadowMem { mem: None, default: v }
-    }
-
-    fn set<U>(&mut self, pointer: *const U, value: T) {
-        unsafe {
-            let map = FOUND_POINTERS.get_or_insert(HashMap::new());
-            let e = map.entry(pointer as *const u8)
-                .or_insert_with(|| { let top = FOUND_POINTERS_TOP; FOUND_POINTERS_TOP += 1; top } );
-            let mem = self.mem.get_or_insert(HashMap::new());
-            mem.insert(*e, value);
-        }
-    }
-
-    fn get<U>(&self, pointer: *const U) -> T {
-        unsafe {
-            let map = FOUND_POINTERS.get_or_insert(HashMap::new());
-            let pointer = pointer as *const u8;
-            *(self.mem.as_ref().unwrap().get(map.get(&pointer).unwrap()).unwrap_or(&self.default))
-        }
-    }
-}
-
-#[inline(never)]
-pub fn get_checked() -> AliasingChecked {
-    static mut CHECKED: AliasingChecked = AliasingChecked { amount: 0 };
-    unsafe { CHECKED.amount = CHECKED.amount.wrapping_add(1);  CHECKED }
-}
-
-#[cfg(any(kani))]
-pub fn pointer_object<U>(pointer: *const U) -> usize {
-    let checked = get_checked();
-    let _ = checked;
-    kani::mem::pointer_object(pointer)
-}
-
-#[cfg(not(kani))]
-pub fn pointer_object<U>(pointer: *const U) -> usize {
-    pointer as usize
-}
-
-#[cfg(any(kani))]
-pub fn pointer_offset<U>(pointer: *const U) -> usize {
-    let checked = get_checked();
-    let _ = checked;
-    kani::mem::pointer_offset(pointer)
-}
-
-#[cfg(not(kani))]
-pub fn pointer_offset<U>(_pointer: *const U) -> usize {
-    0
-}
-
-#[cfg(any(kani))]
-pub fn assume(b: bool) {
-    let checked = get_checked();
-    let _ = checked;
-    kani::assume(b);
-}
-
-#[cfg(not(kani))]
-pub fn assume(b: bool) {
-    let checked: AliasingChecked = get_checked();
-    let _ = checked;
-    assert!(b);
-}
+use crate::shadow::ShadowMem;
+use crate::mem::pointer_object;
+use crate::mem::pointer_offset;
+use crate::{assume, any};
 
 /// The stacked borrows state.
 pub mod sstate {
@@ -124,30 +31,12 @@ pub mod sstate {
         pub(self) const DISABLED: u8 = 3;
 
         pub(self) fn grants(access: bool, tag: u8) -> bool {
-            let checked: AliasingChecked = get_checked();
-            let _ = checked;
             tag != Self::DISABLED && (access != Access::WRITE || tag != Self::SHAREDRO)
         }
     }
 
     /// Associate every pointer object with a permission
     static mut PERMS: ShadowMem<u8> = ShadowMem::new(0);
-
-    #[cfg(not(kani))]
-    pub fn debug() {
-        unsafe {
-            println!("tags & perms at this point: tags: {:?} perms: {:?}", sstate::TAGS, sstate::PERMS);
-            self::monitors::debug_monitors();
-        }
-    }
-
-    #[cfg(any(kani))]
-    #[inline(always)]
-    pub fn debug() {
-        let checked = get_checked();
-        let _ = checked;
-        return;
-    }
 
     pub(super) mod monitors {
         static mut STATE: bool = false;
@@ -156,14 +45,6 @@ pub mod sstate {
         static mut STACK_TAGS: [u8; STACK_DEPTH] = [0; STACK_DEPTH];
         static mut STACK_PERMS: [u8; STACK_DEPTH] = [0; STACK_DEPTH];
         static mut STACK_TOP: usize = 0;
-
-        #[cfg(not(kani))]
-        pub fn debug_monitors() {
-            unsafe {
-                println!("monitors at this point state: {:?} object: {:?} offset: {:?} stags: {:?} sperms: {:?} stop: {:?}",
-                         STATE, OBJECT, OFFSET, STACK_TAGS, STACK_PERMS, STACK_TOP);
-            }
-        }
 
         #[non_exhaustive]
         struct MonitorState;
@@ -192,8 +73,6 @@ pub mod sstate {
         /// An N+1th monitor is allocated as a "garbage"
         /// area to be used when no monitor is picked.
         pub fn prepare_monitors() {
-            let checked: AliasingChecked = get_checked();
-            let _ = checked;
             unsafe {
                 OBJECT = 0usize;
                 OFFSET = 0usize;
@@ -207,8 +86,6 @@ pub mod sstate {
         /// Initialize local when track local is true, picking a monitor,
         /// and setting its object and offset to within pointer.
         pub(super) unsafe fn track_local<U>(tag: u8, pointer: *const U) {
-            let checked: AliasingChecked = get_checked();
-            let _ = checked;
             // Decide whether to initialize the stacks
             // for location:location+size_of(U).
             // Offset has already been picked earlier.
@@ -226,8 +103,6 @@ pub mod sstate {
 
         /// Push a tag with a permission perm at pointer
         pub(super) fn push<U>(tag: u8, perm: u8, pointer: *const U) {
-            let checked: AliasingChecked = get_checked();
-            let _ = checked;
             // Decide whether to initialize the stacks
             // for location:location+size_of(U).
             // Offset has already been picked earlier.
@@ -245,8 +120,6 @@ pub mod sstate {
         }
 
         pub(super) fn stack_check<U>(tag: u8, access: bool, address: *const U) {
-            let checked: AliasingChecked = get_checked();
-            let _ = checked;
             unsafe {
                 use self::*;
                 if STATE == MonitorState::INIT &&
@@ -268,7 +141,7 @@ pub mod sstate {
                        j += 1;
                    }
                    STACK_TOP = new_top;
-                   assert!(found, "Stack violated.");
+                   crate::assert(found, "Stack violated.");
                 }
             }
         }
@@ -276,15 +149,11 @@ pub mod sstate {
 
     #[rustc_diagnostic_item = "KaniInitializeSState"]
     pub fn initialize() {
-        let checked: AliasingChecked = get_checked();
-        let _ = checked;
         self::monitors::prepare_monitors();
     }
 
     /// Push the permissions at the given location
     pub fn push<U>(tag: u8, perm: u8, address: *const U) {
-        let checked: AliasingChecked = get_checked();
-        let _ = checked;
         self::monitors::push(tag, perm, address)
     }
 
@@ -300,8 +169,6 @@ pub mod sstate {
     /// and a reference to the stack location.
     #[rustc_diagnostic_item = "KaniInitializeLocal"]
     pub fn initialize_local<U>(pointer: *const U) {
-        let checked: AliasingChecked = get_checked();
-        let _ = checked;
         unsafe {
             let tag = NEXT_TAG;
             TAGS.set(pointer, tag);
@@ -313,8 +180,6 @@ pub mod sstate {
 
     #[rustc_diagnostic_item = "KaniStackCheckPtr"]
     pub fn stack_check_ptr<U>(pointer_value: *const *mut U) {
-        let checked: AliasingChecked = get_checked();
-        let _ = checked;
         unsafe {
             let tag = TAGS.get(pointer_value);
             let perm = PERMS.get(pointer_value);
@@ -331,8 +196,6 @@ pub mod sstate {
 
     #[rustc_diagnostic_item = "KaniStackCheckRef"]
     pub fn stack_check_ref<U>(pointer_value: *const &mut U) {
-        let checked: AliasingChecked = get_checked();
-        let _ = checked;
         stack_check_ptr(pointer_value as *const *mut U);
     }
 
@@ -342,8 +205,6 @@ pub mod sstate {
     /// pointer_to_val.
     #[rustc_diagnostic_item = "KaniNewMutRefFromValue"]
     pub fn new_mut_ref_from_value<T>(pointer_to_created: *const &mut T, pointer_to_val: *const T) {
-        let checked: AliasingChecked = get_checked();
-        let _ = checked;
         unsafe {
             // Then associate the lvalue and push it
             TAGS.set(pointer_to_created, NEXT_TAG);
@@ -358,8 +219,6 @@ pub mod sstate {
     /// pointer_to_ref, and pushing the tag to the original location.
     #[rustc_diagnostic_item = "KaniNewMutRawFromRef"]
     pub fn new_mut_raw_from_ref<T>(pointer_to_created: *const *mut T, pointer_to_ref: *const &mut T) {
-        let checked: AliasingChecked = get_checked();
-        let _ = checked;
         unsafe {
             // Then associate the lvalue and push it
             TAGS.set(pointer_to_created, NEXT_TAG);
@@ -374,8 +233,6 @@ pub mod sstate {
     /// pointer_to_ref, and pushing the tag to the original location.
     #[rustc_diagnostic_item = "KaniNewMutRefFromRaw"]
     pub fn new_mut_ref_from_raw<T>(pointer_to_created: *const &mut T, pointer_to_ref: *const *mut T) {
-        let checked: AliasingChecked = get_checked();
-        let _ = checked;
         unsafe {
             // Then associate the lvalue and push it
             TAGS.set(pointer_to_created, NEXT_TAG);
@@ -385,126 +242,6 @@ pub mod sstate {
     }
 }
 
-#[cfg(any(kani))]
 pub fn demonic_nondet() -> bool {
-    let checked: AliasingChecked = get_checked();
-    let _ = checked;
-    kani::any::<bool>()
-}
-
-#[cfg(not(kani))]
-pub fn demonic_nondet() -> bool {
-    let checked: AliasingChecked = get_checked();
-    let _ = checked;
-    true
-}
-
-#[cfg(not(kani))]
-static mut LOCAL_COUNT: u32 = 0;
-
-#[cfg(not(kani))]
-pub fn initialize_local<T>(local: *const T) {
-    let checked: AliasingChecked = get_checked();
-    let _ = checked;
-    unsafe {
-        println!("Initializing local {:?}", LOCAL_COUNT);
-    }
-    sstate::initialize_local(local);
-    sstate::debug();
-    unsafe { LOCAL_COUNT += 1 };
-}
-
-#[cfg(not(kani))]
-pub fn new_mut_ref_from_value<T>(pointer_to_created: *const &mut T, pointer_to_val: *const T) {
-    let checked: AliasingChecked = get_checked();
-    let _ = checked;
-    println!("new mut ref from value");
-    sstate::new_mut_ref_from_value(pointer_to_created, pointer_to_val);
-    sstate::debug();
-}
-
-#[cfg(not(kani))]
-pub fn new_mut_raw_from_ref<T>(pointer_to_created: *const *mut T, pointer_to_ref: *const &mut T) {
-    let checked: AliasingChecked = get_checked();
-    let _ = checked;
-    println!("new mut raw from ref");
-    sstate::new_mut_raw_from_ref(pointer_to_created, pointer_to_ref);
-    sstate::debug();
-}
-
-#[cfg(not(kani))]
-pub fn new_mut_ref_from_raw<T>(pointer_to_created: *const &mut T, pointer_to_ref: *const *mut T) {
-    let checked: AliasingChecked = get_checked();
-    let _ = checked;
-    println!("new mut ref from raw");
-    sstate::new_mut_ref_from_raw(pointer_to_created, pointer_to_ref);
-    sstate::debug();
-}
-
-pub fn stack_check_ptr<U>(pointer_value: *const *mut U) {
-    let checked: AliasingChecked = get_checked();
-    let _ = checked;
-    println!("checking ptr on stack");
-    sstate::stack_check_ptr(pointer_value);
-    sstate::debug();
-}
-
-pub fn stack_check_ref<U>(pointer_value: *const &mut U) {
-    let checked: AliasingChecked = get_checked();
-    let _ = checked;
-    println!("checking ref on stack");
-    sstate::stack_check_ref(pointer_value);
-    sstate::debug();
-}
-
-macro_rules! initialize {
-    () => {
-        #[cfg(not(kani))]
-        sstate::initialize();
-    }
-}
-
-macro_rules! initialize_local {
-    ($place:ident) => {
-        #[cfg(not(kani))]
-        initialize_local(std::ptr::addr_of!($place));
-    }
-}
-
-macro_rules! new_mut_ref_from_value {
-    ($reference:ident) => {
-        #[cfg(not(kani))]
-        new_mut_ref_from_value(std::ptr::addr_of!($reference),
-                               $reference);
-    }
-}
-
-macro_rules! stack_check_ref {
-    ($reference:ident) => {
-        #[cfg(not(kani))]
-        stack_check_ref(std::ptr::addr_of!($reference));
-    }
-}
-
-macro_rules! new_mut_raw_from_ref {
-    ($pointer: ident, $reference: ident) => {
-        #[cfg(not(kani))]
-        new_mut_raw_from_ref(std::ptr::addr_of!($pointer),
-                             std::ptr::addr_of!($reference));
-    }
-}
-
-macro_rules! new_mut_ref_from_raw {
-    ($pointer: ident, $reference: ident) => {
-        #[cfg(not(kani))]
-        new_mut_ref_from_raw(std::ptr::addr_of!($pointer),
-                             std::ptr::addr_of!($reference));
-    }
-}
-
-macro_rules! stack_check_ptr {
-    ($pointer: ident) => {
-        #[cfg(not(kani))]
-        stack_check_ptr(std::ptr::addr_of!($pointer));
-    }
+    any::<bool>()
 }
