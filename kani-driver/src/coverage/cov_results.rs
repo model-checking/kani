@@ -25,10 +25,7 @@ impl fmt::Display for CoverageResults {
             // Group checks by function
             for check in checks {
                 // Insert the check into the vector corresponding to its function
-                checks_by_function
-                    .entry(check.function.clone())
-                    .or_default()
-                    .push(check.clone());
+                checks_by_function.entry(check.function.clone()).or_default().push(check.clone());
             }
 
             for (function, checks) in checks_by_function {
