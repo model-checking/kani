@@ -18,6 +18,14 @@ impl KaniSession {
     /// Note: Currently, coverage mappings are not included due to technical
     /// limitations. But this is where we should save them.
     pub fn save_coverage_metadata(&self, project: &Project, stamp: &String) -> Result<()> {
+        if self.args.target_dir.is_some() {
+            self.save_coverage_metadata_cargo(project, stamp)
+        } else {
+            self.save_coverage_metadata_standalone(project, stamp)
+        }
+    }
+
+    fn save_coverage_metadata_cargo(&self, project: &Project, stamp: &String) -> Result<()> {
         let build_target = env!("TARGET");
         let metadata = self.cargo_metadata(build_target)?;
         let target_dir = self
@@ -58,8 +66,24 @@ impl KaniSession {
         Ok(())
     }
 
+    fn save_coverage_metadata_standalone(&self, project: &Project, stamp: &String) -> Result<()> {
+        Ok(())
+    }
+
     /// Saves raw coverage check results required for coverage-related features.
     pub fn save_coverage_results(
+        &self,
+        results: &Vec<HarnessResult>,
+        stamp: &String,
+    ) -> Result<()> {
+        if self.args.target_dir.is_some() {
+            self.save_coverage_results_cargo(results, stamp)
+        } else {
+            self.save_coverage_results_standalone(results, stamp)
+        }
+    }
+
+    pub fn save_coverage_results_cargo(
         &self,
         results: &Vec<HarnessResult>,
         stamp: &String,
@@ -94,6 +118,14 @@ impl KaniSession {
         }
 
         println!("[info] Coverage results saved to {}", &outdir.display());
+        Ok(())
+    }
+
+    pub fn save_coverage_results_standalone(
+        &self,
+        results: &Vec<HarnessResult>,
+        stamp: &String,
+    ) -> Result<()> {
         Ok(())
     }
 }
