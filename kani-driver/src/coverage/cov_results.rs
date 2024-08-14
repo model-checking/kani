@@ -27,7 +27,7 @@ impl fmt::Display for CoverageResults {
                 // Insert the check into the vector corresponding to its function
                 checks_by_function
                     .entry(check.function.clone())
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(check.clone());
             }
 
@@ -38,7 +38,7 @@ impl fmt::Display for CoverageResults {
                 for check in sorted_checks.iter() {
                     writeln!(f, " * {} {}", check.region, check.status)?;
                 }
-                writeln!(f, "")?;
+                writeln!(f)?;
             }
         }
         Ok(())

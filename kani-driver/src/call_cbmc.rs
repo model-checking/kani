@@ -5,6 +5,7 @@ use anyhow::{bail, Result};
 use kani_metadata::{CbmcSolver, HarnessMetadata};
 use regex::Regex;
 use rustc_demangle::demangle;
+use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::fmt::Write;
@@ -465,10 +466,10 @@ fn coverage_results_from_properties(properties: &[Property]) -> Option<CoverageR
             let cov_check = CoverageCheck::new(function, term, region, status);
             let file = cov_check.region.file.clone();
 
-            if coverage_results.contains_key(&file) {
-                coverage_results.entry(file).and_modify(|checks| checks.push(cov_check));
+            if let Entry::Vacant(e) = coverage_results.entry(file.clone()) {
+                e.insert(vec![cov_check]);
             } else {
-                coverage_results.insert(file, vec![cov_check]);
+                coverage_results.entry(file).and_modify(|checks| checks.push(cov_check));
             }
             prop_processed = true;
         }
