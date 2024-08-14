@@ -221,10 +221,10 @@ pub mod rustc_smir {
     use crate::stable_mir::CrateDef;
     use rustc_middle::mir::coverage::CodeRegion;
     use rustc_middle::mir::coverage::CovTerm;
+    use rustc_middle::mir::coverage::MappingKind::Code;
     use rustc_middle::ty::TyCtxt;
     use stable_mir::mir::mono::Instance;
     use stable_mir::Opaque;
-    use rustc_middle::mir::coverage::MappingKind::Code;
 
     type CoverageOpaque = stable_mir::Opaque;
 

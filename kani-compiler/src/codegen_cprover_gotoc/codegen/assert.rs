@@ -149,7 +149,12 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// Generate a cover statement for code coverage reports.
-    pub fn codegen_coverage(&self, counter_data: &str, span: SpanStable, code_region: CodeRegion) -> Stmt {
+    pub fn codegen_coverage(
+        &self,
+        counter_data: &str,
+        span: SpanStable,
+        code_region: CodeRegion,
+    ) -> Stmt {
         let loc = self.codegen_caller_span_stable(span);
         // Should use Stmt::cover, but currently this doesn't work with CBMC
         // unless it is run with '--cover cover' (see

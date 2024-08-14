@@ -163,9 +163,11 @@ impl<'tcx> GotocCtx<'tcx> {
                 let function_name = self.current_fn().readable_name();
                 let instance = self.current_fn().instance_stable();
                 let counter_data = format!("{coverage_opaque:?} {{{function_name}}}");
-                let maybe_code_region = region_from_coverage_opaque(self.tcx, &coverage_opaque, instance);
+                let maybe_code_region =
+                    region_from_coverage_opaque(self.tcx, &coverage_opaque, instance);
                 if let Some(code_region) = maybe_code_region {
-                    let coverage_stmt = self.codegen_coverage(&counter_data, stmt.span, code_region);
+                    let coverage_stmt =
+                        self.codegen_coverage(&counter_data, stmt.span, code_region);
                     // TODO: Avoid single-statement blocks when conversion of
                     // standalone statements to the irep format is fixed.
                     // More details in <https://github.com/model-checking/kani/issues/3012>

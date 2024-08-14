@@ -458,7 +458,7 @@ fn coverage_results_from_properties(properties: &[Property]) -> Option<CoverageR
             let term = match kind {
                 "CounterIncrement" => CoverageTerm::Counter(counter_id),
                 "ExpressionUsed" => CoverageTerm::Expression(counter_id),
-                _ => unreachable!("counter kind could not be recognized: {:?} / {:?}", kind, prop.description),
+                _ => unreachable!("counter kind could not be recognized: {:?}", kind),
             };
             let region = CoverageRegion::from_str(span);
 
