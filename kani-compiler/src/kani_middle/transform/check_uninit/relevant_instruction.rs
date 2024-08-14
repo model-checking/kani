@@ -7,6 +7,7 @@
 use crate::kani_middle::transform::body::{InsertPosition, MutableBody, SourceInstruction};
 use stable_mir::{
     mir::{Mutability, Operand, Place, Rvalue, Statement, StatementKind},
+    ty::RigidTy,
     ty::Ty,
 };
 use strum_macros::AsRefStr;
@@ -36,6 +37,8 @@ pub enum MemoryInitOp {
     Unsupported { reason: String },
     /// Operation that trivially accesses uninitialized memory, results in injecting `assert!(false)`.
     TriviallyUnsafe { reason: String },
+    /// Operation that copies memory initialization state over to another operand.
+    Copy { from: Operand, to: Operand, count: Operand },
 }
 
 impl MemoryInitOp {
@@ -74,7 +77,9 @@ impl MemoryInitOp {
 
                 Operand::Copy(Place { local: ref_local, projection: vec![] })
             }
-            MemoryInitOp::Unsupported { .. } | MemoryInitOp::TriviallyUnsafe { .. } => {
+            MemoryInitOp::Copy { .. }
+            | MemoryInitOp::Unsupported { .. }
+            | MemoryInitOp::TriviallyUnsafe { .. } => {
                 unreachable!()
             }
         }
@@ -95,7 +100,22 @@ impl MemoryInitOp {
                 rvalue.ty(body.locals()).unwrap()
             }
             MemoryInitOp::Unsupported { .. } | MemoryInitOp::TriviallyUnsafe { .. } => {
-                unreachable!()
+                unreachable!("operands do not exist for this operation")
+            }
+            MemoryInitOp::Copy { from, to, .. } => {
+                // It does not matter which operand to return for layout generation, since both of
+                // them have the same pointee type, so we assert that.
+                let from_kind = from.ty(body.locals()).unwrap().kind();
+                let to_kind = to.ty(body.locals()).unwrap().kind();
+
+                let RigidTy::RawPtr(from_pointee_ty, _) = from_kind.rigid().unwrap().clone() else {
+                    unreachable!()
+                };
+                let RigidTy::RawPtr(to_pointee_ty, _) = to_kind.rigid().unwrap().clone() else {
+                    unreachable!()
+                };
+                assert!(from_pointee_ty == to_pointee_ty);
+                from_pointee_ty
             }
         }
     }
@@ -103,7 +123,8 @@ impl MemoryInitOp {
     pub fn expect_count(&self) -> Operand {
         match self {
             MemoryInitOp::CheckSliceChunk { count, .. }
-            | MemoryInitOp::SetSliceChunk { count, .. } => count.clone(),
+            | MemoryInitOp::SetSliceChunk { count, .. }
+            | MemoryInitOp::Copy { count, .. } => count.clone(),
             MemoryInitOp::Check { .. }
             | MemoryInitOp::Set { .. }
             | MemoryInitOp::CheckRef { .. }
@@ -122,7 +143,8 @@ impl MemoryInitOp {
             | MemoryInitOp::CheckSliceChunk { .. }
             | MemoryInitOp::CheckRef { .. }
             | MemoryInitOp::Unsupported { .. }
-            | MemoryInitOp::TriviallyUnsafe { .. } => unreachable!(),
+            | MemoryInitOp::TriviallyUnsafe { .. }
+            | MemoryInitOp::Copy { .. } => unreachable!(),
         }
     }
 
@@ -136,6 +158,7 @@ impl MemoryInitOp {
             | MemoryInitOp::CheckRef { .. }
             | MemoryInitOp::Unsupported { .. }
             | MemoryInitOp::TriviallyUnsafe { .. } => InsertPosition::Before,
+            MemoryInitOp::Copy { .. } => InsertPosition::After,
         }
     }
 }
