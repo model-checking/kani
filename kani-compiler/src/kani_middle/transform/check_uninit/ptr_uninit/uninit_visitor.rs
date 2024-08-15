@@ -19,11 +19,11 @@ use stable_mir::{
         alloc::GlobalAlloc,
         mono::{Instance, InstanceKind},
         visit::{Location, PlaceContext},
-        BasicBlockIdx, CastKind, LocalDecl, MirVisitor, NonDivergingIntrinsic, Operand, Place,
-        PointerCoercion, ProjectionElem, Rvalue, Statement, StatementKind, Terminator,
-        TerminatorKind,
+        AggregateKind, BasicBlockIdx, CastKind, LocalDecl, MirVisitor, NonDivergingIntrinsic,
+        Operand, Place, PointerCoercion, ProjectionElem, Rvalue, Statement, StatementKind,
+        Terminator, TerminatorKind,
     },
-    ty::{ConstantKind, RigidTy, TyKind},
+    ty::{AdtKind, ConstantKind, RigidTy, TyKind},
 };
 
 pub struct CheckUninitVisitor {
@@ -127,12 +127,65 @@ impl MirVisitor for CheckUninitVisitor {
                         }
                     }
                     // Check whether Rvalue creates a new initialized pointer previously not captured inside shadow memory.
-                    if place.ty(&&self.locals).unwrap().kind().is_raw_ptr() {
+                    if place.ty(&self.locals).unwrap().kind().is_raw_ptr() {
                         if let Rvalue::AddressOf(..) = rvalue {
                             self.push_target(MemoryInitOp::Set {
                                 operand: Operand::Copy(place.clone()),
                                 value: true,
                                 position: InsertPosition::After,
+                            });
+                        }
+                    }
+
+                    // TODO: add support for ADTs which could have unions as subfields. Currently,
+                    // if a union as a subfield is detected, `assert!(false)` will be injected from
+                    // the type layout code.
+                    let is_inside_union = {
+                        let mut contains_union = false;
+                        let mut place_to_add_projections =
+                            Place { local: place.local, projection: vec![] };
+                        for projection_elem in place.projection.iter() {
+                            if place_to_add_projections.ty(&self.locals).unwrap().kind().is_union()
+                            {
+                                contains_union = true;
+                                break;
+                            }
+                            place_to_add_projections.projection.push(projection_elem.clone());
+                        }
+                        contains_union
+                    };
+
+                    // Need to copy some information about union initialization, since lvalue is
+                    // either a union or a field inside a union.
+                    if is_inside_union {
+                        if let Rvalue::Use(operand) = rvalue {
+                            // This is a union-to-union assignment, so we need to copy the
+                            // initialization state.
+                            if place.ty(&self.locals).unwrap().kind().is_union() {
+                                self.push_target(MemoryInitOp::AssignUnion {
+                                    lvalue: place.clone(),
+                                    rvalue: operand.clone(),
+                                });
+                            } else {
+                                // This is assignment to a field of a union.
+                                self.push_target(MemoryInitOp::SetRef {
+                                    operand: Operand::Copy(place.clone()),
+                                    value: true,
+                                    position: InsertPosition::After
+                                });
+                            }
+                        }
+                    }
+
+                    // Create a union from scratch as an aggregate. We handle it here because we
+                    // need to know which field is getting assigned.
+                    if let Rvalue::Aggregate(AggregateKind::Adt(adt_def, _, _, _, union_field), _) =
+                        rvalue
+                    {
+                        if adt_def.kind() == AdtKind::Union {
+                            self.push_target(MemoryInitOp::CreateUnion {
+                                operand: Operand::Copy(place.clone()),
+                                field: union_field.unwrap(), // Safe to unwrap because we know this is a union.
                             });
                         }
                     }
@@ -352,12 +405,13 @@ impl MirVisitor for CheckUninitVisitor {
                         });
                     }
                 }
-                ProjectionElem::Field(idx, target_ty) => {
-                    if target_ty.kind().is_union()
-                        && (!ptx.is_mutating() || place.projection.len() > idx + 1)
+                ProjectionElem::Field(_, _) => {
+                    if intermediate_place.ty(&self.locals).unwrap().kind().is_union()
+                        && !ptx.is_mutating()
                     {
-                        self.push_target(MemoryInitOp::Unsupported {
-                            reason: "Kani does not support reasoning about memory initialization of unions.".to_string(),
+                        // Accessing a place inside the union, need to check if it is initialized.
+                        self.push_target(MemoryInitOp::CheckRef {
+                            operand: Operand::Copy(place.clone()),
                         });
                     }
                 }

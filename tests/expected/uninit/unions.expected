@@ -1,0 +1,12 @@
+union_complex_subfields.assertion.1\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u16`"\
+
+basic_union_fail.assertion.1\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u32`"
+
+Summary:
+Verification failed for - union_complex_subfields
+Verification failed for - basic_union_fail
+Complete - 2 successfully verified harnesses, 2 failures, 4 total.

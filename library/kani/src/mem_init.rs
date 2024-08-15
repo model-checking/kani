@@ -321,3 +321,16 @@ fn copy_init_state<const LAYOUT_SIZE: usize, T>(from: *const T, to: *const T, nu
         MEM_INIT_STATE.copy::<LAYOUT_SIZE>(from_ptr as *const u8, to_ptr as *const u8, num_elts);
     }
 }
+
+/// Copy initialization state of `size_of::<T>` bytes from one pointer to the other.
+#[rustc_diagnostic_item = "KaniCopyInitStateSingle"]
+fn copy_init_state_single<const LAYOUT_SIZE: usize, T>(from: *const T, to: *const T) {
+    if LAYOUT_SIZE == 0 {
+        return;
+    }
+    let (from_ptr, _) = from.to_raw_parts();
+    let (to_ptr, _) = to.to_raw_parts();
+    unsafe {
+        MEM_INIT_STATE.copy::<LAYOUT_SIZE>(from_ptr as *const u8, to_ptr as *const u8, 1);
+    }
+}

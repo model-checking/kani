@@ -203,11 +203,13 @@ impl<'a, 'tcx> UninitInstrumenter<'a, 'tcx> {
             }
             MemoryInitOp::SetSliceChunk { .. }
             | MemoryInitOp::Set { .. }
-            | MemoryInitOp::SetRef { .. } => {
+            | MemoryInitOp::SetRef { .. }
+            | MemoryInitOp::CreateUnion { .. } => {
                 self.build_set(body, source, operation, pointee_info)
             }
-            MemoryInitOp::Copy { .. } => {
-                self.build_copy(body, source, operation, pointee_info)
+            MemoryInitOp::Copy { .. } => self.build_copy(body, source, operation, pointee_info),
+            MemoryInitOp::AssignUnion { .. } => {
+                self.build_assign_union(body, source, operation, pointee_info)
             }
             MemoryInitOp::Unsupported { .. } | MemoryInitOp::TriviallyUnsafe { .. } => {
                 unreachable!()
@@ -307,6 +309,15 @@ impl<'a, 'tcx> UninitInstrumenter<'a, 'tcx> {
             PointeeLayout::TraitObject => {
                 collect_skipped(operation.position(), source, body, &mut self.skip_first);
                 let reason = "Kani does not support reasoning about memory initialization of pointers to trait objects.";
+                self.inject_assert_false(self.tcx, body, source, operation.position(), reason);
+                return;
+            }
+            PointeeLayout::Union { .. } => {
+                // Here we are reading from a pointer to a union.
+                // TODO: we perhaps need to check that the union at least contains an intersection
+                // of all layouts initialized.
+                collect_skipped(operation.position(), source, body, &mut self.skip_first);
+                let reason = "Interaction between raw pointers and unions is not yet supported.";
                 self.inject_assert_false(self.tcx, body, source, operation.position(), reason);
                 return;
             }
@@ -456,6 +467,63 @@ impl<'a, 'tcx> UninitInstrumenter<'a, 'tcx> {
             PointeeLayout::TraitObject => {
                 unreachable!("Cannot change the initialization state of a trait object directly.");
             }
+            PointeeLayout::Union { field_layouts } => {
+                // Writing union data, which could be either creating a union from scratch or
+                // performing some pointer operations with it.
+
+                // TODO: If we don't have a union field, we are either creating a pointer to a union
+                // or assigning to one. In the former case, it is safe to return from this function,
+                // since the union must be already tracked (on creation and update). In the latter
+                // case, we should have been using union assignment instead. Nevertheless, this is
+                // currently mitigated by injecting `assert!(false)`.
+                let union_field = match operation.union_field() {
+                    Some(field) => field,
+                    None => {
+                        collect_skipped(operation.position(), source, body, &mut self.skip_first);
+                        let reason =
+                            "Interaction between raw pointers and unions is not yet supported.";
+                        self.inject_assert_false(
+                            self.tcx,
+                            body,
+                            source,
+                            operation.position(),
+                            reason,
+                        );
+                        return;
+                    }
+                };
+                let layout = &field_layouts[union_field];
+                let layout_operand = mk_layout_operand(body, &mut statements, source, layout);
+                let diagnostic = "KaniSetPtrInitialized";
+                let args = vec![
+                    ptr_operand,
+                    layout_operand,
+                    Operand::Constant(ConstOperand {
+                        span: source.span(body.blocks()),
+                        user_ty: None,
+                        const_: MirConst::from_bool(value),
+                    }),
+                ];
+                let set_ptr_initialized_instance = resolve_mem_init_fn(
+                    get_mem_init_fn_def(self.tcx, diagnostic, &mut self.mem_init_fn_cache),
+                    layout.len(),
+                    *pointee_info.ty(),
+                );
+                Terminator {
+                    kind: TerminatorKind::Call {
+                        func: Operand::Copy(Place::from(body.new_local(
+                            set_ptr_initialized_instance.ty(),
+                            source.span(body.blocks()),
+                            Mutability::Not,
+                        ))),
+                        args,
+                        destination: ret_place.clone(),
+                        target: Some(0), // this will be overriden in add_bb
+                        unwind: UnwindAction::Terminate,
+                    },
+                    span: source.span(body.blocks()),
+                }
+            }
         };
         // Construct the basic block and insert it into the body.
         collect_skipped(operation.position(), source, body, &mut self.skip_first);
@@ -475,22 +543,63 @@ impl<'a, 'tcx> UninitInstrumenter<'a, 'tcx> {
             local: body.new_local(Ty::new_tuple(&[]), source.span(body.blocks()), Mutability::Not),
             projection: vec![],
         };
-        let PointeeLayout::Sized { layout } = pointee_info.layout() else { unreachable!() };
+        let layout_size = pointee_info.layout().maybe_size().unwrap();
         let copy_init_state_instance = resolve_mem_init_fn(
             get_mem_init_fn_def(self.tcx, "KaniCopyInitState", &mut self.mem_init_fn_cache),
-            layout.len(),
+            layout_size,
             *pointee_info.ty(),
         );
         collect_skipped(operation.position(), source, body, &mut self.skip_first);
-        let position = operation.position();
-        let MemoryInitOp::Copy { from, to, count } = operation else { unreachable!() };
+        let (from, to) = operation.expect_copy_operands();
+        let count = operation.expect_count();
         body.insert_call(
             &copy_init_state_instance,
             source,
-            position,
+            operation.position(),
             vec![from, to, count],
             ret_place.clone(),
         );
+    }
+
+    /// Copy memory initialization state from one union variable to another.
+    fn build_assign_union(
+        &mut self,
+        body: &mut MutableBody,
+        source: &mut SourceInstruction,
+        operation: MemoryInitOp,
+        pointee_info: PointeeInfo,
+    ) {
+        let ret_place = Place {
+            local: body.new_local(Ty::new_tuple(&[]), source.span(body.blocks()), Mutability::Not),
+            projection: vec![],
+        };
+        let mut statements = vec![];
+        let layout_size = pointee_info.layout().maybe_size().unwrap();
+        let copy_init_state_instance = resolve_mem_init_fn(
+            get_mem_init_fn_def(self.tcx, "KaniCopyInitStateSingle", &mut self.mem_init_fn_cache),
+            layout_size,
+            *pointee_info.ty(),
+        );
+        let (from, to) = operation.mk_assign_union_operands(body, &mut statements, source);
+        let terminator = Terminator {
+            kind: TerminatorKind::Call {
+                func: Operand::Copy(Place::from(body.new_local(
+                    copy_init_state_instance.ty(),
+                    source.span(body.blocks()),
+                    Mutability::Not,
+                ))),
+                args: vec![from, to],
+                destination: ret_place.clone(),
+                target: Some(0), // this will be overriden in add_bb
+                unwind: UnwindAction::Terminate,
+            },
+            span: source.span(body.blocks()),
+        };
+
+        // Construct the basic block and insert it into the body.
+        collect_skipped(operation.position(), source, body, &mut self.skip_first);
+        body.insert_bb(BasicBlock { statements, terminator }, source, operation.position());
+        self.autogenerated_bbs.insert(body.blocks().len() - 1);
     }
 
     fn inject_assert_false(
