@@ -1,7 +1,5 @@
-use super::{
-    BasicBlock, BasicBlockIdx, Body, Local, LocalDecl, Mutability, Operand, Place,
-    Span, Statement, Terminator, TerminatorKind, Ty, UnwindAction, VarDebugInfo,
-};
+use stable_mir::mir::{BasicBlock, BasicBlockIdx, Body, Local, LocalDecl, Mutability, Operand, Place, Statement, Terminator, TerminatorKind, UnwindAction, VarDebugInfo};
+use stable_mir::ty::{Ty, Span};
 
 /// BodyMutator combines the data of the function body
 /// with "ghost" basic block and local data, allowing the user

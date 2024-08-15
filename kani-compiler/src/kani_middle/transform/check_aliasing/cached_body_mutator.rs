@@ -1,5 +1,8 @@
 use std::collections::HashMap;
-use super::{BodyMutator, Local, MirInstance, Mutability, LocalDecl, Body, Ty, Statement, MutatorIndex, MutatorIndexStatus, Instruction, Span};
+use super::{MirInstance, BodyMutator};
+use stable_mir::mir::{Local, Mutability, LocalDecl, Statement, Body};
+use stable_mir::ty::{Ty, Span};
+use super::{MutatorIndex, MutatorIndexStatus, Instruction};
 
 /// Body mutator which wraps the BodyMutator
 /// interface with a cache of the locals that

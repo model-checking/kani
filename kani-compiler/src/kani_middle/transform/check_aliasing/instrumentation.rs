@@ -1,5 +1,8 @@
 use std::collections::HashMap;
-use super::{TyCtxt, CachedBodyMutator, Cache, Local, Place, Rvalue, Mutability, StatementKind, Statement, MirError, Signature, Span, Ty, GenericArg, MutatorIndex, Instruction, BorrowKind, ProjectionElem, TyKind, RigidTy, MutatorIndexStatus};
+use rustc_middle::ty::TyCtxt;
+use stable_mir::mir::{Local, Place, Rvalue, Mutability, StatementKind, Statement, BorrowKind, ProjectionElem};
+use stable_mir::ty::{GenericArgKind, Ty, Span, TyKind, RigidTy};
+use super::{MirError, CachedBodyMutator, Cache, Signature, MutatorIndex, Instruction, MutatorIndexStatus};
 
 pub struct InstrumentationData<'tcx, 'cache> {
     tcx: TyCtxt<'tcx>,
@@ -45,7 +48,7 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
         let instance = self.cache.register(
             &self.tcx,
             Signature::new("KaniInitializeLocal",
-            &[GenericArg::Type(ty)]))?;
+            &[GenericArgKind::Type(ty)]))?;
         body.call(instance, [*local_ptr].to_vec(), body.unit());
         Ok(())
     }
@@ -66,7 +69,7 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
         let rvalue_ref = self.meta_stack.get(&rvalue).unwrap();
         let instance = self.cache.register(
             &self.tcx,
-            Signature::new("KaniNewMutRefFromValue", &[GenericArg::Type(ty)]),
+            Signature::new("KaniNewMutRefFromValue", &[GenericArgKind::Type(ty)]),
         )?;
         self.body.call(instance, vec![*lvalue_ref, *rvalue_ref], self.body.unit());
         self.body.split(idx);
@@ -85,7 +88,7 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
         let place_ref = self.meta_stack.get(&place).unwrap();
         let instance = self.cache.register(
             &self.tcx,
-            Signature::new("KaniStackCheckRef", &[GenericArg::Type(ty)]),
+            Signature::new("KaniStackCheckRef", &[GenericArgKind::Type(ty)]),
         )?;
         self.body.call(instance, vec![*place_ref], self.body.unit());
         self.body.split(idx);
@@ -104,7 +107,7 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
         let place_ref = self.meta_stack.get(&place).unwrap();
         let instance = self.cache.register(
             &self.tcx,
-            Signature::new("KaniStackCheckPtr", &[GenericArg::Type(ty)]),
+            Signature::new("KaniStackCheckPtr", &[GenericArgKind::Type(ty)]),
         )?;
         self.body.call(instance, vec![*place_ref], self.body.unit());
         self.body.split(idx);
@@ -125,7 +128,7 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
         let reference_ref = self.meta_stack.get(&raw).unwrap();
         let instance = self.cache.register(
             &self.tcx,
-            Signature::new("KaniNewMutRefFromRaw", &[GenericArg::Type(ty)]),
+            Signature::new("KaniNewMutRefFromRaw", &[GenericArgKind::Type(ty)]),
         )?;
         self.body.call(instance, vec![*created_ref, *reference_ref], self.body.unit());
         self.body.split(idx);
@@ -146,7 +149,7 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
         let reference_ref = self.meta_stack.get(&reference).unwrap();
         let instance = self.cache.register(
             &self.tcx,
-            Signature::new("KaniNewMutRawFromRef", &[GenericArg::Type(ty)]),
+            Signature::new("KaniNewMutRawFromRef", &[GenericArgKind::Type(ty)]),
         )?;
         self.body.call(instance, vec![*created_ref, *reference_ref], self.body.unit());
         self.body.split(idx);

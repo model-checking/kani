@@ -1,7 +1,8 @@
 use super::function_cache::*;
+use stable_mir::mir::{Body, Local, LocalDecl, MirVisitor};
+use rustc_middle::ty::TyCtxt;
 use super::{
-    Body, BodyMutationPassState, CachedBodyMutator, InstrumentationData, Local, LocalDecl,
-    MirVisitor, TyCtxt,
+    BodyMutationPassState, CachedBodyMutator, InstrumentationData,
 };
 use std::collections::HashMap;
 

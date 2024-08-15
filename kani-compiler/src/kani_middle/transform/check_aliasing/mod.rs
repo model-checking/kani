@@ -4,8 +4,12 @@
 //! Implement a pass that instruments code with assertions
 //! that will fail when the aliasing model is violated.
 
-use stable_mir::Error as MirError;
-use stable_mir::mir::mono::Instance as MirInstance;
+// Reimport components of mir that conflict with
+// parts of the sub-pass's API.
+pub use stable_mir::Error as MirError;
+pub use stable_mir::mir::mono::Instance as MirInstance;
+
+
 mod function_cache;
 use function_cache::*;
 mod local_collection;
@@ -22,17 +26,9 @@ use instrumentation::*;
 use crate::args::ExtraChecks;
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
+use stable_mir::mir::Body;
 use rustc_middle::ty::TyCtxt;
-use stable_mir::mir::{
-    BasicBlock, BorrowKind, MirVisitor, Operand, ProjectionElem, Rvalue, Statement, StatementKind,
-    Terminator, VarDebugInfo,
-};
-use stable_mir::mir::{
-    BasicBlockIdx, Body, Local, LocalDecl, Mutability, Place, TerminatorKind, UnwindAction,
-};
-use stable_mir::ty::{RigidTy, Span, Ty, TyKind};
 use std::fmt::Debug;
-use std::io::stderr;
 use tracing::trace;
 
 /// Instrument the code with checks for aliasing model

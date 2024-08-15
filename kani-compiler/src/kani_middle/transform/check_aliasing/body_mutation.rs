@@ -1,4 +1,6 @@
-use super::{Local, InstrumentationData, MirError, Body};
+use stable_mir::mir::{Local, Body};
+use super::MirError;
+use super::InstrumentationData;
 
 pub struct BodyMutationPassState<'tcx, 'cache> {
     values: Vec<Local>,
