@@ -54,6 +54,13 @@ use crate::{any, assume};
 /// // object created at `y as *mut i32`, ie, (2, Permission::SHAREDRW)
 /// // resulting in an error.
 /// ```
+/// When demonic nondeterminism is used (currently it is always used),
+/// a nondeterminism oracle is queried to select a single byte of the program's
+/// memory. This way, if a single byte is ever invalid, the nondeterminism
+/// oracle will select it, and allow an error to be thrown.
+/// This can be used with the restriction that assertions over
+/// relations between the stacks (such as, for example, equality between
+/// the top two tags of two different stacks) are never needed.
 pub mod sstate {
     use super::*;
     /// Associate every pointer object with a tag
