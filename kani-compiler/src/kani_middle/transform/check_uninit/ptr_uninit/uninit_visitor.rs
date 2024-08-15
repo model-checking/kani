@@ -88,17 +88,12 @@ impl MirVisitor for CheckUninitVisitor {
             match &stmt.kind {
                 StatementKind::Intrinsic(NonDivergingIntrinsic::CopyNonOverlapping(copy)) => {
                     self.super_statement(stmt, location);
-                    // Source is a *const T and it must be initialized.
-                    self.push_target(MemoryInitOp::CheckSliceChunk {
-                        operand: copy.src.clone(),
+                    // The copy is untyped, so we should copy memory initialization state from `src`
+                    // to `dst`.
+                    self.push_target(MemoryInitOp::Copy {
+                        from: copy.src.clone(),
+                        to: copy.dst.clone(),
                         count: copy.count.clone(),
-                    });
-                    // Destination is a *mut T so it gets initialized.
-                    self.push_target(MemoryInitOp::SetSliceChunk {
-                        operand: copy.dst.clone(),
-                        count: copy.count.clone(),
-                        value: true,
-                        position: InsertPosition::After,
                     });
                 }
                 StatementKind::Assign(place, rvalue) => {
@@ -219,28 +214,23 @@ impl MirVisitor for CheckUninitVisitor {
                                     });
                                 }
                                 Intrinsic::Copy => {
-                                    self.push_target(MemoryInitOp::CheckSliceChunk {
-                                        operand: args[0].clone(),
+                                    // The copy is untyped, so we should copy memory
+                                    // initialization state from `src` to `dst`.
+                                    self.push_target(MemoryInitOp::Copy {
+                                        from: args[0].clone(),
+                                        to: args[1].clone(),
                                         count: args[2].clone(),
-                                    });
-                                    self.push_target(MemoryInitOp::SetSliceChunk {
-                                        operand: args[1].clone(),
-                                        count: args[2].clone(),
-                                        value: true,
-                                        position: InsertPosition::After,
                                     });
                                 }
                                 Intrinsic::VolatileCopyMemory
                                 | Intrinsic::VolatileCopyNonOverlappingMemory => {
-                                    self.push_target(MemoryInitOp::CheckSliceChunk {
-                                        operand: args[1].clone(),
+                                    // The copy is untyped, so we should copy initialization state
+                                    // from `src` to `dst`. Note that the `dst` comes before `src`
+                                    // in this case.
+                                    self.push_target(MemoryInitOp::Copy {
+                                        from: args[1].clone(),
+                                        to: args[0].clone(),
                                         count: args[2].clone(),
-                                    });
-                                    self.push_target(MemoryInitOp::SetSliceChunk {
-                                        operand: args[0].clone(),
-                                        count: args[2].clone(),
-                                        value: true,
-                                        position: InsertPosition::After,
                                     });
                                 }
                                 Intrinsic::TypedSwap => {
