@@ -248,7 +248,14 @@ impl<'a> StandaloneProjectBuilder<'a> {
         let metadata = from_json(&self.metadata)?;
 
         // Create the project with the artifacts built by the compiler.
-        let result = Project::try_new(self.session, self.outdir, Some(self.input), vec![metadata], None, None);
+        let result = Project::try_new(
+            self.session,
+            self.outdir,
+            Some(self.input),
+            vec![metadata],
+            None,
+            None,
+        );
         if let Ok(project) = &result {
             self.session.record_temporary_files(&project.artifacts);
         }
