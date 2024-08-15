@@ -67,19 +67,40 @@ impl KaniSession {
     }
 
     fn save_coverage_metadata_standalone(&self, project: &Project, stamp: &String) -> Result<()> {
+        let input = project.input.clone().unwrap().canonicalize().unwrap();
+        let input_dir = input.parent().unwrap().to_path_buf();
+        let outdir = input_dir.join(format!("kanicov_{stamp}"));
+
+        // Generally we don't expect this directory to exist, but there's no
+        // reason to delete it if it does.
+        if !outdir.exists() {
+            fs::create_dir(&outdir)?;
+        }
+
+        // In this case, the source files correspond to the input file
+        let source_targets = vec![input];
+
+        let kanimap_name = format!("kanicov_{stamp}_kanimap");
+        let file_name = outdir.join(kanimap_name).with_extension("json");
+        let mut kanimap_file = File::create(file_name)?;
+
+        let serialized_data = serde_json::to_string(&source_targets)?;
+        kanimap_file.write_all(serialized_data.as_bytes())?;
+
         Ok(())
     }
 
     /// Saves raw coverage check results required for coverage-related features.
     pub fn save_coverage_results(
         &self,
+        project: &Project,
         results: &Vec<HarnessResult>,
         stamp: &String,
     ) -> Result<()> {
         if self.args.target_dir.is_some() {
             self.save_coverage_results_cargo(results, stamp)
         } else {
-            self.save_coverage_results_standalone(results, stamp)
+            self.save_coverage_results_standalone(project, results, stamp)
         }
     }
 
@@ -123,9 +144,33 @@ impl KaniSession {
 
     pub fn save_coverage_results_standalone(
         &self,
+        project: &Project,
         results: &Vec<HarnessResult>,
         stamp: &String,
     ) -> Result<()> {
+        let input = project.input.clone().unwrap().canonicalize().unwrap();
+        let input_dir = input.parent().unwrap().to_path_buf();
+        let outdir = input_dir.join(format!("kanicov_{stamp}"));
+
+        // This directory should have been created by `save_coverage_metadata`,
+        // so now we expect it to exist.
+        if !outdir.exists() {
+            bail!("directory associated to coverage run does not exist")
+        }
+
+        for harness_res in results {
+            let harness_name = harness_res.harness.mangled_name.clone();
+            let kaniraw_name = format!("{harness_name}_kaniraw");
+            let file_name = outdir.join(kaniraw_name).with_extension("json");
+            let mut cov_file = File::create(file_name)?;
+
+            let cov_results = &harness_res.result.coverage_results.clone().unwrap();
+            let serialized_data = serde_json::to_string(&cov_results)?;
+            cov_file.write_all(serialized_data.as_bytes())?;
+        }
+
+        println!("[info] Coverage results saved to {}", &outdir.display());
+
         Ok(())
     }
 }

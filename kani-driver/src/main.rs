@@ -134,7 +134,7 @@ fn verify_project(project: Project, session: KaniSession) -> Result<()> {
     if session.args.coverage {
         let timestamp = Local::now().format("%Y-%m-%d_%H-%M").to_string();
         session.save_coverage_metadata(&project, &timestamp)?;
-        session.save_coverage_results(&results, &timestamp)?;
+        session.save_coverage_results(&project, &results, &timestamp)?;
     }
 
     session.print_final_summary(&results)

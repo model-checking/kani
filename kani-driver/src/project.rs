@@ -33,6 +33,9 @@ pub struct Project {
     /// The directory where all outputs should be directed to. This path represents the canonical
     /// version of outdir.
     pub outdir: PathBuf,
+    /// The path to the input file the project was built from.
+    /// Note that it will only be `Some(...)` if this was built from a standalone project.
+    pub input: Option<PathBuf>,
     /// The collection of artifacts kept as part of this project.
     artifacts: Vec<Artifact>,
     /// Records the cargo metadata from the build, if there was any
@@ -82,6 +85,7 @@ impl Project {
     fn try_new(
         session: &KaniSession,
         outdir: PathBuf,
+        input: Option<PathBuf>,
         metadata: Vec<KaniMetadata>,
         cargo_metadata: Option<cargo_metadata::Metadata>,
         failed_targets: Option<Vec<String>>,
@@ -115,7 +119,7 @@ impl Project {
             }
         }
 
-        Ok(Project { outdir, metadata, artifacts, cargo_metadata, failed_targets })
+        Ok(Project { outdir, input, metadata, artifacts, cargo_metadata, failed_targets })
     }
 }
 
@@ -178,6 +182,7 @@ pub fn cargo_project(session: &KaniSession, keep_going: bool) -> Result<Project>
     Project::try_new(
         session,
         outdir,
+        None,
         metadata,
         Some(outputs.cargo_metadata),
         outputs.failed_targets,
@@ -243,7 +248,7 @@ impl<'a> StandaloneProjectBuilder<'a> {
         let metadata = from_json(&self.metadata)?;
 
         // Create the project with the artifacts built by the compiler.
-        let result = Project::try_new(self.session, self.outdir, vec![metadata], None, None);
+        let result = Project::try_new(self.session, self.outdir, Some(self.input), vec![metadata], None, None);
         if let Ok(project) = &result {
             self.session.record_temporary_files(&project.artifacts);
         }
@@ -297,5 +302,5 @@ pub(crate) fn std_project(std_path: &Path, session: &KaniSession) -> Result<Proj
 
     // Get the metadata and return a Kani project.
     let metadata = outputs.iter().map(|md_file| from_json(md_file)).collect::<Result<Vec<_>>>()?;
-    Project::try_new(session, outdir, metadata, None, None)
+    Project::try_new(session, outdir, None, metadata, None, None)
 }
