@@ -269,7 +269,6 @@ pub mod sstate {
     /// pointer_to_val.
     #[rustc_diagnostic_item = "KaniNewMutRefFromValue"]
     pub fn new_mut_ref_from_value<T>(pointer_to_created: *const &mut T, pointer_to_val: *const T) {
-        crate::assert(true, "hi");
         unsafe {
             // Then associate the lvalue and push it
             TAGS.set(pointer_to_created, NEXT_TAG);
