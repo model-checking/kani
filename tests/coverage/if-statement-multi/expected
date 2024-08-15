@@ -1,0 +1,11 @@
+Source-based code coverage results:
+
+test.rs (main)\
+ * 20:1 - 25:2 COVERED
+
+test.rs (test_cov)\
+ * 15:1 - 16:15 COVERED\
+ * 16:19 - 16:28 UNCOVERED\
+ * 16:31 - 16:35 COVERED\
+ * 16:45 - 16:50 UNCOVERED\
+ * 17:1 - 17:2 COVERED
