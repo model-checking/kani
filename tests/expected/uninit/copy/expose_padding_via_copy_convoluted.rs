@@ -6,7 +6,6 @@
 #[derive(kani::Arbitrary)]
 struct S(u32, u8); // 5 bytes of data + 3 bytes of padding.
 
-
 /// This checks that reading copied uninitialized bytes fails an assertion even if pointer are
 /// passed around different functions.
 #[kani::proof]
