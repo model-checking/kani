@@ -32,6 +32,7 @@ use stable_mir::mir::{
 };
 use stable_mir::ty::{RigidTy, Span, Ty, TyKind};
 use std::fmt::Debug;
+use std::io::stderr;
 use tracing::trace;
 
 /// Instrument the code with checks for aliasing model
