@@ -1,7 +1,7 @@
 Source-based code coverage results:
 
 main.rs (main)\
- * 26:1 - 29:2 COVERED
+ * 27:1 - 30:2 COVERED
 
 main.rs (print_direction)\
  * 14:1 - 14:36 COVERED\
