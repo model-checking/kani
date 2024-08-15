@@ -13,11 +13,7 @@ fn _other_function() {
 }
 
 fn test_cov(val: u32) -> bool {
-    if val < 3 || val == 42 {
-        true
-    } else {
-        false
-    }
+    if val < 3 || val == 42 { true } else { false }
 }
 
 #[cfg_attr(kani, kani::proof)]
