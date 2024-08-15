@@ -18,19 +18,19 @@ pub mod sstate {
     struct Access;
     #[allow(unused)]
     impl Access {
-        pub(self) const READ: bool = false;
-        pub(self) const WRITE: bool = true;
+        const READ: bool = false;
+        const WRITE: bool = true;
     }
 
     #[non_exhaustive]
     struct Permission;
     impl Permission {
-        pub(self) const UNIQUE: u8 = 0;
-        pub(self) const SHAREDRW: u8 = 1;
-        pub(self) const SHAREDRO: u8 = 2;
-        pub(self) const DISABLED: u8 = 3;
+        const UNIQUE: u8 = 0;
+        const SHAREDRW: u8 = 1;
+        const SHAREDRO: u8 = 2;
+        const DISABLED: u8 = 3;
 
-        pub(self) fn grants(access: bool, tag: u8) -> bool {
+        fn grants(access: bool, tag: u8) -> bool {
             tag != Self::DISABLED && (access != Access::WRITE || tag != Self::SHAREDRO)
         }
     }
@@ -49,8 +49,8 @@ pub mod sstate {
         #[non_exhaustive]
         struct MonitorState;
         impl MonitorState {
-            pub(self) const UNINIT: bool = false;
-            pub(self) const INIT: bool = true;
+            const UNINIT: bool = false;
+            const INIT: bool = true;
         }
 
         use super::*;
