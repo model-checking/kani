@@ -107,7 +107,7 @@ checksum = "b048fb63fd8b5923fc5aa7b340d8e156aec7ec02f0c78fa8a6ddc2613f6f71de"
 
 [[package]]
 name = "build-kani"
-version = "0.53.0"
+version = "0.54.0"
 dependencies = [
  "anyhow",
  "cargo_metadata",
@@ -284,7 +284,7 @@ checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
 
 [[package]]
 name = "cprover_bindings"
-version = "0.53.0"
+version = "0.54.0"
 dependencies = [
  "lazy_static",
  "linear-map",
@@ -514,7 +514,7 @@ dependencies = [
 
 [[package]]
 name = "kani"
-version = "0.53.0"
+version = "0.54.0"
 dependencies = [
  "kani_core",
  "kani_macros",
@@ -522,7 +522,7 @@ dependencies = [
 
 [[package]]
 name = "kani-compiler"
-version = "0.53.0"
+version = "0.54.0"
 dependencies = [
  "clap",
  "cprover_bindings",
@@ -543,7 +543,7 @@ dependencies = [
 
 [[package]]
 name = "kani-driver"
-version = "0.53.0"
+version = "0.54.0"
 dependencies = [
  "anyhow",
  "cargo_metadata",
@@ -572,7 +572,7 @@ dependencies = [
 
 [[package]]
 name = "kani-verifier"
-version = "0.53.0"
+version = "0.54.0"
 dependencies = [
  "anyhow",
  "home",
@@ -581,14 +581,14 @@ dependencies = [
 
 [[package]]
 name = "kani_core"
-version = "0.53.0"
+version = "0.54.0"
 dependencies = [
  "kani_macros",
 ]
 
 [[package]]
 name = "kani_macros"
-version = "0.53.0"
+version = "0.54.0"
 dependencies = [
  "proc-macro-error",
  "proc-macro2",
@@ -598,7 +598,7 @@ dependencies = [
 
 [[package]]
 name = "kani_metadata"
-version = "0.53.0"
+version = "0.54.0"
 dependencies = [
  "clap",
  "cprover_bindings",
@@ -1033,18 +1033,18 @@ dependencies = [
 
 [[package]]
 name = "serde"
-version = "1.0.207"
+version = "1.0.206"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5665e14a49a4ea1b91029ba7d3bca9f299e1f7cfa194388ccc20f14743e784f2"
+checksum = "5b3e4cd94123dd520a128bcd11e34d9e9e423e7e3e50425cb1b4b1e3549d0284"
 dependencies = [
  "serde_derive",
 ]
 
 [[package]]
 name = "serde_derive"
-version = "1.0.207"
+version = "1.0.206"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6aea2634c86b0e8ef2cfdc0c340baede54ec27b1e46febd7f80dffb2aa44a00e"
+checksum = "fabfb6138d2383ea8208cf98ccf69cdfb1aff4088460681d84189aa259762f97"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1123,7 +1123,7 @@ checksum = "3c5e1a9a646d36c3599cd173a41282daf47c44583ad367b8e6837255952e5c67"
 
 [[package]]
 name = "std"
-version = "0.53.0"
+version = "0.54.0"
 dependencies = [
  "kani",
 ]
