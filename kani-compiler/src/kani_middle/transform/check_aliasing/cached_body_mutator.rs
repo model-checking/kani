@@ -32,6 +32,16 @@ impl CachedBodyMutator {
         self.body.new_local(ty, mutability)
     }
 
+    /// Locals in `self` that correspond to this function's arguments.
+    pub fn arg_locals(&self) -> &[LocalDecl] {
+        self.body.arg_locals()
+    }
+
+    /// Locals
+    pub fn locals(&self) -> &[LocalDecl] {
+        self.body.locals()
+    }
+
     /// Insert a call to the function stored at local with the args
     /// stored at args
     pub fn call(&mut self, callee: &MirInstance, args: Vec<Local>, local: Local) {

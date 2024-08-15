@@ -8,11 +8,12 @@ pub struct InstrumentationData<'tcx, 'cache> {
     tcx: TyCtxt<'tcx>,
     cache: &'cache mut Cache,
     meta_stack: HashMap<Local, Local>,
-    pub body: CachedBodyMutator,
+    body: CachedBodyMutator,
 }
 
 impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
-    pub fn new(tcx: TyCtxt<'tcx>, cache: &'cache mut Cache, meta_stack: HashMap<Local, Local>, body: CachedBodyMutator) -> Self {
+    pub fn new(tcx: TyCtxt<'tcx>, cache: &'cache mut Cache, body: CachedBodyMutator) -> Self {
+        let meta_stack = HashMap::new();
         InstrumentationData { tcx, cache, meta_stack, body }
     }
 
@@ -280,10 +281,10 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
 
     /// Instrument each of the locals collected into values with
     /// initialization data.
-    pub fn instrument_locals(&mut self, values: &Vec<Local>) -> Result<(), MirError> {
+    pub fn instrument_locals(&mut self) -> Result<(), MirError> {
         self.instrument_initialize()?;
-        for local in values {
-            self.instrument_local(*local)?
+        for local in (self.body.arg_locals().len() + 1)..self.body.locals().len() {
+            self.instrument_local(local)?
         }
         Ok(())
     }
@@ -299,5 +300,13 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
             status = self.body.decrement_index(&mut index);
         }
         Ok(())
+    }
+
+    pub fn finalize_prologue(&mut self) {
+        self.body.finalize_prologue();
+    }
+
+    pub fn finalize(self) -> stable_mir::mir::Body {
+        self.body.finalize()
     }
 }

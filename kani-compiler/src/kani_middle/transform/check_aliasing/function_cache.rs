@@ -50,6 +50,11 @@ pub struct Cache {
 }
 
 impl Cache {
+    /// Instantiate the cache
+    pub fn new() -> Self {
+        Cache::default()
+    }
+
     /// Register the signature the to the cache
     /// in the given compilation context, ctx
     pub fn register(&mut self, ctx: &TyCtxt, sig: Signature) ->
@@ -68,7 +73,7 @@ impl Cache {
     }
 
     /// Fetch the signature sig from the cache
-    fn get(&self, sig: &Signature) -> Result<&MirInstance, MirError> {
+    pub fn get(&self, sig: &Signature) -> Result<&MirInstance, MirError> {
         let Cache { cache } = self;
         for Instance { signature, instance } in cache {
             if *sig == *signature {

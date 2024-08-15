@@ -12,8 +12,6 @@ pub use stable_mir::mir::mono::Instance as MirInstance;
 
 mod function_cache;
 use function_cache::*;
-mod local_collection;
-use local_collection::*;
 mod cached_body_mutator;
 use cached_body_mutator::*;
 mod body_mutator;
@@ -132,8 +130,9 @@ impl TransformPass for AliasingPass {
         {
             (false, body)
         } else {
-            let pass = LocalCollectionPassState::new(body, tcx, &mut self.cache);
-            let out = pass.collect_locals().collect_body().finalize();
+            let body = CachedBodyMutator::from(body);
+            let instrumentation_data = InstrumentationData::new(tcx, &mut self.cache, body);
+            let out = BodyMutationPassState::new(instrumentation_data).finalize();
             (true, out)
         }
     }

@@ -88,6 +88,16 @@ impl BodyMutator {
         )
     }
 
+    /// Locals in `self` that correspond to this function's arguments.
+    pub fn arg_locals(&self) -> &[LocalDecl] {
+        &self.locals[1..][..self.arg_count]
+    }
+
+    // Get the inner locals
+    pub fn inner_locals(&self) -> &[LocalDecl] {
+        &self.locals[self.arg_count + 1..]
+    }
+
     /// Index into the locals
     pub fn local(&self, idx: usize) -> &LocalDecl {
         if idx > self.locals.len() {
@@ -228,6 +238,11 @@ impl BodyMutator {
     /// Get the span
     pub fn span(&self) -> Span {
         self.span
+    }
+
+    /// Get the locals
+    pub fn locals(&self) -> &[LocalDecl] {
+        &self.locals
     }
 }
 
