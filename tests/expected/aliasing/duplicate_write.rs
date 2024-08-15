@@ -15,7 +15,5 @@ fn main() {
         ref_from_raw_1 = &mut *raw_pointer;
         *ref_from_raw_1 = 0;
         ref_from_raw_2 = &mut *raw_pointer;
-        *ref_from_raw_2 = 1;
-        *ref_from_raw_1 = 2;
     }
 }

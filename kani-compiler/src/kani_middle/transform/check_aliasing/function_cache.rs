@@ -37,7 +37,7 @@ pub struct Instance {
 impl Instance {
     /// Create a new cacheable instance with the given signature and
     /// instance
-    pub fn new(signature: Signature, instance: super::MirInstance) -> Instance {
+    pub fn new(signature: Signature, instance: MirInstance) -> Instance {
         Instance { signature, instance }
     }
 }
@@ -59,6 +59,25 @@ impl Cache {
     /// in the given compilation context, ctx
     pub fn register(&mut self, ctx: &TyCtxt, sig: Signature) ->
         Result<&MirInstance, MirError> {
+        let Cache { cache } = self;
+        for i in 0..cache.len() {
+            if sig == cache[i].signature {
+                return Ok(&cache[i].instance);
+            }
+        }
+        let fndef = find_fn_def(*ctx, &sig.diagnostic)
+            .ok_or(MirError::new(format!("Not found: {}", &sig.diagnostic)))?;
+        let instance = MirInstance::resolve(fndef, &GenericArgs(sig.args.clone()))?;
+        cache.push(Instance::new(sig, instance));
+        Ok(&cache[cache.len() - 1].instance)
+    }
+
+    /// Register the kani assertion function
+    pub fn register_assert(&mut self, ctx: &TyCtxt) ->
+        Result<&MirInstance, MirError> {
+        let diagnostic = "KaniAssert".to_string();
+        let args = vec![];
+        let sig = Signature { diagnostic, args };
         let Cache { cache } = self;
         for i in 0..cache.len() {
             if sig == cache[i].signature {

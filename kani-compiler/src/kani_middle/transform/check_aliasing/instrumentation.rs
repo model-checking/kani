@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use rustc_middle::ty::TyCtxt;
-use stable_mir::mir::{Local, Place, Rvalue, Mutability, StatementKind, Statement, BorrowKind, ProjectionElem};
+use stable_mir::mir::{BorrowKind, Local, Mutability, Place, ProjectionElem, Rvalue, Statement, StatementKind};
 use stable_mir::ty::{GenericArgKind, Ty, Span, TyKind, RigidTy};
 use super::{MirError, CachedBodyMutator, Cache, Signature, MutatorIndex, Instruction, MutatorIndexStatus};
 
@@ -77,11 +77,24 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
         Ok(())
     }
 
+    /// Instrument with stack violated / not violated
+    pub fn instrument_stack_check(&mut self, idx: &MutatorIndex) -> Result<(), MirError> {
+        // Initialize the constants
+        let instance = self.cache.register(
+            &self.tcx,
+            Signature::new("KaniStackValid", &[])
+        )?;
+        self.body.call(instance, vec![], self.body.valid());
+        let msg = format!("Stacked borrows aliasing model violated at {:?}:{:?}", idx.span().get_filename(), idx.span().get_lines());
+        let instance = self.cache.register_assert(&self.tcx)?;
+        self.body.assert(instance, self.body.valid(), msg, idx.span());
+        Ok(())
+    }
+
     /// Instrument a validity assertion on the stacked borrows state
     /// at idx for (place: &mut T).
-    pub fn instrument_stack_check_ref(
+    pub fn instrument_stack_update_ref(
         &mut self,
-        idx: &MutatorIndex,
         place: Local,
         ty: Ty,
     ) -> Result<(), MirError> {
@@ -92,15 +105,13 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
             Signature::new("KaniStackCheckRef", &[GenericArgKind::Type(ty)]),
         )?;
         self.body.call(instance, vec![*place_ref], self.body.unit());
-        self.body.split(idx);
         Ok(())
     }
 
     /// Instrument a validity assertion on the stacked borrows state
     /// at idx for (place: *const T).
-    pub fn instrument_stack_check_ptr(
+    pub fn instrument_stack_update_ptr(
         &mut self,
-        idx: &MutatorIndex,
         place: Local,
         ty: Ty,
     ) -> Result<(), MirError> {
@@ -111,7 +122,6 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
             Signature::new("KaniStackCheckPtr", &[GenericArgKind::Type(ty)]),
         )?;
         self.body.call(instance, vec![*place_ref], self.body.unit());
-        self.body.split(idx);
         Ok(())
     }
 
@@ -188,10 +198,9 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
                                                 );
                                             }
                                             TyKind::RigidTy(RigidTy::RawPtr(ty, _)) => {
-                                                self.instrument_stack_check_ref(idx, from, ty)?;
-                                                self.instrument_new_mut_ref_from_raw(
-                                                    idx, to, from,
-                                                )?;
+                                                self.instrument_stack_update_ref(from, ty)?;
+                                                self.instrument_stack_check(idx)?;
+                                                self.body.split(idx);
                                             }
                                             _ => {}
                                         }
@@ -213,7 +222,9 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
                                         let to = to.local; // Copy to avoid borrow
                                         match self.body.local(to).ty.kind() {
                                             TyKind::RigidTy(RigidTy::Ref(_, ty, _)) => {
-                                                self.instrument_stack_check_ref(idx, from, ty)?;
+                                                self.instrument_stack_update_ref(from, ty)?;
+                                                self.instrument_stack_check(idx)?;
+                                                self.body.split(idx);
                                                 self.instrument_new_mut_raw_from_ref(
                                                     idx, to, from,
                                                 )?;
@@ -244,10 +255,14 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
                                 println!("Self body local to is: {:?}", self.body.local(to));
                                 match self.body.local(to).ty.kind() {
                                     TyKind::RigidTy(RigidTy::Ref(_, ty, _)) => {
-                                        self.instrument_stack_check_ref(idx, to, ty)?;
+                                        self.instrument_stack_update_ref(to, ty)?;
+                                        self.instrument_stack_check(idx)?;
+                                        self.body.split(idx);
                                     }
                                     TyKind::RigidTy(RigidTy::RawPtr(ty, _)) => {
-                                        self.instrument_stack_check_ptr(idx, to, ty)?;
+                                        self.instrument_stack_update_ptr(to, ty)?;
+                                        self.instrument_stack_check(idx)?;
+                                        self.body.split(idx);
                                     }
                                     _ => {}
                                 }

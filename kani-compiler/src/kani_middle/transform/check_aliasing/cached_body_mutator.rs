@@ -10,6 +10,7 @@ use super::{MutatorIndex, MutatorIndexStatus, Instruction};
 pub struct CachedBodyMutator {
     body: BodyMutator,
     unit: Local,
+    valid: Local,
     cache: HashMap<MirInstance, Local>,
 }
 
@@ -18,8 +19,9 @@ impl CachedBodyMutator {
     pub fn from(body: Body) -> Self {
         let mut body = BodyMutator::from(body);
         let unit = body.new_local(Ty::new_tuple(&[]), Mutability::Not);
+        let valid = body.new_local(Ty::from_rigid_kind(stable_mir::ty::RigidTy::Bool), Mutability::Mut);
         let cache = HashMap::new();
-        CachedBodyMutator { body, unit, cache }
+        CachedBodyMutator { body, unit, valid, cache }
     }
 
     /// Get the local at idx
@@ -56,6 +58,20 @@ impl CachedBodyMutator {
             }
         }
         self.body.call(*func_local, args, local);
+    }
+
+    pub fn assert(&mut self, assert_fn: &MirInstance, cond: Local, message: String, span: Span) {
+        let func_local;
+        {
+            let cache = &mut self.cache;
+            let body = &mut self.body;
+            {
+                func_local = cache
+                    .entry(*assert_fn)
+                    .or_insert_with(|| body.new_local(assert_fn.ty(), Mutability::Not));
+            }
+        }
+        self.body.assert(*func_local, self.unit, cond, message, span);
     }
 
     /// Finalize the prologue, initializing all of the locals
@@ -103,5 +119,10 @@ impl CachedBodyMutator {
     /// Get the unit local
     pub fn unit(&self) -> Local {
         self.unit
+    }
+
+    /// Get the violated local
+    pub fn valid(&self) -> Local {
+        self.valid
     }
 }

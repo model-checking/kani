@@ -68,6 +68,15 @@ pub mod sstate {
     /// Next pointer id: the next pointer id in sequence
     static mut NEXT_TAG: PointerTag = 0;
 
+    /// Set to true whenever the stack has been
+    /// invalidated by a failed lookup.
+    static mut STACK_VALID: bool = true;
+
+    #[rustc_diagnostic_item = "KaniStackValid"]
+    pub fn stack_valid() -> bool {
+        unsafe {STACK_VALID}
+    }
+
     #[non_exhaustive]
     struct Access;
     #[allow(unused)]
@@ -196,7 +205,7 @@ pub mod sstate {
                         j += 1;
                     }
                     STACK_TOP = new_top;
-                    crate::assert(found, "Stack violated.");
+                    STACK_VALID = STACK_VALID && found;
                 }
             }
         }
@@ -260,6 +269,7 @@ pub mod sstate {
     /// pointer_to_val.
     #[rustc_diagnostic_item = "KaniNewMutRefFromValue"]
     pub fn new_mut_ref_from_value<T>(pointer_to_created: *const &mut T, pointer_to_val: *const T) {
+        crate::assert(true, "hi");
         unsafe {
             // Then associate the lvalue and push it
             TAGS.set(pointer_to_created, NEXT_TAG);

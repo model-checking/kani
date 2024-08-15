@@ -1,5 +1,5 @@
-use stable_mir::mir::{BasicBlock, BasicBlockIdx, Body, Local, LocalDecl, Mutability, Operand, Place, Statement, Terminator, TerminatorKind, UnwindAction, VarDebugInfo};
-use stable_mir::ty::{Ty, Span};
+use stable_mir::mir::{BasicBlock, BasicBlockIdx, Body, Local, LocalDecl, Mutability, Operand, Place, Statement, Terminator, TerminatorKind, UnwindAction, VarDebugInfo, ConstOperand};
+use stable_mir::ty::{Ty, MirConst, Span};
 
 /// BodyMutator combines the data of the function body
 /// with "ghost" basic block and local data, allowing the user
@@ -114,6 +114,26 @@ impl BodyMutator {
         let local = self.locals.len() + self.ghost_locals.len();
         self.ghost_locals.push(decl);
         local
+    }
+
+    /// Call the assertion function at assert_fn, returning into the unit,
+    /// with condition cond and message string.
+    pub fn assert(&mut self, assert_fn: Local, unit: Local, cond: Local, message: String, span: Span) {
+        let user_ty = None;
+        let const_ = MirConst::from_str(&message);
+        let message = Operand::Constant(ConstOperand { span, user_ty, const_ });
+        let args = vec![Operand::Copy(Place::from(cond)),
+                        message];
+        let func = Operand::Copy(Place::from(assert_fn));
+        let unwind = UnwindAction::Terminate;
+        let target = Some(self.next_block());
+        let projection = Vec::new();
+        let destination = Place { local: unit, projection };
+        let kind = TerminatorKind::Call { func, args, destination, target, unwind };
+        let span = self.span;
+        let terminator = Terminator { kind, span };
+        let statements = std::mem::replace(&mut self.ghost_statements, Vec::new());
+        self.ghost_blocks.push(BasicBlock { statements, terminator });
     }
 
     /// Insert a call into the function body of the function stored at
@@ -254,6 +274,12 @@ pub struct MutatorIndex {
     bb: BasicBlockIdx,
     idx: usize,
     span: Span,
+}
+
+impl MutatorIndex {
+    pub fn span(&self) -> Span {
+        self.span.clone()
+    }
 }
 
 /// Whether or not there is remaining code
