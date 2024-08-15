@@ -89,7 +89,7 @@ impl MirVisitor for CheckUninitVisitor {
                 StatementKind::Intrinsic(NonDivergingIntrinsic::CopyNonOverlapping(copy)) => {
                     self.super_statement(stmt, location);
                     // The copy is untyped, so we should copy memory initialization state from `src`
-                    // to `dst`.  
+                    // to `dst`.
                     self.push_target(MemoryInitOp::Copy {
                         from: copy.src.clone(),
                         to: copy.dst.clone(),
