@@ -7,6 +7,53 @@ use crate::shadow::ShadowMem;
 use crate::{any, assume};
 
 /// The stacked borrows state.
+///
+/// The stacked borrows state associates every pointer value
+/// (IE reference or raw pointer) with a unique tag and permission
+/// in shadow memory.
+///
+/// The tags correspond to the time of the creation of the pointer
+/// value, and the permissions correspond to the mutability
+/// of the pointer value and its status as a raw pointer or reference.
+///
+/// It also associates each byte of the program's memory
+/// with a stack of tags, tracking the borrows of the memory
+/// containing that byte in temporal order. Every time a
+/// pointer value is used, the stack is popped down to that pointer value's
+/// tag, effectively marking the borrows that occur after that variable
+/// as dead. If the borrows associated with the tags popped are later used,
+/// the search for them at that byte fails and the stacked borrows state
+/// is considered violated.
+///
+/// For example:
+/// ```rust
+/// let mut x: i32 = 10;
+/// // Stack allocate 10 and store it at x.
+/// // Stack at addr_of!(x) through addr_of!(x) + 4:
+/// // [(0, Permission::UNIQUE)]
+/// let y = &mut x;
+/// // Make the pointer object `&mut x`. Associate `&mut x`
+/// // with the tag and permission `(1, Permission::UNIQUE)`
+/// // by associating `addr_of!(y)` with `(1, Permission::UNIQUE)`
+/// // in shadow memory. Push the tag to the borrow stacks of
+/// // `addr_of!(x)` through `addr_of!(x) + 4` yielding
+/// // the stacks [(0, Permission::UNIQUE), (1, Permission::UNIQUE)]
+/// let z = y as *mut i32;
+/// // Make the pointer object `y as *mut i32`.
+/// // associate `addr_of!(z)` and push the stacks as
+/// // above with the tag (2, Permission::SHAREDRW),
+/// // corresponding to a raw pointer, yielding the stacks
+/// // [(0, Permission::UNIQUE), (1, Permission::UNIQUE),
+/// //  (2, Permission::SHAREDRW)].
+/// *y = 10;
+/// // Pop the stack down to the tag associated with the pointer
+/// // object created at `&mut x` yielding
+/// // [(0, Permission::UNIQUE), (1, Permission::UNIQUE)]
+/// unsafe { *(&mut *z) = 10; }
+/// // Run stack lookup on the tag associated with the pointer
+/// // object created at `y as *mut i32`, ie, (2, Permission::SHAREDRW)
+/// // resulting in an error.
+/// ```
 pub mod sstate {
     use super::*;
     /// Associate every pointer object with a tag
