@@ -9,7 +9,7 @@ use serde::{ser::SerializeStruct, Serialize, Serializer};
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::visit::{Location, PlaceContext, PlaceRef};
 use stable_mir::mir::{
-    Body, MirVisitor, Mutability, ProjectionElem, Safety, Terminator, TerminatorKind,
+    BasicBlock, Body, MirVisitor, Mutability, ProjectionElem, Safety, Terminator, TerminatorKind,
 };
 use stable_mir::ty::{AdtDef, AdtKind, FnDef, GenericArgs, MirConst, RigidTy, Ty, TyKind};
 use stable_mir::visitor::{Visitable, Visitor};
@@ -159,6 +159,7 @@ impl OverallStats {
     pub fn loops(&mut self, filename: PathBuf) {
         let all_items = stable_mir::all_local_items();
         let (has_loops, no_loops) = all_items
+            .clone()
             .into_iter()
             .filter_map(|item| {
                 let kind = item.ty().kind();
@@ -168,9 +169,37 @@ impl OverallStats {
                 Some(FnLoops::new(item.name()).collect(&item.body()))
             })
             .partition::<Vec<_>, _>(|props| props.has_loops());
-        self.counters
-            .extend_from_slice(&[("has_loops", has_loops.len()), ("no_loops", no_loops.len())]);
-        dump_csv(filename, &has_loops);
+
+        let (has_iterators, no_iterators) = all_items
+            .clone()
+            .into_iter()
+            .filter_map(|item| {
+                let kind = item.ty().kind();
+                if !kind.is_fn() {
+                    return None;
+                };
+                Some(FnLoops::new(item.name()).collect(&item.body()))
+            })
+            .partition::<Vec<_>, _>(|props| props.has_iterators());
+
+        let (has_either, _) = all_items
+            .into_iter()
+            .filter_map(|item| {
+                let kind = item.ty().kind();
+                if !kind.is_fn() {
+                    return None;
+                };
+                Some(FnLoops::new(item.name()).collect(&item.body()))
+            })
+            .partition::<Vec<_>, _>(|props| props.has_iterators() || props.has_loops());
+
+        self.counters.extend_from_slice(&[
+            ("has_loops", has_loops.len()),
+            ("no_loops", no_loops.len()),
+            ("has_iterators", has_iterators.len()),
+            ("no_iterators", no_iterators.len()),
+        ]);
+        dump_csv(filename, &has_either);
     }
 
     /// Create a callgraph for this crate and try to find recursive calls.
@@ -436,21 +465,25 @@ impl<'a> MirVisitor for BodyVisitor<'a> {
 fn_props! {
     struct FnLoops {
         iterators,
-        nested_loops,
-        /// TODO: Collect loops.
         loops,
+        // TODO: Collect nested loops.
+        nested_loops,
     }
 }
 
 impl FnLoops {
     pub fn collect(self, body: &Body) -> FnLoops {
-        let mut visitor = IteratorVisitor { props: self, body };
+        let mut visitor = IteratorVisitor { props: self, body, num_visited_blocks: 0 };
         visitor.visit_body(body);
         visitor.props
     }
 
     pub fn has_loops(&self) -> bool {
-        (self.iterators + self.loops + self.nested_loops) > 0
+        (self.loops + self.nested_loops) > 0
+    }
+
+    pub fn has_iterators(&self) -> bool {
+        (self.iterators) > 0
     }
 }
 
@@ -461,10 +494,23 @@ impl FnLoops {
 struct IteratorVisitor<'a> {
     props: FnLoops,
     body: &'a Body,
+    num_visited_blocks: usize,
 }
 
 impl<'a> MirVisitor for IteratorVisitor<'a> {
+    fn visit_basic_block(&mut self, bb: &BasicBlock) {
+        self.num_visited_blocks += 1;
+        self.super_basic_block(bb);
+    }
+
     fn visit_terminator(&mut self, term: &Terminator, location: Location) {
+        // A goto is identified as a loop latch if its target number is less than
+        // the number of visited basic block.
+        if let TerminatorKind::Goto { target } = &term.kind {
+            if self.num_visited_blocks > *target {
+                self.props.loops += 1;
+            }
+        }
         if let TerminatorKind::Call { func, .. } = &term.kind {
             let kind = func.ty(self.body.locals()).unwrap().kind();
             if let TyKind::RigidTy(RigidTy::FnDef(def, _)) = kind {
