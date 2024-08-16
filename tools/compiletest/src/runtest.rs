@@ -272,7 +272,9 @@ impl<'test> TestCx<'test> {
             .arg("kani")
             .arg("--target-dir")
             .arg(self.output_base_dir().join("target"))
-            .current_dir(parent_dir);
+            .current_dir(parent_dir)
+            .arg("--coverage")
+            .arg("-Zsource-coverage");
         if test {
             cargo.arg("--tests");
         }
