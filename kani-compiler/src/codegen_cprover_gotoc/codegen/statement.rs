@@ -162,7 +162,7 @@ impl<'tcx> GotocCtx<'tcx> {
             StatementKind::Coverage(coverage_opaque) => {
                 let function_name = self.current_fn().readable_name();
                 let instance = self.current_fn().instance_stable();
-                let counter_data = format!("{coverage_opaque:?} ({function_name})");
+                let counter_data = format!("{coverage_opaque:?} ${function_name}$");
                 let maybe_code_region =
                     region_from_coverage_opaque(self.tcx, &coverage_opaque, instance);
                 if let Some(code_region) = maybe_code_region {
