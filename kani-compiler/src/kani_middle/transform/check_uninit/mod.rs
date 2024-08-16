@@ -1,33 +1,44 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
-//! Implement a transformation pass that instruments the code to detect possible UB due to
-//! the accesses to uninitialized memory.
+//! Module containing multiple transformation passes that instrument the code to detect possible UB
+//! due to the accesses to uninitialized memory.
 
-use crate::args::ExtraChecks;
-use crate::kani_middle::find_fn_def;
-use crate::kani_middle::transform::body::{
-    CheckType, InsertPosition, MutableBody, SourceInstruction,
+use crate::kani_middle::{
+    find_fn_def,
+    transform::body::{CheckType, InsertPosition, MutableBody, SourceInstruction},
 };
-use crate::kani_middle::transform::{TransformPass, TransformationType};
-use crate::kani_queries::QueryDb;
+use relevant_instruction::{InitRelevantInstruction, MemoryInitOp};
 use rustc_middle::ty::TyCtxt;
 use rustc_smir::rustc_internal;
-use stable_mir::mir::mono::Instance;
-use stable_mir::mir::{AggregateKind, Body, ConstOperand, Mutability, Operand, Place, Rvalue};
-use stable_mir::ty::{
-    FnDef, GenericArgKind, GenericArgs, MirConst, RigidTy, Ty, TyConst, TyKind, UintTy,
+use stable_mir::{
+    mir::{
+        mono::Instance, AggregateKind, BasicBlockIdx, ConstOperand, Mutability, Operand, Place,
+        Rvalue,
+    },
+    ty::{FnDef, GenericArgKind, GenericArgs, MirConst, RigidTy, Ty, TyConst, TyKind, UintTy},
+    CrateDef,
 };
-use stable_mir::CrateDef;
 use std::collections::{HashMap, HashSet};
-use std::fmt::Debug;
-use tracing::{debug, trace};
 
-mod ty_layout;
-mod uninit_visitor;
-
+pub use delayed_ub::DelayedUbPass;
+pub use ptr_uninit::UninitPass;
 pub use ty_layout::{PointeeInfo, PointeeLayout};
-use uninit_visitor::{CheckUninitVisitor, InitRelevantInstruction, MemoryInitOp};
+
+mod delayed_ub;
+mod ptr_uninit;
+mod relevant_instruction;
+mod ty_layout;
+
+/// Trait that the instrumentation target providers must implement to work with the instrumenter.
+trait TargetFinder {
+    fn find_next(
+        &mut self,
+        body: &MutableBody,
+        bb: BasicBlockIdx,
+        skip_first: bool,
+    ) -> Option<InitRelevantInstruction>;
+}
 
 // Function bodies of those functions will not be instrumented as not to cause infinite recursion.
 const SKIPPED_DIAGNOSTIC_ITEMS: &[&str] = &[
@@ -41,33 +52,24 @@ const SKIPPED_DIAGNOSTIC_ITEMS: &[&str] = &[
     "KaniSetStrPtrInitialized",
 ];
 
-/// Instrument the code with checks for uninitialized memory.
+/// Instruments the code with checks for uninitialized memory, agnostic to the source of targets.
 #[derive(Debug)]
-pub struct UninitPass {
+pub struct UninitInstrumenter<'a> {
     pub check_type: CheckType,
     /// Used to cache FnDef lookups of injected memory initialization functions.
-    pub mem_init_fn_cache: HashMap<&'static str, FnDef>,
+    pub mem_init_fn_cache: &'a mut HashMap<&'static str, FnDef>,
 }
 
-impl TransformPass for UninitPass {
-    fn transformation_type() -> TransformationType
-    where
-        Self: Sized,
-    {
-        TransformationType::Instrumentation
-    }
-
-    fn is_enabled(&self, query_db: &QueryDb) -> bool
-    where
-        Self: Sized,
-    {
-        let args = query_db.args();
-        args.ub_check.contains(&ExtraChecks::Uninit)
-    }
-
-    fn transform(&mut self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
-        trace!(function=?instance.name(), "transform");
-
+impl<'a> UninitInstrumenter<'a> {
+    /// Instrument a body with memory initialization checks, the visitor that generates
+    /// instrumentation targets must be provided via a TF type parameter.
+    fn instrument(
+        &mut self,
+        tcx: TyCtxt,
+        mut body: MutableBody,
+        instance: Instance,
+        mut target_finder: impl TargetFinder,
+    ) -> (bool, MutableBody) {
         // Need to break infinite recursion when memory initialization checks are inserted, so the
         // internal functions responsible for memory initialization are skipped.
         if tcx
@@ -80,13 +82,7 @@ impl TransformPass for UninitPass {
             return (false, body);
         }
 
-        let mut new_body = MutableBody::from(body);
-        let orig_len = new_body.blocks().len();
-
-        // Inject a call to set-up memory initialization state if the function is a harness.
-        if is_harness(instance, tcx) {
-            inject_memory_init_setup(&mut new_body, tcx, &mut self.mem_init_fn_cache);
-        }
+        let orig_len = body.blocks().len();
 
         // Set of basic block indices for which analyzing first statement should be skipped.
         //
@@ -100,21 +96,19 @@ impl TransformPass for UninitPass {
 
         // Do not cache body.blocks().len() since it will change as we add new checks.
         let mut bb_idx = 0;
-        while bb_idx < new_body.blocks().len() {
+        while bb_idx < body.blocks().len() {
             if let Some(candidate) =
-                CheckUninitVisitor::find_next(&new_body, bb_idx, skip_first.contains(&bb_idx))
+                target_finder.find_next(&body, bb_idx, skip_first.contains(&bb_idx))
             {
-                self.build_check_for_instruction(tcx, &mut new_body, candidate, &mut skip_first);
+                self.build_check_for_instruction(tcx, &mut body, candidate, &mut skip_first);
                 bb_idx += 1
             } else {
                 bb_idx += 1;
             };
         }
-        (orig_len != new_body.blocks().len(), new_body.into())
+        (orig_len != body.blocks().len(), body)
     }
-}
 
-impl UninitPass {
     /// Inject memory initialization checks for each operation in an instruction.
     fn build_check_for_instruction(
         &mut self,
@@ -123,7 +117,6 @@ impl UninitPass {
         instruction: InitRelevantInstruction,
         skip_first: &mut HashSet<usize>,
     ) {
-        debug!(?instruction, "build_check");
         let mut source = instruction.source;
         for operation in instruction.before_instruction {
             self.build_check_for_operation(tcx, body, &mut source, operation, skip_first);
@@ -175,13 +168,18 @@ impl UninitPass {
         };
 
         match operation {
-            MemoryInitOp::CheckSliceChunk { .. } | MemoryInitOp::Check { .. } => {
+            MemoryInitOp::CheckSliceChunk { .. }
+            | MemoryInitOp::Check { .. }
+            | MemoryInitOp::CheckRef { .. } => {
                 self.build_get_and_check(tcx, body, source, operation, pointee_ty_info, skip_first)
             }
             MemoryInitOp::SetSliceChunk { .. }
             | MemoryInitOp::Set { .. }
             | MemoryInitOp::SetRef { .. } => {
                 self.build_set(tcx, body, source, operation, pointee_ty_info, skip_first)
+            }
+            MemoryInitOp::Copy { .. } => {
+                self.build_copy(tcx, body, source, operation, pointee_ty_info, skip_first)
             }
             MemoryInitOp::Unsupported { .. } | MemoryInitOp::TriviallyUnsafe { .. } => {
                 unreachable!()
@@ -211,7 +209,7 @@ impl UninitPass {
                 // Depending on whether accessing the known number of elements in the slice, need to
                 // pass is as an argument.
                 let (diagnostic, args) = match &operation {
-                    MemoryInitOp::Check { .. } => {
+                    MemoryInitOp::Check { .. } | MemoryInitOp::CheckRef { .. } => {
                         let diagnostic = "KaniIsPtrInitialized";
                         let args = vec![ptr_operand.clone(), layout_operand];
                         (diagnostic, args)
@@ -275,14 +273,22 @@ impl UninitPass {
 
         // Make sure all non-padding bytes are initialized.
         collect_skipped(&operation, body, skip_first);
-        let ptr_operand_ty = ptr_operand.ty(body.locals()).unwrap();
+        // Find the real operand type for a good error message.
+        let operand_ty = match &operation {
+            MemoryInitOp::Check { operand }
+            | MemoryInitOp::CheckSliceChunk { operand, .. }
+            | MemoryInitOp::CheckRef { operand } => operand.ty(body.locals()).unwrap(),
+            _ => unreachable!(),
+        };
         body.insert_check(
             tcx,
             &self.check_type,
             source,
             operation.position(),
             ret_place.local,
-            &format!("Undefined Behavior: Reading from an uninitialized pointer of type `{ptr_operand_ty}`"),
+            &format!(
+                "Undefined Behavior: Reading from an uninitialized pointer of type `{operand_ty}`"
+            ),
         )
     }
 
@@ -394,6 +400,38 @@ impl UninitPass {
         };
     }
 
+    /// Copy memory initialization state from one pointer to the other.
+    fn build_copy(
+        &mut self,
+        tcx: TyCtxt,
+        body: &mut MutableBody,
+        source: &mut SourceInstruction,
+        operation: MemoryInitOp,
+        pointee_info: PointeeInfo,
+        skip_first: &mut HashSet<usize>,
+    ) {
+        let ret_place = Place {
+            local: body.new_local(Ty::new_tuple(&[]), source.span(body.blocks()), Mutability::Not),
+            projection: vec![],
+        };
+        let PointeeLayout::Sized { layout } = pointee_info.layout() else { unreachable!() };
+        let copy_init_state_instance = resolve_mem_init_fn(
+            get_mem_init_fn_def(tcx, "KaniCopyInitState", &mut self.mem_init_fn_cache),
+            layout.len(),
+            *pointee_info.ty(),
+        );
+        collect_skipped(&operation, body, skip_first);
+        let position = operation.position();
+        let MemoryInitOp::Copy { from, to, count } = operation else { unreachable!() };
+        body.insert_call(
+            &copy_init_state_instance,
+            source,
+            position,
+            vec![from, to, count],
+            ret_place.clone(),
+        );
+    }
+
     fn inject_assert_false(
         &self,
         tcx: TyCtxt,
@@ -482,60 +520,4 @@ pub fn resolve_mem_init_fn(fn_def: FnDef, layout_size: usize, associated_type: T
         ]),
     )
     .unwrap()
-}
-
-/// Checks if the instance is a harness -- an entry point of Kani analysis.
-fn is_harness(instance: Instance, tcx: TyCtxt) -> bool {
-    let harness_identifiers = [
-        vec![
-            rustc_span::symbol::Symbol::intern("kanitool"),
-            rustc_span::symbol::Symbol::intern("proof_for_contract"),
-        ],
-        vec![
-            rustc_span::symbol::Symbol::intern("kanitool"),
-            rustc_span::symbol::Symbol::intern("proof"),
-        ],
-    ];
-    harness_identifiers.iter().any(|attr_path| {
-        tcx.has_attrs_with_path(rustc_internal::internal(tcx, instance.def.def_id()), attr_path)
-    })
-}
-
-/// Inject an initial call to set-up memory initialization tracking.
-fn inject_memory_init_setup(
-    new_body: &mut MutableBody,
-    tcx: TyCtxt,
-    mem_init_fn_cache: &mut HashMap<&'static str, FnDef>,
-) {
-    // First statement or terminator in the harness.
-    let mut source = if !new_body.blocks()[0].statements.is_empty() {
-        SourceInstruction::Statement { idx: 0, bb: 0 }
-    } else {
-        SourceInstruction::Terminator { bb: 0 }
-    };
-
-    // Dummy return place.
-    let ret_place = Place {
-        local: new_body.new_local(
-            Ty::new_tuple(&[]),
-            source.span(new_body.blocks()),
-            Mutability::Not,
-        ),
-        projection: vec![],
-    };
-
-    // Resolve the instance and inject a call to set-up the memory initialization state.
-    let memory_initialization_init = Instance::resolve(
-        get_mem_init_fn_def(tcx, "KaniInitializeMemoryInitializationState", mem_init_fn_cache),
-        &GenericArgs(vec![]),
-    )
-    .unwrap();
-
-    new_body.insert_call(
-        &memory_initialization_init,
-        &mut source,
-        InsertPosition::Before,
-        vec![],
-        ret_place,
-    );
 }

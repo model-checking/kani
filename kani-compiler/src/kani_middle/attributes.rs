@@ -6,24 +6,16 @@ use std::collections::BTreeMap;
 
 use kani_metadata::{CbmcSolver, HarnessAttributes, HarnessKind, Stub};
 use rustc_ast::{
-    attr,
-    token::Token,
-    token::TokenKind,
-    tokenstream::{TokenStream, TokenTree},
-    AttrArgs, AttrArgsEq, AttrKind, Attribute, ExprKind, LitKind, MetaItem, MetaItemKind,
+    attr, AttrArgs, AttrArgsEq, AttrKind, Attribute, ExprKind, LitKind, MetaItem, MetaItemKind,
     NestedMetaItem,
 };
 use rustc_errors::ErrorGuaranteed;
-use rustc_hir::{
-    def::DefKind,
-    def_id::{DefId, LocalDefId},
-};
+use rustc_hir::{def::DefKind, def_id::DefId};
 use rustc_middle::ty::{Instance, TyCtxt, TyKind};
 use rustc_session::Session;
 use rustc_smir::rustc_internal;
 use rustc_span::{Span, Symbol};
 use stable_mir::mir::mono::Instance as InstanceStable;
-use stable_mir::mir::Local;
 use stable_mir::{CrateDef, DefId as StableDefId};
 use std::str::FromStr;
 use strum_macros::{AsRefStr, EnumString};
@@ -56,24 +48,27 @@ enum KaniAttributeKind {
     /// name of the function which was generated as the sound stub from the
     /// contract of this function.
     ReplacedWith,
+    /// Attribute on a function with a contract that identifies the code
+    /// implementing the recursive check for the harness.
+    RecursionCheck,
     /// Attribute on a function that was auto-generated from expanding a
     /// function contract.
     IsContractGenerated,
-    /// Identifies a set of pointer arguments that should be added to the write
-    /// set when checking a function contract. Placed on the inner check function.
-    ///
-    /// Emitted by the expansion of a `modifies` function contract clause.
-    Modifies,
-    /// A function used as the inner code of a contract check.
+    /// A function with contract expanded to include the write set as arguments.
     ///
     /// Contains the original body of the contracted function. The signature is
     /// expanded with additional pointer arguments that are not used in the function
     /// but referenced by the `modifies` annotation.
-    InnerCheck,
+    ModifiesWrapper,
     /// Attribute used to mark contracts for functions with recursion.
     /// We use this attribute to properly instantiate `kani::any_modifies` in
     /// cases when recursion is present given our contracts instrumentation.
     Recursion,
+    /// Attribute used to mark the static variable used for tracking recursion check.
+    RecursionTracker,
+    /// Generic marker that can be used to mark functions so this list doesn't have to keep growing.
+    /// This takes a key which is the marker.
+    FnMarker,
     /// Used to mark functions where generating automatic pointer checks should be disabled. This is
     /// used later to automatically attach pragma statements to locations.
     DisableChecks,
@@ -91,11 +86,13 @@ impl KaniAttributeKind {
             | KaniAttributeKind::StubVerified
             | KaniAttributeKind::Unwind => true,
             KaniAttributeKind::Unstable
+            | KaniAttributeKind::FnMarker
             | KaniAttributeKind::Recursion
+            | KaniAttributeKind::RecursionTracker
             | KaniAttributeKind::ReplacedWith
+            | KaniAttributeKind::RecursionCheck
             | KaniAttributeKind::CheckedWith
-            | KaniAttributeKind::Modifies
-            | KaniAttributeKind::InnerCheck
+            | KaniAttributeKind::ModifiesWrapper
             | KaniAttributeKind::IsContractGenerated
             | KaniAttributeKind::DisableChecks => false,
         }
@@ -123,6 +120,21 @@ pub struct KaniAttributes<'tcx> {
     item: DefId,
     /// All attributes we found in raw format.
     map: BTreeMap<KaniAttributeKind, Vec<&'tcx Attribute>>,
+}
+
+#[derive(Clone, Debug)]
+/// Bundle contract attributes for a function annotated with contracts.
+pub struct ContractAttributes {
+    /// Whether the contract was marked with #[recursion] attribute.
+    pub has_recursion: bool,
+    /// The name of the contract recursion check.
+    pub recursion_check: Symbol,
+    /// The name of the contract check.
+    pub checked_with: Symbol,
+    /// The name of the contract replacement.
+    pub replaced_with: Symbol,
+    /// The name of the inner check used to modify clauses.
+    pub modifies_wrapper: Symbol,
 }
 
 impl<'tcx> std::fmt::Debug for KaniAttributes<'tcx> {
@@ -182,22 +194,28 @@ impl<'tcx> KaniAttributes<'tcx> {
     /// returned `Symbol` and `DefId` are respectively the name and id of
     /// `TARGET`. The `Span` is that of the contents of the attribute and used
     /// for error reporting.
-    fn interpret_stub_verified_attribute(
-        &self,
-    ) -> Vec<Result<(Symbol, DefId, Span), ErrorGuaranteed>> {
+    ///
+    /// Any error is emitted and the attribute is filtered out.
+    pub fn interpret_stub_verified_attribute(&self) -> Vec<(Symbol, DefId, Span)> {
         self.map
             .get(&KaniAttributeKind::StubVerified)
             .map_or([].as_slice(), Vec::as_slice)
             .iter()
-            .map(|attr| {
-                let name = expect_key_string_value(self.tcx.sess, attr)?;
-                let ok = self.resolve_sibling(name.as_str()).map_err(|e| {
-                    self.tcx.dcx().span_err(
-                        attr.span,
-                        format!("Failed to resolve replacement function {}: {e}", name.as_str()),
-                    )
-                })?;
-                Ok((name, ok, attr.span))
+            .filter_map(|attr| {
+                let name = expect_key_string_value(self.tcx.sess, attr).ok()?;
+                let def = self
+                    .resolve_from_mod(name.as_str())
+                    .map_err(|e| {
+                        self.tcx.dcx().span_err(
+                            attr.span,
+                            format!(
+                                "Failed to resolve replacement function {}: {e}",
+                                name.as_str()
+                            ),
+                        )
+                    })
+                    .ok()?;
+                Some((name, def, attr.span))
             })
             .collect()
     }
@@ -209,13 +227,14 @@ impl<'tcx> KaniAttributes<'tcx> {
     /// Parse and extract the `proof_for_contract(TARGET)` attribute. The
     /// returned symbol and DefId are respectively the name and id of `TARGET`,
     /// the span in the span for the attribute (contents).
-    pub(crate) fn interpret_the_for_contract_attribute(
-        &self,
-    ) -> Option<Result<(Symbol, DefId, Span), ErrorGuaranteed>> {
-        self.expect_maybe_one(KaniAttributeKind::ProofForContract).map(|target| {
-            let name = expect_key_string_value(self.tcx.sess, target)?;
-            self.resolve_sibling(name.as_str()).map(|ok| (name, ok, target.span)).map_err(
-                |resolve_err| {
+    ///
+    /// In the case of an error, this function will emit the error and return `None`.
+    pub(crate) fn interpret_for_contract_attribute(&self) -> Option<(Symbol, DefId, Span)> {
+        self.expect_maybe_one(KaniAttributeKind::ProofForContract).and_then(|target| {
+            let name = expect_key_string_value(self.tcx.sess, target).ok()?;
+            self.resolve_from_mod(name.as_str())
+                .map(|ok| (name, ok, target.span))
+                .map_err(|resolve_err| {
                     self.tcx.dcx().span_err(
                         target.span,
                         format!(
@@ -223,19 +242,9 @@ impl<'tcx> KaniAttributes<'tcx> {
                             name.as_str()
                         ),
                     )
-                },
-            )
+                })
+                .ok()
         })
-    }
-
-    /// Extract the name of the sibling function this function's contract is
-    /// checked with (if any).
-    ///
-    /// `None` indicates this function does not use a contract, `Some(Err(_))`
-    /// indicates a contract does exist but an error occurred during resolution.
-    pub fn checked_with(&self) -> Option<Result<Symbol, ErrorGuaranteed>> {
-        self.expect_maybe_one(KaniAttributeKind::CheckedWith)
-            .map(|target| expect_key_string_value(self.tcx.sess, target))
     }
 
     pub fn proof_for_contract(&self) -> Option<Result<Symbol, ErrorGuaranteed>> {
@@ -243,61 +252,52 @@ impl<'tcx> KaniAttributes<'tcx> {
             .map(|target| expect_key_string_value(self.tcx.sess, target))
     }
 
-    pub fn inner_check(&self) -> Option<Result<DefId, ErrorGuaranteed>> {
-        self.eval_sibling_attribute(KaniAttributeKind::InnerCheck)
-    }
-
-    pub fn replaced_with(&self) -> Option<Result<Symbol, ErrorGuaranteed>> {
-        self.expect_maybe_one(KaniAttributeKind::ReplacedWith)
-            .map(|target| expect_key_string_value(self.tcx.sess, target))
-    }
-
-    /// Retrieves the global, static recursion tracker variable.
-    pub fn checked_with_id(&self) -> Option<Result<DefId, ErrorGuaranteed>> {
-        self.eval_sibling_attribute(KaniAttributeKind::CheckedWith)
-    }
-
-    /// Find the `mod` that `self.item` is defined in, then search in the items defined in this
-    /// `mod` for an item that is named after the `name` in the `#[kanitool::<kind> = "<name>"]`
-    /// annotation on `self.item`.
+    /// Extract the name of the local that represents this function's contract is
+    /// checked with (if any).
     ///
-    /// This is similar to [`resolve_fn`] but more efficient since it only looks inside one `mod`.
-    fn eval_sibling_attribute(
-        &self,
-        kind: KaniAttributeKind,
-    ) -> Option<Result<DefId, ErrorGuaranteed>> {
-        use rustc_hir::{Item, ItemKind, Mod, Node};
-        self.expect_maybe_one(kind).map(|target| {
-            let name = expect_key_string_value(self.tcx.sess, target)?;
-            let hir_map = self.tcx.hir();
-            let hir_id = self.tcx.local_def_id_to_hir_id(self.item.expect_local());
-            let find_in_mod = |md: &Mod<'_>| {
-                md.item_ids
-                    .iter()
-                    .find(|it| hir_map.item(**it).ident.name == name)
-                    .unwrap()
-                    .hir_id()
-            };
+    /// `None` indicates this function does not use a contract, or an error was found.
+    /// Note that the error will already be emitted, so we don't return an error.
+    pub fn contract_attributes(&self) -> Option<ContractAttributes> {
+        let has_recursion = self.has_recursion();
+        let recursion_check = self.attribute_value(KaniAttributeKind::RecursionCheck);
+        let checked_with = self.attribute_value(KaniAttributeKind::CheckedWith);
+        let replace_with = self.attribute_value(KaniAttributeKind::ReplacedWith);
+        let modifies_wrapper = self.attribute_value(KaniAttributeKind::ModifiesWrapper);
 
-            let result = match self.tcx.parent_hir_node(hir_id) {
-                Node::Item(Item { kind, .. }) => match kind {
-                    ItemKind::Mod(m) => find_in_mod(m),
-                    ItemKind::Impl(imp) => {
-                        imp.items.iter().find(|it| it.ident.name == name).unwrap().id.hir_id()
-                    }
-                    other => panic!("Odd parent item kind {other:?}"),
-                },
-                Node::Crate(m) => find_in_mod(m),
-                other => panic!("Odd parent node type {other:?}"),
-            }
-            .expect_owner()
-            .def_id
-            .to_def_id();
-            Ok(result)
+        let total = recursion_check
+            .iter()
+            .chain(&checked_with)
+            .chain(&replace_with)
+            .chain(&modifies_wrapper)
+            .count();
+        if total != 0 && total != 4 {
+            self.tcx.sess.dcx().err(format!(
+                "Failed to parse contract instrumentation tags in function `{}`.\
+                Expected `4` attributes, but was only able to process `{total}`",
+                self.tcx.def_path_str(self.item)
+            ));
+        }
+        Some(ContractAttributes {
+            has_recursion,
+            recursion_check: recursion_check?,
+            checked_with: checked_with?,
+            replaced_with: replace_with?,
+            modifies_wrapper: modifies_wrapper?,
         })
     }
 
-    fn resolve_sibling(&self, path_str: &str) -> Result<DefId, ResolveError<'tcx>> {
+    /// Return a function marker if any.
+    pub fn fn_marker(&self) -> Option<Symbol> {
+        self.attribute_value(KaniAttributeKind::FnMarker)
+    }
+
+    /// Check if function is annotated with any contract attribute.
+    pub fn has_contract(&self) -> bool {
+        self.map.contains_key(&KaniAttributeKind::CheckedWith)
+    }
+
+    /// Resolve a path starting from this item's module context.
+    fn resolve_from_mod(&self, path_str: &str) -> Result<DefId, ResolveError<'tcx>> {
         resolve_fn(
             self.tcx,
             self.tcx.parent_module_from_def_id(self.item.expect_local()).to_local_def_id(),
@@ -371,20 +371,20 @@ impl<'tcx> KaniAttributes<'tcx> {
                 KaniAttributeKind::StubVerified => {
                     expect_single(self.tcx, kind, &attrs);
                 }
-                KaniAttributeKind::CheckedWith | KaniAttributeKind::ReplacedWith => {
-                    self.expect_maybe_one(kind)
-                        .map(|attr| expect_key_string_value(&self.tcx.sess, attr));
+                KaniAttributeKind::FnMarker
+                | KaniAttributeKind::CheckedWith
+                | KaniAttributeKind::ModifiesWrapper
+                | KaniAttributeKind::RecursionCheck
+                | KaniAttributeKind::ReplacedWith => {
+                    self.attribute_value(kind);
                 }
                 KaniAttributeKind::IsContractGenerated => {
                     // Ignored here because this is only used by the proc macros
                     // to communicate with one another. So by the time it gets
                     // here we don't care if it's valid or not.
                 }
-                KaniAttributeKind::Modifies => {
-                    self.modifies_contract();
-                }
-                KaniAttributeKind::InnerCheck => {
-                    self.inner_check();
+                KaniAttributeKind::RecursionTracker => {
+                    // Nothing to do here. This is used by contract instrumentation.
                 }
                 KaniAttributeKind::DisableChecks => {
                     // Ignored here, because it should be an internal attribute. Actual validation
@@ -392,6 +392,17 @@ impl<'tcx> KaniAttributes<'tcx> {
                 }
             }
         }
+    }
+
+    /// Get the value of an attribute if one exists.
+    ///
+    /// This expects up to one attribute with format `#[kanitool::<name>("<value>")]`.
+    ///
+    /// Any format or expectation error is emitted already, and does not need to be handled
+    /// upstream.
+    fn attribute_value(&self, kind: KaniAttributeKind) -> Option<Symbol> {
+        self.expect_maybe_one(kind)
+            .and_then(|target| expect_key_string_value(self.tcx.sess, target).ok())
     }
 
     /// Check that any unstable API has been enabled. Otherwise, emit an error.
@@ -499,14 +510,18 @@ impl<'tcx> KaniAttributes<'tcx> {
                 }
                 KaniAttributeKind::CheckedWith
                 | KaniAttributeKind::IsContractGenerated
-                | KaniAttributeKind::Modifies
-                | KaniAttributeKind::InnerCheck
+                | KaniAttributeKind::ModifiesWrapper
+                | KaniAttributeKind::RecursionCheck
+                | KaniAttributeKind::RecursionTracker
                 | KaniAttributeKind::ReplacedWith => {
                     self.tcx.dcx().span_err(self.tcx.def_span(self.item), format!("Contracts are not supported on harnesses. (Found the kani-internal contract attribute `{}`)", kind.as_ref()));
                 }
                 KaniAttributeKind::DisableChecks => {
                     // Internal attribute which shouldn't exist here.
                     unreachable!()
+                }
+                KaniAttributeKind::FnMarker => {
+                    /* no-op */
                 }
             };
             harness
@@ -515,15 +530,14 @@ impl<'tcx> KaniAttributes<'tcx> {
 
     fn handle_proof_for_contract(&self, harness: &mut HarnessAttributes) {
         let dcx = self.tcx.dcx();
-        let (name, id, span) = match self.interpret_the_for_contract_attribute() {
-            None => unreachable!(
-                "impossible, was asked to handle `proof_for_contract` but didn't find such an attribute."
-            ),
-            Some(Err(_)) => return, // This error was already emitted
-            Some(Ok(values)) => values,
+        let (name, id, span) = match self.interpret_for_contract_attribute() {
+            None => return, // This error was already emitted
+            Some(values) => values,
         };
-        let Some(Ok(replacement_name)) = KaniAttributes::for_item(self.tcx, id).checked_with()
-        else {
+        assert!(matches!(
+                &harness.kind, HarnessKind::ProofForContract { target_fn }
+                if *target_fn == name.to_string()));
+        if KaniAttributes::for_item(self.tcx, id).contract_attributes().is_none() {
             dcx.struct_span_err(
                 span,
                 format!(
@@ -533,24 +547,14 @@ impl<'tcx> KaniAttributes<'tcx> {
             )
             .with_span_note(self.tcx.def_span(id), "Try adding a contract to this function.")
             .emit();
-            return;
-        };
-        harness.stubs.push(self.stub_for_relative_item(name, replacement_name));
+        }
     }
 
     fn handle_stub_verified(&self, harness: &mut HarnessAttributes) {
         let dcx = self.tcx.dcx();
-        for contract in self.interpret_stub_verified_attribute() {
-            let Ok((name, def_id, span)) = contract else {
-                // This error has already been emitted so we can ignore it now.
-                // Later the session will fail anyway so we can just
-                // optimistically forge on and try to find more errors.
-                continue;
-            };
-            let replacement_name = match KaniAttributes::for_item(self.tcx, def_id).replaced_with()
-            {
-                None => {
-                    dcx.struct_span_err(
+        for (name, def_id, span) in self.interpret_stub_verified_attribute() {
+            if KaniAttributes::for_item(self.tcx, def_id).contract_attributes().is_none() {
+                dcx.struct_span_err(
                         span,
                         format!(
                             "Failed to generate verified stub: Function `{}` has no contract.",
@@ -564,13 +568,10 @@ impl<'tcx> KaniAttributes<'tcx> {
                                 KaniAttributeKind::Stub.as_ref(),
                             ),
                         )
-                        .emit();
-                    continue;
-                }
-                Some(Ok(replacement_name)) => replacement_name,
-                Some(Err(_)) => continue,
-            };
-            harness.stubs.push(self.stub_for_relative_item(name, replacement_name))
+                    .emit();
+                return;
+            }
+            harness.verified_stubs.push(name.to_string())
         }
     }
 
@@ -595,92 +596,6 @@ impl<'tcx> KaniAttributes<'tcx> {
             }
         }
     }
-
-    fn stub_for_relative_item(&self, anchor: Symbol, replacement: Symbol) -> Stub {
-        let local_id = self.item.expect_local();
-        let current_module = self.tcx.parent_module_from_def_id(local_id);
-        let replace_str = replacement.as_str();
-        let original_str = anchor.as_str();
-        let replacement = original_str
-            .rsplit_once("::")
-            .map_or_else(|| replace_str.to_string(), |t| t.0.to_string() + "::" + replace_str);
-        resolve::resolve_fn(self.tcx, current_module.to_local_def_id(), &replacement).unwrap();
-        Stub { original: original_str.to_string(), replacement }
-    }
-
-    /// Parse and interpret the `kanitool::modifies(var1, var2, ...)` annotation into the vector
-    /// `[var1, var2, ...]`.
-    pub fn modifies_contract(&self) -> Option<Vec<Local>> {
-        let local_def_id = self.item.expect_local();
-        self.map.get(&KaniAttributeKind::Modifies).map(|attr| {
-            attr.iter()
-                .flat_map(|clause| match &clause.get_normal_item().args {
-                    AttrArgs::Delimited(lvals) => {
-                        parse_modify_values(self.tcx, local_def_id, &lvals.tokens)
-                    }
-                    _ => unreachable!(),
-                })
-                .collect()
-        })
-    }
-}
-
-/// Pattern macro for the comma token used in attributes.
-macro_rules! comma_tok {
-    () => {
-        TokenTree::Token(Token { kind: TokenKind::Comma, .. }, _)
-    };
-}
-
-/// Parse the token stream inside an attribute (like `kanitool::modifies`) as a comma separated
-/// sequence of function parameter names on `local_def_id` (must refer to a function). Then
-/// translates the names into [`Local`]s.
-fn parse_modify_values<'a>(
-    tcx: TyCtxt<'a>,
-    local_def_id: LocalDefId,
-    t: &'a TokenStream,
-) -> impl Iterator<Item = Local> + 'a {
-    let mir = tcx.optimized_mir(local_def_id);
-    let mut iter = t.trees();
-    std::iter::from_fn(move || {
-        let tree = iter.next()?;
-        let wrong_token_err =
-            || tcx.sess.dcx().span_err(tree.span(), "Unexpected token. Expected identifier.");
-        let result = match tree {
-            TokenTree::Token(token, _) => {
-                if let TokenKind::Ident(id, _) = &token.kind {
-                    let hir = tcx.hir();
-                    let bid = hir.body_owned_by(local_def_id).id();
-                    Some(
-                        hir.body_param_names(bid)
-                            .zip(mir.args_iter())
-                            .find(|(name, _decl)| name.name == *id)
-                            .unwrap()
-                            .1
-                            .as_usize(),
-                    )
-                } else {
-                    wrong_token_err();
-                    None
-                }
-            }
-            _ => {
-                wrong_token_err();
-                None
-            }
-        };
-        match iter.next() {
-            None | Some(comma_tok!()) => (),
-            Some(not_comma) => {
-                tcx.sess.dcx().span_err(
-                    not_comma.span(),
-                    "Unexpected token, expected end of attribute or comma",
-                );
-                iter.by_ref().skip_while(|t| !matches!(t, comma_tok!())).count();
-            }
-        }
-        result
-    })
 }
 
 /// An efficient check for the existence for a particular [`KaniAttributeKind`].

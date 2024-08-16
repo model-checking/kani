@@ -5,7 +5,7 @@
 
 use std::process;
 
-#[cfg_attr(kani, kani::proof, kani::unwind(5))]
+#[kani::proof]
 fn main() {
     for i in 0..4 {
         if i == 1 {

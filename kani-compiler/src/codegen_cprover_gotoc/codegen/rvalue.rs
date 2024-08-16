@@ -1,7 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use crate::args::ExtraChecks;
 use crate::codegen_cprover_gotoc::codegen::place::ProjectedPlace;
 use crate::codegen_cprover_gotoc::codegen::ty_stable::pointee_type_stable;
 use crate::codegen_cprover_gotoc::codegen::PropertyClass;
@@ -730,18 +729,14 @@ impl<'tcx> GotocCtx<'tcx> {
             Rvalue::Repeat(op, sz) => self.codegen_rvalue_repeat(op, sz, loc),
             Rvalue::Ref(_, _, p) | Rvalue::AddressOf(_, p) => {
                 let place_ref = self.codegen_place_ref_stable(&p, loc);
-                if self.queries.args().ub_check.contains(&ExtraChecks::PtrToRefCast) {
-                    let place_ref_type = place_ref.typ().clone();
-                    match self.codegen_raw_ptr_deref_validity_check(&p, &loc) {
-                        Some(ptr_validity_check_expr) => Expr::statement_expression(
-                            vec![ptr_validity_check_expr, place_ref.as_stmt(loc)],
-                            place_ref_type,
-                            loc,
-                        ),
-                        None => place_ref,
-                    }
-                } else {
-                    place_ref
+                let place_ref_type = place_ref.typ().clone();
+                match self.codegen_raw_ptr_deref_validity_check(&p, &loc) {
+                    Some(ptr_validity_check_expr) => Expr::statement_expression(
+                        vec![ptr_validity_check_expr, place_ref.as_stmt(loc)],
+                        place_ref_type,
+                        loc,
+                    ),
+                    None => place_ref,
                 }
             }
             Rvalue::Len(p) => self.codegen_rvalue_len(p, loc),

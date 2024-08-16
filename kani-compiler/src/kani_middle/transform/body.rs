@@ -54,6 +54,11 @@ impl MutableBody {
         &self.locals
     }
 
+    #[allow(dead_code)]
+    pub fn arg_count(&self) -> usize {
+        self.arg_count
+    }
+
     /// Create a mutable body from the original MIR body.
     pub fn from(body: Body) -> Self {
         MutableBody {
@@ -145,6 +150,19 @@ impl MutableBody {
         let stmt = Statement { kind: StatementKind::Assign(Place::from(result), rvalue), span };
         self.insert_stmt(stmt, source, position);
         result
+    }
+
+    /// Add a new assignment to an existing place.
+    pub fn assign_to(
+        &mut self,
+        place: Place,
+        rvalue: Rvalue,
+        source: &mut SourceInstruction,
+        position: InsertPosition,
+    ) {
+        let span = source.span(&self.blocks);
+        let stmt = Statement { kind: StatementKind::Assign(place, rvalue), span };
+        self.insert_stmt(stmt, source, position);
     }
 
     /// Add a new assert to the basic block indicated by the given index.
@@ -313,6 +331,7 @@ impl MutableBody {
     /// `InsertPosition` is `InsertPosition::Before`, `source` will point to the same instruction as
     /// before. If `InsertPosition` is `InsertPosition::After`, `source` will point to the
     /// terminator of the newly inserted basic block.
+    #[allow(dead_code)]
     pub fn insert_bb(
         &mut self,
         mut bb: BasicBlock,
@@ -402,11 +421,20 @@ impl MutableBody {
     /// by the compiler. This function allow us to delete the dummy body before
     /// creating a new one.
     ///
-    /// Note: We do not prune the local variables today for simplicity.
-    pub fn clear_body(&mut self) {
+    /// Keep all the locals untouched, so they can be reused by the passes if needed.
+    pub fn clear_body(&mut self, kind: TerminatorKind) {
         self.blocks.clear();
-        let terminator = Terminator { kind: TerminatorKind::Return, span: self.span };
+        let terminator = Terminator { kind, span: self.span };
         self.blocks.push(BasicBlock { statements: Vec::default(), terminator })
+    }
+
+    /// Replace a terminator from the given basic block
+    pub fn replace_terminator(
+        &mut self,
+        source_instruction: &SourceInstruction,
+        new_term: Terminator,
+    ) {
+        self.blocks.get_mut(source_instruction.bb()).unwrap().terminator = new_term;
     }
 }
 
@@ -467,6 +495,12 @@ impl SourceInstruction {
         match *self {
             SourceInstruction::Statement { idx, bb } => blocks[bb].statements[idx].span,
             SourceInstruction::Terminator { bb } => blocks[bb].terminator.span,
+        }
+    }
+
+    pub fn bb(&self) -> BasicBlockIdx {
+        match *self {
+            SourceInstruction::Statement { bb, .. } | SourceInstruction::Terminator { bb } => bb,
         }
     }
 }
