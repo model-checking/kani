@@ -19,12 +19,8 @@
 use crate::kani_middle::codegen_units::CodegenUnit;
 use crate::kani_middle::reachability::CallGraph;
 use crate::kani_middle::transform::body::CheckType;
-<<<<<<< HEAD
 use crate::kani_middle::transform::check_aliasing::AliasingPass;
-use crate::kani_middle::transform::check_uninit::UninitPass;
-=======
 use crate::kani_middle::transform::check_uninit::{DelayedUbPass, UninitPass};
->>>>>>> kani/main
 use crate::kani_middle::transform::check_values::ValidValuePass;
 use crate::kani_middle::transform::contracts::{AnyModifiesPass, FunctionWithContractPass};
 use crate::kani_middle::transform::kani_intrinsics::IntrinsicGeneratorPass;
