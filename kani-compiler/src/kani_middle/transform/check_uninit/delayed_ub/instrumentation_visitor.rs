@@ -18,18 +18,11 @@ use rustc_middle::ty::TyCtxt;
 use stable_mir::mir::{
     mono::Instance,
     visit::{Location, PlaceContext},
-    BasicBlockIdx, MirVisitor, Operand, Place, Rvalue, Statement, Terminator,
+    BasicBlock, MirVisitor, Operand, Place, Rvalue,
 };
 use std::collections::HashSet;
 
 pub struct InstrumentationVisitor<'a, 'tcx> {
-    /// Whether we should skip the next instruction, since it might've been instrumented already.
-    /// When we instrument an instruction, we partition the basic block, and the instruction that
-    /// may trigger UB becomes the first instruction of the basic block, which we need to skip
-    /// later.
-    skip_next: bool,
-    /// The instruction being visited at a given point.
-    current: SourceInstruction,
     /// The target instruction that should be verified.
     pub target: Option<InitRelevantInstruction>,
     /// Aliasing analysis data.
@@ -44,13 +37,23 @@ impl<'a, 'tcx> TargetFinder for InstrumentationVisitor<'a, 'tcx> {
     fn find_next(
         &mut self,
         body: &MutableBody,
-        bb: BasicBlockIdx,
-        skip_first: bool,
+        source: &SourceInstruction,
     ) -> Option<InitRelevantInstruction> {
-        self.skip_next = skip_first;
-        self.current = SourceInstruction::Statement { idx: 0, bb };
         self.target = None;
-        self.visit_basic_block(&body.blocks()[bb]);
+        match *source {
+            SourceInstruction::Statement { idx, bb } => {
+                let BasicBlock { statements, .. } = &body.blocks()[bb];
+                let stmt = &statements[idx];
+                self.visit_statement(stmt, self.__location_hack_remove_before_merging(stmt.span))
+            }
+            SourceInstruction::Terminator { bb } => {
+                let BasicBlock { terminator, .. } = &body.blocks()[bb];
+                self.visit_terminator(
+                    terminator,
+                    self.__location_hack_remove_before_merging(terminator.span),
+                )
+            }
+        }
         self.target.clone()
     }
 }
@@ -62,19 +65,10 @@ impl<'a, 'tcx> InstrumentationVisitor<'a, 'tcx> {
         current_instance: Instance,
         tcx: TyCtxt<'tcx>,
     ) -> Self {
-        Self {
-            skip_next: false,
-            current: SourceInstruction::Statement { idx: 0, bb: 0 },
-            target: None,
-            points_to,
-            analysis_targets,
-            current_instance,
-            tcx,
-        }
+        Self { target: None, points_to, analysis_targets, current_instance, tcx }
     }
     fn push_target(&mut self, source_op: MemoryInitOp) {
         let target = self.target.get_or_insert_with(|| InitRelevantInstruction {
-            source: self.current,
             after_instruction: vec![],
             before_instruction: vec![],
         });
@@ -83,25 +77,6 @@ impl<'a, 'tcx> InstrumentationVisitor<'a, 'tcx> {
 }
 
 impl<'a, 'tcx> MirVisitor for InstrumentationVisitor<'a, 'tcx> {
-    fn visit_statement(&mut self, stmt: &Statement, location: Location) {
-        if self.skip_next {
-            self.skip_next = false;
-        } else if self.target.is_none() {
-            // Check all inner places.
-            self.super_statement(stmt, location);
-        }
-        // Switch to the next statement.
-        let SourceInstruction::Statement { idx, bb } = self.current else { unreachable!() };
-        self.current = SourceInstruction::Statement { idx: idx + 1, bb };
-    }
-
-    fn visit_terminator(&mut self, term: &Terminator, location: Location) {
-        if !(self.skip_next || self.target.is_some()) {
-            self.current = SourceInstruction::Terminator { bb: self.current.bb() };
-            self.super_terminator(term, location);
-        }
-    }
-
     fn visit_rvalue(&mut self, rvalue: &Rvalue, location: Location) {
         match rvalue {
             Rvalue::AddressOf(..) | Rvalue::Ref(..) => {

@@ -503,10 +503,6 @@ impl SourceInstruction {
             SourceInstruction::Statement { bb, .. } | SourceInstruction::Terminator { bb } => bb,
         }
     }
-
-    pub fn is_terminator(&self) -> bool {
-        matches!(self, SourceInstruction::Terminator { .. })
-    }
 }
 
 fn find_instance(tcx: TyCtxt, diagnostic: &str) -> Option<Instance> {
