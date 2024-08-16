@@ -49,4 +49,3 @@ unsafe fn union_update() {
     u.b = 0;
     let non_padding = u.b;
 }
-

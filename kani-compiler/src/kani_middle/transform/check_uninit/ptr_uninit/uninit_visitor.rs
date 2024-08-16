@@ -171,7 +171,7 @@ impl MirVisitor for CheckUninitVisitor {
                                 self.push_target(MemoryInitOp::SetRef {
                                     operand: Operand::Copy(place.clone()),
                                     value: true,
-                                    position: InsertPosition::After
+                                    position: InsertPosition::After,
                                 });
                             }
                         }

@@ -37,7 +37,7 @@ struct S {
     u: U,
 }
 
-/// Tests uninitialized access if unions are top-level subfields. 
+/// Tests uninitialized access if unions are top-level subfields.
 #[kani::proof]
 unsafe fn union_as_subfields() {
     let u = U { a: 0 };
@@ -49,7 +49,7 @@ unsafe fn union_as_subfields() {
 
 union Outer {
     u: U,
-    a: u32
+    a: u32,
 }
 
 /// Tests unions composing with other unions.

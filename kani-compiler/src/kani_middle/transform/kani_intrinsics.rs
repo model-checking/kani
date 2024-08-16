@@ -325,7 +325,8 @@ impl IntrinsicGeneratorPass {
                         }));
                         let result =
                             new_body.insert_assignment(rvalue, &mut source, InsertPosition::Before);
-                        let reason: &str = "Kani does not yet support using initialization predicates on unions.";
+                        let reason: &str =
+                            "Kani does not yet support using initialization predicates on unions.";
 
                         new_body.insert_check(
                             tcx,
