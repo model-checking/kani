@@ -250,13 +250,16 @@ pub mod rustc_smir {
         // We need to pull the coverage info from the internal MIR instance.
         let instance_def = rustc_smir::rustc_internal::internal(tcx, instance.def.def_id());
         let body = tcx.instance_mir(rustc_middle::ty::InstanceKind::Item(instance_def));
-        let cov_info = &body.function_coverage_info.clone().unwrap();
 
-        // Iterate over the coverage mappings and match with the coverage term.
-        for mapping in &cov_info.mappings {
-            let Code(term) = mapping.kind else { unreachable!() };
-            if term == coverage {
-                return Some(mapping.code_region.clone());
+        // Some functions, like `std` ones, may not have coverage info attached
+        // to them because they have been compiled without coverage flags.
+        if let Some(cov_info) = &body.function_coverage_info {
+            // Iterate over the coverage mappings and match with the coverage term.
+            for mapping in &cov_info.mappings {
+                let Code(term) = mapping.kind else { unreachable!() };
+                if term == coverage {
+                    return Some(mapping.code_region.clone());
+                }
             }
         }
         None
