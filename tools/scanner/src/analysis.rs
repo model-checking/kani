@@ -504,52 +504,84 @@ impl<'a> MirVisitor for IteratorVisitor<'a> {
     }
 
     fn visit_terminator(&mut self, term: &Terminator, location: Location) {
-        // A goto is identified as a loop latch if its target has been visited.
-        if let TerminatorKind::Goto { target } = &term.kind {
-            if self.visited_blocks.contains(target) {
-                self.props.loops += 1;
+        match &term.kind {
+            TerminatorKind::Goto { target } => {
+                // A goto is identified as a loop latch if its target has been visited.
+                if self.visited_blocks.contains(target) {
+                    self.props.loops += 1;
+                }
             }
-        }
-        if let TerminatorKind::Call { func, .. } = &term.kind {
-            let kind = func.ty(self.body.locals()).unwrap().kind();
-            if let TyKind::RigidTy(RigidTy::FnDef(def, _)) = kind {
-                let fullname = def.name();
-                let names = fullname.split("::").collect::<Vec<_>>();
-                if let [.., s_last, last] = names.as_slice() {
-                    if *s_last == "Iterator"
-                        && [
-                            "for_each",
-                            "collect",
-                            "advance_by",
-                            "all",
-                            "any",
-                            "partition",
-                            "partition_in_place",
-                            "fold",
-                            "try_fold",
-                            "spec_fold",
-                            "spec_try_fold",
-                            "try_for_each",
-                            "for_each",
-                            "try_reduce",
-                            "reduce",
-                            "find",
-                            "find_map",
-                            "try_find",
-                            "position",
-                            "rposition",
-                            "nth",
-                            "count",
-                            "last",
-                            "find",
-                        ]
-                        .contains(last)
-                    {
-                        self.props.iterators += 1;
+            TerminatorKind::SwitchInt { targets, .. } => {
+                let successors = targets.all_targets();
+                // Check if any of the targets of SwitchInt has been visited.
+                if self.visited_blocks.contains(&successors[0])
+                    || self.visited_blocks.contains(&successors[1])
+                {
+                    self.props.loops += 1;
+                }
+            }
+            TerminatorKind::Drop { target, .. } => {
+                if self.visited_blocks.contains(target) {
+                    self.props.loops += 1;
+                }
+            }
+            TerminatorKind::Call { func, .. } => {
+                let kind = func.ty(self.body.locals()).unwrap().kind();
+                // Check if the target is a visited block.
+
+                // Check if the call is an iterator function that contains loops.
+                if let TyKind::RigidTy(RigidTy::FnDef(def, _)) = kind {
+                    let fullname = def.name();
+                    let names = fullname.split("::").collect::<Vec<_>>();
+                    if let [.., s_last, last] = names.as_slice() {
+                        if *s_last == "Iterator"
+                            && [
+                                "for_each",
+                                "collect",
+                                "advance_by",
+                                "all",
+                                "any",
+                                "partition",
+                                "partition_in_place",
+                                "fold",
+                                "try_fold",
+                                "spec_fold",
+                                "spec_try_fold",
+                                "try_for_each",
+                                "for_each",
+                                "try_reduce",
+                                "reduce",
+                                "find",
+                                "find_map",
+                                "try_find",
+                                "position",
+                                "rposition",
+                                "nth",
+                                "count",
+                                "last",
+                                "find",
+                            ]
+                            .contains(last)
+                        {
+                            self.props.iterators += 1;
+                        }
                     }
                 }
             }
+            TerminatorKind::Assert { target, .. } => {
+                if self.visited_blocks.contains(target) {
+                    self.props.loops += 1;
+                }
+            }
+            TerminatorKind::InlineAsm { destination, .. } => {
+                if let Some(target) = destination {
+                    self.props.loops += self.visited_blocks.contains(target) as usize;
+                }
+            }
+            // No targets in other terminators.
+            _ => {}
         }
+
         self.super_terminator(term, location)
     }
 }
