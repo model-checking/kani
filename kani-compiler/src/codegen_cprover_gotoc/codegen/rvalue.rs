@@ -699,7 +699,6 @@ impl<'tcx> GotocCtx<'tcx> {
                         // cast data to pointer with specified type
                         let data_cast =
                             data.cast_to(Type::Pointer { typ: Box::new(pointee_goto_typ.clone()) });
-                        debug!(?res_ty, ?typ, ?pointee_goto_typ, "** AGG **");
                         let meta = self.codegen_operand_stable(&operands[1]);
                         slice_fat_ptr(typ, data_cast, meta, &self.symbol_table)
                     }
