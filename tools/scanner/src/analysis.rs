@@ -473,7 +473,7 @@ fn_props! {
 
 impl FnLoops {
     pub fn collect(self, body: &Body) -> FnLoops {
-        let mut visitor = IteratorVisitor { props: self, body, num_visited_blocks: 0 };
+        let mut visitor = IteratorVisitor { props: self, body, visited_blocks: HashSet::new() };
         visitor.visit_body(body);
         visitor.props
     }
@@ -494,20 +494,19 @@ impl FnLoops {
 struct IteratorVisitor<'a> {
     props: FnLoops,
     body: &'a Body,
-    num_visited_blocks: usize,
+    visited_blocks: HashSet<usize>,
 }
 
 impl<'a> MirVisitor for IteratorVisitor<'a> {
     fn visit_basic_block(&mut self, bb: &BasicBlock) {
-        self.num_visited_blocks += 1;
+        self.visited_blocks.insert(self.body.blocks.iter().position(|b| *b == *bb).unwrap());
         self.super_basic_block(bb);
     }
 
     fn visit_terminator(&mut self, term: &Terminator, location: Location) {
-        // A goto is identified as a loop latch if its target number is less than
-        // the number of visited basic block.
+        // A goto is identified as a loop latch if its target has been visited.
         if let TerminatorKind::Goto { target } = &term.kind {
-            if self.num_visited_blocks > *target {
+            if self.visited_blocks.contains(target) {
                 self.props.loops += 1;
             }
         }
