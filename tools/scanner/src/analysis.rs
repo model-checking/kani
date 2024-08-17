@@ -573,9 +573,9 @@ impl<'a> MirVisitor for IteratorVisitor<'a> {
                     self.props.loops += 1;
                 }
             }
-            TerminatorKind::InlineAsm { destination, .. } => {
-                if let Some(target) = destination {
-                    self.props.loops += self.visited_blocks.contains(target) as usize;
+            TerminatorKind::InlineAsm { destination: Some(target), .. } => {
+                if self.visited_blocks.contains(target) {
+                    self.props.loops += 1;
                 }
             }
             // No targets in other terminators.
