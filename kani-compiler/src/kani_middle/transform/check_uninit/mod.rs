@@ -13,12 +13,10 @@ use rustc_middle::ty::TyCtxt;
 use rustc_smir::rustc_internal;
 use stable_mir::{
     mir::{
-        mono::Instance, visit::Location, AggregateKind, BasicBlock, Body, ConstOperand, Mutability,
-        Operand, Place, Rvalue, Statement, StatementKind, Terminator, TerminatorKind, UnwindAction,
+        mono::Instance, AggregateKind, BasicBlock, Body, ConstOperand, Mutability, Operand, Place,
+        Rvalue, Statement, StatementKind, Terminator, TerminatorKind, UnwindAction,
     },
-    ty::{
-        FnDef, GenericArgKind, GenericArgs, MirConst, RigidTy, Span, Ty, TyConst, TyKind, UintTy,
-    },
+    ty::{FnDef, GenericArgKind, GenericArgs, MirConst, RigidTy, Ty, TyConst, TyKind, UintTy},
     CrateDef,
 };
 use std::collections::HashMap;
@@ -39,12 +37,6 @@ pub trait TargetFinder {
         body: &MutableBody,
         source: &SourceInstruction,
     ) -> Option<InitRelevantInstruction>;
-
-    /// TODO: This is just a temporary fix to unblock me because I couldn't create Location
-    /// directly. Perhaps we need to make a change in StableMIR to allow creating Location.
-    fn __location_hack_remove_before_merging(&self, span: Span) -> Location {
-        unsafe { std::mem::transmute(span) }
-    }
 }
 
 // Function bodies of those functions will not be instrumented as not to cause infinite recursion.
