@@ -22,7 +22,7 @@ use stable_mir::{
         NonDivergingIntrinsic, Operand, Place, PointerCoercion, ProjectionElem, Rvalue, Statement,
         StatementKind, Terminator, TerminatorKind,
     },
-    ty::{ConstantKind, RigidTy, TyKind},
+    ty::{ConstantKind, RigidTy, Ty, TyKind},
 };
 
 pub struct CheckUninitVisitor {
@@ -90,43 +90,16 @@ impl CheckUninitVisitor {
             StatementKind::Assign(place, rvalue) => {
                 // First check rvalue.
                 self.check_rvalue(rvalue);
-                // Check whether we are assigning into a dereference (*ptr = _).
-                if let Some(place_without_deref) = try_remove_topmost_deref(place) {
-                    // First, check that we are not dereferencing extra pointers along the way
-                    // (e.g., **ptr = _). If yes, check whether these pointers are initialized.
-                    let mut place_to_add_projections =
-                        Place { local: place_without_deref.local, projection: vec![] };
-                    for projection_elem in place_without_deref.projection.iter() {
-                        // If the projection is Deref and the current type is raw pointer, check
-                        // if it points to initialized memory.
-                        if *projection_elem == ProjectionElem::Deref {
-                            if let TyKind::RigidTy(RigidTy::RawPtr(_, _)) =
-                                place_to_add_projections.ty(&self.locals).unwrap().kind()
-                            {
-                                self.push_target(MemoryInitOp::Check {
-                                    operand: Operand::Copy(place_to_add_projections.clone()),
-                                });
-                            };
-                        }
-                        place_to_add_projections.projection.push(projection_elem.clone());
-                    }
-                    if place_without_deref.ty(&self.locals).unwrap().kind().is_raw_ptr() {
-                        self.push_target(MemoryInitOp::Set {
-                            operand: Operand::Copy(place_without_deref),
-                            value: true,
-                            position: InsertPosition::After,
-                        });
-                    }
-                }
-                // Check whether Rvalue creates a new initialized pointer previously not captured inside shadow memory.
-                if place.ty(&self.locals).unwrap().kind().is_raw_ptr() {
-                    if let Rvalue::AddressOf(_, _) = rvalue {
-                        self.push_target(MemoryInitOp::Set {
-                            operand: Operand::Copy(place.clone()),
-                            value: true,
-                            position: InsertPosition::After,
-                        });
-                    }
+                self.check_dereference_assign(place);
+                // Check whether Rvalue creates a new initialized pointer previously not captured
+                // inside shadow memory.
+                if let Rvalue::AddressOf(_, _) = rvalue {
+                    assert!(place.ty(&self.locals).unwrap().kind().is_raw_ptr());
+                    self.push_target(MemoryInitOp::Set {
+                        operand: Operand::Copy(place.clone()),
+                        value: true,
+                        position: InsertPosition::After,
+                    });
                 }
             }
             StatementKind::Deinit(place) => {
@@ -155,6 +128,38 @@ impl CheckUninitVisitor {
         }
     }
 
+    /// Check whether we are assigning into a dereference (*ptr = _).
+    fn check_dereference_assign(&mut self, place: &Place) {
+        if let Some(place_without_deref) = try_remove_topmost_deref(place) {
+            // First, check that we are not dereferencing extra pointers along the way
+            // (e.g., **ptr = _). If yes, check whether these pointers are initialized.
+            let mut place_to_add_projections =
+                Place { local: place_without_deref.local, projection: vec![] };
+            for projection_elem in place_without_deref.projection.iter() {
+                // If the projection is Deref and the current type is raw pointer, check
+                // if it points to initialized memory.
+                if *projection_elem == ProjectionElem::Deref {
+                    if let TyKind::RigidTy(RigidTy::RawPtr(_, _)) =
+                        place_to_add_projections.ty(&self.locals).unwrap().kind()
+                    {
+                        self.push_target(MemoryInitOp::Check {
+                            operand: Operand::Copy(place_to_add_projections.clone()),
+                        });
+                    };
+                }
+                place_to_add_projections.projection.push(projection_elem.clone());
+            }
+            // If the place is a raw pointer, initialize it.
+            if place_without_deref.ty(&self.locals).unwrap().kind().is_raw_ptr() {
+                self.push_target(MemoryInitOp::Set {
+                    operand: Operand::Copy(place_without_deref),
+                    value: true,
+                    position: InsertPosition::After,
+                });
+            }
+        }
+    }
+
     /// Check the terminator and find all potential instrumentation targets.
     fn check_terminator(&mut self, term: &Terminator) {
         // Leave it as an exhaustive match to be notified when a new kind is added.
@@ -174,148 +179,17 @@ impl CheckUninitVisitor {
                 };
                 match instance.kind {
                     InstanceKind::Intrinsic => {
-                        match Intrinsic::from_instance(&instance) {
-                            intrinsic_name if can_skip_intrinsic(intrinsic_name.clone()) => {
-                                /* Intrinsics that can be safely skipped */
-                            }
-                            Intrinsic::AtomicAnd(_)
-                            | Intrinsic::AtomicCxchg(_)
-                            | Intrinsic::AtomicCxchgWeak(_)
-                            | Intrinsic::AtomicLoad(_)
-                            | Intrinsic::AtomicMax(_)
-                            | Intrinsic::AtomicMin(_)
-                            | Intrinsic::AtomicNand(_)
-                            | Intrinsic::AtomicOr(_)
-                            | Intrinsic::AtomicStore(_)
-                            | Intrinsic::AtomicUmax(_)
-                            | Intrinsic::AtomicUmin(_)
-                            | Intrinsic::AtomicXadd(_)
-                            | Intrinsic::AtomicXchg(_)
-                            | Intrinsic::AtomicXor(_)
-                            | Intrinsic::AtomicXsub(_) => {
-                                self.push_target(MemoryInitOp::Check { operand: args[0].clone() });
-                            }
-                            Intrinsic::CompareBytes => {
-                                self.push_target(MemoryInitOp::CheckSliceChunk {
-                                    operand: args[0].clone(),
-                                    count: args[2].clone(),
-                                });
-                                self.push_target(MemoryInitOp::CheckSliceChunk {
-                                    operand: args[1].clone(),
-                                    count: args[2].clone(),
-                                });
-                            }
-                            Intrinsic::Copy => {
-                                // The copy is untyped, so we should copy memory
-                                // initialization state from `src` to `dst`.
-                                self.push_target(MemoryInitOp::Copy {
-                                    from: args[0].clone(),
-                                    to: args[1].clone(),
-                                    count: args[2].clone(),
-                                });
-                            }
-                            Intrinsic::VolatileCopyMemory
-                            | Intrinsic::VolatileCopyNonOverlappingMemory => {
-                                // The copy is untyped, so we should copy initialization state
-                                // from `src` to `dst`. Note that the `dst` comes before `src`
-                                // in this case.
-                                self.push_target(MemoryInitOp::Copy {
-                                    from: args[1].clone(),
-                                    to: args[0].clone(),
-                                    count: args[2].clone(),
-                                });
-                            }
-                            Intrinsic::TypedSwap => {
-                                self.push_target(MemoryInitOp::Check { operand: args[0].clone() });
-                                self.push_target(MemoryInitOp::Check { operand: args[1].clone() });
-                            }
-                            Intrinsic::VolatileLoad | Intrinsic::UnalignedVolatileLoad => {
-                                self.push_target(MemoryInitOp::Check { operand: args[0].clone() });
-                            }
-                            Intrinsic::VolatileStore => {
-                                self.push_target(MemoryInitOp::Set {
-                                    operand: args[0].clone(),
-                                    value: true,
-                                    position: InsertPosition::After,
-                                });
-                            }
-                            Intrinsic::WriteBytes => {
-                                self.push_target(MemoryInitOp::SetSliceChunk {
-                                    operand: args[0].clone(),
-                                    count: args[2].clone(),
-                                    value: true,
-                                    position: InsertPosition::After,
-                                })
-                            }
-                            intrinsic => {
-                                self.push_target(MemoryInitOp::Unsupported {
-                                    reason: format!("Kani does not support reasoning about memory initialization of intrinsic `{intrinsic:?}`."),
-                                });
-                            }
-                        }
+                        self.check_intrinsic(instance, args);
                     }
                     InstanceKind::Item => {
-                        if instance.is_foreign_item() {
-                            match instance.name().as_str() {
-                                "alloc::alloc::__rust_alloc" | "alloc::alloc::__rust_realloc" => {
-                                    /* Memory is uninitialized, nothing to do here. */
-                                }
-                                "alloc::alloc::__rust_alloc_zeroed" => {
-                                    /* Memory is initialized here, need to update shadow memory. */
-                                    self.push_target(MemoryInitOp::SetSliceChunk {
-                                        operand: Operand::Copy(destination.clone()),
-                                        count: args[0].clone(),
-                                        value: true,
-                                        position: InsertPosition::After,
-                                    });
-                                }
-                                "alloc::alloc::__rust_dealloc" => {
-                                    /* Memory is uninitialized here, need to update shadow memory. */
-                                    self.push_target(MemoryInitOp::SetSliceChunk {
-                                        operand: args[0].clone(),
-                                        count: args[1].clone(),
-                                        value: false,
-                                        position: InsertPosition::After,
-                                    });
-                                }
-                                _ => {}
-                            }
-                        }
+                        self.check_alloc_operations(instance, args, destination);
                     }
                     _ => {}
                 }
             }
             TerminatorKind::Drop { place, .. } => {
                 self.check_place(place);
-
-                let place_ty = place.ty(&self.locals).unwrap();
-                // When drop is codegen'ed for types that could define their own dropping
-                // behavior, a reference is taken to the place which is later implicitly coerced
-                // to a pointer. Hence, we need to bless this pointer as initialized.
-                match place
-                    .ty(&self.locals)
-                    .unwrap()
-                    .kind()
-                    .rigid()
-                    .expect("should be working with monomorphized code")
-                {
-                    RigidTy::Adt(_, _) | RigidTy::Dynamic(_, _, _) => {
-                        self.push_target(MemoryInitOp::SetRef {
-                            operand: Operand::Copy(place.clone()),
-                            value: true,
-                            position: InsertPosition::Before,
-                        });
-                    }
-                    _ => {}
-                }
-
-                if place_ty.kind().is_raw_ptr() {
-                    self.push_target(MemoryInitOp::Set {
-                        operand: Operand::Copy(place.clone()),
-                        value: false,
-                        position: InsertPosition::After,
-                    });
-                }
+                self.check_drop(place);
             }
             TerminatorKind::Goto { .. }
             | TerminatorKind::Resume
@@ -338,6 +212,155 @@ impl CheckUninitVisitor {
                         self.check_place(output);
                     }
                 }
+            }
+        }
+    }
+
+    /// Check the drop operation to bless dropped types before drop happens and deinitialize them
+    /// after.
+    fn check_drop(&mut self, place: &Place) {
+        // When drop is codegen'ed for types that could define their own dropping behavior, a
+        // reference is taken to the place which is later implicitly coerced to a pointer. Hence, we
+        // need to bless this pointer as initialized.
+        let place_ty = place.ty(&self.locals).unwrap();
+        match place
+            .ty(&self.locals)
+            .unwrap()
+            .kind()
+            .rigid()
+            .expect("should be working with monomorphized code")
+        {
+            RigidTy::Adt(_, _) | RigidTy::Dynamic(_, _, _) => {
+                self.push_target(MemoryInitOp::SetRef {
+                    operand: Operand::Copy(place.clone()),
+                    value: true,
+                    position: InsertPosition::Before,
+                });
+            }
+            _ => {}
+        }
+        // Deinitialize the place after it is dropped.
+        if place_ty.kind().is_raw_ptr() {
+            self.push_target(MemoryInitOp::Set {
+                operand: Operand::Copy(place.clone()),
+                value: false,
+                position: InsertPosition::After,
+            });
+        }
+    }
+
+    /// Check operations that interact with memory allocator.
+    fn check_alloc_operations(
+        &mut self,
+        instance: Instance,
+        args: &[Operand],
+        destination: &Place,
+    ) {
+        if instance.is_foreign_item() {
+            match instance.name().as_str() {
+                "alloc::alloc::__rust_alloc" | "alloc::alloc::__rust_realloc" => {
+                    /* Memory is uninitialized, nothing to do here. */
+                }
+                "alloc::alloc::__rust_alloc_zeroed" => {
+                    /* Memory is initialized here, need to update shadow memory. */
+                    self.push_target(MemoryInitOp::SetSliceChunk {
+                        operand: Operand::Copy(destination.clone()),
+                        count: args[0].clone(),
+                        value: true,
+                        position: InsertPosition::After,
+                    });
+                }
+                "alloc::alloc::__rust_dealloc" => {
+                    /* Memory is uninitialized here, need to update shadow memory. */
+                    self.push_target(MemoryInitOp::SetSliceChunk {
+                        operand: args[0].clone(),
+                        count: args[1].clone(),
+                        value: false,
+                        position: InsertPosition::After,
+                    });
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// Check intrinsics that behave equivalently to dereferencing raw pointers or copying memory
+    /// initialization state.
+    fn check_intrinsic(&mut self, instance: Instance, args: &[Operand]) {
+        match Intrinsic::from_instance(&instance) {
+            intrinsic_name if can_skip_intrinsic(intrinsic_name.clone()) => {
+                /* Intrinsics that can be safely skipped */
+            }
+            Intrinsic::AtomicAnd(_)
+            | Intrinsic::AtomicCxchg(_)
+            | Intrinsic::AtomicCxchgWeak(_)
+            | Intrinsic::AtomicLoad(_)
+            | Intrinsic::AtomicMax(_)
+            | Intrinsic::AtomicMin(_)
+            | Intrinsic::AtomicNand(_)
+            | Intrinsic::AtomicOr(_)
+            | Intrinsic::AtomicStore(_)
+            | Intrinsic::AtomicUmax(_)
+            | Intrinsic::AtomicUmin(_)
+            | Intrinsic::AtomicXadd(_)
+            | Intrinsic::AtomicXchg(_)
+            | Intrinsic::AtomicXor(_)
+            | Intrinsic::AtomicXsub(_) => {
+                self.push_target(MemoryInitOp::Check { operand: args[0].clone() });
+            }
+            Intrinsic::CompareBytes => {
+                self.push_target(MemoryInitOp::CheckSliceChunk {
+                    operand: args[0].clone(),
+                    count: args[2].clone(),
+                });
+                self.push_target(MemoryInitOp::CheckSliceChunk {
+                    operand: args[1].clone(),
+                    count: args[2].clone(),
+                });
+            }
+            Intrinsic::Copy => {
+                // The copy is untyped, so we should copy memory
+                // initialization state from `src` to `dst`.
+                self.push_target(MemoryInitOp::Copy {
+                    from: args[0].clone(),
+                    to: args[1].clone(),
+                    count: args[2].clone(),
+                });
+            }
+            Intrinsic::VolatileCopyMemory | Intrinsic::VolatileCopyNonOverlappingMemory => {
+                // The copy is untyped, so we should copy initialization state
+                // from `src` to `dst`. Note that the `dst` comes before `src`
+                // in this case.
+                self.push_target(MemoryInitOp::Copy {
+                    from: args[1].clone(),
+                    to: args[0].clone(),
+                    count: args[2].clone(),
+                });
+            }
+            Intrinsic::TypedSwap => {
+                self.push_target(MemoryInitOp::Check { operand: args[0].clone() });
+                self.push_target(MemoryInitOp::Check { operand: args[1].clone() });
+            }
+            Intrinsic::VolatileLoad | Intrinsic::UnalignedVolatileLoad => {
+                self.push_target(MemoryInitOp::Check { operand: args[0].clone() });
+            }
+            Intrinsic::VolatileStore => {
+                self.push_target(MemoryInitOp::Set {
+                    operand: args[0].clone(),
+                    value: true,
+                    position: InsertPosition::After,
+                });
+            }
+            Intrinsic::WriteBytes => self.push_target(MemoryInitOp::SetSliceChunk {
+                operand: args[0].clone(),
+                count: args[2].clone(),
+                value: true,
+                position: InsertPosition::After,
+            }),
+            intrinsic => {
+                self.push_target(MemoryInitOp::Unsupported {
+                    reason: format!("Kani does not support reasoning about memory initialization of intrinsic `{intrinsic:?}`."),
+                });
             }
         }
     }
@@ -369,56 +392,70 @@ impl CheckUninitVisitor {
             }
             Rvalue::NullaryOp(_, _) | Rvalue::ThreadLocalRef(_) => {}
             Rvalue::Cast(cast_kind, op, ty) => {
-                self.check_operand(op);
-                match cast_kind {
-                    // We currently do not support soundly reasoning about trait objects, so need to
-                    // notify the user.
-                    CastKind::PointerCoercion(PointerCoercion::Unsize) => {
-                        if let TyKind::RigidTy(RigidTy::RawPtr(pointee_ty, _)) = ty.kind() {
-                            if pointee_ty.kind().is_trait() {
-                                self.push_target(MemoryInitOp::Unsupported {
-                                reason: "Kani does not support reasoning about memory initialization of unsized pointers.".to_string(),
-                            });
-                            }
-                        }
-                    }
-                    CastKind::Transmute => {
-                        let operand_ty = op.ty(&self.locals).unwrap();
-                        if !tys_layout_compatible_to_size(&operand_ty, &ty) {
-                            // If transmuting between two types of incompatible layouts, padding
-                            // bytes are exposed, which is UB.
-                            self.push_target(MemoryInitOp::TriviallyUnsafe {
-                                reason: "Transmuting between types of incompatible layouts."
-                                    .to_string(),
-                            });
-                        } else if let (
-                            TyKind::RigidTy(RigidTy::Ref(_, from_ty, _)),
-                            TyKind::RigidTy(RigidTy::Ref(_, to_ty, _)),
-                        ) = (operand_ty.kind(), ty.kind())
-                        {
-                            if !tys_layout_compatible_to_size(&from_ty, &to_ty) {
-                                // Since references are supposed to always be initialized for its type,
-                                // transmuting between two references of incompatible layout is UB.
-                                self.push_target(MemoryInitOp::TriviallyUnsafe {
+                self.check_cast(cast_kind, op, ty);
+            }
+        }
+    }
+
+    /// Check the cast operation performed as a part of rvalue. This is mainly to catch invalid
+    /// transmute operations.  
+    fn check_cast(&mut self, cast_kind: &CastKind, op: &Operand, ty: &Ty) {
+        self.check_operand(op);
+        match cast_kind {
+            CastKind::Transmute => {
+                let operand_ty = op.ty(&self.locals).unwrap();
+                if !tys_layout_compatible_to_size(&operand_ty, &ty) {
+                    // If transmuting between two types of incompatible layouts, padding
+                    // bytes are exposed, which is UB.
+                    self.push_target(MemoryInitOp::TriviallyUnsafe {
+                        reason: "Transmuting between types of incompatible layouts.".to_string(),
+                    });
+                } else if let (
+                    TyKind::RigidTy(RigidTy::Ref(_, from_ty, _)),
+                    TyKind::RigidTy(RigidTy::Ref(_, to_ty, _)),
+                ) = (operand_ty.kind(), ty.kind())
+                {
+                    if !tys_layout_compatible_to_size(&from_ty, &to_ty) {
+                        // Since references are supposed to always be initialized for its type,
+                        // transmuting between two references of incompatible layout is UB.
+                        self.push_target(MemoryInitOp::TriviallyUnsafe {
                                 reason: "Transmuting between references pointing to types of incompatible layouts."
                                     .to_string(),
                             });
-                            }
-                        } else if let (
-                            TyKind::RigidTy(RigidTy::RawPtr(from_ty, _)),
-                            TyKind::RigidTy(RigidTy::Ref(_, to_ty, _)),
-                        ) = (operand_ty.kind(), ty.kind())
-                        {
-                            // Assert that we can only cast this way if types are the same.
-                            assert!(from_ty == to_ty);
-                            // When transmuting from a raw pointer to a reference, need to check that
-                            // the value pointed by the raw pointer is initialized.
-                            self.push_target(MemoryInitOp::Check { operand: op.clone() });
-                        }
                     }
-                    _ => {}
+                } else if let (
+                    TyKind::RigidTy(RigidTy::RawPtr(from_ty, _)),
+                    TyKind::RigidTy(RigidTy::Ref(_, to_ty, _)),
+                ) = (operand_ty.kind(), ty.kind())
+                {
+                    // Assert that we can only cast this way if types are the same.
+                    assert!(from_ty == to_ty);
+                    // When transmuting from a raw pointer to a reference, need to check that
+                    // the value pointed by the raw pointer is initialized.
+                    self.push_target(MemoryInitOp::Check { operand: op.clone() });
                 }
             }
+            // We currently do not support soundly reasoning about trait objects, so need to
+            // notify the user.
+            CastKind::PointerCoercion(PointerCoercion::Unsize) => {
+                if let TyKind::RigidTy(RigidTy::RawPtr(pointee_ty, _)) = ty.kind() {
+                    if pointee_ty.kind().is_trait() {
+                        self.push_target(MemoryInitOp::Unsupported {
+                                reason: "Kani does not support reasoning about memory initialization of unsized pointers.".to_string(),
+                            });
+                    }
+                }
+            }
+            CastKind::PointerExposeAddress
+            | CastKind::PointerWithExposedProvenance
+            | CastKind::DynStar
+            | CastKind::IntToInt
+            | CastKind::FloatToInt
+            | CastKind::FloatToFloat
+            | CastKind::IntToFloat
+            | CastKind::PtrToPtr
+            | CastKind::FnPtrToPtr
+            | CastKind::PointerCoercion(_) => {}
         }
     }
 
