@@ -25,8 +25,6 @@ use std::collections::HashSet;
 pub struct InstrumentationVisitor<'a, 'tcx> {
     /// All target instructions in the body.
     targets: Vec<InitRelevantInstruction>,
-    /// Currently analyzed instruction.
-    current_instruction: SourceInstruction,
     /// Current analysis target, eventually needs to be added to a list of all targets.
     current_target: InitRelevantInstruction,
     /// Aliasing analysis data.
@@ -38,14 +36,16 @@ pub struct InstrumentationVisitor<'a, 'tcx> {
 }
 
 impl<'a, 'tcx> TargetFinder for InstrumentationVisitor<'a, 'tcx> {
-    fn find_all(&mut self, body: &MutableBody) -> Vec<InitRelevantInstruction> {
+    fn find_all(mut self, body: &MutableBody) -> Vec<InitRelevantInstruction> {
         for (bb_idx, bb) in body.blocks().iter().enumerate() {
-            self.current_instruction = SourceInstruction::Statement { idx: 0, bb: bb_idx };
+            self.current_target = InitRelevantInstruction {
+                source: SourceInstruction::Statement { idx: 0, bb: bb_idx },
+                before_instruction: vec![],
+                after_instruction: vec![],
+            };
             self.visit_basic_block(bb);
         }
-        // Push the last current target into the list.
-        self.targets.push(self.current_target.clone());
-        self.targets.clone()
+        self.targets
     }
 }
 
@@ -58,7 +58,6 @@ impl<'a, 'tcx> InstrumentationVisitor<'a, 'tcx> {
     ) -> Self {
         Self {
             targets: vec![],
-            current_instruction: SourceInstruction::Statement { idx: 0, bb: 0 },
             current_target: InitRelevantInstruction {
                 source: SourceInstruction::Statement { idx: 0, bb: 0 },
                 before_instruction: vec![],
@@ -72,15 +71,6 @@ impl<'a, 'tcx> InstrumentationVisitor<'a, 'tcx> {
     }
 
     fn push_target(&mut self, source_op: MemoryInitOp) {
-        // If we switched to the next instruction, push the old one onto the list of targets.
-        if self.current_target.source != self.current_instruction {
-            self.targets.push(self.current_target.clone());
-            self.current_target = InitRelevantInstruction {
-                source: self.current_instruction,
-                after_instruction: vec![],
-                before_instruction: vec![],
-            };
-        }
         self.current_target.push_operation(source_op);
     }
 }
@@ -89,20 +79,33 @@ impl<'a, 'tcx> MirVisitor for InstrumentationVisitor<'a, 'tcx> {
     fn visit_statement(&mut self, stmt: &Statement, location: Location) {
         self.super_statement(stmt, location);
         // Switch to the next statement.
-        if let SourceInstruction::Statement { idx, bb } = self.current_instruction {
-            self.current_instruction = SourceInstruction::Statement { idx: idx + 1, bb }
+        if let SourceInstruction::Statement { idx, bb } = self.current_target.source {
+            self.targets.push(self.current_target.clone());
+            self.current_target = InitRelevantInstruction {
+                source: SourceInstruction::Statement { idx: idx + 1, bb },
+                after_instruction: vec![],
+                before_instruction: vec![],
+            };
         } else {
             unreachable!()
         }
     }
 
     fn visit_terminator(&mut self, term: &Terminator, location: Location) {
-        if let SourceInstruction::Statement { bb, .. } = self.current_instruction {
-            self.current_instruction = SourceInstruction::Terminator { bb };
+        if let SourceInstruction::Statement { bb, .. } = self.current_target.source {
+            // We don't have to push the previous target, since it already happened in the statement
+            // handling code.
+            self.current_target = InitRelevantInstruction {
+                source: SourceInstruction::Terminator { bb },
+                after_instruction: vec![],
+                before_instruction: vec![],
+            };
         } else {
             unreachable!()
         }
         self.super_terminator(term, location);
+        // Push the current target from the terminator onto the list.
+        self.targets.push(self.current_target.clone());
     }
 
     fn visit_rvalue(&mut self, rvalue: &Rvalue, location: Location) {

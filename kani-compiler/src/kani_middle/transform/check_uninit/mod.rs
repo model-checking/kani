@@ -32,7 +32,7 @@ mod ty_layout;
 
 /// Trait that the instrumentation target providers must implement to work with the instrumenter.
 pub trait TargetFinder {
-    fn find_all(&mut self, body: &MutableBody) -> Vec<InitRelevantInstruction>;
+    fn find_all(self, body: &MutableBody) -> Vec<InitRelevantInstruction>;
 }
 
 // Function bodies of those functions will not be instrumented as not to cause infinite recursion.
@@ -77,7 +77,7 @@ impl<'a, 'tcx> UninitInstrumenter<'a, 'tcx> {
         &mut self,
         mut body: MutableBody,
         instance: Instance,
-        mut target_finder: impl TargetFinder,
+        target_finder: impl TargetFinder,
     ) -> (bool, MutableBody) {
         // Need to break infinite recursion when memory initialization checks are inserted, so the
         // internal functions responsible for memory initialization are skipped.
