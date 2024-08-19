@@ -1,1 +1,1 @@
-Failed Checks: Stack violated.
+Failed Checks: Stacked borrows aliasing model violated at "./tests/expected/aliasing/control_flow.rs":LineInfo { start_line: 22, start_col: 17, end_line: 22, end_col: 36 }

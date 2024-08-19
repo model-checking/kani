@@ -241,8 +241,19 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
                             Rvalue::Use(Operand::Constant(_)) => {
                                 // Do nothing for the constants case
                             },
+                            Rvalue::Use(Operand::Copy(_)) => {
+                                eprintln!("Copy not yet handled");
+                                // Do nothing for the constants case
+                            },
+                            Rvalue::Use(Operand::Move(_)) => {
+                                eprintln!("Move not yet handled");
+                                // Do nothing for the constants case
+                            },
                             Rvalue::BinaryOp(_, _, _) => {
                                 eprintln!("Binary op not yet handled");
+                            }
+                            Rvalue::CheckedBinaryOp(_, _, _) => {
+                                eprintln!("Checked binary op not yet handled");
                             }
                             _ => {
                                 panic!("Rvalue kind: {:?} not yet handled", rvalue);
