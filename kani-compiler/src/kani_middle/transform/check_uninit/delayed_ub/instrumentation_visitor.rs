@@ -154,7 +154,13 @@ impl<'a, 'tcx> InstrumentationVisitor<'a, 'tcx> {
                 self.check_operand(cond);
             }
             TerminatorKind::Drop { place, .. } => {
-                self.check_place(place, PlaceOperation::Deinit);
+                // According to the documentation, "After drop elaboration: Drop terminators are a
+                // complete nop for types that have no drop glue. For other types, Drop terminators
+                // behave exactly like a call to core::mem::drop_in_place with a pointer to the
+                // given place." Since we check arguments when instrumenting function calls, perhaps
+                // we need to check that one, too. For more info, see:
+                // https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/enum.TerminatorKind.html#variant.Drop
+                self.check_place(place, PlaceOperation::Read);
             }
             TerminatorKind::Call { func, args, destination, target: _, unwind: _ } => {
                 self.check_operand(func);
@@ -215,8 +221,7 @@ impl<'a, 'tcx> InstrumentationVisitor<'a, 'tcx> {
             }
             Operand::Constant(_) => {
                 // Those should be safe to skip, as they are either constants or statics. In the
-                // latter case, we handle them in regular uninit visitor, as accessing statics
-                // requires dereferencing a raw pointer.
+                // latter case, we handle them in regular uninit visior
             }
         }
     }
@@ -232,7 +237,7 @@ impl<'a, 'tcx> InstrumentationVisitor<'a, 'tcx> {
         {
             match place_operation {
                 PlaceOperation::Write => {
-                    // Write to the place initializes it.
+                    // If we are mutating the place, initialize it.
                     self.push_target(MemoryInitOp::SetRef {
                         operand: Operand::Copy(place.clone()),
                         value: true,
@@ -240,7 +245,7 @@ impl<'a, 'tcx> InstrumentationVisitor<'a, 'tcx> {
                     })
                 }
                 PlaceOperation::Deinit => {
-                    // Explicitly deinitialie the place.
+                    // If we are mutating the place, initialize it.
                     self.push_target(MemoryInitOp::SetRef {
                         operand: Operand::Copy(place.clone()),
                         value: false,
@@ -248,7 +253,7 @@ impl<'a, 'tcx> InstrumentationVisitor<'a, 'tcx> {
                     })
                 }
                 PlaceOperation::Read => {
-                    // When reading from a place, check its initialization.
+                    // Otherwise, check its initialization.
                     self.push_target(MemoryInitOp::CheckRef {
                         operand: Operand::Copy(place.clone()),
                     });
