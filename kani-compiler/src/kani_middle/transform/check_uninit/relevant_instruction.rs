@@ -168,6 +168,8 @@ impl MemoryInitOp {
 /// before or after the instruction.
 #[derive(Clone, Debug)]
 pub struct InitRelevantInstruction {
+    /// The instruction that affects the state of the memory.
+    pub source: SourceInstruction,
     /// All memory-related operations that should happen after the instruction.
     pub before_instruction: Vec<MemoryInitOp>,
     /// All memory-related operations that should happen after the instruction.

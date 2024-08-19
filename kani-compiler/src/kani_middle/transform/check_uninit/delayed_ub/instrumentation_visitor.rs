@@ -18,13 +18,17 @@ use rustc_middle::ty::TyCtxt;
 use stable_mir::mir::{
     mono::Instance,
     visit::{Location, PlaceContext},
-    BasicBlock, MirVisitor, Operand, Place, Rvalue,
+    MirVisitor, Operand, Place, Rvalue, Statement, Terminator,
 };
 use std::collections::HashSet;
 
 pub struct InstrumentationVisitor<'a, 'tcx> {
-    /// The target instruction that should be verified.
-    pub target: Option<InitRelevantInstruction>,
+    /// All target instructions in the body.
+    targets: Vec<InitRelevantInstruction>,
+    /// Currently analyzed instruction.
+    current_instruction: SourceInstruction,
+    /// Current analysis target, eventually needs to be added to a list of all targets.
+    current_target: InitRelevantInstruction,
     /// Aliasing analysis data.
     points_to: &'a PointsToGraph<'tcx>,
     /// The list of places we should be looking for, ignoring others
@@ -34,27 +38,14 @@ pub struct InstrumentationVisitor<'a, 'tcx> {
 }
 
 impl<'a, 'tcx> TargetFinder for InstrumentationVisitor<'a, 'tcx> {
-    fn find_next(
-        &mut self,
-        body: &MutableBody,
-        source: &SourceInstruction,
-    ) -> Option<InitRelevantInstruction> {
-        self.target = None;
-        match *source {
-            SourceInstruction::Statement { idx, bb } => {
-                let BasicBlock { statements, .. } = &body.blocks()[bb];
-                let stmt = &statements[idx];
-                self.visit_statement(stmt, self.__location_hack_remove_before_merging(stmt.span))
-            }
-            SourceInstruction::Terminator { bb } => {
-                let BasicBlock { terminator, .. } = &body.blocks()[bb];
-                self.visit_terminator(
-                    terminator,
-                    self.__location_hack_remove_before_merging(terminator.span),
-                )
-            }
+    fn find_all(&mut self, body: &MutableBody) -> Vec<InitRelevantInstruction> {
+        for (bb_idx, bb) in body.blocks().iter().enumerate() {
+            self.current_instruction = SourceInstruction::Statement { idx: 0, bb: bb_idx };
+            self.visit_basic_block(bb);
         }
-        self.target.clone()
+        // Push the last current target into the list.
+        self.targets.push(self.current_target.clone());
+        self.targets.clone()
     }
 }
 
@@ -65,18 +56,55 @@ impl<'a, 'tcx> InstrumentationVisitor<'a, 'tcx> {
         current_instance: Instance,
         tcx: TyCtxt<'tcx>,
     ) -> Self {
-        Self { target: None, points_to, analysis_targets, current_instance, tcx }
+        Self {
+            targets: vec![],
+            current_instruction: SourceInstruction::Statement { idx: 0, bb: 0 },
+            current_target: InitRelevantInstruction {
+                source: SourceInstruction::Statement { idx: 0, bb: 0 },
+                before_instruction: vec![],
+                after_instruction: vec![],
+            },
+            points_to,
+            analysis_targets,
+            current_instance,
+            tcx,
+        }
     }
+
     fn push_target(&mut self, source_op: MemoryInitOp) {
-        let target = self.target.get_or_insert_with(|| InitRelevantInstruction {
-            after_instruction: vec![],
-            before_instruction: vec![],
-        });
-        target.push_operation(source_op);
+        // If we switched to the next instruction, push the old one onto the list of targets.
+        if self.current_target.source != self.current_instruction {
+            self.targets.push(self.current_target.clone());
+            self.current_target = InitRelevantInstruction {
+                source: self.current_instruction,
+                after_instruction: vec![],
+                before_instruction: vec![],
+            };
+        }
+        self.current_target.push_operation(source_op);
     }
 }
 
 impl<'a, 'tcx> MirVisitor for InstrumentationVisitor<'a, 'tcx> {
+    fn visit_statement(&mut self, stmt: &Statement, location: Location) {
+        self.super_statement(stmt, location);
+        // Switch to the next statement.
+        if let SourceInstruction::Statement { idx, bb } = self.current_instruction {
+            self.current_instruction = SourceInstruction::Statement { idx: idx + 1, bb }
+        } else {
+            unreachable!()
+        }
+    }
+
+    fn visit_terminator(&mut self, term: &Terminator, location: Location) {
+        if let SourceInstruction::Statement { bb, .. } = self.current_instruction {
+            self.current_instruction = SourceInstruction::Terminator { bb };
+        } else {
+            unreachable!()
+        }
+        self.super_terminator(term, location);
+    }
+
     fn visit_rvalue(&mut self, rvalue: &Rvalue, location: Location) {
         match rvalue {
             Rvalue::AddressOf(..) | Rvalue::Ref(..) => {

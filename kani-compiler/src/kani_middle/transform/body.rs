@@ -484,7 +484,7 @@ impl CheckType {
 }
 
 /// We store the index of an instruction to avoid borrow checker issues and unnecessary copies.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum SourceInstruction {
     Statement { idx: usize, bb: BasicBlockIdx },
     Terminator { bb: BasicBlockIdx },
