@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use super::{MirInstance, BodyMutator};
-use stable_mir::mir::{Local, Mutability, LocalDecl, Statement, Body};
+use stable_mir::mir::{Body, ConstOperand, Local, LocalDecl, Mutability, Operand, Place, Statement};
 use stable_mir::ty::{Ty, Span};
 use super::{MutatorIndex, MutatorIndexStatus, Instruction};
 
@@ -20,6 +20,7 @@ impl CachedBodyMutator {
         let mut body = BodyMutator::from(body);
         let unit = body.new_local(Ty::new_tuple(&[]), Mutability::Not);
         let valid = body.new_local(Ty::from_rigid_kind(stable_mir::ty::RigidTy::Bool), Mutability::Mut);
+        body.insert_statement(Statement { kind: stable_mir::mir::StatementKind::Assign(Place::from(valid), stable_mir::mir::Rvalue::Use(Operand::Constant(ConstOperand { span: body.span(), user_ty: None, const_: stable_mir::ty::MirConst::from_bool(true) }))), span: body.span() });
         let cache = HashMap::new();
         CachedBodyMutator { body, unit, valid, cache }
     }
@@ -85,7 +86,7 @@ impl CachedBodyMutator {
     }
 
     /// Get an index with which to iterate over the body
-    pub fn new_index(&mut self) -> MutatorIndex {
+    pub fn new_index(&self) -> MutatorIndex {
         self.body.new_index()
     }
 

@@ -17,6 +17,9 @@ pub struct BodyMutator {
     ghost_locals: Vec<LocalDecl>,
     ghost_blocks: Vec<BasicBlock>,
     ghost_statements: Vec<Statement>,
+    /// index after the last ghost block interleaved with the
+    /// original program's control flow
+    processed: BasicBlockIdx,
 }
 
 impl BodyMutator {
@@ -30,7 +33,8 @@ impl BodyMutator {
         span: Span,
         ghost_locals: Vec<LocalDecl>,
         ghost_blocks: Vec<BasicBlock>,
-        statements: Vec<Statement>,
+        ghost_statements: Vec<Statement>,
+        processed: BasicBlockIdx,
     ) -> Self {
         BodyMutator {
             blocks,
@@ -41,7 +45,8 @@ impl BodyMutator {
             span,
             ghost_locals,
             ghost_blocks,
-            ghost_statements: statements,
+            ghost_statements,
+            processed
         }
     }
 
@@ -75,6 +80,7 @@ impl BodyMutator {
         let spread_arg = body.spread_arg();
         let debug_info = body.var_debug_info;
         let statements = Vec::new();
+        let processed = 0;
         BodyMutator::new(
             body.blocks,
             locals,
@@ -85,6 +91,7 @@ impl BodyMutator {
             ghost_locals,
             ghost_blocks,
             statements,
+            processed
         )
     }
 
@@ -157,6 +164,11 @@ impl BodyMutator {
 
     /// Finalize the prologue that initializes the variable data.
     pub fn finalize_prologue(&mut self) {
+        // mark the ghost blocks as processed
+        // include one extra ghost block to jump
+        // back to the 0th block
+        self.processed = self.ghost_blocks.len() + 1;
+        // goto the source's 0th basic block:
         let kind = TerminatorKind::Goto { target: self.blocks.len() - 1 };
         let span = self.span;
         let terminator = Terminator { kind, span };
@@ -210,7 +222,12 @@ impl BodyMutator {
     /// Split at the given index, causing the current ghost code to be called
     /// and control flow to return from the ghost code to after the current index
     pub fn split(&mut self, index: &MutatorIndex) {
-        let kind = TerminatorKind::Goto { target: self.blocks.len() + self.ghost_blocks.len() - 1 };
+        // Jump to the first unprocessed ghost block
+        let kind = TerminatorKind::Goto { target: self.blocks.len() + self.processed };
+        // Mark the rest of the ghost blocks as processed
+        // include one extra -- the jump back into the source
+        // code
+        self.processed = self.ghost_blocks.len() + 1;
         let span = index.span;
         let term = Terminator { kind, span };
         let len = self.blocks[index.bb].statements.len();
@@ -246,6 +263,7 @@ impl BodyMutator {
                 ghost_locals,
                 ghost_blocks,
                 ghost_statements,
+                ..
             } => {
                 assert!(ghost_statements.len() == 0);
                 blocks.extend(ghost_blocks.into_iter());
@@ -269,7 +287,7 @@ impl BodyMutator {
 /// Mutator index with which to iterate over the function body.
 /// when idx = len(blocks[bb]), you are at the terminator, otherwise,
 /// you are at the statement idx in the basic block blocks[bb].
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct MutatorIndex {
     bb: BasicBlockIdx,
     idx: usize,

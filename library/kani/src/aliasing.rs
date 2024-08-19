@@ -1,10 +1,8 @@
 const STACK_DEPTH: usize = 15;
 type PointerTag = u8;
 
-use crate::mem::pointer_object;
-use crate::mem::pointer_offset;
+use crate::mem::{pointer_object, pointer_offset};
 use crate::shadow::ShadowMem;
-use crate::{any, assume};
 
 /// The stacked borrows state.
 ///
@@ -156,7 +154,8 @@ pub mod sstate {
                 if demonic_nondet() && STATE == MonitorState::UNINIT {
                     STATE = MonitorState::INIT;
                     OBJECT = pointer_object(pointer);
-                    assume(OFFSET < std::mem::size_of::<U>());
+                    OFFSET = 0;
+                    crate::assume(OFFSET < std::mem::size_of::<U>());
                     STACK_TAGS[STACK_TOP] = tag;
                     STACK_PERMS[STACK_TOP] = Permission::UNIQUE;
                     STACK_TOP += 1;
@@ -313,5 +312,5 @@ pub mod sstate {
 }
 
 pub fn demonic_nondet() -> bool {
-    any::<bool>()
+    crate::any()
 }

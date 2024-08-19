@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use rustc_middle::ty::TyCtxt;
-use stable_mir::mir::{BorrowKind, Local, Mutability, Place, ProjectionElem, Rvalue, Statement, StatementKind};
+use stable_mir::mir::{BorrowKind, ConstOperand, Local, Mutability, Operand, Place, ProjectionElem, Rvalue, Statement, StatementKind};
 use stable_mir::ty::{GenericArgKind, Ty, Span, TyKind, RigidTy};
 use super::{MirError, CachedBodyMutator, Cache, Signature, MutatorIndex, Instruction, MutatorIndexStatus};
 
@@ -73,20 +73,18 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
             Signature::new("KaniNewMutRefFromValue", &[GenericArgKind::Type(ty)]),
         )?;
         self.body.call(instance, vec![*lvalue_ref, *rvalue_ref], self.body.unit());
-        self.body.split(idx);
         Ok(())
     }
 
     /// Instrument with stack violated / not violated
     pub fn instrument_stack_check(&mut self, idx: &MutatorIndex) -> Result<(), MirError> {
-        // Initialize the constants
         let instance = self.cache.register(
             &self.tcx,
             Signature::new("KaniStackValid", &[])
         )?;
         self.body.call(instance, vec![], self.body.valid());
-        let msg = format!("Stacked borrows aliasing model violated at {:?}:{:?}", idx.span().get_filename(), idx.span().get_lines());
         let instance = self.cache.register_assert(&self.tcx)?;
+        let msg = format!("Stacked borrows aliasing model violated at {:?}:{:?}", idx.span().get_filename(), idx.span().get_lines());
         self.body.assert(instance, self.body.valid(), msg, idx.span());
         Ok(())
     }
@@ -129,12 +127,11 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
     /// created = &mut *(raw: const *T).
     pub fn instrument_new_mut_ref_from_raw(
         &mut self,
-        idx: &MutatorIndex,
         created: Local,
         raw: Local,
+        ty: Ty,
     ) -> Result<(), MirError> {
         // Initialize the constants
-        let ty = self.body.local(created).ty;
         let created_ref = self.meta_stack.get(&created).unwrap();
         let reference_ref = self.meta_stack.get(&raw).unwrap();
         let instance = self.cache.register(
@@ -142,7 +139,6 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
             Signature::new("KaniNewMutRefFromRaw", &[GenericArgKind::Type(ty)]),
         )?;
         self.body.call(instance, vec![*created_ref, *reference_ref], self.body.unit());
-        self.body.split(idx);
         Ok(())
     }
 
@@ -150,12 +146,11 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
     /// created = (ref: &mut T) as *mut T
     pub fn instrument_new_mut_raw_from_ref(
         &mut self,
-        idx: &MutatorIndex,
         created: Local,
         reference: Local,
+        ty: Ty,
     ) -> Result<(), MirError> {
         // Initialize the constants
-        let ty = self.body.local(created).ty;
         let created_ref = self.meta_stack.get(&created).unwrap();
         let reference_ref = self.meta_stack.get(&reference).unwrap();
         let instance = self.cache.register(
@@ -163,7 +158,6 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
             Signature::new("KaniNewMutRawFromRef", &[GenericArgKind::Type(ty)]),
         )?;
         self.body.call(instance, vec![*created_ref, *reference_ref], self.body.unit());
-        self.body.split(idx);
         Ok(())
     }
 
@@ -185,21 +179,28 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
                                         self.instrument_new_stack_reference(
                                             idx, to.local, from.local,
                                         )?;
+                                        self.body.split(idx);
                                     }
                                     [ProjectionElem::Deref] => {
                                         // Reborrow
-                                        // x : &mut T = &*(y : *mut T)
+                                        // x : &mut T = &*(y : *mut T OR &mut T)
                                         let from = from.local; // Copy to avoid borrow
                                         let to = to.local; // Copy to avoid borrow
-                                        match self.body.local(to).ty.kind() {
-                                            TyKind::RigidTy(RigidTy::Ref(_, _ty, _)) => {
-                                                eprintln!(
-                                                    "Reborrow from reference not yet handled"
-                                                );
-                                            }
-                                            TyKind::RigidTy(RigidTy::RawPtr(ty, _)) => {
+                                        match self.body.local(from).ty.kind() {
+                                            TyKind::RigidTy(RigidTy::Ref(_, ty, _)) => {
+                                                // Reborrow of reference
+                                                // Occurs during normal course of reference-from
+                                                // raw-pointer -- a reference will be made, then reborrowed.
                                                 self.instrument_stack_update_ref(from, ty)?;
                                                 self.instrument_stack_check(idx)?;
+                                                self.instrument_new_mut_ref_from_raw(to, from, ty)?;
+                                                self.body.split(idx);
+                                            }
+                                            TyKind::RigidTy(RigidTy::RawPtr(ty, _)) => {
+                                                // Reborrow of raw pointer
+                                                self.instrument_stack_update_ptr(from, ty)?;
+                                                self.instrument_stack_check(idx)?;
+                                                self.instrument_new_mut_ref_from_raw(to, from, ty)?;
                                                 self.body.split(idx);
                                             }
                                             _ => {}
@@ -214,34 +215,37 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
                                 match from.projection[..] {
                                     [] => {
                                         // x = &raw y
-                                        eprintln!("addr of not yet handled");
+                                        panic!("Addr of not yet handled");
                                     }
                                     [ProjectionElem::Deref] => {
-                                        // x = &raw mut *(y: &mut T)
+                                        // x = &raw mut *(y: &mut T OR *mut T)
                                         let from = from.local; // Copy to avoid borrow
-                                        let to = to.local; // Copy to avoid borrow
-                                        match self.body.local(to).ty.kind() {
+                                        let to = to.local;
+                                        match self.body.local(from).ty.kind() {
                                             TyKind::RigidTy(RigidTy::Ref(_, ty, _)) => {
                                                 self.instrument_stack_update_ref(from, ty)?;
                                                 self.instrument_stack_check(idx)?;
-                                                self.body.split(idx);
                                                 self.instrument_new_mut_raw_from_ref(
-                                                    idx, to, from,
+                                                    to, from, ty
                                                 )?;
+                                                self.body.split(idx);
                                             }
-                                            TyKind::RigidTy(RigidTy::RawPtr(_ty, _)) => {
-                                                eprintln!(
-                                                    "Pointer to pointer casts not yet handled"
-                                                );
+                                            _ => {
+                                                panic!("Deref case {:?} not yet handled", kind);
                                             }
-                                            _ => {}
                                         }
                                     }
                                     _ => {}
                                 }
+                            },
+                            Rvalue::Use(Operand::Constant(_)) => {
+                                // Do nothing for the constants case
+                            },
+                            Rvalue::BinaryOp(_, _, _) => {
+                                eprintln!("Binary op not yet handled");
                             }
                             _ => {
-                                eprintln!("Rvalue kind: {:?} not yet handled", rvalue);
+                                panic!("Rvalue kind: {:?} not yet handled", rvalue);
                             }
                         }
                         match to.projection[..] {
@@ -252,7 +256,6 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
                             [ProjectionElem::Deref] => {
                                 // *x = rvalue
                                 let to = to.local;
-                                println!("Self body local to is: {:?}", self.body.local(to));
                                 match self.body.local(to).ty.kind() {
                                     TyKind::RigidTy(RigidTy::Ref(_, ty, _)) => {
                                         self.instrument_stack_update_ref(to, ty)?;

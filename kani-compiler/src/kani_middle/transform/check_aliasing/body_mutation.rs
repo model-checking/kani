@@ -1,6 +1,7 @@
 use stable_mir::mir::Body;
 use super::MirError;
 use super::InstrumentationData;
+use super::MutatorIndex;
 
 pub struct BodyMutationPassState<'tcx, 'cache> {
     instrumentation_data: InstrumentationData<'tcx, 'cache>,

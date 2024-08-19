@@ -131,7 +131,7 @@ impl TransformPass for AliasingPass {
             (false, body)
         } else {
             let body = CachedBodyMutator::from(body);
-            let instrumentation_data = InstrumentationData::new(tcx, &mut self.cache, body);
+            let mut instrumentation_data = InstrumentationData::new(tcx, &mut self.cache, body);
             let out = BodyMutationPassState::new(instrumentation_data).finalize();
             (true, out)
         }
