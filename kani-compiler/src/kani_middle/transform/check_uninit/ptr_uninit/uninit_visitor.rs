@@ -18,9 +18,10 @@ use stable_mir::{
     mir::{
         alloc::GlobalAlloc,
         mono::{Instance, InstanceKind},
-        BasicBlock, CastKind, CopyNonOverlapping, InlineAsmOperand, LocalDecl,
-        NonDivergingIntrinsic, Operand, Place, PointerCoercion, ProjectionElem, Rvalue, Statement,
-        StatementKind, Terminator, TerminatorKind,
+        visit::{Location, PlaceContext},
+        BasicBlock, CastKind, LocalDecl, MirVisitor, NonDivergingIntrinsic, Operand, Place,
+        PointerCoercion, ProjectionElem, Rvalue, Statement, StatementKind, Terminator,
+        TerminatorKind,
     },
     ty::{ConstantKind, RigidTy, TyKind},
 };
@@ -43,11 +44,14 @@ impl TargetFinder for CheckUninitVisitor {
             SourceInstruction::Statement { idx, bb } => {
                 let BasicBlock { statements, .. } = &body.blocks()[bb];
                 let stmt = &statements[idx];
-                self.check_statement(stmt)
+                self.visit_statement(stmt, self.__location_hack_remove_before_merging(stmt.span))
             }
             SourceInstruction::Terminator { bb } => {
                 let BasicBlock { terminator, .. } = &body.blocks()[bb];
-                self.check_terminator(terminator)
+                self.visit_terminator(
+                    terminator,
+                    self.__location_hack_remove_before_merging(terminator.span),
+                )
             }
         }
         self.target.clone()
@@ -68,28 +72,23 @@ impl CheckUninitVisitor {
     }
 }
 
-impl CheckUninitVisitor {
-    /// Check the statement and find all potential instrumentation targets.
-    fn check_statement(&mut self, stmt: &Statement) {
+impl MirVisitor for CheckUninitVisitor {
+    fn visit_statement(&mut self, stmt: &Statement, location: Location) {
         // Leave it as an exhaustive match to be notified when a new kind is added.
         match &stmt.kind {
-            StatementKind::Intrinsic(NonDivergingIntrinsic::CopyNonOverlapping(
-                CopyNonOverlapping { src, dst, count },
-            )) => {
-                self.check_operand(src);
-                self.check_operand(dst);
-                self.check_operand(count);
+            StatementKind::Intrinsic(NonDivergingIntrinsic::CopyNonOverlapping(copy)) => {
+                self.super_statement(stmt, location);
                 // The copy is untyped, so we should copy memory initialization state from `src`
                 // to `dst`.
                 self.push_target(MemoryInitOp::Copy {
-                    from: src.clone(),
-                    to: dst.clone(),
-                    count: count.clone(),
+                    from: copy.src.clone(),
+                    to: copy.dst.clone(),
+                    count: copy.count.clone(),
                 });
             }
             StatementKind::Assign(place, rvalue) => {
                 // First check rvalue.
-                self.check_rvalue(rvalue);
+                self.visit_rvalue(rvalue, location);
                 // Check whether we are assigning into a dereference (*ptr = _).
                 if let Some(place_without_deref) = try_remove_topmost_deref(place) {
                     // First, check that we are not dereferencing extra pointers along the way
@@ -100,8 +99,8 @@ impl CheckUninitVisitor {
                         // If the projection is Deref and the current type is raw pointer, check
                         // if it points to initialized memory.
                         if *projection_elem == ProjectionElem::Deref {
-                            if let TyKind::RigidTy(RigidTy::RawPtr(_, _)) =
-                                place_to_add_projections.ty(&self.locals).unwrap().kind()
+                            if let TyKind::RigidTy(RigidTy::RawPtr(..)) =
+                                place_to_add_projections.ty(&&self.locals).unwrap().kind()
                             {
                                 self.push_target(MemoryInitOp::Check {
                                     operand: Operand::Copy(place_to_add_projections.clone()),
@@ -110,7 +109,7 @@ impl CheckUninitVisitor {
                         }
                         place_to_add_projections.projection.push(projection_elem.clone());
                     }
-                    if place_without_deref.ty(&self.locals).unwrap().kind().is_raw_ptr() {
+                    if place_without_deref.ty(&&self.locals).unwrap().kind().is_raw_ptr() {
                         self.push_target(MemoryInitOp::Set {
                             operand: Operand::Copy(place_without_deref),
                             value: true,
@@ -119,8 +118,8 @@ impl CheckUninitVisitor {
                     }
                 }
                 // Check whether Rvalue creates a new initialized pointer previously not captured inside shadow memory.
-                if place.ty(&self.locals).unwrap().kind().is_raw_ptr() {
-                    if let Rvalue::AddressOf(_, _) = rvalue {
+                if place.ty(&&self.locals).unwrap().kind().is_raw_ptr() {
+                    if let Rvalue::AddressOf(..) = rvalue {
                         self.push_target(MemoryInitOp::Set {
                             operand: Operand::Copy(place.clone()),
                             value: true,
@@ -130,44 +129,36 @@ impl CheckUninitVisitor {
                 }
             }
             StatementKind::Deinit(place) => {
-                self.check_place(place);
+                self.super_statement(stmt, location);
                 self.push_target(MemoryInitOp::Set {
                     operand: Operand::Copy(place.clone()),
                     value: false,
                     position: InsertPosition::After,
                 });
             }
-            StatementKind::FakeRead(_, place)
-            | StatementKind::SetDiscriminant { place, .. }
-            | StatementKind::Retag(_, place)
-            | StatementKind::PlaceMention(place)
-            | StatementKind::AscribeUserType { place, .. } => {
-                self.check_place(place);
-            }
-            StatementKind::Intrinsic(NonDivergingIntrinsic::Assume(operand)) => {
-                self.check_operand(operand);
-            }
-            StatementKind::StorageLive(_)
+            StatementKind::FakeRead(_, _)
+            | StatementKind::SetDiscriminant { .. }
+            | StatementKind::StorageLive(_)
             | StatementKind::StorageDead(_)
+            | StatementKind::Retag(_, _)
+            | StatementKind::PlaceMention(_)
+            | StatementKind::AscribeUserType { .. }
             | StatementKind::Coverage(_)
             | StatementKind::ConstEvalCounter
-            | StatementKind::Nop => {}
+            | StatementKind::Intrinsic(NonDivergingIntrinsic::Assume(_))
+            | StatementKind::Nop => self.super_statement(stmt, location),
         }
     }
 
-    /// Check the terminator and find all potential instrumentation targets.
-    fn check_terminator(&mut self, term: &Terminator) {
+    fn visit_terminator(&mut self, term: &Terminator, location: Location) {
         // Leave it as an exhaustive match to be notified when a new kind is added.
         match &term.kind {
             TerminatorKind::Call { func, args, destination, .. } => {
-                self.check_operand(func);
-                for arg in args {
-                    self.check_operand(arg);
-                }
-                self.check_place(destination);
+                self.super_terminator(term, location);
                 let instance = match try_resolve_instance(&self.locals, func) {
                     Ok(instance) => instance,
                     Err(reason) => {
+                        self.super_terminator(term, location);
                         self.push_target(MemoryInitOp::Unsupported { reason });
                         return;
                     }
@@ -286,20 +277,20 @@ impl CheckUninitVisitor {
                 }
             }
             TerminatorKind::Drop { place, .. } => {
-                self.check_place(place);
+                self.super_terminator(term, location);
+                let place_ty = place.ty(&&self.locals).unwrap();
 
-                let place_ty = place.ty(&self.locals).unwrap();
                 // When drop is codegen'ed for types that could define their own dropping
                 // behavior, a reference is taken to the place which is later implicitly coerced
                 // to a pointer. Hence, we need to bless this pointer as initialized.
                 match place
-                    .ty(&self.locals)
+                    .ty(&&self.locals)
                     .unwrap()
                     .kind()
                     .rigid()
                     .expect("should be working with monomorphized code")
                 {
-                    RigidTy::Adt(_, _) | RigidTy::Dynamic(_, _, _) => {
+                    RigidTy::Adt(..) | RigidTy::Dynamic(_, _, _) => {
                         self.push_target(MemoryInitOp::SetRef {
                             operand: Operand::Copy(place.clone()),
                             value: true,
@@ -318,177 +309,121 @@ impl CheckUninitVisitor {
                 }
             }
             TerminatorKind::Goto { .. }
+            | TerminatorKind::SwitchInt { .. }
             | TerminatorKind::Resume
             | TerminatorKind::Abort
             | TerminatorKind::Return
-            | TerminatorKind::Unreachable => {}
-            TerminatorKind::SwitchInt { discr, .. } => {
-                self.check_operand(discr);
-            }
-            TerminatorKind::Assert { cond, .. } => {
-                self.check_operand(cond);
-            }
-            TerminatorKind::InlineAsm { operands, .. } => {
-                for op in operands {
-                    let InlineAsmOperand { in_value, out_place, raw_rpr: _ } = op;
-                    if let Some(input) = in_value {
-                        self.check_operand(input);
-                    }
-                    if let Some(output) = out_place {
-                        self.check_place(output);
-                    }
-                }
-            }
+            | TerminatorKind::Unreachable
+            | TerminatorKind::Assert { .. }
+            | TerminatorKind::InlineAsm { .. } => self.super_terminator(term, location),
         }
     }
 
-    /// Check the rvalue and find all potential instrumentation targets.
-    fn check_rvalue(&mut self, rvalue: &Rvalue) {
-        match rvalue {
-            Rvalue::Aggregate(_, operands) => {
-                for op in operands {
-                    self.check_operand(op);
-                }
-            }
-            Rvalue::BinaryOp(_, lhs, rhs) | Rvalue::CheckedBinaryOp(_, lhs, rhs) => {
-                self.check_operand(lhs);
-                self.check_operand(rhs);
-            }
-            Rvalue::AddressOf(_, place)
-            | Rvalue::CopyForDeref(place)
-            | Rvalue::Discriminant(place)
-            | Rvalue::Len(place)
-            | Rvalue::Ref(_, _, place) => {
-                self.check_place(place);
-            }
-            Rvalue::ShallowInitBox(op, _)
-            | Rvalue::UnaryOp(_, op)
-            | Rvalue::Use(op)
-            | Rvalue::Repeat(op, _) => {
-                self.check_operand(op);
-            }
-            Rvalue::NullaryOp(_, _) | Rvalue::ThreadLocalRef(_) => {}
-            Rvalue::Cast(cast_kind, op, ty) => {
-                self.check_operand(op);
-                match cast_kind {
-                    // We currently do not support soundly reasoning about trait objects, so need to
-                    // notify the user.
-                    CastKind::PointerCoercion(PointerCoercion::Unsize) => {
-                        if let TyKind::RigidTy(RigidTy::RawPtr(pointee_ty, _)) = ty.kind() {
-                            if pointee_ty.kind().is_trait() {
-                                self.push_target(MemoryInitOp::Unsupported {
-                                reason: "Kani does not support reasoning about memory initialization of unsized pointers.".to_string(),
-                            });
-                            }
-                        }
-                    }
-                    CastKind::Transmute => {
-                        let operand_ty = op.ty(&self.locals).unwrap();
-                        if !tys_layout_compatible_to_size(&operand_ty, &ty) {
-                            // If transmuting between two types of incompatible layouts, padding
-                            // bytes are exposed, which is UB.
-                            self.push_target(MemoryInitOp::TriviallyUnsafe {
-                                reason: "Transmuting between types of incompatible layouts."
-                                    .to_string(),
-                            });
-                        } else if let (
-                            TyKind::RigidTy(RigidTy::Ref(_, from_ty, _)),
-                            TyKind::RigidTy(RigidTy::Ref(_, to_ty, _)),
-                        ) = (operand_ty.kind(), ty.kind())
-                        {
-                            if !tys_layout_compatible_to_size(&from_ty, &to_ty) {
-                                // Since references are supposed to always be initialized for its type,
-                                // transmuting between two references of incompatible layout is UB.
-                                self.push_target(MemoryInitOp::TriviallyUnsafe {
-                                reason: "Transmuting between references pointing to types of incompatible layouts."
-                                    .to_string(),
-                            });
-                            }
-                        } else if let (
-                            TyKind::RigidTy(RigidTy::RawPtr(from_ty, _)),
-                            TyKind::RigidTy(RigidTy::Ref(_, to_ty, _)),
-                        ) = (operand_ty.kind(), ty.kind())
-                        {
-                            // Assert that we can only cast this way if types are the same.
-                            assert!(from_ty == to_ty);
-                            // When transmuting from a raw pointer to a reference, need to check that
-                            // the value pointed by the raw pointer is initialized.
-                            self.push_target(MemoryInitOp::Check { operand: op.clone() });
-                        }
-                    }
-                    _ => {}
-                }
-            }
-        }
-    }
-
-    /// Check if one of the place projections involves dereferencing a raw pointer, which is an
-    /// instrumentation target , or union access, which is currently not supported.
-    fn check_place(&mut self, place: &Place) {
+    fn visit_place(&mut self, place: &Place, ptx: PlaceContext, location: Location) {
         for (idx, elem) in place.projection.iter().enumerate() {
             let intermediate_place =
                 Place { local: place.local, projection: place.projection[..idx].to_vec() };
-            self.check_projection_elem(elem, intermediate_place)
-        }
-    }
-
-    /// Check if the projection involves dereferencing a raw pointer, which is an instrumentation
-    /// target, or union access, which is currently not supported.
-    fn check_projection_elem(
-        &mut self,
-        projection_elem: &ProjectionElem,
-        intermediate_place: Place,
-    ) {
-        match projection_elem {
-            ProjectionElem::Deref => {
-                let ptr_ty = intermediate_place.ty(&self.locals).unwrap();
-                if ptr_ty.kind().is_raw_ptr() {
-                    self.push_target(MemoryInitOp::Check {
-                        operand: Operand::Copy(intermediate_place.clone()),
-                    });
-                }
-            }
-            ProjectionElem::Field(_, _) => {
-                if intermediate_place.ty(&self.locals).unwrap().kind().is_union() {
-                    self.push_target(MemoryInitOp::Unsupported {
-                        reason:
-                            "Kani does not support reasoning about memory initialization of unions."
-                                .to_string(),
-                    });
-                }
-            }
-            ProjectionElem::Index(_)
-            | ProjectionElem::ConstantIndex { .. }
-            | ProjectionElem::Subslice { .. } => {
-                /* For a slice to be indexed, it should be valid first. */
-            }
-            ProjectionElem::Downcast(_) => {}
-            ProjectionElem::OpaqueCast(_) => {}
-            ProjectionElem::Subtype(_) => {}
-        }
-    }
-
-    /// Check if the operand is a static to initialize it or else check its associated place.
-    fn check_operand(&mut self, operand: &Operand) {
-        match operand {
-            Operand::Copy(place) | Operand::Move(place) => self.check_place(place),
-            Operand::Constant(constant) => {
-                if let ConstantKind::Allocated(allocation) = constant.const_.kind() {
-                    for (_, prov) in &allocation.provenance.ptrs {
-                        if let GlobalAlloc::Static(_) = GlobalAlloc::from(prov.0) {
-                            if constant.ty().kind().is_raw_ptr() {
-                                // If a static is a raw pointer, need to mark it as initialized.
-                                self.push_target(MemoryInitOp::Set {
-                                    operand: Operand::Constant(constant.clone()),
-                                    value: true,
-                                    position: InsertPosition::Before,
-                                });
-                            }
-                        };
+            match elem {
+                ProjectionElem::Deref => {
+                    let ptr_ty = intermediate_place.ty(&self.locals).unwrap();
+                    if ptr_ty.kind().is_raw_ptr() {
+                        self.push_target(MemoryInitOp::Check {
+                            operand: Operand::Copy(intermediate_place.clone()),
+                        });
                     }
                 }
+                ProjectionElem::Field(idx, target_ty) => {
+                    if target_ty.kind().is_union()
+                        && (!ptx.is_mutating() || place.projection.len() > idx + 1)
+                    {
+                        self.push_target(MemoryInitOp::Unsupported {
+                            reason: "Kani does not support reasoning about memory initialization of unions.".to_string(),
+                        });
+                    }
+                }
+                ProjectionElem::Index(_)
+                | ProjectionElem::ConstantIndex { .. }
+                | ProjectionElem::Subslice { .. } => {
+                    /* For a slice to be indexed, it should be valid first. */
+                }
+                ProjectionElem::Downcast(_) => {}
+                ProjectionElem::OpaqueCast(_) => {}
+                ProjectionElem::Subtype(_) => {}
             }
         }
+        self.super_place(place, ptx, location)
+    }
+
+    fn visit_operand(&mut self, operand: &Operand, location: Location) {
+        if let Operand::Constant(constant) = operand {
+            if let ConstantKind::Allocated(allocation) = constant.const_.kind() {
+                for (_, prov) in &allocation.provenance.ptrs {
+                    if let GlobalAlloc::Static(_) = GlobalAlloc::from(prov.0) {
+                        if constant.ty().kind().is_raw_ptr() {
+                            // If a static is a raw pointer, need to mark it as initialized.
+                            self.push_target(MemoryInitOp::Set {
+                                operand: Operand::Constant(constant.clone()),
+                                value: true,
+                                position: InsertPosition::Before,
+                            });
+                        }
+                    };
+                }
+            }
+        }
+        self.super_operand(operand, location);
+    }
+
+    fn visit_rvalue(&mut self, rvalue: &Rvalue, location: Location) {
+        if let Rvalue::Cast(cast_kind, operand, ty) = rvalue {
+            match cast_kind {
+                CastKind::PointerCoercion(PointerCoercion::Unsize) => {
+                    if let TyKind::RigidTy(RigidTy::RawPtr(pointee_ty, _)) = ty.kind() {
+                        if pointee_ty.kind().is_trait() {
+                            self.push_target(MemoryInitOp::Unsupported {
+                                reason: "Kani does not support reasoning about memory initialization of unsized pointers.".to_string(),
+                            });
+                        }
+                    }
+                }
+                CastKind::Transmute => {
+                    let operand_ty = operand.ty(&self.locals).unwrap();
+                    if !tys_layout_compatible_to_size(&operand_ty, &ty) {
+                        // If transmuting between two types of incompatible layouts, padding
+                        // bytes are exposed, which is UB.
+                        self.push_target(MemoryInitOp::TriviallyUnsafe {
+                            reason: "Transmuting between types of incompatible layouts."
+                                .to_string(),
+                        });
+                    } else if let (
+                        TyKind::RigidTy(RigidTy::Ref(_, from_ty, _)),
+                        TyKind::RigidTy(RigidTy::Ref(_, to_ty, _)),
+                    ) = (operand_ty.kind(), ty.kind())
+                    {
+                        if !tys_layout_compatible_to_size(&from_ty, &to_ty) {
+                            // Since references are supposed to always be initialized for its type,
+                            // transmuting between two references of incompatible layout is UB.
+                            self.push_target(MemoryInitOp::TriviallyUnsafe {
+                                reason: "Transmuting between references pointing to types of incompatible layouts."
+                                    .to_string(),
+                            });
+                        }
+                    } else if let (
+                        TyKind::RigidTy(RigidTy::RawPtr(from_ty, _)),
+                        TyKind::RigidTy(RigidTy::Ref(_, to_ty, _)),
+                    ) = (operand_ty.kind(), ty.kind())
+                    {
+                        // Assert that we can only cast this way if types are the same.
+                        assert!(from_ty == to_ty);
+                        // When transmuting from a raw pointer to a reference, need to check that
+                        // the value pointed by the raw pointer is initialized.
+                        self.push_target(MemoryInitOp::Check { operand: operand.clone() });
+                    }
+                }
+                _ => {}
+            }
+        };
+        self.super_rvalue(rvalue, location);
     }
 }
 
