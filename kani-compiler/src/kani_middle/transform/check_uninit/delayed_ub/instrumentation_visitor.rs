@@ -32,8 +32,6 @@ pub struct InstrumentationVisitor<'a, 'tcx> {
     tcx: TyCtxt<'tcx>,
 }
 
-/// This enum differentiates between different reasons to visit a place, yielding different
-/// instrumentation injected.
 enum PlaceOperation {
     Read,
     Write,
