@@ -5,6 +5,8 @@
 
 use crate::info;
 use csv::WriterBuilder;
+use graph_cycles::Cycles;
+use petgraph::graph::Graph;
 use serde::{ser::SerializeStruct, Serialize, Serializer};
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::visit::{Location, PlaceContext, PlaceRef};
@@ -473,7 +475,8 @@ fn_props! {
 
 impl FnLoops {
     pub fn collect(self, body: &Body) -> FnLoops {
-        let mut visitor = IteratorVisitor { props: self, body, visited_blocks: HashSet::new() };
+        let mut visitor =
+            IteratorVisitor { props: self, body, graph: Vec::new(), current_bbidx: 0 };
         visitor.visit_body(body);
         visitor.props
     }
@@ -494,23 +497,30 @@ impl FnLoops {
 struct IteratorVisitor<'a> {
     props: FnLoops,
     body: &'a Body,
-    visited_blocks: HashSet<usize>,
+    graph: Vec<(u32, u32)>,
+    current_bbidx: u32,
 }
 
 impl<'a> MirVisitor for IteratorVisitor<'a> {
+    fn visit_body(&mut self, body: &Body) {
+        // First visit the body to build the control flow graph
+        self.super_body(body);
+        // Build the petgraph from the adj vec
+        let g = Graph::<(), ()>::from_edges(self.graph.clone());
+        self.props.loops += g.cycles().len();
+    }
+
     fn visit_basic_block(&mut self, bb: &BasicBlock) {
-        self.visited_blocks.insert(self.body.blocks.iter().position(|b| *b == *bb).unwrap());
+        self.current_bbidx = self.body.blocks.iter().position(|b| *b == *bb).unwrap() as u32;
         self.super_basic_block(bb);
     }
 
     fn visit_terminator(&mut self, term: &Terminator, location: Location) {
-        // Check if any successor has been visited---the terminator is a loop latch.
+        // Add edges between basic block into the adj table
         let successors = term.kind.successors();
-        let mut contain_loop = false;
         for target in successors {
-            contain_loop |= self.visited_blocks.contains(&target);
+            self.graph.push((self.current_bbidx, target as u32));
         }
-        self.props.loops += contain_loop as usize;
 
         if let TerminatorKind::Call { func, .. } = &term.kind {
             let kind = func.ty(self.body.locals()).unwrap().kind();

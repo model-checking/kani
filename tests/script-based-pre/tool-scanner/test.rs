@@ -33,12 +33,12 @@ pub fn with_iterator(input: &[usize]) -> usize {
         .iter()
         .copied()
         .find(|e| *e == 0)
-        .unwrap_or_else(|| input.iter().fold(0, |acc, i| acc + 1))
+        .unwrap_or_else(|| input.iter().fold(0, |acc, _| acc + 1))
 }
 
 pub fn with_for_loop(input: &[usize]) -> usize {
     let mut res = 0;
-    for n in input {
+    for _ in input {
         res += 1;
     }
     res
