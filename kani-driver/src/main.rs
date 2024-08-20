@@ -5,7 +5,7 @@ use std::ffi::OsString;
 use std::process::ExitCode;
 
 use anyhow::Result;
-use chrono::Local;
+use time::{OffsetDateTime, format_description};
 
 use args::{check_is_valid, CargoKaniSubcommand};
 use args_toml::join_args;
@@ -132,7 +132,9 @@ fn verify_project(project: Project, session: KaniSession) -> Result<()> {
     let results = runner.check_all_harnesses(&harnesses)?;
 
     if session.args.coverage {
-        let timestamp = Local::now().format("%Y-%m-%d_%H-%M").to_string();
+        let time_now = OffsetDateTime::now_utc();
+        let format = format_description::parse("[year]-[month]-[day]_[hour]-[minute]").unwrap();
+        let timestamp = time_now.format(&format).unwrap();
         session.save_coverage_metadata(&project, &timestamp)?;
         session.save_coverage_results(&project, &results, &timestamp)?;
     }
