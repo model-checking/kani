@@ -5,7 +5,7 @@ use std::ffi::OsString;
 use std::process::ExitCode;
 
 use anyhow::Result;
-use time::{OffsetDateTime, format_description};
+use time::{format_description, OffsetDateTime};
 
 use args::{check_is_valid, CargoKaniSubcommand};
 use args_toml::join_args;
