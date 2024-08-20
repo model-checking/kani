@@ -1,7 +1,0 @@
-Source-based code coverage results:
-
-test.rs (div)\
- * 4:1 - 6:2 COVERED
-
-tests/coverage/reachable/div-zero/reachable_fail/test.rs (main)\
- * 9:1 - 11:2 COVERED

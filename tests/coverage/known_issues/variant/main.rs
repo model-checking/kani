@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 //! Checks coverage results in an example with a `match` statement matching on
-//! all enum variants.
+//! all enum variants. Currently, it does not yield the expected results because
+//! it reports the `dir` in the match statement as `UNCOVERED`:
+//! <https://github.com/model-checking/kani/issues/3456>
 
 enum Direction {
     Up,

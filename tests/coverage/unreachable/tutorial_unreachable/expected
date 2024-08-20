@@ -1,6 +1,0 @@
-Source-based code coverage results:
-
-main.rs (unreachable_example)\
- * 5:1 - 8:13 COVERED\
- * 8:14 - 10:6 UNCOVERED\
- * 10:6 - 10:7 COVERED

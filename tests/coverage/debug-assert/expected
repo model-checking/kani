@@ -1,6 +1,6 @@
 Source-based code coverage results:
 
-tests/coverage/unreachable/debug-assert/main.rs (main)
+main.rs (main)\
  * 10:1 - 10:11 COVERED\
  * 11:9 - 11:10 COVERED\
  * 11:14 - 11:18 COVERED\

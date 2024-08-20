@@ -1,6 +1,0 @@
-Source-based code coverage results:
-
-main.rs (main)\
- * 7:1 - 11:39 COVERED\
- * 13:17 - 13:22 UNCOVERED\
- * 16:12 - 18:6 COVERED
