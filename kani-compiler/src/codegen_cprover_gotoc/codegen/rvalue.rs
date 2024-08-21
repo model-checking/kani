@@ -698,7 +698,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         let pointee_goto_typ = Type::unsigned_int(8);
                         // cast data to pointer with specified type
                         let data_cast =
-                            data.cast_to(Type::Pointer { typ: Box::new(pointee_goto_typ.clone()) });
+                            data.cast_to(Type::Pointer { typ: Box::new(pointee_goto_typ) });
                         let meta = self.codegen_operand_stable(&operands[1]);
                         slice_fat_ptr(typ, data_cast, meta, &self.symbol_table)
                     }
