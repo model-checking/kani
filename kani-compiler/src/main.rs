@@ -10,10 +10,11 @@
 #![recursion_limit = "256"]
 #![feature(box_patterns)]
 #![feature(rustc_private)]
-#![feature(lazy_cell)]
 #![feature(more_qualified_paths)]
 #![feature(iter_intersperse)]
 #![feature(let_chains)]
+#![feature(f128)]
+#![feature(f16)]
 extern crate rustc_abi;
 extern crate rustc_ast;
 extern crate rustc_ast_pretty;
@@ -26,6 +27,7 @@ extern crate rustc_index;
 extern crate rustc_interface;
 extern crate rustc_metadata;
 extern crate rustc_middle;
+extern crate rustc_mir_dataflow;
 extern crate rustc_session;
 extern crate rustc_smir;
 extern crate rustc_span;
@@ -37,6 +39,7 @@ extern crate tempfile;
 mod args;
 #[cfg(feature = "cprover")]
 mod codegen_cprover_gotoc;
+mod intrinsics;
 mod kani_compiler;
 mod kani_middle;
 mod kani_queries;

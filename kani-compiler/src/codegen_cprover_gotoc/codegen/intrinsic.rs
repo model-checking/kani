@@ -5,6 +5,7 @@ use super::typ;
 use super::{bb_label, PropertyClass};
 use crate::codegen_cprover_gotoc::codegen::ty_stable::pointee_type_stable;
 use crate::codegen_cprover_gotoc::{utils, GotocCtx};
+use crate::intrinsics::Intrinsic;
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
 use cbmc::goto_program::{
     ArithmeticOverflowResult, BinaryOperator, BuiltinFn, Expr, Location, Stmt, Type,
@@ -33,11 +34,12 @@ impl<'tcx> GotocCtx<'tcx> {
         place: &Place,
         mut fargs: Vec<Expr>,
         f: F,
+        loc: Location,
     ) -> Stmt {
         let arg1 = fargs.remove(0);
         let arg2 = fargs.remove(0);
         let expr = f(arg1, arg2);
-        self.codegen_expr_to_place_stable(place, expr)
+        self.codegen_expr_to_place_stable(place, expr, loc)
     }
 
     /// Given a call to an compiler intrinsic, generate the call and the `goto` terminator
@@ -113,7 +115,7 @@ impl<'tcx> GotocCtx<'tcx> {
         span: Span,
     ) -> Stmt {
         let intrinsic_name = instance.intrinsic_name().unwrap();
-        let intrinsic = intrinsic_name.as_str();
+        let intrinsic_str = intrinsic_name.as_str();
         let loc = self.codegen_span_stable(span);
         debug!(?instance, "codegen_intrinsic");
         debug!(?fargs, "codegen_intrinsic");
@@ -149,7 +151,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         mm,
                     );
                 let expr = BuiltinFn::$f.call(casted_fargs, loc);
-                self.codegen_expr_to_place_stable(place, expr)
+                self.codegen_expr_to_place_stable(place, expr, loc)
             }};
         }
 
@@ -162,11 +164,11 @@ impl<'tcx> GotocCtx<'tcx> {
                 let div_overflow_check = self.codegen_assert_assume(
                     div_does_not_overflow,
                     PropertyClass::ArithmeticOverflow,
-                    format!("attempt to compute {} which would overflow", intrinsic).as_str(),
+                    format!("attempt to compute {} which would overflow", intrinsic_str).as_str(),
                     loc,
                 );
                 let res = a.$f(b);
-                let expr_place = self.codegen_expr_to_place_stable(place, res);
+                let expr_place = self.codegen_expr_to_place_stable(place, res, loc);
                 Stmt::block(vec![div_overflow_check, expr_place], loc)
             }};
         }
@@ -178,7 +180,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
         // Intrinsics which encode a simple binary operation
         macro_rules! codegen_intrinsic_binop {
-            ($f:ident) => {{ self.binop(place, fargs, |a, b| a.$f(b)) }};
+            ($f:ident) => {{ self.binop(place, fargs, |a, b| a.$f(b), loc) }};
         }
 
         // Intrinsics which encode a simple binary operation which need a machine model
@@ -187,7 +189,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 let arg1 = fargs.remove(0);
                 let arg2 = fargs.remove(0);
                 let expr = arg1.$f(arg2, self.symbol_table.machine_model());
-                self.codegen_expr_to_place_stable(place, expr)
+                self.codegen_expr_to_place_stable(place, expr, loc)
             }};
         }
 
@@ -196,7 +198,7 @@ impl<'tcx> GotocCtx<'tcx> {
         macro_rules! codegen_count_intrinsic {
             ($builtin: ident, $allow_zero: expr) => {{
                 let arg = fargs.remove(0);
-                self.codegen_expr_to_place_stable(place, arg.$builtin($allow_zero))
+                self.codegen_expr_to_place_stable(place, arg.$builtin($allow_zero), loc)
             }};
         }
 
@@ -208,8 +210,8 @@ impl<'tcx> GotocCtx<'tcx> {
                 let alloc = stable_instance.try_const_eval(place_ty).unwrap();
                 // We assume that the intrinsic has type checked at this point, so
                 // we can use the place type as the expression type.
-                let expr = self.codegen_allocation(&alloc, place_ty, Some(span));
-                self.codegen_expr_to_place_stable(&place, expr)
+                let expr = self.codegen_allocation(&alloc, place_ty, loc);
+                self.codegen_expr_to_place_stable(&place, expr, loc)
             }};
         }
 
@@ -220,7 +222,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 let target_ty = args.0[0].expect_ty();
                 let arg = fargs.remove(0);
                 let size_align = self.size_and_align_of_dst(*target_ty, arg);
-                self.codegen_expr_to_place_stable(place, size_align.$which)
+                self.codegen_expr_to_place_stable(place, size_align.$which, loc)
             }};
         }
 
@@ -256,7 +258,7 @@ impl<'tcx> GotocCtx<'tcx> {
         macro_rules! codegen_atomic_binop {
             ($op: ident) => {{
                 let loc = self.codegen_span_stable(span);
-                self.store_concurrent_construct(intrinsic, loc);
+                self.store_concurrent_construct(intrinsic_str, loc);
                 let var1_ref = fargs.remove(0);
                 let var1 = var1_ref.dereference();
                 let (tmp, decl_stmt) =
@@ -271,7 +273,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     (var1.clone()).$op(var2).with_location(loc)
                 };
                 let assign_stmt = (var1.clone()).assign(op_expr, loc);
-                let res_stmt = self.codegen_expr_to_place_stable(place, tmp.clone());
+                let res_stmt = self.codegen_expr_to_place_stable(place, tmp.clone(), loc);
                 Stmt::atomic_block(vec![decl_stmt, assign_stmt, res_stmt], loc)
             }};
         }
@@ -279,346 +281,282 @@ impl<'tcx> GotocCtx<'tcx> {
         macro_rules! unstable_codegen {
             ($($tt:tt)*) => {{
                 let expr = self.codegen_unimplemented_expr(
-                    &format!("'{}' intrinsic", intrinsic),
+                    &format!("'{}' intrinsic", intrinsic_str),
                     cbmc_ret_ty,
                     loc,
                     "https://github.com/model-checking/kani/issues/new/choose",
                 );
-                self.codegen_expr_to_place_stable(place, expr)
+                self.codegen_expr_to_place_stable(place, expr, loc)
             }};
         }
 
-        if let Some(stripped) = intrinsic.strip_prefix("simd_shuffle") {
-            assert!(fargs.len() == 3, "`simd_shuffle` had unexpected arguments {fargs:?}");
-            let n: u64 = self.simd_shuffle_length(stripped, farg_types, span);
-            return self.codegen_intrinsic_simd_shuffle(fargs, place, farg_types, ret_ty, n, span);
-        }
+        let intrinsic = Intrinsic::from_instance(&instance);
 
         match intrinsic {
-            "add_with_overflow" => {
+            Intrinsic::AddWithOverflow => {
                 self.codegen_op_with_overflow(BinaryOperator::OverflowResultPlus, fargs, place, loc)
             }
-            "arith_offset" => self.codegen_offset(intrinsic, instance, fargs, place, loc),
-            "assert_inhabited" => self.codegen_assert_intrinsic(instance, intrinsic, span),
-            "assert_mem_uninitialized_valid" => {
-                self.codegen_assert_intrinsic(instance, intrinsic, span)
+            Intrinsic::ArithOffset => {
+                self.codegen_offset(intrinsic_str, instance, fargs, place, loc)
             }
-            "assert_zero_valid" => self.codegen_assert_intrinsic(instance, intrinsic, span),
+            Intrinsic::AssertInhabited => {
+                self.codegen_assert_intrinsic(instance, intrinsic_str, span)
+            }
+            Intrinsic::AssertMemUninitializedValid => {
+                self.codegen_assert_intrinsic(instance, intrinsic_str, span)
+            }
+            Intrinsic::AssertZeroValid => {
+                self.codegen_assert_intrinsic(instance, intrinsic_str, span)
+            }
             // https://doc.rust-lang.org/core/intrinsics/fn.assume.html
             // Informs the optimizer that a condition is always true.
             // If the condition is false, the behavior is undefined.
-            "assume" => self.codegen_assert_assume(
+            Intrinsic::Assume => self.codegen_assert_assume(
                 fargs.remove(0).cast_to(Type::bool()),
                 PropertyClass::Assume,
                 "assumption failed",
                 loc,
             ),
-            "atomic_and_seqcst" => codegen_atomic_binop!(bitand),
-            "atomic_and_acquire" => codegen_atomic_binop!(bitand),
-            "atomic_and_acqrel" => codegen_atomic_binop!(bitand),
-            "atomic_and_release" => codegen_atomic_binop!(bitand),
-            "atomic_and_relaxed" => codegen_atomic_binop!(bitand),
-            name if name.starts_with("atomic_cxchg") => {
-                self.codegen_atomic_cxchg(intrinsic, fargs, place, loc)
+            Intrinsic::AtomicAnd(_) => codegen_atomic_binop!(bitand),
+            Intrinsic::AtomicCxchg(_) | Intrinsic::AtomicCxchgWeak(_) => {
+                self.codegen_atomic_cxchg(intrinsic_str, fargs, place, loc)
             }
-            "atomic_fence_seqcst" => self.codegen_atomic_noop(intrinsic, loc),
-            "atomic_fence_acquire" => self.codegen_atomic_noop(intrinsic, loc),
-            "atomic_fence_acqrel" => self.codegen_atomic_noop(intrinsic, loc),
-            "atomic_fence_release" => self.codegen_atomic_noop(intrinsic, loc),
-            "atomic_load_seqcst" => self.codegen_atomic_load(intrinsic, fargs, place, loc),
-            "atomic_load_acquire" => self.codegen_atomic_load(intrinsic, fargs, place, loc),
-            "atomic_load_relaxed" => self.codegen_atomic_load(intrinsic, fargs, place, loc),
-            "atomic_load_unordered" => self.codegen_atomic_load(intrinsic, fargs, place, loc),
-            "atomic_max_seqcst" => codegen_atomic_binop!(max),
-            "atomic_max_acquire" => codegen_atomic_binop!(max),
-            "atomic_max_acqrel" => codegen_atomic_binop!(max),
-            "atomic_max_release" => codegen_atomic_binop!(max),
-            "atomic_max_relaxed" => codegen_atomic_binop!(max),
-            "atomic_min_seqcst" => codegen_atomic_binop!(min),
-            "atomic_min_acquire" => codegen_atomic_binop!(min),
-            "atomic_min_acqrel" => codegen_atomic_binop!(min),
-            "atomic_min_release" => codegen_atomic_binop!(min),
-            "atomic_min_relaxed" => codegen_atomic_binop!(min),
-            "atomic_nand_seqcst" => codegen_atomic_binop!(bitnand),
-            "atomic_nand_acquire" => codegen_atomic_binop!(bitnand),
-            "atomic_nand_acqrel" => codegen_atomic_binop!(bitnand),
-            "atomic_nand_release" => codegen_atomic_binop!(bitnand),
-            "atomic_nand_relaxed" => codegen_atomic_binop!(bitnand),
-            "atomic_or_seqcst" => codegen_atomic_binop!(bitor),
-            "atomic_or_acquire" => codegen_atomic_binop!(bitor),
-            "atomic_or_acqrel" => codegen_atomic_binop!(bitor),
-            "atomic_or_release" => codegen_atomic_binop!(bitor),
-            "atomic_or_relaxed" => codegen_atomic_binop!(bitor),
-            "atomic_singlethreadfence_seqcst" => self.codegen_atomic_noop(intrinsic, loc),
-            "atomic_singlethreadfence_acquire" => self.codegen_atomic_noop(intrinsic, loc),
-            "atomic_singlethreadfence_acqrel" => self.codegen_atomic_noop(intrinsic, loc),
-            "atomic_singlethreadfence_release" => self.codegen_atomic_noop(intrinsic, loc),
-            "atomic_store_seqcst" => self.codegen_atomic_store(intrinsic, fargs, place, loc),
-            "atomic_store_release" => self.codegen_atomic_store(intrinsic, fargs, place, loc),
-            "atomic_store_relaxed" => self.codegen_atomic_store(intrinsic, fargs, place, loc),
-            "atomic_store_unordered" => self.codegen_atomic_store(intrinsic, fargs, place, loc),
-            "atomic_umax_seqcst" => codegen_atomic_binop!(max),
-            "atomic_umax_acquire" => codegen_atomic_binop!(max),
-            "atomic_umax_acqrel" => codegen_atomic_binop!(max),
-            "atomic_umax_release" => codegen_atomic_binop!(max),
-            "atomic_umax_relaxed" => codegen_atomic_binop!(max),
-            "atomic_umin_seqcst" => codegen_atomic_binop!(min),
-            "atomic_umin_acquire" => codegen_atomic_binop!(min),
-            "atomic_umin_acqrel" => codegen_atomic_binop!(min),
-            "atomic_umin_release" => codegen_atomic_binop!(min),
-            "atomic_umin_relaxed" => codegen_atomic_binop!(min),
-            "atomic_xadd_seqcst" => codegen_atomic_binop!(plus),
-            "atomic_xadd_acquire" => codegen_atomic_binop!(plus),
-            "atomic_xadd_acqrel" => codegen_atomic_binop!(plus),
-            "atomic_xadd_release" => codegen_atomic_binop!(plus),
-            "atomic_xadd_relaxed" => codegen_atomic_binop!(plus),
-            "atomic_xchg_seqcst" => self.codegen_atomic_store(intrinsic, fargs, place, loc),
-            "atomic_xchg_acquire" => self.codegen_atomic_store(intrinsic, fargs, place, loc),
-            "atomic_xchg_acqrel" => self.codegen_atomic_store(intrinsic, fargs, place, loc),
-            "atomic_xchg_release" => self.codegen_atomic_store(intrinsic, fargs, place, loc),
-            "atomic_xchg_relaxed" => self.codegen_atomic_store(intrinsic, fargs, place, loc),
-            "atomic_xor_seqcst" => codegen_atomic_binop!(bitxor),
-            "atomic_xor_acquire" => codegen_atomic_binop!(bitxor),
-            "atomic_xor_acqrel" => codegen_atomic_binop!(bitxor),
-            "atomic_xor_release" => codegen_atomic_binop!(bitxor),
-            "atomic_xor_relaxed" => codegen_atomic_binop!(bitxor),
-            "atomic_xsub_seqcst" => codegen_atomic_binop!(sub),
-            "atomic_xsub_acquire" => codegen_atomic_binop!(sub),
-            "atomic_xsub_acqrel" => codegen_atomic_binop!(sub),
-            "atomic_xsub_release" => codegen_atomic_binop!(sub),
-            "atomic_xsub_relaxed" => codegen_atomic_binop!(sub),
-            "bitreverse" => self.codegen_expr_to_place_stable(place, fargs.remove(0).bitreverse()),
+
+            Intrinsic::AtomicFence(_) => self.codegen_atomic_noop(intrinsic_str, loc),
+            Intrinsic::AtomicLoad(_) => self.codegen_atomic_load(intrinsic_str, fargs, place, loc),
+            Intrinsic::AtomicMax(_) => codegen_atomic_binop!(max),
+            Intrinsic::AtomicMin(_) => codegen_atomic_binop!(min),
+            Intrinsic::AtomicNand(_) => codegen_atomic_binop!(bitnand),
+            Intrinsic::AtomicOr(_) => codegen_atomic_binop!(bitor),
+            Intrinsic::AtomicSingleThreadFence(_) => self.codegen_atomic_noop(intrinsic_str, loc),
+            Intrinsic::AtomicStore(_) => {
+                self.codegen_atomic_store(intrinsic_str, fargs, place, loc)
+            }
+            Intrinsic::AtomicUmax(_) => codegen_atomic_binop!(max),
+            Intrinsic::AtomicUmin(_) => codegen_atomic_binop!(min),
+            Intrinsic::AtomicXadd(_) => codegen_atomic_binop!(plus),
+            Intrinsic::AtomicXchg(_) => self.codegen_atomic_store(intrinsic_str, fargs, place, loc),
+            Intrinsic::AtomicXor(_) => codegen_atomic_binop!(bitxor),
+            Intrinsic::AtomicXsub(_) => codegen_atomic_binop!(sub),
+            Intrinsic::Bitreverse => {
+                self.codegen_expr_to_place_stable(place, fargs.remove(0).bitreverse(), loc)
+            }
             // black_box is an identity function that hints to the compiler
             // to be maximally pessimistic to limit optimizations
-            "black_box" => self.codegen_expr_to_place_stable(place, fargs.remove(0)),
-            "breakpoint" => Stmt::skip(loc),
-            "bswap" => self.codegen_expr_to_place_stable(place, fargs.remove(0).bswap()),
-            "caller_location" => self.codegen_unimplemented_stmt(
-                intrinsic,
-                loc,
-                "https://github.com/model-checking/kani/issues/374",
-            ),
-            "catch_unwind" => self.codegen_unimplemented_stmt(
-                intrinsic,
-                loc,
-                "https://github.com/model-checking/kani/issues/267",
-            ),
-            "ceilf32" => codegen_simple_intrinsic!(Ceilf),
-            "ceilf64" => codegen_simple_intrinsic!(Ceil),
-            "compare_bytes" => self.codegen_compare_bytes(fargs, place, loc),
-            "copy" => self.codegen_copy(intrinsic, false, fargs, farg_types, Some(place), loc),
-            "copy_nonoverlapping" => unreachable!(
-                "Expected `core::intrinsics::unreachable` to be handled by `StatementKind::CopyNonOverlapping`"
-            ),
-            "copysignf32" => codegen_simple_intrinsic!(Copysignf),
-            "copysignf64" => codegen_simple_intrinsic!(Copysign),
-            "cosf32" => codegen_simple_intrinsic!(Cosf),
-            "cosf64" => codegen_simple_intrinsic!(Cos),
-            "ctlz" => codegen_count_intrinsic!(ctlz, true),
-            "ctlz_nonzero" => codegen_count_intrinsic!(ctlz, false),
-            "ctpop" => self.codegen_ctpop(place, span, fargs.remove(0), farg_types[0]),
-            "cttz" => codegen_count_intrinsic!(cttz, true),
-            "cttz_nonzero" => codegen_count_intrinsic!(cttz, false),
-            "discriminant_value" => {
+            Intrinsic::BlackBox => self.codegen_expr_to_place_stable(place, fargs.remove(0), loc),
+            Intrinsic::Breakpoint => Stmt::skip(loc),
+            Intrinsic::Bswap => {
+                self.codegen_expr_to_place_stable(place, fargs.remove(0).bswap(), loc)
+            }
+            Intrinsic::CeilF32 => codegen_simple_intrinsic!(Ceilf),
+            Intrinsic::CeilF64 => codegen_simple_intrinsic!(Ceil),
+            Intrinsic::CompareBytes => self.codegen_compare_bytes(fargs, place, loc),
+            Intrinsic::Copy => {
+                self.codegen_copy(intrinsic_str, false, fargs, farg_types, Some(place), loc)
+            }
+            Intrinsic::CopySignF32 => codegen_simple_intrinsic!(Copysignf),
+            Intrinsic::CopySignF64 => codegen_simple_intrinsic!(Copysign),
+            Intrinsic::CosF32 => codegen_simple_intrinsic!(Cosf),
+            Intrinsic::CosF64 => codegen_simple_intrinsic!(Cos),
+            Intrinsic::Ctlz => codegen_count_intrinsic!(ctlz, true),
+            Intrinsic::CtlzNonZero => codegen_count_intrinsic!(ctlz, false),
+            Intrinsic::Ctpop => self.codegen_ctpop(place, span, fargs.remove(0), farg_types[0]),
+            Intrinsic::Cttz => codegen_count_intrinsic!(cttz, true),
+            Intrinsic::CttzNonZero => codegen_count_intrinsic!(cttz, false),
+            Intrinsic::DiscriminantValue => {
                 let sig = instance.ty().kind().fn_sig().unwrap().skip_binder();
                 let ty = pointee_type_stable(sig.inputs()[0]).unwrap();
                 let e = self.codegen_get_discriminant(fargs.remove(0).dereference(), ty, ret_ty);
-                self.codegen_expr_to_place_stable(place, e)
+                self.codegen_expr_to_place_stable(place, e, loc)
             }
-            "exact_div" => self.codegen_exact_div(fargs, place, loc),
-            "exp2f32" => codegen_simple_intrinsic!(Exp2f),
-            "exp2f64" => codegen_simple_intrinsic!(Exp2),
-            "expf32" => codegen_simple_intrinsic!(Expf),
-            "expf64" => codegen_simple_intrinsic!(Exp),
-            "fabsf32" => codegen_simple_intrinsic!(Fabsf),
-            "fabsf64" => codegen_simple_intrinsic!(Fabs),
-            "fadd_fast" => {
+            Intrinsic::ExactDiv => self.codegen_exact_div(fargs, place, loc),
+            Intrinsic::Exp2F32 => codegen_simple_intrinsic!(Exp2f),
+            Intrinsic::Exp2F64 => codegen_simple_intrinsic!(Exp2),
+            Intrinsic::ExpF32 => codegen_simple_intrinsic!(Expf),
+            Intrinsic::ExpF64 => codegen_simple_intrinsic!(Exp),
+            Intrinsic::FabsF32 => codegen_simple_intrinsic!(Fabsf),
+            Intrinsic::FabsF64 => codegen_simple_intrinsic!(Fabs),
+            Intrinsic::FaddFast => {
                 let fargs_clone = fargs.clone();
                 let binop_stmt = codegen_intrinsic_binop!(plus);
-                self.add_finite_args_checks(intrinsic, fargs_clone, binop_stmt, span)
+                self.add_finite_args_checks(intrinsic_str, fargs_clone, binop_stmt, span)
             }
-            "fdiv_fast" => {
+            Intrinsic::FdivFast => {
                 let fargs_clone = fargs.clone();
                 let binop_stmt = codegen_intrinsic_binop!(div);
-                self.add_finite_args_checks(intrinsic, fargs_clone, binop_stmt, span)
+                self.add_finite_args_checks(intrinsic_str, fargs_clone, binop_stmt, span)
             }
-            "floorf32" => codegen_simple_intrinsic!(Floorf),
-            "floorf64" => codegen_simple_intrinsic!(Floor),
-            "fmaf32" => unstable_codegen!(codegen_simple_intrinsic!(Fmaf)),
-            "fmaf64" => unstable_codegen!(codegen_simple_intrinsic!(Fma)),
-            "fmul_fast" => {
+            Intrinsic::FloorF32 => codegen_simple_intrinsic!(Floorf),
+            Intrinsic::FloorF64 => codegen_simple_intrinsic!(Floor),
+            Intrinsic::FmafF32 => codegen_simple_intrinsic!(Fmaf),
+            Intrinsic::FmafF64 => codegen_simple_intrinsic!(Fma),
+            Intrinsic::FmulFast => {
                 let fargs_clone = fargs.clone();
                 let binop_stmt = codegen_intrinsic_binop!(mul);
-                self.add_finite_args_checks(intrinsic, fargs_clone, binop_stmt, span)
+                self.add_finite_args_checks(intrinsic_str, fargs_clone, binop_stmt, span)
             }
-            "forget" => Stmt::skip(loc),
-            "fsub_fast" => {
+            Intrinsic::Forget => Stmt::skip(loc),
+            Intrinsic::FsubFast => {
                 let fargs_clone = fargs.clone();
                 let binop_stmt = codegen_intrinsic_binop!(sub);
-                self.add_finite_args_checks(intrinsic, fargs_clone, binop_stmt, span)
+                self.add_finite_args_checks(intrinsic_str, fargs_clone, binop_stmt, span)
             }
-            "is_val_statically_known" => {
+            Intrinsic::IsValStaticallyKnown => {
                 // Returning false is sound according do this intrinsic's documentation:
                 // https://doc.rust-lang.org/nightly/std/intrinsics/fn.is_val_statically_known.html
-                self.codegen_expr_to_place_stable(place, Expr::c_false())
+                self.codegen_expr_to_place_stable(place, Expr::c_false(), loc)
             }
-            "likely" => self.codegen_expr_to_place_stable(place, fargs.remove(0)),
-            "log10f32" => unstable_codegen!(codegen_simple_intrinsic!(Log10f)),
-            "log10f64" => unstable_codegen!(codegen_simple_intrinsic!(Log10)),
-            "log2f32" => unstable_codegen!(codegen_simple_intrinsic!(Log2f)),
-            "log2f64" => unstable_codegen!(codegen_simple_intrinsic!(Log2)),
-            "logf32" => codegen_simple_intrinsic!(Logf),
-            "logf64" => codegen_simple_intrinsic!(Log),
-            "maxnumf32" => codegen_simple_intrinsic!(Fmaxf),
-            "maxnumf64" => codegen_simple_intrinsic!(Fmax),
-            "min_align_of" => codegen_intrinsic_const!(),
-            "min_align_of_val" => codegen_size_align!(align),
-            "minnumf32" => codegen_simple_intrinsic!(Fminf),
-            "minnumf64" => codegen_simple_intrinsic!(Fmin),
-            "mul_with_overflow" => {
+            Intrinsic::Likely => self.codegen_expr_to_place_stable(place, fargs.remove(0), loc),
+            Intrinsic::Log10F32 => codegen_simple_intrinsic!(Log10f),
+            Intrinsic::Log10F64 => codegen_simple_intrinsic!(Log10),
+            Intrinsic::Log2F32 => codegen_simple_intrinsic!(Log2f),
+            Intrinsic::Log2F64 => codegen_simple_intrinsic!(Log2),
+            Intrinsic::LogF32 => codegen_simple_intrinsic!(Logf),
+            Intrinsic::LogF64 => codegen_simple_intrinsic!(Log),
+            Intrinsic::MaxNumF32 => codegen_simple_intrinsic!(Fmaxf),
+            Intrinsic::MaxNumF64 => codegen_simple_intrinsic!(Fmax),
+            Intrinsic::MinAlignOf => codegen_intrinsic_const!(),
+            Intrinsic::MinAlignOfVal => codegen_size_align!(align),
+            Intrinsic::MinNumF32 => codegen_simple_intrinsic!(Fminf),
+            Intrinsic::MinNumF64 => codegen_simple_intrinsic!(Fmin),
+            Intrinsic::MulWithOverflow => {
                 self.codegen_op_with_overflow(BinaryOperator::OverflowResultMult, fargs, place, loc)
             }
-            "nearbyintf32" => codegen_simple_intrinsic!(Nearbyintf),
-            "nearbyintf64" => codegen_simple_intrinsic!(Nearbyint),
-            "needs_drop" => codegen_intrinsic_const!(),
-            // As of https://github.com/rust-lang/rust/pull/110822 the `offset` intrinsic is lowered to `mir::BinOp::Offset`
-            "offset" => unreachable!(
-                "Expected `core::intrinsics::unreachable` to be handled by `BinOp::OffSet`"
-            ),
-            "powf32" => codegen_simple_intrinsic!(Powf),
-            "powf64" => codegen_simple_intrinsic!(Pow),
-            "powif32" => unstable_codegen!(codegen_simple_intrinsic!(Powif)),
-            "powif64" => unstable_codegen!(codegen_simple_intrinsic!(Powi)),
-            "pref_align_of" => codegen_intrinsic_const!(),
-            "ptr_guaranteed_cmp" => self.codegen_ptr_guaranteed_cmp(fargs, place),
-            "ptr_offset_from" => self.codegen_ptr_offset_from(fargs, place, loc),
-            "ptr_offset_from_unsigned" => self.codegen_ptr_offset_from_unsigned(fargs, place, loc),
-            "raw_eq" => self.codegen_intrinsic_raw_eq(instance, fargs, place, loc),
-            "retag_box_to_raw" => self.codegen_retag_box_to_raw(fargs, place, loc),
-            "rintf32" => codegen_simple_intrinsic!(Rintf),
-            "rintf64" => codegen_simple_intrinsic!(Rint),
-            "rotate_left" => codegen_intrinsic_binop!(rol),
-            "rotate_right" => codegen_intrinsic_binop!(ror),
-            "roundf32" => codegen_simple_intrinsic!(Roundf),
-            "roundf64" => codegen_simple_intrinsic!(Round),
-            "saturating_add" => codegen_intrinsic_binop_with_mm!(saturating_add),
-            "saturating_sub" => codegen_intrinsic_binop_with_mm!(saturating_sub),
-            "sinf32" => codegen_simple_intrinsic!(Sinf),
-            "sinf64" => codegen_simple_intrinsic!(Sin),
-            "simd_add" => self.codegen_simd_op_with_overflow(
+            Intrinsic::NearbyIntF32 => codegen_simple_intrinsic!(Nearbyintf),
+            Intrinsic::NearbyIntF64 => codegen_simple_intrinsic!(Nearbyint),
+            Intrinsic::NeedsDrop => codegen_intrinsic_const!(),
+            Intrinsic::PowF32 => codegen_simple_intrinsic!(Powf),
+            Intrinsic::PowF64 => codegen_simple_intrinsic!(Pow),
+            Intrinsic::PowIF32 => codegen_simple_intrinsic!(Powif),
+            Intrinsic::PowIF64 => codegen_simple_intrinsic!(Powi),
+            Intrinsic::PrefAlignOf => codegen_intrinsic_const!(),
+            Intrinsic::PtrGuaranteedCmp => self.codegen_ptr_guaranteed_cmp(fargs, place, loc),
+            Intrinsic::PtrOffsetFrom => self.codegen_ptr_offset_from(fargs, place, loc),
+            Intrinsic::PtrOffsetFromUnsigned => {
+                self.codegen_ptr_offset_from_unsigned(fargs, place, loc)
+            }
+            Intrinsic::RawEq => self.codegen_intrinsic_raw_eq(instance, fargs, place, loc),
+            Intrinsic::RetagBoxToRaw => self.codegen_retag_box_to_raw(fargs, place, loc),
+            Intrinsic::RintF32 => codegen_simple_intrinsic!(Rintf),
+            Intrinsic::RintF64 => codegen_simple_intrinsic!(Rint),
+            Intrinsic::RotateLeft => codegen_intrinsic_binop!(rol),
+            Intrinsic::RotateRight => codegen_intrinsic_binop!(ror),
+            Intrinsic::RoundF32 => codegen_simple_intrinsic!(Roundf),
+            Intrinsic::RoundF64 => codegen_simple_intrinsic!(Round),
+            Intrinsic::SaturatingAdd => codegen_intrinsic_binop_with_mm!(saturating_add),
+            Intrinsic::SaturatingSub => codegen_intrinsic_binop_with_mm!(saturating_sub),
+            Intrinsic::SinF32 => codegen_simple_intrinsic!(Sinf),
+            Intrinsic::SinF64 => codegen_simple_intrinsic!(Sin),
+            Intrinsic::SimdAdd => self.codegen_simd_op_with_overflow(
                 Expr::plus,
                 Expr::add_overflow_p,
                 fargs,
-                intrinsic,
+                intrinsic_str,
                 place,
                 loc,
             ),
-            "simd_and" => codegen_intrinsic_binop!(bitand),
+            Intrinsic::SimdAnd => codegen_intrinsic_binop!(bitand),
             // TODO: `simd_rem` doesn't check for overflow cases for floating point operands.
             // <https://github.com/model-checking/kani/pull/2645>
-            "simd_div" | "simd_rem" => {
-                self.codegen_simd_div_with_overflow(fargs, intrinsic, place, loc)
+            Intrinsic::SimdDiv | Intrinsic::SimdRem => {
+                self.codegen_simd_div_with_overflow(fargs, intrinsic_str, place, loc)
             }
-            "simd_eq" => {
+            Intrinsic::SimdEq => {
                 self.codegen_simd_cmp(Expr::vector_eq, fargs, place, span, farg_types, ret_ty)
             }
-            "simd_extract" => {
+            Intrinsic::SimdExtract => {
                 self.codegen_intrinsic_simd_extract(fargs, place, farg_types, ret_ty, span)
             }
-            "simd_ge" => {
+            Intrinsic::SimdGe => {
                 self.codegen_simd_cmp(Expr::vector_ge, fargs, place, span, farg_types, ret_ty)
             }
-            "simd_gt" => {
+            Intrinsic::SimdGt => {
                 self.codegen_simd_cmp(Expr::vector_gt, fargs, place, span, farg_types, ret_ty)
             }
-            "simd_insert" => {
+            Intrinsic::SimdInsert => {
                 self.codegen_intrinsic_simd_insert(fargs, place, cbmc_ret_ty, farg_types, span, loc)
             }
-            "simd_le" => {
+            Intrinsic::SimdLe => {
                 self.codegen_simd_cmp(Expr::vector_le, fargs, place, span, farg_types, ret_ty)
             }
-            "simd_lt" => {
+            Intrinsic::SimdLt => {
                 self.codegen_simd_cmp(Expr::vector_lt, fargs, place, span, farg_types, ret_ty)
             }
-            "simd_mul" => self.codegen_simd_op_with_overflow(
+            Intrinsic::SimdMul => self.codegen_simd_op_with_overflow(
                 Expr::mul,
                 Expr::mul_overflow_p,
                 fargs,
-                intrinsic,
+                intrinsic_str,
                 place,
                 loc,
             ),
-            "simd_ne" => {
+            Intrinsic::SimdNe => {
                 self.codegen_simd_cmp(Expr::vector_neq, fargs, place, span, farg_types, ret_ty)
             }
-            "simd_or" => codegen_intrinsic_binop!(bitor),
-            "simd_shl" | "simd_shr" => {
-                self.codegen_simd_shift_with_distance_check(fargs, intrinsic, place, loc)
+            Intrinsic::SimdOr => codegen_intrinsic_binop!(bitor),
+            Intrinsic::SimdShl | Intrinsic::SimdShr => {
+                self.codegen_simd_shift_with_distance_check(fargs, intrinsic_str, place, loc)
             }
-            // "simd_shuffle#" => handled in an `if` preceding this match
-            "simd_sub" => self.codegen_simd_op_with_overflow(
+            Intrinsic::SimdShuffle(stripped) => {
+                let n: u64 = self.simd_shuffle_length(stripped.as_str(), farg_types, span);
+                self.codegen_intrinsic_simd_shuffle(fargs, place, farg_types, ret_ty, n, span)
+            }
+            Intrinsic::SimdSub => self.codegen_simd_op_with_overflow(
                 Expr::sub,
                 Expr::sub_overflow_p,
                 fargs,
-                intrinsic,
+                intrinsic_str,
                 place,
                 loc,
             ),
-            "simd_xor" => codegen_intrinsic_binop!(bitxor),
-            "size_of" => unreachable!(),
-            "size_of_val" => codegen_size_align!(size),
-            "sqrtf32" => unstable_codegen!(codegen_simple_intrinsic!(Sqrtf)),
-            "sqrtf64" => unstable_codegen!(codegen_simple_intrinsic!(Sqrt)),
-            "sub_with_overflow" => self.codegen_op_with_overflow(
+            Intrinsic::SimdXor => codegen_intrinsic_binop!(bitxor),
+            Intrinsic::SizeOfVal => codegen_size_align!(size),
+            Intrinsic::SqrtF32 => codegen_simple_intrinsic!(Sqrtf),
+            Intrinsic::SqrtF64 => codegen_simple_intrinsic!(Sqrt),
+            Intrinsic::SubWithOverflow => self.codegen_op_with_overflow(
                 BinaryOperator::OverflowResultMinus,
                 fargs,
                 place,
                 loc,
             ),
-            "transmute" => self.codegen_intrinsic_transmute(fargs, ret_ty, place),
-            "truncf32" => codegen_simple_intrinsic!(Truncf),
-            "truncf64" => codegen_simple_intrinsic!(Trunc),
-            "type_id" => codegen_intrinsic_const!(),
-            "type_name" => codegen_intrinsic_const!(),
-            "unaligned_volatile_load" => {
-                unstable_codegen!(
-                    self.codegen_expr_to_place_stable(place, fargs.remove(0).dereference())
-                )
+            Intrinsic::Transmute => self.codegen_intrinsic_transmute(fargs, ret_ty, place, loc),
+            Intrinsic::TruncF32 => codegen_simple_intrinsic!(Truncf),
+            Intrinsic::TruncF64 => codegen_simple_intrinsic!(Trunc),
+            Intrinsic::TypeId => codegen_intrinsic_const!(),
+            Intrinsic::TypeName => codegen_intrinsic_const!(),
+            Intrinsic::TypedSwap => self.codegen_swap(fargs, farg_types, loc),
+            Intrinsic::UnalignedVolatileLoad => {
+                unstable_codegen!(self.codegen_expr_to_place_stable(
+                    place,
+                    fargs.remove(0).dereference(),
+                    loc
+                ))
             }
-            "unchecked_add" | "unchecked_mul" | "unchecked_shl" | "unchecked_shr"
-            | "unchecked_sub" => {
-                unreachable!("Expected intrinsic `{intrinsic}` to be lowered before codegen")
-            }
-            "unchecked_div" => codegen_op_with_div_overflow_check!(div),
-            "unchecked_rem" => codegen_op_with_div_overflow_check!(rem),
-            "unlikely" => self.codegen_expr_to_place_stable(place, fargs.remove(0)),
-            "unreachable" => unreachable!(
-                "Expected `std::intrinsics::unreachable` to be handled by `TerminatorKind::Unreachable`"
-            ),
-            "volatile_copy_memory" => unstable_codegen!(codegen_intrinsic_copy!(Memmove)),
-            "volatile_copy_nonoverlapping_memory" => {
+            Intrinsic::UncheckedDiv => codegen_op_with_div_overflow_check!(div),
+            Intrinsic::UncheckedRem => codegen_op_with_div_overflow_check!(rem),
+            Intrinsic::Unlikely => self.codegen_expr_to_place_stable(place, fargs.remove(0), loc),
+            Intrinsic::VolatileCopyMemory => unstable_codegen!(codegen_intrinsic_copy!(Memmove)),
+            Intrinsic::VolatileCopyNonOverlappingMemory => {
                 unstable_codegen!(codegen_intrinsic_copy!(Memcpy))
             }
-            "volatile_load" => self.codegen_volatile_load(fargs, farg_types, place, loc),
-            "volatile_store" => {
+            Intrinsic::VolatileLoad => self.codegen_volatile_load(fargs, farg_types, place, loc),
+            Intrinsic::VolatileStore => {
                 assert!(self.place_ty_stable(place).kind().is_unit());
                 self.codegen_volatile_store(fargs, farg_types, loc)
             }
-            "vtable_size" => self.vtable_info(VTableInfo::Size, fargs, place, loc),
-            "vtable_align" => self.vtable_info(VTableInfo::Align, fargs, place, loc),
-            "wrapping_add" => codegen_wrapping_op!(plus),
-            "wrapping_mul" => codegen_wrapping_op!(mul),
-            "wrapping_sub" => codegen_wrapping_op!(sub),
-            "write_bytes" => {
+            Intrinsic::VtableSize => self.vtable_info(VTableInfo::Size, fargs, place, loc),
+            Intrinsic::VtableAlign => self.vtable_info(VTableInfo::Align, fargs, place, loc),
+            Intrinsic::WrappingAdd => codegen_wrapping_op!(plus),
+            Intrinsic::WrappingMul => codegen_wrapping_op!(mul),
+            Intrinsic::WrappingSub => codegen_wrapping_op!(sub),
+            Intrinsic::WriteBytes => {
                 assert!(self.place_ty_stable(place).kind().is_unit());
                 self.codegen_write_bytes(fargs, farg_types, loc)
             }
             // Unimplemented
-            _ => self.codegen_unimplemented_stmt(
-                intrinsic,
-                loc,
-                "https://github.com/model-checking/kani/issues/new/choose",
-            ),
+            Intrinsic::Unimplemented { name, issue_link } => {
+                self.codegen_unimplemented_stmt(&name, loc, &issue_link)
+            }
         }
     }
 
@@ -633,7 +571,8 @@ impl<'tcx> GotocCtx<'tcx> {
         if !arg.typ().is_integer() {
             self.intrinsics_typecheck_fail(span, "ctpop", "integer type", arg_rust_ty)
         } else {
-            self.codegen_expr_to_place_stable(&target_place, arg.popcount())
+            let loc = self.codegen_span_stable(span);
+            self.codegen_expr_to_place_stable(&target_place, arg.popcount(), loc)
         }
     }
 
@@ -721,7 +660,8 @@ impl<'tcx> GotocCtx<'tcx> {
         let res = self.codegen_binop_with_overflow(binop, left, right, result_type.clone(), loc);
         self.codegen_expr_to_place_stable(
             place,
-            Expr::statement_expression(vec![res.as_stmt(loc)], result_type),
+            Expr::statement_expression(vec![res.as_stmt(loc)], result_type, loc),
+            loc,
         )
     }
 
@@ -755,7 +695,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     "exact_div division does not overflow",
                     loc,
                 ),
-                self.codegen_expr_to_place_stable(p, a.div(b)),
+                self.codegen_expr_to_place_stable(p, a.div(b), loc),
             ],
             loc,
         )
@@ -856,7 +796,7 @@ impl<'tcx> GotocCtx<'tcx> {
         self.store_concurrent_construct(intrinsic, loc);
         let var1_ref = fargs.remove(0);
         let var1 = var1_ref.dereference().with_location(loc);
-        let res_stmt = self.codegen_expr_to_place_stable(p, var1);
+        let res_stmt = self.codegen_expr_to_place_stable(p, var1, loc);
         Stmt::atomic_block(vec![res_stmt], loc)
     }
 
@@ -864,6 +804,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// its primary argument and returns a tuple that contains:
     ///  * the previous value
     ///  * a boolean value indicating whether the operation was successful or not
+    ///
     /// In a sequential context, the update is always sucessful so we assume the
     /// second value to be true.
     /// -------------------------
@@ -896,7 +837,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let tuple_expr =
             Expr::struct_expr_from_values(res_type, vec![tmp, Expr::c_true()], &self.symbol_table)
                 .with_location(loc);
-        let res_stmt = self.codegen_expr_to_place_stable(p, tuple_expr);
+        let res_stmt = self.codegen_expr_to_place_stable(p, tuple_expr, loc);
         Stmt::atomic_block(vec![decl_stmt, cond_update_stmt, res_stmt], loc)
     }
 
@@ -924,7 +865,7 @@ impl<'tcx> GotocCtx<'tcx> {
             self.decl_temp_variable(var1.typ().clone(), Some(var1.to_owned()), loc);
         let var2 = fargs.remove(0).with_location(loc);
         let assign_stmt = var1.assign(var2, loc);
-        let res_stmt = self.codegen_expr_to_place_stable(place, tmp);
+        let res_stmt = self.codegen_expr_to_place_stable(place, tmp, loc);
         Stmt::atomic_block(vec![decl_stmt, assign_stmt, res_stmt], loc)
     }
 
@@ -948,9 +889,10 @@ impl<'tcx> GotocCtx<'tcx> {
     ///  * Both `src`/`dst` must be valid for reads/writes of `count *
     ///      size_of::<T>()` bytes (done by calls to `memmove`)
     ///  * (Exclusive to nonoverlapping copy) The region of memory beginning
-    ///      at `src` with a size of `count * size_of::<T>()` bytes must *not*
-    ///      overlap with the region of memory beginning at `dst` with the same
-    ///      size.
+    ///    at `src` with a size of `count * size_of::<T>()` bytes must *not*
+    ///    overlap with the region of memory beginning at `dst` with the same
+    ///    size.
+    ///
     /// In addition, we check that computing `count` in bytes (i.e., the third
     /// argument of the copy built-in call) would not overflow.
     pub fn codegen_copy(
@@ -1002,7 +944,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // fail on passing a reference to it unless we codegen this zero check.
         let copy_if_nontrivial = count_bytes.is_zero().ternary(dst, copy_call);
         let copy_expr = if let Some(p) = p {
-            self.codegen_expr_to_place_stable(p, copy_if_nontrivial)
+            self.codegen_expr_to_place_stable(p, copy_if_nontrivial, loc)
         } else {
             copy_if_nontrivial.as_stmt(loc)
         };
@@ -1033,9 +975,11 @@ impl<'tcx> GotocCtx<'tcx> {
         let is_lhs_ok = lhs_var.clone().is_nonnull();
         let is_rhs_ok = rhs_var.clone().is_nonnull();
         let should_skip_pointer_checks = is_len_zero.and(is_lhs_ok).and(is_rhs_ok);
-        let place_expr =
-            unwrap_or_return_codegen_unimplemented_stmt!(self, self.codegen_place_stable(place))
-                .goto_expr;
+        let place_expr = unwrap_or_return_codegen_unimplemented_stmt!(
+            self,
+            self.codegen_place_stable(place, loc)
+        )
+        .goto_expr;
         let res = should_skip_pointer_checks.ternary(
             Expr::int_constant(0, place_expr.typ().clone()), // zero bytes are always equal (as long as pointers are nonnull and aligned)
             BuiltinFn::Memcmp
@@ -1056,14 +1000,19 @@ impl<'tcx> GotocCtx<'tcx> {
     //
     // This intrinsic replaces `ptr_guaranteed_eq` and `ptr_guaranteed_ne`:
     // https://doc.rust-lang.org/beta/std/primitive.pointer.html#method.guaranteed_eq
-    fn codegen_ptr_guaranteed_cmp(&mut self, mut fargs: Vec<Expr>, p: &Place) -> Stmt {
+    fn codegen_ptr_guaranteed_cmp(
+        &mut self,
+        mut fargs: Vec<Expr>,
+        p: &Place,
+        loc: Location,
+    ) -> Stmt {
         let a = fargs.remove(0);
         let b = fargs.remove(0);
         let place_type = self.place_ty_stable(p);
         let res_type = self.codegen_ty_stable(place_type);
         let eq_expr = a.eq(b);
         let cmp_expr = eq_expr.ternary(res_type.one(), res_type.zero());
-        self.codegen_expr_to_place_stable(p, cmp_expr)
+        self.codegen_expr_to_place_stable(p, cmp_expr, loc)
     }
 
     /// Computes the offset from a pointer.
@@ -1111,7 +1060,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
         // Re-compute `dst_ptr` with standard addition to avoid conversion
         let dst_ptr = src_ptr.plus(offset);
-        let expr_place = self.codegen_expr_to_place_stable(p, dst_ptr);
+        let expr_place = self.codegen_expr_to_place_stable(p, dst_ptr, loc);
         Stmt::block(vec![bytes_overflow_check, overflow_check, expr_place], loc)
     }
 
@@ -1130,7 +1079,7 @@ impl<'tcx> GotocCtx<'tcx> {
             loc,
         );
 
-        let offset_expr = self.codegen_expr_to_place_stable(p, offset_expr);
+        let offset_expr = self.codegen_expr_to_place_stable(p, offset_expr, loc);
         Stmt::block(vec![overflow_check, offset_expr], loc)
     }
 
@@ -1162,7 +1111,8 @@ impl<'tcx> GotocCtx<'tcx> {
             loc,
         );
 
-        let offset_expr = self.codegen_expr_to_place_stable(p, offset_expr.cast_to(Type::size_t()));
+        let offset_expr =
+            self.codegen_expr_to_place_stable(p, offset_expr.cast_to(Type::size_t()), loc);
         Stmt::block(vec![overflow_check, non_negative_check, offset_expr], loc)
     }
 
@@ -1209,18 +1159,26 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Note(std): An earlier attempt to add alignment checks for both the argument and result types
     /// had catastrophic results in the regression. Hence, we don't perform any additional checks
     /// and only encode the transmute operation here.
-    fn codegen_intrinsic_transmute(&mut self, mut fargs: Vec<Expr>, ret_ty: Ty, p: &Place) -> Stmt {
+    fn codegen_intrinsic_transmute(
+        &mut self,
+        mut fargs: Vec<Expr>,
+        ret_ty: Ty,
+        p: &Place,
+        loc: Location,
+    ) -> Stmt {
         assert!(fargs.len() == 1, "transmute had unexpected arguments {fargs:?}");
         let arg = fargs.remove(0);
         let cbmc_ret_ty = self.codegen_ty_stable(ret_ty);
         let expr = arg.transmute_to(cbmc_ret_ty, &self.symbol_table);
-        self.codegen_expr_to_place_stable(p, expr)
+        self.codegen_expr_to_place_stable(p, expr, loc)
     }
 
     // `raw_eq` determines whether the raw bytes of two values are equal.
     // https://doc.rust-lang.org/core/intrinsics/fn.raw_eq.html
     //
-    // The implementation below calls `memcmp` and returns equal if the result is zero.
+    // The implementation below calls `memcmp` and returns equal if the result is zero, and
+    // immediately returns zero when ZSTs are compared to mimic what compare_bytes and our memcmp
+    // hook do.
     //
     // TODO: It's UB to call `raw_eq` if any of the bytes in the first or second
     // arguments are uninitialized. At present, we cannot detect if there is
@@ -1239,26 +1197,25 @@ impl<'tcx> GotocCtx<'tcx> {
         let dst = fargs.remove(0).cast_to(Type::void_pointer());
         let val = fargs.remove(0).cast_to(Type::void_pointer());
         let layout = self.layout_of_stable(ty);
-        let sz = Expr::int_constant(layout.size.bytes(), Type::size_t())
-            .with_size_of_annotation(self.codegen_ty_stable(ty));
-        let e = BuiltinFn::Memcmp
-            .call(vec![dst, val, sz], loc)
-            .eq(Type::c_int().zero())
-            .cast_to(Type::c_bool());
-        self.codegen_expr_to_place_stable(p, e)
+        if layout.size.bytes() == 0 {
+            self.codegen_expr_to_place_stable(p, Expr::int_constant(1, Type::c_bool()), loc)
+        } else {
+            let sz = Expr::int_constant(layout.size.bytes(), Type::size_t())
+                .with_size_of_annotation(self.codegen_ty_stable(ty));
+            let e = BuiltinFn::Memcmp
+                .call(vec![dst, val, sz], loc)
+                .eq(Type::c_int().zero())
+                .cast_to(Type::c_bool());
+            self.codegen_expr_to_place_stable(p, e, loc)
+        }
     }
 
     // This is an operation that is primarily relevant for stacked borrow
     // checks.  For Kani, we simply return the pointer.
-    fn codegen_retag_box_to_raw(
-        &mut self,
-        mut fargs: Vec<Expr>,
-        p: &Place,
-        _loc: Location,
-    ) -> Stmt {
+    fn codegen_retag_box_to_raw(&mut self, mut fargs: Vec<Expr>, p: &Place, loc: Location) -> Stmt {
         assert_eq!(fargs.len(), 1, "raw_box_to_box expected one argument");
         let arg = fargs.remove(0);
-        self.codegen_expr_to_place_stable(p, arg)
+        self.codegen_expr_to_place_stable(p, arg, loc)
     }
 
     fn vtable_info(
@@ -1266,7 +1223,7 @@ impl<'tcx> GotocCtx<'tcx> {
         info: VTableInfo,
         mut fargs: Vec<Expr>,
         place: &Place,
-        _loc: Location,
+        loc: Location,
     ) -> Stmt {
         assert_eq!(fargs.len(), 1, "vtable intrinsics expects one raw pointer argument");
         let vtable_obj = fargs
@@ -1278,7 +1235,7 @@ impl<'tcx> GotocCtx<'tcx> {
             VTableInfo::Size => vtable_obj.member(typ::VTABLE_SIZE_FIELD, &self.symbol_table),
             VTableInfo::Align => vtable_obj.member(typ::VTABLE_ALIGN_FIELD, &self.symbol_table),
         };
-        self.codegen_expr_to_place_stable(place, expr)
+        self.codegen_expr_to_place_stable(place, expr, loc)
     }
 
     /// Gets the length for a `simd_shuffle*` instance, which comes in two
@@ -1458,7 +1415,8 @@ impl<'tcx> GotocCtx<'tcx> {
         }
         self.tcx.dcx().abort_if_errors();
 
-        self.codegen_expr_to_place_stable(p, vec.index_array(index))
+        let loc = self.codegen_span_stable(span);
+        self.codegen_expr_to_place_stable(p, vec.index_array(index), loc)
     }
 
     /// Insert is a generic update of a single value in a SIMD vector.
@@ -1505,7 +1463,7 @@ impl<'tcx> GotocCtx<'tcx> {
             vec![
                 decl,
                 tmp.clone().index_array(index).assign(newval.cast_to(elem_ty), loc),
-                self.codegen_expr_to_place_stable(p, tmp),
+                self.codegen_expr_to_place_stable(p, tmp, loc),
             ],
             loc,
         )
@@ -1578,7 +1536,8 @@ impl<'tcx> GotocCtx<'tcx> {
 
         // Create the vector comparison expression
         let e = f(arg1, arg2, ret_typ);
-        self.codegen_expr_to_place_stable(p, e)
+        let loc = self.codegen_span_stable(span);
+        self.codegen_expr_to_place_stable(p, e, loc)
     }
 
     /// Codegen for `simd_div` and `simd_rem` intrinsics.
@@ -1610,7 +1569,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 loc,
             )
         } else {
-            self.binop(p, fargs, op_fun)
+            self.binop(p, fargs, op_fun, loc)
         }
     }
 
@@ -1648,7 +1607,7 @@ impl<'tcx> GotocCtx<'tcx> {
             loc,
         );
         let res = op_fun(a, b);
-        let expr_place = self.codegen_expr_to_place_stable(p, res);
+        let expr_place = self.codegen_expr_to_place_stable(p, res, loc);
         Stmt::block(vec![check_stmt, expr_place], loc)
     }
 
@@ -1706,7 +1665,7 @@ impl<'tcx> GotocCtx<'tcx> {
             _ => unreachable!("expected a simd shift intrinsic"),
         };
         let res = op_fun(values, distances);
-        let expr_place = self.codegen_expr_to_place_stable(p, res);
+        let expr_place = self.codegen_expr_to_place_stable(p, res, loc);
 
         if distance_is_signed {
             let negative_check_stmt = self.codegen_assert_assume(
@@ -1799,7 +1758,8 @@ impl<'tcx> GotocCtx<'tcx> {
             .collect();
         self.tcx.dcx().abort_if_errors();
         let cbmc_ret_ty = self.codegen_ty_stable(rust_ret_type);
-        self.codegen_expr_to_place_stable(p, Expr::vector_expr(cbmc_ret_ty, elems))
+        let loc = self.codegen_span_stable(span);
+        self.codegen_expr_to_place_stable(p, Expr::vector_expr(cbmc_ret_ty, elems), loc)
     }
 
     /// A volatile load of a memory location:
@@ -1811,7 +1771,7 @@ impl<'tcx> GotocCtx<'tcx> {
     ///
     /// TODO: Add a check for the condition:
     ///  * `src` must point to a properly initialized value of type `T`
-    /// See <https://github.com/model-checking/kani/issues/920> for more details
+    ///    See <https://github.com/model-checking/kani/issues/920> for more details
     fn codegen_volatile_load(
         &mut self,
         mut fargs: Vec<Expr>,
@@ -1829,7 +1789,7 @@ impl<'tcx> GotocCtx<'tcx> {
             loc,
         );
         let expr = src.dereference();
-        let res_stmt = self.codegen_expr_to_place_stable(p, expr);
+        let res_stmt = self.codegen_expr_to_place_stable(p, expr, loc);
         Stmt::block(vec![align_check, res_stmt], loc)
     }
 
@@ -1855,8 +1815,13 @@ impl<'tcx> GotocCtx<'tcx> {
             "`dst` must be properly aligned",
             loc,
         );
-        let expr = dst.dereference().assign(src, loc);
-        Stmt::block(vec![align_check, expr], loc)
+        if self.is_zst_stable(pointee_type_stable(dst_typ).unwrap()) {
+            // do not attempt to dereference (and assign) a ZST
+            align_check
+        } else {
+            let expr = dst.dereference().assign(src, loc);
+            Stmt::block(vec![align_check, expr], loc)
+        }
     }
 
     /// Sets `count * size_of::<T>()` bytes of memory starting at `dst` to `val`
@@ -1865,6 +1830,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Undefined behavior if any of these conditions are violated:
     ///  * `dst` must be valid for writes (done by memset writable check)
     ///  * `dst` must be properly aligned (done by `align_check` below)
+    ///
     /// In addition, we check that computing `bytes` (i.e., the third argument
     /// for the `memset` call) would not overflow
     fn codegen_write_bytes(
@@ -1942,6 +1908,59 @@ impl<'tcx> GotocCtx<'tcx> {
         let cast_ptr = ptr.cast_to(Type::size_t());
         let zero = Type::size_t().zero();
         cast_ptr.rem(align).eq(zero)
+    }
+
+    /// Swaps the memory contents pointed to by arguments `x` and `y`, respectively, which is
+    /// required for the `typed_swap` intrinsic.
+    ///
+    /// The standard library API requires that `x` and `y` are readable and writable as their
+    /// (common) type (which auto-generated checks for dereferencing will take care of), and the
+    /// memory regions pointed to must be non-overlapping.
+    pub fn codegen_swap(&mut self, mut fargs: Vec<Expr>, farg_types: &[Ty], loc: Location) -> Stmt {
+        // two parameters, and both must be raw pointers with the same base type
+        assert!(fargs.len() == 2);
+        assert!(farg_types[0].kind().is_raw_ptr());
+        assert!(farg_types[0] == farg_types[1]);
+
+        let x = fargs.remove(0);
+        let y = fargs.remove(0);
+
+        if self.is_zst_stable(pointee_type_stable(farg_types[0]).unwrap()) {
+            // do not attempt to dereference (and assign) a ZST
+            Stmt::skip(loc)
+        } else {
+            // if(same_object(x, y)) {
+            //   assert(x + 1 <= y || y + 1 <= x);
+            //   assume(x + 1 <= y || y + 1 <= x);
+            // }
+            let one = Expr::int_constant(1, Type::c_int());
+            let non_overlapping = x
+                .clone()
+                .plus(one.clone())
+                .le(y.clone())
+                .or(y.clone().plus(one.clone()).le(x.clone()));
+            let non_overlapping_check = self.codegen_assert_assume(
+                non_overlapping,
+                PropertyClass::SafetyCheck,
+                "memory regions pointed to by `x` and `y` must not overlap",
+                loc,
+            );
+            let non_overlapping_stmt = Stmt::if_then_else(
+                x.clone().same_object(y.clone()),
+                non_overlapping_check,
+                None,
+                loc,
+            );
+
+            // T t = *y; *y = *x; *x = t;
+            let deref_y = y.clone().dereference();
+            let (temp_var, assign_to_t) =
+                self.decl_temp_variable(deref_y.typ().clone(), Some(deref_y), loc);
+            let assign_to_y = y.dereference().assign(x.clone().dereference(), loc);
+            let assign_to_x = x.dereference().assign(temp_var, loc);
+
+            Stmt::block(vec![non_overlapping_stmt, assign_to_t, assign_to_y, assign_to_x], loc)
+        }
     }
 }
 

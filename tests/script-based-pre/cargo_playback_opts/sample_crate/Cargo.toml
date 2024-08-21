@@ -4,3 +4,6 @@
 name = "sample_crate"
 version = "0.1.0"
 edition = "2021"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }

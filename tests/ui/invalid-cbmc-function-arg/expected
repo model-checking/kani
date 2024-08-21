@@ -1,1 +1,1 @@
-error: Invalid flag: --function should be provided to Kani directly, not via
+error: Invalid flag: --function is not supported in Kani.

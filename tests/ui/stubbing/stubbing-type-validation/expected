@@ -1,8 +1,11 @@
-error: arity mismatch: original function/method `f1` takes 1 argument(s), stub `f2` takes 0
-error: return type differs: stub `g2` has type `i32` where original function/method `g1` has type `bool`
-error: type of parameter 1 differs: stub `g2` has type `u32` where original function/method `g1` has type `i32`
-error: type of parameter 2 differs: stub `g2` has type `&mut bool` where original function/method `g1` has type `&bool`
 error: mismatch in the number of generic parameters: original function/method `h1` takes 1 generic parameters(s), stub `h2` takes 2
-error: return type differs: stub `i2` has type `Y` where original function/method `i1` has type `X`
-error: type of parameter 1 differs: stub `j2` has type `&X` where original function/method `j1` has type `&Y`
-error: aborting due to 7 previous errors
+
+error: Cannot stub `g1` by `g2`.\
+        - Expected return type `bool`, but found `i32`\
+        - Expected type `i32` for parameter 2, but found `u32`\
+        - Expected type `&bool` for parameter 3, but found `&mut bool`\
+
+error: Cannot stub `i1` by `i2`.\
+        - Expected return type `X`, but found `Y`
+
+error: arity mismatch: original function/method `f1` takes 1 argument(s), stub `f2` takes 0

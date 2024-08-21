@@ -16,8 +16,8 @@
 use rustc_hir::lang_items::LangItem;
 use rustc_middle::traits::{ImplSource, ImplSourceUserDefinedData};
 use rustc_middle::ty::adjustment::CustomCoerceUnsized;
+use rustc_middle::ty::TraitRef;
 use rustc_middle::ty::{ParamEnv, Ty, TyCtxt};
-use rustc_middle::ty::{TraitRef, TypeAndMut};
 use rustc_smir::rustc_internal;
 use stable_mir::ty::{RigidTy, Ty as TyStable, TyKind};
 use stable_mir::Symbol;
@@ -263,5 +263,5 @@ fn custom_coerce_unsize_info<'tcx>(
 
 /// Extract pointee type from builtin pointer types.
 fn extract_pointee(tcx: TyCtxt<'_>, typ: TyStable) -> Option<Ty<'_>> {
-    rustc_internal::internal(tcx, typ).builtin_deref(true).map(|TypeAndMut { ty, .. }| ty)
+    rustc_internal::internal(tcx, typ).builtin_deref(true)
 }

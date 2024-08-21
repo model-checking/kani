@@ -82,4 +82,6 @@ pub enum ExtraChecks {
     /// Check that produced values are valid except for uninitialized values.
     /// See https://github.com/model-checking/kani/issues/920.
     Validity,
+    /// Check for using uninitialized memory.
+    Uninit,
 }

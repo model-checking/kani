@@ -3,11 +3,9 @@
 
 //! Initialization routine for the contract handler
 
-use std::collections::{HashMap, HashSet};
-
 use proc_macro::{Diagnostic, TokenStream};
-use proc_macro2::{Ident, Span, TokenStream as TokenStream2};
-use syn::{spanned::Spanned, visit::Visit, visit_mut::VisitMut, Expr, ItemFn, Signature};
+use proc_macro2::TokenStream as TokenStream2;
+use syn::ItemFn;
 
 use super::{
     helpers::{chunks_by, is_token_stream_2_comma, matches_path},
@@ -21,24 +19,9 @@ impl<'a> TryFrom<&'a syn::Attribute> for ContractFunctionState {
     /// Find out if this attribute could be describing a "contract handling"
     /// state and if so return it.
     fn try_from(attribute: &'a syn::Attribute) -> Result<Self, Self::Error> {
-        if let syn::Meta::List(lst) = &attribute.meta {
-            if matches_path(&lst.path, &["kanitool", "is_contract_generated"]) {
-                let ident = syn::parse2::<Ident>(lst.tokens.clone())
-                    .map_err(|e| Some(lst.span().unwrap().error(format!("{e}"))))?;
-                let ident_str = ident.to_string();
-                return match ident_str.as_str() {
-                    "check" => Ok(Self::Check),
-                    "replace" => Ok(Self::Replace),
-                    "wrapper" => Ok(Self::ModifiesWrapper),
-                    _ => {
-                        Err(Some(lst.span().unwrap().error("Expected `check` or `replace` ident")))
-                    }
-                };
-            }
-        }
         if let syn::Meta::NameValue(nv) = &attribute.meta {
             if matches_path(&nv.path, &["kanitool", "checked_with"]) {
-                return Ok(ContractFunctionState::Original);
+                return Ok(ContractFunctionState::Expanded);
             }
         }
         Err(None)
@@ -68,12 +51,10 @@ impl<'a> ContractConditionsHandler<'a> {
     /// Initialize the handler. Constructs the required
     /// [`ContractConditionsType`] depending on `is_requires`.
     pub fn new(
-        function_state: ContractFunctionState,
         is_requires: ContractConditionsType,
         attr: TokenStream,
         annotated_fn: &'a mut ItemFn,
         attr_copy: TokenStream2,
-        hash: Option<u64>,
     ) -> Result<Self, syn::Error> {
         let mut output = TokenStream2::new();
         let condition_type = match is_requires {
@@ -81,27 +62,33 @@ impl<'a> ContractConditionsHandler<'a> {
                 ContractConditionsData::Requires { attr: syn::parse(attr)? }
             }
             ContractConditionsType::Ensures => {
-                ContractConditionsData::new_ensures(&annotated_fn.sig, syn::parse(attr)?)
+                ContractConditionsData::Ensures { attr: syn::parse(attr)? }
             }
             ContractConditionsType::Modifies => {
                 ContractConditionsData::new_modifies(attr, &mut output)
             }
         };
 
-        Ok(Self { function_state, condition_type, annotated_fn, attr_copy, output, hash })
+        let fn_name = &annotated_fn.sig.ident;
+        let generate_name = |purpose| format!("__kani_{purpose}_{fn_name}");
+        let check_name = generate_name("check");
+        let replace_name = generate_name("replace");
+        let recursion_name = generate_name("recursion_check");
+        let modifies_name = generate_name("modifies");
+
+        Ok(Self {
+            condition_type,
+            annotated_fn,
+            attr_copy,
+            output,
+            check_name,
+            replace_name,
+            recursion_name,
+            modify_name: modifies_name,
+        })
     }
 }
 impl ContractConditionsData {
-    /// Constructs a [`Self::Ensures`] from the signature of the decorated
-    /// function and the contents of the decorating attribute.
-    ///
-    /// Renames the [`Ident`]s used in `attr` and stores the translation map in
-    /// `argument_names`.
-    fn new_ensures(sig: &Signature, mut attr: Expr) -> Self {
-        let argument_names = rename_argument_occurrences(sig, &mut attr);
-        ContractConditionsData::Ensures { argument_names, attr }
-    }
-
     /// Constructs a [`Self::Modifies`] from the contents of the decorating attribute.
     ///
     /// Responsible for parsing the attribute.
@@ -118,75 +105,5 @@ impl ContractConditionsData {
             .collect();
 
         ContractConditionsData::Modifies { attr }
-    }
-}
-
-/// A supporting function for creating shallow, unsafe copies of the arguments
-/// for the postconditions.
-///
-/// This function:
-/// - Collects all [`Ident`]s found in the argument patterns;
-/// - Creates new names for them;
-/// - Replaces all occurrences of those idents in `attrs` with the new names and;
-/// - Returns the mapping of old names to new names.
-fn rename_argument_occurrences(sig: &syn::Signature, attr: &mut Expr) -> HashMap<Ident, Ident> {
-    let mut arg_ident_collector = ArgumentIdentCollector::new();
-    arg_ident_collector.visit_signature(&sig);
-
-    let mk_new_ident_for = |id: &Ident| Ident::new(&format!("{}_renamed", id), Span::mixed_site());
-    let arg_idents = arg_ident_collector
-        .0
-        .into_iter()
-        .map(|i| {
-            let new = mk_new_ident_for(&i);
-            (i, new)
-        })
-        .collect::<HashMap<_, _>>();
-
-    let mut ident_rewriter = Renamer(&arg_idents);
-    ident_rewriter.visit_expr_mut(attr);
-    arg_idents
-}
-
-/// Collect all named identifiers used in the argument patterns of a function.
-struct ArgumentIdentCollector(HashSet<Ident>);
-
-impl ArgumentIdentCollector {
-    fn new() -> Self {
-        Self(HashSet::new())
-    }
-}
-
-impl<'ast> Visit<'ast> for ArgumentIdentCollector {
-    fn visit_pat_ident(&mut self, i: &'ast syn::PatIdent) {
-        self.0.insert(i.ident.clone());
-        syn::visit::visit_pat_ident(self, i)
-    }
-    fn visit_receiver(&mut self, _: &'ast syn::Receiver) {
-        self.0.insert(Ident::new("self", proc_macro2::Span::call_site()));
-    }
-}
-
-/// Applies the contained renaming (key renamed to value) to every ident pattern
-/// and ident expr visited.
-struct Renamer<'a>(&'a HashMap<Ident, Ident>);
-
-impl<'a> VisitMut for Renamer<'a> {
-    fn visit_expr_path_mut(&mut self, i: &mut syn::ExprPath) {
-        if i.path.segments.len() == 1 {
-            i.path
-                .segments
-                .first_mut()
-                .and_then(|p| self.0.get(&p.ident).map(|new| p.ident = new.clone()));
-        }
-    }
-
-    /// This restores shadowing. Without this we would rename all ident
-    /// occurrences, but not rebinding location. This is because our
-    /// [`Self::visit_expr_path_mut`] is scope-unaware.
-    fn visit_pat_ident_mut(&mut self, i: &mut syn::PatIdent) {
-        if let Some(new) = self.0.get(&i.ident) {
-            i.ident = new.clone();
-        }
     }
 }

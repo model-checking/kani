@@ -259,7 +259,7 @@ class dump_markdown_results_table:
                 {%- for bench_name, bench_variants in d["scaled_metrics"][metric]["benchmarks"].items () %}
                 {% set v0 = bench_variants[d["scaled_variants"][metric][0]] -%}
                 {% set v1 = bench_variants[d["scaled_variants"][metric][1]] -%}
-                "{{ bench_name }}": [{{ v0|round(3) }}, {{ v1|round(3) }}]
+                "{{ bench_name }}": [{{ v0|safe_round(3) }}, {{ v1|safe_round(3) }}]
                 {%- endfor %}
             ```
             Scatterplot axis ranges are {{ d["scaled_metrics"][metric]["min_value"] }} (bottom/left) to {{ d["scaled_metrics"][metric]["max_value"] }} (top/right).
@@ -273,6 +273,14 @@ class dump_markdown_results_table:
             {%- endfor %}
             {% endfor -%}
             """)
+
+
+    @staticmethod
+    def _safe_round(value, precision):
+        try:
+            return round(value, precision)
+        except TypeError:
+            return 0
 
 
     @staticmethod
@@ -358,7 +366,20 @@ class dump_markdown_results_table:
             for bench, variants in benches.items():
                 tmp_variants = dict(variants)
                 for column in columns:
-                    variants[column["column_name"]] = column["text"](tmp_variants)
+                    if "column_name" not in column:
+                        logging.error(
+                            "A column specification for metric %s did not "
+                            "contain a column_name field. Each column should "
+                            "have a column name and column text", metric)
+                        sys.exit(1)
+                    try:
+                        variants[column["column_name"]] = column["text"](tmp_variants)
+                    except BaseException:
+                        # This may be reached when evaluating the column text
+                        # throws an exception. The column text is written in a
+                        # YAML file and is typically a simple lambda so can't
+                        # contain sophisticated error handling.
+                        variants[column["column_name"]] = "**ERROR**"
 
 
     @staticmethod
@@ -397,6 +418,7 @@ class dump_markdown_results_table:
             loader=jinja2.BaseLoader, autoescape=jinja2.select_autoescape(
                 enabled_extensions=("html"),
                 default_for_string=True))
+        env.filters["safe_round"] = self._safe_round
         template = env.from_string(self._get_template())
         include_scatterplot = self.scatterplot != Plot.OFF
         output = template.render(d=data, scatterplot=include_scatterplot)[:-1]

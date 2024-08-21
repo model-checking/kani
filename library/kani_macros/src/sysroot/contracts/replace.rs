@@ -3,16 +3,25 @@
 
 //! Logic used for generating the code that replaces a function with its contract.
 
-use proc_macro2::{Ident, TokenStream as TokenStream2};
+use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
+use std::mem;
+use syn::Stmt;
 
 use super::{
     helpers::*,
-    shared::{attach_require_kani_any, make_unsafe_argument_copies, try_as_result_assign},
-    ContractConditionsData, ContractConditionsHandler,
+    shared::{build_ensures, try_as_result_assign},
+    ContractConditionsData, ContractConditionsHandler, INTERNAL_RESULT_IDENT,
 };
 
 impl<'a> ContractConditionsHandler<'a> {
+    /// Create initial set of replace statements which is the return havoc.
+    fn initial_replace_stmts(&self) -> Vec<syn::Stmt> {
+        let return_type = return_type_to_type(&self.annotated_fn.sig.output);
+        let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
+        vec![syn::parse_quote!(let #result : #return_type = kani::any_modifies();)]
+    }
+
     /// Split an existing replace body of the form
     ///
     /// ```ignore
@@ -35,25 +44,21 @@ impl<'a> ContractConditionsHandler<'a> {
     /// Such that the first vector contains everything up to and including the single result havoc
     /// and the second one the rest, excluding the return.
     ///
-    /// If this is the first time we're emitting replace we create the return havoc and nothing else.
-    fn ensure_bootstrapped_replace_body(&self) -> (Vec<syn::Stmt>, Vec<syn::Stmt>) {
-        if self.is_first_emit() {
-            let return_type = return_type_to_type(&self.annotated_fn.sig.output);
-            (vec![syn::parse_quote!(let result : #return_type = kani::any();)], vec![])
-        } else {
-            let stmts = &self.annotated_fn.block.stmts;
-            let idx = stmts
-                .iter()
-                .enumerate()
-                .find_map(|(i, elem)| is_replace_return_havoc(elem).then_some(i))
-                .unwrap_or_else(|| {
-                    panic!("ICE: Could not find result let binding in statement sequence")
-                });
-            // We want the result assign statement to end up as the last statement in the first
-            // vector, hence the `+1`.
-            let (before, after) = stmts.split_at(idx + 1);
-            (before.to_vec(), after.split_last().unwrap().1.to_vec())
-        }
+    fn split_replace(&self, mut stmts: Vec<Stmt>) -> (Vec<Stmt>, Vec<Stmt>) {
+        // Pop the return result since we always re-add it.
+        stmts.pop();
+
+        let idx = stmts
+            .iter()
+            .enumerate()
+            .find_map(|(i, elem)| is_replace_return_havoc(elem).then_some(i))
+            .unwrap_or_else(|| {
+                panic!("ICE: Could not find result let binding in statement sequence")
+            });
+        // We want the result assign statement to end up as the last statement in the first
+        // vector, hence the `+1`.
+        let (before, after) = stmts.split_at_mut(idx + 1);
+        (before.to_vec(), after.to_vec())
     }
 
     /// Create the body of a stub for this contract.
@@ -64,72 +69,69 @@ impl<'a> ContractConditionsHandler<'a> {
     ///
     /// `use_nondet_result` will only be true if this is the first time we are
     /// generating a replace function.
-    fn make_replace_body(&self) -> TokenStream2 {
-        let (before, after) = self.ensure_bootstrapped_replace_body();
-
+    fn expand_replace_body(&self, before: &[Stmt], after: &[Stmt]) -> TokenStream {
         match &self.condition_type {
             ContractConditionsData::Requires { attr } => {
                 let Self { attr_copy, .. } = self;
-                quote!(
+                let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
+                quote!({
                     kani::assert(#attr, stringify!(#attr_copy));
                     #(#before)*
                     #(#after)*
-                    result
-                )
+                    #result
+                })
             }
-            ContractConditionsData::Ensures { attr, argument_names } => {
-                let (arg_copies, copy_clean) = make_unsafe_argument_copies(&argument_names);
-                quote!(
-                    #arg_copies
+            ContractConditionsData::Ensures { attr } => {
+                let (remembers, ensures_clause) = build_ensures(attr);
+                let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
+                quote!({
+                    #remembers
                     #(#before)*
                     #(#after)*
-                    kani::assume(#attr);
-                    #copy_clean
-                    result
-                )
+                    kani::assume(#ensures_clause);
+                    #result
+                })
             }
             ContractConditionsData::Modifies { attr } => {
-                quote!(
+                let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
+                quote!({
                     #(#before)*
-                    #(*unsafe { kani::internal::Pointer::assignable(#attr) } = kani::any();)*
+                    #(unsafe{kani::internal::write_any(kani::internal::Pointer::assignable(kani::internal::untracked_deref(&#attr)))};)*
                     #(#after)*
-                    result
-                )
+                    #result
+                })
             }
         }
     }
 
-    /// Emit the replace funtion into the output stream.
+    /// Emit the replace function into the output stream.
     ///
-    /// See [`Self::make_replace_body`] for the most interesting parts of this
+    /// See [`Self::expand_replace_body`] for the most interesting parts of this
     /// function.
-    pub fn emit_replace_function(&mut self, override_function_ident: Option<Ident>) {
-        self.emit_common_header();
+    pub fn replace_closure(&self) -> TokenStream {
+        let replace_ident = Ident::new(&self.replace_name, Span::call_site());
+        let sig = &self.annotated_fn.sig;
+        let output = &sig.output;
+        let before = self.initial_replace_stmts();
+        let body = self.expand_replace_body(&before, &vec![]);
 
-        if self.function_state.emit_tag_attr() {
-            // If it's the first time we also emit this marker. Again, order is
-            // important so this happens as the last emitted attribute.
-            self.output.extend(quote!(#[kanitool::is_contract_generated(replace)]));
-        }
-        let mut sig = self.annotated_fn.sig.clone();
-        if self.is_first_emit() {
-            attach_require_kani_any(&mut sig);
-        }
-        let body = self.make_replace_body();
-        if let Some(ident) = override_function_ident {
-            sig.ident = ident;
-        }
+        quote!(
+            #[kanitool::is_contract_generated(replace)]
+            #[allow(dead_code, unused_variables, unused_mut)]
+            let mut #replace_ident = || #output #body;
+        )
+    }
 
-        // Finally emit the check function itself.
-        self.output.extend(quote!(
-            #sig {
-                #body
-            }
-        ));
+    /// Expand the `replace` body with the new attribute.
+    pub fn expand_replace(&self, closure: &mut Stmt) {
+        let body = closure_body(closure);
+        let (before, after) = self.split_replace(mem::take(&mut body.block.stmts));
+        let stream = self.expand_replace_body(&before, &after);
+        *body = syn::parse2(stream).unwrap();
     }
 }
 
-/// Is this statement `let result : <...> = kani::any();`.
+/// Is this statement `let result_kani_internal : <...> = kani::any_modifies();`.
 fn is_replace_return_havoc(stmt: &syn::Stmt) -> bool {
     let Some(syn::LocalInit { diverge: None, expr: e, .. }) = try_as_result_assign(stmt) else {
         return false;
@@ -152,7 +154,7 @@ fn is_replace_return_havoc(stmt: &syn::Stmt) -> bool {
             })
             if path.segments.len() == 2
             && path.segments[0].ident == "kani"
-            && path.segments[1].ident == "any"
+            && path.segments[1].ident == "any_modifies"
             && attrs.is_empty()
         )
     )
