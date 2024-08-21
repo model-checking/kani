@@ -86,9 +86,8 @@ The idea is, instead of exploring all possible branches of the loop, Kani only n
 prove those branches reached from an arbitrary program state that satisfies the loop contracts,
 after the execution of one iteration of the loop.
 
-So, for loops without break statements, proving post-loops properties with loop contracts is
-equivalent to proving the properties with the loop abstracted out as assuming the post-states
-of the loops should satisfying the disjunction of the invariant and the negation of the loop guard.
+So, for loops without break statements, we can assume all post-states of the loop satisfying
+`inv && !loop_guard` for proving post-loops properties.
 The requirement of satisfying the negation of the loop guard comes from the fact that a path
 exits loops without break statements must fail the loop guard.
 
@@ -144,8 +143,9 @@ provided.
 ### Proof of termination
     
 Loop contracts also provide a way to prove the termination of the loop.
-Without the proof of termination, the loop contracts could lead to a false
-positive result. For example, consider the following program:
+Without the proof of termination, Kani could report success of some assertions that
+are actually unreachable due to non-terminating loops.
+For example, consider the following program:
 
 ```rs
 fn simple_loop_non_terminating() {
@@ -227,7 +227,7 @@ When generating GOTO program from MIR, Kani will first scan for the placeholder 
 calls `kani_loop_invariant_begin_marker` and `kani_loop_invariant_end_marker` in the MIR. 
 Then Kani will generate the corresponding GOTO-level statement expression for all instructions
 between the two placeholder function calls. At last, Kani will add the statement expression
-to the loop latch---the jump back to the loop head.
+to the loop latches---the jumps back to the loop head.
 
 The artifact `goto-instrument` in CBMC will extract the loop contracts from the named-subs
 of the loop latch, and then apply and prove the extracted loop contracts.
@@ -266,6 +266,11 @@ the GOTO level will make the integration of loop contracts with the synthesis to
 easier.
 
 ## Open questions
+
+- How do we integrate loop contracts with the synthesis tool? When the user-provided
+  loop contracts are not enough prove the harness, we expect the loop-contract synthesizer
+  can fix the loop contracts.
+- How do we translate back modify targets that inferred by CBMC to Rust level? 
 
 ## Future possibilities
 
