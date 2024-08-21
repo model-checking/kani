@@ -143,9 +143,9 @@ provided.
 
 ### Proof of termination
     
-    Loop contracts also provide a way to prove the termination of the loop.
-    Without the proof of termination, the loop contracts could lead to a false
-    positive result. For example, consider the following program:
+Loop contracts also provide a way to prove the termination of the loop.
+Without the proof of termination, the loop contracts could lead to a false
+positive result. For example, consider the following program:
 
 ```rs
 fn simple_loop_non_terminating() {
