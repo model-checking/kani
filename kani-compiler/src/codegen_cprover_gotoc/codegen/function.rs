@@ -265,7 +265,14 @@ pub mod rustc_smir {
         None
     }
 
-    fn parse_coverage_opaque(coverage_opaque: &Opaque) -> Option<CovTerm> {
+    /// Parse a `CoverageOpaque` item and return the corresponding `CovTerm`:
+    /// <https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/coverage/enum.CovTerm.html>
+    ///
+    /// At present, a `CovTerm` can be one of the following:
+    ///  - `CounterIncrement(<num>)`: A physical counter.
+    ///  - `ExpressionUsed(<num>)`: An expression-based counter.
+    ///  - `Zero`: A counter with a constant zero value.
+    fn parse_coverage_opaque(coverage_opaque: &Opaque) -> CovTerm {
         let coverage_str = coverage_opaque.to_string();
         if let Some(rest) = coverage_str.strip_prefix("CounterIncrement(") {
             let (num_str, _rest) = rest.split_once(')').unwrap();
