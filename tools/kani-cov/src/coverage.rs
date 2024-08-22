@@ -30,6 +30,12 @@ impl CoverageResults {
         Self { data }
     }
 }
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CombinedCoverageResults {
+    pub data: BTreeMap<String, Vec<CovResult>>,
+}
+
 pub fn fmt_coverage_results(coverage_results: &CoverageResults) -> Result<String> {
     let mut fmt_string = String::new();
     for (file, checks) in coverage_results.data.iter() {
@@ -62,7 +68,17 @@ pub struct CoverageCheck {
     pub function: String,
     term: CoverageTerm,
     pub region: CoverageRegion,
-    status: CheckStatus,
+    pub status: CheckStatus,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CovResult {
+    pub function: String,
+    // term: CoverageTerm,
+    pub region: CoverageRegion,
+    // status: CheckStatus,
+    pub times_covered: u32,
+    pub total_times: u32,
 }
 
 impl CoverageCheck {

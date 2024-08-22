@@ -31,9 +31,9 @@ pub struct Args {
 #[derive(Debug, clap::Args)]
 pub struct MergeArgs {
     #[arg(long)]
-    output: Option<PathBuf>,
+    pub output: Option<PathBuf>,
     #[arg(required = true)]
-    files: Vec<PathBuf>,
+    pub files: Vec<PathBuf>,
 }
 
 pub fn validate_args(args: &Args) -> Result<()> {
