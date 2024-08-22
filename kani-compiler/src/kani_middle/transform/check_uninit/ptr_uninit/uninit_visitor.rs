@@ -19,42 +19,33 @@ use stable_mir::{
         alloc::GlobalAlloc,
         mono::{Instance, InstanceKind},
         visit::{Location, PlaceContext},
-        AggregateKind, BasicBlockIdx, CastKind, LocalDecl, MirVisitor, NonDivergingIntrinsic,
-        Operand, Place, PointerCoercion, ProjectionElem, Rvalue, Statement, StatementKind,
-        Terminator, TerminatorKind,
+        AggregateKind, CastKind, LocalDecl, MirVisitor, NonDivergingIntrinsic, Operand, Place,
+        PointerCoercion, ProjectionElem, Rvalue, Statement, StatementKind, Terminator,
+        TerminatorKind,
     },
     ty::{AdtKind, ConstantKind, RigidTy, TyKind},
 };
 
 pub struct CheckUninitVisitor {
     locals: Vec<LocalDecl>,
-    /// Whether we should skip the next instruction, since it might've been instrumented already.
-    /// When we instrument an instruction, we partition the basic block, and the instruction that
-    /// may trigger UB becomes the first instruction of the basic block, which we need to skip
-    /// later.
-    skip_next: bool,
-    /// The instruction being visited at a given point.
-    current: SourceInstruction,
-    /// The target instruction that should be verified.
-    pub target: Option<InitRelevantInstruction>,
-    /// The basic block being visited.
-    bb: BasicBlockIdx,
+    /// All target instructions in the body.
+    targets: Vec<InitRelevantInstruction>,
+    /// Current analysis target, eventually needs to be added to a list of all targets.
+    current_target: InitRelevantInstruction,
 }
 
 impl TargetFinder for CheckUninitVisitor {
-    fn find_next(
-        &mut self,
-        body: &MutableBody,
-        bb: BasicBlockIdx,
-        skip_first: bool,
-    ) -> Option<InitRelevantInstruction> {
+    fn find_all(mut self, body: &MutableBody) -> Vec<InitRelevantInstruction> {
         self.locals = body.locals().to_vec();
-        self.skip_next = skip_first;
-        self.current = SourceInstruction::Statement { idx: 0, bb };
-        self.target = None;
-        self.bb = bb;
-        self.visit_basic_block(&body.blocks()[bb]);
-        self.target.clone()
+        for (bb_idx, bb) in body.blocks().iter().enumerate() {
+            self.current_target = InitRelevantInstruction {
+                source: SourceInstruction::Statement { idx: 0, bb: bb_idx },
+                before_instruction: vec![],
+                after_instruction: vec![],
+            };
+            self.visit_basic_block(bb);
+        }
+        self.targets
     }
 }
 
@@ -62,339 +53,341 @@ impl CheckUninitVisitor {
     pub fn new() -> Self {
         Self {
             locals: vec![],
-            skip_next: false,
-            current: SourceInstruction::Statement { idx: 0, bb: 0 },
-            target: None,
-            bb: 0,
+            targets: vec![],
+            current_target: InitRelevantInstruction {
+                source: SourceInstruction::Statement { idx: 0, bb: 0 },
+                before_instruction: vec![],
+                after_instruction: vec![],
+            },
         }
     }
 
     fn push_target(&mut self, source_op: MemoryInitOp) {
-        let target = self.target.get_or_insert_with(|| InitRelevantInstruction {
-            source: self.current,
-            after_instruction: vec![],
-            before_instruction: vec![],
-        });
-        target.push_operation(source_op);
+        self.current_target.push_operation(source_op);
     }
 }
 
 impl MirVisitor for CheckUninitVisitor {
     fn visit_statement(&mut self, stmt: &Statement, location: Location) {
-        if self.skip_next {
-            self.skip_next = false;
-        } else if self.target.is_none() {
-            // Leave it as an exhaustive match to be notified when a new kind is added.
-            match &stmt.kind {
-                StatementKind::Intrinsic(NonDivergingIntrinsic::CopyNonOverlapping(copy)) => {
-                    self.super_statement(stmt, location);
-                    // The copy is untyped, so we should copy memory initialization state from `src`
-                    // to `dst`.
-                    self.push_target(MemoryInitOp::Copy {
-                        from: copy.src.clone(),
-                        to: copy.dst.clone(),
-                        count: copy.count.clone(),
-                    });
-                }
-                StatementKind::Assign(place, rvalue) => {
-                    // First check rvalue.
-                    self.visit_rvalue(rvalue, location);
-                    // Check whether we are assigning into a dereference (*ptr = _).
-                    if let Some(place_without_deref) = try_remove_topmost_deref(place) {
-                        // First, check that we are not dereferencing extra pointers along the way
-                        // (e.g., **ptr = _). If yes, check whether these pointers are initialized.
-                        let mut place_to_add_projections =
-                            Place { local: place_without_deref.local, projection: vec![] };
-                        for projection_elem in place_without_deref.projection.iter() {
-                            // If the projection is Deref and the current type is raw pointer, check
-                            // if it points to initialized memory.
-                            if *projection_elem == ProjectionElem::Deref {
-                                if let TyKind::RigidTy(RigidTy::RawPtr(..)) =
-                                    place_to_add_projections.ty(&&self.locals).unwrap().kind()
-                                {
-                                    self.push_target(MemoryInitOp::Check {
-                                        operand: Operand::Copy(place_to_add_projections.clone()),
-                                    });
-                                };
-                            }
-                            place_to_add_projections.projection.push(projection_elem.clone());
+        // Leave it as an exhaustive match to be notified when a new kind is added.
+        match &stmt.kind {
+            StatementKind::Intrinsic(NonDivergingIntrinsic::CopyNonOverlapping(copy)) => {
+                self.super_statement(stmt, location);
+                // The copy is untyped, so we should copy memory initialization state from `src`
+                // to `dst`.
+                self.push_target(MemoryInitOp::Copy {
+                    from: copy.src.clone(),
+                    to: copy.dst.clone(),
+                    count: copy.count.clone(),
+                });
+            }
+            StatementKind::Assign(place, rvalue) => {
+                // First check rvalue.
+                self.visit_rvalue(rvalue, location);
+                // Check whether we are assigning into a dereference (*ptr = _).
+                if let Some(place_without_deref) = try_remove_topmost_deref(place) {
+                    // First, check that we are not dereferencing extra pointers along the way
+                    // (e.g., **ptr = _). If yes, check whether these pointers are initialized.
+                    let mut place_to_add_projections =
+                        Place { local: place_without_deref.local, projection: vec![] };
+                    for projection_elem in place_without_deref.projection.iter() {
+                        // If the projection is Deref and the current type is raw pointer, check
+                        // if it points to initialized memory.
+                        if *projection_elem == ProjectionElem::Deref {
+                            if let TyKind::RigidTy(RigidTy::RawPtr(..)) =
+                                place_to_add_projections.ty(&&self.locals).unwrap().kind()
+                            {
+                                self.push_target(MemoryInitOp::Check {
+                                    operand: Operand::Copy(place_to_add_projections.clone()),
+                                });
+                            };
                         }
-                        if place_without_deref.ty(&&self.locals).unwrap().kind().is_raw_ptr() {
-                            self.push_target(MemoryInitOp::Set {
-                                operand: Operand::Copy(place_without_deref),
-                                value: true,
-                                position: InsertPosition::After,
-                            });
-                        }
+                        place_to_add_projections.projection.push(projection_elem.clone());
                     }
-                    // Check whether Rvalue creates a new initialized pointer previously not captured inside shadow memory.
-                    if place.ty(&self.locals).unwrap().kind().is_raw_ptr() {
-                        if let Rvalue::AddressOf(..) = rvalue {
-                            self.push_target(MemoryInitOp::Set {
+                    if place_without_deref.ty(&&self.locals).unwrap().kind().is_raw_ptr() {
+                        self.push_target(MemoryInitOp::Set {
+                            operand: Operand::Copy(place_without_deref),
+                            value: true,
+                            position: InsertPosition::After,
+                        });
+                    }
+                }
+                // Check whether Rvalue creates a new initialized pointer previously not captured inside shadow memory.
+                if place.ty(&self.locals).unwrap().kind().is_raw_ptr() {
+                    if let Rvalue::AddressOf(..) = rvalue {
+                        self.push_target(MemoryInitOp::Set {
+                            operand: Operand::Copy(place.clone()),
+                            value: true,
+                            position: InsertPosition::After,
+                        });
+                    }
+                }
+
+                // TODO: add support for ADTs which could have unions as subfields. Currently,
+                // if a union as a subfield is detected, `assert!(false)` will be injected from
+                // the type layout code.
+                let is_inside_union = {
+                    let mut contains_union = false;
+                    let mut place_to_add_projections =
+                        Place { local: place.local, projection: vec![] };
+                    for projection_elem in place.projection.iter() {
+                        if place_to_add_projections.ty(&self.locals).unwrap().kind().is_union() {
+                            contains_union = true;
+                            break;
+                        }
+                        place_to_add_projections.projection.push(projection_elem.clone());
+                    }
+                    contains_union
+                };
+
+                // Need to copy some information about union initialization, since lvalue is
+                // either a union or a field inside a union.
+                if is_inside_union {
+                    if let Rvalue::Use(operand) = rvalue {
+                        // This is a union-to-union assignment, so we need to copy the
+                        // initialization state.
+                        if place.ty(&self.locals).unwrap().kind().is_union() {
+                            self.push_target(MemoryInitOp::AssignUnion {
+                                lvalue: place.clone(),
+                                rvalue: operand.clone(),
+                            });
+                        } else {
+                            // This is assignment to a field of a union.
+                            self.push_target(MemoryInitOp::SetRef {
                                 operand: Operand::Copy(place.clone()),
                                 value: true,
                                 position: InsertPosition::After,
                             });
                         }
                     }
+                }
 
-                    // TODO: add support for ADTs which could have unions as subfields. Currently,
-                    // if a union as a subfield is detected, `assert!(false)` will be injected from
-                    // the type layout code.
-                    let is_inside_union = {
-                        let mut contains_union = false;
-                        let mut place_to_add_projections =
-                            Place { local: place.local, projection: vec![] };
-                        for projection_elem in place.projection.iter() {
-                            if place_to_add_projections.ty(&self.locals).unwrap().kind().is_union()
-                            {
-                                contains_union = true;
-                                break;
+                // Create a union from scratch as an aggregate. We handle it here because we
+                // need to know which field is getting assigned.
+                if let Rvalue::Aggregate(AggregateKind::Adt(adt_def, _, _, _, union_field), _) =
+                    rvalue
+                {
+                    if adt_def.kind() == AdtKind::Union {
+                        self.push_target(MemoryInitOp::CreateUnion {
+                            operand: Operand::Copy(place.clone()),
+                            field: union_field.unwrap(), // Safe to unwrap because we know this is a union.
+                        });
+                    }
+                }
+            }
+            StatementKind::Deinit(place) => {
+                self.super_statement(stmt, location);
+                self.push_target(MemoryInitOp::Set {
+                    operand: Operand::Copy(place.clone()),
+                    value: false,
+                    position: InsertPosition::After,
+                });
+            }
+            StatementKind::FakeRead(_, _)
+            | StatementKind::SetDiscriminant { .. }
+            | StatementKind::StorageLive(_)
+            | StatementKind::StorageDead(_)
+            | StatementKind::Retag(_, _)
+            | StatementKind::PlaceMention(_)
+            | StatementKind::AscribeUserType { .. }
+            | StatementKind::Coverage(_)
+            | StatementKind::ConstEvalCounter
+            | StatementKind::Intrinsic(NonDivergingIntrinsic::Assume(_))
+            | StatementKind::Nop => self.super_statement(stmt, location),
+        }
+        // Switch to the next statement.
+        if let SourceInstruction::Statement { idx, bb } = self.current_target.source {
+            self.targets.push(self.current_target.clone());
+            self.current_target = InitRelevantInstruction {
+                source: SourceInstruction::Statement { idx: idx + 1, bb },
+                after_instruction: vec![],
+                before_instruction: vec![],
+            };
+        } else {
+            unreachable!()
+        }
+    }
+
+    fn visit_terminator(&mut self, term: &Terminator, location: Location) {
+        if let SourceInstruction::Statement { bb, .. } = self.current_target.source {
+            // We don't have to push the previous target, since it already happened in the statement
+            // handling code.
+            self.current_target = InitRelevantInstruction {
+                source: SourceInstruction::Terminator { bb },
+                after_instruction: vec![],
+                before_instruction: vec![],
+            };
+        } else {
+            unreachable!()
+        }
+        // Leave it as an exhaustive match to be notified when a new kind is added.
+        match &term.kind {
+            TerminatorKind::Call { func, args, destination, .. } => {
+                self.super_terminator(term, location);
+                let instance = match try_resolve_instance(&self.locals, func) {
+                    Ok(instance) => instance,
+                    Err(reason) => {
+                        self.super_terminator(term, location);
+                        self.push_target(MemoryInitOp::Unsupported { reason });
+                        return;
+                    }
+                };
+                match instance.kind {
+                    InstanceKind::Intrinsic => {
+                        match Intrinsic::from_instance(&instance) {
+                            intrinsic_name if can_skip_intrinsic(intrinsic_name.clone()) => {
+                                /* Intrinsics that can be safely skipped */
                             }
-                            place_to_add_projections.projection.push(projection_elem.clone());
-                        }
-                        contains_union
-                    };
-
-                    // Need to copy some information about union initialization, since lvalue is
-                    // either a union or a field inside a union.
-                    if is_inside_union {
-                        if let Rvalue::Use(operand) = rvalue {
-                            // This is a union-to-union assignment, so we need to copy the
-                            // initialization state.
-                            if place.ty(&self.locals).unwrap().kind().is_union() {
-                                self.push_target(MemoryInitOp::AssignUnion {
-                                    lvalue: place.clone(),
-                                    rvalue: operand.clone(),
+                            Intrinsic::AtomicAnd(_)
+                            | Intrinsic::AtomicCxchg(_)
+                            | Intrinsic::AtomicCxchgWeak(_)
+                            | Intrinsic::AtomicLoad(_)
+                            | Intrinsic::AtomicMax(_)
+                            | Intrinsic::AtomicMin(_)
+                            | Intrinsic::AtomicNand(_)
+                            | Intrinsic::AtomicOr(_)
+                            | Intrinsic::AtomicStore(_)
+                            | Intrinsic::AtomicUmax(_)
+                            | Intrinsic::AtomicUmin(_)
+                            | Intrinsic::AtomicXadd(_)
+                            | Intrinsic::AtomicXchg(_)
+                            | Intrinsic::AtomicXor(_)
+                            | Intrinsic::AtomicXsub(_) => {
+                                self.push_target(MemoryInitOp::Check { operand: args[0].clone() });
+                            }
+                            Intrinsic::CompareBytes => {
+                                self.push_target(MemoryInitOp::CheckSliceChunk {
+                                    operand: args[0].clone(),
+                                    count: args[2].clone(),
                                 });
-                            } else {
-                                // This is assignment to a field of a union.
-                                self.push_target(MemoryInitOp::SetRef {
-                                    operand: Operand::Copy(place.clone()),
+                                self.push_target(MemoryInitOp::CheckSliceChunk {
+                                    operand: args[1].clone(),
+                                    count: args[2].clone(),
+                                });
+                            }
+                            Intrinsic::Copy => {
+                                // The copy is untyped, so we should copy memory
+                                // initialization state from `src` to `dst`.
+                                self.push_target(MemoryInitOp::Copy {
+                                    from: args[0].clone(),
+                                    to: args[1].clone(),
+                                    count: args[2].clone(),
+                                });
+                            }
+                            Intrinsic::VolatileCopyMemory
+                            | Intrinsic::VolatileCopyNonOverlappingMemory => {
+                                // The copy is untyped, so we should copy initialization state
+                                // from `src` to `dst`. Note that the `dst` comes before `src`
+                                // in this case.
+                                self.push_target(MemoryInitOp::Copy {
+                                    from: args[1].clone(),
+                                    to: args[0].clone(),
+                                    count: args[2].clone(),
+                                });
+                            }
+                            Intrinsic::TypedSwap => {
+                                self.push_target(MemoryInitOp::Check { operand: args[0].clone() });
+                                self.push_target(MemoryInitOp::Check { operand: args[1].clone() });
+                            }
+                            Intrinsic::VolatileLoad | Intrinsic::UnalignedVolatileLoad => {
+                                self.push_target(MemoryInitOp::Check { operand: args[0].clone() });
+                            }
+                            Intrinsic::VolatileStore => {
+                                self.push_target(MemoryInitOp::Set {
+                                    operand: args[0].clone(),
                                     value: true,
                                     position: InsertPosition::After,
                                 });
                             }
+                            Intrinsic::WriteBytes => {
+                                self.push_target(MemoryInitOp::SetSliceChunk {
+                                    operand: args[0].clone(),
+                                    count: args[2].clone(),
+                                    value: true,
+                                    position: InsertPosition::After,
+                                })
+                            }
+                            intrinsic => {
+                                self.push_target(MemoryInitOp::Unsupported {
+                                    reason: format!("Kani does not support reasoning about memory initialization of intrinsic `{intrinsic:?}`."),
+                                });
+                            }
                         }
                     }
-
-                    // Create a union from scratch as an aggregate. We handle it here because we
-                    // need to know which field is getting assigned.
-                    if let Rvalue::Aggregate(AggregateKind::Adt(adt_def, _, _, _, union_field), _) =
-                        rvalue
-                    {
-                        if adt_def.kind() == AdtKind::Union {
-                            self.push_target(MemoryInitOp::CreateUnion {
-                                operand: Operand::Copy(place.clone()),
-                                field: union_field.unwrap(), // Safe to unwrap because we know this is a union.
-                            });
+                    InstanceKind::Item => {
+                        if instance.is_foreign_item() {
+                            match instance.name().as_str() {
+                                "alloc::alloc::__rust_alloc" | "alloc::alloc::__rust_realloc" => {
+                                    /* Memory is uninitialized, nothing to do here. */
+                                }
+                                "alloc::alloc::__rust_alloc_zeroed" => {
+                                    /* Memory is initialized here, need to update shadow memory. */
+                                    self.push_target(MemoryInitOp::SetSliceChunk {
+                                        operand: Operand::Copy(destination.clone()),
+                                        count: args[0].clone(),
+                                        value: true,
+                                        position: InsertPosition::After,
+                                    });
+                                }
+                                "alloc::alloc::__rust_dealloc" => {
+                                    /* Memory is uninitialized here, need to update shadow memory. */
+                                    self.push_target(MemoryInitOp::SetSliceChunk {
+                                        operand: args[0].clone(),
+                                        count: args[1].clone(),
+                                        value: false,
+                                        position: InsertPosition::After,
+                                    });
+                                }
+                                _ => {}
+                            }
                         }
                     }
+                    _ => {}
                 }
-                StatementKind::Deinit(place) => {
-                    self.super_statement(stmt, location);
+            }
+            TerminatorKind::Drop { place, .. } => {
+                self.super_terminator(term, location);
+                let place_ty = place.ty(&&self.locals).unwrap();
+
+                // When drop is codegen'ed for types that could define their own dropping
+                // behavior, a reference is taken to the place which is later implicitly coerced
+                // to a pointer. Hence, we need to bless this pointer as initialized.
+                match place
+                    .ty(&&self.locals)
+                    .unwrap()
+                    .kind()
+                    .rigid()
+                    .expect("should be working with monomorphized code")
+                {
+                    RigidTy::Adt(..) | RigidTy::Dynamic(_, _, _) => {
+                        self.push_target(MemoryInitOp::SetRef {
+                            operand: Operand::Copy(place.clone()),
+                            value: true,
+                            position: InsertPosition::Before,
+                        });
+                    }
+                    _ => {}
+                }
+
+                if place_ty.kind().is_raw_ptr() {
                     self.push_target(MemoryInitOp::Set {
                         operand: Operand::Copy(place.clone()),
                         value: false,
                         position: InsertPosition::After,
                     });
                 }
-                StatementKind::FakeRead(_, _)
-                | StatementKind::SetDiscriminant { .. }
-                | StatementKind::StorageLive(_)
-                | StatementKind::StorageDead(_)
-                | StatementKind::Retag(_, _)
-                | StatementKind::PlaceMention(_)
-                | StatementKind::AscribeUserType { .. }
-                | StatementKind::Coverage(_)
-                | StatementKind::ConstEvalCounter
-                | StatementKind::Intrinsic(NonDivergingIntrinsic::Assume(_))
-                | StatementKind::Nop => self.super_statement(stmt, location),
             }
+            TerminatorKind::Goto { .. }
+            | TerminatorKind::SwitchInt { .. }
+            | TerminatorKind::Resume
+            | TerminatorKind::Abort
+            | TerminatorKind::Return
+            | TerminatorKind::Unreachable
+            | TerminatorKind::Assert { .. }
+            | TerminatorKind::InlineAsm { .. } => self.super_terminator(term, location),
         }
-        let SourceInstruction::Statement { idx, bb } = self.current else { unreachable!() };
-        self.current = SourceInstruction::Statement { idx: idx + 1, bb };
-    }
-
-    fn visit_terminator(&mut self, term: &Terminator, location: Location) {
-        if !(self.skip_next || self.target.is_some()) {
-            self.current = SourceInstruction::Terminator { bb: self.bb };
-            // Leave it as an exhaustive match to be notified when a new kind is added.
-            match &term.kind {
-                TerminatorKind::Call { func, args, destination, .. } => {
-                    self.super_terminator(term, location);
-                    let instance = match try_resolve_instance(&self.locals, func) {
-                        Ok(instance) => instance,
-                        Err(reason) => {
-                            self.super_terminator(term, location);
-                            self.push_target(MemoryInitOp::Unsupported { reason });
-                            return;
-                        }
-                    };
-                    match instance.kind {
-                        InstanceKind::Intrinsic => {
-                            match Intrinsic::from_instance(&instance) {
-                                intrinsic_name if can_skip_intrinsic(intrinsic_name.clone()) => {
-                                    /* Intrinsics that can be safely skipped */
-                                }
-                                Intrinsic::AtomicAnd(_)
-                                | Intrinsic::AtomicCxchg(_)
-                                | Intrinsic::AtomicCxchgWeak(_)
-                                | Intrinsic::AtomicLoad(_)
-                                | Intrinsic::AtomicMax(_)
-                                | Intrinsic::AtomicMin(_)
-                                | Intrinsic::AtomicNand(_)
-                                | Intrinsic::AtomicOr(_)
-                                | Intrinsic::AtomicStore(_)
-                                | Intrinsic::AtomicUmax(_)
-                                | Intrinsic::AtomicUmin(_)
-                                | Intrinsic::AtomicXadd(_)
-                                | Intrinsic::AtomicXchg(_)
-                                | Intrinsic::AtomicXor(_)
-                                | Intrinsic::AtomicXsub(_) => {
-                                    self.push_target(MemoryInitOp::Check {
-                                        operand: args[0].clone(),
-                                    });
-                                }
-                                Intrinsic::CompareBytes => {
-                                    self.push_target(MemoryInitOp::CheckSliceChunk {
-                                        operand: args[0].clone(),
-                                        count: args[2].clone(),
-                                    });
-                                    self.push_target(MemoryInitOp::CheckSliceChunk {
-                                        operand: args[1].clone(),
-                                        count: args[2].clone(),
-                                    });
-                                }
-                                Intrinsic::Copy => {
-                                    // The copy is untyped, so we should copy memory
-                                    // initialization state from `src` to `dst`.
-                                    self.push_target(MemoryInitOp::Copy {
-                                        from: args[0].clone(),
-                                        to: args[1].clone(),
-                                        count: args[2].clone(),
-                                    });
-                                }
-                                Intrinsic::VolatileCopyMemory
-                                | Intrinsic::VolatileCopyNonOverlappingMemory => {
-                                    // The copy is untyped, so we should copy initialization state
-                                    // from `src` to `dst`. Note that the `dst` comes before `src`
-                                    // in this case.
-                                    self.push_target(MemoryInitOp::Copy {
-                                        from: args[1].clone(),
-                                        to: args[0].clone(),
-                                        count: args[2].clone(),
-                                    });
-                                }
-                                Intrinsic::TypedSwap => {
-                                    self.push_target(MemoryInitOp::Check {
-                                        operand: args[0].clone(),
-                                    });
-                                    self.push_target(MemoryInitOp::Check {
-                                        operand: args[1].clone(),
-                                    });
-                                }
-                                Intrinsic::VolatileLoad | Intrinsic::UnalignedVolatileLoad => {
-                                    self.push_target(MemoryInitOp::Check {
-                                        operand: args[0].clone(),
-                                    });
-                                }
-                                Intrinsic::VolatileStore => {
-                                    self.push_target(MemoryInitOp::Set {
-                                        operand: args[0].clone(),
-                                        value: true,
-                                        position: InsertPosition::After,
-                                    });
-                                }
-                                Intrinsic::WriteBytes => {
-                                    self.push_target(MemoryInitOp::SetSliceChunk {
-                                        operand: args[0].clone(),
-                                        count: args[2].clone(),
-                                        value: true,
-                                        position: InsertPosition::After,
-                                    })
-                                }
-                                intrinsic => {
-                                    self.push_target(MemoryInitOp::Unsupported {
-                                    reason: format!("Kani does not support reasoning about memory initialization of intrinsic `{intrinsic:?}`."),
-                                });
-                                }
-                            }
-                        }
-                        InstanceKind::Item => {
-                            if instance.is_foreign_item() {
-                                match instance.name().as_str() {
-                                    "alloc::alloc::__rust_alloc"
-                                    | "alloc::alloc::__rust_realloc" => {
-                                        /* Memory is uninitialized, nothing to do here. */
-                                    }
-                                    "alloc::alloc::__rust_alloc_zeroed" => {
-                                        /* Memory is initialized here, need to update shadow memory. */
-                                        self.push_target(MemoryInitOp::SetSliceChunk {
-                                            operand: Operand::Copy(destination.clone()),
-                                            count: args[0].clone(),
-                                            value: true,
-                                            position: InsertPosition::After,
-                                        });
-                                    }
-                                    "alloc::alloc::__rust_dealloc" => {
-                                        /* Memory is uninitialized here, need to update shadow memory. */
-                                        self.push_target(MemoryInitOp::SetSliceChunk {
-                                            operand: args[0].clone(),
-                                            count: args[1].clone(),
-                                            value: false,
-                                            position: InsertPosition::After,
-                                        });
-                                    }
-                                    _ => {}
-                                }
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-                TerminatorKind::Drop { place, .. } => {
-                    self.super_terminator(term, location);
-                    let place_ty = place.ty(&&self.locals).unwrap();
-
-                    // When drop is codegen'ed for types that could define their own dropping
-                    // behavior, a reference is taken to the place which is later implicitly coerced
-                    // to a pointer. Hence, we need to bless this pointer as initialized.
-                    match place
-                        .ty(&&self.locals)
-                        .unwrap()
-                        .kind()
-                        .rigid()
-                        .expect("should be working with monomorphized code")
-                    {
-                        RigidTy::Adt(..) | RigidTy::Dynamic(_, _, _) => {
-                            self.push_target(MemoryInitOp::SetRef {
-                                operand: Operand::Copy(place.clone()),
-                                value: true,
-                                position: InsertPosition::Before,
-                            });
-                        }
-                        _ => {}
-                    }
-
-                    if place_ty.kind().is_raw_ptr() {
-                        self.push_target(MemoryInitOp::Set {
-                            operand: Operand::Copy(place.clone()),
-                            value: false,
-                            position: InsertPosition::After,
-                        });
-                    }
-                }
-                TerminatorKind::Goto { .. }
-                | TerminatorKind::SwitchInt { .. }
-                | TerminatorKind::Resume
-                | TerminatorKind::Abort
-                | TerminatorKind::Return
-                | TerminatorKind::Unreachable
-                | TerminatorKind::Assert { .. }
-                | TerminatorKind::InlineAsm { .. } => self.super_terminator(term, location),
-            }
-        }
+        // Push the current target from the terminator onto the list.
+        self.targets.push(self.current_target.clone());
     }
 
     fn visit_place(&mut self, place: &Place, ptx: PlaceContext, location: Location) {

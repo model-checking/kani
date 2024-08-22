@@ -190,7 +190,6 @@ impl IntrinsicGeneratorPass {
         // Instead of injecting the instrumentation immediately, collect it into a list of
         // statements and a terminator to construct a basic block and inject it at the end.
         let mut statements = vec![];
-        let terminator;
 
         // The first argument type.
         let arg_ty = new_body.locals()[1].ty;
@@ -234,7 +233,7 @@ impl IntrinsicGeneratorPass {
                         let layout_operand =
                             mk_layout_operand(&mut new_body, &mut statements, &mut source, &layout);
 
-                        terminator = Terminator {
+                        let terminator = Terminator {
                             kind: TerminatorKind::Call {
                                 func: Operand::Copy(Place::from(new_body.new_local(
                                     is_ptr_initialized_instance.ty(),
@@ -277,7 +276,7 @@ impl IntrinsicGeneratorPass {
                             &mut source,
                             &element_layout,
                         );
-                        terminator = Terminator {
+                        let terminator = Terminator {
                             kind: TerminatorKind::Call {
                                 func: Operand::Copy(Place::from(new_body.new_local(
                                     is_ptr_initialized_instance.ty(),

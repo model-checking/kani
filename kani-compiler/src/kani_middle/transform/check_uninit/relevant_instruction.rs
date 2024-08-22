@@ -115,7 +115,7 @@ impl MemoryInitOp {
     }
 
     /// A helper to access operands of union assign, automatically creates references to them.
-    pub fn mk_assign_union_operands(
+    pub fn expect_assign_union_operands(
         &self,
         body: &mut MutableBody,
         statements: &mut Vec<Statement>,
