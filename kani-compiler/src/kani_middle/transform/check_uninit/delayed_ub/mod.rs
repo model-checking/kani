@@ -11,9 +11,8 @@ use crate::kani_middle::{
     points_to::{run_points_to_analysis, MemLoc, PointsToGraph},
     reachability::CallGraph,
     transform::{
-        body::{CheckType, MutableBody},
-        check_uninit::UninitInstrumenter,
-        BodyTransformation, GlobalPass, TransformationResult,
+        body::CheckType, check_uninit::UninitInstrumenter, BodyTransformation, GlobalPass,
+        TransformationResult,
     },
 };
 use crate::kani_queries::QueryDb;
@@ -112,12 +111,8 @@ impl GlobalPass for DelayedUbPass {
 
             // Instrument each instance based on the final targets we found.
             for instance in instances {
-                let mut instrumenter = UninitInstrumenter {
-                    check_type: self.check_type.clone(),
-                    mem_init_fn_cache: &mut self.mem_init_fn_cache,
-                };
                 // Retrieve the body with all local instrumentation passes applied.
-                let body = MutableBody::from(transformer.body(tcx, instance));
+                let body = transformer.body(tcx, instance);
                 // Instrument for delayed UB.
                 let target_finder = InstrumentationVisitor::new(
                     &global_points_to_graph,
@@ -125,12 +120,18 @@ impl GlobalPass for DelayedUbPass {
                     instance,
                     tcx,
                 );
-                let (instrumentation_added, body) =
-                    instrumenter.instrument(tcx, body, instance, target_finder);
+                let (instrumentation_added, body) = UninitInstrumenter::run(
+                    body,
+                    tcx,
+                    instance,
+                    self.check_type.clone(),
+                    &mut self.mem_init_fn_cache,
+                    target_finder,
+                );
                 // If some instrumentation has been performed, update the cached body in the local transformer.
                 if instrumentation_added {
                     transformer.cache.entry(instance).and_modify(|transformation_result| {
-                        *transformation_result = TransformationResult::Modified(body.into());
+                        *transformation_result = TransformationResult::Modified(body);
                     });
                 }
             }
