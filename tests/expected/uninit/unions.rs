@@ -35,9 +35,16 @@ union U1 {
     b: (u32, u16, u8),
 }
 
-/// Tests accessing uninit data via subfields of a union.
+/// Tests accessing initialized data via subfields of a union.
 #[kani::proof]
 unsafe fn union_complex_subfields_should_pass() {
+    let u = U1 { a: (0, 0) };
+    let non_padding = u.b.0;
+}
+
+/// Tests accessing uninit data via subfields of a union.
+#[kani::proof]
+unsafe fn union_complex_subfields_should_fail() {
     let u = U1 { a: (0, 0) };
     let non_padding = u.b.1;
 }
@@ -47,5 +54,13 @@ unsafe fn union_complex_subfields_should_pass() {
 unsafe fn union_update_should_pass() {
     let mut u = U { a: 0 };
     u.b = 0;
+    let non_padding = u.b;
+}
+
+/// Tests overwriting data inside unions.
+#[kani::proof]
+unsafe fn union_update_should_fail() {
+    let mut u = U { a: 0 };
+    u.a = 0;
     let non_padding = u.b;
 }
