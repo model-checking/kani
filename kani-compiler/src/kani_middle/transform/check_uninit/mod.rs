@@ -425,7 +425,8 @@ impl<'a, 'tcx> UninitInstrumenter<'a, 'tcx> {
             }
             PointeeLayout::Union { field_layouts } => {
                 // Writing union data, which could be either creating a union from scratch or
-                // performing some pointer operations with it.
+                // performing some pointer operations with it. If we are creating a union from
+                // scratch, an operation will contain a union field.
 
                 // TODO: If we don't have a union field, we are either creating a pointer to a union
                 // or assigning to one. In the former case, it is safe to return from this function,

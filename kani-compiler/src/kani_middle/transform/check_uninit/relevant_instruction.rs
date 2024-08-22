@@ -7,7 +7,7 @@
 use crate::kani_middle::transform::body::{InsertPosition, MutableBody, SourceInstruction};
 use stable_mir::{
     mir::{FieldIdx, Mutability, Operand, Place, Rvalue, Statement, StatementKind},
-    ty::Ty,
+    ty::{RigidTy, Ty},
 };
 use strum_macros::AsRefStr;
 
@@ -152,9 +152,19 @@ impl MemoryInitOp {
             MemoryInitOp::Unsupported { .. } | MemoryInitOp::TriviallyUnsafe { .. } => {
                 unreachable!("operands do not exist for this operation")
             }
-            MemoryInitOp::Copy { from, .. } => {
+            MemoryInitOp::Copy { from, to, .. } => {
                 // It does not matter which operand to return for layout generation, since both of
-                // them have the same pointee type.
+                // them have the same pointee type, so we assert that.
+                let from_kind = from.ty(body.locals()).unwrap().kind();
+                let to_kind = to.ty(body.locals()).unwrap().kind();
+
+                let RigidTy::RawPtr(from_pointee_ty, _) = from_kind.rigid().unwrap().clone() else {
+                    unreachable!()
+                };
+                let RigidTy::RawPtr(to_pointee_ty, _) = to_kind.rigid().unwrap().clone() else {
+                    unreachable!()
+                };
+                assert!(from_pointee_ty == to_pointee_ty);
                 from.ty(body.locals()).unwrap()
             }
             MemoryInitOp::AssignUnion { lvalue, .. } => {
