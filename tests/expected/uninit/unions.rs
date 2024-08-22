@@ -35,18 +35,18 @@ union U1 {
     b: (u32, u16, u8),
 }
 
-/// Tests accessing initialized data via subfields of a union.
-#[kani::proof]
-unsafe fn union_complex_subfields_should_pass() {
-    let u = U1 { a: (0, 0) };
-    let non_padding = u.b.0;
-}
-
 /// Tests accessing uninit data via subfields of a union.
 #[kani::proof]
 unsafe fn union_complex_subfields_should_fail() {
     let u = U1 { a: (0, 0) };
     let non_padding = u.b.1;
+}
+
+/// Tests accessing uninitialized data inside a place projection.
+#[kani::proof]
+unsafe fn union_uninit_inside_projection_should_fail() {
+    let u = U1 { a: (0, 0) };
+    let non_padding = u.b.0;
 }
 
 /// Tests overwriting data inside unions.
