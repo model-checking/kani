@@ -15,7 +15,7 @@ union U {
 
 /// Simple and correct union access.
 #[kani::proof]
-unsafe fn basic_union_pass() {
+unsafe fn basic_union_should_pass() {
     let u = U { b: 0 };
     let u1 = u;
     let padding = u1.a;
@@ -23,7 +23,7 @@ unsafe fn basic_union_pass() {
 
 /// Reading padding data via simple union access.
 #[kani::proof]
-unsafe fn basic_union_fail() {
+unsafe fn basic_union_should_fail() {
     let u = U { a: 0 };
     let u1 = u;
     let padding = u1.b;
@@ -37,14 +37,14 @@ union U1 {
 
 /// Tests accessing uninit data via subfields of a union.
 #[kani::proof]
-unsafe fn union_complex_subfields() {
+unsafe fn union_complex_subfields_should_pass() {
     let u = U1 { a: (0, 0) };
     let non_padding = u.b.1;
 }
 
 /// Tests overwriting data inside unions.
 #[kani::proof]
-unsafe fn union_update() {
+unsafe fn union_update_should_pass() {
     let mut u = U { a: 0 };
     u.b = 0;
     let non_padding = u.b;
