@@ -2,15 +2,7 @@ std::ptr::read::<std::mem::MaybeUninit<u8>>.assertion.1\
 	 - Status: FAILURE\
 	 - Description: "Kani currently doesn't support checking memory initialization for pointers to `std::mem::MaybeUninit<u8>."
 
-std::ptr::read::<std::mem::MaybeUninit<u8>>.assertion.2\
-	 - Status: FAILURE\
-	 - Description: "Kani currently doesn't support checking memory initialization for pointers to `std::mem::MaybeUninit<u8>."
-
 std::ptr::write::<std::mem::MaybeUninit<u8>>.assertion.1\
-	 - Status: FAILURE\
-	 - Description: "Kani currently doesn't support checking memory initialization for pointers to `std::mem::MaybeUninit<u8>."
-
-std::ptr::write::<std::mem::MaybeUninit<u8>>.assertion.2\
 	 - Status: FAILURE\
 	 - Description: "Kani currently doesn't support checking memory initialization for pointers to `std::mem::MaybeUninit<u8>."
 
