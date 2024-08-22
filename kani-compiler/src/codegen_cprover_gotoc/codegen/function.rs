@@ -235,7 +235,7 @@ pub mod rustc_smir {
         coverage_opaque: &CoverageOpaque,
         instance: Instance,
     ) -> Option<CodeRegion> {
-        let cov_term = parse_coverage_opaque(coverage_opaque)?;
+        let cov_term = parse_coverage_opaque(coverage_opaque);
         region_from_coverage(tcx, cov_term, instance)
     }
 
@@ -267,18 +267,16 @@ pub mod rustc_smir {
 
     fn parse_coverage_opaque(coverage_opaque: &Opaque) -> Option<CovTerm> {
         let coverage_str = coverage_opaque.to_string();
-        if coverage_str == "Zero" {
-            Some(CovTerm::Zero)
-        } else if let Some(rest) = coverage_str.strip_prefix("CounterIncrement(") {
+        if let Some(rest) = coverage_str.strip_prefix("CounterIncrement(") {
             let (num_str, _rest) = rest.split_once(')').unwrap();
             let num = num_str.parse::<u32>().unwrap();
-            Some(CovTerm::Counter(num.into()))
+            CovTerm::Counter(num.into())
         } else if let Some(rest) = coverage_str.strip_prefix("ExpressionUsed(") {
             let (num_str, _rest) = rest.split_once(')').unwrap();
             let num = num_str.parse::<u32>().unwrap();
-            Some(CovTerm::Expression(num.into()))
+            CovTerm::Expression(num.into())
         } else {
-            None
+            CovTerm::Zero
         }
     }
 }
