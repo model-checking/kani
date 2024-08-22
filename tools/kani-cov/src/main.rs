@@ -1,4 +1,11 @@
+// Copyright Kani Contributors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
 mod coverage;
+mod args;
+mod merge;
+mod summary;
+mod report;
 use std::fs::File;
 use std::io::Read;
 use std::io::{BufRead, BufReader};
@@ -7,22 +14,31 @@ use std::path::PathBuf;
 use atty::Stream;
 
 use crate::coverage::CoverageResults;
+use args::{Args, validate_args, Subcommand};
+use clap::Parser;
 use anyhow::{Context, Result};
 use coverage::CoverageCheck;
 
 
 fn main() -> Result<()> {
-    let args = std::env::args().collect::<Vec<_>>();
+    let args = args::Args::parse();
 
-    let file_path = args.get(1).context("kanicov file not specified")?;
-    let mut file = File::open(file_path)?;
-    let mut contents = String::new();
-    file.read_to_string(&mut contents)?;
-    let path_to_root = cargo_root_dir(file_path.into());
-    let cov_results: CoverageResults = serde_json::from_str(&contents)?;
-    let visual_results = visualize_coverage_results(&cov_results, path_to_root.unwrap())
-        .expect("error: couldn't format coverage results");
-    println!("{visual_results}");
+    validate_args(&args)?;
+
+    match args.command.unwrap() {
+        Subcommand::Merge(merge_args) => merge::merge_main(&merge_args)?,
+        // Subcommand::Summary => summary::summary_main()?,
+        // Subcommand::Report => report::report_main()?,
+    };
+    // let file_path = args.get(1).context("kanicov file not specified")?;
+    // let mut file = File::open(file_path)?;
+    // let mut contents = String::new();
+    // file.read_to_string(&mut contents)?;
+    // let path_to_root = cargo_root_dir(file_path.into());
+    // let cov_results: CoverageResults = serde_json::from_str(&contents)?;
+    // let visual_results = visualize_coverage_results(&cov_results, path_to_root.unwrap())
+    //     .expect("error: couldn't format coverage results");
+    // println!("{visual_results}");
     Ok(())
 }
 
