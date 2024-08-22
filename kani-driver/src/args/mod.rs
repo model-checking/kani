@@ -5,7 +5,6 @@
 pub mod assess_args;
 pub mod cargo;
 pub mod common;
-pub mod coverage_args;
 pub mod playback_args;
 pub mod std_args;
 
