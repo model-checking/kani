@@ -5,11 +5,13 @@
 
 use crate::info;
 use csv::WriterBuilder;
+use graph_cycles::Cycles;
+use petgraph::graph::Graph;
 use serde::{ser::SerializeStruct, Serialize, Serializer};
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::visit::{Location, PlaceContext, PlaceRef};
 use stable_mir::mir::{
-    Body, MirVisitor, Mutability, ProjectionElem, Safety, Terminator, TerminatorKind,
+    BasicBlock, Body, MirVisitor, Mutability, ProjectionElem, Safety, Terminator, TerminatorKind,
 };
 use stable_mir::ty::{AdtDef, AdtKind, FnDef, GenericArgs, MirConst, RigidTy, Ty, TyKind};
 use stable_mir::visitor::{Visitable, Visitor};
@@ -159,6 +161,7 @@ impl OverallStats {
     pub fn loops(&mut self, filename: PathBuf) {
         let all_items = stable_mir::all_local_items();
         let (has_loops, no_loops) = all_items
+            .clone()
             .into_iter()
             .filter_map(|item| {
                 let kind = item.ty().kind();
@@ -168,9 +171,37 @@ impl OverallStats {
                 Some(FnLoops::new(item.name()).collect(&item.body()))
             })
             .partition::<Vec<_>, _>(|props| props.has_loops());
-        self.counters
-            .extend_from_slice(&[("has_loops", has_loops.len()), ("no_loops", no_loops.len())]);
-        dump_csv(filename, &has_loops);
+
+        let (has_iterators, no_iterators) = all_items
+            .clone()
+            .into_iter()
+            .filter_map(|item| {
+                let kind = item.ty().kind();
+                if !kind.is_fn() {
+                    return None;
+                };
+                Some(FnLoops::new(item.name()).collect(&item.body()))
+            })
+            .partition::<Vec<_>, _>(|props| props.has_iterators());
+
+        let (has_either, _) = all_items
+            .into_iter()
+            .filter_map(|item| {
+                let kind = item.ty().kind();
+                if !kind.is_fn() {
+                    return None;
+                };
+                Some(FnLoops::new(item.name()).collect(&item.body()))
+            })
+            .partition::<Vec<_>, _>(|props| props.has_iterators() || props.has_loops());
+
+        self.counters.extend_from_slice(&[
+            ("has_loops", has_loops.len()),
+            ("no_loops", no_loops.len()),
+            ("has_iterators", has_iterators.len()),
+            ("no_iterators", no_iterators.len()),
+        ]);
+        dump_csv(filename, &has_either);
     }
 
     /// Create a callgraph for this crate and try to find recursive calls.
@@ -436,21 +467,26 @@ impl<'a> MirVisitor for BodyVisitor<'a> {
 fn_props! {
     struct FnLoops {
         iterators,
-        nested_loops,
-        /// TODO: Collect loops.
         loops,
+        // TODO: Collect nested loops.
+        nested_loops,
     }
 }
 
 impl FnLoops {
     pub fn collect(self, body: &Body) -> FnLoops {
-        let mut visitor = IteratorVisitor { props: self, body };
+        let mut visitor =
+            IteratorVisitor { props: self, body, graph: Vec::new(), current_bbidx: 0 };
         visitor.visit_body(body);
         visitor.props
     }
 
     pub fn has_loops(&self) -> bool {
-        (self.iterators + self.loops + self.nested_loops) > 0
+        (self.loops + self.nested_loops) > 0
+    }
+
+    pub fn has_iterators(&self) -> bool {
+        (self.iterators) > 0
     }
 }
 
@@ -461,12 +497,36 @@ impl FnLoops {
 struct IteratorVisitor<'a> {
     props: FnLoops,
     body: &'a Body,
+    graph: Vec<(u32, u32)>,
+    current_bbidx: u32,
 }
 
 impl<'a> MirVisitor for IteratorVisitor<'a> {
+    fn visit_body(&mut self, body: &Body) {
+        // First visit the body to build the control flow graph
+        self.super_body(body);
+        // Build the petgraph from the adj vec
+        let g = Graph::<(), ()>::from_edges(self.graph.clone());
+        self.props.loops += g.cycles().len();
+    }
+
+    fn visit_basic_block(&mut self, bb: &BasicBlock) {
+        self.current_bbidx = self.body.blocks.iter().position(|b| *b == *bb).unwrap() as u32;
+        self.super_basic_block(bb);
+    }
+
     fn visit_terminator(&mut self, term: &Terminator, location: Location) {
+        // Add edges between basic block into the adj table
+        let successors = term.kind.successors();
+        for target in successors {
+            self.graph.push((self.current_bbidx, target as u32));
+        }
+
         if let TerminatorKind::Call { func, .. } = &term.kind {
             let kind = func.ty(self.body.locals()).unwrap().kind();
+            // Check if the target is a visited block.
+
+            // Check if the call is an iterator function that contains loops.
             if let TyKind::RigidTy(RigidTy::FnDef(def, _)) = kind {
                 let fullname = def.name();
                 let names = fullname.split("::").collect::<Vec<_>>();
@@ -505,6 +565,7 @@ impl<'a> MirVisitor for IteratorVisitor<'a> {
                 }
             }
         }
+
         self.super_terminator(term, location)
     }
 }
