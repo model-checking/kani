@@ -474,7 +474,7 @@ dependencies = [
  "shell-words",
  "strum",
  "strum_macros",
- "syn 2.0.74",
+ "syn 2.0.75",
  "tracing",
  "tracing-subscriber",
 ]
