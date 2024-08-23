@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! This module contains a cache of resolved generic functions
 
-use super::{MirInstance, MirError};
+use super::{MirError, MirInstance};
+use crate::kani_middle::find_fn_def;
 use rustc_middle::ty::TyCtxt;
 use stable_mir::ty::{GenericArgKind as GenericArg, GenericArgs};
-use crate::kani_middle::find_fn_def;
 
 /// FunctionSignature encapsulates the data
 /// for rust functions with generic arguments
@@ -56,8 +56,7 @@ pub struct Cache {
 impl Cache {
     /// Register the signature the to the cache
     /// in the given compilation context, ctx
-    pub fn register(&mut self, ctx: &TyCtxt, sig: Signature) ->
-        Result<&MirInstance, MirError> {
+    pub fn register(&mut self, ctx: &TyCtxt, sig: Signature) -> Result<&MirInstance, MirError> {
         let Cache { cache } = self;
         for i in 0..cache.len() {
             if sig == cache[i].signature {
@@ -72,8 +71,7 @@ impl Cache {
     }
 
     /// Register the kani assertion function
-    pub fn register_assert(&mut self, ctx: &TyCtxt) ->
-        Result<&MirInstance, MirError> {
+    pub fn register_assert(&mut self, ctx: &TyCtxt) -> Result<&MirInstance, MirError> {
         let diagnostic = "KaniAssert".to_string();
         let args = vec![];
         let sig = Signature { diagnostic, args };

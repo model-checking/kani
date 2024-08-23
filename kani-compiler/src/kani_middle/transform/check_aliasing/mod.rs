@@ -121,8 +121,14 @@ impl GlobalPass for GlobalAliasingPass {
         let mut found = HashSet::new();
         // Collect
         for instance in &instances {
-            if instance.def.all_attrs().into_iter().fold(false, |is_proof, attr| is_proof || attr.as_str().contains("kanitool::proof")) {
-                let (items, _) = collect_reachable_items(tcx, transformer, &[MonoItem::Fn(*instance)]);
+            if instance
+                .def
+                .all_attrs()
+                .into_iter()
+                .fold(false, |is_proof, attr| is_proof || attr.as_str().contains("kanitool::proof"))
+            {
+                let (items, _) =
+                    collect_reachable_items(tcx, transformer, &[MonoItem::Fn(*instance)]);
                 for item in items {
                     if let MonoItem::Fn(instance) = item {
                         found.insert(instance);
@@ -136,11 +142,8 @@ impl GlobalPass for GlobalAliasingPass {
             if found.contains(instance) {
                 found.remove(instance);
                 let mut pass = AliasingPass { cache: &mut self.cache };
-                let (_, body) =
-                    pass.transform(tcx, transformer.body(tcx, *instance), *instance);
-                transformer
-                    .cache
-                    .insert(*instance, TransformationResult::Modified(body));
+                let (_, body) = pass.transform(tcx, transformer.body(tcx, *instance), *instance);
+                transformer.cache.insert(*instance, TransformationResult::Modified(body));
             }
         }
     }

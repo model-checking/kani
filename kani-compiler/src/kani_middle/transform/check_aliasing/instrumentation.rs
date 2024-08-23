@@ -7,14 +7,16 @@
 //! are instrumented, and that no code that is added by the instrumentation
 //! pass itself is instrumented or analyzed.
 
-use std::collections::HashMap;
-use rustc_middle::ty::TyCtxt;
-use stable_mir::mir::{Body, Local, Mutability, Operand, Place, Rvalue, Terminator, TerminatorKind, UnwindAction};
-use stable_mir::ty::{GenericArgKind, Ty, Span};
 use crate::kani_middle::transform::body::{CheckType, InsertPosition};
+use rustc_middle::ty::TyCtxt;
+use stable_mir::mir::{
+    Body, Local, Mutability, Operand, Place, Rvalue, Terminator, TerminatorKind, UnwindAction,
+};
+use stable_mir::ty::{GenericArgKind, Span, Ty};
+use std::collections::HashMap;
 
-use super::{Action, Cache, CollectActions, MirError, MirInstance, Signature};
 use super::super::body::{MutableBody, SourceInstruction};
+use super::{Action, Cache, CollectActions, MirError, MirInstance, Signature};
 
 type Result<T> = std::result::Result<T, MirError>;
 
@@ -62,7 +64,7 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
             0 => {
                 source = SourceInstruction::Terminator { bb: 0 };
                 span = body.blocks()[0].terminator.span;
-            },
+            }
             _ => {
                 source = SourceInstruction::Statement { idx: 0, bb: 0 };
                 span = body.blocks()[0].terminator.span;
@@ -84,14 +86,30 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
         let local_count = body.locals().len();
         let fn_pointers = HashMap::new();
         let unit = body.new_local(Ty::new_tuple(&[]), span, Mutability::Not);
-        let valid = body.new_local(Ty::from_rigid_kind(stable_mir::ty::RigidTy::Bool), span, Mutability::Mut);
+        let valid = body.new_local(
+            Ty::from_rigid_kind(stable_mir::ty::RigidTy::Bool),
+            span,
+            Mutability::Mut,
+        );
         let bb = body.blocks().len() - 1;
         let min_processed = match body.blocks()[bb].statements.len() {
             0 => SourceInstruction::Terminator { bb },
-            n => SourceInstruction::Statement { idx: n - 1, bb }
+            n => SourceInstruction::Statement { idx: n - 1, bb },
         };
         let ghost_index = SourceInstruction::Terminator { bb: 0 };
-        InstrumentationData { tcx, cache, meta_stack, local_count, unit, valid, fn_pointers, span, min_processed, ghost_index, body }
+        InstrumentationData {
+            tcx,
+            cache,
+            meta_stack,
+            local_count,
+            unit,
+            valid,
+            fn_pointers,
+            span,
+            min_processed,
+            ghost_index,
+            body,
+        }
     }
 
     /// Register the function described by the diagnostic
@@ -103,7 +121,8 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
         let body = &mut self.body;
         let span = self.span.clone();
         let instance = cache.register(tcx, callee)?;
-        let func_local = fn_pointers.entry(*instance)
+        let func_local = fn_pointers
+            .entry(*instance)
             .or_insert_with(|| body.new_local(instance.ty(), span, Mutability::Not));
         Ok(*func_local)
     }
@@ -112,10 +131,7 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
     /// in args and returning into "dest".
     /// This differs from Mutable Body's call in that the
     /// function name is cached.
-    pub fn call(&mut self,
-                callee: Signature,
-                args: Vec<Local>,
-                dest: Local) -> Result<()> {
+    pub fn call(&mut self, callee: Signature, args: Vec<Local>, dest: Local) -> Result<()> {
         let func_local = self.register_fn(callee)?;
         let new_bb = self.body.blocks().len();
         let span = self.body.blocks()[self.min_processed.bb()].terminator.span;
@@ -142,7 +158,12 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
     pub fn assign_pointer(&mut self, lvalue: Local, rvalue: Local) {
         let source = &mut self.ghost_index;
         let position = InsertPosition::After;
-        self.body.assign_to(Place::from(lvalue), Rvalue::AddressOf(Mutability::Not, Place::from(rvalue)), source, position);
+        self.body.assign_to(
+            Place::from(lvalue),
+            Rvalue::AddressOf(Mutability::Not, Place::from(rvalue)),
+            source,
+            position,
+        );
     }
 
     /// For some local, say let x: T;
@@ -154,11 +175,17 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
         let ptr_ty = Ty::new_ptr(ty, Mutability::Not);
         let span = self.span.clone();
         let body = &mut self.body;
-        let local_ptr =
-            self.meta_stack.entry(local).or_insert_with(|| body.new_local(ptr_ty, span, Mutability::Not));
+        let local_ptr = self
+            .meta_stack
+            .entry(local)
+            .or_insert_with(|| body.new_local(ptr_ty, span, Mutability::Not));
         let local_ptr = *local_ptr;
         self.assign_pointer(local_ptr, local);
-        self.call(Signature::new("KaniInitializeLocal", &[GenericArgKind::Type(ty)]), vec![local_ptr], self.unit)?;
+        self.call(
+            Signature::new("KaniInitializeLocal", &[GenericArgKind::Type(ty)]),
+            vec![local_ptr],
+            self.unit,
+        )?;
         Ok(())
     }
 
@@ -206,7 +233,7 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
                 body.replace_terminator(&execute_terminator_block, original);
 
                 self.ghost_index = execute_ghost_block;
-            },
+            }
             SourceInstruction::Statement { idx, bb } => {
                 // In this case it is simple, merely goto the ghost code
                 // immdediately.
@@ -225,16 +252,16 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
     /// lvalue = &rvalue
     /// with an update to the stacked borrows state,
     /// at the code index source.
-    pub fn instrument_new_stack_reference(
-        &mut self,
-        lvalue: Local,
-        rvalue: Local,
-    ) -> Result<()> {
+    pub fn instrument_new_stack_reference(&mut self, lvalue: Local, rvalue: Local) -> Result<()> {
         // Initialize the constants
         let ty = self.body.locals()[rvalue].ty;
         let lvalue_ref = self.meta_stack.get(&lvalue).unwrap();
         let rvalue_ref = self.meta_stack.get(&rvalue).unwrap();
-        self.call(Signature::new("KaniNewMutRefFromValue", &[GenericArgKind::Type(ty)]), vec![*lvalue_ref, *rvalue_ref], self.unit)?;
+        self.call(
+            Signature::new("KaniNewMutRefFromValue", &[GenericArgKind::Type(ty)]),
+            vec![*lvalue_ref, *rvalue_ref],
+            self.unit,
+        )?;
         Ok(())
     }
 
@@ -245,36 +272,47 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
             SourceInstruction::Terminator { bb } => self.body.blocks()[bb].terminator.span,
         };
         self.call(Signature::new("KaniStackValid", &[]), vec![], self.valid)?;
-        let msg = format!("Stacked borrows aliasing model violated at {:?}:{:?}", span.get_filename(), span.get_lines());
+        let msg = format!(
+            "Stacked borrows aliasing model violated at {:?}:{:?}",
+            span.get_filename(),
+            span.get_lines()
+        );
         let check_fn = self.cache.register_assert(&self.tcx)?;
         let check_type = &CheckType::Assert(*check_fn);
-        self.body.insert_check(self.tcx, check_type, &mut self.ghost_index, InsertPosition::After, self.valid, &msg);
+        self.body.insert_check(
+            self.tcx,
+            check_type,
+            &mut self.ghost_index,
+            InsertPosition::After,
+            self.valid,
+            &msg,
+        );
         Ok(())
     }
 
     /// Instrument a validity assertion on the stacked borrows state
     /// at idx for (place: &mut T).
-    pub fn instrument_stack_update_ref(
-        &mut self,
-        place: Local,
-        ty: Ty,
-    ) -> Result<()> {
+    pub fn instrument_stack_update_ref(&mut self, place: Local, ty: Ty) -> Result<()> {
         // Initialize the constants
         let place_ref = self.meta_stack.get(&place).unwrap();
-        self.call(Signature::new("KaniStackCheckRef", &[GenericArgKind::Type(ty)]), vec![*place_ref], self.unit)?;
+        self.call(
+            Signature::new("KaniStackCheckRef", &[GenericArgKind::Type(ty)]),
+            vec![*place_ref],
+            self.unit,
+        )?;
         Ok(())
     }
 
     /// Instrument a validity assertion on the stacked borrows state
     /// at idx for (place: *const T).
-    pub fn instrument_stack_update_ptr(
-        &mut self,
-        place: Local,
-        ty: Ty,
-    ) -> Result<()> {
+    pub fn instrument_stack_update_ptr(&mut self, place: Local, ty: Ty) -> Result<()> {
         // Initialize the constants
         let place_ref = self.meta_stack.get(&place).unwrap();
-        self.call(Signature::new("KaniStackCheckPtr", &[GenericArgKind::Type(ty)]), vec![*place_ref], self.unit)?;
+        self.call(
+            Signature::new("KaniStackCheckPtr", &[GenericArgKind::Type(ty)]),
+            vec![*place_ref],
+            self.unit,
+        )?;
         Ok(())
     }
 
@@ -289,7 +327,11 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
         // Initialize the constants
         let created_ref = self.meta_stack.get(&created).unwrap();
         let reference_ref = self.meta_stack.get(&raw).unwrap();
-        self.call(Signature::new("KaniNewMutRefFromRaw", &[GenericArgKind::Type(ty)]), vec![*created_ref, *reference_ref], self.unit)?;
+        self.call(
+            Signature::new("KaniNewMutRefFromRaw", &[GenericArgKind::Type(ty)]),
+            vec![*created_ref, *reference_ref],
+            self.unit,
+        )?;
         Ok(())
     }
 
@@ -304,7 +346,11 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
         // Initialize the constants
         let created_ref = self.meta_stack.get(&created).unwrap();
         let reference_ref = self.meta_stack.get(&reference).unwrap();
-        self.call(Signature::new("KaniNewMutRawFromRef", &[GenericArgKind::Type(ty)]), vec![*created_ref, *reference_ref], self.unit)?;
+        self.call(
+            Signature::new("KaniNewMutRawFromRef", &[GenericArgKind::Type(ty)]),
+            vec![*created_ref, *reference_ref],
+            self.unit,
+        )?;
         Ok(())
     }
 
@@ -321,7 +367,7 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
     pub fn instruction_actions(&self) -> Vec<Action> {
         let mut visitor = CollectActions::new(self.body.locals());
         match self.min_processed {
-            SourceInstruction::Terminator { .. } => { /* not yet handled */ },
+            SourceInstruction::Terminator { .. } => { /* not yet handled */ }
             SourceInstruction::Statement { idx, bb } => {
                 visitor.visit_statement(&self.body.blocks()[bb].statements[idx]);
             }
@@ -334,11 +380,19 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
     fn instrument_action(&mut self, action: Action) -> Result<()> {
         match action {
             Action::StackCheck => self.instrument_stack_check(),
-            Action::NewStackReference { lvalue, rvalue } => self.instrument_new_stack_reference(lvalue, rvalue),
-            Action::StackUpdateReference { place, ty } => self.instrument_stack_update_ref(place, ty),
-            Action::NewMutRefFromRaw { lvalue, rvalue, ty } => self.instrument_new_mut_ref_from_raw(lvalue, rvalue, ty),
+            Action::NewStackReference { lvalue, rvalue } => {
+                self.instrument_new_stack_reference(lvalue, rvalue)
+            }
+            Action::StackUpdateReference { place, ty } => {
+                self.instrument_stack_update_ref(place, ty)
+            }
+            Action::NewMutRefFromRaw { lvalue, rvalue, ty } => {
+                self.instrument_new_mut_ref_from_raw(lvalue, rvalue, ty)
+            }
             Action::StackUpdatePointer { place, ty } => self.instrument_stack_update_ptr(place, ty),
-            Action::NewMutRawFromRef { lvalue, rvalue, ty } => self.instrument_new_mut_raw_from_ref(lvalue, rvalue, ty),
+            Action::NewMutRawFromRef { lvalue, rvalue, ty } => {
+                self.instrument_new_mut_raw_from_ref(lvalue, rvalue, ty)
+            }
         }
     }
 
@@ -357,13 +411,29 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
                 self.instrument_action(action)?;
             }
             self.min_processed = match self.min_processed {
-                SourceInstruction::Statement { idx: 0, bb: 0 } => { break; },
-                SourceInstruction::Statement { idx: 0, bb } => SourceInstruction::Terminator { bb: bb - 1 },
-                SourceInstruction::Statement { idx, bb } => SourceInstruction::Statement { idx: idx - 1, bb },
-                SourceInstruction::Terminator { bb } if self.body.blocks()[bb].statements.len() > 0 =>
-                    SourceInstruction::Statement { idx: self.body.blocks()[bb].statements.len() - 1, bb },
-                SourceInstruction::Terminator { bb } if bb > 0 => SourceInstruction::Terminator { bb: bb - 1 },
-                SourceInstruction::Terminator { .. } => { break; }
+                SourceInstruction::Statement { idx: 0, bb: 0 } => {
+                    break;
+                }
+                SourceInstruction::Statement { idx: 0, bb } => {
+                    SourceInstruction::Terminator { bb: bb - 1 }
+                }
+                SourceInstruction::Statement { idx, bb } => {
+                    SourceInstruction::Statement { idx: idx - 1, bb }
+                }
+                SourceInstruction::Terminator { bb }
+                    if self.body.blocks()[bb].statements.len() > 0 =>
+                {
+                    SourceInstruction::Statement {
+                        idx: self.body.blocks()[bb].statements.len() - 1,
+                        bb,
+                    }
+                }
+                SourceInstruction::Terminator { bb } if bb > 0 => {
+                    SourceInstruction::Terminator { bb: bb - 1 }
+                }
+                SourceInstruction::Terminator { .. } => {
+                    break;
+                }
             }
         }
         Ok(())

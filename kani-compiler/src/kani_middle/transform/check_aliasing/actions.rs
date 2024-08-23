@@ -6,8 +6,8 @@
 //! statements of the code.
 
 use stable_mir::mir::{
-    BorrowKind, Local, LocalDecl, Mutability, Operand, ProjectionElem, Rvalue,
-    Statement, StatementKind, Place,
+    BorrowKind, Local, LocalDecl, Mutability, Operand, Place, ProjectionElem, Rvalue, Statement,
+    StatementKind,
 };
 use stable_mir::ty::{RigidTy, Ty, TyKind};
 
@@ -47,11 +47,7 @@ impl<'locals> CollectActions<'locals> {
         match self.locals[rvalue].ty.kind() {
             TyKind::RigidTy(RigidTy::Ref(_, ty, _)) | TyKind::RigidTy(RigidTy::RawPtr(ty, _)) => {
                 // reborrow
-                self.actions.push(Action::NewMutRefFromRaw {
-                    lvalue,
-                    rvalue,
-                    ty,
-                });
+                self.actions.push(Action::NewMutRefFromRaw { lvalue, rvalue, ty });
             }
             _ => {}
         }
@@ -67,7 +63,7 @@ impl<'locals> CollectActions<'locals> {
                 let lvalue = to;
                 let rvalue = from.local.clone();
                 self.actions.push(Action::NewStackReference { lvalue, rvalue });
-            },
+            }
             [ProjectionElem::Deref] => {
                 // Reborrow
                 // x : &mut T = &*(y : *mut T OR &mut T)
@@ -93,14 +89,13 @@ impl<'locals> CollectActions<'locals> {
                 let lvalue = to;
                 match self.locals[rvalue].ty.kind() {
                     TyKind::RigidTy(RigidTy::Ref(_, ty, _)) => {
-                        self.actions.push(Action::NewMutRawFromRef {
-                            lvalue,
-                            rvalue,
-                            ty,
-                        });
+                        self.actions.push(Action::NewMutRawFromRef { lvalue, rvalue, ty });
                     }
                     _ => {
-                        panic!("Dereference of rvalue case not yet handled for raw pointers {:?}", from);
+                        panic!(
+                            "Dereference of rvalue case not yet handled for raw pointers {:?}",
+                            from
+                        );
                     }
                 }
             }
@@ -116,10 +111,10 @@ impl<'locals> CollectActions<'locals> {
             [] => {
                 // Direct usage -- no update needed
                 return;
-            },
+            }
             [ProjectionElem::Deref] => {
                 // Dereference -- instrument stack check
-            },
+            }
             _ => {
                 // Field access -- not yet handled.
                 return;
@@ -129,12 +124,12 @@ impl<'locals> CollectActions<'locals> {
             TyKind::RigidTy(RigidTy::Ref(_, ty, _)) => {
                 self.actions.push(Action::StackUpdateReference { place: place.local, ty });
                 self.actions.push(Action::StackCheck);
-            },
+            }
             TyKind::RigidTy(RigidTy::RawPtr(ty, _)) => {
                 self.actions.push(Action::StackUpdatePointer { place: place.local, ty });
                 self.actions.push(Action::StackCheck);
-            },
-            _ => {},
+            }
+            _ => {}
         }
     }
 
@@ -143,24 +138,24 @@ impl<'locals> CollectActions<'locals> {
         match rvalue {
             Rvalue::AddressOf(_, place) => {
                 self.visit_place(place);
-            },
+            }
             Rvalue::Ref(_, _, place) => {
                 self.visit_place(place);
             }
             // The rest are not yet handled
-            Rvalue::Aggregate(_, _) => {},
-            Rvalue::BinaryOp(_, _, _) => {},
-            Rvalue::Cast(_, _, _) => {},
-            Rvalue::CheckedBinaryOp(_, _, _) => {},
-            Rvalue::CopyForDeref(_) => {},
-            Rvalue::Discriminant(_) => {},
-            Rvalue::Len(_) => {},
-            Rvalue::Repeat(_, _) => {},
-            Rvalue::ShallowInitBox(_, _) => {},
-            Rvalue::ThreadLocalRef(_) => {},
-            Rvalue::NullaryOp(_, _) => {},
-            Rvalue::UnaryOp(_, _) => {},
-            Rvalue::Use(_) => {},
+            Rvalue::Aggregate(_, _) => {}
+            Rvalue::BinaryOp(_, _, _) => {}
+            Rvalue::Cast(_, _, _) => {}
+            Rvalue::CheckedBinaryOp(_, _, _) => {}
+            Rvalue::CopyForDeref(_) => {}
+            Rvalue::Discriminant(_) => {}
+            Rvalue::Len(_) => {}
+            Rvalue::Repeat(_, _) => {}
+            Rvalue::ShallowInitBox(_, _) => {}
+            Rvalue::ThreadLocalRef(_) => {}
+            Rvalue::NullaryOp(_, _) => {}
+            Rvalue::UnaryOp(_, _) => {}
+            Rvalue::Use(_) => {}
         }
     }
 
@@ -171,18 +166,18 @@ impl<'locals> CollectActions<'locals> {
                 self.visit_rvalue_places(rvalue);
                 self.visit_place(place);
             }
-            StatementKind::FakeRead(_, _) => {},
-            StatementKind::SetDiscriminant { .. } => {},
-            StatementKind::Deinit(_) => {},
-            StatementKind::StorageLive(_) => {},
-            StatementKind::StorageDead(_) => {},
-            StatementKind::Retag(_, _) => {},
-            StatementKind::PlaceMention(_) => {},
-            StatementKind::AscribeUserType { .. } => {},
-            StatementKind::Coverage(_) => {},
-            StatementKind::Intrinsic(_) => {},
-            StatementKind::ConstEvalCounter => {},
-            StatementKind::Nop => {},
+            StatementKind::FakeRead(_, _) => {}
+            StatementKind::SetDiscriminant { .. } => {}
+            StatementKind::Deinit(_) => {}
+            StatementKind::StorageLive(_) => {}
+            StatementKind::StorageDead(_) => {}
+            StatementKind::Retag(_, _) => {}
+            StatementKind::PlaceMention(_) => {}
+            StatementKind::AscribeUserType { .. } => {}
+            StatementKind::Coverage(_) => {}
+            StatementKind::Intrinsic(_) => {}
+            StatementKind::ConstEvalCounter => {}
+            StatementKind::Nop => {}
         }
     }
 

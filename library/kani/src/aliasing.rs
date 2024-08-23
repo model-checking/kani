@@ -75,7 +75,7 @@ static mut STACK_VALID: bool = true;
 
 #[rustc_diagnostic_item = "KaniStackValid"]
 fn stack_valid() -> bool {
-    unsafe {STACK_VALID}
+    unsafe { STACK_VALID }
 }
 
 /// Type of access.
@@ -282,10 +282,7 @@ fn new_mut_ref_from_value<T>(pointer_to_created: *const &mut T, pointer_to_val: 
 /// tag, running a stack check on the tag associated with the reference, accessed by
 /// pointer_to_ref, and pushing the tag to the original location.
 #[rustc_diagnostic_item = "KaniNewMutRawFromRef"]
-fn new_mut_raw_from_ref<T>(
-    pointer_to_created: *const *mut T,
-    pointer_to_ref: *const &mut T,
-) {
+fn new_mut_raw_from_ref<T>(pointer_to_created: *const *mut T, pointer_to_ref: *const &mut T) {
     unsafe {
         // Then associate the lvalue and push it
         TAGS.set(pointer_to_created, NEXT_TAG);
@@ -299,10 +296,7 @@ fn new_mut_raw_from_ref<T>(
 /// tag, running a stack check on the tag associated with the reference, accessed by
 /// pointer_to_ref, and pushing the tag to the original location.
 #[rustc_diagnostic_item = "KaniNewMutRefFromRaw"]
-fn new_mut_ref_from_raw<T>(
-    pointer_to_created: *const &mut T,
-    pointer_to_ref: *const *mut T,
-) {
+fn new_mut_ref_from_raw<T>(pointer_to_created: *const &mut T, pointer_to_ref: *const *mut T) {
     unsafe {
         // Then associate the lvalue and push it
         TAGS.set(pointer_to_created, NEXT_TAG);
