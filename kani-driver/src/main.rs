@@ -132,9 +132,18 @@ fn verify_project(project: Project, session: KaniSession) -> Result<()> {
     let results = runner.check_all_harnesses(&harnesses)?;
 
     if session.args.coverage {
+        // We generate a timestamp to save the coverage data in a folder named
+        // `kanicov_<date>` where `<date>` is the current date based on `format`
+        // below. The purpose of adding timestamps to the folder name is to make
+        // coverage results easily identifiable. Using a timestamp makes
+        // coverage results not only distinguishable, but also easy to relate to
+        // verification runs. We expect this to be particularly helpful for
+        // users in a proof debugging session, who are usually interested in the
+        // most recent results.
         let time_now = OffsetDateTime::now_utc();
         let format = format_description::parse("[year]-[month]-[day]_[hour]-[minute]").unwrap();
         let timestamp = time_now.format(&format).unwrap();
+
         session.save_coverage_metadata(&project, &timestamp)?;
         session.save_coverage_results(&project, &results, &timestamp)?;
     }
