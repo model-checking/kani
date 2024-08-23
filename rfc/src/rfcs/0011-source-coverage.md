@@ -594,17 +594,47 @@ integration](#integrating-the-instrumentation-into-kani), we noted that we could
 follow an alternative approach where we only instrument coverage statements that
 correspond to physical counters. In fact, this would be the logical choice since
 the replacement of physical counters by expression-based counters would also be
-a performance optimization for us. However, the expressions used for
-expression-based counters are built with the arithmetic operators `Add` and
-`Sub`. On the other hand, the coverage checks performed by Kani have a boolean
-meaning: you either cover a region or you do not.
+a performance optimization for us.
 
-It is not difficult to find cases where these two notions for coverage counters
-are incompatible. For example
+However, the expressions used in expression-based counters are built with the
+arithmetic operators `Add` (`+`) and `Sub` (`-`). On the other hand, the
+coverage checks performed by Kani have a boolean meaning: you either cover a
+region or you do not. Thus, there are many cases where these two notions of
+coverage counters are incompatible. For example, let's say we have this
+function:
 
+```rust
+fn check_value(val: u32) {
+   if val == VALUE {
+      do_this();
+   } else {
+      do_that();
+   }
+   do_something_else();
+}
+```
 
-[^note-expression-integration]: We could follow an alternative approach where we
-do not instrument each coverage statement, but only those that correspond to
-physical counters. Unfortunately, doing so would lead to incorrect coverage
-results due to the arithmetic nature of expression-based counters. We elaborate
-on this topic in the later parts of this document.
+One way to optimize the counters in this function is to have two physical
+counters for the branches of the `if` statement (`c1` and `c2`), and then an
+expression-based counter associated to the `do_something_else()` statement
+adding those (i.e., `c3 = c1 + c2`). If we have, for example, two executions for
+this program, with each one taking a different branch, then the results for the
+coverage counters will be `c1 = 1`, `c2 = 1` and `c3 = c1 + c2 = 2`.
+
+But what does `c3 = 2` mean in the context of a verification-based coverage
+result? That is not clear. For instance, in a Kani trace, you could have a
+nondeterministic value for `val` which just happens to be `val == VALUE` and not
+at the same time. This would result in the same counters (`c1 = 1`, `c2 = 1` and
+`c3 = 2`), but the program is being run only once!
+
+Note that finding a verification-based replacement for the runtime operators in
+counter-based expressions is an interesting research topic. If we could
+establish a relation between the runtime and verification expressions, then we
+could avoid the instrumentation of coverage checks for expression-based
+counters. For example, could we replace the `Add` operator (`+`) with an `Or`
+operator (`||`)? Intuitively, this makes sense since verification-based coverage
+counters are binary. It also seems to work for our example since covering any of
+the branches should result in the `do_something_else()` statement being covered
+as well, with the counter values now being `c1 = 1`, `c2 = 1` and `c3 = 1`.
+However, it is not clear that this would work for all cases, nor it is clear
+that we can replace `Sub` with another verification-based operator.
