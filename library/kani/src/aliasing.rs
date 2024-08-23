@@ -1,6 +1,3 @@
-const STACK_DEPTH: usize = 15;
-type PointerTag = u8;
-
 use crate::mem::{pointer_object, pointer_offset};
 use crate::shadow::ShadowMem;
 
@@ -59,90 +56,95 @@ use crate::shadow::ShadowMem;
 /// This can be used with the restriction that assertions over
 /// relations between the stacks (such as, for example, equality between
 /// the top two tags of two different stacks) are never needed.
-pub mod sstate {
+#[allow(unused)] // All functions hidden; they are queried by diagnostic
+mod sstate {
+    const STACK_DEPTH: usize = 15;
+    type PointerTag = u8;
+
     use super::*;
     /// Associate every pointer object with a tag
     static mut TAGS: ShadowMem<PointerTag> = ShadowMem::new(0);
     /// Next pointer id: the next pointer id in sequence
-    static mut NEXT_TAG: PointerTag = 0;
+    const INITIAL_TAG: PointerTag = 0;
+    static mut NEXT_TAG: PointerTag = INITIAL_TAG;
 
     /// Set to true whenever the stack has been
     /// invalidated by a failed lookup.
     static mut STACK_VALID: bool = true;
 
     #[rustc_diagnostic_item = "KaniStackValid"]
-    pub fn stack_valid() -> bool {
+    fn stack_valid() -> bool {
         unsafe {STACK_VALID}
     }
 
-    #[non_exhaustive]
+    /// Type of access.
+    /// To ensure that 1 bit, instead of
+    /// larger, representations are used in cbmc,
+    /// this is encoded using associated constants.
     struct Access;
-    #[allow(unused)]
     impl Access {
         const READ: bool = false;
         const WRITE: bool = true;
     }
+    type AccessBit = bool;
 
-    #[non_exhaustive]
+    /// Type of permission.
+    /// To ensure that 8 bit, instead of larger,
+    /// repreesentations are used in cbmc, this
+    /// is encoded using associated constants.
     struct Permission;
     impl Permission {
+        /// Unique corresponds to the original allocation
+        /// and to &mut. For each byte, this permission can
+        /// only be aquired once at any given time in the program,
+        /// therefore it is called "unique."
         const UNIQUE: u8 = 0;
+        /// SharedRW corresponds to a mutable pointer.
         const SHAREDRW: u8 = 1;
+        /// SharedRO corresponds to a const pointer
         const SHAREDRO: u8 = 2;
+        /// Disabled corresponds to disabling writable pointers
+        /// during 2-phase borrows (not yet implemented)
         const DISABLED: u8 = 3;
+    }
 
-        fn grants(access: bool, tag: u8) -> bool {
+    type PermissionByte = u8;
+
+    impl Permission {
+        /// Returns whether the access bit is granted by the permission
+        /// byte
+        fn grants(access: AccessBit, tag: PermissionByte) -> bool {
             tag != Self::DISABLED && (access != Access::WRITE || tag != Self::SHAREDRO)
         }
     }
 
     /// Associate every pointer object with a permission
-    static mut PERMS: ShadowMem<u8> = ShadowMem::new(0);
+    static mut PERMS: ShadowMem<PermissionByte> = ShadowMem::new(Permission::UNIQUE);
 
+    /// State of the borrows stack monitor for a byte
     pub(super) mod monitors {
-        static mut STATE: bool = false;
-        static mut OBJECT: usize = 0;
-        static mut OFFSET: usize = 0;
-        static mut STACK_TAGS: [u8; STACK_DEPTH] = [0; STACK_DEPTH];
-        static mut STACK_PERMS: [u8; STACK_DEPTH] = [0; STACK_DEPTH];
-        static mut STACK_TOP: usize = 0;
-
-        #[non_exhaustive]
         struct MonitorState;
         impl MonitorState {
-            const UNINIT: bool = false;
-            const INIT: bool = true;
+            const ON: bool = true;
+            const OFF: bool = false;
         }
+
+        /// Whether the monitor is on. Initially, the monitor is
+        /// "off", and it will remain so until an allocation is found
+        /// to track.
+        static mut STATE: bool = MonitorState::OFF;
+        /// The object being monitored
+        static mut OBJECT: usize = 0;
+        /// The offset being monitored
+        static mut OFFSET: usize = 0;
+        /// The tags of the pointer objects borrowing the byte
+        static mut STACK_TAGS: [PointerTag; STACK_DEPTH] = [INITIAL_TAG; STACK_DEPTH];
+        /// The permissions of the pointer objects borrowing the byte
+        static mut STACK_PERMS: [PermissionByte; STACK_DEPTH] = [Permission::UNIQUE; STACK_DEPTH];
+        /// The "top" of the stack
+        static mut STACK_TOP: usize = 0;
 
         use super::*;
-
-        /// Monitors:
-        /// If there are K bytes in the address space,
-        /// every stacked borrows instrumentation has
-        /// between 0 and K monitors.
-        /// These monitors track a single byte of the program,
-        /// associating it with a stack of pointer values
-        /// (represented by tags).
-        /// Whenever a pointer borrows an object containing
-        /// the byte, its tag is pushed to the stack;
-        /// when a read or write is performed through this pointer,
-        /// writes from pointers above its location on the stack
-        /// are disabled.
-        /// This function prepares N monitors,
-        /// writes them to global heap memory, then
-        /// stores them in pointers.
-        /// An N+1th monitor is allocated as a "garbage"
-        /// area to be used when no monitor is picked.
-        pub fn prepare_monitors() {
-            unsafe {
-                OBJECT = 0usize;
-                OFFSET = 0usize;
-                STATE = MonitorState::UNINIT;
-                STACK_TAGS = [NEXT_TAG; STACK_DEPTH];
-                STACK_PERMS = [Permission::UNIQUE; STACK_DEPTH];
-                STACK_TOP = 0usize;
-            }
-        }
 
         /// Initialize local when track local is true, picking a monitor,
         /// and setting its object and offset to within pointer.
@@ -151,8 +153,8 @@ pub mod sstate {
             // for location:location+size_of(U).
             // Offset has already been picked earlier.
             unsafe {
-                if demonic_nondet() && STATE == MonitorState::UNINIT {
-                    STATE = MonitorState::INIT;
+                if demonic_nondet() && STATE == MonitorState::OFF {
+                    STATE = MonitorState::ON;
                     OBJECT = pointer_object(pointer);
                     OFFSET = 0;
                     crate::assume(OFFSET < std::mem::size_of::<U>());
@@ -170,7 +172,7 @@ pub mod sstate {
             // Offset has already been picked earlier.
             unsafe {
                 use self::*;
-                if STATE == MonitorState::INIT
+                if STATE == MonitorState::ON
                     && OBJECT == pointer_object(pointer)
                     && OFFSET == pointer_offset(pointer)
                 {
@@ -184,7 +186,7 @@ pub mod sstate {
         pub(super) fn stack_check<U>(tag: u8, access: bool, address: *const U) {
             unsafe {
                 use self::*;
-                if STATE == MonitorState::INIT
+                if STATE == MonitorState::ON
                     && OFFSET == pointer_offset(address)
                     && OBJECT == pointer_object(address)
                 {
@@ -210,13 +212,8 @@ pub mod sstate {
         }
     }
 
-    #[rustc_diagnostic_item = "KaniInitializeSState"]
-    pub fn initialize() {
-        self::monitors::prepare_monitors();
-    }
-
     /// Push the permissions at the given location
-    pub fn push<U>(tag: u8, perm: u8, address: *const U) {
+    fn push<U>(tag: u8, perm: u8, address: *const U) {
         self::monitors::push(tag, perm, address)
     }
 
@@ -231,7 +228,7 @@ pub mod sstate {
     /// of a query to a demonic nondeterminism oracle (when this feature is used)
     /// and a reference to the stack location.
     #[rustc_diagnostic_item = "KaniInitializeLocal"]
-    pub fn initialize_local<U>(pointer: *const U) {
+    fn initialize_local<U>(pointer: *const U) {
         unsafe {
             let tag = NEXT_TAG;
             TAGS.set(pointer, tag);
@@ -242,7 +239,7 @@ pub mod sstate {
     }
 
     #[rustc_diagnostic_item = "KaniStackCheckPtr"]
-    pub fn stack_check_ptr<U>(pointer_value: *const *mut U) {
+    fn stack_check_ptr<U>(pointer_value: *const *mut U) {
         unsafe {
             let tag = TAGS.get(pointer_value);
             let perm = PERMS.get(pointer_value);
@@ -258,7 +255,7 @@ pub mod sstate {
     }
 
     #[rustc_diagnostic_item = "KaniStackCheckRef"]
-    pub fn stack_check_ref<U>(pointer_value: *const &mut U) {
+    fn stack_check_ref<U>(pointer_value: *const &mut U) {
         stack_check_ptr(pointer_value as *const *mut U);
     }
 
@@ -267,7 +264,7 @@ pub mod sstate {
     /// with a new tag, and pushing the new tag to the created reference, stored at
     /// pointer_to_val.
     #[rustc_diagnostic_item = "KaniNewMutRefFromValue"]
-    pub fn new_mut_ref_from_value<T>(pointer_to_created: *const &mut T, pointer_to_val: *const T) {
+    fn new_mut_ref_from_value<T>(pointer_to_created: *const &mut T, pointer_to_val: *const T) {
         unsafe {
             // Then associate the lvalue and push it
             TAGS.set(pointer_to_created, NEXT_TAG);
@@ -281,7 +278,7 @@ pub mod sstate {
     /// tag, running a stack check on the tag associated with the reference, accessed by
     /// pointer_to_ref, and pushing the tag to the original location.
     #[rustc_diagnostic_item = "KaniNewMutRawFromRef"]
-    pub fn new_mut_raw_from_ref<T>(
+    fn new_mut_raw_from_ref<T>(
         pointer_to_created: *const *mut T,
         pointer_to_ref: *const &mut T,
     ) {
@@ -298,7 +295,7 @@ pub mod sstate {
     /// tag, running a stack check on the tag associated with the reference, accessed by
     /// pointer_to_ref, and pushing the tag to the original location.
     #[rustc_diagnostic_item = "KaniNewMutRefFromRaw"]
-    pub fn new_mut_ref_from_raw<T>(
+    fn new_mut_ref_from_raw<T>(
         pointer_to_created: *const &mut T,
         pointer_to_ref: *const *mut T,
     ) {
@@ -309,8 +306,8 @@ pub mod sstate {
             NEXT_TAG += 1;
         }
     }
-}
 
-pub fn demonic_nondet() -> bool {
-    crate::any()
+    fn demonic_nondet() -> bool {
+        crate::any()
+    }
 }

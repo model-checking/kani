@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use rustc_middle::ty::TyCtxt;
-use stable_mir::mir::{BasicBlock, Body, Local, Mutability, Operand, Place, Rvalue, Terminator, TerminatorKind, UnwindAction};
+use stable_mir::mir::{Body, Local, Mutability, Operand, Place, Rvalue, Terminator, TerminatorKind, UnwindAction};
 use stable_mir::ty::{GenericArgKind, Ty, Span};
 use crate::kani_middle::transform::body::{CheckType, InsertPosition};
 
@@ -45,25 +45,35 @@ pub struct InstrumentationData<'tcx, 'cache> {
 
 impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
     /// Move bb0 to the end to start instrumentation there.
-    fn prepare_body(body: &mut Body) {
-        let statements = std::mem::replace(&mut body.blocks[0].statements, Vec::new());
-        let terminator = Terminator { kind: TerminatorKind::Goto { target: body.blocks.len() },
-                                      span: body.blocks[0].terminator.span };
-        let terminator = std::mem::replace(&mut body.blocks[0].terminator, terminator);
-        let bb0 = BasicBlock { statements, terminator };
-        body.blocks.push(bb0);
+    fn prepare_body(body: Body) -> MutableBody {
+        let mut body = MutableBody::from(body);
+        let span;
+        let mut source;
+        match body.blocks()[0].statements.len() {
+            0 => {
+                source = SourceInstruction::Terminator { bb: 0 };
+                span = body.blocks()[0].terminator.span;
+            },
+            _ => {
+                source = SourceInstruction::Statement { idx: 0, bb: 0 };
+                span = body.blocks()[0].terminator.span;
+            }
+        }
+        let kind = TerminatorKind::Goto { target: body.blocks().len() };
+        let terminator = Terminator { kind, span };
+        body.insert_terminator(&mut source, InsertPosition::Before, terminator);
+        body
     }
 
     /// Using a (potentially) pre-populated cache of resolved generic
     /// functions, and the StableMir body "body", initialize the instrumentation
     /// pass data.
-    pub fn new(tcx: TyCtxt<'tcx>, cache: &'cache mut Cache, mut body: Body) -> Self {
-        Self::prepare_body(&mut body);
+    pub fn new(tcx: TyCtxt<'tcx>, cache: &'cache mut Cache, body: Body) -> Self {
         let span = body.span;
+        let mut body = Self::prepare_body(body);
         let meta_stack = HashMap::new();
         let local_count = body.locals().len();
         let fn_pointers = HashMap::new();
-        let mut body = MutableBody::from(body);
         let unit = body.new_local(Ty::new_tuple(&[]), span, Mutability::Not);
         let valid = body.new_local(Ty::from_rigid_kind(stable_mir::ty::RigidTy::Bool), span, Mutability::Mut);
         let bb = body.blocks().len() - 1;
@@ -292,7 +302,6 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
     /// Instrument each of the locals collected into values with
     /// initialization data.
     pub fn instrument_locals(&mut self) -> Result<()> {
-        self.call(Signature::new("KaniInitializeSState", &[]), vec![], self.unit)?;
         for local in (self.body.arg_count() + 1)..self.local_count {
             self.instrument_local(local)?
         }
