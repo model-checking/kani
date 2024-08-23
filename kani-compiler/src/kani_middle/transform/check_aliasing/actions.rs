@@ -4,7 +4,7 @@ use stable_mir::mir::{
 };
 use stable_mir::ty::{RigidTy, Ty, TyKind};
 
-/// An instrumentation action to be taken
+/// Update action to the stacked borrows state
 #[derive(Debug)]
 pub enum Action {
     StackCheck,
@@ -15,20 +15,27 @@ pub enum Action {
     NewMutRawFromRef { lvalue: usize, rvalue: usize, ty: Ty },
 }
 
+/// The actions of a statement
 pub struct CollectActions<'locals> {
     actions: Vec<Action>,
+    /// The locals, required to ensure that the references
+    /// and pointers are picked appropriately.
     locals: &'locals [LocalDecl],
 }
 
 impl<'locals> CollectActions<'locals> {
+    /// Initialize the struct using the given locals
     pub fn new(locals: &'locals [LocalDecl]) -> Self {
         CollectActions { actions: Vec::new(), locals }
     }
 
+    /// Finalize the code actions to be taken
     pub fn finalize(self) -> Vec<Action> {
         self.actions
     }
 
+    /// Collect the actions for assigning the lvalue
+    /// to the dereferenced rvalue
     fn visit_assign_reference_dereference(&mut self, lvalue: Local, rvalue: Local) {
         match self.locals[rvalue].ty.kind() {
             TyKind::RigidTy(RigidTy::Ref(_, ty, _)) | TyKind::RigidTy(RigidTy::RawPtr(ty, _)) => {
@@ -43,6 +50,8 @@ impl<'locals> CollectActions<'locals> {
         }
     }
 
+    /// Collect the actions for assigning the reference in
+    /// "place" to the local at "to".
     fn visit_assign_reference(&mut self, to: Local, from: Place) {
         match from.projection[..] {
             [] => {
@@ -63,6 +72,8 @@ impl<'locals> CollectActions<'locals> {
         }
     }
 
+    /// Collect the actions for assigning the data at
+    /// from to the local at to.
     fn visit_assign_pointer(&mut self, to: Local, from: Place) {
         match from.projection[..] {
             [] => {
@@ -90,6 +101,9 @@ impl<'locals> CollectActions<'locals> {
         }
     }
 
+    /// Collect the actions for a Place,
+    /// incurring a stack check in the case of a
+    /// dereference of a pointer or reference
     fn visit_place(&mut self, place: &Place) {
         match &place.projection[..] {
             [] => {
@@ -117,6 +131,7 @@ impl<'locals> CollectActions<'locals> {
         }
     }
 
+    /// Collect the actions for the places of an Rvalue
     fn visit_rvalue_places(&mut self, rvalue: &Rvalue) {
         match rvalue {
             Rvalue::AddressOf(_, place) => {
@@ -142,6 +157,7 @@ impl<'locals> CollectActions<'locals> {
         }
     }
 
+    /// Collect the actions for the places of a statement
     fn visit_statement_places(&mut self, stmt: &Statement) {
         match &stmt.kind {
             StatementKind::Assign(place, rvalue) => {
@@ -163,6 +179,10 @@ impl<'locals> CollectActions<'locals> {
         }
     }
 
+    /// Collect the actions for the places of the statement,
+    /// then find assignments of pointer values to lvalues
+    /// and collect updates to the stacked borrows state
+    /// accordingly
     pub fn visit_statement(&mut self, stmt: &Statement) {
         self.visit_statement_places(stmt);
         match &stmt.kind {
