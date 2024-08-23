@@ -1,3 +1,12 @@
+// Copyright Kani Contributors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//! This module contains methods handling the data needed
+//! for the instrumentation of a single function body with updates from the
+//! stacked borrows calculus. These data ensure that each of the original
+//! locals is instrumented, that each of the original instructions
+//! are instrumented, and that no code that is added by the instrumentation
+//! pass itself is instrumented or analyzed.
+
 use std::collections::HashMap;
 use rustc_middle::ty::TyCtxt;
 use stable_mir::mir::{Body, Local, Mutability, Operand, Place, Rvalue, Terminator, TerminatorKind, UnwindAction};

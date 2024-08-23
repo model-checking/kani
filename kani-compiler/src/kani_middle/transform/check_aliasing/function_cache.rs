@@ -1,3 +1,7 @@
+// Copyright Kani Contributors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//! This module contains a cache of resolved generic functions
+
 use super::{MirInstance, MirError};
 use rustc_middle::ty::TyCtxt;
 use stable_mir::ty::{GenericArgKind as GenericArg, GenericArgs};

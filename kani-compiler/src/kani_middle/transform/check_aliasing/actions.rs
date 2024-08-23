@@ -1,3 +1,10 @@
+// Copyright Kani Contributors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//! This module contains stacked borrows "actions,"
+//! or updates to the stacked borrows state, as well as
+//! methods that collect the actions that need to be applied from the
+//! statements of the code.
+
 use stable_mir::mir::{
     BorrowKind, Local, LocalDecl, Mutability, Operand, ProjectionElem, Rvalue,
     Statement, StatementKind, Place,

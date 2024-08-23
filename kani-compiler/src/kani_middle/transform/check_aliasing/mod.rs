@@ -19,7 +19,7 @@ mod instrumentation;
 use instrumentation::*;
 
 use crate::args::ExtraChecks;
-use crate::kani_middle::reachability::{collect_reachable_items};
+use crate::kani_middle::reachability::collect_reachable_items;
 use crate::kani_middle::transform::{TransformPass, TransformationResult, TransformationType};
 use crate::kani_queries::QueryDb;
 use rustc_middle::ty::TyCtxt;
