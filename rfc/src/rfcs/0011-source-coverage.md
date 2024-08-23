@@ -508,7 +508,10 @@ uses the JSON format but we might consider using a binary format if it doesn't
 scale.
 
 In addition, Kani will produce two types of coverage results:
- 1. A coverage summary
+ 1. A coverage summary with the default options.
+ 2. A terminal-based coverage report with the default options. However, we will
+ only do this if the program is composed of a single source
+ file[^note-conditional-report].
 
 [^note-kanimap]: Note that the `.kanimap` generation isn't implemented in
    [#3119](https://github.com/model-checking/kani/pull/3119). The [draft
@@ -516,6 +519,10 @@ In addition, Kani will produce two types of coverage results:
    `kani-cov`](https://github.com/model-checking/kani/pull/3121) simply reads
    the source files referred to by the code coverage checks, but it doesn't get
    information about code trimmed out by the MIR linker.
+
+[^note-conditional-report]: In other words, standalone `kani` would always emit
+these terminal-based reports, but `cargo kani` would not unless the project
+contains a single Rust file (for example, `src/main.rs`).
 
 ## Rationale and alternatives
 
