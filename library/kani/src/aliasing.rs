@@ -60,8 +60,6 @@
 use crate::mem::{pointer_object, pointer_offset};
 use crate::shadow::ShadowMem;
 
-#[allow(unused)]
-const STACK_DEPTH: usize = 15;
 type PointerTag = u8;
 
 use super::*;
@@ -132,6 +130,9 @@ pub(super) mod monitors {
         const OFF: bool = false;
     }
 
+    #[allow(unused)]
+    const STACK_DEPTH: usize = 15;
+
     /// Whether the monitor is on. Initially, the monitor is
     /// "off", and it will remain so until an allocation is found
     /// to track.
@@ -196,7 +197,7 @@ pub(super) mod monitors {
                 let mut found = false;
                 let mut j = 0;
                 let mut new_top = 0;
-                assert!(STACK_TOP < STACK_DEPTH);
+                crate::assert(STACK_TOP < STACK_DEPTH, "Max # of nested borrows (15) exceeded");
                 while j < STACK_DEPTH {
                     if j < STACK_TOP {
                         let id = STACK_TAGS[j];
