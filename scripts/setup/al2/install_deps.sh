@@ -11,6 +11,7 @@ set -eu
 DEPS=(
   cmake
   cmake3
+  gcc10-c++
   git
   openssl-devel
   python3-pip

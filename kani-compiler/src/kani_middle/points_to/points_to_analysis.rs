@@ -24,12 +24,14 @@
 //! Currently, the analysis is not field-sensitive: e.g., if a field of a place aliases to some
 //! other place, we treat it as if the place itself aliases to another place.
 
-use crate::kani_middle::{
-    points_to::{MemLoc, PointsToGraph},
-    reachability::CallGraph,
-    transform::RustcInternalMir,
+use crate::{
+    intrinsics::Intrinsic,
+    kani_middle::{
+        points_to::{MemLoc, PointsToGraph},
+        reachability::CallGraph,
+        transform::RustcInternalMir,
+    },
 };
-use rustc_ast::Mutability;
 use rustc_middle::{
     mir::{
         BasicBlock, BinOp, Body, CallReturnPlaces, Location, NonDivergingIntrinsic, Operand, Place,
@@ -201,118 +203,81 @@ impl<'a, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'tcx> {
             };
             match instance.def {
                 // Intrinsics could introduce aliasing edges we care about, so need to handle them.
-                InstanceKind::Intrinsic(def_id) => {
-                    match self.tcx.intrinsic(def_id).unwrap().name.to_string().as_str() {
-                        name if name.starts_with("atomic") => {
-                            match name {
-                                // All `atomic_cxchg` intrinsics take `dst, old, src` as arguments.
-                                // This is equivalent to `destination = *dst; *dst = src`.
-                                name if name.starts_with("atomic_cxchg") => {
-                                    assert_eq!(
-                                        args.len(),
-                                        3,
-                                        "Unexpected number of arguments for `{name}`"
-                                    );
-                                    assert!(matches!(
-                                        args[0].node.ty(self.body, self.tcx).kind(),
-                                        TyKind::RawPtr(_, Mutability::Mut)
-                                    ));
-                                    let src_set =
-                                        self.successors_for_operand(state, args[2].node.clone());
-                                    let dst_set =
-                                        self.successors_for_deref(state, args[0].node.clone());
-                                    let destination_set =
-                                        state.resolve_place(*destination, self.instance);
-                                    state.extend(&destination_set, &state.successors(&dst_set));
-                                    state.extend(&dst_set, &src_set);
-                                }
-                                // All `atomic_load` intrinsics take `src` as an argument.
-                                // This is equivalent to `destination = *src`.
-                                name if name.starts_with("atomic_load") => {
-                                    assert_eq!(
-                                        args.len(),
-                                        1,
-                                        "Unexpected number of arguments for `{name}`"
-                                    );
-                                    assert!(matches!(
-                                        args[0].node.ty(self.body, self.tcx).kind(),
-                                        TyKind::RawPtr(_, Mutability::Not)
-                                    ));
-                                    let src_set =
-                                        self.successors_for_deref(state, args[0].node.clone());
-                                    let destination_set =
-                                        state.resolve_place(*destination, self.instance);
-                                    state.extend(&destination_set, &state.successors(&src_set));
-                                }
-                                // All `atomic_store` intrinsics take `dst, val` as arguments.
-                                // This is equivalent to `*dst = val`.
-                                name if name.starts_with("atomic_store") => {
-                                    assert_eq!(
-                                        args.len(),
-                                        2,
-                                        "Unexpected number of arguments for `{name}`"
-                                    );
-                                    assert!(matches!(
-                                        args[0].node.ty(self.body, self.tcx).kind(),
-                                        TyKind::RawPtr(_, Mutability::Mut)
-                                    ));
-                                    let dst_set =
-                                        self.successors_for_deref(state, args[0].node.clone());
-                                    let val_set =
-                                        self.successors_for_operand(state, args[1].node.clone());
-                                    state.extend(&dst_set, &val_set);
-                                }
-                                // All other `atomic` intrinsics take `dst, src` as arguments.
-                                // This is equivalent to `destination = *dst; *dst = src`.
-                                _ => {
-                                    assert_eq!(
-                                        args.len(),
-                                        2,
-                                        "Unexpected number of arguments for `{name}`"
-                                    );
-                                    assert!(matches!(
-                                        args[0].node.ty(self.body, self.tcx).kind(),
-                                        TyKind::RawPtr(_, Mutability::Mut)
-                                    ));
-                                    let src_set =
-                                        self.successors_for_operand(state, args[1].node.clone());
-                                    let dst_set =
-                                        self.successors_for_deref(state, args[0].node.clone());
-                                    let destination_set =
-                                        state.resolve_place(*destination, self.instance);
-                                    state.extend(&destination_set, &state.successors(&dst_set));
-                                    state.extend(&dst_set, &src_set);
-                                }
-                            };
+                InstanceKind::Intrinsic(_) => {
+                    match Intrinsic::from_instance(&rustc_internal::stable(instance)) {
+                        intrinsic if is_identity_aliasing_intrinsic(intrinsic.clone()) => {
+                            // Treat the intrinsic as an aggregate, taking a union of all of the
+                            // arguments' aliases.
+                            let destination_set = state.resolve_place(*destination, self.instance);
+                            let operands_set = args
+                                .into_iter()
+                                .flat_map(|operand| {
+                                    self.successors_for_operand(state, operand.node.clone())
+                                })
+                                .collect();
+                            state.extend(&destination_set, &operands_set);
+                        }
+                        // All `atomic_cxchg` intrinsics take `dst, old, src` as arguments.
+                        // This is equivalent to `destination = *dst; *dst = src`.
+                        Intrinsic::AtomicCxchg(_) | Intrinsic::AtomicCxchgWeak(_) => {
+                            let src_set = self.successors_for_operand(state, args[2].node.clone());
+                            let dst_set = self.successors_for_deref(state, args[0].node.clone());
+                            let destination_set = state.resolve_place(*destination, self.instance);
+                            state.extend(&destination_set, &state.successors(&dst_set));
+                            state.extend(&dst_set, &src_set);
+                        }
+                        // All `atomic_load` intrinsics take `src` as an argument.
+                        // This is equivalent to `destination = *src`.
+                        Intrinsic::AtomicLoad(_) => {
+                            let src_set = self.successors_for_deref(state, args[0].node.clone());
+                            let destination_set = state.resolve_place(*destination, self.instance);
+                            state.extend(&destination_set, &state.successors(&src_set));
+                        }
+                        // All `atomic_store` intrinsics take `dst, val` as arguments.
+                        // This is equivalent to `*dst = val`.
+                        Intrinsic::AtomicStore(_) => {
+                            let dst_set = self.successors_for_deref(state, args[0].node.clone());
+                            let val_set = self.successors_for_operand(state, args[1].node.clone());
+                            state.extend(&dst_set, &val_set);
+                        }
+                        // All other `atomic` intrinsics take `dst, src` as arguments.
+                        // This is equivalent to `destination = *dst; *dst = src`.
+                        Intrinsic::AtomicAnd(_)
+                        | Intrinsic::AtomicMax(_)
+                        | Intrinsic::AtomicMin(_)
+                        | Intrinsic::AtomicNand(_)
+                        | Intrinsic::AtomicOr(_)
+                        | Intrinsic::AtomicUmax(_)
+                        | Intrinsic::AtomicUmin(_)
+                        | Intrinsic::AtomicXadd(_)
+                        | Intrinsic::AtomicXchg(_)
+                        | Intrinsic::AtomicXor(_)
+                        | Intrinsic::AtomicXsub(_) => {
+                            let src_set = self.successors_for_operand(state, args[1].node.clone());
+                            let dst_set = self.successors_for_deref(state, args[0].node.clone());
+                            let destination_set = state.resolve_place(*destination, self.instance);
+                            state.extend(&destination_set, &state.successors(&dst_set));
+                            state.extend(&dst_set, &src_set);
                         }
                         // Similar to `copy_nonoverlapping`, argument order is `src`, `dst`, `count`.
-                        "copy" => {
-                            assert_eq!(args.len(), 3, "Unexpected number of arguments for `copy`");
-                            assert!(matches!(
-                                args[0].node.ty(self.body, self.tcx).kind(),
-                                TyKind::RawPtr(_, Mutability::Not)
-                            ));
-                            assert!(matches!(
-                                args[1].node.ty(self.body, self.tcx).kind(),
-                                TyKind::RawPtr(_, Mutability::Mut)
-                            ));
+                        Intrinsic::Copy => {
                             self.apply_copy_effect(
                                 state,
                                 args[0].node.clone(),
                                 args[1].node.clone(),
                             );
                         }
+                        Intrinsic::TypedSwap => {
+                            // Extend from x_set to y_set and vice-versa so that both x and y alias
+                            // to a union of places each of them alias to.
+                            let x_set = self.successors_for_deref(state, args[0].node.clone());
+                            let y_set = self.successors_for_deref(state, args[1].node.clone());
+                            state.extend(&x_set, &state.successors(&y_set));
+                            state.extend(&y_set, &state.successors(&x_set));
+                        }
                         // Similar to `copy_nonoverlapping`, argument order is `dst`, `src`, `count`.
-                        "volatile_copy_memory" | "volatile_copy_nonoverlapping_memory" => {
-                            assert_eq!(args.len(), 3, "Unexpected number of arguments for `copy`");
-                            assert!(matches!(
-                                args[0].node.ty(self.body, self.tcx).kind(),
-                                TyKind::RawPtr(_, Mutability::Mut)
-                            ));
-                            assert!(matches!(
-                                args[1].node.ty(self.body, self.tcx).kind(),
-                                TyKind::RawPtr(_, Mutability::Not)
-                            ));
+                        Intrinsic::VolatileCopyMemory
+                        | Intrinsic::VolatileCopyNonOverlappingMemory => {
                             self.apply_copy_effect(
                                 state,
                                 args[1].node.clone(),
@@ -320,44 +285,26 @@ impl<'a, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'tcx> {
                             );
                         }
                         // Semantically equivalent to dest = *a
-                        "volatile_load" | "unaligned_volatile_load" => {
-                            assert_eq!(
-                                args.len(),
-                                1,
-                                "Unexpected number of arguments for `volatile_load`"
-                            );
-                            assert!(matches!(
-                                args[0].node.ty(self.body, self.tcx).kind(),
-                                TyKind::RawPtr(_, Mutability::Not)
-                            ));
+                        Intrinsic::VolatileLoad | Intrinsic::UnalignedVolatileLoad => {
                             // Destination of the return value.
                             let lvalue_set = state.resolve_place(*destination, self.instance);
                             let rvalue_set = self.successors_for_deref(state, args[0].node.clone());
                             state.extend(&lvalue_set, &state.successors(&rvalue_set));
                         }
                         // Semantically equivalent *a = b.
-                        "volatile_store" | "unaligned_volatile_store" => {
-                            assert_eq!(
-                                args.len(),
-                                2,
-                                "Unexpected number of arguments for `volatile_store`"
-                            );
-                            assert!(matches!(
-                                args[0].node.ty(self.body, self.tcx).kind(),
-                                TyKind::RawPtr(_, Mutability::Mut)
-                            ));
+                        Intrinsic::VolatileStore => {
                             let lvalue_set = self.successors_for_deref(state, args[0].node.clone());
                             let rvalue_set =
                                 self.successors_for_operand(state, args[1].node.clone());
                             state.extend(&lvalue_set, &rvalue_set);
                         }
-                        _ => {
-                            // TODO: this probably does not handle all relevant intrinsics, so more
-                            // need to be added. For more information, see:
-                            // https://github.com/model-checking/kani/issues/3300
-                            if self.tcx.is_mir_available(def_id) {
-                                self.apply_regular_call_effect(state, instance, args, destination);
-                            }
+                        Intrinsic::Unimplemented { .. } => {
+                            // This will be taken care of at the codegen level.
+                        }
+                        intrinsic => {
+                            unimplemented!(
+                                "Kani does not support reasoning about aliasing in presence of intrinsic `{intrinsic:?}`. For more information about the state of uninitialized memory checks implementation, see: https://github.com/model-checking/kani/issues/3300."
+                            );
                         }
                     }
                 }
@@ -649,6 +596,141 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
                 // We store a def_id of a static.
                 HashSet::from([MemLoc::new_static_allocation(def_id)])
             }
+        }
+    }
+}
+
+/// Determines if the intrinsic does not influence aliasing beyond being treated as an identity
+/// function (i.e. propagate aliasing without changes).
+fn is_identity_aliasing_intrinsic(intrinsic: Intrinsic) -> bool {
+    match intrinsic {
+        Intrinsic::AddWithOverflow
+        | Intrinsic::ArithOffset
+        | Intrinsic::AssertInhabited
+        | Intrinsic::AssertMemUninitializedValid
+        | Intrinsic::AssertZeroValid
+        | Intrinsic::Assume
+        | Intrinsic::Bitreverse
+        | Intrinsic::BlackBox
+        | Intrinsic::Breakpoint
+        | Intrinsic::Bswap
+        | Intrinsic::CeilF32
+        | Intrinsic::CeilF64
+        | Intrinsic::CompareBytes
+        | Intrinsic::CopySignF32
+        | Intrinsic::CopySignF64
+        | Intrinsic::CosF32
+        | Intrinsic::CosF64
+        | Intrinsic::Ctlz
+        | Intrinsic::CtlzNonZero
+        | Intrinsic::Ctpop
+        | Intrinsic::Cttz
+        | Intrinsic::CttzNonZero
+        | Intrinsic::DiscriminantValue
+        | Intrinsic::ExactDiv
+        | Intrinsic::Exp2F32
+        | Intrinsic::Exp2F64
+        | Intrinsic::ExpF32
+        | Intrinsic::ExpF64
+        | Intrinsic::FabsF32
+        | Intrinsic::FabsF64
+        | Intrinsic::FaddFast
+        | Intrinsic::FdivFast
+        | Intrinsic::FloorF32
+        | Intrinsic::FloorF64
+        | Intrinsic::FmafF32
+        | Intrinsic::FmafF64
+        | Intrinsic::FmulFast
+        | Intrinsic::Forget
+        | Intrinsic::FsubFast
+        | Intrinsic::IsValStaticallyKnown
+        | Intrinsic::Likely
+        | Intrinsic::Log10F32
+        | Intrinsic::Log10F64
+        | Intrinsic::Log2F32
+        | Intrinsic::Log2F64
+        | Intrinsic::LogF32
+        | Intrinsic::LogF64
+        | Intrinsic::MaxNumF32
+        | Intrinsic::MaxNumF64
+        | Intrinsic::MinAlignOf
+        | Intrinsic::MinAlignOfVal
+        | Intrinsic::MinNumF32
+        | Intrinsic::MinNumF64
+        | Intrinsic::MulWithOverflow
+        | Intrinsic::NearbyIntF32
+        | Intrinsic::NearbyIntF64
+        | Intrinsic::NeedsDrop
+        | Intrinsic::PowF32
+        | Intrinsic::PowF64
+        | Intrinsic::PowIF32
+        | Intrinsic::PowIF64
+        | Intrinsic::PrefAlignOf
+        | Intrinsic::PtrGuaranteedCmp
+        | Intrinsic::PtrOffsetFrom
+        | Intrinsic::PtrOffsetFromUnsigned
+        | Intrinsic::RawEq
+        | Intrinsic::RetagBoxToRaw
+        | Intrinsic::RintF32
+        | Intrinsic::RintF64
+        | Intrinsic::RotateLeft
+        | Intrinsic::RotateRight
+        | Intrinsic::RoundF32
+        | Intrinsic::RoundF64
+        | Intrinsic::SaturatingAdd
+        | Intrinsic::SaturatingSub
+        | Intrinsic::SinF32
+        | Intrinsic::SinF64
+        | Intrinsic::SizeOfVal
+        | Intrinsic::SqrtF32
+        | Intrinsic::SqrtF64
+        | Intrinsic::SubWithOverflow
+        | Intrinsic::Transmute
+        | Intrinsic::TruncF32
+        | Intrinsic::TruncF64
+        | Intrinsic::TypeId
+        | Intrinsic::TypeName
+        | Intrinsic::UncheckedDiv
+        | Intrinsic::UncheckedRem
+        | Intrinsic::Unlikely
+        | Intrinsic::VtableSize
+        | Intrinsic::VtableAlign
+        | Intrinsic::WrappingAdd
+        | Intrinsic::WrappingMul
+        | Intrinsic::WrappingSub
+        | Intrinsic::WriteBytes => {
+            /* Intrinsics that do not interact with aliasing beyond propagating it. */
+            true
+        }
+        Intrinsic::SimdAdd
+        | Intrinsic::SimdAnd
+        | Intrinsic::SimdDiv
+        | Intrinsic::SimdRem
+        | Intrinsic::SimdEq
+        | Intrinsic::SimdExtract
+        | Intrinsic::SimdGe
+        | Intrinsic::SimdGt
+        | Intrinsic::SimdInsert
+        | Intrinsic::SimdLe
+        | Intrinsic::SimdLt
+        | Intrinsic::SimdMul
+        | Intrinsic::SimdNe
+        | Intrinsic::SimdOr
+        | Intrinsic::SimdShl
+        | Intrinsic::SimdShr
+        | Intrinsic::SimdShuffle(_)
+        | Intrinsic::SimdSub
+        | Intrinsic::SimdXor => {
+            /* SIMD operations */
+            true
+        }
+        Intrinsic::AtomicFence(_) | Intrinsic::AtomicSingleThreadFence(_) => {
+            /* Atomic fences */
+            true
+        }
+        _ => {
+            /* Everything else */
+            false
         }
     }
 }
