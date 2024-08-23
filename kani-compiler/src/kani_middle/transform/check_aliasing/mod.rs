@@ -131,7 +131,7 @@ impl TransformPass for AliasingPass {
             // let out = BodyMutationPassState::new(instrumentation_data).finalize();
             instrumentation_data.instrument_locals().unwrap();
             instrumentation_data.instrument_instructions().unwrap();
-            (true, instrumentation_data.body.into())
+            (true, instrumentation_data.finalize().into())
         }
     }
 }

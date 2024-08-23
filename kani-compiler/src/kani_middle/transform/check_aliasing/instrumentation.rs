@@ -10,24 +10,42 @@ use super::super::body::{MutableBody, SourceInstruction};
 type Result<T> = std::result::Result<T, MirError>;
 
 pub struct InstrumentationData<'tcx, 'cache> {
+    /// Compilation context, used to fetch resolved generic functions
     tcx: TyCtxt<'tcx>,
+    /// Cache of resolved generic functions,
+    /// potentially populated by previous passes
     cache: &'cache mut Cache,
+    /// Map associating each local with a local storing
+    /// its address on the stack, which is used to associate
+    /// the metadata.
     meta_stack: HashMap<Local, Local>,
+    /// The count of the number of locals in the original
+    /// body
     local_count: usize,
+    /// A local storing the unit value
     unit: Local,
+    /// A local storing whether the stack is still in a valid
+    /// state
     valid: Local,
+    /// A map associating resolved generic functions with
+    /// locals in the body that can be used to call them
     fn_pointers: HashMap<MirInstance, Local>,
+    /// The span of the body
     span: Span,
-    /// The minimum processed instruction
+    /// The minimum processed instruction.
+    /// All instructions before this one belong to the original
+    /// source code, and have not yet been analyzed.
     min_processed: SourceInstruction,
-    /// The index after which "ghost" instrumentation code may be added
+    /// The index after which "ghost" instrumentation code
+    /// may be added.
     ghost_index: SourceInstruction,
-    pub body: MutableBody,
+    /// The body being instrumented
+    body: MutableBody,
 }
 
 impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
     /// Move bb0 to the end to start instrumentation there.
-    pub fn prepare_body(body: &mut Body) {
+    fn prepare_body(body: &mut Body) {
         let statements = std::mem::replace(&mut body.blocks[0].statements, Vec::new());
         let terminator = Terminator { kind: TerminatorKind::Goto { target: body.blocks.len() },
                                       span: body.blocks[0].terminator.span };
@@ -36,6 +54,9 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
         body.blocks.push(bb0);
     }
 
+    /// Using a (potentially) pre-populated cache of resolved generic
+    /// functions, and the StableMir body "body", initialize the instrumentation
+    /// pass data.
     pub fn new(tcx: TyCtxt<'tcx>, cache: &'cache mut Cache, mut body: Body) -> Self {
         Self::prepare_body(&mut body);
         let span = body.span;
@@ -96,15 +117,6 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
         let source = &mut self.ghost_index;
         self.body.insert_terminator(source, InsertPosition::After, terminator);
         Ok(())
-    }
-
-    /// Instrument the code with a call to initialize the monitors.
-    pub fn initialize_prologue(&mut self) -> Result<()> {
-        self.call(Signature::new("KaniStackedBorrowsBeginPrologue", &[]), vec![], self.unit)
-    }
-
-    pub fn finalize_prologue(&mut self) -> Result<()> {
-        self.call(Signature::new("KaniStackedBorrowsEndPrologue", &[]), vec![], self.unit)
     }
 
     /// Instrument an assignment to a local
@@ -280,15 +292,14 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
     /// Instrument each of the locals collected into values with
     /// initialization data.
     pub fn instrument_locals(&mut self) -> Result<()> {
-        self.initialize_prologue()?;
         self.call(Signature::new("KaniInitializeSState", &[]), vec![], self.unit)?;
         for local in (self.body.arg_count() + 1)..self.local_count {
             self.instrument_local(local)?
         }
-        self.finalize_prologue()?;
         Ok(())
     }
 
+    /// Fetch the actions to be instrumented at the current instruction.
     pub fn instruction_actions(&self) -> Vec<Action> {
         let mut visitor = CollectActions::new(self.body.locals());
         match self.min_processed {
@@ -300,6 +311,8 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
         visitor.finalize()
     }
 
+    /// Instrument the action given in "action" with the appropriate
+    /// update to the stacked borrows state.
     fn instrument_action(&mut self, action: Action) -> Result<()> {
         match action {
             Action::StackCheck => self.instrument_stack_check(),
@@ -336,5 +349,10 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
             }
         }
         Ok(())
+    }
+
+    /// Finalize the instrumentation of the body
+    pub fn finalize(self) -> MutableBody {
+        self.body
     }
 }
