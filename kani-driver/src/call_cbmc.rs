@@ -428,6 +428,20 @@ fn coverage_results_from_properties(properties: &[Property]) -> Option<CoverageR
         return None;
     }
 
+    // Postprocessing the coverage results involves matching on the descriptions
+    // of code coverage properties with the `counter_re` regex. These are two
+    // real examples of such descriptions:
+    //
+    // ```
+    // CounterIncrement(0) $test_cov$ - src/main.rs:5:1 - 6:15
+    // ExpressionUsed(0) $test_cov$ - src/main.rs:6:19 - 6:28
+    // ```
+    //
+    // The span is further processed to extract the code region attributes.
+    // Ideally, we should have coverage mappings (i.e., the relation between
+    // counters and code regions) available in the coverage metadata:
+    // <https://github.com/model-checking/kani/issues/3445>. If that were the
+    // case, we would not need the spans in these descriptions.
     let counter_re = {
         static COUNTER_RE: OnceLock<Regex> = OnceLock::new();
         COUNTER_RE.get_or_init(|| {
