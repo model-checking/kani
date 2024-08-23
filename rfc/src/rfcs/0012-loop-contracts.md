@@ -194,46 +194,17 @@ Kani implements the functionality of loop contracts in three places.
 
 ### Procedural macros `loop_invariant`, `loop_modifies`, and `loop_decreases`.
 
-The `loop_invariant` macro perform code generation for the loop invariant clause.
-The generated code consists of two parts: 
-1. a closure definition to wrap the loop invariant, which is an Boolean expression.
-2. a call to a builtin function `kani_loop_invariant` at end of the loop.
-
-As an example, in the above program, the following code will be generated for the
-loop invariants clauses:
-
-```rs
-fn simple_loop_macro_expanded() {
-    let mut x: u64 = kani::any_where(|i| *i >= 1);
-
-    while x > 1{
-        x = x - 1;
-        kani::kani_loop_invariant_begin_marker();
-        let __kani_loop_invariant: bool = x >= 1;
-        kani::kani_loop_invariant_end_marker();
-    };
-
-    assert!(x == 1);
-}
-```
-
-Similarly, we generate calls to the corresponding builtin functions for `modifies` and `decreases`
-clauses.
+We extend the three macros `loop_invariant`, `loop_modifies`, and `loop_decreases` to
+corresponding Rust code. Kani will then compile them into MIR-level code.
 
 
 ### Code Generation for Builtin Functions
 
-When generating GOTO program from MIR, Kani will first scan for the placeholder function
-calls `kani_loop_invariant_begin_marker` and `kani_loop_invariant_end_marker` in the MIR. 
-Then Kani will generate the corresponding GOTO-level statement expression for all instructions
-between the two placeholder function calls. At last, Kani will add the statement expression
-to the loop latches---the jumps back to the loop head.
+Then in the MIR, we codegen the loop contracts as GOTO-level expressions and annotate them
+into the corresponding loop latches---the jumps back to the loop head.
 
 The artifact `goto-instrument` in CBMC will extract the loop contracts from the named-subs
 of the loop latch, and then apply and prove the extracted loop contracts.
-
-Similarly, Kani will add the `modifies` targets into the named-subs of the loop latch for
-CBMC to extract and prove the loop contracts.
 
 
 ### GOTO-Level Havocing
@@ -271,6 +242,8 @@ easier.
   loop contracts are not enough prove the harness, we expect the loop-contract synthesizer
   can fix the loop contracts.
 - How do we translate back modify targets that inferred by CBMC to Rust level? 
+- It is not clear how the CBMC loop modifies inference works for Rust code. We need to
+  experiment more to decide what would be the best UX of using loop modifies.
 
 ## Future possibilities
 
