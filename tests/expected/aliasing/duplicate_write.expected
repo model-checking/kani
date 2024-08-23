@@ -1,1 +1,1 @@
-Failed Checks: Stacked borrows aliasing model violated at "./tests/expected/aliasing/duplicate_write.rs":LineInfo { start_line: 21, start_col: 1, end_line: 21, end_col: 2 }
+Failed Checks: Stacked borrows aliasing model violated at "./tests/expected/aliasing/duplicate_write.rs":LineInfo { start_line: 19, start_col: 9, end_line: 19, end_col: 28 }

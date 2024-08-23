@@ -50,11 +50,6 @@ pub struct Cache {
 }
 
 impl Cache {
-    /// Instantiate the cache
-    pub fn new() -> Self {
-        Cache::default()
-    }
-
     /// Register the signature the to the cache
     /// in the given compilation context, ctx
     pub fn register(&mut self, ctx: &TyCtxt, sig: Signature) ->
@@ -89,16 +84,5 @@ impl Cache {
         let instance = super::MirInstance::resolve(fndef, &GenericArgs(sig.args.clone()))?;
         cache.push(Instance::new(sig, instance));
         Ok(&cache[cache.len() - 1].instance)
-    }
-
-    /// Fetch the signature sig from the cache
-    pub fn get(&self, sig: &Signature) -> Result<&MirInstance, MirError> {
-        let Cache { cache } = self;
-        for Instance { signature, instance } in cache {
-            if *sig == *signature {
-                return Ok(instance);
-            }
-        }
-        Err(MirError::new(format!("Not found: {:?}", sig)))
     }
 }

@@ -10,14 +10,10 @@ pub use stable_mir::Error as MirError;
 pub use stable_mir::mir::mono::Instance as MirInstance;
 
 
+mod actions;
+use actions::*;
 mod function_cache;
 use function_cache::*;
-mod cached_body_mutator;
-use cached_body_mutator::*;
-mod body_mutator;
-use body_mutator::*;
-mod body_mutation;
-use body_mutation::*;
 mod instrumentation;
 use instrumentation::*;
 
@@ -130,10 +126,12 @@ impl TransformPass for AliasingPass {
         {
             (false, body)
         } else {
-            let body = CachedBodyMutator::from(body);
+            // let body = CachedBodyMutator::from(body);
             let mut instrumentation_data = InstrumentationData::new(tcx, &mut self.cache, body);
-            let out = BodyMutationPassState::new(instrumentation_data).finalize();
-            (true, out)
+            // let out = BodyMutationPassState::new(instrumentation_data).finalize();
+            instrumentation_data.instrument_locals().unwrap();
+            instrumentation_data.instrument_instructions().unwrap();
+            (true, instrumentation_data.body.into())
         }
     }
 }

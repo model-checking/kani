@@ -311,6 +311,14 @@ pub mod sstate {
     }
 }
 
+/// Signposts the sections of the instrumentation.
+/// Serves no other purpose.
+#[rustc_diagnostic_item = "KaniStackedBorrowsBeginPrologue"]
+pub fn begin_prologue() { }
+
+#[rustc_diagnostic_item = "KaniStackedBorrowsEndPrologue"]
+pub fn end_prologue() { }
+
 pub fn demonic_nondet() -> bool {
     crate::any()
 }
