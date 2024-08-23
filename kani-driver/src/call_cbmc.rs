@@ -329,12 +329,7 @@ impl VerificationResult {
         }
     }
 
-    pub fn render(
-        &self,
-        output_format: &OutputFormat,
-        should_panic: bool,
-        _coverage_mode: bool,
-    ) -> String {
+    pub fn render(&self, output_format: &OutputFormat, should_panic: bool) -> String {
         match &self.results {
             Ok(results) => {
                 let status = self.status;

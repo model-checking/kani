@@ -124,11 +124,7 @@ impl KaniSession {
             if !self.args.common_args.quiet && self.args.output_format != OutputFormat::Old {
                 println!(
                     "{}",
-                    result.render(
-                        &self.args.output_format,
-                        harness.attributes.should_panic,
-                        self.args.coverage
-                    )
+                    result.render(&self.args.output_format, harness.attributes.should_panic)
                 );
             }
             self.gen_and_add_concrete_playback(harness, &mut result)?;

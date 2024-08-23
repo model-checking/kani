@@ -423,7 +423,7 @@ pub fn format_result(
 }
 
 /// Separate checks into coverage and non-coverage based on property class and
-/// format them separately for `--coverage``. Then we report both verification
+/// format them separately for `--coverage`. Then we report both verification
 /// and processed coverage results.
 ///
 /// Note: The reporting of coverage results should be removed once `kani-cov` is
