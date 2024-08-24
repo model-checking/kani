@@ -18,7 +18,8 @@ union U {
 unsafe fn basic_union_should_pass() {
     let u = U { b: 0 };
     let u1 = u;
-    let padding = u1.a;
+    let non_padding = u1.a;
+    assert!(non_padding == 0);
 }
 
 /// Reading padding data via simple union access.
@@ -39,10 +40,11 @@ union U1 {
 #[kani::proof]
 unsafe fn union_complex_subfields_should_fail() {
     let u = U1 { a: (0, 0) };
-    let non_padding = u.b.1;
+    let padding = u.b.1;
 }
 
 /// Tests accessing uninitialized data inside a place projection.
+/// TODO: this is valid and should pass.
 #[kani::proof]
 unsafe fn union_uninit_inside_projection_should_fail() {
     let u = U1 { a: (0, 0) };
@@ -55,6 +57,7 @@ unsafe fn union_update_should_pass() {
     let mut u = U { a: 0 };
     u.b = 0;
     let non_padding = u.b;
+    assert!(non_padding == 0);
 }
 
 /// Tests overwriting data inside unions.
@@ -62,5 +65,5 @@ unsafe fn union_update_should_pass() {
 unsafe fn union_update_should_fail() {
     let mut u = U { a: 0 };
     u.a = 0;
-    let non_padding = u.b;
+    let padding = u.b;
 }
