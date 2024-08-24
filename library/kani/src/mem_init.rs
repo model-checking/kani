@@ -310,6 +310,7 @@ fn set_str_ptr_initialized<const LAYOUT_SIZE: usize>(
 }
 
 /// Copy initialization state of `size_of::<T> * num_elts` bytes from one pointer to the other.
+#[kanitool::disable_checks(pointer)]
 #[rustc_diagnostic_item = "KaniCopyInitState"]
 fn copy_init_state<const LAYOUT_SIZE: usize, T>(from: *const T, to: *const T, num_elts: usize) {
     if LAYOUT_SIZE == 0 {
@@ -323,6 +324,7 @@ fn copy_init_state<const LAYOUT_SIZE: usize, T>(from: *const T, to: *const T, nu
 }
 
 /// Copy initialization state of `size_of::<T>` bytes from one pointer to the other.
+#[kanitool::disable_checks(pointer)]
 #[rustc_diagnostic_item = "KaniCopyInitStateSingle"]
 fn copy_init_state_single<const LAYOUT_SIZE: usize, T>(from: *const T, to: *const T) {
     if LAYOUT_SIZE == 0 {
