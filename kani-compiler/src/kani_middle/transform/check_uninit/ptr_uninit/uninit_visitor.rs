@@ -407,6 +407,15 @@ impl MirVisitor for CheckUninitVisitor {
                     if intermediate_place.ty(&self.locals).unwrap().kind().is_union()
                         && !ptx.is_mutating()
                     {
+                        let contains_deref_projection =
+                            { place.projection.iter().any(|elem| *elem == ProjectionElem::Deref) };
+                        if contains_deref_projection {
+                            // We do not currently support having a deref projection in the same
+                            // place as union field access.
+                            self.push_target(MemoryInitOp::Unsupported {
+                                reason: "Kani does not yet support performing a dereference on a union field".to_string(),
+                            });
+                        }
                         // Accessing a place inside the union, need to check if it is initialized.
                         self.push_target(MemoryInitOp::CheckRef {
                             operand: Operand::Copy(place.clone()),
