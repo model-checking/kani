@@ -57,6 +57,8 @@
 //! relations between the stacks (such as, for example, equality between
 //! the top two tags of two different stacks) are never needed.
 
+use monitors::MONITORED;
+
 use crate::mem::{pointer_object, pointer_offset};
 use crate::shadow::ShadowMem;
 
@@ -137,10 +139,8 @@ pub(super) mod monitors {
     /// "off", and it will remain so until an allocation is found
     /// to track.
     static mut STATE: bool = MonitorState::OFF;
-    /// The object being monitored
-    static mut OBJECT: usize = 0;
-    /// The offset being monitored
-    static mut OFFSET: usize = 0;
+    /// Object + offset being monitored
+    pub static mut MONITORED: *const u8 = std::ptr::null();
     /// The tags of the pointer objects borrowing the byte
     static mut STACK_TAGS: [PointerTag; STACK_DEPTH] = [INITIAL_TAG; STACK_DEPTH];
     /// The permissions of the pointer objects borrowing the byte
@@ -159,9 +159,11 @@ pub(super) mod monitors {
         unsafe {
             if demonic_nondet() && STATE == MonitorState::OFF {
                 STATE = MonitorState::ON;
-                OBJECT = pointer_object(pointer);
-                OFFSET = 0;
-                crate::assume(OFFSET < std::mem::size_of::<U>());
+                MONITORED = (pointer as *const u8)
+                    .offset(kani::any_where(|offset| *offset < std::mem::size_of::<U>().try_into().unwrap_unchecked()));
+                let offset = kani::any::<usize>();
+                crate::assume(offset < std::mem::size_of::<U>());
+
                 STACK_TAGS[STACK_TOP] = tag;
                 STACK_PERMS[STACK_TOP] = Permission::UNIQUE;
                 STACK_TOP += 1;
@@ -176,9 +178,7 @@ pub(super) mod monitors {
         // Offset has already been picked earlier.
         unsafe {
             use self::*;
-            if STATE == MonitorState::ON
-                && OBJECT == pointer_object(pointer)
-                && OFFSET == pointer_offset(pointer)
+            if STATE == MonitorState::ON && MONITORED == (pointer as *const u8)
             {
                 STACK_TAGS[STACK_TOP] = tag;
                 STACK_PERMS[STACK_TOP] = perm;
@@ -190,9 +190,7 @@ pub(super) mod monitors {
     pub(super) fn stack_check<U>(tag: u8, access: bool, address: *const U) {
         unsafe {
             use self::*;
-            if STATE == MonitorState::ON
-                && OFFSET == pointer_offset(address)
-                && OBJECT == pointer_object(address)
+            if STATE == MonitorState::ON && MONITORED == (address as *const u8)
             {
                 let mut found = false;
                 let mut j = 0;
@@ -248,13 +246,11 @@ fn stack_check_ptr<U>(pointer_value: *const *mut U) {
         let tag = TAGS.get(pointer_value);
         let perm = PERMS.get(pointer_value);
         let pointer = *pointer_value;
-        for i in 0..std::mem::size_of::<U>() {
-            for access in [false, true] {
-                if Permission::grants(access, perm) {
-                    self::monitors::stack_check(tag, access, pointer.byte_add(i));
-                }
+        if pointer_object(pointer_value) == pointer_object(MONITORED) &&
+            pointer_offset(MONITORED) < std::mem::size_of::<U>() {
+                self::monitors::stack_check(tag, Access::READ, MONITORED);
+                self::monitors::stack_check(tag, Access::WRITE, MONITORED);
             }
-        }
     }
 }
 
