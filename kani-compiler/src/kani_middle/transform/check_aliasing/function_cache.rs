@@ -72,19 +72,6 @@ impl Cache {
 
     /// Register the kani assertion function
     pub fn register_assert(&mut self, ctx: &TyCtxt) -> Result<&MirInstance, MirError> {
-        let diagnostic = "KaniAssert".to_string();
-        let args = vec![];
-        let sig = Signature { diagnostic, args };
-        let Cache { cache } = self;
-        for i in 0..cache.len() {
-            if sig == cache[i].signature {
-                return Ok(&cache[i].instance);
-            }
-        }
-        let fndef = find_fn_def(*ctx, &sig.diagnostic)
-            .ok_or(MirError::new(format!("Not found: {}", &sig.diagnostic)))?;
-        let instance = super::MirInstance::resolve(fndef, &GenericArgs(sig.args.clone()))?;
-        cache.push(Instance::new(sig, instance));
-        Ok(&cache[cache.len() - 1].instance)
+        self.register(ctx, Signature::new("KaniAssert", &[]))
     }
 }

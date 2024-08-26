@@ -71,7 +71,7 @@ impl<'locals> CollectActions<'locals> {
                 let rvalue = from.local; // Copy to avoid borrow
                 self.visit_assign_reference_dereference(lvalue, rvalue);
             }
-            _ => { /* not yet handled */ }
+            _ => { eprintln!("not yet handled: assignment to reference {:?}", from) }
         }
     }
 
@@ -120,7 +120,7 @@ impl<'locals> CollectActions<'locals> {
                 return;
             }
         };
-        match self.locals[place.local].ty.kind() {
+        match place.ty(self.locals).unwrap().kind() {
             TyKind::RigidTy(RigidTy::Ref(_, ty, _)) => {
                 self.actions.push(Action::StackUpdateReference { place: place.local, ty });
                 self.actions.push(Action::StackCheck);

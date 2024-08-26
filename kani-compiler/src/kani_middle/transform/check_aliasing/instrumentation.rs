@@ -267,16 +267,8 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
 
     /// Instrument with stack violated / not violated
     pub fn instrument_stack_check(&mut self) -> Result<()> {
-        let span = match self.min_processed {
-            SourceInstruction::Statement { idx, bb } => self.body.blocks()[bb].statements[idx].span,
-            SourceInstruction::Terminator { bb } => self.body.blocks()[bb].terminator.span,
-        };
         self.call(Signature::new("KaniStackValid", &[]), vec![], self.valid)?;
-        let msg = format!(
-            "Stacked borrows aliasing model violated at {:?}:{:?}",
-            span.get_filename(),
-            span.get_lines()
-        );
+        let msg = "Stacked borrows aliasing model violated.";
         let check_fn = self.cache.register_assert(&self.tcx)?;
         let check_type = &CheckType::Assert(*check_fn);
         self.body.insert_check(

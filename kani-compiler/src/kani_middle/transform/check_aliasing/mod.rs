@@ -19,12 +19,11 @@ mod instrumentation;
 use instrumentation::*;
 
 use crate::args::ExtraChecks;
-use crate::kani_middle::reachability::collect_reachable_items;
 use crate::kani_middle::transform::{TransformPass, TransformationResult, TransformationType};
 use crate::kani_queries::QueryDb;
 use rustc_middle::ty::TyCtxt;
 use stable_mir::mir::Body;
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
 use std::fmt::Debug;
 use tracing::trace;
 
@@ -113,12 +112,13 @@ impl GlobalPass for GlobalAliasingPass {
     fn transform(
         &mut self,
         tcx: TyCtxt,
-        _call_graph: &crate::kani_middle::reachability::CallGraph,
+        call_graph: &crate::kani_middle::reachability::CallGraph,
         _starting_items: &[stable_mir::mir::mono::MonoItem],
         instances: Vec<MirInstance>,
         transformer: &mut super::BodyTransformation,
     ) {
         let mut found = HashSet::new();
+        let mut queue = VecDeque::new();
         // Collect
         for instance in &instances {
             if instance
@@ -127,23 +127,21 @@ impl GlobalPass for GlobalAliasingPass {
                 .into_iter()
                 .fold(false, |is_proof, attr| is_proof || attr.as_str().contains("kanitool::proof"))
             {
-                let (items, _) =
-                    collect_reachable_items(tcx, transformer, &[MonoItem::Fn(*instance)]);
-                for item in items {
-                    if let MonoItem::Fn(instance) = item {
-                        found.insert(instance);
-                    }
+                if found.insert(instance) {
+                    queue.push_back(instance)
                 }
             }
         }
-        eprintln!("Found is: {:?}", found);
-        // Instrument
-        for instance in &instances {
-            if found.contains(instance) {
-                found.remove(instance);
-                let mut pass = AliasingPass { cache: &mut self.cache };
-                let (_, body) = pass.transform(tcx, transformer.body(tcx, *instance), *instance);
-                transformer.cache.insert(*instance, TransformationResult::Modified(body));
+        while let Some(instance) = queue.pop_front() {
+            let mut pass = AliasingPass { cache: &mut self.cache };
+            let (_, body) = pass.transform(tcx, transformer.body(tcx, *instance), *instance);
+            transformer.cache.insert(*instance, TransformationResult::Modified(body));
+            for node in call_graph.adjacencies(MonoItem::Fn(*instance).clone()) {
+                if let MonoItem::Fn(adjacent) = node {
+                    if found.insert(adjacent) {
+                        queue.push_back(adjacent);
+                    }
+                }
             }
         }
     }
