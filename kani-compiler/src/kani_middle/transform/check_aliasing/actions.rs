@@ -120,16 +120,15 @@ impl<'locals> CollectActions<'locals> {
                 return;
             }
         };
-        match place.ty(self.locals).unwrap().kind() {
-            TyKind::RigidTy(RigidTy::Ref(_, ty, _)) => {
-                self.actions.push(Action::StackUpdateReference { place: place.local, ty });
-                self.actions.push(Action::StackCheck);
-            }
-            TyKind::RigidTy(RigidTy::RawPtr(ty, _)) => {
-                self.actions.push(Action::StackUpdatePointer { place: place.local, ty });
-                self.actions.push(Action::StackCheck);
-            }
-            _ => {}
+        if self.locals[place.local].ty.kind().is_ref() {
+            let ty = place.ty(self.locals).unwrap();
+            self.actions.push(Action::StackUpdateReference { place: place.local, ty });
+            self.actions.push(Action::StackCheck);
+        }
+        if self.locals[place.local].ty.kind().is_raw_ptr() {
+            let ty = place.ty(self.locals).unwrap();
+            self.actions.push(Action::StackUpdatePointer { place: place.local, ty });
+            self.actions.push(Action::StackCheck);
         }
     }
 
