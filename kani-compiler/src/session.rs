@@ -19,6 +19,7 @@ use std::io::IsTerminal;
 use std::panic;
 use std::sync::LazyLock;
 use tracing_subscriber::{layer::SubscriberExt, EnvFilter, Registry};
+use tracing_tree::HierarchicalLayer;
 
 /// Environment variable used to control this session log tracing.
 const LOG_ENV_VAR: &str = "KANI_LOG";
@@ -115,10 +116,13 @@ fn hier_logs(args: &Arguments, filter: EnvFilter) {
     let use_colors = std::io::stdout().is_terminal() || args.color_output;
     let subscriber = Registry::default().with(filter);
     let subscriber = subscriber.with(
-        tracing_subscriber::fmt::layer()
+        HierarchicalLayer::default()
             .with_writer(std::io::stderr)
+            .with_indent_lines(true)
             .with_ansi(use_colors)
-            .with_target(true),
+            .with_targets(true)
+            .with_verbose_exit(true)
+            .with_indent_amount(4),
     );
     tracing::subscriber::set_global_default(subscriber).unwrap();
 }
