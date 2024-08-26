@@ -142,19 +142,7 @@ impl<'locals> CollectActions<'locals> {
                 self.visit_place(place);
             }
             // The rest are not yet handled
-            Rvalue::Aggregate(_, _) => {}
-            Rvalue::BinaryOp(_, _, _) => {}
-            Rvalue::Cast(_, _, _) => {}
-            Rvalue::CheckedBinaryOp(_, _, _) => {}
-            Rvalue::CopyForDeref(_) => {}
-            Rvalue::Discriminant(_) => {}
-            Rvalue::Len(_) => {}
-            Rvalue::Repeat(_, _) => {}
-            Rvalue::ShallowInitBox(_, _) => {}
-            Rvalue::ThreadLocalRef(_) => {}
-            Rvalue::NullaryOp(_, _) => {}
-            Rvalue::UnaryOp(_, _) => {}
-            Rvalue::Use(_) => {}
+            _ => { eprintln!("Not yet handled: {:?}", rvalue); }
         }
     }
 
@@ -165,18 +153,7 @@ impl<'locals> CollectActions<'locals> {
                 self.visit_rvalue_places(rvalue);
                 self.visit_place(place);
             }
-            StatementKind::FakeRead(_, _) => {}
-            StatementKind::SetDiscriminant { .. } => {}
-            StatementKind::Deinit(_) => {}
-            StatementKind::StorageLive(_) => {}
-            StatementKind::StorageDead(_) => {}
-            StatementKind::Retag(_, _) => {}
-            StatementKind::PlaceMention(_) => {}
-            StatementKind::AscribeUserType { .. } => {}
-            StatementKind::Coverage(_) => {}
-            StatementKind::Intrinsic(_) => {}
-            StatementKind::ConstEvalCounter => {}
-            StatementKind::Nop => {}
+            _ => { eprintln!("Not yet handled: {:?}", stmt); }
         }
     }
 
@@ -217,20 +194,7 @@ impl<'locals> CollectActions<'locals> {
                     }
                 }
             }
-            // The following are not yet handled, however, no info is printed
-            // to avoid blowups:
-            StatementKind::Retag(_, _) => {}
-            StatementKind::FakeRead(_, _) => {}
-            StatementKind::SetDiscriminant { .. } => {}
-            StatementKind::Deinit(_) => {}
-            StatementKind::StorageLive(_) => {}
-            StatementKind::StorageDead(_) => {}
-            StatementKind::PlaceMention(_) => {}
-            StatementKind::AscribeUserType { .. } => {}
-            StatementKind::Coverage(_) => {}
-            StatementKind::Intrinsic(_) => {}
-            StatementKind::ConstEvalCounter => {}
-            StatementKind::Nop => {}
+            _=> { eprintln!("Not yet handled, {:?}", stmt); }
         }
     }
 }
