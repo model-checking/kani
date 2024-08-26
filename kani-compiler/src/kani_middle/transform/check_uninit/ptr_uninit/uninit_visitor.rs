@@ -407,15 +407,9 @@ impl MirVisitor for CheckUninitVisitor {
                     if intermediate_place.ty(&self.locals).unwrap().kind().is_union()
                         && !ptx.is_mutating()
                     {
-                        // Generate a place which includes all projections until (and including)
-                        // union field access.
-                        let union_field_access_place = Place {
-                            local: place.local,
-                            projection: place.projection[..idx + 1].to_vec(),
-                        };
                         // Accessing a place inside the union, need to check if it is initialized.
                         self.push_target(MemoryInitOp::CheckRef {
-                            operand: Operand::Copy(union_field_access_place.clone()),
+                            operand: Operand::Copy(place.clone()),
                         });
                     }
                 }
