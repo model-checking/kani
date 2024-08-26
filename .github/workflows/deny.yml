@@ -4,7 +4,7 @@
 # 1. Checks licenses for allowed license.
 # 2. Checks Rust-Sec registry for security advisories.
 
-name: Cargo Audit
+name: Cargo Deny
 on:
   pull_request:
   merge_group:
@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: EmbarkStudios/cargo-deny-action@v1
+      - uses: EmbarkStudios/cargo-deny-action@v2
         with:
           arguments: --all-features --workspace
           command-arguments: -s
