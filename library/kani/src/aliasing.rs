@@ -57,6 +57,8 @@
 //! relations between the stacks (such as, for example, equality between
 //! the top two tags of two different stacks) are never needed.
 
+use std::ptr::read;
+
 use monitors::MONITORED;
 
 use crate::mem::{pointer_object, pointer_offset};
@@ -155,15 +157,12 @@ pub(super) mod monitors {
     pub(super) unsafe fn track_local<U>(tag: u8, pointer: *const U) {
         // Decide whether to initialize the stacks
         // for location:location+size_of(U).
-        // Offset has already been picked earlier.
         unsafe {
             if demonic_nondet() && STATE == MonitorState::OFF {
                 STATE = MonitorState::ON;
-                MONITORED = (pointer as *const u8)
-                    .offset(kani::any_where(|offset| *offset < std::mem::size_of::<U>().try_into().unwrap_unchecked()));
-                let offset = kani::any::<usize>();
+                let offset: usize = kani::any();
                 crate::assume(offset < std::mem::size_of::<U>());
-
+                MONITORED = pointer.byte_add(offset) as *const u8;
                 STACK_TAGS[STACK_TOP] = tag;
                 STACK_PERMS[STACK_TOP] = Permission::UNIQUE;
                 STACK_TOP += 1;
@@ -178,7 +177,9 @@ pub(super) mod monitors {
         // Offset has already been picked earlier.
         unsafe {
             use self::*;
-            if STATE == MonitorState::ON && MONITORED == (pointer as *const u8)
+            if STATE == MonitorState::ON &&
+                pointer_object(MONITORED) == pointer_object(pointer) &&
+                pointer_offset(MONITORED) <= std::mem::size_of::<U>()
             {
                 STACK_TAGS[STACK_TOP] = tag;
                 STACK_PERMS[STACK_TOP] = perm;
@@ -187,10 +188,10 @@ pub(super) mod monitors {
         }
     }
 
-    pub(super) fn stack_check<U>(tag: u8, access: bool, address: *const U) {
+    pub(super) fn stack_check(tag: u8, access: bool) {
         unsafe {
             use self::*;
-            if STATE == MonitorState::ON && MONITORED == (address as *const u8)
+            if STATE == MonitorState::ON
             {
                 let mut found = false;
                 let mut j = 0;
@@ -246,10 +247,13 @@ fn stack_check_ptr<U>(pointer_value: *const *mut U) {
         let tag = TAGS.get(pointer_value);
         let perm = PERMS.get(pointer_value);
         let pointer = *pointer_value;
-        if pointer_object(pointer_value) == pointer_object(MONITORED) &&
+        if pointer_object(pointer) == pointer_object(MONITORED) &&
             pointer_offset(MONITORED) < std::mem::size_of::<U>() {
-                self::monitors::stack_check(tag, Access::READ, MONITORED);
-                self::monitors::stack_check(tag, Access::WRITE, MONITORED);
+                if Permission::grants(Access::READ, perm) {
+                    self::monitors::stack_check(tag, Access::READ);
+                } else if Permission::grants(Access::WRITE, perm){
+                    self::monitors::stack_check(tag, Access::WRITE);
+                }
             }
     }
 }
@@ -268,6 +272,7 @@ fn new_mut_ref_from_value<T>(pointer_to_created: *const &mut T, pointer_to_val: 
     unsafe {
         // Then associate the lvalue and push it
         TAGS.set(pointer_to_created, NEXT_TAG);
+        PERMS.set(pointer_to_created, Permission::SHAREDRW);
         push(NEXT_TAG, Permission::SHAREDRW, pointer_to_val);
         NEXT_TAG += 1;
     }
