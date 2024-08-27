@@ -58,9 +58,9 @@ impl Cache {
     /// in the given compilation context, ctx
     pub fn register(&mut self, ctx: &TyCtxt, sig: Signature) -> Result<&MirInstance, MirError> {
         let Cache { cache } = self;
-        for i in 0..cache.len() {
-            if sig == cache[i].signature {
-                return Ok(&cache[i].instance);
+        for item in &cache {
+            if sig == item.signature {
+                return Ok(item.instance);
             }
         }
         let fndef = find_fn_def(*ctx, &sig.diagnostic)

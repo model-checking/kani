@@ -119,7 +119,7 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
         let tcx = &self.tcx;
         let fn_pointers = &mut self.fn_pointers;
         let body = &mut self.body;
-        let span = self.span.clone();
+        let span = *self.span;
         let instance = cache.register(tcx, callee)?;
         let func_local = fn_pointers
             .entry(*instance)
@@ -210,13 +210,13 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
                 let kind = TerminatorKind::Goto { target: 0 };
                 let terminator = Terminator { kind, span };
                 let source = &mut self.min_processed.clone();
-                let enter_ghost_block = source.clone();
+                let enter_ghost_block = *source;
                 let body = &mut self.body;
                 body.replace_terminator(source, terminator.clone()); // replace terminator so you can instrument "after" it
                 body.insert_terminator(source, InsertPosition::After, terminator.clone());
-                let execute_terminator_block = source.clone();
+                let execute_terminator_block = *source;
                 body.insert_terminator(source, InsertPosition::After, terminator.clone());
-                let execute_ghost_block = source.clone();
+                let execute_ghost_block = *source;
 
                 // Instrument enter ghost:
                 let span = original_span;
@@ -398,7 +398,7 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
     pub fn instrument_instructions(&mut self) -> Result<()> {
         loop {
             let actions = self.instruction_actions();
-            if actions.len() > 0 {
+            if !actions.is_empty() {
                 eprintln!("Instrumenting actions:");
                 self.process_instruction();
             }
@@ -417,7 +417,7 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
                     SourceInstruction::Statement { idx: idx - 1, bb }
                 }
                 SourceInstruction::Terminator { bb }
-                    if self.body.blocks()[bb].statements.len() > 0 =>
+                    if !self.body.blocks()[bb].statements.is_empty() =>
                 {
                     SourceInstruction::Statement {
                         idx: self.body.blocks()[bb].statements.len() - 1,

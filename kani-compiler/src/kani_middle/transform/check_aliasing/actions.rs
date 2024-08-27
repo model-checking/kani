@@ -61,7 +61,7 @@ impl<'locals> CollectActions<'locals> {
                 // Direct reference to stack local
                 // x = &y;
                 let lvalue = to;
-                let rvalue = from.local.clone();
+                let rvalue = from.local;
                 self.actions.push(Action::NewStackReference { lvalue, rvalue });
             }
             [ProjectionElem::Deref] => {
