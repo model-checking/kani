@@ -1,4 +1,4 @@
 Failed Checks: Stacked borrows aliasing model violated.
- File: "./tests/expected/aliasing/control_flow.rs", line 21, in main
+ File: "./tests/expected/aliasing/control_flow.rs", line 23, in main
 Failed Checks: Stacked borrows aliasing model violated.
- File: "./tests/expected/aliasing/control_flow.rs", line 22, in main
+ File: "./tests/expected/aliasing/control_flow.rs", line 24, in main
