@@ -24,7 +24,7 @@ unsafe fn cross_function_union_should_fail() {
     helper(u);
 }
 
-/// Reading padding data but a union is via a union from behind a pointer.
+/// Reading padding data but a union is behind a pointer.
 #[kani::proof]
 unsafe fn pointer_union_should_fail() {
     let u = U { a: 0 }; // `u` is initialized for 2 bytes.
