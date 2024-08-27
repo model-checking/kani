@@ -54,7 +54,11 @@ pub struct Cache {
 }
 
 fn try_get_or_insert<T, P, F, E>(vec: &mut Vec<T>, p: P, f: F) -> Result<&mut T, E>
-where F: FnOnce() -> Result<T, E>, P: Fn(&T) -> bool, T: PartialEq {
+where
+    F: FnOnce() -> Result<T, E>,
+    P: Fn(&T) -> bool,
+    T: PartialEq,
+{
     if let Some(i) = vec.iter().position(p) {
         Ok(&mut vec[i])
     } else {
@@ -64,20 +68,26 @@ where F: FnOnce() -> Result<T, E>, P: Fn(&T) -> bool, T: PartialEq {
 }
 
 impl Cache {
-
     /// Register the signature the to the cache
     /// in the given compilation context, ctx
-    pub fn register(&mut self, ctx: &TyCtxt, signature: Signature) -> Result<&MirInstance, MirError> {
+    pub fn register(
+        &mut self,
+        ctx: &TyCtxt,
+        signature: Signature,
+    ) -> Result<&MirInstance, MirError> {
         let test_sig = signature.clone();
         let Cache { cache } = self;
-        try_get_or_insert(cache, |item| item.signature == test_sig, ||
-                          {
-                              let fndef = find_fn_def(*ctx, &signature.diagnostic)
-                                  .ok_or(MirError::new(format!("Not found: {}", &signature.diagnostic)))?;
-                              let instance = MirInstance::resolve(fndef, &GenericArgs(signature.args.clone()))?;
-                              Ok(Instance::new(signature, instance))
-                          }).map(|entry| &entry.instance)
-
+        try_get_or_insert(
+            cache,
+            |item| item.signature == test_sig,
+            || {
+                let fndef = find_fn_def(*ctx, &signature.diagnostic)
+                    .ok_or(MirError::new(format!("Not found: {}", &signature.diagnostic)))?;
+                let instance = MirInstance::resolve(fndef, &GenericArgs(signature.args.clone()))?;
+                Ok(Instance::new(signature, instance))
+            },
+        )
+        .map(|entry| &entry.instance)
     }
 
     /// Register the kani assertion function
