@@ -124,11 +124,7 @@ impl KaniSession {
             if !self.args.common_args.quiet && self.args.output_format != OutputFormat::Old {
                 println!(
                     "{}",
-                    result.render(
-                        &self.args.output_format,
-                        harness.attributes.should_panic,
-                        self.args.coverage
-                    )
+                    result.render(&self.args.output_format, harness.attributes.should_panic)
                 );
             }
             self.gen_and_add_concrete_playback(harness, &mut result)?;
@@ -192,12 +188,23 @@ impl KaniSession {
             }
         }
 
+        if self.args.coverage {
+            self.show_coverage_summary()?;
+        }
+
         if failing > 0 {
             // Failure exit code without additional error message
             drop(self);
             std::process::exit(1);
         }
 
+        Ok(())
+    }
+
+    /// Show a coverage summary.
+    ///
+    /// This is just a placeholder for now.
+    fn show_coverage_summary(&self) -> Result<()> {
         Ok(())
     }
 }

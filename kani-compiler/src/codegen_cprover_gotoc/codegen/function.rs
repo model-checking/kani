@@ -216,3 +216,74 @@ impl<'tcx> GotocCtx<'tcx> {
         self.reset_current_fn();
     }
 }
+
+pub mod rustc_smir {
+    use crate::stable_mir::CrateDef;
+    use rustc_middle::mir::coverage::CodeRegion;
+    use rustc_middle::mir::coverage::CovTerm;
+    use rustc_middle::mir::coverage::MappingKind::Code;
+    use rustc_middle::ty::TyCtxt;
+    use stable_mir::mir::mono::Instance;
+    use stable_mir::Opaque;
+
+    type CoverageOpaque = stable_mir::Opaque;
+
+    /// Retrieves the `CodeRegion` associated with the data in a
+    /// `CoverageOpaque` object.
+    pub fn region_from_coverage_opaque(
+        tcx: TyCtxt,
+        coverage_opaque: &CoverageOpaque,
+        instance: Instance,
+    ) -> Option<CodeRegion> {
+        let cov_term = parse_coverage_opaque(coverage_opaque);
+        region_from_coverage(tcx, cov_term, instance)
+    }
+
+    /// Retrieves the `CodeRegion` associated with a `CovTerm` object.
+    ///
+    /// Note: This function could be in the internal `rustc` impl for `Coverage`.
+    pub fn region_from_coverage(
+        tcx: TyCtxt<'_>,
+        coverage: CovTerm,
+        instance: Instance,
+    ) -> Option<CodeRegion> {
+        // We need to pull the coverage info from the internal MIR instance.
+        let instance_def = rustc_smir::rustc_internal::internal(tcx, instance.def.def_id());
+        let body = tcx.instance_mir(rustc_middle::ty::InstanceKind::Item(instance_def));
+
+        // Some functions, like `std` ones, may not have coverage info attached
+        // to them because they have been compiled without coverage flags.
+        if let Some(cov_info) = &body.function_coverage_info {
+            // Iterate over the coverage mappings and match with the coverage term.
+            for mapping in &cov_info.mappings {
+                let Code(term) = mapping.kind else { unreachable!() };
+                if term == coverage {
+                    return Some(mapping.code_region.clone());
+                }
+            }
+        }
+        None
+    }
+
+    /// Parse a `CoverageOpaque` item and return the corresponding `CovTerm`:
+    /// <https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/coverage/enum.CovTerm.html>
+    ///
+    /// At present, a `CovTerm` can be one of the following:
+    ///  - `CounterIncrement(<num>)`: A physical counter.
+    ///  - `ExpressionUsed(<num>)`: An expression-based counter.
+    ///  - `Zero`: A counter with a constant zero value.
+    fn parse_coverage_opaque(coverage_opaque: &Opaque) -> CovTerm {
+        let coverage_str = coverage_opaque.to_string();
+        if let Some(rest) = coverage_str.strip_prefix("CounterIncrement(") {
+            let (num_str, _rest) = rest.split_once(')').unwrap();
+            let num = num_str.parse::<u32>().unwrap();
+            CovTerm::Counter(num.into())
+        } else if let Some(rest) = coverage_str.strip_prefix("ExpressionUsed(") {
+            let (num_str, _rest) = rest.split_once(')').unwrap();
+            let num = num_str.parse::<u32>().unwrap();
+            CovTerm::Expression(num.into())
+        } else {
+            CovTerm::Zero
+        }
+    }
+}
