@@ -359,7 +359,11 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
     pub fn instruction_actions(&self) -> Vec<Action> {
         let mut visitor = CollectActions::new(self.body.locals());
         match self.min_processed {
-            SourceInstruction::Terminator { .. } => { eprintln!("Terminators (calls, gotos) do not yet update the stacked borrows state. ") }
+            SourceInstruction::Terminator { .. } => {
+                eprintln!(
+                    "Terminators (calls, gotos) do not yet update the stacked borrows state. "
+                )
+            }
             SourceInstruction::Statement { idx, bb } => {
                 visitor.visit_statement(&self.body.blocks()[bb].statements[idx]);
             }

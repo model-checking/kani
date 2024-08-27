@@ -177,9 +177,9 @@ pub(super) mod monitors {
         // Offset has already been picked earlier.
         unsafe {
             use self::*;
-            if STATE == MonitorState::ON &&
-                pointer_object(MONITORED) == pointer_object(pointer) &&
-                pointer_offset(MONITORED) <= std::mem::size_of::<U>()
+            if STATE == MonitorState::ON
+                && pointer_object(MONITORED) == pointer_object(pointer)
+                && pointer_offset(MONITORED) <= std::mem::size_of::<U>()
             {
                 STACK_TAGS[STACK_TOP] = tag;
                 STACK_PERMS[STACK_TOP] = perm;
@@ -191,8 +191,7 @@ pub(super) mod monitors {
     pub(super) fn stack_check(tag: u8, access: bool) {
         unsafe {
             use self::*;
-            if STATE == MonitorState::ON
-            {
+            if STATE == MonitorState::ON {
                 let mut found = false;
                 let mut j = 0;
                 let mut new_top = 0;
@@ -247,14 +246,15 @@ fn stack_check_ptr<U>(pointer_value: *const *mut U) {
         let tag = TAGS.get(pointer_value);
         let perm = PERMS.get(pointer_value);
         let pointer = *pointer_value;
-        if pointer_object(pointer) == pointer_object(MONITORED) &&
-            pointer_offset(MONITORED) < std::mem::size_of::<U>() {
-                if Permission::grants(Access::READ, perm) {
-                    self::monitors::stack_check(tag, Access::READ);
-                } else if Permission::grants(Access::WRITE, perm){
-                    self::monitors::stack_check(tag, Access::WRITE);
-                }
+        if pointer_object(pointer) == pointer_object(MONITORED)
+            && pointer_offset(MONITORED) < std::mem::size_of::<U>()
+        {
+            if Permission::grants(Access::READ, perm) {
+                self::monitors::stack_check(tag, Access::READ);
+            } else if Permission::grants(Access::WRITE, perm) {
+                self::monitors::stack_check(tag, Access::WRITE);
             }
+        }
     }
 }
 

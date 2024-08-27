@@ -71,7 +71,9 @@ impl<'locals> CollectActions<'locals> {
                 let rvalue = from.local; // Copy to avoid borrow
                 self.visit_assign_reference_dereference(lvalue, rvalue);
             }
-            _ => { eprintln!("not yet handled: assignment to reference {:?}", from) }
+            _ => {
+                eprintln!("not yet handled: assignment to reference {:?}", from)
+            }
         }
     }
 
@@ -142,7 +144,9 @@ impl<'locals> CollectActions<'locals> {
                 self.visit_place(place);
             }
             // The rest are not yet handled
-            _ => { eprintln!("Not yet handled: {:?}", rvalue); }
+            _ => {
+                eprintln!("Not yet handled: {:?}", rvalue);
+            }
         }
     }
 
@@ -153,7 +157,9 @@ impl<'locals> CollectActions<'locals> {
                 self.visit_rvalue_places(rvalue);
                 self.visit_place(place);
             }
-            _ => { eprintln!("Not yet handled: {:?}", stmt); }
+            _ => {
+                eprintln!("Not yet handled: {:?}", stmt);
+            }
         }
     }
 
@@ -194,7 +200,9 @@ impl<'locals> CollectActions<'locals> {
                     }
                 }
             }
-            _=> { eprintln!("Not yet handled, {:?}", stmt); }
+            _ => {
+                eprintln!("Not yet handled, {:?}", stmt);
+            }
         }
     }
 }
