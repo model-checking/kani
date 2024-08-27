@@ -173,7 +173,7 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
     pub fn instrument_local(&mut self, local: Local) -> Result<()> {
         let ty = self.body.locals()[local].ty;
         let ptr_ty = Ty::new_ptr(ty, Mutability::Not);
-        let span = self.span.clone();
+        let span = self.span;
         let body = &mut self.body;
         let local_ptr = self
             .meta_stack
@@ -205,7 +205,7 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
         match self.min_processed {
             SourceInstruction::Terminator { bb } => {
                 let original = self.body.blocks()[bb].terminator.clone();
-                let original_span = self.body.blocks()[bb].terminator.span.clone();
+                let original_span = self.body.blocks()[bb].terminator.span;
                 let span = self.span;
                 let kind = TerminatorKind::Goto { target: 0 };
                 let terminator = Terminator { kind, span };
