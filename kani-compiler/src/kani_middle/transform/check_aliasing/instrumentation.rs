@@ -119,7 +119,7 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
         let tcx = &self.tcx;
         let fn_pointers = &mut self.fn_pointers;
         let body = &mut self.body;
-        let span = *self.span;
+        let span = self.span;
         let instance = cache.register(tcx, callee)?;
         let func_local = fn_pointers
             .entry(*instance)

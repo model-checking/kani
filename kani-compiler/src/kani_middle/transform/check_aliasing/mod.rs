@@ -125,8 +125,8 @@ impl GlobalPass for GlobalAliasingPass {
                 .def
                 .all_attrs()
                 .into_iter()
-                .all(|attr| attr.as_str().contains("kanitool::proof")) &&
-                found.insert(instance)
+                .all(|attr| attr.as_str().contains("kanitool::proof"))
+                && found.insert(instance)
             {
                 queue.push_back(instance)
             }
