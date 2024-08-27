@@ -115,6 +115,23 @@ impl MemoryInitializationState {
                 self.tracked_offset += to_offset - from_offset;
                 // Note that this preserves the value.
             }
+        } else if self.tracked_object_id == to_obj
+            && self.tracked_offset >= to_offset
+            && self.tracked_offset < to_offset + num_elts * LAYOUT_SIZE
+        {
+            self.value = true;
+        }
+    }
+
+    pub fn bless<const LAYOUT_SIZE: usize>(&mut self, ptr: *const u8, num_elts: usize) {
+        let obj = crate::mem::pointer_object(ptr);
+        let offset = crate::mem::pointer_offset(ptr);
+
+        if self.tracked_object_id == obj
+            && self.tracked_offset >= offset
+            && self.tracked_offset < offset + num_elts * LAYOUT_SIZE
+        {
+            self.value = true;
         }
     }
 
@@ -330,4 +347,59 @@ fn copy_init_state<const LAYOUT_SIZE: usize, T>(from: *const T, to: *const T, nu
 #[rustc_diagnostic_item = "KaniCopyInitStateSingle"]
 fn copy_init_state_single<const LAYOUT_SIZE: usize, T>(from: *const T, to: *const T) {
     copy_init_state::<LAYOUT_SIZE, T>(from, to, 1);
+}
+
+#[derive(Clone, Copy)]
+struct ArgumentBuffer {
+    selected_argument: usize,
+    saved_address: *const (),
+    layout_size: usize,
+}
+static mut ARGUMENT_BUFFER: Option<ArgumentBuffer> = None;
+
+#[rustc_diagnostic_item = "KaniResetArgumentBuffer"]
+#[kanitool::disable_checks(pointer)]
+fn reset_argument_buffer() {
+    unsafe { ARGUMENT_BUFFER = None }
+}
+
+#[rustc_diagnostic_item = "KaniStoreArgument"]
+#[kanitool::disable_checks(pointer)]
+fn store_argument<const LAYOUT_SIZE: usize, T>(from: *const T, selected_argument: usize) {
+    if LAYOUT_SIZE == 0 {
+        return;
+    }
+    let (from_ptr, _) = from.to_raw_parts();
+    let should_store: bool = crate::any();
+    if should_store {
+        unsafe {
+            ARGUMENT_BUFFER = Some(ArgumentBuffer {
+                selected_argument,
+                saved_address: from_ptr,
+                layout_size: LAYOUT_SIZE,
+            })
+        }
+    }
+}
+
+#[rustc_diagnostic_item = "KaniLoadArgument"]
+#[kanitool::disable_checks(pointer)]
+fn load_argument<const LAYOUT_SIZE: usize, T>(to: *const T, selected_argument: usize) {
+    if LAYOUT_SIZE == 0 {
+        return;
+    }
+    let (to_ptr, _) = to.to_raw_parts();
+    unsafe {
+        match ARGUMENT_BUFFER {
+            Some(buffer) => {
+                if buffer.selected_argument == selected_argument {
+                    assert!(buffer.layout_size == LAYOUT_SIZE);
+                    copy_init_state_single::<LAYOUT_SIZE, ()>(buffer.saved_address, to_ptr);
+                    return;
+                }
+            }
+            None => {}
+        }
+        MEM_INIT_STATE.bless::<LAYOUT_SIZE>(to_ptr as *const u8, 1);
+    }
 }

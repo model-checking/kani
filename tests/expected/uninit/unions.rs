@@ -66,3 +66,23 @@ unsafe fn union_update_should_fail() {
     u.a = 0;
     let padding = u.b;
 }
+
+/// Reading padding data via simple union access if union is passed to another function.
+#[kani::proof]
+unsafe fn cross_function_union_should_fail() {
+    unsafe fn helper(u: U) {
+        let padding = u.b; // Read 4 bytes from `u`.
+    }
+    let u = U { a: 0 }; // `u` is initialized for 2 bytes.
+    helper(u);
+}
+
+/// Reading non-padding data via simple union access if union is passed to another function.
+#[kani::proof]
+unsafe fn cross_function_union_should_pass() {
+    unsafe fn helper(u: U) {
+        let non_padding = u.a; // Read 2 bytes from `u`.
+    }
+    let u = U { a: 0 }; // `u` is initialized for 2 bytes.
+    helper(u);
+}

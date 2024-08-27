@@ -10,8 +10,13 @@ basic_union_should_fail.assertion.1\
 	 - Status: FAILURE\
 	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u32`"
 
+cross_function_union_should_fail::helper.assertion.1\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u32`"
+
 Summary:
+Verification failed for - cross_function_union_should_fail
 Verification failed for - union_update_should_fail
 Verification failed for - union_complex_subfields_should_fail
 Verification failed for - basic_union_should_fail
-Complete - 3 successfully verified harnesses, 3 failures, 6 total.
+Complete - 4 successfully verified harnesses, 4 failures, 8 total.

@@ -75,6 +75,16 @@ pub enum MemoryInitOp {
         operand: Operand,
         field: FieldIdx,
     },
+
+    LoadArgument {
+        operand: Operand,
+        argument_no: usize,
+    },
+    StoreArgument {
+        operand: Operand,
+        argument_no: usize,
+    },
+    ResetArgumentBuffer,
 }
 
 impl MemoryInitOp {
@@ -94,13 +104,16 @@ impl MemoryInitOp {
             | MemoryInitOp::SetSliceChunk { operand, .. } => operand.clone(),
             MemoryInitOp::CheckRef { operand, .. }
             | MemoryInitOp::SetRef { operand, .. }
-            | MemoryInitOp::CreateUnion { operand, .. } => {
+            | MemoryInitOp::CreateUnion { operand, .. }
+            | MemoryInitOp::LoadArgument { operand, .. }
+            | MemoryInitOp::StoreArgument { operand, .. } => {
                 mk_ref(operand, body, statements, source)
             }
             MemoryInitOp::Copy { .. }
             | MemoryInitOp::AssignUnion { .. }
             | MemoryInitOp::Unsupported { .. }
-            | MemoryInitOp::TriviallyUnsafe { .. } => {
+            | MemoryInitOp::TriviallyUnsafe { .. }
+            | MemoryInitOp::ResetArgumentBuffer => {
                 unreachable!()
             }
         }
@@ -141,7 +154,9 @@ impl MemoryInitOp {
             | MemoryInitOp::SetSliceChunk { operand, .. } => operand.ty(body.locals()).unwrap(),
             MemoryInitOp::SetRef { operand, .. }
             | MemoryInitOp::CheckRef { operand, .. }
-            | MemoryInitOp::CreateUnion { operand, .. } => {
+            | MemoryInitOp::CreateUnion { operand, .. }
+            | MemoryInitOp::LoadArgument { operand, .. }
+            | MemoryInitOp::StoreArgument { operand, .. } => {
                 let place = match operand {
                     Operand::Copy(place) | Operand::Move(place) => place,
                     Operand::Constant(_) => unreachable!(),
@@ -149,7 +164,9 @@ impl MemoryInitOp {
                 let rvalue = Rvalue::AddressOf(Mutability::Not, place.clone());
                 rvalue.ty(body.locals()).unwrap()
             }
-            MemoryInitOp::Unsupported { .. } | MemoryInitOp::TriviallyUnsafe { .. } => {
+            MemoryInitOp::Unsupported { .. }
+            | MemoryInitOp::TriviallyUnsafe { .. }
+            | MemoryInitOp::ResetArgumentBuffer => {
                 unreachable!("operands do not exist for this operation")
             }
             MemoryInitOp::Copy { from, to, .. } => {
@@ -188,7 +205,10 @@ impl MemoryInitOp {
             | MemoryInitOp::CreateUnion { .. }
             | MemoryInitOp::AssignUnion { .. }
             | MemoryInitOp::Unsupported { .. }
-            | MemoryInitOp::TriviallyUnsafe { .. } => unreachable!(),
+            | MemoryInitOp::TriviallyUnsafe { .. }
+            | MemoryInitOp::StoreArgument { .. }
+            | MemoryInitOp::LoadArgument { .. }
+            | MemoryInitOp::ResetArgumentBuffer => unreachable!(),
         }
     }
 
@@ -204,7 +224,10 @@ impl MemoryInitOp {
             | MemoryInitOp::Unsupported { .. }
             | MemoryInitOp::TriviallyUnsafe { .. }
             | MemoryInitOp::Copy { .. }
-            | MemoryInitOp::AssignUnion { .. } => unreachable!(),
+            | MemoryInitOp::AssignUnion { .. }
+            | MemoryInitOp::StoreArgument { .. }
+            | MemoryInitOp::LoadArgument { .. }
+            | MemoryInitOp::ResetArgumentBuffer => unreachable!(),
         }
     }
 
@@ -220,7 +243,10 @@ impl MemoryInitOp {
             | MemoryInitOp::Unsupported { .. }
             | MemoryInitOp::TriviallyUnsafe { .. }
             | MemoryInitOp::Copy { .. }
-            | MemoryInitOp::AssignUnion { .. } => None,
+            | MemoryInitOp::AssignUnion { .. }
+            | MemoryInitOp::StoreArgument { .. }
+            | MemoryInitOp::LoadArgument { .. }
+            | MemoryInitOp::ResetArgumentBuffer => None,
         }
     }
 
@@ -233,10 +259,21 @@ impl MemoryInitOp {
             | MemoryInitOp::CheckSliceChunk { .. }
             | MemoryInitOp::CheckRef { .. }
             | MemoryInitOp::Unsupported { .. }
-            | MemoryInitOp::TriviallyUnsafe { .. } => InsertPosition::Before,
+            | MemoryInitOp::TriviallyUnsafe { .. }
+            | MemoryInitOp::StoreArgument { .. }
+            | MemoryInitOp::LoadArgument { .. }
+            | MemoryInitOp::ResetArgumentBuffer => InsertPosition::Before,
             MemoryInitOp::Copy { .. }
             | MemoryInitOp::AssignUnion { .. }
             | MemoryInitOp::CreateUnion { .. } => InsertPosition::After,
+        }
+    }
+
+    pub fn expect_argument_no(&self) -> usize {
+        match self {
+            MemoryInitOp::LoadArgument { argument_no, .. }
+            | MemoryInitOp::StoreArgument { argument_no, .. } => *argument_no,
+            _ => unreachable!(),
         }
     }
 }

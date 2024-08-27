@@ -43,6 +43,24 @@ impl TargetFinder for CheckUninitVisitor {
                 before_instruction: vec![],
                 after_instruction: vec![],
             };
+            if bb_idx == 0 {
+                let union_args: Vec<_> = body
+                    .locals()
+                    .iter()
+                    .enumerate()
+                    .skip(1)
+                    .take(body.arg_count())
+                    .filter(|(_, local)| local.ty.kind().is_union())
+                    .collect();
+                if !union_args.is_empty() {
+                    for (idx, _) in union_args {
+                        self.push_target(MemoryInitOp::LoadArgument {
+                            operand: Operand::Copy(Place { local: idx, projection: vec![] }),
+                            argument_no: idx,
+                        })
+                    }
+                }
+            }
             self.visit_basic_block(bb);
         }
         self.targets
@@ -339,6 +357,21 @@ impl MirVisitor for CheckUninitVisitor {
                                     });
                                 }
                                 _ => {}
+                            }
+                        } else {
+                            let union_args: Vec<_> = args
+                                .iter()
+                                .enumerate()
+                                .filter(|(_, arg)| arg.ty(&self.locals).unwrap().kind().is_union())
+                                .collect();
+                            if !union_args.is_empty() {
+                                self.push_target(MemoryInitOp::ResetArgumentBuffer);
+                                for (idx, operand) in union_args {
+                                    self.push_target(MemoryInitOp::StoreArgument {
+                                        operand: operand.clone(),
+                                        argument_no: idx + 1, // since arguments are 1-indexed
+                                    })
+                                }
                             }
                         }
                     }
