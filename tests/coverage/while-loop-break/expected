@@ -1,0 +1,13 @@
+Source-based code coverage results:
+
+main.rs (find_first_negative)\
+ * 7:1 - 8:22 COVERED\
+ * 9:11 - 9:29 COVERED\
+ * 10:12 - 10:27 COVERED\
+ * 11:20 - 11:37 COVERED\
+ * 12:10 - 13:19 COVERED\
+ * 15:5 - 15:9 UNCOVERED\
+ * 16:1 - 16:2 COVERED
+
+main.rs (main)\
+ * 19:1 - 23:2 COVERED

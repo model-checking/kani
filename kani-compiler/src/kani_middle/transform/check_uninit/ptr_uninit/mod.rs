@@ -62,14 +62,16 @@ impl TransformPass for UninitPass {
         }
 
         // Call a helper that performs the actual instrumentation.
-        let mut instrumenter = UninitInstrumenter {
-            check_type: self.check_type.clone(),
-            mem_init_fn_cache: &mut self.mem_init_fn_cache,
-        };
-        let (instrumentation_added, body) =
-            instrumenter.instrument(tcx, new_body, instance, CheckUninitVisitor::new());
+        let (instrumentation_added, body) = UninitInstrumenter::run(
+            new_body.into(),
+            tcx,
+            instance,
+            self.check_type.clone(),
+            &mut self.mem_init_fn_cache,
+            CheckUninitVisitor::new(),
+        );
 
-        (changed || instrumentation_added, body.into())
+        (changed || instrumentation_added, body)
     }
 }
 
