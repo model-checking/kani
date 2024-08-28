@@ -244,7 +244,6 @@ impl KaniSession {
     fn run_build(&self, cargo_cmd: Command) -> Result<Vec<RustcArtifact>> {
         let support_color = std::io::stdout().is_terminal();
         let mut artifacts = vec![];
-        println!("The cargo cmd is {:?}", cargo_cmd);
         if let Some(mut cargo_process) = self.run_piped(cargo_cmd)? {
             let reader = BufReader::new(cargo_process.stdout.take().unwrap());
             let mut error_count = 0;
