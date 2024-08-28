@@ -1,0 +1,9 @@
+Source-based code coverage results:
+
+test.rs (check_assert)\
+ * 9:1 - 10:34 COVERED\
+ * 11:14 - 13:6 COVERED\
+ * 13:6 - 13:7 UNCOVERED
+
+test.rs (check_assert::{closure#0})\
+ * 10:40 - 10:49 COVERED
