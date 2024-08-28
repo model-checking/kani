@@ -10,10 +10,9 @@
 use crate::kani_middle::transform::body::InsertPosition;
 use rustc_middle::ty::TyCtxt;
 use stable_mir::mir::{
-    BasicBlock, Body, Local, MirVisitor, Mutability, Operand, Place, Rvalue, Statement,
-    StatementKind, Terminator, TerminatorKind, UnwindAction,
+    BasicBlock, Body, ConstOperand, Local, MirVisitor, Mutability, Operand, Place, Rvalue, Statement, StatementKind, Terminator, TerminatorKind, UnwindAction
 };
-use stable_mir::ty::{GenericArgKind, Span, Ty};
+use stable_mir::ty::{GenericArgKind, MirConst, Span, Ty};
 use std::collections::HashMap;
 
 use super::super::body::{MutableBody, SourceInstruction};
@@ -184,7 +183,7 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
         let ty = self.body.locals()[rvalue].ty;
         let lvalue_ref = self.meta_stack.get(&lvalue).unwrap();
         let rvalue_ref = self.meta_stack.get(&rvalue).unwrap();
-        self.call(
+        self.instrument_call(
             Signature::new("KaniNewMutRefFromValue", &[GenericArgKind::Type(ty)]),
             vec![*lvalue_ref, *rvalue_ref],
             self.unit,
@@ -302,23 +301,26 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
     /// update to the stacked borrows state.
     fn instrument_action(&mut self, source: &mut SourceInstruction, action: Action) -> Result<()> {
         match action {
-            Action::StackCheck => self.instrument_stack_check(source),
+            Action::StackCheck => {
+                self.instrument_stack_check(source);
+                Ok(())
+            },
             Action::NewStackReference { lvalue, rvalue } => {
                 eprintln!("instrumenting stack ref");
                 self.instrument_new_stack_reference(source, lvalue, rvalue)
-            }
+            },
             Action::StackUpdateReference { place, ty } => {
                 self.instrument_stack_update_ref(source, place, ty)
-            }
+            },
             Action::NewMutRefFromRaw { lvalue, rvalue, ty } => {
                 self.instrument_new_mut_ref_from_raw(source, lvalue, rvalue, ty)
-            }
+            },
             Action::StackUpdatePointer { place, ty } => {
                 self.instrument_stack_update_ptr(source, place, ty)
-            }
+            },
             Action::NewMutRawFromRef { lvalue, rvalue, ty } => {
                 self.instrument_new_mut_raw_from_ref(source, lvalue, rvalue, ty)
-            }
+            },
         }
     }
 
@@ -335,6 +337,17 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
         Ok(())
     }
 
+    pub fn instrument_initialize_stack_check(&mut self) {
+        let mut source = self.first_instruction();
+        let span = self.first_instruction().span(self.body.blocks());
+        let lvalue = Place::from(0);
+        let user_ty = None;
+        let const_ = MirConst::from_bool(true);
+        let operand = Operand::Constant(ConstOperand { span, user_ty, const_ });
+        let statement = Statement { kind: StatementKind::Assign(Place::from(self.valid), Rvalue::Use(operand)), span };
+        self.body.insert_stmt(statement, &mut source, InsertPosition::Before);
+    }
+
     /// Run the passes and retrieve the mutable body
     pub fn finalize(mut self) -> Result<MutableBody> {
         for local in ((self.body.arg_count() + 1)..self.local_count).rev() {
@@ -345,7 +358,8 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
         }
         eprintln!("instrumenting instructions");
         self.instrument_instructions()?;
-        // self.instrument_locals()?;
+        self.instrument_locals()?;
+        self.instrument_initialize_stack_check();
         Ok(self.body)
     }
 }
