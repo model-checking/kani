@@ -61,7 +61,8 @@ static JSON_PANIC_HOOK: LazyLock<Box<dyn Fn(&panic::PanicHookInfo<'_>) + Sync + 
                 Lrc::new(SourceMap::new(FilePathMapping::empty())),
                 fallback_bundle,
                 false,
-                HumanReadableErrorType::Default(ColorConfig::Never),
+                HumanReadableErrorType::Default,
+                ColorConfig::Never,
             );
             let diagnostic = DiagInner::new(rustc_errors::Level::Bug, msg);
             emitter.emit_diagnostic(diagnostic);

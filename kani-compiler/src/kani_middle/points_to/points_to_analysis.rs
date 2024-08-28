@@ -53,7 +53,7 @@ struct PointsToAnalysis<'a, 'tcx> {
     tcx: TyCtxt<'tcx>,
     /// This will be used in the future to resolve function pointer and vtable calls. Currently, we
     /// can resolve call graph edges just by looking at the terminators and erroring if we can't
-    /// resolve the callee.  
+    /// resolve the callee.
     call_graph: &'a CallGraph,
     /// This graph should contain a subset of the points-to graph reachable from function arguments.
     /// For the entry function it will be empty (as it supposedly does not have any parameters).
@@ -521,7 +521,7 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
             | Rvalue::ShallowInitBox(operand, _)
             | Rvalue::Cast(_, operand, _)
             | Rvalue::Repeat(operand, ..) => self.successors_for_operand(state, operand),
-            Rvalue::Ref(_, _, ref_place) | Rvalue::AddressOf(_, ref_place) => {
+            Rvalue::Ref(_, _, ref_place) | Rvalue::RawPtr(_, ref_place) => {
                 // Here, a reference to a place is created, which leaves the place
                 // unchanged.
                 state.resolve_place(ref_place, self.instance)
