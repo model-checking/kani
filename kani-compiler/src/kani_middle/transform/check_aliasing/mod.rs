@@ -11,8 +11,8 @@ use stable_mir::CrateDef;
 pub use stable_mir::mir::mono::Instance as MirInstance;
 pub use stable_mir::Error as MirError;
 
-mod actions;
-use actions::*;
+mod visitor;
+use visitor::*;
 mod function_cache;
 use function_cache::*;
 mod instrumentation;
@@ -25,6 +25,7 @@ use rustc_middle::ty::TyCtxt;
 use stable_mir::mir::Body;
 use std::collections::{HashSet, VecDeque};
 use std::fmt::Debug;
+use std::io::stderr;
 use tracing::trace;
 
 use super::GlobalPass;
@@ -78,11 +79,11 @@ impl<'cache> TransformPass for AliasingPass<'cache> {
     fn transform(&mut self, tcx: TyCtxt, body: Body, instance: MirInstance) -> (bool, Body) {
         trace!(function=?instance.name(), "transform: aliasing pass");
         // let body = CachedBodyMutator::from(body);
-        let mut instrumentation_data = InstrumentationData::new(tcx, &mut self.cache, body);
-        // let out = BodyMutationPassState::new(instrumentation_data).finalize();
-        instrumentation_data.instrument_locals().unwrap();
-        instrumentation_data.instrument_instructions().unwrap();
-        (true, instrumentation_data.finalize().into())
+        body.dump(&mut stderr(), "main");
+        let instrumentation_data = InstrumentationData::new(tcx, &mut self.cache, body);
+        let out = instrumentation_data.finalize().unwrap().into();
+        out.dump(&mut stderr(), "the output");
+        (true, out)
     }
 }
 
@@ -125,7 +126,7 @@ impl GlobalPass for GlobalAliasingPass {
                 .def
                 .all_attrs()
                 .into_iter()
-                .all(|attr| attr.as_str().contains("kanitool::proof"))
+                .any(|attr| attr.as_str().contains("kanitool::proof"))
                 && found.insert(instance)
             {
                 queue.push_back(instance)

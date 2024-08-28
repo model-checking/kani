@@ -7,10 +7,11 @@
 //! are instrumented, and that no code that is added by the instrumentation
 //! pass itself is instrumented or analyzed.
 
-use crate::kani_middle::transform::body::{CheckType, InsertPosition};
+use crate::kani_middle::transform::body::InsertPosition;
 use rustc_middle::ty::TyCtxt;
 use stable_mir::mir::{
-    Body, Local, Mutability, Operand, Place, Rvalue, Terminator, TerminatorKind, UnwindAction,
+    BasicBlock, Body, Local, MirVisitor, Mutability, Operand, Place, Rvalue, Statement,
+    StatementKind, Terminator, TerminatorKind, UnwindAction,
 };
 use stable_mir::ty::{GenericArgKind, Span, Ty};
 use std::collections::HashMap;
@@ -43,45 +44,22 @@ pub struct InstrumentationData<'tcx, 'cache> {
     fn_pointers: HashMap<MirInstance, Local>,
     /// The span of the body
     span: Span,
-    /// The minimum processed instruction.
-    /// All instructions before this one belong to the original
-    /// source code, and have not yet been analyzed.
-    min_processed: SourceInstruction,
-    /// The index after which "ghost" instrumentation code
-    /// may be added.
-    ghost_index: SourceInstruction,
     /// The body being instrumented
     body: MutableBody,
+    /// The code actions for the instruction
+    actions: Option<Vec<(SourceInstruction, Vec<Action>)>>,
 }
 
 impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
-    /// Move bb0 to the end to start instrumentation there.
-    fn prepare_body(body: Body) -> MutableBody {
-        let mut body = MutableBody::from(body);
-        let span;
-        let mut source;
-        match body.blocks()[0].statements.len() {
-            0 => {
-                source = SourceInstruction::Terminator { bb: 0 };
-                span = body.blocks()[0].terminator.span;
-            }
-            _ => {
-                source = SourceInstruction::Statement { idx: 0, bb: 0 };
-                span = body.blocks()[0].terminator.span;
-            }
-        }
-        let kind = TerminatorKind::Goto { target: body.blocks().len() };
-        let terminator = Terminator { kind, span };
-        body.insert_terminator(&mut source, InsertPosition::Before, terminator);
-        body
-    }
-
     /// Using a (potentially) pre-populated cache of resolved generic
     /// functions, and the StableMir body "body", initialize the instrumentation
     /// pass data.
     pub fn new(tcx: TyCtxt<'tcx>, cache: &'cache mut Cache, body: Body) -> Self {
+        let mut visitor = CollectActions::new(body.locals());
+        visitor.visit_body(&body);
+        let actions = Some(visitor.finalize());
         let span = body.span;
-        let mut body = Self::prepare_body(body);
+        let mut body = MutableBody::from(body);
         let meta_stack = HashMap::new();
         let local_count = body.locals().len();
         let fn_pointers = HashMap::new();
@@ -91,12 +69,6 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
             span,
             Mutability::Mut,
         );
-        let bb = body.blocks().len() - 1;
-        let min_processed = match body.blocks()[bb].statements.len() {
-            0 => SourceInstruction::Terminator { bb },
-            n => SourceInstruction::Statement { idx: n - 1, bb },
-        };
-        let ghost_index = SourceInstruction::Terminator { bb: 0 };
         InstrumentationData {
             tcx,
             cache,
@@ -106,24 +78,20 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
             valid,
             fn_pointers,
             span,
-            min_processed,
-            ghost_index,
             body,
+            actions,
         }
     }
 
     /// Register the function described by the diagnostic
     /// and generic arguments in "Signature".
     fn register_fn(&mut self, callee: Signature) -> Result<Local> {
-        let cache = &mut self.cache;
-        let tcx = &self.tcx;
-        let fn_pointers = &mut self.fn_pointers;
-        let body = &mut self.body;
         let span = self.span;
-        let instance = cache.register(tcx, callee)?;
-        let func_local = fn_pointers
+        let instance = self.cache.register(&self.tcx, callee)?;
+        let func_local = self
+            .fn_pointers
             .entry(*instance)
-            .or_insert_with(|| body.new_local(instance.ty(), span, Mutability::Not));
+            .or_insert_with(|| self.body.new_local(instance.ty(), span, Mutability::Not));
         Ok(*func_local)
     }
 
@@ -131,39 +99,55 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
     /// in args and returning into "dest".
     /// This differs from Mutable Body's call in that the
     /// function name is cached.
-    pub fn call(&mut self, callee: Signature, args: Vec<Local>, dest: Local) -> Result<()> {
-        let func_local = self.register_fn(callee)?;
-        let new_bb = self.body.blocks().len();
-        let span = self.body.blocks()[self.min_processed.bb()].terminator.span;
-        let callee_op = Operand::Copy(Place::from(func_local));
-        let args = args
-            .into_iter()
-            .map(|v| Operand::Copy(Place { local: v, projection: vec![] }))
-            .collect();
-        let destination = Place::from(dest);
-        let kind = TerminatorKind::Call {
-            func: callee_op,
-            args,
-            destination,
-            target: Some(new_bb),
-            unwind: UnwindAction::Terminate,
-        };
-        let terminator = Terminator { kind, span };
-        let source = &mut self.ghost_index;
-        self.body.insert_terminator(source, InsertPosition::After, terminator);
+    pub fn call(
+        &mut self,
+        callee: Signature,
+        args: Vec<Local>,
+        dest: Local,
+        source: &SourceInstruction,
+    ) -> Result<Terminator> {
+        let fn_local = self.register_fn(callee)?;
+        let func = Operand::Copy(Place::from(fn_local));
+        let args = args.into_iter().map(|local| Operand::Copy(Place::from(local))).collect();
+        let destination = Place::from(self.unit);
+        let target = Some(0); // doesn't matter, updated later
+        let unwind = UnwindAction::Terminate;
+        let kind = TerminatorKind::Call { func, args, destination, target, unwind };
+        let span = source.span(self.body.blocks());
+        Ok(Terminator { kind, span })
+    }
+
+    /// Instrument the call generated by "call" for these parameters.
+    pub fn instrument_call(
+        &mut self,
+        callee: Signature,
+        args: Vec<Local>,
+        dest: Local,
+        source: &mut SourceInstruction) -> Result<()> {
+        let terminator = self.call(callee, args, dest, source)?;
+        let bb = BasicBlock { statements: vec![], terminator };
+        self.body.insert_bb(bb, source, InsertPosition::Before);
         Ok(())
     }
 
     /// Instrument an assignment to a local
-    pub fn assign_pointer(&mut self, lvalue: Local, rvalue: Local) {
-        let source = &mut self.ghost_index;
-        let position = InsertPosition::After;
-        self.body.assign_to(
-            Place::from(lvalue),
-            Rvalue::AddressOf(Mutability::Not, Place::from(rvalue)),
-            source,
-            position,
-        );
+    pub fn assign_pointer(
+        &mut self,
+        lvalue: Local,
+        rvalue: Local,
+        source: &SourceInstruction,
+    ) -> Statement {
+        let span = source.span(&self.body.blocks());
+        let rvalue = Rvalue::AddressOf(Mutability::Not, Place::from(rvalue));
+        Statement { kind: StatementKind::Assign(Place::from(lvalue), rvalue), span }
+    }
+
+    pub fn first_instruction(&self) -> SourceInstruction {
+        if self.body.blocks()[0].statements.is_empty() {
+            SourceInstruction::Terminator { bb: 0 }
+        } else {
+            SourceInstruction::Statement { idx: 0, bb: 0 }
+        }
     }
 
     /// For some local, say let x: T;
@@ -172,87 +156,30 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
     /// initialize_local(ptr_x);
     pub fn instrument_local(&mut self, local: Local) -> Result<()> {
         let ty = self.body.locals()[local].ty;
-        let ptr_ty = Ty::new_ptr(ty, Mutability::Not);
-        let span = self.span;
-        let body = &mut self.body;
-        let local_ptr = self
-            .meta_stack
-            .entry(local)
-            .or_insert_with(|| body.new_local(ptr_ty, span, Mutability::Not));
-        let local_ptr = *local_ptr;
-        self.assign_pointer(local_ptr, local);
-        self.call(
+        let local_ptr = *self.meta_stack.get(&local).unwrap();
+        let statement = self.assign_pointer(local_ptr, local, &self.first_instruction());
+        let statements = vec![statement];
+        let terminator = self.call(
             Signature::new("KaniInitializeLocal", &[GenericArgKind::Type(ty)]),
             vec![local_ptr],
             self.unit,
+            &self.first_instruction(),
         )?;
+        let bb = BasicBlock { statements, terminator };
+        self.body.insert_bb(bb, &mut self.first_instruction(), InsertPosition::Before);
         Ok(())
-    }
-
-    /// Split at the minimum processed instruction,
-    /// allowing instrumentation of ghost code following
-    /// that source instruction.
-    pub fn process_instruction(&mut self) {
-        // If the instruction under processing is a terminator,
-        // special care is needed; it is impossible to instrument
-        // "after" a terminator with no target.
-        // Therefore we handle the terminators manually,
-        // inserting the terminator into the ghost code,
-        // then inserting a jump to that terminator.
-        // These will be called the "enter ghost,"
-        // "execute ghost", and "execute terminator"
-        // terminators
-        match self.min_processed {
-            SourceInstruction::Terminator { bb } => {
-                let original = self.body.blocks()[bb].terminator.clone();
-                let original_span = self.body.blocks()[bb].terminator.span;
-                let span = self.span;
-                let kind = TerminatorKind::Goto { target: 0 };
-                let terminator = Terminator { kind, span };
-                let source = &mut self.min_processed.clone();
-                let enter_ghost_block = *source;
-                let body = &mut self.body;
-                body.replace_terminator(source, terminator.clone()); // replace terminator so you can instrument "after" it
-                body.insert_terminator(source, InsertPosition::After, terminator.clone());
-                let execute_terminator_block = *source;
-                body.insert_terminator(source, InsertPosition::After, terminator.clone());
-                let execute_ghost_block = *source;
-
-                // Instrument enter ghost:
-                let span = original_span;
-                let target = execute_ghost_block.bb();
-                let kind = TerminatorKind::Goto { target };
-                let terminator = Terminator { kind, span };
-                body.replace_terminator(&enter_ghost_block, terminator);
-                // Instrument execute ghost:
-                let target = execute_terminator_block.bb();
-                let kind = TerminatorKind::Goto { target };
-                let terminator = Terminator { kind, span };
-                body.replace_terminator(&execute_ghost_block, terminator);
-                // Instrument execute terminator
-                body.replace_terminator(&execute_terminator_block, original);
-
-                self.ghost_index = execute_ghost_block;
-            }
-            SourceInstruction::Statement { idx, bb } => {
-                // In this case it is simple, merely goto the ghost code
-                // immdediately.
-                let span = self.body.blocks()[bb].statements[idx].span;
-                let target = self.body.blocks().len();
-                let kind = TerminatorKind::Goto { target };
-                let terminator = Terminator { kind, span };
-                let min_processed = &mut self.min_processed.clone();
-                self.body.insert_terminator(min_processed, InsertPosition::After, terminator);
-                self.ghost_index = *min_processed;
-            }
-        }
     }
 
     /// Instrument a stack reference of the fo
     /// lvalue = &rvalue
     /// with an update to the stacked borrows state,
     /// at the code index source.
-    pub fn instrument_new_stack_reference(&mut self, lvalue: Local, rvalue: Local) -> Result<()> {
+    pub fn instrument_new_stack_reference(
+        &mut self,
+        source: &mut SourceInstruction,
+        lvalue: Local,
+        rvalue: Local,
+    ) -> Result<()> {
         // Initialize the constants
         let ty = self.body.locals()[rvalue].ty;
         let lvalue_ref = self.meta_stack.get(&lvalue).unwrap();
@@ -261,21 +188,21 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
             Signature::new("KaniNewMutRefFromValue", &[GenericArgKind::Type(ty)]),
             vec![*lvalue_ref, *rvalue_ref],
             self.unit,
+            source,
         )?;
         Ok(())
     }
 
     /// Instrument with stack violated / not violated
-    pub fn instrument_stack_check(&mut self) -> Result<()> {
-        self.call(Signature::new("KaniStackValid", &[]), vec![], self.valid)?;
+    pub fn instrument_stack_check(&mut self, source: &mut SourceInstruction) -> Result<()> {
+        self.instrument_call(Signature::new("KaniStackValid", &[]), vec![], self.valid, source)?;
+        let assert = self.register_fn(Signature::new("KaniAssert", &[]))?;
         let msg = "Stacked borrows aliasing model violated.";
-        let check_fn = self.cache.register_assert(&self.tcx)?;
-        let check_type = &CheckType::Assert(*check_fn);
-        self.body.insert_check(
+        self.body.insert_check_with_local(
             self.tcx,
-            check_type,
-            &mut self.ghost_index,
-            InsertPosition::After,
+            assert,
+            source,
+            InsertPosition::Before,
             self.valid,
             &msg,
         );
@@ -284,26 +211,38 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
 
     /// Instrument a validity assertion on the stacked borrows state
     /// at idx for (place: &mut T).
-    pub fn instrument_stack_update_ref(&mut self, place: Local, ty: Ty) -> Result<()> {
+    pub fn instrument_stack_update_ref(
+        &mut self,
+        source: &mut SourceInstruction,
+        place: Local,
+        ty: Ty,
+    ) -> Result<()> {
         // Initialize the constants
         let place_ref = self.meta_stack.get(&place).unwrap();
-        self.call(
+        self.instrument_call(
             Signature::new("KaniStackCheckRef", &[GenericArgKind::Type(ty)]),
             vec![*place_ref],
             self.unit,
+            source,
         )?;
         Ok(())
     }
 
     /// Instrument a validity assertion on the stacked borrows state
     /// at idx for (place: *const T).
-    pub fn instrument_stack_update_ptr(&mut self, place: Local, ty: Ty) -> Result<()> {
+    pub fn instrument_stack_update_ptr(
+        &mut self,
+        source: &mut SourceInstruction,
+        place: Local,
+        ty: Ty,
+    ) -> Result<()> {
         // Initialize the constants
         let place_ref = self.meta_stack.get(&place).unwrap();
-        self.call(
+        self.instrument_call(
             Signature::new("KaniStackCheckPtr", &[GenericArgKind::Type(ty)]),
             vec![*place_ref],
             self.unit,
+            source,
         )?;
         Ok(())
     }
@@ -312,6 +251,7 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
     /// created = &mut *(raw: const *T).
     pub fn instrument_new_mut_ref_from_raw(
         &mut self,
+        source: &mut SourceInstruction,
         created: Local,
         raw: Local,
         ty: Ty,
@@ -319,10 +259,11 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
         // Initialize the constants
         let created_ref = self.meta_stack.get(&created).unwrap();
         let reference_ref = self.meta_stack.get(&raw).unwrap();
-        self.call(
+        self.instrument_call(
             Signature::new("KaniNewMutRefFromRaw", &[GenericArgKind::Type(ty)]),
             vec![*created_ref, *reference_ref],
             self.unit,
+            source,
         )?;
         Ok(())
     }
@@ -331,6 +272,7 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
     /// created = (ref: &mut T) as *mut T
     pub fn instrument_new_mut_raw_from_ref(
         &mut self,
+        source: &mut SourceInstruction,
         created: Local,
         reference: Local,
         ty: Ty,
@@ -338,10 +280,11 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
         // Initialize the constants
         let created_ref = self.meta_stack.get(&created).unwrap();
         let reference_ref = self.meta_stack.get(&reference).unwrap();
-        self.call(
+        self.instrument_call(
             Signature::new("KaniNewMutRawFromRef", &[GenericArgKind::Type(ty)]),
             vec![*created_ref, *reference_ref],
             self.unit,
+            source,
         )?;
         Ok(())
     }
@@ -349,45 +292,32 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
     /// Instrument each of the locals collected into values with
     /// initialization data.
     pub fn instrument_locals(&mut self) -> Result<()> {
-        for local in (self.body.arg_count() + 1)..self.local_count {
+        for local in ((self.body.arg_count() + 1)..self.local_count).rev() {
             self.instrument_local(local)?
         }
         Ok(())
     }
 
-    /// Fetch the actions to be instrumented at the current instruction.
-    pub fn instruction_actions(&self) -> Vec<Action> {
-        let mut visitor = CollectActions::new(self.body.locals());
-        match self.min_processed {
-            SourceInstruction::Terminator { .. } => {
-                eprintln!(
-                    "Terminators (calls, gotos) do not yet update the stacked borrows state. "
-                )
-            }
-            SourceInstruction::Statement { idx, bb } => {
-                visitor.visit_statement(&self.body.blocks()[bb].statements[idx]);
-            }
-        }
-        visitor.finalize()
-    }
-
     /// Instrument the action given in "action" with the appropriate
     /// update to the stacked borrows state.
-    fn instrument_action(&mut self, action: Action) -> Result<()> {
+    fn instrument_action(&mut self, source: &mut SourceInstruction, action: Action) -> Result<()> {
         match action {
-            Action::StackCheck => self.instrument_stack_check(),
+            Action::StackCheck => self.instrument_stack_check(source),
             Action::NewStackReference { lvalue, rvalue } => {
-                self.instrument_new_stack_reference(lvalue, rvalue)
+                eprintln!("instrumenting stack ref");
+                self.instrument_new_stack_reference(source, lvalue, rvalue)
             }
             Action::StackUpdateReference { place, ty } => {
-                self.instrument_stack_update_ref(place, ty)
+                self.instrument_stack_update_ref(source, place, ty)
             }
             Action::NewMutRefFromRaw { lvalue, rvalue, ty } => {
-                self.instrument_new_mut_ref_from_raw(lvalue, rvalue, ty)
+                self.instrument_new_mut_ref_from_raw(source, lvalue, rvalue, ty)
             }
-            Action::StackUpdatePointer { place, ty } => self.instrument_stack_update_ptr(place, ty),
+            Action::StackUpdatePointer { place, ty } => {
+                self.instrument_stack_update_ptr(source, place, ty)
+            }
             Action::NewMutRawFromRef { lvalue, rvalue, ty } => {
-                self.instrument_new_mut_raw_from_ref(lvalue, rvalue, ty)
+                self.instrument_new_mut_raw_from_ref(source, lvalue, rvalue, ty)
             }
         }
     }
@@ -396,47 +326,26 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
     /// with appropriate updates to the stacked borrows state
     /// and with validity assertions on the stacked borrows state.
     pub fn instrument_instructions(&mut self) -> Result<()> {
-        loop {
-            let actions = self.instruction_actions();
-            if !actions.is_empty() {
-                eprintln!("Instrumenting actions:");
-                self.process_instruction();
-            }
-            for action in actions {
-                eprintln!("Action is: {:?}", action);
-                self.instrument_action(action)?;
-            }
-            self.min_processed = match self.min_processed {
-                SourceInstruction::Statement { idx: 0, bb: 0 } => {
-                    break;
-                }
-                SourceInstruction::Statement { idx: 0, bb } => {
-                    SourceInstruction::Terminator { bb: bb - 1 }
-                }
-                SourceInstruction::Statement { idx, bb } => {
-                    SourceInstruction::Statement { idx: idx - 1, bb }
-                }
-                SourceInstruction::Terminator { bb }
-                    if !self.body.blocks()[bb].statements.is_empty() =>
-                {
-                    SourceInstruction::Statement {
-                        idx: self.body.blocks()[bb].statements.len() - 1,
-                        bb,
-                    }
-                }
-                SourceInstruction::Terminator { bb } if bb > 0 => {
-                    SourceInstruction::Terminator { bb: bb - 1 }
-                }
-                SourceInstruction::Terminator { .. } => {
-                    break;
-                }
+        let to_instrument = self.actions.take().unwrap();
+        for (mut source, actions) in to_instrument.into_iter().rev() {
+            for action in actions.into_iter() {
+                self.instrument_action(&mut source, action)?;
             }
         }
         Ok(())
     }
 
-    /// Finalize the instrumentation of the body
-    pub fn finalize(self) -> MutableBody {
-        self.body
+    /// Run the passes and retrieve the mutable body
+    pub fn finalize(mut self) -> Result<MutableBody> {
+        for local in ((self.body.arg_count() + 1)..self.local_count).rev() {
+            let ty = self.body.locals()[local].ty;
+            let ptr_ty = Ty::new_ptr(ty, Mutability::Not);
+            let local_ptr = self.body.new_local(ptr_ty, self.span, Mutability::Not);
+            self.meta_stack.insert(local, local_ptr);
+        }
+        eprintln!("instrumenting instructions");
+        self.instrument_instructions()?;
+        // self.instrument_locals()?;
+        Ok(self.body)
     }
 }

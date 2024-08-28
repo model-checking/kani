@@ -165,6 +165,46 @@ impl MutableBody {
         self.insert_stmt(stmt, source, position);
     }
 
+    /// Add a new assert to the basic block indicated by the given index, using
+    /// "local" as the checking function.
+    ///
+    /// The new assertion will have the same span as the source instruction, and the basic block
+    /// will be split. If `InsertPosition` is `InsertPosition::Before`, `source` will point to the
+    /// same instruction as before. If `InsertPosition` is `InsertPosition::After`, `source` will
+    /// point to the new terminator.
+    pub fn insert_check_with_local(
+        &mut self,
+        tcx: TyCtxt,
+        local: Local,
+        source: &mut SourceInstruction,
+        position: InsertPosition,
+        value: Local,
+        msg: &str,
+    ) {
+        assert_eq!(
+            self.locals[value].ty,
+            Ty::bool_ty(),
+            "Expected boolean value as the assert input"
+        );
+        assert!(self.locals[local].ty.kind().is_fn(), "Expected a function type as assert");
+        let new_bb = self.blocks.len();
+        let span = source.span(&self.blocks);
+        let assert_op = Operand::Copy(Place::from(local));
+        let msg_op = self.new_str_operand(msg, span);
+        let kind = TerminatorKind::Call {
+            func: assert_op,
+            args: vec![Operand::Move(Place::from(value)), msg_op],
+            destination: Place {
+                local: self.new_local(Ty::new_tuple(&[]), span, Mutability::Not),
+                projection: vec![],
+            },
+            target: Some(new_bb),
+            unwind: UnwindAction::Terminate,
+        };
+        let terminator = Terminator { kind, span };
+        self.insert_terminator(source, position, terminator);
+    }
+
     /// Add a new assert to the basic block indicated by the given index.
     ///
     /// The new assertion will have the same span as the source instruction, and the basic block
@@ -189,24 +229,12 @@ impl MutableBody {
         let span = source.span(&self.blocks);
         match check_type {
             CheckType::Assert(assert_fn) => {
-                let assert_op = Operand::Copy(Place::from(self.new_local(
+                let local = self.new_local(
                     assert_fn.ty(),
                     span,
                     Mutability::Not,
-                )));
-                let msg_op = self.new_str_operand(msg, span);
-                let kind = TerminatorKind::Call {
-                    func: assert_op,
-                    args: vec![Operand::Move(Place::from(value)), msg_op],
-                    destination: Place {
-                        local: self.new_local(Ty::new_tuple(&[]), span, Mutability::Not),
-                        projection: vec![],
-                    },
-                    target: Some(new_bb),
-                    unwind: UnwindAction::Terminate,
-                };
-                let terminator = Terminator { kind, span };
-                self.insert_terminator(source, position, terminator);
+                );
+                self.insert_check_with_local(tcx, local, source, position, value, msg);
             }
             CheckType::Panic | CheckType::NoCore => {
                 tcx.sess
@@ -221,11 +249,9 @@ impl MutableBody {
     }
 
     /// Add a new call to the basic block indicated by the given index.
-    ///
-    /// The new call will have the same span as the source instruction, and the basic block will be
-    /// split. If `InsertPosition` is `InsertPosition::Before`, `source` will point to the same
-    /// instruction as before. If `InsertPosition` is `InsertPosition::After`, `source` will point
-    /// to the new terminator.
+    /// This has the same semantics as insert_call_to_local, the only
+    /// difference being that a new local is created for the given function
+    /// instance.
     pub fn insert_call(
         &mut self,
         callee: &Instance,
@@ -234,10 +260,28 @@ impl MutableBody {
         args: Vec<Operand>,
         destination: Place,
     ) {
+        let span = source.span(&self.blocks);
+        let local = self.new_local(callee.ty(), span, Mutability::Not);
+        self.insert_call_to_local(local, source, position, args, destination);
+    }
+
+    /// Add a new call to the basic block indicated by the given index.
+    ///
+    /// The new call will have the same span as the source instruction, and the basic block will be
+    /// split. If `InsertPosition` is `InsertPosition::Before`, `source` will point to the same
+    /// instruction as before. If `InsertPosition` is `InsertPosition::After`, `source` will point
+    /// to the new terminator.
+    pub fn insert_call_to_local(
+        &mut self,
+        callee: Local,
+        source: &mut SourceInstruction,
+        position: InsertPosition,
+        args: Vec<Operand>,
+        destination: Place,
+    ) {
         let new_bb = self.blocks.len();
         let span = source.span(&self.blocks);
-        let callee_op =
-            Operand::Copy(Place::from(self.new_local(callee.ty(), span, Mutability::Not)));
+        let callee_op = Operand::Copy(Place::from(callee));
         let kind = TerminatorKind::Call {
             func: callee_op,
             args,
@@ -484,7 +528,7 @@ impl CheckType {
 }
 
 /// We store the index of an instruction to avoid borrow checker issues and unnecessary copies.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum SourceInstruction {
     Statement { idx: usize, bb: BasicBlockIdx },
     Terminator { bb: BasicBlockIdx },
