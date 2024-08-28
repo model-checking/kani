@@ -22,3 +22,4 @@ graph-cycles = "0.1.0"
 # This crate uses rustc crates.
 # More info: https://github.com/rust-analyzer/rust-analyzer/pull/7891
 rustc_private = true
+
