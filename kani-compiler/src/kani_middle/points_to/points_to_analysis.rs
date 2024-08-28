@@ -53,7 +53,7 @@ struct PointsToAnalysis<'a, 'tcx> {
     tcx: TyCtxt<'tcx>,
     /// This will be used in the future to resolve function pointer and vtable calls. Currently, we
     /// can resolve call graph edges just by looking at the terminators and erroring if we can't
-    /// resolve the callee. 
+    /// resolve the callee.
     call_graph: &'a CallGraph,
     /// This graph should contain a subset of the points-to graph reachable from function arguments.
     /// For the entry function it will be empty (as it supposedly does not have any parameters).
