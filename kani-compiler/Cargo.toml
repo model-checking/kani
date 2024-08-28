@@ -35,3 +35,6 @@ write_json_symtab = []
 [package.metadata.rust-analyzer]
 # This package uses rustc crates.
 rustc_private=true
+
+[lints]
+workspace = true

@@ -832,7 +832,6 @@ fn projection_data_ptr(projection: &ProjectedPlace) -> Expr {
 /// Err<UnimplementedData>` if it is `Ok` and returns an `codegen_unimplemented`
 /// expression otherwise.
 /// Note that this macro affects the control flow since it calls `return`
-#[allow(clippy::too_long_first_doc_paragraph)]
 #[macro_export]
 macro_rules! unwrap_or_return_codegen_unimplemented {
     ($ctx:expr, $pp_result:expr) => {{
