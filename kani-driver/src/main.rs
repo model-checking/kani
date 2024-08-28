@@ -5,6 +5,7 @@ use std::ffi::OsString;
 use std::process::ExitCode;
 
 use anyhow::Result;
+use time::{format_description, OffsetDateTime};
 
 use args::{check_is_valid, CargoKaniSubcommand};
 use args_toml::join_args;
@@ -30,6 +31,7 @@ mod call_single_file;
 mod cbmc_output_parser;
 mod cbmc_property_renderer;
 mod concrete_playback;
+mod coverage;
 mod harness_runner;
 mod metadata;
 mod project;
@@ -128,6 +130,23 @@ fn verify_project(project: Project, session: KaniSession) -> Result<()> {
     // Verification
     let runner = harness_runner::HarnessRunner { sess: &session, project: &project };
     let results = runner.check_all_harnesses(&harnesses)?;
+
+    if session.args.coverage {
+        // We generate a timestamp to save the coverage data in a folder named
+        // `kanicov_<date>` where `<date>` is the current date based on `format`
+        // below. The purpose of adding timestamps to the folder name is to make
+        // coverage results easily identifiable. Using a timestamp makes
+        // coverage results not only distinguishable, but also easy to relate to
+        // verification runs. We expect this to be particularly helpful for
+        // users in a proof debugging session, who are usually interested in the
+        // most recent results.
+        let time_now = OffsetDateTime::now_utc();
+        let format = format_description::parse("[year]-[month]-[day]_[hour]-[minute]").unwrap();
+        let timestamp = time_now.format(&format).unwrap();
+
+        session.save_coverage_metadata(&project, &timestamp)?;
+        session.save_coverage_results(&project, &results, &timestamp)?;
+    }
 
     session.print_final_summary(&results)
 }

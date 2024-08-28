@@ -210,10 +210,9 @@ impl RustcInternalMir for Rvalue {
 
     fn internal_mir<'tcx>(&self, tcx: TyCtxt<'tcx>) -> Self::T<'tcx> {
         match self {
-            Rvalue::AddressOf(mutability, place) => rustc_middle::mir::Rvalue::AddressOf(
-                internal(tcx, mutability),
-                internal(tcx, place),
-            ),
+            Rvalue::AddressOf(mutability, place) => {
+                rustc_middle::mir::Rvalue::RawPtr(internal(tcx, mutability), internal(tcx, place))
+            }
             Rvalue::Aggregate(aggregate_kind, operands) => rustc_middle::mir::Rvalue::Aggregate(
                 Box::new(aggregate_kind.internal_mir(tcx)),
                 rustc_index::IndexVec::from_raw(
