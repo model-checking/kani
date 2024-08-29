@@ -79,10 +79,8 @@ impl<'cache> TransformPass for AliasingPass<'cache> {
     fn transform(&mut self, tcx: TyCtxt, body: Body, instance: MirInstance) -> (bool, Body) {
         trace!(function=?instance.name(), "transform: aliasing pass");
         // let body = CachedBodyMutator::from(body);
-        body.dump(&mut stderr(), "main");
         let instrumentation_data = InstrumentationData::new(tcx, &mut self.cache, body);
         let out = instrumentation_data.finalize().unwrap().into();
-        out.dump(&mut stderr(), "the output");
         (true, out)
     }
 }

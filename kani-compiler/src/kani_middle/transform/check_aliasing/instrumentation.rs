@@ -108,7 +108,7 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
         let fn_local = self.register_fn(callee)?;
         let func = Operand::Copy(Place::from(fn_local));
         let args = args.into_iter().map(|local| Operand::Copy(Place::from(local))).collect();
-        let destination = Place::from(self.unit);
+        let destination = Place::from(dest);
         let target = Some(0); // doesn't matter, updated later
         let unwind = UnwindAction::Terminate;
         let kind = TerminatorKind::Call { func, args, destination, target, unwind };
@@ -192,11 +192,22 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
         Ok(())
     }
 
+    fn decrement_source(&self, source: &SourceInstruction) -> SourceInstruction {
+        match source {
+            SourceInstruction::Statement { idx: 0, bb: 0 } => SourceInstruction::Terminator { bb: 0 },
+            SourceInstruction::Statement { idx: 0, bb } => SourceInstruction::Terminator { bb: *bb - 1 },
+            SourceInstruction::Statement { idx, bb } => SourceInstruction::Statement { idx: idx - 1, bb: *bb },
+            SourceInstruction::Terminator { bb } if self.body.blocks()[*bb].statements.is_empty() => SourceInstruction::Terminator { bb: *bb - 1 },
+            SourceInstruction::Terminator { bb } => SourceInstruction::Statement { idx: self.body.blocks()[*bb].statements.len() - 1, bb: *bb }
+        }
+    }
+
     /// Instrument with stack violated / not violated
-    pub fn instrument_stack_check(&mut self, source: &mut SourceInstruction) -> Result<()> {
+    pub fn instrument_stack_check(&mut self, source: &mut SourceInstruction, check_source: &SourceInstruction) -> Result<()> {
+        let less = self.decrement_source(check_source);
+        let msg = format!("Stacked borrows state invalidated at {:?}", less.span(self.body.blocks()).get_lines());
         self.instrument_call(Signature::new("KaniStackValid", &[]), vec![], self.valid, source)?;
         let assert = self.register_fn(Signature::new("KaniAssert", &[]))?;
-        let msg = "Stacked borrows aliasing model violated.";
         self.body.insert_check_with_local(
             self.tcx,
             assert,
@@ -299,10 +310,10 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
 
     /// Instrument the action given in "action" with the appropriate
     /// update to the stacked borrows state.
-    fn instrument_action(&mut self, source: &mut SourceInstruction, action: Action) -> Result<()> {
+    fn instrument_action(&mut self, source: &mut SourceInstruction, check_source: &SourceInstruction, action: Action) -> Result<()> {
         match action {
             Action::StackCheck => {
-                self.instrument_stack_check(source);
+                self.instrument_stack_check(source, check_source);
                 Ok(())
             },
             Action::NewStackReference { lvalue, rvalue } => {
@@ -330,8 +341,9 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
     pub fn instrument_instructions(&mut self) -> Result<()> {
         let to_instrument = self.actions.take().unwrap();
         for (mut source, actions) in to_instrument.into_iter().rev() {
+            let check_source = source.clone();
             for action in actions.into_iter() {
-                self.instrument_action(&mut source, action)?;
+                self.instrument_action(&mut source, &check_source, action)?;
             }
         }
         Ok(())

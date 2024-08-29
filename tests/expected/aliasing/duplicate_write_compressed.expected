@@ -1,2 +1,2 @@
-Failed Checks: Stacked borrows aliasing model violated.
- File: "./tests/expected/aliasing/duplicate_write_compressed.rs", line 14, in main
+
+Failed Checks: Stacked borrows state invalidated at LineInfo { start_line: 14, start_col: 9, end_line: 14, end_col: 28 }
