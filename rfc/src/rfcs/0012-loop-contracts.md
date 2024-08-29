@@ -131,14 +131,10 @@ Then when use the loop contracts to abstract the loop, Kani will only havoc the 
 location `x` and keep `y` unchanged. Note that if the `modifies` clause contains also
 `y`, Kani will havoc both `x` and `y`, and hence violate the assertion `y == 1`.
 
-
-Kani will also verify if all writing targets in the loop are included in the `modifies`
-clause.
-
-
-Note that the `modifies` clause is optional, and Kani will infer the write set if not
-provided.
-
+Kani can employs CBMC's write set inference to infer the write set of the loop.
+So users have to specify the `modifies` clauses by their self only when the inferred write
+sets are not complete---there exists some target that could be written to in the loop but 
+is not in the inferred write set.
 
 ### Proof of termination
     
@@ -244,8 +240,16 @@ easier.
 - How do we translate back modify targets that inferred by CBMC to Rust level? 
 - It is not clear how the CBMC loop modifies inference works for Rust code. We need to
   experiment more to decide what would be the best UX of using loop modifies.
+- How do we handle havocing in unsafe code where it is fine to break the safety invariant
+  of Rust? In that case, we may need havocing function that preserves validity invariant
+  but not safety invariant.
 
 ## Future possibilities
+
+- We can improve the UX by allowing users to choose if they want to apply loop contracts
+  to certain annotated loops or not.
+- We can employ CBMC's decreases inference to infer the decreases clauses to reduce the
+  user burden of specifying the decreases clauses.
 
 <!-- For Developers -->
 
