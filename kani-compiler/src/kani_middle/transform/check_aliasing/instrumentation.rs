@@ -86,12 +86,11 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
     /// Register the function described by the diagnostic
     /// and generic arguments in "Signature".
     fn register_fn(&mut self, callee: Signature) -> Result<Local> {
-        let span = self.span;
         let instance = self.cache.register(&self.tcx, callee)?;
         let func_local = self
             .fn_pointers
             .entry(*instance)
-            .or_insert_with(|| self.body.new_local(instance.ty(), span, Mutability::Not));
+            .or_insert_with(|| self.body.new_local(instance.ty(), self.span, Mutability::Not));
         Ok(*func_local)
     }
 
