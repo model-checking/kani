@@ -194,8 +194,8 @@ Kani implements the functionality of loop contracts in three places.
 
 ### Procedural macros `loop_invariant`, `loop_modifies`, and `loop_decreases`.
 
-We extend the three macros `loop_invariant`, `loop_modifies`, and `loop_decreases` to
-corresponding Rust code. Kani will then compile them into MIR-level code.
+We will implement the three proc-macros `loop_invariant`, `loop_modifies`, and `loop_decreases` to
+embed the annotation logic as Rust code. Kani will then compile them into MIR-level code.
 
 
 ### Code Generation for Builtin Functions
