@@ -579,6 +579,7 @@ impl CallGraph {
 
     /// Print the graph in DOT format to a file.
     /// See <https://graphviz.org/doc/info/lang.html> for more information.
+    #[allow(unused)]
     fn dump_dot(&self, tcx: TyCtxt) -> std::io::Result<()> {
         if let Ok(target) = std::env::var("KANI_REACH_DEBUG") {
             debug!(?target, "dump_dot");
@@ -601,6 +602,7 @@ impl CallGraph {
     }
 
     /// Write all notes to the given writer.
+    #[allow(unused)]
     fn dump_all<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
         tracing::info!(nodes=?self.nodes.len(), edges=?self.edges.len(), "dump_all");
         for node in &self.nodes {
@@ -614,6 +616,7 @@ impl CallGraph {
     }
 
     /// Write all notes that may have led to the discovery of the given target.
+    #[allow(unused)]
     fn dump_reason<W: Write>(&self, writer: &mut W, target: &str) -> std::io::Result<()> {
         let mut queue: Vec<Node> =
             self.nodes.iter().filter(|item| item.to_string().contains(target)).cloned().collect();

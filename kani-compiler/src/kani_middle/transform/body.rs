@@ -174,7 +174,6 @@ impl MutableBody {
     /// point to the new terminator.
     pub fn insert_check_with_local(
         &mut self,
-        tcx: TyCtxt,
         local: Local,
         source: &mut SourceInstruction,
         position: InsertPosition,
@@ -225,7 +224,6 @@ impl MutableBody {
             Ty::bool_ty(),
             "Expected boolean value as the assert input"
         );
-        let new_bb = self.blocks.len();
         let span = source.span(&self.blocks);
         match check_type {
             CheckType::Assert(assert_fn) => {
@@ -234,7 +232,7 @@ impl MutableBody {
                     span,
                     Mutability::Not,
                 );
-                self.insert_check_with_local(tcx, local, source, position, value, msg);
+                self.insert_check_with_local(local, source, position, value, msg);
             }
             CheckType::Panic | CheckType::NoCore => {
                 tcx.sess

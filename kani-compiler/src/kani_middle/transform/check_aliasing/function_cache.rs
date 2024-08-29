@@ -89,9 +89,4 @@ impl Cache {
         )
         .map(|entry| &entry.instance)
     }
-
-    /// Register the kani assertion function
-    pub fn register_assert(&mut self, ctx: &TyCtxt) -> Result<&MirInstance, MirError> {
-        self.register(ctx, Signature::new("KaniAssert", &[]))
-    }
 }

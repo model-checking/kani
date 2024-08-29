@@ -25,7 +25,6 @@ use rustc_middle::ty::TyCtxt;
 use stable_mir::mir::Body;
 use std::collections::{HashSet, VecDeque};
 use std::fmt::Debug;
-use std::io::stderr;
 use tracing::trace;
 
 use super::GlobalPass;

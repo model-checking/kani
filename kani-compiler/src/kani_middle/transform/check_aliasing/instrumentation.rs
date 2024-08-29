@@ -206,7 +206,7 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
             SourceInstruction::Statement { idx, bb } => SourceInstruction::Statement { idx: idx - 1, bb: *bb },
             // One below the terminator of the first block with no statements
             // is 0, 0
-            SourceInstruction::Terminator { bb: 0 } if self.body.blocks()[*bb].statements.is_empty() => SourceInstruction::Statement { idx: 0, bb: 0 },
+            SourceInstruction::Terminator { bb: 0 } if self.body.blocks()[0].statements.is_empty() => SourceInstruction::Statement { idx: 0, bb: 0 },
             // Otherwise one below the terminator of a block is the previous
             // terminator if there are no statements in the block,
             SourceInstruction::Terminator { bb } if self.body.blocks()[*bb].statements.is_empty() => SourceInstruction::Terminator { bb: *bb - 1 },
@@ -222,7 +222,6 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
         self.instrument_call(Signature::new("KaniStackValid", &[]), vec![], self.valid, source)?;
         let assert = self.register_fn(Signature::new("KaniAssert", &[]))?;
         self.body.insert_check_with_local(
-            self.tcx,
             assert,
             source,
             InsertPosition::Before,
@@ -326,8 +325,7 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
     fn instrument_action(&mut self, source: &mut SourceInstruction, check_source: &SourceInstruction, action: Action) -> Result<()> {
         match action {
             Action::StackCheck => {
-                self.instrument_stack_check(source, check_source);
-                Ok(())
+                self.instrument_stack_check(source, check_source)
             },
             Action::NewStackReference { lvalue, rvalue } => {
                 eprintln!("instrumenting stack ref");
