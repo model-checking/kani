@@ -224,10 +224,13 @@ impl<'locals> CollectActions<'locals> {
 }
 
 impl<'locals> MirVisitor for CollectActions<'locals> {
-    /// Visit the statement stmt
+    /// Visit the statement stmt.
+    /// Associate the actions collected so far with the
+    /// current source index, then collect the actions
+    /// of the statement and increase the source index
     fn visit_statement(&mut self, stmt: &Statement, _location: Location) {
         let collected = std::mem::replace(&mut self.collected, Vec::new());
-        self.actions.push((self.source.clone(), collected));
+        self.actions.push((self.source, collected));
         self.visit_statement_internal(stmt);
         self.source = match self.source {
             SourceInstruction::Statement { idx, bb } => {
@@ -240,6 +243,9 @@ impl<'locals> MirVisitor for CollectActions<'locals> {
     }
 
     /// Visit the terminator.
+    /// Associate the actions collected so far with the
+    /// current source index, then increase the source index
+    /// to the next basic block
     fn visit_terminator(&mut self, _term: &Terminator, _location: Location) {
         let collected = std::mem::replace(&mut self.collected, Vec::new());
         let bb = self.source.bb();
