@@ -316,6 +316,26 @@ impl IntrinsicGeneratorPass {
                             &reason,
                         );
                     }
+                    PointeeLayout::Union { .. } => {
+                        let rvalue = Rvalue::Use(Operand::Constant(ConstOperand {
+                            const_: MirConst::from_bool(false),
+                            span: source.span(new_body.blocks()),
+                            user_ty: None,
+                        }));
+                        let result =
+                            new_body.insert_assignment(rvalue, &mut source, InsertPosition::Before);
+                        let reason: &str =
+                            "Kani does not yet support using initialization predicates on unions.";
+
+                        new_body.insert_check(
+                            tcx,
+                            &self.check_type,
+                            &mut source,
+                            InsertPosition::Before,
+                            result,
+                            &reason,
+                        );
+                    }
                 };
             }
             Err(msg) => {
