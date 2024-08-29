@@ -154,7 +154,7 @@ pub(super) mod monitors {
 
     /// Initialize local when track local is true, picking a monitor,
     /// and setting its object and offset to within pointer.
-    pub(super) unsafe fn track_local<U>(tag: u8, pointer: *const U) {
+    pub(super) unsafe fn track_local<U>(tag: PointerTag, pointer: *const U) {
         // Decide whether to initialize the stacks
         // for location:location+size_of(U).
         unsafe {
@@ -171,7 +171,7 @@ pub(super) mod monitors {
     }
 
     /// Push a tag with a permission perm at pointer
-    pub(super) fn push<U>(tag: u8, perm: PermissionByte, pointer: *const U) {
+    pub(super) fn push<U>(tag: PointerTag, perm: PermissionByte, pointer: *const U) {
         // Decide whether to initialize the stacks
         // for location:location+size_of(U).
         // Offset has already been picked earlier.
@@ -190,7 +190,7 @@ pub(super) mod monitors {
 
     /// Run a stack check on the monitored byte for the given
     /// tag and the given access permission.
-    pub(super) fn stack_check(tag: u8, access: AccessBit) {
+    pub(super) fn stack_check(tag: PointerTag, access: AccessBit) {
         unsafe {
             use self::*;
             if STATE == MonitorState::ON {
@@ -217,7 +217,7 @@ pub(super) mod monitors {
 }
 
 /// Push the permissions at the given location
-fn push<U>(tag: u8, perm: PermissionByte, address: *const U) {
+fn push<U>(tag: PointerTag, perm: PermissionByte, address: *const U) {
     self::monitors::push(tag, perm, address)
 }
 
