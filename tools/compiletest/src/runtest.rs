@@ -320,7 +320,7 @@ impl<'test> TestCx<'test> {
             kani.env("RUSTFLAGS", self.props.compile_flags.join(" "));
         }
         kani.arg(&self.testpaths.file).args(&self.props.kani_flags);
-        kani.arg("--coverage").args(["-Z", "line-coverage"]);
+        kani.arg("--coverage").args(["-Z", "source-coverage"]);
 
         if !self.props.cbmc_flags.is_empty() {
             kani.arg("--cbmc-args").args(&self.props.cbmc_flags);
