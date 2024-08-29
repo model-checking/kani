@@ -82,14 +82,18 @@ fn stack_valid() -> bool {
     unsafe { STACK_VALID }
 }
 
-/// Type of access.
-#[derive(Eq, PartialEq, Clone, Copy, Hash, Debug)]
-enum Access {
-    /// Read access
-    Read,
-    /// Write access
-    Write
+/// Access bit.
+/// Encoded as associated constants
+/// instead of as an enum to ensure
+/// that the representation uses
+/// 1 bit.
+type AccessBit = bool;
+struct Access;
+impl Access {
+    const READ: AccessBit = false;
+    const WRITE: AccessBit = true;
 }
+
 
 /// Type of permission.
 /// To ensure that 8 bit, instead of larger,
@@ -111,8 +115,8 @@ enum Permission {
 impl Permission {
     /// Returns whether the access bit is granted by the permission
     /// byte
-    fn grants(access: Access, perm: Permission) -> bool {
-        perm != Permission::Disabled && (access != Access::Write || perm != Permission::SharedRO)
+    fn grants(access: AccessBit, perm: Permission) -> bool {
+        perm != Permission::Disabled && (access != Access::WRITE || perm != Permission::SharedRO)
     }
 }
 
@@ -121,10 +125,15 @@ static mut PERMS: ShadowMem<Permission> = ShadowMem::new(Permission::SharedRO);
 
 /// State of the borrows stack monitor for a byte
 pub(super) mod monitors {
-    #[derive(Eq, PartialEq, Clone, Copy, Hash, Debug)]
-    enum MonitorState {
-        On,
-        Off
+    /// Tracks whether the monitor is on or off.
+    /// Encoded as associated constants instead
+    /// of as an enum to ensure that the representation
+    /// uses 1 bit.
+    type MonitorBit = bool;
+    struct MonitorState;
+    impl MonitorState {
+        const ON: MonitorBit = false;
+        const OFF: MonitorBit = true;
     }
 
     #[allow(unused)]
@@ -133,7 +142,7 @@ pub(super) mod monitors {
     /// Whether the monitor is on. Initially, the monitor is
     /// "off", and it will remain so until an allocation is found
     /// to track.
-    static mut STATE: MonitorState = MonitorState::Off;
+    static mut STATE: MonitorBit = MonitorState::OFF;
     /// Object + offset being monitored
     pub static mut MONITORED: *const u8 = std::ptr::null();
     /// The tags of the pointer objects borrowing the byte
@@ -151,8 +160,8 @@ pub(super) mod monitors {
         // Decide whether to initialize the stacks
         // for location:location+size_of(U).
         unsafe {
-            if demonic_nondet() && STATE == MonitorState::Off {
-                STATE = MonitorState::On;
+            if demonic_nondet() && STATE == MonitorState::OFF {
+                STATE = MonitorState::ON;
                 let offset: usize = kani::any();
                 crate::assume(offset < std::mem::size_of::<U>());
                 MONITORED = pointer.byte_add(offset) as *const u8;
@@ -170,7 +179,7 @@ pub(super) mod monitors {
         // Offset has already been picked earlier.
         unsafe {
             use self::*;
-            if STATE == MonitorState::On
+            if STATE == MonitorState::ON
                 && pointer_object(MONITORED) == pointer_object(pointer)
                 && pointer_offset(MONITORED) <= std::mem::size_of::<U>()
             {
@@ -181,10 +190,12 @@ pub(super) mod monitors {
         }
     }
 
-    pub(super) fn stack_check(tag: u8, access: Access) {
+    /// Run a stack check on the monitored byte for the given
+    /// tag and the given access permission.
+    pub(super) fn stack_check(tag: u8, access: AccessBit) {
         unsafe {
             use self::*;
-            if STATE == MonitorState::On {
+            if STATE == MonitorState::ON {
                 let mut found = false;
                 let mut j = 0;
                 let mut new_top = 0;
@@ -242,10 +253,10 @@ fn stack_check_ptr<U>(pointer_value: *const *mut U) {
         if pointer_object(pointer) == pointer_object(MONITORED)
             && pointer_offset(MONITORED) < std::mem::size_of::<U>()
         {
-            if Permission::grants(Access::Read, perm) {
-                self::monitors::stack_check(tag, Access::Read);
-            } else if Permission::grants(Access::Write, perm) {
-                self::monitors::stack_check(tag, Access::Write);
+            if Permission::grants(Access::READ, perm) {
+                self::monitors::stack_check(tag, Access::READ);
+            } else if Permission::grants(Access::WRITE, perm) {
+                self::monitors::stack_check(tag, Access::WRITE);
             }
         }
     }
