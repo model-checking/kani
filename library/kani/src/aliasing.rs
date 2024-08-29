@@ -99,29 +99,29 @@ impl Access {
 /// To ensure that 8 bit, instead of larger,
 /// repreesentations are used in cbmc, this
 /// is encoded using associated constants.
-#[repr(u8)]
-#[derive(Eq, PartialEq, Clone, Copy, Hash, Debug)]
-enum Permission {
-    /// Read/write reference with unique ownership
-    Unique,
-    /// Pointer with read/write access
-    SharedRW,
-    /// Pointer with read access
-    SharedRO,
-    /// Disabled pointer
-    Disabled,
+type PermissionByte = u8;
+struct Permission;
+impl Permission {
+    /// Unique ownership of a memory location
+    const UNIQUE: u8 = 0;
+    /// Raw pointer read/write permission
+    const SHAREDRW: u8 = 1;
+    /// Raw pointer read permission
+    const SHAREDRO: u8 = 2;
+    /// Disabled -- no accesses allowed
+    const DISABLED: u8 = 3;
 }
 
 impl Permission {
     /// Returns whether the access bit is granted by the permission
     /// byte
-    fn grants(access: AccessBit, perm: Permission) -> bool {
-        perm != Permission::Disabled && (access != Access::WRITE || perm != Permission::SharedRO)
+    fn grants(access: AccessBit, perm: PermissionByte) -> bool {
+        perm != Permission::DISABLED && (access != Access::WRITE || perm != Permission::SHAREDRO)
     }
 }
 
 /// Associate every pointer object with a permission
-static mut PERMS: ShadowMem<Permission> = ShadowMem::new(Permission::SharedRO);
+static mut PERMS: ShadowMem<PermissionByte> = ShadowMem::new(Permission::SHAREDRO);
 
 /// State of the borrows stack monitor for a byte
 pub(super) mod monitors {
@@ -148,7 +148,7 @@ pub(super) mod monitors {
     /// The tags of the pointer objects borrowing the byte
     static mut STACK_TAGS: [PointerTag; STACK_DEPTH] = [0; STACK_DEPTH];
     /// The permissions of the pointer objects borrowing the byte
-    static mut STACK_PERMS: [Permission; STACK_DEPTH] = [Permission::Unique; STACK_DEPTH];
+    static mut STACK_PERMS: [PermissionByte; STACK_DEPTH] = [Permission::UNIQUE; STACK_DEPTH];
     /// The "top" of the stack
     static mut STACK_TOP: usize = 0;
 
@@ -166,14 +166,14 @@ pub(super) mod monitors {
                 crate::assume(offset < std::mem::size_of::<U>());
                 MONITORED = pointer.byte_add(offset) as *const u8;
                 STACK_TAGS[STACK_TOP] = tag;
-                STACK_PERMS[STACK_TOP] = Permission::Unique;
+                STACK_PERMS[STACK_TOP] = Permission::UNIQUE;
                 STACK_TOP += 1;
             }
         }
     }
 
     /// Push a tag with a permission perm at pointer
-    pub(super) fn push<U>(tag: u8, perm: Permission, pointer: *const U) {
+    pub(super) fn push<U>(tag: u8, perm: PermissionByte, pointer: *const U) {
         // Decide whether to initialize the stacks
         // for location:location+size_of(U).
         // Offset has already been picked earlier.
@@ -219,7 +219,7 @@ pub(super) mod monitors {
 }
 
 /// Push the permissions at the given location
-fn push<U>(tag: u8, perm: Permission, address: *const U) {
+fn push<U>(tag: u8, perm: PermissionByte, address: *const U) {
     self::monitors::push(tag, perm, address)
 }
 
@@ -238,7 +238,7 @@ fn initialize_local<U>(pointer: *const U) {
     unsafe {
         let tag = NEXT_TAG;
         TAGS.set(pointer, tag);
-        PERMS.set(pointer, Permission::Unique);
+        PERMS.set(pointer, Permission::UNIQUE);
         NEXT_TAG += 1;
         monitors::track_local(tag, pointer);
     }
@@ -276,8 +276,8 @@ fn new_mut_ref_from_value<T>(pointer_to_created: *const &mut T, pointer_to_val: 
     unsafe {
         // Then associate the lvalue and push it
         TAGS.set(pointer_to_created, NEXT_TAG);
-        PERMS.set(pointer_to_created, Permission::SharedRW);
-        push(NEXT_TAG, Permission::SharedRW, pointer_to_val);
+        PERMS.set(pointer_to_created, Permission::SHAREDRW);
+        push(NEXT_TAG, Permission::SHAREDRW, pointer_to_val);
         NEXT_TAG += 1;
     }
 }
@@ -291,7 +291,7 @@ fn new_mut_raw_from_ref<T>(pointer_to_created: *const *mut T, pointer_to_ref: *c
     unsafe {
         // Then associate the lvalue and push it
         TAGS.set(pointer_to_created, NEXT_TAG);
-        push(NEXT_TAG, Permission::SharedRW, *pointer_to_ref);
+        push(NEXT_TAG, Permission::SHAREDRW, *pointer_to_ref);
         NEXT_TAG += 1;
     }
 }
@@ -305,7 +305,7 @@ fn new_mut_ref_from_raw<T>(pointer_to_created: *const &mut T, pointer_to_ref: *c
     unsafe {
         // Then associate the lvalue and push it
         TAGS.set(pointer_to_created, NEXT_TAG);
-        push(NEXT_TAG, Permission::SharedRW, *pointer_to_ref);
+        push(NEXT_TAG, Permission::SHAREDRW, *pointer_to_ref);
         NEXT_TAG += 1;
     }
 }
