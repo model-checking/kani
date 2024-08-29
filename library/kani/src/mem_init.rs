@@ -390,15 +390,12 @@ fn load_argument<const LAYOUT_SIZE: usize, T>(to: *const T, selected_argument: u
     }
     let (to_ptr, _) = to.to_raw_parts();
     unsafe {
-        match ARGUMENT_BUFFER {
-            Some(buffer) => {
-                if buffer.selected_argument == selected_argument {
-                    assert!(buffer.layout_size == LAYOUT_SIZE);
-                    copy_init_state_single::<LAYOUT_SIZE, ()>(buffer.saved_address, to_ptr);
-                    return;
-                }
+        if let Some(buffer) = ARGUMENT_BUFFER {
+            if buffer.selected_argument == selected_argument {
+                assert!(buffer.layout_size == LAYOUT_SIZE);
+                copy_init_state_single::<LAYOUT_SIZE, ()>(buffer.saved_address, to_ptr);
+                return;
             }
-            None => {}
         }
         MEM_INIT_STATE.bless::<LAYOUT_SIZE>(to_ptr as *const u8, 1);
     }
