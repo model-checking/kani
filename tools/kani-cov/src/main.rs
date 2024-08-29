@@ -7,11 +7,9 @@ mod merge;
 mod summary;
 mod report;
 use std::fs::File;
-use std::io::Read;
+use std::io::{IsTerminal, Read};
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
-
-use atty::Stream;
 
 use crate::coverage::CoverageResults;
 use args::{Args, validate_args, Subcommand};
@@ -132,7 +130,8 @@ fn insert_escapes(str: &String, markers: Vec<(usize, bool)>) -> String {
 }
 
 fn open_marker() -> String {
-    if atty::is(Stream::Stdout) {
+    let support_color = std::io::stdout().is_terminal();
+    if support_color {
         "\x1b[42m".to_string()
     } else {
         "```".to_string()
