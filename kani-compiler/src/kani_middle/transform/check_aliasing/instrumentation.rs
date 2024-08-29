@@ -192,19 +192,32 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
         Ok(())
     }
 
-    fn decrement_source(&self, source: &SourceInstruction) -> SourceInstruction {
+    /// Return the source instruction one below "source,"
+    /// or the instruction at 0 if there are none below
+    fn predecessor(&self, source: &SourceInstruction) -> SourceInstruction {
         match source {
-            SourceInstruction::Statement { idx: 0, bb: 0 } => SourceInstruction::Terminator { bb: 0 },
+            // One below 0, 0 is 0, 0
+            SourceInstruction::Statement { idx: 0, bb: 0 } => SourceInstruction::Statement { idx: 0, bb: 0 },
+            // One below the first statement of a block is the
+            // previous terminator
             SourceInstruction::Statement { idx: 0, bb } => SourceInstruction::Terminator { bb: *bb - 1 },
+            // Otherwise one below the statement of a block is the
+            // previous statement
             SourceInstruction::Statement { idx, bb } => SourceInstruction::Statement { idx: idx - 1, bb: *bb },
+            // One below the terminator of the first block with no statements
+            // is 0, 0
+            SourceInstruction::Terminator { bb: 0 } if self.body.blocks()[*bb].statements.is_empty() => SourceInstruction::Statement { idx: 0, bb: 0 },
+            // Otherwise one below the terminator of a block is the previous
+            // terminator if there are no statements in the block,
             SourceInstruction::Terminator { bb } if self.body.blocks()[*bb].statements.is_empty() => SourceInstruction::Terminator { bb: *bb - 1 },
+            // Or the last statement of the current block.
             SourceInstruction::Terminator { bb } => SourceInstruction::Statement { idx: self.body.blocks()[*bb].statements.len() - 1, bb: *bb }
         }
     }
 
     /// Instrument with stack violated / not violated
     pub fn instrument_stack_check(&mut self, source: &mut SourceInstruction, check_source: &SourceInstruction) -> Result<()> {
-        let less = self.decrement_source(check_source);
+        let less = self.predecessor(check_source);
         let msg = format!("Stacked borrows state invalidated at {:?}", less.span(self.body.blocks()).get_lines());
         self.instrument_call(Signature::new("KaniStackValid", &[]), vec![], self.valid, source)?;
         let assert = self.register_fn(Signature::new("KaniAssert", &[]))?;
@@ -349,14 +362,17 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
         Ok(())
     }
 
+    /// Initialize the "valid" local, used to check whether
+    /// the stack has been invalidated
     pub fn instrument_initialize_stack_check(&mut self) {
         let mut source = self.first_instruction();
         let span = self.first_instruction().span(self.body.blocks());
-        let lvalue = Place::from(0);
+        let lvalue = Place::from(self.valid);
         let user_ty = None;
         let const_ = MirConst::from_bool(true);
         let operand = Operand::Constant(ConstOperand { span, user_ty, const_ });
-        let statement = Statement { kind: StatementKind::Assign(Place::from(self.valid), Rvalue::Use(operand)), span };
+        let rvalue = Rvalue::Use(operand);
+        let statement = Statement { kind: StatementKind::Assign(lvalue, rvalue), span };
         self.body.insert_stmt(statement, &mut source, InsertPosition::Before);
     }
 
