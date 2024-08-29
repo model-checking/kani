@@ -219,34 +219,34 @@ impl<'tcx> GotocCtx<'tcx> {
 
 pub mod rustc_smir {
     use crate::stable_mir::CrateDef;
-    use rustc_middle::mir::coverage::CodeRegion;
     use rustc_middle::mir::coverage::CovTerm;
     use rustc_middle::mir::coverage::MappingKind::Code;
+    use rustc_middle::mir::coverage::SourceRegion;
     use rustc_middle::ty::TyCtxt;
     use stable_mir::mir::mono::Instance;
     use stable_mir::Opaque;
 
     type CoverageOpaque = stable_mir::Opaque;
 
-    /// Retrieves the `CodeRegion` associated with the data in a
+    /// Retrieves the `SourceRegion` associated with the data in a
     /// `CoverageOpaque` object.
     pub fn region_from_coverage_opaque(
         tcx: TyCtxt,
         coverage_opaque: &CoverageOpaque,
         instance: Instance,
-    ) -> Option<CodeRegion> {
+    ) -> Option<SourceRegion> {
         let cov_term = parse_coverage_opaque(coverage_opaque);
         region_from_coverage(tcx, cov_term, instance)
     }
 
-    /// Retrieves the `CodeRegion` associated with a `CovTerm` object.
+    /// Retrieves the `SourceRegion` associated with a `CovTerm` object.
     ///
     /// Note: This function could be in the internal `rustc` impl for `Coverage`.
     pub fn region_from_coverage(
         tcx: TyCtxt<'_>,
         coverage: CovTerm,
         instance: Instance,
-    ) -> Option<CodeRegion> {
+    ) -> Option<SourceRegion> {
         // We need to pull the coverage info from the internal MIR instance.
         let instance_def = rustc_smir::rustc_internal::internal(tcx, instance.def.def_id());
         let body = tcx.instance_mir(rustc_middle::ty::InstanceKind::Item(instance_def));
@@ -258,7 +258,7 @@ pub mod rustc_smir {
             for mapping in &cov_info.mappings {
                 let Code(term) = mapping.kind else { unreachable!() };
                 if term == coverage {
-                    return Some(mapping.code_region.clone());
+                    return Some(mapping.source_region.clone());
                 }
             }
         }
