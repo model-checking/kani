@@ -170,9 +170,9 @@ impl<'a, 'tcx> UninitInstrumenter<'a, 'tcx> {
             // Calculate pointee layout for byte-by-byte memory initialization checks.
             match PointeeInfo::from_ty(pointee_ty) {
                 Ok(type_info) => type_info,
-                Err(_) => {
+                Err(reason) => {
                     let reason = format!(
-                        "Kani currently doesn't support checking memory initialization for pointers to `{pointee_ty}.",
+                        "Kani currently doesn't support checking memory initialization for pointers to `{pointee_ty}. {reason}",
                     );
                     self.inject_assert_false(self.tcx, body, source, operation.position(), &reason);
                     return;

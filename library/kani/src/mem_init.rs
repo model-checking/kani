@@ -93,6 +93,7 @@ impl MemoryInitializationState {
 
     /// Copy memory initialization state by non-deterministically switching the tracked object and
     /// adjusting the tracked offset.
+    #[kanitool::disable_checks(pointer)]
     pub fn copy<const LAYOUT_SIZE: usize>(
         &mut self,
         from_ptr: *const u8,
@@ -115,14 +116,12 @@ impl MemoryInitializationState {
                 self.tracked_offset += to_offset - from_offset;
                 // Note that this preserves the value.
             }
-        } else if self.tracked_object_id == to_obj
-            && self.tracked_offset >= to_offset
-            && self.tracked_offset < to_offset + num_elts * LAYOUT_SIZE
-        {
-            self.value = true;
+        } else {
+            self.bless::<LAYOUT_SIZE>(to_ptr as *const u8, 1);
         }
     }
 
+    #[kanitool::disable_checks(pointer)]
     pub fn bless<const LAYOUT_SIZE: usize>(&mut self, ptr: *const u8, num_elts: usize) {
         let obj = crate::mem::pointer_object(ptr);
         let offset = crate::mem::pointer_offset(ptr);
