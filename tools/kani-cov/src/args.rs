@@ -19,7 +19,7 @@ pub enum Subcommand {
 #[command(
     version,
     name = "kani-cov",
-    about = "Process coverage information from Kani",
+    about = "A tool to process coverage information from Kani",
     args_override_self = true,
     subcommand_negates_reqs = true,
     subcommand_precedence_over_arg = true,
