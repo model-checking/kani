@@ -797,7 +797,7 @@ fn parse_stubs(tcx: TyCtxt, harness: DefId, attributes: &[&Attribute]) -> Vec<St
             Ok(FnResolution::FnImpl { .. }) => {
                 tcx.dcx().span_err(
                     attr.span,
-                    "Kani currently does not support stubbing trait implementation.",
+                    "Kani currently does not support stubbing trait implementations.",
                 );
             }
             Err(err) => {
