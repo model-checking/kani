@@ -117,7 +117,7 @@ impl MemoryInitializationState {
                 // Note that this preserves the value.
             }
         } else {
-            self.bless::<LAYOUT_SIZE>(to_ptr as *const u8, 1);
+            self.bless::<LAYOUT_SIZE>(to_ptr, 1);
         }
     }
 
