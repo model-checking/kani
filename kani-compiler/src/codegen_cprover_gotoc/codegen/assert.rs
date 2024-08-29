@@ -21,7 +21,7 @@
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::{Expr, Location, Stmt, Type};
 use cbmc::InternedString;
-use rustc_middle::mir::coverage::CodeRegion;
+use rustc_middle::mir::coverage::SourceRegion;
 use stable_mir::mir::{Place, ProjectionElem};
 use stable_mir::ty::{Span as SpanStable, TypeAndMut};
 use strum_macros::{AsRefStr, EnumString};
@@ -153,14 +153,14 @@ impl<'tcx> GotocCtx<'tcx> {
         &self,
         counter_data: &str,
         span: SpanStable,
-        code_region: CodeRegion,
+        source_region: SourceRegion,
     ) -> Stmt {
         let loc = self.codegen_caller_span_stable(span);
         // Should use Stmt::cover, but currently this doesn't work with CBMC
         // unless it is run with '--cover cover' (see
         // https://github.com/diffblue/cbmc/issues/6613). So for now use
         // `assert(false)`.
-        let msg = format!("{counter_data} - {code_region:?}");
+        let msg = format!("{counter_data} - {source_region:?}");
         self.codegen_assert(Expr::bool_false(), PropertyClass::CodeCoverage, &msg, loc)
     }
 
