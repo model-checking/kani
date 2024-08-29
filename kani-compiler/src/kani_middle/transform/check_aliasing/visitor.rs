@@ -5,8 +5,6 @@
 //! methods that collect the actions that need to be applied from the
 //! statements of the code.
 
-use std::usize;
-
 use stable_mir::mir::visit::Location;
 use stable_mir::mir::{
     BorrowKind, Local, LocalDecl, MirVisitor, Mutability, Operand, Place, ProjectionElem, Rvalue,
@@ -229,7 +227,7 @@ impl<'locals> MirVisitor for CollectActions<'locals> {
     /// current source index, then collect the actions
     /// of the statement and increase the source index
     fn visit_statement(&mut self, stmt: &Statement, _location: Location) {
-        let collected = std::mem::replace(&mut self.collected, Vec::new());
+        let collected = std::mem::take(&mut self.collected);
         self.actions.push((self.source, collected));
         self.visit_statement_internal(stmt);
         self.source = match self.source {
@@ -247,7 +245,7 @@ impl<'locals> MirVisitor for CollectActions<'locals> {
     /// current source index, then increase the source index
     /// to the next basic block
     fn visit_terminator(&mut self, _term: &Terminator, _location: Location) {
-        let collected = std::mem::replace(&mut self.collected, Vec::new());
+        let collected = std::mem::take(&mut self.collected);
         let bb = self.source.bb();
         self.actions.push((SourceInstruction::Terminator { bb }, collected));
         self.source = SourceInstruction::Statement { idx: 0, bb: bb + 1 };

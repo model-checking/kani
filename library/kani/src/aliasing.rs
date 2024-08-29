@@ -22,32 +22,32 @@
 //!
 //! For example:
 //! ```rust
-//! let mut x: i32 = 10;
 //! // Stack allocate 10 and store it at x.
 //! // Stack at addr_of!(x) through addr_of!(x) + 4:
-//! // [(0, Permission::UNIQUE)]
-//! let y = &mut x;
+//! // [(TAG_0, Permission::UNIQUE)]
+//! let mut x: i32 = 10;
 //! // Make the pointer object `&mut x`. Associate `&mut x`
 //! // with the tag and permission `(1, Permission::UNIQUE)`
 //! // by associating `addr_of!(y)` with `(1, Permission::UNIQUE)`
 //! // in shadow memory. Push the tag to the borrow stacks of
 //! // `addr_of!(x)` through `addr_of!(x) + 4` yielding
-//! // the stacks [(0, Permission::UNIQUE), (1, Permission::UNIQUE)]
-//! let z = y as *mut i32;
+//! // the stacks [(TAG_0, Permission::UNIQUE), (TAG_1, Permission::UNIQUE)]
+//! let y = &mut x;
 //! // Make the pointer object `y as *mut i32`.
 //! // associate `addr_of!(z)` and push the stacks as
 //! // above with the tag (2, Permission::SHAREDRW),
 //! // corresponding to a raw pointer, yielding the stacks
-//! // [(0, Permission::UNIQUE), (1, Permission::UNIQUE),
-//! //  (2, Permission::SHAREDRW)].
+//! // [(TAG_0, Permission::UNIQUE), (TAG_1, Permission::UNIQUE),
+//! //  (TAG_2, Permission::SHAREDRW)].
+//! let z = y as *mut i32;
+//! // Pop elements from the pointee object stack until it matches
+//! // the tag associated with the pointer value, yielding
+//! // [(TAG_0, Permission::UNIQUE), (TAG_1, Permission::UNIQUE)]
 //! *y = 10;
-//! // Pop the stack down to the tag associated with the pointer
-//! // object created at `&mut x` yielding
-//! // [(0, Permission::UNIQUE), (1, Permission::UNIQUE)]
-//! unsafe { *(&mut *z) = 10; }
 //! // Run stack lookup on the tag associated with the pointer
-//! // object created at `y as *mut i32`, ie, (2, Permission::SHAREDRW)
+//! // object created at `y as *mut i32`, ie, (TAG_2, Permission::SHAREDRW)
 //! // resulting in an error.
+//! unsafe { *(&mut *z) = 10; }
 //! ```
 //! When demonic nondeterminism is used (currently it is always used),
 //! a nondeterminism oracle is queried to select a single byte of the program's
@@ -83,55 +83,48 @@ fn stack_valid() -> bool {
 }
 
 /// Type of access.
-/// To ensure that 1 bit, instead of
-/// larger, representations are used in cbmc,
-/// this is encoded using associated constants.
-struct Access;
-impl Access {
-    const READ: bool = false;
-    const WRITE: bool = true;
+#[derive(Eq, PartialEq, Clone, Copy, Hash, Debug)]
+enum Access {
+    /// Read access
+    Read,
+    /// Write access
+    Write
 }
-type AccessBit = bool;
 
 /// Type of permission.
 /// To ensure that 8 bit, instead of larger,
 /// repreesentations are used in cbmc, this
 /// is encoded using associated constants.
-struct Permission;
-impl Permission {
-    /// Unique corresponds to the original allocation
-    /// and to &mut. For each byte, this permission can
-    /// only be aquired once at any given time in the program,
-    /// therefore it is called "unique."
-    const UNIQUE: u8 = 0;
-    /// SharedRW corresponds to a mutable pointer.
-    const SHAREDRW: u8 = 1;
-    /// SharedRO corresponds to a const pointer
-    const SHAREDRO: u8 = 2;
-    /// Disabled corresponds to disabling writable pointers
-    /// during 2-phase borrows (not yet implemented)
-    const DISABLED: u8 = 3;
+#[repr(u8)]
+#[derive(Eq, PartialEq, Clone, Copy, Hash, Debug)]
+enum Permission {
+    /// Read/write reference with unique ownership
+    Unique,
+    /// Pointer with read/write access
+    SharedRW,
+    /// Pointer with read access
+    SharedRO,
+    /// Disabled pointer
+    Disabled,
 }
-
-type PermissionByte = u8;
 
 impl Permission {
     /// Returns whether the access bit is granted by the permission
     /// byte
-    fn grants(access: AccessBit, tag: PermissionByte) -> bool {
-        tag != Self::DISABLED && (access != Access::WRITE || tag != Self::SHAREDRO)
+    fn grants(access: Access, perm: Permission) -> bool {
+        perm != Permission::Disabled && (access != Access::Write || perm != Permission::SharedRO)
     }
 }
 
 /// Associate every pointer object with a permission
-static mut PERMS: ShadowMem<PermissionByte> = ShadowMem::new(Permission::UNIQUE);
+static mut PERMS: ShadowMem<Permission> = ShadowMem::new(Permission::SharedRO);
 
 /// State of the borrows stack monitor for a byte
 pub(super) mod monitors {
-    struct MonitorState;
-    impl MonitorState {
-        const ON: bool = true;
-        const OFF: bool = false;
+    #[derive(Eq, PartialEq, Clone, Copy, Hash, Debug)]
+    enum MonitorState {
+        On,
+        Off
     }
 
     #[allow(unused)]
@@ -140,13 +133,13 @@ pub(super) mod monitors {
     /// Whether the monitor is on. Initially, the monitor is
     /// "off", and it will remain so until an allocation is found
     /// to track.
-    static mut STATE: bool = MonitorState::OFF;
+    static mut STATE: MonitorState = MonitorState::Off;
     /// Object + offset being monitored
     pub static mut MONITORED: *const u8 = std::ptr::null();
     /// The tags of the pointer objects borrowing the byte
-    static mut STACK_TAGS: [PointerTag; STACK_DEPTH] = [INITIAL_TAG; STACK_DEPTH];
+    static mut STACK_TAGS: [PointerTag; STACK_DEPTH] = [0; STACK_DEPTH];
     /// The permissions of the pointer objects borrowing the byte
-    static mut STACK_PERMS: [PermissionByte; STACK_DEPTH] = [Permission::UNIQUE; STACK_DEPTH];
+    static mut STACK_PERMS: [Permission; STACK_DEPTH] = [Permission::Unique; STACK_DEPTH];
     /// The "top" of the stack
     static mut STACK_TOP: usize = 0;
 
@@ -158,26 +151,26 @@ pub(super) mod monitors {
         // Decide whether to initialize the stacks
         // for location:location+size_of(U).
         unsafe {
-            if demonic_nondet() && STATE == MonitorState::OFF {
-                STATE = MonitorState::ON;
+            if demonic_nondet() && STATE == MonitorState::Off {
+                STATE = MonitorState::On;
                 let offset: usize = kani::any();
                 crate::assume(offset < std::mem::size_of::<U>());
                 MONITORED = pointer.byte_add(offset) as *const u8;
                 STACK_TAGS[STACK_TOP] = tag;
-                STACK_PERMS[STACK_TOP] = Permission::UNIQUE;
+                STACK_PERMS[STACK_TOP] = Permission::Unique;
                 STACK_TOP += 1;
             }
         }
     }
 
     /// Push a tag with a permission perm at pointer
-    pub(super) fn push<U>(tag: u8, perm: u8, pointer: *const U) {
+    pub(super) fn push<U>(tag: u8, perm: Permission, pointer: *const U) {
         // Decide whether to initialize the stacks
         // for location:location+size_of(U).
         // Offset has already been picked earlier.
         unsafe {
             use self::*;
-            if STATE == MonitorState::ON
+            if STATE == MonitorState::On
                 && pointer_object(MONITORED) == pointer_object(pointer)
                 && pointer_offset(MONITORED) <= std::mem::size_of::<U>()
             {
@@ -188,10 +181,10 @@ pub(super) mod monitors {
         }
     }
 
-    pub(super) fn stack_check(tag: u8, access: bool) {
+    pub(super) fn stack_check(tag: u8, access: Access) {
         unsafe {
             use self::*;
-            if STATE == MonitorState::ON {
+            if STATE == MonitorState::On {
                 let mut found = false;
                 let mut j = 0;
                 let mut new_top = 0;
@@ -215,7 +208,7 @@ pub(super) mod monitors {
 }
 
 /// Push the permissions at the given location
-fn push<U>(tag: u8, perm: u8, address: *const U) {
+fn push<U>(tag: u8, perm: Permission, address: *const U) {
     self::monitors::push(tag, perm, address)
 }
 
@@ -234,7 +227,7 @@ fn initialize_local<U>(pointer: *const U) {
     unsafe {
         let tag = NEXT_TAG;
         TAGS.set(pointer, tag);
-        PERMS.set(pointer, Permission::UNIQUE);
+        PERMS.set(pointer, Permission::Unique);
         NEXT_TAG += 1;
         monitors::track_local(tag, pointer);
     }
@@ -249,10 +242,10 @@ fn stack_check_ptr<U>(pointer_value: *const *mut U) {
         if pointer_object(pointer) == pointer_object(MONITORED)
             && pointer_offset(MONITORED) < std::mem::size_of::<U>()
         {
-            if Permission::grants(Access::READ, perm) {
-                self::monitors::stack_check(tag, Access::READ);
-            } else if Permission::grants(Access::WRITE, perm) {
-                self::monitors::stack_check(tag, Access::WRITE);
+            if Permission::grants(Access::Read, perm) {
+                self::monitors::stack_check(tag, Access::Read);
+            } else if Permission::grants(Access::Write, perm) {
+                self::monitors::stack_check(tag, Access::Write);
             }
         }
     }
@@ -272,8 +265,8 @@ fn new_mut_ref_from_value<T>(pointer_to_created: *const &mut T, pointer_to_val: 
     unsafe {
         // Then associate the lvalue and push it
         TAGS.set(pointer_to_created, NEXT_TAG);
-        PERMS.set(pointer_to_created, Permission::SHAREDRW);
-        push(NEXT_TAG, Permission::SHAREDRW, pointer_to_val);
+        PERMS.set(pointer_to_created, Permission::SharedRW);
+        push(NEXT_TAG, Permission::SharedRW, pointer_to_val);
         NEXT_TAG += 1;
     }
 }
@@ -287,7 +280,7 @@ fn new_mut_raw_from_ref<T>(pointer_to_created: *const *mut T, pointer_to_ref: *c
     unsafe {
         // Then associate the lvalue and push it
         TAGS.set(pointer_to_created, NEXT_TAG);
-        push(NEXT_TAG, Permission::SHAREDRW, *pointer_to_ref);
+        push(NEXT_TAG, Permission::SharedRW, *pointer_to_ref);
         NEXT_TAG += 1;
     }
 }
@@ -301,7 +294,7 @@ fn new_mut_ref_from_raw<T>(pointer_to_created: *const &mut T, pointer_to_ref: *c
     unsafe {
         // Then associate the lvalue and push it
         TAGS.set(pointer_to_created, NEXT_TAG);
-        push(NEXT_TAG, Permission::SHAREDRW, *pointer_to_ref);
+        push(NEXT_TAG, Permission::SharedRW, *pointer_to_ref);
         NEXT_TAG += 1;
     }
 }

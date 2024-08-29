@@ -352,7 +352,7 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
     pub fn instrument_instructions(&mut self) -> Result<()> {
         let to_instrument = self.actions.take().unwrap();
         for (mut source, actions) in to_instrument.into_iter().rev() {
-            let check_source = source.clone();
+            let check_source = source;
             for action in actions.into_iter() {
                 self.instrument_action(&mut source, &check_source, action)?;
             }
