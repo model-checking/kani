@@ -3,6 +3,12 @@
 
 use anyhow::Result;
 
-pub fn summary_main() -> Result<()> {
+use crate::args::SummaryArgs;
+
+pub fn summary_main(_args: &SummaryArgs) -> Result<()> {
+    Ok(())
+}
+
+pub fn validate_summary_args(_args: &SummaryArgs) -> Result<()> {
     Ok(())
 }

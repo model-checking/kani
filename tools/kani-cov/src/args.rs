@@ -11,7 +11,7 @@ use crate::{merge, summary, report};
 #[derive(Debug, clap::Subcommand)]
 pub enum Subcommand {
     Merge(MergeArgs),
-    // Summary(SummaryArgs),
+    Summary(SummaryArgs),
     // Report(ReportArgs),
 }
 
@@ -38,6 +38,14 @@ pub struct MergeArgs {
     pub files: Vec<PathBuf>,
 }
 
+#[derive(Debug, clap::Args)]
+pub struct SummaryArgs {
+    #[arg(required = true)]
+    pub profile: Vec<PathBuf>,
+    #[arg(required = true)]
+    pub output: Option<PathBuf>,
+}
+
 pub fn validate_args(args: &Args) -> Result<()> {
     if args.command.is_none() {
         bail!("subcommand needs to be specified")
@@ -45,7 +53,7 @@ pub fn validate_args(args: &Args) -> Result<()> {
 
     match args.command.as_ref().unwrap() {
         Subcommand::Merge(merge_args) => merge::validate_merge_args(&merge_args)?,
-        // Subcommand::Summary => summary::validate_summary_args(args)?,
+        Subcommand::Summary(summary_args) => summary::validate_summary_args(&summary_args)?,
         // Subcommand::Report => report::validate_report_args(args)?,
     };
 
