@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use std::{collections::BTreeMap, fs::File, io::BufReader, os::linux::raw, path::PathBuf};
+use std::{collections::BTreeMap, fs::File, io::{BufReader, BufWriter}, os::linux::raw, path::PathBuf};
 
 use anyhow::Result;
 
@@ -10,11 +10,11 @@ use crate::{args::MergeArgs, coverage::{CheckStatus, CombinedCoverageResults, Co
 pub fn merge_main(args: &MergeArgs) -> Result<()> {
     let raw_results = parse_raw_results(&args.files)?;
     let combined_results = combine_raw_results(&raw_results);
-    // save_combined_results(combined_results, args.output)?;
+    save_combined_results(&combined_results, &args.output)?;
     Ok(())
 }
 
-pub fn validate_merge_args(args: &MergeArgs) -> Result<()> {
+pub fn validate_merge_args(_args: &MergeArgs) -> Result<()> {
     Ok(())
 }
 
@@ -33,7 +33,7 @@ fn parse_raw_results(paths: &Vec<PathBuf>) -> Result<Vec<CoverageResults>> {
 
 fn combine_raw_results(results: &Vec<CoverageResults>) -> CombinedCoverageResults {
     let all_function_names = function_names_from_results(results);
-    println!("{:?}", all_function_names);
+
     let mut new_data = BTreeMap::new();
     for fun_name in all_function_names {
         let mut this_fun_checks: Vec<&CoverageCheck> = Vec::new();
@@ -60,6 +60,16 @@ fn combine_raw_results(results: &Vec<CoverageResults>) -> CombinedCoverageResult
         new_data.insert(fun_name, new_results);
     }
     CombinedCoverageResults { data: new_data }
+}
+
+fn save_combined_results(results: &CombinedCoverageResults, output: &Option<PathBuf>) -> Result<()> {
+    let output_path = if let Some(out) = output { out } else { &PathBuf::from("default_kanicov.json") };
+    let file = File::create(output_path)?;
+    let writer = BufWriter::new(file);
+
+    serde_json::to_writer(writer, results)?;
+
+    Ok(())
 }
 
 fn function_names_from_results(results: &Vec<CoverageResults>) -> Vec<String> {
