@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use anyhow::{bail, Result};
 use clap::{arg, command};
 
-use crate::{merge, summary, report};
+use crate::{merge, report, summary};
 
 #[derive(Debug, clap::Subcommand)]
 pub enum Subcommand {

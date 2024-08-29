@@ -1,11 +1,20 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use std::{collections::BTreeMap, fs::File, io::{BufReader, BufWriter}, os::linux::raw, path::PathBuf};
+use std::{
+    collections::BTreeMap,
+    fs::File,
+    io::{BufReader, BufWriter},
+    os::linux::raw,
+    path::PathBuf,
+};
 
 use anyhow::Result;
 
-use crate::{args::MergeArgs, coverage::{CheckStatus, CombinedCoverageResults, CovResult, CoverageCheck, CoverageResults}};
+use crate::{
+    args::MergeArgs,
+    coverage::{CheckStatus, CombinedCoverageResults, CovResult, CoverageCheck, CoverageResults},
+};
 
 pub fn merge_main(args: &MergeArgs) -> Result<()> {
     let raw_results = parse_raw_results(&args.files)?;
@@ -25,7 +34,8 @@ fn parse_raw_results(paths: &Vec<PathBuf>) -> Result<Vec<CoverageResults>> {
         let file = File::open(path).expect(&format!("could not open file {filename}"));
         let reader = BufReader::new(file);
 
-        let result = serde_json::from_reader(reader).expect(&format!("could not deserialize file {filename}"));
+        let result = serde_json::from_reader(reader)
+            .expect(&format!("could not deserialize file {filename}"));
         raw_results.push(result);
     }
     Ok(raw_results)
@@ -48,12 +58,26 @@ fn combine_raw_results(results: &Vec<CoverageResults>) -> CombinedCoverageResult
         while !this_fun_checks.is_empty() {
             let this_region_check = this_fun_checks[0];
             // should do this with a partition...
-            let mut same_region_checks: Vec<&CoverageCheck> = this_fun_checks.iter().cloned().filter(|check| check.region == this_region_check.region).collect();
+            let mut same_region_checks: Vec<&CoverageCheck> = this_fun_checks
+                .iter()
+                .cloned()
+                .filter(|check| check.region == this_region_check.region)
+                .collect();
             this_fun_checks.retain(|check| check.region != this_region_check.region);
             same_region_checks.push(this_region_check);
             let total_times = same_region_checks.len().try_into().unwrap();
-            let times_covered = same_region_checks.iter().filter(|check| check.status == CheckStatus::Covered).count().try_into().unwrap();
-            let new_result = CovResult { function: fun_name.clone(), region: this_region_check.region.clone() , times_covered, total_times };
+            let times_covered = same_region_checks
+                .iter()
+                .filter(|check| check.status == CheckStatus::Covered)
+                .count()
+                .try_into()
+                .unwrap();
+            let new_result = CovResult {
+                function: fun_name.clone(),
+                region: this_region_check.region.clone(),
+                times_covered,
+                total_times,
+            };
             new_results.push(new_result);
         }
 
@@ -62,8 +86,12 @@ fn combine_raw_results(results: &Vec<CoverageResults>) -> CombinedCoverageResult
     CombinedCoverageResults { data: new_data }
 }
 
-fn save_combined_results(results: &CombinedCoverageResults, output: &Option<PathBuf>) -> Result<()> {
-    let output_path = if let Some(out) = output { out } else { &PathBuf::from("default_kanicov.json") };
+fn save_combined_results(
+    results: &CombinedCoverageResults,
+    output: &Option<PathBuf>,
+) -> Result<()> {
+    let output_path =
+        if let Some(out) = output { out } else { &PathBuf::from("default_kanicov.json") };
     let file = File::create(output_path)?;
     let writer = BufWriter::new(file);
 
