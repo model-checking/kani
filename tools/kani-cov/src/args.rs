@@ -12,7 +12,7 @@ use crate::{merge, report, summary};
 pub enum Subcommand {
     Merge(MergeArgs),
     Summary(SummaryArgs),
-    // Report(ReportArgs),
+    Report(ReportArgs),
 }
 
 #[derive(Debug, clap::Parser)]
@@ -43,7 +43,13 @@ pub struct SummaryArgs {
     #[arg(required = true)]
     pub profile: Vec<PathBuf>,
     #[arg(required = true)]
-    pub output: Option<PathBuf>,
+    pub mapfile: Option<PathBuf>,
+}
+
+#[derive(Debug, clap::Args)]
+pub struct ReportArgs {
+    #[arg(required = true)]
+    pub profile: Vec<PathBuf>,
 }
 
 pub fn validate_args(args: &Args) -> Result<()> {
@@ -54,7 +60,7 @@ pub fn validate_args(args: &Args) -> Result<()> {
     match args.command.as_ref().unwrap() {
         Subcommand::Merge(merge_args) => merge::validate_merge_args(&merge_args)?,
         Subcommand::Summary(summary_args) => summary::validate_summary_args(&summary_args)?,
-        // Subcommand::Report => report::validate_report_args(args)?,
+        Subcommand::Report(report_args) => report::validate_report_args(&report_args)?,
     };
 
     Ok(())

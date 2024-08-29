@@ -1,10 +1,9 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use anyhow::Result;
 use console::style;
 use serde_derive::{Deserialize, Serialize};
-use std::fmt::{self, Write};
+use std::fmt;
 use std::{collections::BTreeMap, fmt::Display};
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -25,11 +24,11 @@ pub struct CoverageResults {
     pub data: BTreeMap<String, Vec<CoverageCheck>>,
 }
 
-impl CoverageResults {
-    pub fn new(data: BTreeMap<String, Vec<CoverageCheck>>) -> Self {
-        Self { data }
-    }
-}
+// impl CoverageResults {
+//     pub fn new(data: BTreeMap<String, Vec<CoverageCheck>>) -> Self {
+//         Self { data }
+//     }
+// }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CombinedCoverageResults {
@@ -81,20 +80,20 @@ pub struct CovResult {
     pub total_times: u32,
 }
 
-impl CoverageCheck {
-    pub fn new(
-        function: String,
-        term: CoverageTerm,
-        region: CoverageRegion,
-        status: CheckStatus,
-    ) -> Self {
-        Self { function, term, region, status }
-    }
+// impl CoverageCheck {
+//     pub fn new(
+//         function: String,
+//         term: CoverageTerm,
+//         region: CoverageRegion,
+//         status: CheckStatus,
+//     ) -> Self {
+//         Self { function, term, region, status }
+//     }
 
-    pub fn is_covered(&self) -> bool {
-        self.status == CheckStatus::Covered
-    }
-}
+//     pub fn is_covered(&self) -> bool {
+//         self.status == CheckStatus::Covered
+//     }
+// }
 
 #[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct CoverageRegion {
@@ -109,16 +108,16 @@ impl Display for CoverageRegion {
     }
 }
 
-impl CoverageRegion {
-    pub fn from_str(str: String) -> Self {
-        let str_splits: Vec<&str> = str.split([':', '-']).map(|s| s.trim()).collect();
-        assert_eq!(str_splits.len(), 5, "{str:?}");
-        let file = str_splits[0].to_string();
-        let start = (str_splits[1].parse().unwrap(), str_splits[2].parse().unwrap());
-        let end = (str_splits[3].parse().unwrap(), str_splits[4].parse().unwrap());
-        Self { file, start, end }
-    }
-}
+// impl CoverageRegion {
+//     pub fn from_str(str: String) -> Self {
+//         let str_splits: Vec<&str> = str.split([':', '-']).map(|s| s.trim()).collect();
+//         assert_eq!(str_splits.len(), 5, "{str:?}");
+//         let file = str_splits[0].to_string();
+//         let start = (str_splits[1].parse().unwrap(), str_splits[2].parse().unwrap());
+//         let end = (str_splits[3].parse().unwrap(), str_splits[4].parse().unwrap());
+//         Self { file, start, end }
+//     }
+// }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum CoverageTerm {

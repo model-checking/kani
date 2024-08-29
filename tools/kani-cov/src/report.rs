@@ -2,11 +2,17 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use anyhow::Result;
+
+use crate::args::ReportArgs;
 // use coverage::CoverageCheck;
 // use crate::coverage::CoverageResults;
 // use args::Args;
 
-pub fn report_main() -> Result<()> {
+pub fn report_main(_args: &ReportArgs) -> Result<()> {
+    Ok(())
+}
+
+pub fn validate_report_args(_args: &ReportArgs) -> Result<()> {
     Ok(())
 }
 

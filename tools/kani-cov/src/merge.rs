@@ -5,7 +5,6 @@ use std::{
     collections::BTreeMap,
     fs::File,
     io::{BufReader, BufWriter},
-    os::linux::raw,
     path::PathBuf,
 };
 
@@ -100,6 +99,6 @@ fn save_combined_results(
     Ok(())
 }
 
-fn function_names_from_results(results: &Vec<CoverageResults>) -> Vec<String> {
+fn function_names_from_results(results: &[CoverageResults]) -> Vec<String> {
     results.iter().map(|result| result.data.keys().cloned().collect()).collect()
 }
