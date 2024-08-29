@@ -33,8 +33,7 @@
 //! // `addr_of!(x)` through `addr_of!(x) + 4` yielding
 //! // the stacks [(TAG_0, Permission::UNIQUE), (TAG_1, Permission::UNIQUE)]
 //! let y = &mut x;
-//! // Make the pointer object `y as *mut i32`.
-//! // associate `addr_of!(z)` and push the stacks as
+//! // Associate `addr_of!(z)` and push the stacks as
 //! // above with the tag (2, Permission::SHAREDRW),
 //! // corresponding to a raw pointer, yielding the stacks
 //! // [(TAG_0, Permission::UNIQUE), (TAG_1, Permission::UNIQUE),
