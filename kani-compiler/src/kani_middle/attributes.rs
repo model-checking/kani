@@ -814,8 +814,9 @@ fn parse_stubs(tcx: TyCtxt, harness: DefId, attributes: &[&Attribute]) -> Vec<St
             let paths = parse_paths(attr).unwrap_or_else(|_| {
                 tcx.dcx().span_err(
                     attr.span,
-                    "attribute `kani::stub` takes two path arguments; found argument that is not \
-                    a path",
+                    format!(
+                    "attribute `kani::{}` takes two path arguments; found argument that is not a path",
+                    KaniAttributeKind::Stub.as_ref())
                 );
                 vec![]
             });
