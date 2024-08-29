@@ -94,7 +94,6 @@ impl Access {
     const WRITE: AccessBit = true;
 }
 
-
 /// Type of permission.
 /// To ensure that 8 bit, instead of larger,
 /// repreesentations are used in cbmc, this

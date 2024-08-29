@@ -227,11 +227,7 @@ impl MutableBody {
         let span = source.span(&self.blocks);
         match check_type {
             CheckType::Assert(assert_fn) => {
-                let local = self.new_local(
-                    assert_fn.ty(),
-                    span,
-                    Mutability::Not,
-                );
+                let local = self.new_local(assert_fn.ty(), span, Mutability::Not);
                 self.insert_check_with_local(local, source, position, value, msg);
             }
             CheckType::Panic | CheckType::NoCore => {

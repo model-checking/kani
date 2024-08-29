@@ -10,7 +10,8 @@
 use crate::kani_middle::transform::body::InsertPosition;
 use rustc_middle::ty::TyCtxt;
 use stable_mir::mir::{
-    BasicBlock, Body, ConstOperand, Local, MirVisitor, Mutability, Operand, Place, Rvalue, Statement, StatementKind, Terminator, TerminatorKind, UnwindAction
+    BasicBlock, Body, ConstOperand, Local, MirVisitor, Mutability, Operand, Place, Rvalue,
+    Statement, StatementKind, Terminator, TerminatorKind, UnwindAction,
 };
 use stable_mir::ty::{GenericArgKind, MirConst, Span, Ty};
 use std::collections::HashMap;
@@ -122,7 +123,8 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
         callee: Signature,
         args: Vec<Local>,
         dest: Local,
-        source: &mut SourceInstruction) -> Result<()> {
+        source: &mut SourceInstruction,
+    ) -> Result<()> {
         let terminator = self.call(callee, args, dest, source)?;
         let bb = BasicBlock { statements: vec![], terminator };
         self.body.insert_bb(bb, source, InsertPosition::Before);
@@ -197,37 +199,55 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
     fn predecessor(&self, source: &SourceInstruction) -> SourceInstruction {
         match source {
             // One below 0, 0 is 0, 0
-            SourceInstruction::Statement { idx: 0, bb: 0 } => SourceInstruction::Statement { idx: 0, bb: 0 },
+            SourceInstruction::Statement { idx: 0, bb: 0 } => {
+                SourceInstruction::Statement { idx: 0, bb: 0 }
+            }
             // One below the first statement of a block is the
             // previous terminator
-            SourceInstruction::Statement { idx: 0, bb } => SourceInstruction::Terminator { bb: *bb - 1 },
+            SourceInstruction::Statement { idx: 0, bb } => {
+                SourceInstruction::Terminator { bb: *bb - 1 }
+            }
             // Otherwise one below the statement of a block is the
             // previous statement
-            SourceInstruction::Statement { idx, bb } => SourceInstruction::Statement { idx: idx - 1, bb: *bb },
+            SourceInstruction::Statement { idx, bb } => {
+                SourceInstruction::Statement { idx: idx - 1, bb: *bb }
+            }
             // One below the terminator of the first block with no statements
             // is 0, 0
-            SourceInstruction::Terminator { bb: 0 } if self.body.blocks()[0].statements.is_empty() => SourceInstruction::Statement { idx: 0, bb: 0 },
+            SourceInstruction::Terminator { bb: 0 }
+                if self.body.blocks()[0].statements.is_empty() =>
+            {
+                SourceInstruction::Statement { idx: 0, bb: 0 }
+            }
             // Otherwise one below the terminator of a block is the previous
             // terminator if there are no statements in the block,
-            SourceInstruction::Terminator { bb } if self.body.blocks()[*bb].statements.is_empty() => SourceInstruction::Terminator { bb: *bb - 1 },
+            SourceInstruction::Terminator { bb }
+                if self.body.blocks()[*bb].statements.is_empty() =>
+            {
+                SourceInstruction::Terminator { bb: *bb - 1 }
+            }
             // Or the last statement of the current block.
-            SourceInstruction::Terminator { bb } => SourceInstruction::Statement { idx: self.body.blocks()[*bb].statements.len() - 1, bb: *bb }
+            SourceInstruction::Terminator { bb } => SourceInstruction::Statement {
+                idx: self.body.blocks()[*bb].statements.len() - 1,
+                bb: *bb,
+            },
         }
     }
 
     /// Instrument with stack violated / not violated
-    pub fn instrument_stack_check(&mut self, source: &mut SourceInstruction, check_source: &SourceInstruction) -> Result<()> {
+    pub fn instrument_stack_check(
+        &mut self,
+        source: &mut SourceInstruction,
+        check_source: &SourceInstruction,
+    ) -> Result<()> {
         let less = self.predecessor(check_source);
-        let msg = format!("Stacked borrows state invalidated at {:?}", less.span(self.body.blocks()).get_lines());
+        let msg = format!(
+            "Stacked borrows state invalidated at {:?}",
+            less.span(self.body.blocks()).get_lines()
+        );
         self.instrument_call(Signature::new("KaniStackValid", &[]), vec![], self.valid, source)?;
         let assert = self.register_fn(Signature::new("KaniAssert", &[]))?;
-        self.body.insert_check_with_local(
-            assert,
-            source,
-            InsertPosition::Before,
-            self.valid,
-            &msg,
-        );
+        self.body.insert_check_with_local(assert, source, InsertPosition::Before, self.valid, &msg);
         Ok(())
     }
 
@@ -322,27 +342,30 @@ impl<'tcx, 'cache> InstrumentationData<'tcx, 'cache> {
 
     /// Instrument the action given in "action" with the appropriate
     /// update to the stacked borrows state.
-    fn instrument_action(&mut self, source: &mut SourceInstruction, check_source: &SourceInstruction, action: Action) -> Result<()> {
+    fn instrument_action(
+        &mut self,
+        source: &mut SourceInstruction,
+        check_source: &SourceInstruction,
+        action: Action,
+    ) -> Result<()> {
         match action {
-            Action::StackCheck => {
-                self.instrument_stack_check(source, check_source)
-            },
+            Action::StackCheck => self.instrument_stack_check(source, check_source),
             Action::NewStackReference { lvalue, rvalue } => {
                 eprintln!("instrumenting stack ref");
                 self.instrument_new_stack_reference(source, lvalue, rvalue)
-            },
+            }
             Action::StackUpdateReference { place, ty } => {
                 self.instrument_stack_update_ref(source, place, ty)
-            },
+            }
             Action::NewMutRefFromRaw { lvalue, rvalue, ty } => {
                 self.instrument_new_mut_ref_from_raw(source, lvalue, rvalue, ty)
-            },
+            }
             Action::StackUpdatePointer { place, ty } => {
                 self.instrument_stack_update_ptr(source, place, ty)
-            },
+            }
             Action::NewMutRawFromRef { lvalue, rvalue, ty } => {
                 self.instrument_new_mut_raw_from_ref(source, lvalue, rvalue, ty)
-            },
+            }
         }
     }
 
