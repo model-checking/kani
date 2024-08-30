@@ -19,6 +19,8 @@
 #![feature(ptr_metadata)]
 #![feature(f16)]
 #![feature(f128)]
+// required for using size_of_val_raw
+#![feature(layout_for_ptr)]
 
 // Allow us to use `kani::` to access crate features.
 extern crate self as kani;
