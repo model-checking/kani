@@ -228,7 +228,7 @@ fn find_fn_def(tcx: TyCtxt, diagnostic: &str) -> Option<FnDef> {
     stable_fn_def(tcx, *attr_id)
 }
 
-/// Try to convert a internal DefId to a FnDef.
+/// Try to convert an internal `DefId` to a `FnDef`.
 pub fn stable_fn_def(tcx: TyCtxt, def_id: InternalDefId) -> Option<FnDef> {
     if let TyKind::RigidTy(RigidTy::FnDef(def, _)) =
         rustc_internal::stable(tcx.type_of(def_id)).value.kind()
