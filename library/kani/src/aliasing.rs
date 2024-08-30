@@ -75,7 +75,8 @@ mod types {
     /// Encoded as associated constants
     /// instead of as an enum to ensure
     /// that the representation uses
-    /// 1 bit.
+    /// 8 bits. Using an enum instead can cause
+    /// factor of 2 blowups.
     pub(super) type AccessBit = bool;
     pub(super) struct Access;
     impl Access {
@@ -202,8 +203,9 @@ pub(super) mod monitor_transitions {
         // for location:location+size_of(U).
         // Offset has already been picked earlier.
         unsafe {
+            let size = std::mem::size_of_val_raw(pointer);
             if pointer_object(MONITORED) == pointer_object(pointer)
-                && pointer_offset(MONITORED) <= std::mem::size_of::<U>()
+                && pointer_offset(MONITORED) <= size
             {
                 STACK_TAGS[STACK_TOP] = tag;
                 STACK_PERMS[STACK_TOP] = perm;
