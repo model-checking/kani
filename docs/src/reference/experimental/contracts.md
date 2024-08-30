@@ -19,10 +19,11 @@ Instead, we can write *contracts* with guarantees about `gcd`'s behavior. For ex
 ```rust
 #[kani::requires(min != 0 && max != 0)]
 #[kani::ensures(|result| *result != 0 && max % *result == 0 && min % *result == 0)]
+#[kani::recursion]
 fn gcd(mut max: u64, mut min: u64) -> u64 { ... }
 ```
 
-Since `gcd` performs `max % min` (and perhaps swaps those values), passing zero as an argument could cause a division by zero. The `requires` contract tells Kani to restrict the range of nondeterministic inputs to nonzero ones so that we don't run into this error. The `ensures` contract is what actually checks that the result is a correct divisor for the inputs.
+Since `gcd` performs `max % min` (and perhaps swaps those values), passing zero as an argument could cause a division by zero. The `requires` contract tells Kani to restrict the range of nondeterministic inputs to nonzero ones so that we don't run into this error. The `ensures` contract is what actually checks that the result is a correct divisor for the inputs. (The `recursion` attribute is required when using contracts on recursive functions).
 
 Then, we would write a harness to *verify* those contracts, like so:[^1]
 
