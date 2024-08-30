@@ -41,15 +41,17 @@ pub struct MergeArgs {
 #[derive(Debug, clap::Args)]
 pub struct SummaryArgs {
     #[arg(required = true)]
-    pub profile: Vec<PathBuf>,
-    #[arg(required = true)]
-    pub mapfile: Option<PathBuf>,
+    pub mapfile: PathBuf,
+    #[arg(long, required = true)]
+    pub profile: PathBuf,
 }
 
 #[derive(Debug, clap::Args)]
 pub struct ReportArgs {
     #[arg(required = true)]
-    pub profile: Vec<PathBuf>,
+    pub mapfile: PathBuf,
+    #[arg(long, required = true)]
+    pub profile: PathBuf,
 }
 
 pub fn validate_args(args: &Args) -> Result<()> {
