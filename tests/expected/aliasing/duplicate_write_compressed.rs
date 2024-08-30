@@ -2,6 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Zghost-state -Zaliasing
 
+// The following code is equivalent to duplicate_write,
+// the only difference being that operations may be chained
+// in one line.
+
 #[kani::proof]
 fn main() {
     let mut local: i32 = 0;

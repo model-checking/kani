@@ -165,7 +165,7 @@ impl MutableBody {
         self.insert_stmt(stmt, source, position);
     }
 
-    /// Add a new assert to the basic block indicated by the given index, using
+    /// Add a new assert to the basic block by the source instruction, using
     /// "local" as the checking function.
     ///
     /// The new assertion will have the same span as the source instruction, and the basic block

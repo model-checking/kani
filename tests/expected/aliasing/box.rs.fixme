@@ -1,14 +1,20 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Zaliasing
+// In the following code, the aliasing pattern
+// is disallowed by stacked borrows.
+// That is, since raw_1 borrows raw_2,
+// write raw_2, followed by read raw_1, followed
+// by write raw_2, causes an error:
+// the scope of the borrow ends when raw_1 is written.
 
 #[kani::proof]
-fn main() {
+fn write_out_of_order_to_box() {
     let x = Box::new(10);
     let ref_x = Box::into_raw(x);
     let raw_1 = ref_x as *mut i32;
-    let raw_2 = ref_x as *const i32;
-    let _write = unsafe { *raw_1 = 100 };
-    let _read = unsafe { *raw_2 };
-    let _write = unsafe { *raw_1 = 110 };
+    let raw_2 = ref_x as *mut i32;
+    let _write = unsafe { *raw_2 = 100 };
+    let _read = unsafe { *raw_1 };
+    let _write = unsafe { *raw_2 = 110 };
 }

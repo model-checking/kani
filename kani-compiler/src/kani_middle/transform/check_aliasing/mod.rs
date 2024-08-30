@@ -4,22 +4,20 @@
 //! Implement a pass that instruments code with assertions
 //! that will fail when the aliasing model is violated.
 
-use stable_mir::mir::mono::MonoItem;
+use stable_mir::mir::mono::{Instance, MonoItem};
 use stable_mir::CrateDef;
 // Reimport components of mir that conflict with
 // parts of the sub-pass's API.
-pub use stable_mir::mir::mono::Instance as MirInstance;
 pub use stable_mir::Error as MirError;
 
 mod visitor;
 use visitor::*;
-mod function_cache;
-use function_cache::*;
 mod instrumentation;
 use instrumentation::*;
 
 use crate::args::ExtraChecks;
 use crate::kani_middle::transform::{TransformPass, TransformationResult, TransformationType};
+use crate::kani_middle::FnDefCache as Cache;
 use crate::kani_queries::QueryDb;
 use rustc_middle::ty::TyCtxt;
 use stable_mir::mir::Body;
@@ -32,32 +30,20 @@ use super::GlobalPass;
 /// Instrument the code with checks for aliasing model
 /// violations.
 /// Cache functions in-between applications of the pass.
-/// Architecturally, this is implemented as the composition
-/// of several sub passes on functions:
-/// First, information is collected on the variables in the
-/// function body and on the arguments to the function.
-/// (LocalCollectionPassState)
-/// Then, enough information from the body
-/// is collected for instrumentation.
-///
-/// The body is transformed into a CachedBodyMutator to
-/// be used in the BodyMutationPass, which combines the
-/// body with (initially empty) storage for
-/// instrumented locals and instrumented instructions,
-/// and which caches function items referring to
-/// resolved function instances.
-///
-/// The prologue of the function is then instrumented with data for every
-/// stack allocation referenced by a local (instrument_locals).
-/// Pointers to these locals are kept in InstrumentationData,
-/// which then checks all instructions that modify memory for
-/// aliasing violations (instrument_instructions).
-///
-/// Finally, a new body is made from the code + the instrumented
-/// code.
+/// This is performed by taking the incoming body,
+/// using a visitor to find instructions relevant to
+/// the instrumentation, then iterating over these
+/// instructions backwards, inserting code prior to their
+/// execution.
 #[derive(Debug)]
 struct AliasingPass<'cache> {
     cache: &'cache mut Cache,
+}
+
+/// Returns whether ExtraChecks::Aliasing is included
+/// in the command line arguments
+fn db_includes_aliasing(query_db: &QueryDb) -> bool {
+    query_db.args().ub_check.contains(&ExtraChecks::Aliasing)
 }
 
 impl<'cache> TransformPass for AliasingPass<'cache> {
@@ -68,16 +54,15 @@ impl<'cache> TransformPass for AliasingPass<'cache> {
         TransformationType::Instrumentation
     }
 
-    fn is_enabled(&self, _query_db: &QueryDb) -> bool
+    fn is_enabled(&self, query_db: &QueryDb) -> bool
     where
         Self: Sized,
     {
-        true
+        db_includes_aliasing(query_db)
     }
 
-    fn transform(&mut self, tcx: TyCtxt, body: Body, instance: MirInstance) -> (bool, Body) {
+    fn transform(&mut self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
         trace!(function=?instance.name(), "transform: aliasing pass");
-        // let body = CachedBodyMutator::from(body);
         let instrumentation_data = InstrumentationData::new(tcx, &mut self.cache, body);
         let out = instrumentation_data.finalize().unwrap().into();
         (true, out)
@@ -87,6 +72,9 @@ impl<'cache> TransformPass for AliasingPass<'cache> {
 /// The global aliasing pass keeps a cache of resolved generic functions,
 /// and ensures that only the functions that are called
 /// from the proof harness itself are instrumented.
+/// To avoid instrumenting functions that were not present in the source,
+/// but added in the instrumented code, this first collects the functions
+/// present in the source, then instruments them.
 #[derive(Debug, Default)]
 pub struct GlobalAliasingPass {
     cache: Cache,
@@ -103,8 +91,7 @@ impl GlobalPass for GlobalAliasingPass {
     where
         Self: Sized,
     {
-        let args = query_db.args();
-        args.ub_check.contains(&ExtraChecks::Aliasing)
+        db_includes_aliasing(query_db)
     }
 
     fn transform(
@@ -112,7 +99,7 @@ impl GlobalPass for GlobalAliasingPass {
         tcx: TyCtxt,
         call_graph: &crate::kani_middle::reachability::CallGraph,
         _starting_items: &[stable_mir::mir::mono::MonoItem],
-        instances: Vec<MirInstance>,
+        instances: Vec<Instance>,
         transformer: &mut super::BodyTransformation,
     ) {
         let mut found = HashSet::new();
@@ -133,7 +120,7 @@ impl GlobalPass for GlobalAliasingPass {
             let mut pass = AliasingPass { cache: &mut self.cache };
             let (_, body) = pass.transform(tcx, transformer.body(tcx, *instance), *instance);
             transformer.cache.insert(*instance, TransformationResult::Modified(body));
-            for node in call_graph.adjacencies(MonoItem::Fn(*instance).clone()) {
+            for node in call_graph.successors(MonoItem::Fn(*instance).clone()) {
                 if let MonoItem::Fn(adjacent) = node {
                     if found.insert(adjacent) {
                         queue.push_back(adjacent);

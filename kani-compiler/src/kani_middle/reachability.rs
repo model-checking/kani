@@ -651,7 +651,7 @@ impl CallGraph {
 
     /// Get all items adjacent to the current item in the
     /// call graph.
-    pub fn adjacencies(&self, node: MonoItem) -> Vec<&MonoItem> {
+    pub fn successors(&self, node: MonoItem) -> Vec<&MonoItem> {
         match self.edges.get(&Node(node)) {
             None => vec![],
             Some(list) => list.iter().map(|collected| &collected.0.item).collect(),

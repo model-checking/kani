@@ -2,9 +2,22 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Zghost-state -Zaliasing
 
+// In the following code,
+// ref_from_raw_1 and ref_from_raw_2
+// borrow from the memory location of local.
+// In the second iteration of the loop,
+// the write to ref_from_raw_2 should end the scope
+// of ref_from_raw_1's borrow.
+// When ref_from_raw_1 then is written, an aliasing
+// error should be thrown.
+
+// This example is used as a litmus test to check
+// that multiple basic blocks with non-linear
+// control flow are instrumented properly
+
 #[allow(unused)]
 #[kani::proof]
-fn main() {
+fn violation_within_control_flow() {
     let mut local: i32 = 10;
     let mut referent_1: i32 = 0;
     let mut referent_2: i32 = 0;

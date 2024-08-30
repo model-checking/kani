@@ -232,3 +232,83 @@ fn find_fn_def(tcx: TyCtxt, diagnostic: &str) -> Option<FnDef> {
     };
     Some(def)
 }
+
+/// NamedFnDef encapsulates the diagnostic along with the fn def.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NamedFnDef {
+    /// The diagnostic with which the function definition
+    /// is found
+    diagnostic: String,
+    /// The "value", the resolved function instance itself
+    def: FnDef,
+}
+
+impl NamedFnDef {
+    /// Create a new cacheable instance with the given signature and
+    /// instance
+    pub fn new(diagnostic: String, def: FnDef) -> NamedFnDef {
+        NamedFnDef { diagnostic, def }
+    }
+}
+
+trait Cache<T>
+where
+    T: PartialEq,
+{
+    /// Generate a mutable reference to the cache's first item,
+    /// or if none exists try generating a new one with `f`
+    /// and return it. When `f` fails, return an error
+    /// `vec`'s first item that
+    /// passes the predicate `p`, or if none exists try generating
+    /// a new one with `f` and return it.
+    /// When `f` fails, return an error.
+    fn try_get_or_insert<P, F, E>(&mut self, p: P, f: F) -> Result<&mut T, E>
+    where
+        F: FnOnce() -> Result<T, E>,
+        P: Fn(&T) -> bool;
+}
+
+impl<T> Cache<T> for Vec<T>
+where
+    T: PartialEq,
+{
+    fn try_get_or_insert<P, F, E>(&mut self, p: P, f: F) -> Result<&mut T, E>
+    where
+        F: FnOnce() -> Result<T, E>,
+        P: Fn(&T) -> bool,
+    {
+        if let Some(i) = self.iter().position(p) {
+            Ok(&mut self[i])
+        } else {
+            self.push(f()?);
+            Ok(self.last_mut().unwrap())
+        }
+    }
+}
+
+/// Caches function instances for later lookups.
+#[derive(Default, Debug)]
+pub struct FnDefCache {
+    /// The cache
+    cache: Vec<NamedFnDef>,
+}
+
+impl FnDefCache {
+    pub fn register(
+        &mut self,
+        ctx: &TyCtxt,
+        diagnostic: String,
+    ) -> Result<&FnDef, stable_mir::Error> {
+        let test_diagnostic = diagnostic.clone();
+        self.cache
+            .try_get_or_insert(
+                |item: &NamedFnDef| item.diagnostic == test_diagnostic,
+                || {
+                    let fndef = find_fn_def(*ctx, diagnostic.as_str())
+                        .ok_or(stable_mir::Error::new(format!("Not found: {}", &diagnostic)))?;
+                    Ok(NamedFnDef::new(diagnostic, fndef))
+                },
+            )
+            .map(|entry| &entry.def)
+    }
+}
