@@ -1,3 +1,6 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+
 % LLNCS DOCUMENT CLASS -- version 2.24 (29-Jan-2024)
 % Springer Verlag LaTeX2e support for Lecture Notes in Computer Science
 %
