@@ -16,4 +16,4 @@
 - [0008-line-coverage](rfcs/0008-line-coverage.md)
 - [0009-function-contracts](rfcs/0009-function-contracts.md)
 - [0010-quantifiers](rfcs/0010-quantifiers.md)
-- [0011-list](rfcs/0011-list.md)
+- [0012-list](rfcs/0012-list.md)
