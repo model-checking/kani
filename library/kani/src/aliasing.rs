@@ -186,16 +186,16 @@ pub(super) mod monitor_transitions {
             if demonic_nondet() {
                 let offset: usize = kani::any();
                 crate::assume(offset < std::mem::size_of::<U>());
+                STACK_TOP = 1;
                 MONITORED = pointer.byte_add(offset) as *const u8;
-                STACK_TAGS[STACK_TOP] = tag;
-                STACK_PERMS[STACK_TOP] = Permission::UNIQUE;
-                STACK_TOP += 1;
+                STACK_TAGS[0] = tag;
+                STACK_PERMS[0] = Permission::UNIQUE;
             }
         }
     }
 
     /// Push a tag with a permission perm at pointer
-    pub(super) fn push<U>(tag: PointerTag, perm: PermissionByte, pointer: *const U)
+    pub(super) unsafe fn push<U>(tag: PointerTag, perm: PermissionByte, pointer: *const U)
     where
         U: Sized,
     {
@@ -203,6 +203,7 @@ pub(super) mod monitor_transitions {
         // for location:location+size_of(U).
         // Offset has already been picked earlier.
         unsafe {
+            crate::assert(STACK_TOP < STACK_DEPTH, "Max # of nested borrows (15) exceeded");
             let size = std::mem::size_of_val_raw(pointer);
             if pointer_object(MONITORED) == pointer_object(pointer)
                 && pointer_offset(MONITORED) <= size
@@ -240,7 +241,7 @@ pub(super) mod monitor_transitions {
 }
 
 /// Push the permissions at the given location
-fn push<U>(tag: types::PointerTag, perm: types::PermissionByte, address: *const U) {
+unsafe fn push<U>(tag: types::PointerTag, perm: types::PermissionByte, address: *const U) {
     self::monitor_transitions::push(tag, perm, address)
 }
 
@@ -293,7 +294,7 @@ fn initialize_local<U>(pointer: *const U) {
 /// will succeed, given that offsets within the same allocation
 /// are considered parts of the same pointer object by cbmc.
 #[rustc_diagnostic_item = "KaniStackCheckPtr"]
-fn stack_check_ptr<U>(pointer_value: *const *mut U) {
+unsafe fn stack_check_ptr<U>(pointer_value: *const *mut U) {
     unsafe {
         let pointer = *pointer_value;
         let size = unsafe { std::mem::size_of_val_raw::<U>(pointer) };
@@ -312,7 +313,7 @@ fn stack_check_ptr<U>(pointer_value: *const *mut U) {
 }
 
 #[rustc_diagnostic_item = "KaniStackCheckRef"]
-fn stack_check_ref<U>(pointer_value: *const &mut U) {
+unsafe fn stack_check_ref<U>(pointer_value: *const &mut U) {
     stack_check_ptr(pointer_value as *const *mut U);
 }
 
