@@ -245,16 +245,13 @@ pub struct NamedFnDef {
 
 impl NamedFnDef {
     /// Create a new cacheable instance with the given signature and
-    /// instance
+    /// def
     pub fn new(diagnostic: String, def: FnDef) -> NamedFnDef {
         NamedFnDef { diagnostic, def }
     }
 }
 
-trait Cache<T>
-where
-    T: PartialEq,
-{
+trait Cache<T> {
     /// Generate a mutable reference to the cache's first item,
     /// or if none exists try generating a new one with `f`
     /// and return it. When `f` fails, return an error
