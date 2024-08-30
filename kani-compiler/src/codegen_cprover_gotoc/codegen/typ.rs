@@ -579,7 +579,10 @@ impl<'tcx> GotocCtx<'tcx> {
                         .unwrap();
                 self.codegen_fndef_type(instance)
             }
-            ty::FnPtr(sig) => self.codegen_function_sig(*sig).to_pointer(),
+            ty::FnPtr(sig_tys, hdr) => {
+                let sig = sig_tys.with(*hdr);
+                self.codegen_function_sig(sig).to_pointer()
+            }
             ty::Closure(_, subst) => self.codegen_ty_closure(ty, subst),
             ty::Coroutine(..) => self.codegen_ty_coroutine(ty),
             ty::Never => self.ensure_struct(NEVER_TYPE_EMPTY_STRUCT_NAME, "!", |_, _| vec![]),
@@ -1014,7 +1017,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
             // These types were blocking stdlib. Doing the default thing to unblock.
             // https://github.com/model-checking/kani/issues/214
-            ty::FnPtr(_) => self.codegen_ty(pointee_type).to_pointer(),
+            ty::FnPtr(_, _) => self.codegen_ty(pointee_type).to_pointer(),
 
             // These types have no regression tests for them.
             // For soundness, hold off on generating them till we have test-cases.

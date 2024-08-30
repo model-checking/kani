@@ -13,13 +13,13 @@ use rustc_middle::ty::TyCtxt;
 use rustc_smir::rustc_internal;
 use stable_mir::{
     mir::{
-        mono::Instance, AggregateKind, BasicBlockIdx, ConstOperand, Mutability, Operand, Place,
-        Rvalue,
+        mono::Instance, AggregateKind, BasicBlock, Body, ConstOperand, Mutability, Operand, Place,
+        Rvalue, Statement, StatementKind, Terminator, TerminatorKind, UnwindAction,
     },
     ty::{FnDef, GenericArgKind, GenericArgs, MirConst, RigidTy, Ty, TyConst, TyKind, UintTy},
     CrateDef,
 };
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 pub use delayed_ub::DelayedUbPass;
 pub use ptr_uninit::UninitPass;
@@ -31,49 +31,72 @@ mod relevant_instruction;
 mod ty_layout;
 
 /// Trait that the instrumentation target providers must implement to work with the instrumenter.
-trait TargetFinder {
-    fn find_next(
-        &mut self,
-        body: &MutableBody,
-        bb: BasicBlockIdx,
-        skip_first: bool,
-    ) -> Option<InitRelevantInstruction>;
+pub trait TargetFinder {
+    fn find_all(self, body: &MutableBody) -> Vec<InitRelevantInstruction>;
 }
+
+const KANI_IS_PTR_INITIALIZED_DIAGNOSTIC: &str = "KaniIsPtrInitialized";
+const KANI_SET_PTR_INITIALIZED_DIAGNOSTIC: &str = "KaniSetPtrInitialized";
+const KANI_IS_SLICE_CHUNK_PTR_INITIALIZED_DIAGNOSTIC: &str = "KaniIsSliceChunkPtrInitialized";
+const KANI_SET_SLICE_CHUNK_PTR_INITIALIZED_DIAGNOSTIC: &str = "KaniSetSliceChunkPtrInitialized";
+const KANI_IS_SLICE_PTR_INITIALIZED_DIAGNOSTIC: &str = "KaniIsSlicePtrInitialized";
+const KANI_SET_SLICE_PTR_INITIALIZED_DIAGNOSTIC: &str = "KaniSetSlicePtrInitialized";
+const KANI_IS_STR_PTR_INITIALIZED_DIAGNOSTIC: &str = "KaniIsStrPtrInitialized";
+const KANI_SET_STR_PTR_INITIALIZED_DIAGNOSTIC: &str = "KaniSetStrPtrInitialized";
+const KANI_COPY_INIT_STATE_DIAGNOSTIC: &str = "KaniCopyInitState";
+const KANI_COPY_INIT_STATE_SINGLE_DIAGNOSTIC: &str = "KaniCopyInitStateSingle";
 
 // Function bodies of those functions will not be instrumented as not to cause infinite recursion.
 const SKIPPED_DIAGNOSTIC_ITEMS: &[&str] = &[
-    "KaniIsPtrInitialized",
-    "KaniSetPtrInitialized",
-    "KaniIsSliceChunkPtrInitialized",
-    "KaniSetSliceChunkPtrInitialized",
-    "KaniIsSlicePtrInitialized",
-    "KaniSetSlicePtrInitialized",
-    "KaniIsStrPtrInitialized",
-    "KaniSetStrPtrInitialized",
+    KANI_IS_PTR_INITIALIZED_DIAGNOSTIC,
+    KANI_SET_PTR_INITIALIZED_DIAGNOSTIC,
+    KANI_IS_SLICE_CHUNK_PTR_INITIALIZED_DIAGNOSTIC,
+    KANI_SET_SLICE_CHUNK_PTR_INITIALIZED_DIAGNOSTIC,
+    KANI_IS_SLICE_PTR_INITIALIZED_DIAGNOSTIC,
+    KANI_SET_SLICE_PTR_INITIALIZED_DIAGNOSTIC,
+    KANI_IS_STR_PTR_INITIALIZED_DIAGNOSTIC,
+    KANI_SET_STR_PTR_INITIALIZED_DIAGNOSTIC,
+    KANI_COPY_INIT_STATE_DIAGNOSTIC,
+    KANI_COPY_INIT_STATE_SINGLE_DIAGNOSTIC,
 ];
 
 /// Instruments the code with checks for uninitialized memory, agnostic to the source of targets.
-#[derive(Debug)]
-pub struct UninitInstrumenter<'a> {
-    pub check_type: CheckType,
+pub struct UninitInstrumenter<'a, 'tcx> {
+    check_type: CheckType,
     /// Used to cache FnDef lookups of injected memory initialization functions.
-    pub mem_init_fn_cache: &'a mut HashMap<&'static str, FnDef>,
+    mem_init_fn_cache: &'a mut HashMap<&'static str, FnDef>,
+    tcx: TyCtxt<'tcx>,
 }
 
-impl<'a> UninitInstrumenter<'a> {
+impl<'a, 'tcx> UninitInstrumenter<'a, 'tcx> {
+    /// Create the instrumenter and run it with the given parameters.
+    pub(crate) fn run(
+        body: Body,
+        tcx: TyCtxt<'tcx>,
+        instance: Instance,
+        check_type: CheckType,
+        mem_init_fn_cache: &'a mut HashMap<&'static str, FnDef>,
+        target_finder: impl TargetFinder,
+    ) -> (bool, Body) {
+        let mut instrumenter = Self { check_type, mem_init_fn_cache, tcx };
+        let body = MutableBody::from(body);
+        let (changed, new_body) = instrumenter.instrument(body, instance, target_finder);
+        (changed, new_body.into())
+    }
+
     /// Instrument a body with memory initialization checks, the visitor that generates
     /// instrumentation targets must be provided via a TF type parameter.
     fn instrument(
         &mut self,
-        tcx: TyCtxt,
         mut body: MutableBody,
         instance: Instance,
-        mut target_finder: impl TargetFinder,
+        target_finder: impl TargetFinder,
     ) -> (bool, MutableBody) {
         // Need to break infinite recursion when memory initialization checks are inserted, so the
         // internal functions responsible for memory initialization are skipped.
-        if tcx
-            .get_diagnostic_name(rustc_internal::internal(tcx, instance.def.def_id()))
+        if self
+            .tcx
+            .get_diagnostic_name(rustc_internal::internal(self.tcx, instance.def.def_id()))
             .map(|diagnostic_name| {
                 SKIPPED_DIAGNOSTIC_ITEMS.contains(&diagnostic_name.to_ident_string().as_str())
             })
@@ -83,28 +106,9 @@ impl<'a> UninitInstrumenter<'a> {
         }
 
         let orig_len = body.blocks().len();
-
-        // Set of basic block indices for which analyzing first statement should be skipped.
-        //
-        // This is necessary because some checks are inserted before the source instruction, which, in
-        // turn, gets moved to the next basic block. Hence, we would not need to look at the
-        // instruction again as a part of new basic block. However, if the check is inserted after the
-        // source instruction, we still need to look at the first statement of the new basic block, so
-        // we need to keep track of which basic blocks were created as a part of injecting checks after
-        // the source instruction.
-        let mut skip_first = HashSet::new();
-
-        // Do not cache body.blocks().len() since it will change as we add new checks.
-        let mut bb_idx = 0;
-        while bb_idx < body.blocks().len() {
-            if let Some(candidate) =
-                target_finder.find_next(&body, bb_idx, skip_first.contains(&bb_idx))
-            {
-                self.build_check_for_instruction(tcx, &mut body, candidate, &mut skip_first);
-                bb_idx += 1
-            } else {
-                bb_idx += 1;
-            };
+        for instruction in target_finder.find_all(&body).into_iter().rev() {
+            let source = instruction.source;
+            self.build_check_for_instruction(&mut body, instruction, source);
         }
         (orig_len != body.blocks().len(), body)
     }
@@ -112,40 +116,38 @@ impl<'a> UninitInstrumenter<'a> {
     /// Inject memory initialization checks for each operation in an instruction.
     fn build_check_for_instruction(
         &mut self,
-        tcx: TyCtxt,
         body: &mut MutableBody,
         instruction: InitRelevantInstruction,
-        skip_first: &mut HashSet<usize>,
+        mut source: SourceInstruction,
     ) {
-        let mut source = instruction.source;
         for operation in instruction.before_instruction {
-            self.build_check_for_operation(tcx, body, &mut source, operation, skip_first);
+            self.build_check_for_operation(body, &mut source, operation);
         }
         for operation in instruction.after_instruction {
-            self.build_check_for_operation(tcx, body, &mut source, operation, skip_first);
+            self.build_check_for_operation(body, &mut source, operation);
         }
     }
 
     /// Inject memory initialization check for an operation.
     fn build_check_for_operation(
         &mut self,
-        tcx: TyCtxt,
         body: &mut MutableBody,
         source: &mut SourceInstruction,
         operation: MemoryInitOp,
-        skip_first: &mut HashSet<usize>,
     ) {
         if let MemoryInitOp::Unsupported { reason } | MemoryInitOp::TriviallyUnsafe { reason } =
             &operation
         {
-            collect_skipped(&operation, body, skip_first);
-            self.inject_assert_false(tcx, body, source, operation.position(), reason);
+            // If the operation is unsupported or trivially accesses uninitialized memory, encode
+            // the check as `assert!(false)`.
+            self.inject_assert_false(self.tcx, body, source, operation.position(), reason);
             return;
         };
 
-        let pointee_ty_info = {
-            let ptr_operand = operation.mk_operand(body, source);
-            let ptr_operand_ty = ptr_operand.ty(body.locals()).unwrap();
+        let pointee_info = {
+            // Sanity check: since CBMC memory object primitives only accept pointers, need to
+            // ensure the correct type.
+            let ptr_operand_ty = operation.operand_ty(body);
             let pointee_ty = match ptr_operand_ty.kind() {
                 TyKind::RigidTy(RigidTy::RawPtr(pointee_ty, _)) => pointee_ty,
                 _ => {
@@ -154,68 +156,71 @@ impl<'a> UninitInstrumenter<'a> {
                     )
                 }
             };
+            // Calculate pointee layout for byte-by-byte memory initialization checks.
             match PointeeInfo::from_ty(pointee_ty) {
                 Ok(type_info) => type_info,
                 Err(_) => {
                     let reason = format!(
                         "Kani currently doesn't support checking memory initialization for pointers to `{pointee_ty}.",
                     );
-                    collect_skipped(&operation, body, skip_first);
-                    self.inject_assert_false(tcx, body, source, operation.position(), &reason);
+                    self.inject_assert_false(self.tcx, body, source, operation.position(), &reason);
                     return;
                 }
             }
         };
 
-        match operation {
+        match &operation {
             MemoryInitOp::CheckSliceChunk { .. }
             | MemoryInitOp::Check { .. }
             | MemoryInitOp::CheckRef { .. } => {
-                self.build_get_and_check(tcx, body, source, operation, pointee_ty_info, skip_first)
+                self.build_get_and_check(body, source, operation, pointee_info)
             }
             MemoryInitOp::SetSliceChunk { .. }
             | MemoryInitOp::Set { .. }
-            | MemoryInitOp::SetRef { .. } => {
-                self.build_set(tcx, body, source, operation, pointee_ty_info, skip_first)
+            | MemoryInitOp::SetRef { .. }
+            | MemoryInitOp::CreateUnion { .. } => {
+                self.build_set(body, source, operation, pointee_info)
             }
-            MemoryInitOp::Copy { .. } => {
-                self.build_copy(tcx, body, source, operation, pointee_ty_info, skip_first)
+            MemoryInitOp::Copy { .. } => self.build_copy(body, source, operation, pointee_info),
+            MemoryInitOp::AssignUnion { .. } => {
+                self.build_assign_union(body, source, operation, pointee_info)
             }
             MemoryInitOp::Unsupported { .. } | MemoryInitOp::TriviallyUnsafe { .. } => {
                 unreachable!()
             }
-        }
+        };
     }
 
     /// Inject a load from memory initialization state and an assertion that all non-padding bytes
     /// are initialized.
     fn build_get_and_check(
         &mut self,
-        tcx: TyCtxt,
         body: &mut MutableBody,
         source: &mut SourceInstruction,
         operation: MemoryInitOp,
         pointee_info: PointeeInfo,
-        skip_first: &mut HashSet<usize>,
     ) {
         let ret_place = Place {
             local: body.new_local(Ty::bool_ty(), source.span(body.blocks()), Mutability::Not),
             projection: vec![],
         };
-        let ptr_operand = operation.mk_operand(body, source);
-        match pointee_info.layout() {
+        // Instead of injecting the instrumentation immediately, collect it into a list of
+        // statements and a terminator to construct a basic block and inject it at the end.
+        let mut statements = vec![];
+        let ptr_operand = operation.mk_operand(body, &mut statements, source);
+        let terminator = match pointee_info.layout() {
             PointeeLayout::Sized { layout } => {
-                let layout_operand = mk_layout_operand(body, source, operation.position(), &layout);
+                let layout_operand = mk_layout_operand(body, &mut statements, source, &layout);
                 // Depending on whether accessing the known number of elements in the slice, need to
                 // pass is as an argument.
                 let (diagnostic, args) = match &operation {
                     MemoryInitOp::Check { .. } | MemoryInitOp::CheckRef { .. } => {
-                        let diagnostic = "KaniIsPtrInitialized";
+                        let diagnostic = KANI_IS_PTR_INITIALIZED_DIAGNOSTIC;
                         let args = vec![ptr_operand.clone(), layout_operand];
                         (diagnostic, args)
                     }
                     MemoryInitOp::CheckSliceChunk { .. } => {
-                        let diagnostic = "KaniIsSliceChunkPtrInitialized";
+                        let diagnostic = KANI_IS_SLICE_CHUNK_PTR_INITIALIZED_DIAGNOSTIC;
                         let args =
                             vec![ptr_operand.clone(), layout_operand, operation.expect_count()];
                         (diagnostic, args)
@@ -223,57 +228,78 @@ impl<'a> UninitInstrumenter<'a> {
                     _ => unreachable!(),
                 };
                 let is_ptr_initialized_instance = resolve_mem_init_fn(
-                    get_mem_init_fn_def(tcx, diagnostic, &mut self.mem_init_fn_cache),
+                    get_mem_init_fn_def(self.tcx, diagnostic, &mut self.mem_init_fn_cache),
                     layout.len(),
                     *pointee_info.ty(),
                 );
-                collect_skipped(&operation, body, skip_first);
-                body.insert_call(
-                    &is_ptr_initialized_instance,
-                    source,
-                    operation.position(),
-                    args,
-                    ret_place.clone(),
-                );
+                Terminator {
+                    kind: TerminatorKind::Call {
+                        func: Operand::Copy(Place::from(body.new_local(
+                            is_ptr_initialized_instance.ty(),
+                            source.span(body.blocks()),
+                            Mutability::Not,
+                        ))),
+                        args,
+                        destination: ret_place.clone(),
+                        target: Some(0), // The current value does not matter, since it will be overwritten in add_bb.
+                        unwind: UnwindAction::Terminate,
+                    },
+                    span: source.span(body.blocks()),
+                }
             }
             PointeeLayout::Slice { element_layout } => {
                 // Since `str`` is a separate type, need to differentiate between [T] and str.
                 let (slicee_ty, diagnostic) = match pointee_info.ty().kind() {
                     TyKind::RigidTy(RigidTy::Slice(slicee_ty)) => {
-                        (slicee_ty, "KaniIsSlicePtrInitialized")
+                        (slicee_ty, KANI_IS_SLICE_PTR_INITIALIZED_DIAGNOSTIC)
                     }
                     TyKind::RigidTy(RigidTy::Str) => {
-                        (Ty::unsigned_ty(UintTy::U8), "KaniIsStrPtrInitialized")
+                        (Ty::unsigned_ty(UintTy::U8), KANI_IS_STR_PTR_INITIALIZED_DIAGNOSTIC)
                     }
                     _ => unreachable!(),
                 };
                 let is_ptr_initialized_instance = resolve_mem_init_fn(
-                    get_mem_init_fn_def(tcx, diagnostic, &mut self.mem_init_fn_cache),
+                    get_mem_init_fn_def(self.tcx, diagnostic, &mut self.mem_init_fn_cache),
                     element_layout.len(),
                     slicee_ty,
                 );
                 let layout_operand =
-                    mk_layout_operand(body, source, operation.position(), &element_layout);
-                collect_skipped(&operation, body, skip_first);
-                body.insert_call(
-                    &is_ptr_initialized_instance,
-                    source,
-                    operation.position(),
-                    vec![ptr_operand.clone(), layout_operand],
-                    ret_place.clone(),
-                );
+                    mk_layout_operand(body, &mut statements, source, &element_layout);
+                Terminator {
+                    kind: TerminatorKind::Call {
+                        func: Operand::Copy(Place::from(body.new_local(
+                            is_ptr_initialized_instance.ty(),
+                            source.span(body.blocks()),
+                            Mutability::Not,
+                        ))),
+                        args: vec![ptr_operand.clone(), layout_operand],
+                        destination: ret_place.clone(),
+                        target: Some(0), // The current value does not matter, since it will be overwritten in add_bb.
+                        unwind: UnwindAction::Terminate,
+                    },
+                    span: source.span(body.blocks()),
+                }
             }
             PointeeLayout::TraitObject => {
-                collect_skipped(&operation, body, skip_first);
                 let reason = "Kani does not support reasoning about memory initialization of pointers to trait objects.";
-                self.inject_assert_false(tcx, body, source, operation.position(), reason);
+                self.inject_assert_false(self.tcx, body, source, operation.position(), reason);
+                return;
+            }
+            PointeeLayout::Union { .. } => {
+                // Here we are reading from a pointer to a union.
+                // TODO: we perhaps need to check that the union at least contains an intersection
+                // of all layouts initialized.
+                let reason = "Interaction between raw pointers and unions is not yet supported.";
+                self.inject_assert_false(self.tcx, body, source, operation.position(), reason);
                 return;
             }
         };
 
-        // Make sure all non-padding bytes are initialized.
-        collect_skipped(&operation, body, skip_first);
-        // Find the real operand type for a good error message.
+        // Construct the basic block and insert it into the body.
+        body.insert_bb(BasicBlock { statements, terminator }, source, operation.position());
+
+        // Since the check involves a terminator, we cannot add it to the previously constructed
+        // basic block. Instead, we insert the check after the basic block.
         let operand_ty = match &operation {
             MemoryInitOp::Check { operand }
             | MemoryInitOp::CheckSliceChunk { operand, .. }
@@ -281,7 +307,7 @@ impl<'a> UninitInstrumenter<'a> {
             _ => unreachable!(),
         };
         body.insert_check(
-            tcx,
+            self.tcx,
             &self.check_type,
             source,
             operation.position(),
@@ -296,28 +322,29 @@ impl<'a> UninitInstrumenter<'a> {
     /// non-padding bytes.
     fn build_set(
         &mut self,
-        tcx: TyCtxt,
         body: &mut MutableBody,
         source: &mut SourceInstruction,
         operation: MemoryInitOp,
         pointee_info: PointeeInfo,
-        skip_first: &mut HashSet<usize>,
     ) {
         let ret_place = Place {
             local: body.new_local(Ty::new_tuple(&[]), source.span(body.blocks()), Mutability::Not),
             projection: vec![],
         };
-        let ptr_operand = operation.mk_operand(body, source);
-        let value = operation.expect_value();
 
-        match pointee_info.layout() {
+        // Instead of injecting the instrumentation immediately, collect it into a list of
+        // statements and a terminator to construct a basic block and inject it at the end.
+        let mut statements = vec![];
+        let ptr_operand = operation.mk_operand(body, &mut statements, source);
+        let value = operation.expect_value();
+        let terminator = match pointee_info.layout() {
             PointeeLayout::Sized { layout } => {
-                let layout_operand = mk_layout_operand(body, source, operation.position(), &layout);
+                let layout_operand = mk_layout_operand(body, &mut statements, source, &layout);
                 // Depending on whether writing to the known number of elements in the slice, need to
                 // pass is as an argument.
                 let (diagnostic, args) = match &operation {
                     MemoryInitOp::Set { .. } | MemoryInitOp::SetRef { .. } => {
-                        let diagnostic = "KaniSetPtrInitialized";
+                        let diagnostic = KANI_SET_PTR_INITIALIZED_DIAGNOSTIC;
                         let args = vec![
                             ptr_operand,
                             layout_operand,
@@ -330,7 +357,7 @@ impl<'a> UninitInstrumenter<'a> {
                         (diagnostic, args)
                     }
                     MemoryInitOp::SetSliceChunk { .. } => {
-                        let diagnostic = "KaniSetSliceChunkPtrInitialized";
+                        let diagnostic = KANI_SET_SLICE_CHUNK_PTR_INITIALIZED_DIAGNOSTIC;
                         let args = vec![
                             ptr_operand,
                             layout_operand,
@@ -346,83 +373,156 @@ impl<'a> UninitInstrumenter<'a> {
                     _ => unreachable!(),
                 };
                 let set_ptr_initialized_instance = resolve_mem_init_fn(
-                    get_mem_init_fn_def(tcx, diagnostic, &mut self.mem_init_fn_cache),
+                    get_mem_init_fn_def(self.tcx, diagnostic, &mut self.mem_init_fn_cache),
                     layout.len(),
                     *pointee_info.ty(),
                 );
-                collect_skipped(&operation, body, skip_first);
-                body.insert_call(
-                    &set_ptr_initialized_instance,
-                    source,
-                    operation.position(),
-                    args,
-                    ret_place,
-                );
+                Terminator {
+                    kind: TerminatorKind::Call {
+                        func: Operand::Copy(Place::from(body.new_local(
+                            set_ptr_initialized_instance.ty(),
+                            source.span(body.blocks()),
+                            Mutability::Not,
+                        ))),
+                        args,
+                        destination: ret_place.clone(),
+                        target: Some(0), // this will be overriden in add_bb
+                        unwind: UnwindAction::Terminate,
+                    },
+                    span: source.span(body.blocks()),
+                }
             }
             PointeeLayout::Slice { element_layout } => {
                 // Since `str`` is a separate type, need to differentiate between [T] and str.
                 let (slicee_ty, diagnostic) = match pointee_info.ty().kind() {
                     TyKind::RigidTy(RigidTy::Slice(slicee_ty)) => {
-                        (slicee_ty, "KaniSetSlicePtrInitialized")
+                        (slicee_ty, KANI_SET_SLICE_PTR_INITIALIZED_DIAGNOSTIC)
                     }
                     TyKind::RigidTy(RigidTy::Str) => {
-                        (Ty::unsigned_ty(UintTy::U8), "KaniSetStrPtrInitialized")
+                        (Ty::unsigned_ty(UintTy::U8), KANI_SET_STR_PTR_INITIALIZED_DIAGNOSTIC)
                     }
                     _ => unreachable!(),
                 };
                 let set_ptr_initialized_instance = resolve_mem_init_fn(
-                    get_mem_init_fn_def(tcx, diagnostic, &mut self.mem_init_fn_cache),
+                    get_mem_init_fn_def(self.tcx, diagnostic, &mut self.mem_init_fn_cache),
                     element_layout.len(),
                     slicee_ty,
                 );
                 let layout_operand =
-                    mk_layout_operand(body, source, operation.position(), &element_layout);
-                collect_skipped(&operation, body, skip_first);
-                body.insert_call(
-                    &set_ptr_initialized_instance,
-                    source,
-                    operation.position(),
-                    vec![
-                        ptr_operand,
-                        layout_operand,
-                        Operand::Constant(ConstOperand {
-                            span: source.span(body.blocks()),
-                            user_ty: None,
-                            const_: MirConst::from_bool(value),
-                        }),
-                    ],
-                    ret_place,
-                );
+                    mk_layout_operand(body, &mut statements, source, &element_layout);
+                Terminator {
+                    kind: TerminatorKind::Call {
+                        func: Operand::Copy(Place::from(body.new_local(
+                            set_ptr_initialized_instance.ty(),
+                            source.span(body.blocks()),
+                            Mutability::Not,
+                        ))),
+                        args: vec![
+                            ptr_operand,
+                            layout_operand,
+                            Operand::Constant(ConstOperand {
+                                span: source.span(body.blocks()),
+                                user_ty: None,
+                                const_: MirConst::from_bool(value),
+                            }),
+                        ],
+                        destination: ret_place.clone(),
+                        target: Some(0), // The current value does not matter, since it will be overwritten in add_bb.
+                        unwind: UnwindAction::Terminate,
+                    },
+                    span: source.span(body.blocks()),
+                }
             }
             PointeeLayout::TraitObject => {
                 unreachable!("Cannot change the initialization state of a trait object directly.");
             }
+            PointeeLayout::Union { field_layouts } => {
+                // Writing union data, which could be either creating a union from scratch or
+                // performing some pointer operations with it. If we are creating a union from
+                // scratch, an operation will contain a union field.
+
+                // TODO: If we don't have a union field, we are either creating a pointer to a union
+                // or assigning to one. In the former case, it is safe to return from this function,
+                // since the union must be already tracked (on creation and update). In the latter
+                // case, we should have been using union assignment instead. Nevertheless, this is
+                // currently mitigated by injecting `assert!(false)`.
+                let union_field = match operation.union_field() {
+                    Some(field) => field,
+                    None => {
+                        let reason =
+                            "Interaction between raw pointers and unions is not yet supported.";
+                        self.inject_assert_false(
+                            self.tcx,
+                            body,
+                            source,
+                            operation.position(),
+                            reason,
+                        );
+                        return;
+                    }
+                };
+                let layout = &field_layouts[union_field];
+                let layout_operand = mk_layout_operand(body, &mut statements, source, layout);
+                let diagnostic = KANI_SET_PTR_INITIALIZED_DIAGNOSTIC;
+                let args = vec![
+                    ptr_operand,
+                    layout_operand,
+                    Operand::Constant(ConstOperand {
+                        span: source.span(body.blocks()),
+                        user_ty: None,
+                        const_: MirConst::from_bool(value),
+                    }),
+                ];
+                let set_ptr_initialized_instance = resolve_mem_init_fn(
+                    get_mem_init_fn_def(self.tcx, diagnostic, &mut self.mem_init_fn_cache),
+                    layout.len(),
+                    *pointee_info.ty(),
+                );
+                Terminator {
+                    kind: TerminatorKind::Call {
+                        func: Operand::Copy(Place::from(body.new_local(
+                            set_ptr_initialized_instance.ty(),
+                            source.span(body.blocks()),
+                            Mutability::Not,
+                        ))),
+                        args,
+                        destination: ret_place.clone(),
+                        target: Some(0), // this will be overriden in add_bb
+                        unwind: UnwindAction::Terminate,
+                    },
+                    span: source.span(body.blocks()),
+                }
+            }
         };
+        // Construct the basic block and insert it into the body.
+        body.insert_bb(BasicBlock { statements, terminator }, source, operation.position());
     }
 
     /// Copy memory initialization state from one pointer to the other.
     fn build_copy(
         &mut self,
-        tcx: TyCtxt,
         body: &mut MutableBody,
         source: &mut SourceInstruction,
         operation: MemoryInitOp,
         pointee_info: PointeeInfo,
-        skip_first: &mut HashSet<usize>,
     ) {
         let ret_place = Place {
             local: body.new_local(Ty::new_tuple(&[]), source.span(body.blocks()), Mutability::Not),
             projection: vec![],
         };
-        let PointeeLayout::Sized { layout } = pointee_info.layout() else { unreachable!() };
+        let layout_size = pointee_info.layout().maybe_size().unwrap();
         let copy_init_state_instance = resolve_mem_init_fn(
-            get_mem_init_fn_def(tcx, "KaniCopyInitState", &mut self.mem_init_fn_cache),
-            layout.len(),
+            get_mem_init_fn_def(
+                self.tcx,
+                KANI_COPY_INIT_STATE_DIAGNOSTIC,
+                &mut self.mem_init_fn_cache,
+            ),
+            layout_size,
             *pointee_info.ty(),
         );
-        collect_skipped(&operation, body, skip_first);
         let position = operation.position();
-        let MemoryInitOp::Copy { from, to, count } = operation else { unreachable!() };
+        let (from, to) = operation.expect_copy_operands();
+        let count = operation.expect_count();
         body.insert_call(
             &copy_init_state_instance,
             source,
@@ -430,6 +530,49 @@ impl<'a> UninitInstrumenter<'a> {
             vec![from, to, count],
             ret_place.clone(),
         );
+    }
+
+    /// Copy memory initialization state from one union variable to another.
+    fn build_assign_union(
+        &mut self,
+        body: &mut MutableBody,
+        source: &mut SourceInstruction,
+        operation: MemoryInitOp,
+        pointee_info: PointeeInfo,
+    ) {
+        let ret_place = Place {
+            local: body.new_local(Ty::new_tuple(&[]), source.span(body.blocks()), Mutability::Not),
+            projection: vec![],
+        };
+        let mut statements = vec![];
+        let layout_size = pointee_info.layout().maybe_size().unwrap();
+        let copy_init_state_instance = resolve_mem_init_fn(
+            get_mem_init_fn_def(
+                self.tcx,
+                KANI_COPY_INIT_STATE_SINGLE_DIAGNOSTIC,
+                &mut self.mem_init_fn_cache,
+            ),
+            layout_size,
+            *pointee_info.ty(),
+        );
+        let (from, to) = operation.expect_assign_union_operands(body, &mut statements, source);
+        let terminator = Terminator {
+            kind: TerminatorKind::Call {
+                func: Operand::Copy(Place::from(body.new_local(
+                    copy_init_state_instance.ty(),
+                    source.span(body.blocks()),
+                    Mutability::Not,
+                ))),
+                args: vec![from, to],
+                destination: ret_place.clone(),
+                target: Some(0), // this will be overriden in add_bb
+                unwind: UnwindAction::Terminate,
+            },
+            span: source.span(body.blocks()),
+        };
+
+        // Construct the basic block and insert it into the body.
+        body.insert_bb(BasicBlock { statements, terminator }, source, operation.position());
     }
 
     fn inject_assert_false(
@@ -465,39 +608,30 @@ impl<'a> UninitInstrumenter<'a> {
 /// will have the following byte mask `[true, true, true, false]`.
 pub fn mk_layout_operand(
     body: &mut MutableBody,
+    statements: &mut Vec<Statement>,
     source: &mut SourceInstruction,
-    position: InsertPosition,
     layout_byte_mask: &[bool],
 ) -> Operand {
-    Operand::Move(Place {
-        local: body.insert_assignment(
-            Rvalue::Aggregate(
-                AggregateKind::Array(Ty::bool_ty()),
-                layout_byte_mask
-                    .iter()
-                    .map(|byte| {
-                        Operand::Constant(ConstOperand {
-                            span: source.span(body.blocks()),
-                            user_ty: None,
-                            const_: MirConst::from_bool(*byte),
-                        })
-                    })
-                    .collect(),
-            ),
-            source,
-            position,
-        ),
-        projection: vec![],
-    })
-}
+    let span = source.span(body.blocks());
+    let rvalue = Rvalue::Aggregate(
+        AggregateKind::Array(Ty::bool_ty()),
+        layout_byte_mask
+            .iter()
+            .map(|byte| {
+                Operand::Constant(ConstOperand {
+                    span: source.span(body.blocks()),
+                    user_ty: None,
+                    const_: MirConst::from_bool(*byte),
+                })
+            })
+            .collect(),
+    );
+    let ret_ty = rvalue.ty(body.locals()).unwrap();
+    let result = body.new_local(ret_ty, span, Mutability::Not);
+    let stmt = Statement { kind: StatementKind::Assign(Place::from(result), rvalue), span };
+    statements.push(stmt);
 
-/// If injecting a new call to the function before the current statement, need to skip the original
-/// statement when analyzing it as a part of the new basic block.
-fn collect_skipped(operation: &MemoryInitOp, body: &MutableBody, skip_first: &mut HashSet<usize>) {
-    if operation.position() == InsertPosition::Before {
-        let new_bb_idx = body.blocks().len();
-        skip_first.insert(new_bb_idx);
-    }
+    Operand::Move(Place { local: result, projection: vec![] })
 }
 
 /// Retrieve a function definition by diagnostic string, caching the result.
