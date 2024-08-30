@@ -293,13 +293,13 @@ fn initialize_local<U>(pointer: *const U) {
 #[rustc_diagnostic_item = "KaniStackCheckPtr"]
 fn stack_check_ptr<U>(pointer_value: *const *mut U) {
     unsafe {
-        let tag = global::TAGS.get(pointer_value);
-        let perm = global::PERMS.get(pointer_value);
         let pointer = *pointer_value;
         let size = unsafe { std::mem::size_of_val_raw::<U>(pointer) };
         if pointer_object(pointer) == pointer_object(global::MONITORED)
             && pointer_offset(global::MONITORED) < size
         {
+            let tag = global::TAGS.get(pointer_value);
+            let perm = global::PERMS.get(pointer_value);
             if types::Permission::grants(types::Access::READ, perm) {
                 self::monitor_transitions::stack_check(tag, types::Access::READ);
             } else if types::Permission::grants(types::Access::WRITE, perm) {
