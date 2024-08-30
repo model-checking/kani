@@ -202,7 +202,6 @@ pub(super) mod monitor_transitions {
         // for location:location+size_of(U).
         // Offset has already been picked earlier.
         unsafe {
-            use self::*;
             if pointer_object(MONITORED) == pointer_object(pointer)
                 && pointer_offset(MONITORED) <= std::mem::size_of::<U>()
             {
@@ -217,7 +216,6 @@ pub(super) mod monitor_transitions {
     /// tag and the given access permission.
     pub(super) fn stack_check(tag: PointerTag, access: AccessBit) {
         unsafe {
-            use self::*;
             let mut found = false;
             let mut j = 0;
             let mut new_top = 0;
