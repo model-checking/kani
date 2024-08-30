@@ -101,6 +101,8 @@ pub enum UnstableFeature {
     Quantifiers,
     /// Automatically check that uninitialized memory is not used.
     UninitChecks,
+    /// Check the pointer aliasing model
+    Aliasing,
     /// Enable an unstable option or subcommand.
     UnstableOptions,
     /// Automatically check that no invalid value is produced which is considered UB in Rust.

@@ -22,10 +22,13 @@
 #![feature(f128)]
 #![feature(convert_float_to_int)]
 #![feature(sized_hierarchy)]
+// required for using size_of_val_raw
+#![feature(layout_for_ptr)]
 
 // Allow us to use `kani::` to access crate features.
 extern crate self as kani;
 
+mod aliasing;
 pub mod arbitrary;
 pub mod bounded_arbitrary;
 #[cfg(feature = "concrete_playback")]

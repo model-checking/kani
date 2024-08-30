@@ -28,6 +28,7 @@ use crate::kani_middle::transform::loop_contracts::LoopContractPass;
 use crate::kani_middle::transform::stubs::{ExternFnStubPass, FnStubPass};
 use crate::kani_queries::QueryDb;
 use automatic::{AutomaticArbitraryPass, AutomaticHarnessPass};
+use check_aliasing::GlobalAliasingPass;
 use dump_mir_pass::DumpMirPass;
 use rustc_middle::ty::TyCtxt;
 use rustc_public::mir::Body;
@@ -40,6 +41,7 @@ pub use internal_mir::RustcInternalMir;
 
 mod automatic;
 pub(crate) mod body;
+mod check_aliasing;
 mod check_uninit;
 mod check_values;
 mod contracts;
@@ -223,6 +225,7 @@ impl GlobalPasses {
                 queries,
             ),
         );
+        global_passes.add_global_pass(queries, GlobalAliasingPass::new());
         global_passes.add_global_pass(queries, DumpMirPass::new(tcx));
         global_passes
     }
