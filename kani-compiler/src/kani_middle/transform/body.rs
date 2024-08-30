@@ -204,7 +204,7 @@ impl MutableBody {
         self.insert_terminator(source, position, terminator);
     }
 
-    /// Add a new assert to the basic block indicated by the given index.
+    /// Add a new assert to the basic block indicated by "source".
     ///
     /// The new assertion will have the same span as the source instruction, and the basic block
     /// will be split. If `InsertPosition` is `InsertPosition::Before`, `source` will point to the
