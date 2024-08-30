@@ -23,3 +23,6 @@ rustc_private = true
 
 [features]
 no_core = []
+
+[lints]
+workspace = true

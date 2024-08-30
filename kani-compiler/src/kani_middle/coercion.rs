@@ -99,7 +99,7 @@ pub fn extract_unsize_casting<'tcx>(
         coerce_info.dst_ty
     ));
     // Find the tail of the coercion that determines the type of metadata to be stored.
-    let (src_base_ty, dst_base_ty) = tcx.struct_lockstep_tails_erasing_lifetimes(
+    let (src_base_ty, dst_base_ty) = tcx.struct_lockstep_tails_for_codegen(
         src_pointee_ty,
         dst_pointee_ty,
         ParamEnv::reveal_all(),

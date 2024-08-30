@@ -8,7 +8,6 @@
 // So we have to enable this on the commandline (see kani-rustc) with:
 //   RUSTFLAGS="-Zcrate-attr=feature(register_tool) -Zcrate-attr=register_tool(kanitool)"
 #![feature(proc_macro_diagnostic)]
-
 mod derive;
 
 // proc_macro::quote is nightly-only, so we'll cobble things together instead
@@ -65,6 +64,7 @@ pub fn recursion(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// Set Loop unwind limit for proof harnesses
 /// The attribute `#[kani::unwind(arg)]` can only be called alongside `#[kani::proof]`.
 /// arg - Takes in a integer value (u32) that represents the unwind value for the harness.
+#[allow(clippy::too_long_first_doc_paragraph)]
 #[proc_macro_attribute]
 pub fn unwind(attr: TokenStream, item: TokenStream) -> TokenStream {
     attr_impl::unwind(attr, item)

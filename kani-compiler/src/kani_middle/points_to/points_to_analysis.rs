@@ -53,7 +53,7 @@ struct PointsToAnalysis<'a, 'tcx> {
     tcx: TyCtxt<'tcx>,
     /// This will be used in the future to resolve function pointer and vtable calls. Currently, we
     /// can resolve call graph edges just by looking at the terminators and erroring if we can't
-    /// resolve the callee.  
+    /// resolve the callee.
     call_graph: &'a CallGraph,
     /// This graph should contain a subset of the points-to graph reachable from function arguments.
     /// For the entry function it will be empty (as it supposedly does not have any parameters).
@@ -203,119 +203,108 @@ impl<'a, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'tcx> {
             };
             match instance.def {
                 // Intrinsics could introduce aliasing edges we care about, so need to handle them.
-                InstanceKind::Intrinsic(def_id) => {
-                    // Check if the intrinsic has a body we can analyze.
-                    if self.tcx.is_mir_available(def_id) {
-                        self.apply_regular_call_effect(state, instance, args, destination);
-                    } else {
-                        // Check all of the other intrinsics.
-                        match Intrinsic::from_instance(&rustc_internal::stable(instance)) {
-                            intrinsic if is_identity_aliasing_intrinsic(intrinsic.clone()) => {
-                                // Treat the intrinsic as an aggregate, taking a union of all of the
-                                // arguments' aliases.
-                                let destination_set =
-                                    state.resolve_place(*destination, self.instance);
-                                let operands_set = args
-                                    .into_iter()
-                                    .flat_map(|operand| {
-                                        self.successors_for_operand(state, operand.node.clone())
-                                    })
-                                    .collect();
-                                state.extend(&destination_set, &operands_set);
-                            }
-                            // All `atomic_cxchg` intrinsics take `dst, old, src` as arguments.
-                            // This is equivalent to `destination = *dst; *dst = src`.
-                            Intrinsic::AtomicCxchg(_) | Intrinsic::AtomicCxchgWeak(_) => {
-                                let src_set =
-                                    self.successors_for_operand(state, args[2].node.clone());
-                                let dst_set =
-                                    self.successors_for_deref(state, args[0].node.clone());
-                                let destination_set =
-                                    state.resolve_place(*destination, self.instance);
-                                state.extend(&destination_set, &state.successors(&dst_set));
-                                state.extend(&dst_set, &src_set);
-                            }
-                            // All `atomic_load` intrinsics take `src` as an argument.
-                            // This is equivalent to `destination = *src`.
-                            Intrinsic::AtomicLoad(_) => {
-                                let src_set =
-                                    self.successors_for_deref(state, args[0].node.clone());
-                                let destination_set =
-                                    state.resolve_place(*destination, self.instance);
-                                state.extend(&destination_set, &state.successors(&src_set));
-                            }
-                            // All `atomic_store` intrinsics take `dst, val` as arguments.
-                            // This is equivalent to `*dst = val`.
-                            Intrinsic::AtomicStore(_) => {
-                                let dst_set =
-                                    self.successors_for_deref(state, args[0].node.clone());
-                                let val_set =
-                                    self.successors_for_operand(state, args[1].node.clone());
-                                state.extend(&dst_set, &val_set);
-                            }
-                            // All other `atomic` intrinsics take `dst, src` as arguments.
-                            // This is equivalent to `destination = *dst; *dst = src`.
-                            Intrinsic::AtomicAnd(_)
-                            | Intrinsic::AtomicMax(_)
-                            | Intrinsic::AtomicMin(_)
-                            | Intrinsic::AtomicNand(_)
-                            | Intrinsic::AtomicOr(_)
-                            | Intrinsic::AtomicUmax(_)
-                            | Intrinsic::AtomicUmin(_)
-                            | Intrinsic::AtomicXadd(_)
-                            | Intrinsic::AtomicXchg(_)
-                            | Intrinsic::AtomicXor(_)
-                            | Intrinsic::AtomicXsub(_) => {
-                                let src_set =
-                                    self.successors_for_operand(state, args[1].node.clone());
-                                let dst_set =
-                                    self.successors_for_deref(state, args[0].node.clone());
-                                let destination_set =
-                                    state.resolve_place(*destination, self.instance);
-                                state.extend(&destination_set, &state.successors(&dst_set));
-                                state.extend(&dst_set, &src_set);
-                            }
-                            // Similar to `copy_nonoverlapping`, argument order is `src`, `dst`, `count`.
-                            Intrinsic::Copy => {
-                                self.apply_copy_effect(
-                                    state,
-                                    args[0].node.clone(),
-                                    args[1].node.clone(),
-                                );
-                            }
-                            // Similar to `copy_nonoverlapping`, argument order is `dst`, `src`, `count`.
-                            Intrinsic::VolatileCopyMemory
-                            | Intrinsic::VolatileCopyNonOverlappingMemory => {
-                                self.apply_copy_effect(
-                                    state,
-                                    args[1].node.clone(),
-                                    args[0].node.clone(),
-                                );
-                            }
-                            // Semantically equivalent to dest = *a
-                            Intrinsic::VolatileLoad | Intrinsic::UnalignedVolatileLoad => {
-                                // Destination of the return value.
-                                let lvalue_set = state.resolve_place(*destination, self.instance);
-                                let rvalue_set =
-                                    self.successors_for_deref(state, args[0].node.clone());
-                                state.extend(&lvalue_set, &state.successors(&rvalue_set));
-                            }
-                            // Semantically equivalent *a = b.
-                            Intrinsic::VolatileStore => {
-                                let lvalue_set =
-                                    self.successors_for_deref(state, args[0].node.clone());
-                                let rvalue_set =
-                                    self.successors_for_operand(state, args[1].node.clone());
-                                state.extend(&lvalue_set, &rvalue_set);
-                            }
-                            Intrinsic::Unimplemented { .. } => {
-                                // This will be taken care of at the codegen level.
-                            }
-                            intrinsic => {
-                                unimplemented!(
-                                    "Kani does not support reasoning about aliasing in presence of intrinsic `{intrinsic:?}`. For more information about the state of uninitialized memory checks implementation, see: https://github.com/model-checking/kani/issues/3300."
-                                );
-                            }
+                InstanceKind::Intrinsic(_) => {
+                    match Intrinsic::from_instance(&rustc_internal::stable(instance)) {
+                        intrinsic if is_identity_aliasing_intrinsic(intrinsic.clone()) => {
+                            // Treat the intrinsic as an aggregate, taking a union of all of the
+                            // arguments' aliases.
+                            let destination_set = state.resolve_place(*destination, self.instance);
+                            let operands_set = args
+                                .into_iter()
+                                .flat_map(|operand| {
+                                    self.successors_for_operand(state, operand.node.clone())
+                                })
+                                .collect();
+                            state.extend(&destination_set, &operands_set);
+                        }
+                        // All `atomic_cxchg` intrinsics take `dst, old, src` as arguments.
+                        // This is equivalent to `destination = *dst; *dst = src`.
+                        Intrinsic::AtomicCxchg(_) | Intrinsic::AtomicCxchgWeak(_) => {
+                            let src_set = self.successors_for_operand(state, args[2].node.clone());
+                            let dst_set = self.successors_for_deref(state, args[0].node.clone());
+                            let destination_set = state.resolve_place(*destination, self.instance);
+                            state.extend(&destination_set, &state.successors(&dst_set));
+                            state.extend(&dst_set, &src_set);
+                        }
+                        // All `atomic_load` intrinsics take `src` as an argument.
+                        // This is equivalent to `destination = *src`.
+                        Intrinsic::AtomicLoad(_) => {
+                            let src_set = self.successors_for_deref(state, args[0].node.clone());
+                            let destination_set = state.resolve_place(*destination, self.instance);
+                            state.extend(&destination_set, &state.successors(&src_set));
+                        }
+                        // All `atomic_store` intrinsics take `dst, val` as arguments.
+                        // This is equivalent to `*dst = val`.
+                        Intrinsic::AtomicStore(_) => {
+                            let dst_set = self.successors_for_deref(state, args[0].node.clone());
+                            let val_set = self.successors_for_operand(state, args[1].node.clone());
+                            state.extend(&dst_set, &val_set);
+                        }
+                        // All other `atomic` intrinsics take `dst, src` as arguments.
+                        // This is equivalent to `destination = *dst; *dst = src`.
+                        Intrinsic::AtomicAnd(_)
+                        | Intrinsic::AtomicMax(_)
+                        | Intrinsic::AtomicMin(_)
+                        | Intrinsic::AtomicNand(_)
+                        | Intrinsic::AtomicOr(_)
+                        | Intrinsic::AtomicUmax(_)
+                        | Intrinsic::AtomicUmin(_)
+                        | Intrinsic::AtomicXadd(_)
+                        | Intrinsic::AtomicXchg(_)
+                        | Intrinsic::AtomicXor(_)
+                        | Intrinsic::AtomicXsub(_) => {
+                            let src_set = self.successors_for_operand(state, args[1].node.clone());
+                            let dst_set = self.successors_for_deref(state, args[0].node.clone());
+                            let destination_set = state.resolve_place(*destination, self.instance);
+                            state.extend(&destination_set, &state.successors(&dst_set));
+                            state.extend(&dst_set, &src_set);
+                        }
+                        // Similar to `copy_nonoverlapping`, argument order is `src`, `dst`, `count`.
+                        Intrinsic::Copy => {
+                            self.apply_copy_effect(
+                                state,
+                                args[0].node.clone(),
+                                args[1].node.clone(),
+                            );
+                        }
+                        Intrinsic::TypedSwap => {
+                            // Extend from x_set to y_set and vice-versa so that both x and y alias
+                            // to a union of places each of them alias to.
+                            let x_set = self.successors_for_deref(state, args[0].node.clone());
+                            let y_set = self.successors_for_deref(state, args[1].node.clone());
+                            state.extend(&x_set, &state.successors(&y_set));
+                            state.extend(&y_set, &state.successors(&x_set));
+                        }
+                        // Similar to `copy_nonoverlapping`, argument order is `dst`, `src`, `count`.
+                        Intrinsic::VolatileCopyMemory
+                        | Intrinsic::VolatileCopyNonOverlappingMemory => {
+                            self.apply_copy_effect(
+                                state,
+                                args[1].node.clone(),
+                                args[0].node.clone(),
+                            );
+                        }
+                        // Semantically equivalent to dest = *a
+                        Intrinsic::VolatileLoad | Intrinsic::UnalignedVolatileLoad => {
+                            // Destination of the return value.
+                            let lvalue_set = state.resolve_place(*destination, self.instance);
+                            let rvalue_set = self.successors_for_deref(state, args[0].node.clone());
+                            state.extend(&lvalue_set, &state.successors(&rvalue_set));
+                        }
+                        // Semantically equivalent *a = b.
+                        Intrinsic::VolatileStore => {
+                            let lvalue_set = self.successors_for_deref(state, args[0].node.clone());
+                            let rvalue_set =
+                                self.successors_for_operand(state, args[1].node.clone());
+                            state.extend(&lvalue_set, &rvalue_set);
+                        }
+                        Intrinsic::Unimplemented { .. } => {
+                            // This will be taken care of at the codegen level.
+                        }
+                        intrinsic => {
+                            unimplemented!(
+                                "Kani does not support reasoning about aliasing in presence of intrinsic `{intrinsic:?}`. For more information about the state of uninitialized memory checks implementation, see: https://github.com/model-checking/kani/issues/3300."
+                            );
                         }
                     }
                 }
@@ -532,7 +521,7 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
             | Rvalue::ShallowInitBox(operand, _)
             | Rvalue::Cast(_, operand, _)
             | Rvalue::Repeat(operand, ..) => self.successors_for_operand(state, operand),
-            Rvalue::Ref(_, _, ref_place) | Rvalue::AddressOf(_, ref_place) => {
+            Rvalue::Ref(_, _, ref_place) | Rvalue::RawPtr(_, ref_place) => {
                 // Here, a reference to a place is created, which leaves the place
                 // unchanged.
                 state.resolve_place(ref_place, self.instance)
@@ -681,6 +670,7 @@ fn is_identity_aliasing_intrinsic(intrinsic: Intrinsic) -> bool {
         | Intrinsic::PtrOffsetFrom
         | Intrinsic::PtrOffsetFromUnsigned
         | Intrinsic::RawEq
+        | Intrinsic::RetagBoxToRaw
         | Intrinsic::RintF32
         | Intrinsic::RintF64
         | Intrinsic::RotateLeft
@@ -695,6 +685,7 @@ fn is_identity_aliasing_intrinsic(intrinsic: Intrinsic) -> bool {
         | Intrinsic::SqrtF32
         | Intrinsic::SqrtF64
         | Intrinsic::SubWithOverflow
+        | Intrinsic::Transmute
         | Intrinsic::TruncF32
         | Intrinsic::TruncF64
         | Intrinsic::TypeId

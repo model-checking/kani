@@ -6,7 +6,7 @@
 use stable_mir::{
     abi::{FieldsShape, Scalar, TagEncoding, ValueAbi, VariantsShape},
     target::{MachineInfo, MachineSize},
-    ty::{AdtKind, IndexedVal, RigidTy, Ty, TyKind, UintTy},
+    ty::{AdtKind, IndexedVal, RigidTy, Ty, TyKind, UintTy, VariantIdx},
     CrateDef,
 };
 
@@ -43,8 +43,24 @@ pub enum PointeeLayout {
     Sized { layout: Layout },
     /// Layout of slices, *const/mut str is included in this case and treated as *const/mut [u8].
     Slice { element_layout: Layout },
+    /// Layout of unions, which are shared storage for multiple fields of potentially different layouts.
+    Union { field_layouts: Vec<Layout> },
     /// Trait objects have an arbitrary layout.
     TraitObject,
+}
+
+impl PointeeLayout {
+    /// Returns the size of the layout, if available.
+    pub fn maybe_size(&self) -> Option<usize> {
+        match self {
+            PointeeLayout::Sized { layout } => Some(layout.len()),
+            PointeeLayout::Slice { element_layout } => Some(element_layout.len()),
+            PointeeLayout::Union { field_layouts } => {
+                Some(field_layouts.iter().map(|field_layout| field_layout.len()).max().unwrap())
+            }
+            PointeeLayout::TraitObject => None,
+        }
+    }
 }
 
 pub struct PointeeInfo {
@@ -56,6 +72,25 @@ impl PointeeInfo {
     pub fn from_ty(ty: Ty) -> Result<Self, String> {
         match ty.kind() {
             TyKind::RigidTy(rigid_ty) => match rigid_ty {
+                RigidTy::Adt(adt_def, args) if adt_def.kind() == AdtKind::Union => {
+                    assert!(adt_def.variants().len() == 1);
+                    let fields: Result<_, _> = adt_def
+                        .variant(VariantIdx::to_val(0))
+                        .unwrap()
+                        .fields()
+                        .into_iter()
+                        .map(|field_def| {
+                            let ty = field_def.ty_with_args(&args);
+                            let size_in_bytes = ty.layout().unwrap().shape().size.bytes();
+                            data_bytes_for_ty(&MachineInfo::target(), ty, 0)
+                                .map(|data_chunks| generate_byte_mask(size_in_bytes, data_chunks))
+                        })
+                        .collect();
+                    Ok(PointeeInfo {
+                        pointee_ty: ty,
+                        layout: PointeeLayout::Union { field_layouts: fields? },
+                    })
+                }
                 RigidTy::Str => {
                     let slicee_ty = Ty::unsigned_ty(UintTy::U8);
                     let size_in_bytes = slicee_ty.layout().unwrap().shape().size.bytes();
@@ -330,7 +365,7 @@ fn data_bytes_for_ty(
                 | RigidTy::Dynamic(_, _, _) => Err(format!("Unsupported {ty:?}")),
             }
         }
-        FieldsShape::Union(_) => Err(format!("Unsupported {ty:?}")),
+        FieldsShape::Union(_) => Err(format!("Unions as fields of unions are unsupported {ty:?}")),
         FieldsShape::Array { .. } => Ok(vec![]),
     }
 }
@@ -357,12 +392,12 @@ fn tys_layout_cmp_to_size(from_ty: &Ty, to_ty: &Ty, cmp: impl Fn(bool, bool) -> 
         let from_ty_layout = match from_ty_info.layout() {
             PointeeLayout::Sized { layout } => layout,
             PointeeLayout::Slice { element_layout } => element_layout,
-            PointeeLayout::TraitObject => return false,
+            PointeeLayout::TraitObject | PointeeLayout::Union { .. } => return false,
         };
         let to_ty_layout = match to_ty_info.layout() {
             PointeeLayout::Sized { layout } => layout,
             PointeeLayout::Slice { element_layout } => element_layout,
-            PointeeLayout::TraitObject => return false,
+            PointeeLayout::TraitObject | PointeeLayout::Union { .. } => return false,
         };
         // Ensure `to_ty_layout` does not have a larger size.
         if to_ty_layout.len() <= from_ty_layout.len() {
