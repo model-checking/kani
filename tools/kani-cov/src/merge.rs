@@ -43,7 +43,8 @@ fn parse_raw_results(paths: &Vec<PathBuf>) -> Result<Vec<CoverageResults>> {
 fn combine_raw_results(results: &Vec<CoverageResults>) -> CombinedCoverageResults {
     let all_file_function_names = function_names_from_results(results);
 
-    let mut new_data = BTreeMap::new();
+    let mut new_data: BTreeMap<String, Vec<(String, Vec<CovResult>)>> = BTreeMap::new();
+
     for (file_name, fun_name) in all_file_function_names {
         let mut this_fun_checks: Vec<&CoverageCheck> = Vec::new();
 
@@ -83,8 +84,14 @@ fn combine_raw_results(results: &Vec<CoverageResults>) -> CombinedCoverageResult
             new_results.push(new_result);
         }
 
-        let pair_string = format!("{file_name}+{fun_name}");
-        new_data.insert(pair_string, new_results);
+        // let pair_string = format!("{file_name}+{fun_name}");
+        let filename_copy = file_name.clone();
+        if new_data.contains_key(&file_name) {
+            new_data.get_mut(&filename_copy).unwrap().push((fun_name, new_results));
+        } else {
+            new_data.insert(file_name.clone(), vec![(fun_name, new_results)]);
+        }
+        // new_data.insert(file_name, (fun_name, new_results));
     }
     CombinedCoverageResults { data: new_data }
 }

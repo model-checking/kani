@@ -33,6 +33,10 @@ pub fn summary_main(args: &SummaryArgs) -> Result<()> {
         function_info.extend(new_info);
     }
 
+    for info in function_info {
+        calculate_coverage_info(&info, &cov_results);
+    }
+
     Ok(())
 }
 
@@ -40,6 +44,12 @@ pub fn validate_summary_args(_args: &SummaryArgs) -> Result<()> {
     Ok(())
 }
 
+fn calculate_coverage_info(info: &FunctionCoverageInfo, results: &CombinedCoverageResults) {
+    // `info` does not include file so how do we match?
+    // use function just for now...
+    let this_info_key = results.data.keys().find(|key| key.split_once('+').unwrap_or_default().1 == info.name).unwrap();
+    let this_info_results = results.data.get(this_info_key);
+}
 #[derive(Debug)]
 struct FunctionCoverageInfo {
     name: String,
@@ -47,6 +57,11 @@ struct FunctionCoverageInfo {
     end: (usize, usize),
     num_lines: usize,
 }
+
+// struct SummaryInfo {
+//     covered_functions: u32,
+//     total_functions: u32,
+// }
 
 fn function_info_from_file(filepath: &PathBuf) -> Vec<FunctionCoverageInfo> {
     let source_code = fs::read_to_string(filepath).expect("could not read source file");

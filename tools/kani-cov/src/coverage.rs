@@ -32,7 +32,7 @@ pub struct CoverageResults {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CombinedCoverageResults {
-    pub data: BTreeMap<String, Vec<CovResult>>,
+    pub data: BTreeMap<String, Vec<(String, Vec<CovResult>)>>,
 }
 
 // pub fn fmt_coverage_results(coverage_results: &CoverageResults) -> Result<String> {
