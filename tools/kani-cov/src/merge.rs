@@ -3,8 +3,8 @@
 
 use std::{
     collections::BTreeMap,
-    fs::File,
-    io::{BufReader, BufWriter},
+    fs::{File, OpenOptions},
+    io::{BufReader, BufWriter, Write},
     path::PathBuf,
 };
 
@@ -41,19 +41,20 @@ fn parse_raw_results(paths: &Vec<PathBuf>) -> Result<Vec<CoverageResults>> {
 }
 
 fn combine_raw_results(results: &Vec<CoverageResults>) -> CombinedCoverageResults {
-    let all_function_names = function_names_from_results(results);
+    let all_file_function_names = function_names_from_results(results);
 
     let mut new_data = BTreeMap::new();
-    for fun_name in all_function_names {
+    for (file_name, fun_name) in all_file_function_names {
         let mut this_fun_checks: Vec<&CoverageCheck> = Vec::new();
 
         for result in results {
-            if result.data.contains_key(&fun_name) {
-                this_fun_checks.extend(result.data.get(&fun_name).unwrap())
+            if result.data.contains_key(&file_name) {
+                this_fun_checks.extend(result.data.get(&file_name).unwrap().iter().filter(|check| check.function == fun_name))
             }
         }
 
         let mut new_results = Vec::new();
+
         while !this_fun_checks.is_empty() {
             let this_region_check = this_fun_checks[0];
             // should do this with a partition...
@@ -65,12 +66,14 @@ fn combine_raw_results(results: &Vec<CoverageResults>) -> CombinedCoverageResult
             this_fun_checks.retain(|check| check.region != this_region_check.region);
             same_region_checks.push(this_region_check);
             let total_times = same_region_checks.len().try_into().unwrap();
+
             let times_covered = same_region_checks
                 .iter()
                 .filter(|check| check.status == CheckStatus::Covered)
                 .count()
                 .try_into()
                 .unwrap();
+
             let new_result = CovResult {
                 function: fun_name.clone(),
                 region: this_region_check.region.clone(),
@@ -80,7 +83,8 @@ fn combine_raw_results(results: &Vec<CoverageResults>) -> CombinedCoverageResult
             new_results.push(new_result);
         }
 
-        new_data.insert(fun_name, new_results);
+        let pair_string = format!("{file_name}+{fun_name}");
+        new_data.insert(pair_string, new_results);
     }
     CombinedCoverageResults { data: new_data }
 }
@@ -91,7 +95,8 @@ fn save_combined_results(
 ) -> Result<()> {
     let output_path =
         if let Some(out) = output { out } else { &PathBuf::from("default_kanicov.json") };
-    let file = File::create(output_path)?;
+
+    let file = OpenOptions::new().write(true).create(true).open(output_path)?;
     let writer = BufWriter::new(file);
 
     serde_json::to_writer(writer, results)?;
@@ -99,6 +104,20 @@ fn save_combined_results(
     Ok(())
 }
 
-fn function_names_from_results(results: &[CoverageResults]) -> Vec<String> {
-    results.iter().map(|result| result.data.keys().cloned().collect()).collect()
+fn function_names_from_results(results: &[CoverageResults]) -> Vec<(String, String)> {
+    let mut file_function_pairs = vec![];
+    for result in results {
+        let files = result.data.keys().cloned();
+        for file in files {
+            let checks = result.data.get(&file).unwrap();
+            for check in checks {
+                let function = check.function.clone();
+                let file_function = (file.clone(), function);
+                if !file_function_pairs.contains(&file_function) {
+                    file_function_pairs.push(file_function);
+                }
+            }
+        }
+    }
+    file_function_pairs
 }
