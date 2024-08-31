@@ -113,7 +113,7 @@ macro_rules! kani_mem_init {
                     && self.tracked_offset >= from_offset
                     && self.tracked_offset < from_offset + num_elts * LAYOUT_SIZE
                 {
-                    let should_reset: bool = crate::any();
+                    let should_reset: bool = super::any();
                     if should_reset {
                         self.tracked_object_id = to_obj;
                         self.tracked_offset += to_offset - from_offset;
