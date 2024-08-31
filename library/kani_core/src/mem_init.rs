@@ -95,6 +95,33 @@ macro_rules! kani_mem_init {
                 }
             }
 
+            /// Copy memory initialization state by non-deterministically switching the tracked object and
+            /// adjusting the tracked offset.
+            pub fn copy<const LAYOUT_SIZE: usize>(
+                &mut self,
+                from_ptr: *const u8,
+                to_ptr: *const u8,
+                num_elts: usize,
+            ) {
+                let from_obj = super::mem::pointer_object(from_ptr);
+                let from_offset = super::mem::pointer_offset(from_ptr);
+
+                let to_obj = super::mem::pointer_object(to_ptr);
+                let to_offset = super::mem::pointer_offset(to_ptr);
+
+                if self.tracked_object_id == from_obj
+                    && self.tracked_offset >= from_offset
+                    && self.tracked_offset < from_offset + num_elts * LAYOUT_SIZE
+                {
+                    let should_reset: bool = crate::any();
+                    if should_reset {
+                        self.tracked_object_id = to_obj;
+                        self.tracked_offset += to_offset - from_offset;
+                        // Note that this preserves the value.
+                    }
+                }
+            }
+
             /// Return currently tracked memory initialization state if `ptr` points to the currently
             /// tracked object and the tracked offset lies within `LAYOUT_SIZE * num_elts` bytes of `ptr`.
             /// Return `true` otherwise.
@@ -284,6 +311,37 @@ macro_rules! kani_mem_init {
             unsafe {
                 MEM_INIT_STATE.set_slice(ptr as *const u8, layout, num_elts, value);
             }
+        }
+
+        /// Copy initialization state of `size_of::<T> * num_elts` bytes from one pointer to the other. Note
+        /// that in this case `LAYOUT_SIZE == size_of::<T>`.
+        #[kanitool::disable_checks(pointer)]
+        #[rustc_diagnostic_item = "KaniCopyInitState"]
+        fn copy_init_state<const LAYOUT_SIZE: usize, T>(
+            from: *const T,
+            to: *const T,
+            num_elts: usize,
+        ) {
+            if LAYOUT_SIZE == 0 {
+                return;
+            }
+            let (from_ptr, _) = from.to_raw_parts();
+            let (to_ptr, _) = to.to_raw_parts();
+            unsafe {
+                MEM_INIT_STATE.copy::<LAYOUT_SIZE>(
+                    from_ptr as *const u8,
+                    to_ptr as *const u8,
+                    num_elts,
+                );
+            }
+        }
+
+        /// Copy initialization state of `size_of::<T>` bytes from one pointer to the other. Note that in
+        /// this case `LAYOUT_SIZE == size_of::<T>`.
+        #[kanitool::disable_checks(pointer)]
+        #[rustc_diagnostic_item = "KaniCopyInitStateSingle"]
+        fn copy_init_state_single<const LAYOUT_SIZE: usize, T>(from: *const T, to: *const T) {
+            copy_init_state::<LAYOUT_SIZE, T>(from, to, 1);
         }
     };
 }
