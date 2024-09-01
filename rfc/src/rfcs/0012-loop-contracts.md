@@ -243,11 +243,10 @@ easier.
 - How do we handle havocing in unsafe code where it is fine to break the safety invariant
   of Rust? In that case, we may need havocing function that preserves validity invariant
   but not safety invariant.
+- What is the proper mechanism for users to specify the loops that they want to opt-out from applying loop contracts, and (optionally) the unwind numbers for them. Such options should be per-harness.
 
 ## Future possibilities
 
-- We can improve the UX by allowing users to choose if they want to apply loop contracts
-  to certain annotated loops or not.
 - We can employ CBMC's decreases inference to infer the decreases clauses to reduce the
   user burden of specifying the decreases clauses.
 
