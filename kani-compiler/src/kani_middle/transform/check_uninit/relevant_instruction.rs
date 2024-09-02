@@ -16,75 +16,38 @@ use strum_macros::AsRefStr;
 pub enum MemoryInitOp {
     /// Check memory initialization of data bytes in a memory region starting from the pointer
     /// `operand` and of length `sizeof(operand)` bytes.
-    Check {
-        operand: Operand,
-    },
+    Check { operand: Operand },
     /// Set memory initialization state of data bytes in a memory region starting from the pointer
     /// `operand` and of length `sizeof(operand)` bytes.
-    Set {
-        operand: Operand,
-        value: bool,
-        position: InsertPosition,
-    },
+    Set { operand: Operand, value: bool, position: InsertPosition },
     /// Check memory initialization of data bytes in a memory region starting from the pointer
     /// `operand` and of length `count * sizeof(operand)` bytes.
-    CheckSliceChunk {
-        operand: Operand,
-        count: Operand,
-    },
+    CheckSliceChunk { operand: Operand, count: Operand },
     /// Set memory initialization state of data bytes in a memory region starting from the pointer
     /// `operand` and of length `count * sizeof(operand)` bytes.
-    SetSliceChunk {
-        operand: Operand,
-        count: Operand,
-        value: bool,
-        position: InsertPosition,
-    },
+    SetSliceChunk { operand: Operand, count: Operand, value: bool, position: InsertPosition },
     /// Set memory initialization of data bytes in a memory region starting from the reference to
     /// `operand` and of length `sizeof(operand)` bytes.
-    CheckRef {
-        operand: Operand,
-    },
+    CheckRef { operand: Operand },
     /// Set memory initialization of data bytes in a memory region starting from the reference to
     /// `operand` and of length `sizeof(operand)` bytes.
-    SetRef {
-        operand: Operand,
-        value: bool,
-        position: InsertPosition,
-    },
+    SetRef { operand: Operand, value: bool, position: InsertPosition },
     /// Unsupported memory initialization operation.
-    Unsupported {
-        reason: String,
-    },
+    Unsupported { reason: String },
     /// Operation that trivially accesses uninitialized memory, results in injecting `assert!(false)`.
-    TriviallyUnsafe {
-        reason: String,
-    },
-    /// Operation that copies memory initialization state over to another operand.
-    Copy {
-        from: Operand,
-        to: Operand,
-        count: Operand,
-    },
-
-    AssignUnion {
-        lvalue: Place,
-        rvalue: Operand,
-    },
-    CreateUnion {
-        operand: Operand,
-        field: FieldIdx,
-    },
-
-    LoadArgument {
-        operand: Operand,
-        argument_no: usize,
-    },
-    StoreArgument {
-        operand: Operand,
-        argument_no: usize,
-    },
-    ResetArgumentBuffer,
+    TriviallyUnsafe { reason: String },
+    /// Copy memory initialization state over to another operand.
+    Copy { from: Operand, to: Operand, count: Operand },
+    /// Copy memory initialization state over from one union variable to another.
+    AssignUnion { lvalue: Place, rvalue: Operand },
+    /// Create a union from scratch with a given field index and store it in the provided operand.
+    CreateUnion { operand: Operand, field: FieldIdx },
+    /// Load argument containing a union from the argument buffer together if the argument number
+    /// provided matches.
+    LoadArgument { operand: Operand, argument_no: usize },
+    /// Store argument containing a union into the argument buffer together with the argument number
+    /// provided.
+    StoreArgument { operand: Operand, argument_no: usize },
 }
 
 impl MemoryInitOp {
@@ -112,8 +75,7 @@ impl MemoryInitOp {
             MemoryInitOp::Copy { .. }
             | MemoryInitOp::AssignUnion { .. }
             | MemoryInitOp::Unsupported { .. }
-            | MemoryInitOp::TriviallyUnsafe { .. }
-            | MemoryInitOp::ResetArgumentBuffer => {
+            | MemoryInitOp::TriviallyUnsafe { .. } => {
                 unreachable!()
             }
         }
@@ -164,9 +126,7 @@ impl MemoryInitOp {
                 let rvalue = Rvalue::AddressOf(Mutability::Not, place.clone());
                 rvalue.ty(body.locals()).unwrap()
             }
-            MemoryInitOp::Unsupported { .. }
-            | MemoryInitOp::TriviallyUnsafe { .. }
-            | MemoryInitOp::ResetArgumentBuffer => {
+            MemoryInitOp::Unsupported { .. } | MemoryInitOp::TriviallyUnsafe { .. } => {
                 unreachable!("operands do not exist for this operation")
             }
             MemoryInitOp::Copy { from, to, .. } => {
@@ -207,8 +167,7 @@ impl MemoryInitOp {
             | MemoryInitOp::Unsupported { .. }
             | MemoryInitOp::TriviallyUnsafe { .. }
             | MemoryInitOp::StoreArgument { .. }
-            | MemoryInitOp::LoadArgument { .. }
-            | MemoryInitOp::ResetArgumentBuffer => unreachable!(),
+            | MemoryInitOp::LoadArgument { .. } => unreachable!(),
         }
     }
 
@@ -226,8 +185,7 @@ impl MemoryInitOp {
             | MemoryInitOp::Copy { .. }
             | MemoryInitOp::AssignUnion { .. }
             | MemoryInitOp::StoreArgument { .. }
-            | MemoryInitOp::LoadArgument { .. }
-            | MemoryInitOp::ResetArgumentBuffer => unreachable!(),
+            | MemoryInitOp::LoadArgument { .. } => unreachable!(),
         }
     }
 
@@ -245,8 +203,7 @@ impl MemoryInitOp {
             | MemoryInitOp::Copy { .. }
             | MemoryInitOp::AssignUnion { .. }
             | MemoryInitOp::StoreArgument { .. }
-            | MemoryInitOp::LoadArgument { .. }
-            | MemoryInitOp::ResetArgumentBuffer => None,
+            | MemoryInitOp::LoadArgument { .. } => None,
         }
     }
 
@@ -261,8 +218,7 @@ impl MemoryInitOp {
             | MemoryInitOp::Unsupported { .. }
             | MemoryInitOp::TriviallyUnsafe { .. }
             | MemoryInitOp::StoreArgument { .. }
-            | MemoryInitOp::LoadArgument { .. }
-            | MemoryInitOp::ResetArgumentBuffer => InsertPosition::Before,
+            | MemoryInitOp::LoadArgument { .. } => InsertPosition::Before,
             MemoryInitOp::Copy { .. }
             | MemoryInitOp::AssignUnion { .. }
             | MemoryInitOp::CreateUnion { .. } => InsertPosition::After,

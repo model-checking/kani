@@ -393,7 +393,6 @@ impl MirVisitor for CheckUninitVisitor {
                                 .filter(|(_, arg)| arg.ty(&self.locals).unwrap().kind().is_union())
                                 .collect();
                             if !union_args.is_empty() {
-                                self.push_target(MemoryInitOp::ResetArgumentBuffer);
                                 for (idx, operand) in union_args {
                                     self.push_target(MemoryInitOp::StoreArgument {
                                         operand: operand.clone(),

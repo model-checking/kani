@@ -150,11 +150,6 @@ impl<'a, 'tcx> UninitInstrumenter<'a, 'tcx> {
             return;
         };
 
-        if let MemoryInitOp::ResetArgumentBuffer = &operation {
-            self.inject_argument_buffer_reset(body, source, operation.position());
-            return;
-        }
-
         let pointee_info = {
             // Sanity check: since CBMC memory object primitives only accept pointers, need to
             // ensure the correct type.
@@ -199,9 +194,7 @@ impl<'a, 'tcx> UninitInstrumenter<'a, 'tcx> {
             MemoryInitOp::StoreArgument { .. } | MemoryInitOp::LoadArgument { .. } => {
                 self.build_argument_operation(body, source, operation, pointee_info)
             }
-            MemoryInitOp::Unsupported { .. }
-            | MemoryInitOp::TriviallyUnsafe { .. }
-            | MemoryInitOp::ResetArgumentBuffer => {
+            MemoryInitOp::Unsupported { .. } | MemoryInitOp::TriviallyUnsafe { .. } => {
                 unreachable!()
             }
         };
@@ -548,7 +541,9 @@ impl<'a, 'tcx> UninitInstrumenter<'a, 'tcx> {
         );
     }
 
-    /// Construct a piece of instrumentation storing information about unions passed as arguments.
+    /// Instrument the code to pass information about arguments containing unions. Whenever a
+    /// function is called and some of the arguments contain unions, we store the information. And
+    /// when we enter the callee, we load the information.
     fn build_argument_operation(
         &mut self,
         body: &mut MutableBody,
@@ -660,25 +655,6 @@ impl<'a, 'tcx> UninitInstrumenter<'a, 'tcx> {
         }));
         let result = body.insert_assignment(rvalue, source, position);
         body.insert_check(tcx, &self.check_type, source, position, result, reason);
-    }
-
-    fn inject_argument_buffer_reset(
-        &mut self,
-        body: &mut MutableBody,
-        source: &mut SourceInstruction,
-        position: InsertPosition,
-    ) {
-        let ret_place = Place {
-            local: body.new_local(Ty::new_tuple(&[]), source.span(body.blocks()), Mutability::Not),
-            projection: vec![],
-        };
-        let fn_def = get_mem_init_fn_def(
-            self.tcx,
-            KANI_RESET_ARGUMENT_BUFFER_DIAGNOSTIC,
-            &mut self.mem_init_fn_cache,
-        );
-        let reset_fn_instance = Instance::resolve(fn_def, &GenericArgs(vec![])).unwrap();
-        body.insert_call(&reset_fn_instance, source, position, vec![], ret_place);
     }
 }
 
