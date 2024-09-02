@@ -22,6 +22,7 @@
 
 mod arbitrary;
 mod mem;
+mod mem_init;
 
 pub use kani_macros::*;
 
@@ -45,6 +46,10 @@ macro_rules! kani_lib {
             pub mod mem {
                 kani_core::kani_mem!(core);
             }
+
+            mod mem_init {
+                kani_core::kani_mem_init!(core);
+            }
         }
     };
 
@@ -55,6 +60,10 @@ macro_rules! kani_lib {
 
         pub mod mem {
             kani_core::kani_mem!(std);
+        }
+
+        mod mem_init {
+            kani_core::kani_mem_init!(std);
         }
     };
 }
