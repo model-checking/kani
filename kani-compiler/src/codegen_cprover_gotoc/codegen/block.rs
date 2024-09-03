@@ -37,7 +37,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 } else {
                     self.codegen_terminator(term)
                 };
-              
+
                 self.current_fn_mut().push_onto_block(tcode.with_label(label));
             }
             _ => {
