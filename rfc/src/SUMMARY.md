@@ -17,3 +17,4 @@
 - [0009-function-contracts](rfcs/0009-function-contracts.md)
 - [0010-quantifiers](rfcs/0010-quantifiers.md)
 - [0011-source-coverage](rfcs/0011-source-coverage.md)
+- [0012-list](rfcs/0012-list.md)
