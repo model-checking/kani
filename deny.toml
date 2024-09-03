@@ -7,10 +7,7 @@
 [advisories]
 db-path = "~/.cargo/advisory-db"
 db-urls = ["https://github.com/rustsec/advisory-db"]
-vulnerability = "deny"
-unmaintained = "warn"
 yanked = "deny"
-notice = "warn"
 # A list of advisory IDs to ignore. Note that ignored advisories will still
 # output a note when they are encountered.
 ignore = [
@@ -21,19 +18,14 @@ ignore = [
 # More documentation for the licenses section can be found here:
 # https://embarkstudios.github.io/cargo-deny/checks/licenses/cfg.html
 [licenses]
-default = "deny"
-unlicensed = "deny"
-copyleft = "deny"
 allow = [
     "MIT",
     "Apache-2.0",
 ]
-allow-osi-fsf-free = "neither"
 confidence-threshold = 0.8
 
 # All these exceptions should probably appear in: tools/build-kani/license-notes.txt
 exceptions = [
-    { name = "Inflector", allow=["BSD-2-Clause"] },
     { name = "unicode-ident", allow=["Unicode-DFS-2016"] },
 ]
 

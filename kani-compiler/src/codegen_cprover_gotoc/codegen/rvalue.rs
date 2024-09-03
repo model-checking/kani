@@ -1,7 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use crate::args::ExtraChecks;
 use crate::codegen_cprover_gotoc::codegen::place::ProjectedPlace;
 use crate::codegen_cprover_gotoc::codegen::ty_stable::pointee_type_stable;
 use crate::codegen_cprover_gotoc::codegen::PropertyClass;
@@ -695,6 +694,14 @@ impl<'tcx> GotocCtx<'tcx> {
                         let meta = self.codegen_operand_stable(&operands[1]);
                         slice_fat_ptr(typ, data_cast, meta, &self.symbol_table)
                     }
+                    TyKind::RigidTy(RigidTy::Str) => {
+                        let pointee_goto_typ = Type::unsigned_int(8);
+                        // cast data to pointer with specified type
+                        let data_cast =
+                            data.cast_to(Type::Pointer { typ: Box::new(pointee_goto_typ) });
+                        let meta = self.codegen_operand_stable(&operands[1]);
+                        slice_fat_ptr(typ, data_cast, meta, &self.symbol_table)
+                    }
                     TyKind::RigidTy(RigidTy::Adt(..)) => {
                         let pointee_goto_typ = self.codegen_ty_stable(pointee_ty);
                         let data_cast =
@@ -730,18 +737,14 @@ impl<'tcx> GotocCtx<'tcx> {
             Rvalue::Repeat(op, sz) => self.codegen_rvalue_repeat(op, sz, loc),
             Rvalue::Ref(_, _, p) | Rvalue::AddressOf(_, p) => {
                 let place_ref = self.codegen_place_ref_stable(&p, loc);
-                if self.queries.args().ub_check.contains(&ExtraChecks::PtrToRefCast) {
-                    let place_ref_type = place_ref.typ().clone();
-                    match self.codegen_raw_ptr_deref_validity_check(&p, &loc) {
-                        Some(ptr_validity_check_expr) => Expr::statement_expression(
-                            vec![ptr_validity_check_expr, place_ref.as_stmt(loc)],
-                            place_ref_type,
-                            loc,
-                        ),
-                        None => place_ref,
-                    }
-                } else {
-                    place_ref
+                let place_ref_type = place_ref.typ().clone();
+                match self.codegen_raw_ptr_deref_validity_check(&p, &loc) {
+                    Some(ptr_validity_check_expr) => Expr::statement_expression(
+                        vec![ptr_validity_check_expr, place_ref.as_stmt(loc)],
+                        place_ref_type,
+                        loc,
+                    ),
+                    None => place_ref,
                 }
             }
             Rvalue::Len(p) => self.codegen_rvalue_len(p, loc),

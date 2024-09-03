@@ -7,7 +7,7 @@ VERIFICATION:- SUCCESSFUL
 
 .assigns\
 - Status: SUCCESS\
-- Description: "Check that var_4 is assignable"\
+- Description: "Check that *dst is assignable"\
 in function copy
 
 VERIFICATION:- SUCCESSFUL

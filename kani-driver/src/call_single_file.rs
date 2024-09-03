@@ -135,10 +135,6 @@ impl KaniSession {
             flags.push("--ub-check=validity".into())
         }
 
-        if self.args.common_args.unstable_features.contains(UnstableFeature::PtrToRefCastChecks) {
-            flags.push("--ub-check=ptr_to_ref_cast".into())
-        }
-
         if self.args.common_args.unstable_features.contains(UnstableFeature::UninitChecks) {
             // Automatically enable shadow memory, since the version of uninitialized memory checks
             // without non-determinism depends on it.
@@ -159,6 +155,11 @@ impl KaniSession {
     pub fn kani_rustc_flags(&self, lib_config: LibConfig) -> Vec<OsString> {
         let mut flags: Vec<_> = base_rustc_flags(lib_config);
         // We only use panic abort strategy for verification since we cannot handle unwind logic.
+        if self.args.coverage {
+            flags.extend_from_slice(
+                &["-C", "instrument-coverage", "-Z", "no-profiler-runtime"].map(OsString::from),
+            );
+        }
         flags.extend_from_slice(
             &[
                 "-C",

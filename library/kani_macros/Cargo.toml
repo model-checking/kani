@@ -3,7 +3,7 @@
 
 [package]
 name = "kani_macros"
-version = "0.53.0"
+version = "0.54.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 publish = false
@@ -23,3 +23,6 @@ rustc_private = true
 
 [features]
 no_core = []
+
+[lints]
+workspace = true

@@ -22,6 +22,7 @@
 
 mod arbitrary;
 mod mem;
+mod mem_init;
 
 pub use kani_macros::*;
 
@@ -45,6 +46,10 @@ macro_rules! kani_lib {
             pub mod mem {
                 kani_core::kani_mem!(core);
             }
+
+            mod mem_init {
+                kani_core::kani_mem_init!(core);
+            }
         }
     };
 
@@ -52,6 +57,14 @@ macro_rules! kani_lib {
         pub use kani_core::*;
         kani_core::kani_intrinsics!(std);
         kani_core::generate_arbitrary!(std);
+
+        pub mod mem {
+            kani_core::kani_mem!(std);
+        }
+
+        mod mem_init {
+            kani_core::kani_mem_init!(std);
+        }
     };
 }
 
@@ -298,6 +311,7 @@ macro_rules! kani_intrinsics {
             loop {}
         }
 
+        #[doc(hidden)]
         pub mod internal {
             use crate::kani::Arbitrary;
             use core::ptr;

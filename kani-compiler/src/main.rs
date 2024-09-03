@@ -15,6 +15,7 @@
 #![feature(let_chains)]
 #![feature(f128)]
 #![feature(f16)]
+#![feature(non_exhaustive_omitted_patterns_lint)]
 extern crate rustc_abi;
 extern crate rustc_ast;
 extern crate rustc_ast_pretty;
@@ -39,6 +40,7 @@ extern crate tempfile;
 mod args;
 #[cfg(feature = "cprover")]
 mod codegen_cprover_gotoc;
+mod intrinsics;
 mod kani_compiler;
 mod kani_middle;
 mod kani_queries;

@@ -29,6 +29,7 @@ pub mod verify {
     }
 
     #[kani::proof_for_contract(dummy_read)]
+    #[cfg(not(uninit_checks))]
     fn check_dummy_read() {
         let val: char = kani::any();
         assert_eq!(unsafe { dummy_read(&val) }, val);
@@ -37,16 +38,19 @@ pub mod verify {
     /// Ensure we can verify constant functions.
     #[kani::requires(kani::mem::can_dereference(ptr))]
     #[rustc_diagnostic_item = "dummy_read"]
+    #[cfg(not(uninit_checks))]
     const unsafe fn dummy_read<T: Copy>(ptr: *const T) -> T {
         *ptr
     }
 
+    #[cfg(not(uninit_checks))]
     #[kani::proof_for_contract(swap_tuple)]
     fn check_swap_tuple() {
         let initial: (char, NonZeroU8) = kani::any();
         let _swapped = swap_tuple(initial);
     }
 
+    #[cfg(not(uninit_checks))]
     #[kani::ensures(| result | result.0 == second && result.1 == first)]
     fn swap_tuple((first, second): (char, NonZeroU8)) -> (NonZeroU8, char) {
         (second, first)
