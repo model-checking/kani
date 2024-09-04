@@ -6,6 +6,11 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 
 ## [0.55.0]
 
+### Major/Breaking Changes
+* Coverage reporting in Kani is now source-based instead of line-based.
+Consequently, the unstable `-Zline-coverage` flag has been replaced with a `-Zsource-coverage` one.
+Check the [Source-Coverage RFC](https://model-checking.github.io/kani/rfc/rfcs/0011-source-coverage.html) for more details.
+
 ### What's Changed
 * Update CBMC build instructions for Amazon Linux 2 by @tautschnig in https://github.com/model-checking/kani/pull/3431
 * Implement memory initialization state copy functionality by @artemagvanian in https://github.com/model-checking/kani/pull/3350
