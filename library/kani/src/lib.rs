@@ -32,7 +32,6 @@ pub mod shadow;
 pub mod slice;
 pub mod vec;
 
-mod mem_init;
 mod models;
 
 #[cfg(feature = "concrete_playback")]
