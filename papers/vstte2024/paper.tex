@@ -101,6 +101,9 @@ The extensible model of ownership relies on the simple (yet difficult) principle
 
 Rust developers use \textit{encapsulation} as a common design pattern to mask unsafe code blocks. The safe abstractions allow \texttt{unsafe} code blocks to be limited in number and not leak into all parts of the codebase. The Rust standard library itself has widespread use of \texttt{unsafe} code blocks, with almost 5.5K \texttt{unsafe} functions and 4.8K \texttt{unsafe} code blocks. In the last 3 years, 40 soundness issues have been filed in the Rust standard library along with 17 reported CVEs, even with the extensive testing and usage of the library. The onus of proving the safety and correctness of these \texttt{unsafe} code blocks is on the developers. Some such efforts have been made, but there is still a lot of ground to cover~\cite{jung2017rustbelt}.
 
+Verifying the Rust standard library is important and rewarding along multiple dimensions such as improving Rust, creating better verification tools, and enabling a safer ecosystem. Given the size and scope of this exercise, we believe doing this in isolation would be expensive and counter-productive. Ergo, we believe that motivating the community and creating a unified crowd-sourced effort is the desirable method, which we hope to catalyze via our proposed effort. 
+
+
 \section{Rust Verification Landscape}
 
 A common misconception Rust developers have is that they are producing \texttt{safe} memory-safe code by simply using Rust as their development language. To counter this, there have been significant efforts to create tools and techniques that enable verification of Rust code. Here we list (alphabetically) some tools:
