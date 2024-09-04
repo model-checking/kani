@@ -132,6 +132,9 @@ macro_rules! kani_mem_init {
                 }
             }
 
+            /// Set currently tracked memory initialization state to `true` if `ptr` points to the
+            /// currently tracked object and the tracked offset lies within `LAYOUT_SIZE * num_elts`
+            /// bytes of `ptr`.
             #[kanitool::disable_checks(pointer)]
             pub fn bless<const LAYOUT_SIZE: usize>(&mut self, ptr: *const u8, num_elts: usize) {
                 let obj = super::mem::pointer_object(ptr);
@@ -399,15 +402,17 @@ macro_rules! kani_mem_init {
         #[rustc_diagnostic_item = "KaniLoadArgument"]
         fn load_argument<const LAYOUT_SIZE: usize, T>(to: *const T, selected_argument: usize) {
             let (to_ptr, _) = to.to_raw_parts();
-            unsafe {
-                if let Some(buffer) = ARGUMENT_BUFFER {
-                    if buffer.selected_argument == selected_argument {
-                        assert!(buffer.layout_size == LAYOUT_SIZE);
-                        copy_init_state_single::<LAYOUT_SIZE, ()>(buffer.saved_address, to_ptr);
+            if let Some(buffer) = unsafe { ARGUMENT_BUFFER } {
+                if buffer.selected_argument == selected_argument {
+                    assert!(buffer.layout_size == LAYOUT_SIZE);
+                    copy_init_state_single::<LAYOUT_SIZE, ()>(buffer.saved_address, to_ptr);
+                    unsafe {
                         ARGUMENT_BUFFER = None;
-                        return;
                     }
+                    return;
                 }
+            }
+            unsafe {
                 MEM_INIT_STATE.bless::<LAYOUT_SIZE>(to_ptr as *const u8, 1);
             }
         }
