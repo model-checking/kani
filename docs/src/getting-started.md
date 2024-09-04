@@ -14,7 +14,8 @@ Proof harnesses are similar to test harnesses, especially property-based test ha
 
 Kani is currently under active development.
 Releases are published [here](https://github.com/model-checking/kani/releases).
-Major changes to Kani are documented in the [RFC Book](https://model-checking.github.io/kani/rfc). We also publish updates on Kani use cases and features on our [blog](https://model-checking.github.io/kani-verifier-blog/).
+Major changes to Kani are documented in the [RFC Book](https://model-checking.github.io/kani/rfc).
+We also publish updates on Kani use cases and features on our [blog](https://model-checking.github.io/kani-verifier-blog/).
 
 There is support for a fair amount of Rust language features, but not all (e.g., concurrency).
 Please see [Limitations](./limitations.md) for a detailed list of supported features.
