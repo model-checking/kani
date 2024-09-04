@@ -159,17 +159,17 @@ fdiv_fast | Partial | [#809](https://github.com/model-checking/kani/issues/809) 
 float_to_int_unchecked | No | |
 floorf32 | Yes | |
 floorf64 | Yes | |
-fmaf32 | No | |
-fmaf64 | No | |
+fmaf32 | Partial | Results are overapproximated |
+fmaf64 | Partial | Results are overapproximated |
 fmul_fast | Partial | [#809](https://github.com/model-checking/kani/issues/809) |
 forget | Yes | |
 frem_fast | No | |
 fsub_fast | Yes | |
 likely | Yes | |
-log10f32 | No | |
-log10f64 | No | |
-log2f32 | No | |
-log2f64 | No | |
+log10f32 | Partial | Results are overapproximated |
+log10f64 | Partial | Results are overapproximated |
+log2f32 | Partial | Results are overapproximated |
+log2f64 | Partial | Results are overapproximated |
 logf32 | Partial | Results are overapproximated |
 logf64 | Partial | Results are overapproximated |
 maxnumf32 | Yes | |
@@ -187,8 +187,8 @@ nontemporal_store | No | |
 offset | Partial | Doesn't check [all UB conditions](https://doc.rust-lang.org/std/primitive.pointer.html#safety-2) |
 powf32 | Partial | Results are overapproximated |
 powf64 | Partial | Results are overapproximated |
-powif32 | No | |
-powif64 | No | |
+powif32 | Partial | Results are overapproximated |
+powif64 | Partial | Results are overapproximated |
 pref_align_of | Yes | |
 prefetch_read_data | No | |
 prefetch_read_instruction | No | |
@@ -211,8 +211,8 @@ sinf32 | Partial | Results are overapproximated; [this test](https://github.com/
 sinf64 | Partial | Results are overapproximated; [this test](https://github.com/model-checking/kani/blob/main/tests/kani/Intrinsics/Math/Trigonometry/sinf64.rs) explains how |
 size_of | Yes | |
 size_of_val | Yes | |
-sqrtf32 | No | |
-sqrtf64 | No | |
+sqrtf32 | Partial | Results are overapproximated |
+sqrtf64 | Partial | Results are overapproximated |
 sub_with_overflow | Yes | |
 transmute | Partial | Doesn't check [all UB conditions](https://doc.rust-lang.org/nomicon/transmutes.html) |
 truncf32 | Yes | |
@@ -220,6 +220,7 @@ truncf64 | Yes | |
 try | No | [#267](https://github.com/model-checking/kani/issues/267) |
 type_id | Yes | |
 type_name | Yes | |
+typed_swap | Yes | |
 unaligned_volatile_load | No | See [Notes - Concurrency](#concurrency) |
 unaligned_volatile_store | No | See [Notes - Concurrency](#concurrency) |
 unchecked_add | Yes | |

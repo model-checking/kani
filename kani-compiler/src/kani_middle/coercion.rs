@@ -16,8 +16,8 @@
 use rustc_hir::lang_items::LangItem;
 use rustc_middle::traits::{ImplSource, ImplSourceUserDefinedData};
 use rustc_middle::ty::adjustment::CustomCoerceUnsized;
+use rustc_middle::ty::TraitRef;
 use rustc_middle::ty::{ParamEnv, Ty, TyCtxt};
-use rustc_middle::ty::{TraitRef, TypeAndMut};
 use rustc_smir::rustc_internal;
 use stable_mir::ty::{RigidTy, Ty as TyStable, TyKind};
 use stable_mir::Symbol;
@@ -99,7 +99,7 @@ pub fn extract_unsize_casting<'tcx>(
         coerce_info.dst_ty
     ));
     // Find the tail of the coercion that determines the type of metadata to be stored.
-    let (src_base_ty, dst_base_ty) = tcx.struct_lockstep_tails_erasing_lifetimes(
+    let (src_base_ty, dst_base_ty) = tcx.struct_lockstep_tails_for_codegen(
         src_pointee_ty,
         dst_pointee_ty,
         ParamEnv::reveal_all(),
@@ -263,5 +263,5 @@ fn custom_coerce_unsize_info<'tcx>(
 
 /// Extract pointee type from builtin pointer types.
 fn extract_pointee(tcx: TyCtxt<'_>, typ: TyStable) -> Option<Ty<'_>> {
-    rustc_internal::internal(tcx, typ).builtin_deref(true).map(|TypeAndMut { ty, .. }| ty)
+    rustc_internal::internal(tcx, typ).builtin_deref(true)
 }

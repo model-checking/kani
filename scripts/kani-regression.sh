@@ -33,31 +33,33 @@ check_kissat_version.sh
 # Formatting check
 ${SCRIPT_DIR}/kani-fmt.sh --check
 
-# Build all packages in the workspace and ensure no warning is emitted.
-RUSTFLAGS="-D warnings" cargo build-dev
+# Build kani
+cargo build-dev
 
 # Unit tests
 cargo test -p cprover_bindings
 cargo test -p kani-compiler
 cargo test -p kani-driver
 cargo test -p kani_metadata
-cargo test -p kani --lib # skip doc tests.
+# skip doc tests and enable assertions to fail
+cargo test -p kani --lib --features concrete_playback
 # Test the actual macros, skipping doc tests and enabling extra traits for "syn"
 # so we can debug print AST
 RUSTFLAGS=--cfg=kani_sysroot cargo test -p kani_macros --features syn/extra-traits --lib
 
 # Declare testing suite information (suite and mode)
 TESTS=(
-    "script-based-pre exec"
-    "coverage coverage-based"
     "kani kani"
     "expected expected"
     "ui expected"
+    "std-checks cargo-kani"
     "firecracker kani"
     "prusti kani"
     "smack kani"
     "cargo-kani cargo-kani"
     "cargo-ui cargo-kani"
+    "script-based-pre exec"
+    "coverage coverage-based"
     "kani-docs cargo-kani"
     "kani-fixme kani-fixme"
 )
@@ -99,6 +101,13 @@ time "$SCRIPT_DIR"/codegen-firecracker.sh
 FEATURES_MANIFEST_PATH="$KANI_DIR/tests/cargo-kani/cargo-features-flag/Cargo.toml"
 cargo kani --manifest-path "$FEATURES_MANIFEST_PATH" --harness trivial_success
 cargo clean --manifest-path "$FEATURES_MANIFEST_PATH"
+
+# Build all packages in the workspace and ensure no warning is emitted.
+# Please don't replace `cargo build-dev` above with this command.
+# Setting RUSTFLAGS like this always resets cargo's build cache resulting in
+# all tests to be re-run. I.e., cannot keep re-runing the regression from where
+# we stopped.
+RUSTFLAGS="-D warnings" cargo build --target-dir /tmp/kani_build_warnings
 
 echo
 echo "All Kani regression tests completed successfully."

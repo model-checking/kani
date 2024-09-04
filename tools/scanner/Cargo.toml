@@ -1,0 +1,25 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+
+
+[package]
+name = "scanner"
+description = "A rustc extension used to scan rust features in a crate"
+version = "0.0.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[dependencies]
+csv = "1.3"
+serde = {version = "1", features = ["derive"]}
+strum = "0.26"
+strum_macros = "0.26"
+petgraph = "0.6.5"
+graph-cycles = "0.1.0"
+
+[package.metadata.rust-analyzer]
+# This crate uses rustc crates.
+# More info: https://github.com/rust-analyzer/rust-analyzer/pull/7891
+rustc_private = true
+

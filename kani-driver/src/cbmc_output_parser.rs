@@ -27,7 +27,7 @@ use anyhow::Result;
 use console::style;
 use pathdiff::diff_paths;
 use rustc_demangle::demangle;
-use serde::{Deserialize, Deserializer};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use std::env;
 use std::io::{BufRead, BufReader};
@@ -287,9 +287,7 @@ fn filepath(file: String) -> String {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TraceItem {
-    pub thread: u32,
     pub step_type: String,
-    pub hidden: bool,
     pub lhs: Option<String>,
     pub source_location: Option<SourceLocation>,
     pub value: Option<TraceValue>,
@@ -301,7 +299,6 @@ pub struct TraceItem {
 /// The fields included right now are relevant to primitive types.
 #[derive(Clone, Debug, Deserialize)]
 pub struct TraceValue {
-    pub name: String,
     pub binary: Option<String>,
     pub data: Option<TraceData>,
     pub width: Option<u32>,
@@ -324,7 +321,7 @@ impl std::fmt::Display for TraceData {
     }
 }
 
-#[derive(Copy, Clone, Debug, Deserialize, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum CheckStatus {
     Failure,
@@ -332,6 +329,7 @@ pub enum CheckStatus {
     Satisfied, // for `cover` properties only
     Success,
     Undetermined,
+    Unknown,
     Unreachable,
     Uncovered,     // for `code_coverage` properties only
     Unsatisfiable, // for `cover` properties only
@@ -347,6 +345,9 @@ impl std::fmt::Display for CheckStatus {
             CheckStatus::Failure => style("FAILURE").red(),
             CheckStatus::Unreachable => style("UNREACHABLE").yellow(),
             CheckStatus::Undetermined => style("UNDETERMINED").yellow(),
+            // CBMC 6+ uses UNKNOWN when another property of undefined behavior failed, making it
+            // impossible to definitively conclude whether other properties hold or not.
+            CheckStatus::Unknown => style("UNDETERMINED").yellow(),
             CheckStatus::Unsatisfiable => style("UNSATISFIABLE").yellow(),
         };
         write!(f, "{check_str}")

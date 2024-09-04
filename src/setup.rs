@@ -141,22 +141,42 @@ pub(crate) fn get_rust_toolchain_version(kani_dir: &Path) -> Result<String> {
         .context("Reading release bundle rust-toolchain-version")
 }
 
+pub(crate) fn get_rustc_version_from_build(kani_dir: &Path) -> Result<String> {
+    std::fs::read_to_string(kani_dir.join("rustc-version"))
+        .context("Reading release bundle rustc-version")
+}
+
 /// Install the Rust toolchain version we require
 fn setup_rust_toolchain(kani_dir: &Path, use_local_toolchain: Option<OsString>) -> Result<String> {
     // Currently this means we require the bundle to have been unpacked first!
     let toolchain_version = get_rust_toolchain_version(kani_dir)?;
-    println!("[3/5] Installing rust toolchain version: {}", &toolchain_version);
+    let rustc_version = get_rustc_version_from_build(kani_dir)?.trim().to_string();
 
     // Symlink to a local toolchain if the user explicitly requests
     if let Some(local_toolchain_path) = use_local_toolchain {
         let toolchain_path = Path::new(&local_toolchain_path);
-        // TODO: match the version against which kani was built
-        // Issue: https://github.com/model-checking/kani/issues/3060
-        symlink_rust_toolchain(toolchain_path, kani_dir)?;
-        return Ok(toolchain_version);
+
+        let custom_toolchain_rustc_version =
+            get_rustc_version_from_local_toolchain(local_toolchain_path.clone())?;
+
+        if rustc_version == custom_toolchain_rustc_version {
+            symlink_rust_toolchain(toolchain_path, kani_dir)?;
+            println!(
+                "[3/5] Installing rust toolchain from path provided: {}",
+                &toolchain_path.to_string_lossy()
+            );
+            return Ok(toolchain_version);
+        } else {
+            bail!(
+                "The toolchain with rustc {:?} being used to setup is not the same as the one Kani used in its release bundle {:?}. Try to setup with the same version as the bundle.",
+                custom_toolchain_rustc_version,
+                rustc_version,
+            );
+        }
     }
 
     // This is the default behaviour when no explicit path to a toolchain is mentioned
+    println!("[3/5] Installing rust toolchain version: {}", &toolchain_version);
     Command::new("rustup").args(["toolchain", "install", &toolchain_version]).run()?;
     let toolchain = home::rustup_home()?.join("toolchains").join(&toolchain_version);
     symlink_rust_toolchain(&toolchain, kani_dir)?;
@@ -169,7 +189,7 @@ fn setup_python_deps(kani_dir: &Path) -> Result<()> {
     let pyroot = kani_dir.join("pyroot");
 
     // TODO: this is a repetition of versions from kani/kani-dependencies
-    let pkg_versions = &["cbmc-viewer==3.8"];
+    let pkg_versions = &["cbmc-viewer==3.9"];
 
     Command::new("python3")
         .args(["-m", "pip", "install", "--target"])
@@ -187,6 +207,27 @@ fn setup_python_deps(kani_dir: &Path) -> Result<()> {
 /// The filename of the release bundle
 fn download_filename() -> String {
     format!("kani-{VERSION}-{TARGET}.tar.gz")
+}
+
+/// Get the version of rustc that is being used to setup kani by the user
+fn get_rustc_version_from_local_toolchain(path: OsString) -> Result<String> {
+    let path = Path::new(&path);
+    let rustc_path = path.join("bin").join("rustc");
+
+    let output = Command::new(rustc_path).arg("--version").output();
+
+    match output {
+        Ok(output) => {
+            if output.status.success() {
+                Ok(String::from_utf8(output.stdout).map(|s| s.trim().to_string())?)
+            } else {
+                bail!(
+                    "Could not parse rustc version string. Toolchain installation likely invalid. "
+                );
+            }
+        }
+        Err(_) => bail!("Could not get rustc version. Toolchain installation likely invalid"),
+    }
 }
 
 /// The download URL for this version of Kani

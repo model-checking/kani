@@ -1,7 +1,7 @@
 assigns\
 - Status: FAILURE\
-- Description: "Check that *ptr is assignable"
+- Description: "Check that *var_6 is assignable"
 
-Failed Checks: Check that *ptr is assignable
+Failed Checks: Check that *var_6 is assignable
 
 VERIFICATION:- FAILED

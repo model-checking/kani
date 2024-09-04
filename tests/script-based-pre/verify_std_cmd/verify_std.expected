@@ -1,0 +1,34 @@
+[TEST] Run kani verify-std
+
+Checking harness verify::dummy_proof...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness verify::harness...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness verify::check_dummy_read...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness verify::check_add_one...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness verify::check_swap_tuple...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness num::verify::check_non_zero...
+VERIFICATION:- SUCCESSFUL
+
+Complete - 6 successfully verified harnesses, 0 failures, 6 total.
+
+[TEST] Run kani verify-std -Z uninit-checks
+
+Checking harness verify::check_add_one...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness verify::dummy_proof...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness verify::harness...
+VERIFICATION:- SUCCESSFUL
+
+Complete - 3 successfully verified harnesses, 0 failures, 3 total.

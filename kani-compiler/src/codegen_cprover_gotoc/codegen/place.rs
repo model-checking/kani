@@ -11,7 +11,7 @@ use crate::codegen_cprover_gotoc::codegen::typ::std_pointee_type;
 use crate::codegen_cprover_gotoc::utils::{dynamic_fat_ptr, slice_fat_ptr};
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::unwrap_or_return_codegen_unimplemented;
-use cbmc::goto_program::{Expr, Location, Type};
+use cbmc::goto_program::{Expr, ExprValue, Location, Stmt, Type};
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_smir::rustc_internal;
 use rustc_target::abi::{TagEncoding, Variants};
@@ -292,6 +292,11 @@ impl<'tcx> GotocCtx<'tcx> {
                             "element of {parent_ty:?} is not accessed via field projection"
                         )
                     }
+                    TyKind::RigidTy(RigidTy::Pat(..)) => {
+                        // See https://github.com/rust-lang/types-team/issues/126
+                        // for what is currently supported.
+                        unreachable!("projection inside a pattern is not supported, only transmute")
+                    }
                 }
             }
             // if we fall here, then we are handling an enum
@@ -328,8 +333,9 @@ impl<'tcx> GotocCtx<'tcx> {
     ///      assert!(v.0 == [1, 2]); // refers to the entire array
     ///    }
     /// ```
-    /// * Note that projection inside SIMD structs may eventually become illegal.
-    /// See <https://github.com/rust-lang/stdarch/pull/1422#discussion_r1176415609> thread.
+    ///
+    /// Note that projection inside SIMD structs may eventually become illegal.
+    /// See thread <https://github.com/rust-lang/stdarch/pull/1422#discussion_r1176415609>.
     ///
     /// Since the goto representation for both is the same, we use the expected type to decide
     /// what to return.
@@ -358,22 +364,20 @@ impl<'tcx> GotocCtx<'tcx> {
     /// a named variable.
     ///
     /// Recursively finds the actual FnDef from a pointer or box.
-    fn codegen_local_fndef(&mut self, ty: Ty) -> Option<Expr> {
+    fn codegen_local_fndef(&mut self, ty: Ty, loc: Location) -> Option<Expr> {
         match ty.kind() {
             // A local that is itself a FnDef, like Fn::call_once
-            TyKind::RigidTy(RigidTy::FnDef(def, args)) => {
-                Some(self.codegen_fndef(def, &args, None))
-            }
+            TyKind::RigidTy(RigidTy::FnDef(def, args)) => Some(self.codegen_fndef(def, &args, loc)),
             // A local can be pointer to a FnDef, like Fn::call and Fn::call_mut
             TyKind::RigidTy(RigidTy::RawPtr(inner, _)) => self
-                .codegen_local_fndef(inner)
+                .codegen_local_fndef(inner, loc)
                 .map(|f| if f.can_take_address_of() { f.address_of() } else { f }),
             // A local can be a boxed function pointer
             TyKind::RigidTy(RigidTy::Adt(def, args)) if def.is_box() => {
                 let boxed_ty = self.codegen_ty_stable(ty);
                 // The type of `T` for `Box<T>` can be derived from the first definition args.
                 let inner_ty = args.0[0].ty().unwrap();
-                self.codegen_local_fndef(*inner_ty)
+                self.codegen_local_fndef(*inner_ty, loc)
                     .map(|f| self.box_value(f.address_of(), boxed_ty))
             }
             _ => None,
@@ -381,10 +385,10 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// Codegen for a local
-    fn codegen_local(&mut self, l: Local) -> Expr {
+    pub fn codegen_local(&mut self, l: Local, loc: Location) -> Expr {
         let local_ty = self.local_ty_stable(l);
         // Check if the local is a function definition (see comment above)
-        if let Some(fn_def) = self.codegen_local_fndef(local_ty) {
+        if let Some(fn_def) = self.codegen_local_fndef(local_ty, loc) {
             return fn_def;
         }
 
@@ -402,6 +406,7 @@ impl<'tcx> GotocCtx<'tcx> {
         &mut self,
         before: Result<ProjectedPlace, UnimplementedData>,
         proj: &ProjectionElem,
+        loc: Location,
     ) -> Result<ProjectedPlace, UnimplementedData> {
         let before = before?;
         trace!(?before, ?proj, "codegen_projection");
@@ -494,7 +499,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             ProjectionElem::Index(i) => {
                 let base_type = before.mir_typ();
-                let idxe = self.codegen_local(*i);
+                let idxe = self.codegen_local(*i, loc);
                 let typ = match base_type.kind() {
                     TyKind::RigidTy(RigidTy::Array(elemt, _))
                     | TyKind::RigidTy(RigidTy::Slice(elemt)) => TypeOrVariant::Type(elemt),
@@ -631,19 +636,53 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
+    fn is_zst_object(&self, expr: &Expr) -> bool {
+        match expr.value() {
+            ExprValue::Symbol { .. } => expr.typ().sizeof(&self.symbol_table) == 0,
+            ExprValue::Member { lhs, .. } => self.is_zst_object(lhs),
+            _ => false,
+        }
+    }
+
     /// Codegen the reference to a given place.
     /// We currently have a somewhat weird way of handling ZST.
     /// - For `*(&T)` where `T: Unsized`, the projection's `goto_expr` is a thin pointer, so we
     ///   build the fat pointer from there.
     /// - For `*(Wrapper<T>)` where `T: Unsized`, the projection's `goto_expr` returns an object,
     ///   and we need to take it's address and build the fat pointer.
-    pub fn codegen_place_ref_stable(&mut self, place: &Place) -> Expr {
+    pub fn codegen_place_ref_stable(&mut self, place: &Place, loc: Location) -> Expr {
         let place_ty = self.place_ty_stable(place);
         let projection =
-            unwrap_or_return_codegen_unimplemented!(self, self.codegen_place_stable(place));
+            unwrap_or_return_codegen_unimplemented!(self, self.codegen_place_stable(place, loc));
         if self.use_thin_pointer_stable(place_ty) {
-            // Just return the address of the place dereferenced.
-            projection.goto_expr.address_of()
+            // For ZST objects rustc does not necessarily generate any actual objects.
+            let need_not_be_an_object = self.is_zst_object(&projection.goto_expr);
+            let address_of = projection.goto_expr.clone().address_of();
+            if need_not_be_an_object {
+                // Create a non-deterministic numeric value, assume it is non-zero and (when
+                // interpreted as an address) of proper alignment for the type, and cast that
+                // numeric value to a pointer type.
+                let loc = projection.goto_expr.location();
+                let (var, decl) =
+                    self.decl_temp_variable(Type::size_t(), Some(Type::size_t().nondet()), *loc);
+                let assume_non_zero =
+                    Stmt::assume(var.clone().neq(Expr::int_constant(0, var.typ().clone())), *loc);
+                let layout = self.layout_of_stable(place_ty);
+                let alignment = Expr::int_constant(layout.align.abi.bytes(), var.typ().clone());
+                let assume_aligned = Stmt::assume(
+                    var.clone().rem(alignment).eq(Expr::int_constant(0, var.typ().clone())),
+                    *loc,
+                );
+                let cast_to_pointer_type = var.cast_to(address_of.typ().clone()).as_stmt(*loc);
+                Expr::statement_expression(
+                    vec![decl, assume_non_zero, assume_aligned, cast_to_pointer_type],
+                    address_of.typ().clone(),
+                    *loc,
+                )
+            } else {
+                // Just return the address of the place dereferenced.
+                address_of
+            }
         } else if place_ty == pointee_type(self.local_ty_stable(place.local)).unwrap() {
             // Just return the fat pointer if this is a simple &(*local).
             projection.fat_ptr_goto_expr.unwrap()
@@ -672,9 +711,10 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn codegen_place_stable(
         &mut self,
         place: &Place,
+        loc: Location,
     ) -> Result<ProjectedPlace, UnimplementedData> {
         debug!(?place, "codegen_place");
-        let initial_expr = self.codegen_local(place.local);
+        let initial_expr = self.codegen_local(place.local, loc);
         let initial_typ = TypeOrVariant::Type(self.local_ty_stable(place.local));
         debug!(?initial_typ, ?initial_expr, "codegen_place");
         let initial_projection =
@@ -682,7 +722,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let result = place
             .projection
             .iter()
-            .fold(initial_projection, |accum, proj| self.codegen_projection(accum, proj));
+            .fold(initial_projection, |accum, proj| self.codegen_projection(accum, proj, loc));
         match result {
             Err(data) => Err(UnimplementedData::new(
                 &data.operation,
@@ -699,10 +739,11 @@ impl<'tcx> GotocCtx<'tcx> {
         &mut self,
         initial_projection: ProjectedPlace,
         variant_idx: VariantIdx,
+        loc: Location,
     ) -> ProjectedPlace {
         debug!(?initial_projection, ?variant_idx, "codegen_variant_lvalue");
         let downcast = ProjectionElem::Downcast(variant_idx);
-        self.codegen_projection(Ok(initial_projection), &downcast).unwrap()
+        self.codegen_projection(Ok(initial_projection), &downcast, loc).unwrap()
     }
 
     // https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/enum.ProjectionElem.html

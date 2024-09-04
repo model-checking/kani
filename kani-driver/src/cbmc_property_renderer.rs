@@ -4,12 +4,12 @@
 use crate::args::OutputFormat;
 use crate::call_cbmc::{FailedProperties, VerificationStatus};
 use crate::cbmc_output_parser::{CheckStatus, ParserItem, Property, TraceItem};
+use crate::coverage::cov_results::CoverageResults;
 use console::style;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use rustc_demangle::demangle;
-use std::collections::{BTreeMap, HashMap};
-use strum_macros::{AsRefStr, Display};
+use std::collections::HashMap;
 
 type CbmcAltDescriptions = HashMap<&'static str, Vec<(&'static str, Option<&'static str>)>>;
 
@@ -150,19 +150,10 @@ static CBMC_ALT_DESCRIPTIONS: Lazy<CbmcAltDescriptions> = Lazy::new(|| {
     map
 });
 
-#[derive(PartialEq, Eq, AsRefStr, Clone, Copy, Display)]
-#[strum(serialize_all = "UPPERCASE")]
-// The status of coverage reported by Kani
-enum CoverageStatus {
-    Full,
-    Partial,
-    None,
-}
-
 const UNSUPPORTED_CONSTRUCT_DESC: &str = "is not currently supported by Kani";
 const UNWINDING_ASSERT_DESC: &str = "unwinding assertion loop";
 const UNWINDING_ASSERT_REC_DESC: &str = "recursion unwinding assertion";
-const DEFAULT_ASSERTION: &str = "assertion";
+const UNDEFINED_FUNCTION_DESC: &str = "undefined function should be unreachable";
 
 impl ParserItem {
     /// Determines if an item must be skipped or not.
@@ -431,70 +422,29 @@ pub fn format_result(
     result_str
 }
 
-/// Separate checks into coverage and non-coverage based on property class and format them separately for --coverage. We report both verification and processed coverage
-/// results
+/// Separate checks into coverage and non-coverage based on property class and
+/// format them separately for `--coverage`. Then we report both verification
+/// and processed coverage results.
+///
+/// Note: The reporting of coverage results should be removed once `kani-cov` is
+/// introduced.
 pub fn format_coverage(
     properties: &[Property],
+    cov_results: &CoverageResults,
     status: VerificationStatus,
     should_panic: bool,
     failed_properties: FailedProperties,
     show_checks: bool,
 ) -> String {
-    let (coverage_checks, non_coverage_checks): (Vec<Property>, Vec<Property>) =
+    let (_coverage_checks, non_coverage_checks): (Vec<Property>, Vec<Property>) =
         properties.iter().cloned().partition(|x| x.property_class() == "code_coverage");
 
     let verification_output =
         format_result(&non_coverage_checks, status, should_panic, failed_properties, show_checks);
-    let coverage_output = format_result_coverage(&coverage_checks);
-    let result = format!("{}\n{}", verification_output, coverage_output);
+    let cov_results_intro = "Source-based code coverage results:";
+    let result = format!("{}\n{}\n\n{}", verification_output, cov_results_intro, cov_results);
 
     result
-}
-
-/// Generate coverage result from all coverage properties (i.e., checks with `code_coverage` property class).
-/// Loops through each of the checks with the `code_coverage` property class on a line and gives:
-///  - A status `FULL` if all checks pertaining to a line number are `COVERED`
-///  - A status `NONE` if all checks related to a line are `UNCOVERED`
-///  - Otherwise (i.e., if the line contains both) it reports `PARTIAL`.
-///
-/// Used when the user requests coverage information with `--coverage`.
-/// Output is tested through the `coverage-based` testing suite, not the regular
-/// `expected` suite.
-fn format_result_coverage(properties: &[Property]) -> String {
-    let mut formatted_output = String::new();
-    formatted_output.push_str("\nCoverage Results:\n");
-
-    let mut coverage_results: BTreeMap<String, BTreeMap<usize, CoverageStatus>> =
-        BTreeMap::default();
-    for prop in properties {
-        let src = prop.source_location.clone();
-        let file_entries = coverage_results.entry(src.file.unwrap()).or_default();
-        let check_status = if prop.status == CheckStatus::Covered {
-            CoverageStatus::Full
-        } else {
-            CoverageStatus::None
-        };
-
-        // Create Map<file, Map<line, status>>
-        file_entries
-            .entry(src.line.unwrap().parse().unwrap())
-            .and_modify(|line_status| {
-                if *line_status != check_status {
-                    *line_status = CoverageStatus::Partial
-                }
-            })
-            .or_insert(check_status);
-    }
-
-    // Create formatted string that is returned to the user as output
-    for (file, checks) in coverage_results.iter() {
-        for (line_number, coverage_status) in checks {
-            formatted_output.push_str(&format!("{}, {}, {}\n", file, line_number, coverage_status));
-        }
-        formatted_output.push('\n');
-    }
-
-    formatted_output
 }
 
 /// Attempts to build a message for a failed property with as much detailed
@@ -618,8 +568,7 @@ fn modify_undefined_function_checks(mut properties: Vec<Property>) -> (Vec<Prope
     let mut has_unknown_location_checks = false;
     for prop in &mut properties {
         if let Some(function) = &prop.source_location.function
-            && prop.description == DEFAULT_ASSERTION
-            && prop.source_location.file.is_none()
+            && prop.description == UNDEFINED_FUNCTION_DESC
         {
             // Missing functions come with mangled names.
             // `demangle` produces the demangled version if it's a mangled name.
@@ -700,6 +649,7 @@ fn update_properties_with_reach_status(
 /// Update the results of `code_coverage` (NOT `cover`) properties.
 /// - `SUCCESS` -> `UNCOVERED`
 /// - `FAILURE` -> `COVERED`
+///
 /// Note that these statuses are intermediate statuses that aren't reported to
 /// users but rather internally consumed and reported finally as `PARTIAL`, `FULL`
 /// or `NONE` based on aggregated line coverage results.
@@ -720,9 +670,10 @@ fn update_results_of_code_covererage_checks(mut properties: Vec<Property>) -> Ve
 
 /// Update the results of cover properties.
 /// We encode cover(cond) as assert(!cond), so if the assertion
-/// fails, then the cover property is satisfied and vice versa.
+/// fails, then the cover property is satisfied and vice versa:
 /// - SUCCESS -> UNSATISFIABLE
 /// - FAILURE -> SATISFIED
+///
 /// Note that if the cover property was unreachable, its status at this point
 /// will be `CheckStatus::Unreachable` and not `CheckStatus::Success` since
 /// `update_properties_with_reach_status` is called beforehand

@@ -4,7 +4,7 @@
 
 #[kani::requires(v.len() > 0)]
 #[kani::modifies(&v[0])]
-#[kani::ensures(v[0] == src)]
+#[kani::ensures(|result| v[0] == src)]
 fn modify(v: &mut Vec<u32>, src: u32) {
     v[0] = src
 }

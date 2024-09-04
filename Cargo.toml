@@ -3,7 +3,7 @@
 
 [package]
 name = "kani-verifier"
-version = "0.47.0"
+version = "0.54.0"
 edition = "2021"
 description = "A bit-precise model checker for Rust."
 readme = "README.md"
@@ -19,7 +19,6 @@ include = ["/src", "/build.rs", "/rust-toolchain.toml", "/LICENSE-*", "/README.m
 [dependencies]
 anyhow = "1"
 home = "0.5"
-clap = "2.33.3"
 os_info = { version = "3", default-features = false }
 
 [[bin]]
@@ -39,14 +38,13 @@ strip = "debuginfo"
 members = [
   "library/kani",
   "library/std",
-  "tools/bookrunner",
   "tools/compiletest",
   "tools/build-kani",
+  "tools/scanner",
   "kani-driver",
   "kani-compiler",
   "kani_metadata",
-  # `librustdoc` is still needed by bookrunner.
-  "tools/bookrunner/librustdoc",
+  "library/kani_core",
 ]
 
 # This indicates what package to e.g. build with 'cargo build' without --workspace
@@ -66,8 +64,13 @@ exclude = [
   "tests/perf",
   "tests/cargo-ui",
   "tests/slow",
+  "tests/std-checks",
   "tests/assess-scan-test-scaffold",
   "tests/script-based-pre",
   "tests/script-based-pre/build-cache-bin/target/new_dep",
   "tests/script-based-pre/build-cache-dirty/target/new_dep",
+  "tests/script-based-pre/verify_std_cmd/tmp_dir/target/kani_verify_std",
 ]
+
+[workspace.lints.clippy]
+too_long_first_doc_paragraph = "allow"

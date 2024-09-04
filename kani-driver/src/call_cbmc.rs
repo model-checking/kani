@@ -3,17 +3,24 @@
 
 use anyhow::{bail, Result};
 use kani_metadata::{CbmcSolver, HarnessMetadata};
+use regex::Regex;
+use rustc_demangle::demangle;
+use std::collections::btree_map::Entry;
+use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::path::Path;
 use std::process::Command;
+use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
 use crate::args::{OutputFormat, VerificationArgs};
 use crate::cbmc_output_parser::{
-    extract_results, process_cbmc_output, CheckStatus, ParserItem, Property, VerificationOutput,
+    extract_results, process_cbmc_output, CheckStatus, Property, VerificationOutput,
 };
 use crate::cbmc_property_renderer::{format_coverage, format_result, kani_cbmc_output_filter};
+use crate::coverage::cov_results::{CoverageCheck, CoverageResults};
+use crate::coverage::cov_results::{CoverageRegion, CoverageTerm};
 use crate::session::KaniSession;
 
 /// We will use Cadical by default since it performed better than MiniSAT in our analysis.
@@ -45,9 +52,6 @@ pub struct VerificationResult {
     pub status: VerificationStatus,
     /// The compact representation for failed properties
     pub failed_properties: FailedProperties,
-    /// The parsed output, message by message, of CBMC. However, the `Result` message has been
-    /// removed and is available in `results` instead.
-    pub messages: Option<Vec<ParserItem>>,
     /// The `Result` properties in detail or the exit_status of CBMC.
     /// Note: CBMC process exit status is only potentially useful if `status` is `Failure`.
     /// Kani will see CBMC report "failure" that's actually success (interpreting "failed"
@@ -57,6 +61,8 @@ pub struct VerificationResult {
     pub runtime: Duration,
     /// Whether concrete playback generated a test
     pub generated_concrete_test: bool,
+    /// The coverage results
+    pub coverage_results: Option<CoverageResults>,
 }
 
 impl KaniSession {
@@ -156,6 +162,11 @@ impl KaniSession {
 
         args.push(file.to_owned().into_os_string());
 
+        // Make CBMC verbose by default to tell users about unwinding progress. This should be
+        // reviewed as CBMC's verbosity defaults evolve.
+        args.push("--verbosity".into());
+        args.push("9".into());
+
         Ok(args)
     }
 
@@ -163,18 +174,25 @@ impl KaniSession {
     pub fn cbmc_check_flags(&self) -> Vec<OsString> {
         let mut args = Vec::new();
 
-        if self.args.checks.memory_safety_on() {
-            args.push("--bounds-check".into());
-            args.push("--pointer-check".into());
+        // We assume that malloc cannot fail, see https://github.com/model-checking/kani/issues/891
+        args.push("--no-malloc-may-fail".into());
+
+        // With PR #2630 we generate the appropriate checks directly rather than relying on CBMC's
+        // checks (which are for C semantics).
+        args.push("--no-undefined-shift-check".into());
+        // With PR #647 we use Rust's `-C overflow-checks=on` instead of:
+        // --unsigned-overflow-check
+        // --signed-overflow-check
+        // So these options are deliberately skipped to avoid erroneously re-checking operations.
+        args.push("--no-signed-overflow-check".into());
+
+        if !self.args.checks.memory_safety_on() {
+            args.push("--no-bounds-check".into());
+            args.push("--no-pointer-check".into());
         }
         if self.args.checks.overflow_on() {
-            args.push("--div-by-zero-check".into());
             args.push("--float-overflow-check".into());
             args.push("--nan-check".into());
-            // With PR #647 we use Rust's `-C overflow-checks=on` instead of:
-            // --unsigned-overflow-check
-            // --signed-overflow-check
-            // So these options are deliberately skipped to avoid erroneously re-checking operations.
 
             // TODO: Implement conversion checks as an optional check.
             // They are a well defined operation in rust, but they may yield unexpected results to
@@ -182,10 +200,14 @@ impl KaniSession {
             // We might want to create a transformation pass instead of enabling CBMC since Kani
             // compiler sometimes rely on the bitwise conversion of signed <-> unsigned.
             // args.push("--conversion-check".into());
+        } else {
+            args.push("--no-div-by-zero-check".into());
         }
 
-        if self.args.checks.unwinding_on() {
-            args.push("--unwinding-assertions".into());
+        if !self.args.checks.unwinding_on() {
+            args.push("--no-unwinding-assertions".into());
+        } else {
+            args.push("--no-self-loops-to-assumptions".into());
         }
 
         if self.args.extra_pointer_checks {
@@ -193,7 +215,8 @@ impl KaniSession {
             // still catch any invalid dereference with --pointer-check. Thus, only enable them
             // if the user explicitly request them.
             args.push("--pointer-overflow-check".into());
-            args.push("--pointer-primitive-check".into());
+        } else {
+            args.push("--no-pointer-primitive-check".into());
         }
 
         args
@@ -254,28 +277,29 @@ impl VerificationResult {
         start_time: Instant,
     ) -> VerificationResult {
         let runtime = start_time.elapsed();
-        let (items, results) = extract_results(output.processed_items);
+        let (_, results) = extract_results(output.processed_items);
 
         if let Some(results) = results {
             let (status, failed_properties) =
                 verification_outcome_from_properties(&results, should_panic);
+            let coverage_results = coverage_results_from_properties(&results);
             VerificationResult {
                 status,
                 failed_properties,
-                messages: Some(items),
                 results: Ok(results),
                 runtime,
                 generated_concrete_test: false,
+                coverage_results,
             }
         } else {
             // We never got results from CBMC - something went wrong (e.g. crash) so it's failure
             VerificationResult {
                 status: VerificationStatus::Failure,
                 failed_properties: FailedProperties::Other,
-                messages: Some(items),
                 results: Err(output.process_status),
                 runtime,
                 generated_concrete_test: false,
+                coverage_results: None,
             }
         }
     }
@@ -284,10 +308,10 @@ impl VerificationResult {
         VerificationResult {
             status: VerificationStatus::Success,
             failed_properties: FailedProperties::None,
-            messages: None,
             results: Ok(vec![]),
             runtime: Duration::from_secs(0),
             generated_concrete_test: false,
+            coverage_results: None,
         }
     }
 
@@ -295,30 +319,32 @@ impl VerificationResult {
         VerificationResult {
             status: VerificationStatus::Failure,
             failed_properties: FailedProperties::Other,
-            messages: None,
             // on failure, exit codes in theory might be used,
             // but `mock_failure` should never be used in a context where they will,
             // so again use something weird:
             results: Err(42),
             runtime: Duration::from_secs(0),
             generated_concrete_test: false,
+            coverage_results: None,
         }
     }
 
-    pub fn render(
-        &self,
-        output_format: &OutputFormat,
-        should_panic: bool,
-        coverage_mode: bool,
-    ) -> String {
+    pub fn render(&self, output_format: &OutputFormat, should_panic: bool) -> String {
         match &self.results {
             Ok(results) => {
                 let status = self.status;
                 let failed_properties = self.failed_properties;
                 let show_checks = matches!(output_format, OutputFormat::Regular);
 
-                let mut result = if coverage_mode {
-                    format_coverage(results, status, should_panic, failed_properties, show_checks)
+                let mut result = if let Some(cov_results) = &self.coverage_results {
+                    format_coverage(
+                        results,
+                        cov_results,
+                        status,
+                        should_panic,
+                        failed_properties,
+                        show_checks,
+                    )
                 } else {
                     format_result(results, status, should_panic, failed_properties, show_checks)
                 };
@@ -394,6 +420,74 @@ fn determine_failed_properties(properties: &[Property]) -> FailedProperties {
     }
 }
 
+fn coverage_results_from_properties(properties: &[Property]) -> Option<CoverageResults> {
+    let cov_properties: Vec<&Property> =
+        properties.iter().filter(|p| p.is_code_coverage_property()).collect();
+
+    if cov_properties.is_empty() {
+        return None;
+    }
+
+    // Postprocessing the coverage results involves matching on the descriptions
+    // of code coverage properties with the `counter_re` regex. These are two
+    // real examples of such descriptions:
+    //
+    // ```
+    // CounterIncrement(0) $test_cov$ - src/main.rs:5:1 - 6:15
+    // ExpressionUsed(0) $test_cov$ - src/main.rs:6:19 - 6:28
+    // ```
+    //
+    // The span is further processed to extract the code region attributes.
+    // Ideally, we should have coverage mappings (i.e., the relation between
+    // counters and code regions) available in the coverage metadata:
+    // <https://github.com/model-checking/kani/issues/3445>. If that were the
+    // case, we would not need the spans in these descriptions.
+    let counter_re = {
+        static COUNTER_RE: OnceLock<Regex> = OnceLock::new();
+        COUNTER_RE.get_or_init(|| {
+            Regex::new(
+                r#"^(?<kind>CounterIncrement|ExpressionUsed)\((?<counter_num>[0-9]+)\) \$(?<func_name>[^\$]+)\$ - (?<span>.+)"#,
+            )
+            .unwrap()
+        })
+    };
+
+    let mut coverage_results: BTreeMap<String, Vec<CoverageCheck>> = BTreeMap::default();
+
+    for prop in cov_properties {
+        let mut prop_processed = false;
+
+        if let Some(captures) = counter_re.captures(&prop.description) {
+            let kind = &captures["kind"];
+            let counter_num = &captures["counter_num"];
+            let function = demangle(&captures["func_name"]).to_string();
+            let status = prop.status;
+            let span = captures["span"].to_string();
+
+            let counter_id = counter_num.parse().unwrap();
+            let term = match kind {
+                "CounterIncrement" => CoverageTerm::Counter(counter_id),
+                "ExpressionUsed" => CoverageTerm::Expression(counter_id),
+                _ => unreachable!("counter kind could not be recognized: {:?}", kind),
+            };
+            let region = CoverageRegion::from_str(span);
+
+            let cov_check = CoverageCheck::new(function, term, region, status);
+            let file = cov_check.region.file.clone();
+
+            if let Entry::Vacant(e) = coverage_results.entry(file.clone()) {
+                e.insert(vec![cov_check]);
+            } else {
+                coverage_results.entry(file).and_modify(|checks| checks.push(cov_check));
+            }
+            prop_processed = true;
+        }
+
+        assert!(prop_processed, "error: coverage property not processed\n{prop:?}");
+    }
+
+    Some(CoverageResults::new(coverage_results))
+}
 /// Solve Unwind Value from conflicting inputs of unwind values. (--default-unwind, annotation-unwind, --unwind)
 pub fn resolve_unwind_value(
     args: &VerificationArgs,
@@ -407,7 +501,7 @@ pub fn resolve_unwind_value(
 #[cfg(test)]
 mod tests {
     use crate::args;
-    use crate::metadata::mock_proof_harness;
+    use crate::metadata::tests::mock_proof_harness;
     use clap::Parser;
 
     use super::*;
