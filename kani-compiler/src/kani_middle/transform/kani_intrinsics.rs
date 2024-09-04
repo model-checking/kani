@@ -195,9 +195,9 @@ impl IntrinsicGeneratorPass {
         let arg_ty = new_body.locals()[1].ty;
         // Sanity check: since CBMC memory object primitives only accept pointers, need to
         // ensure the correct type.
-        let TyKind::RigidTy(RigidTy::RawPtr(target_ty, _)) = arg_ty.kind() else { unreachable!() };
+        let TyKind::RigidTy(RigidTy::RawPtr(pointee_ty, _)) = arg_ty.kind() else { unreachable!() };
         // Calculate pointee layout for byte-by-byte memory initialization checks.
-        let pointee_info = PointeeInfo::from_ty(target_ty);
+        let pointee_info = PointeeInfo::from_ty(pointee_ty);
         match pointee_info {
             Ok(pointee_info) => {
                 match pointee_info.layout() {
@@ -338,7 +338,7 @@ impl IntrinsicGeneratorPass {
                     }
                 };
             }
-            Err(msg) => {
+            Err(reason) => {
                 // We failed to retrieve the type layout.
                 let rvalue = Rvalue::Use(Operand::Constant(ConstOperand {
                     const_: MirConst::from_bool(false),
@@ -348,7 +348,7 @@ impl IntrinsicGeneratorPass {
                 let result =
                     new_body.insert_assignment(rvalue, &mut source, InsertPosition::Before);
                 let reason = format!(
-                    "Kani currently doesn't support checking memory initialization of `{target_ty}`. {msg}"
+                    "Kani currently doesn't support checking memory initialization for pointers to `{pointee_ty}. {reason}",
                 );
                 new_body.insert_check(
                     tcx,
