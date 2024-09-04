@@ -18,7 +18,7 @@ So, for two large 64-bit numbers, a single call to `gcd` can take almost 96 iter
 It would be very expensive for Kani to unroll each of these iterations and then perform symbolic execution.
 
 Instead, we can write *contracts* with guarantees about `gcd`'s behavior.
-Once Kani verifies that `gcd`s contracts are correct, it can replace each invocation of `gcd` with its contracts, which reduces verification time for `gcd`'s callers.
+Once Kani verifies that `gcd`'s contracts are correct, it can replace each invocation of `gcd` with its contracts, which reduces verification time for `gcd`'s callers.
 For example, perhaps we want to ensure that the returned `result` does indeed divide both `max` and `min`.
 In that case, we could write contracts like these:
 
