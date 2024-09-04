@@ -1,0 +1,172 @@
+% Copyright Kani Contributors
+% SPDX-License-Identifier: Apache-2.0 OR MIT
+
+\documentclass[runningheads]{llncs}
+%
+\usepackage[T1]{fontenc}
+\usepackage{graphicx}
+\usepackage{amsmath,amsfonts}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{color}
+\usepackage{listings}
+\definecolor{GrayCodeBlock}{RGB}{241,241,241}
+\definecolor{BlackText}{RGB}{110,107,94}
+\definecolor{RedTypename}{RGB}{182,86,17}
+\definecolor{GreenString}{RGB}{96,172,57}
+\definecolor{PurpleKeyword}{RGB}{184,84,212}
+\definecolor{GrayComment}{RGB}{170,170,170}
+\definecolor{GoldDocumentation}{RGB}{180,165,45}
+\lstdefinelanguage{rust}
+{
+    columns=fullflexible,
+    keepspaces=true,
+    frame=single,
+    framesep=0pt,
+    framerule=0pt,
+    framexleftmargin=4pt,
+    framexrightmargin=4pt,
+    framextopmargin=5pt,
+    framexbottommargin=3pt,
+    xleftmargin=4pt,
+    xrightmargin=4pt,
+    backgroundcolor=\color{GrayCodeBlock},
+    basicstyle=\ttfamily\color{BlackText},
+    keywords={
+        true,false,
+        unsafe,async,await,move,
+        use,pub,crate,super,self,mod,
+        struct,enum,fn,const,static,let,mut,ref,type,impl,dyn,trait,where,as,
+        break,continue,if,else,while,for,loop,match,return,yield,in
+    },
+    keywordstyle=\color{PurpleKeyword},
+    ndkeywords={
+        bool,u8,u16,u32,u64,u128,i8,i16,i32,i64,i128,char,str,
+        Self,Option,Some,None,Result,Ok,Err,String,Box,Vec,Rc,Arc,Cell,RefCell,HashMap,BTreeMap,
+        macro_rules
+    },
+    ndkeywordstyle=\color{RedTypename},
+    comment=[l][\color{GrayComment}\slshape]{//},
+    morecomment=[s][\color{GrayComment}\slshape]{/*}{*/},
+    morecomment=[l][\color{GoldDocumentation}\slshape]{///},
+    morecomment=[s][\color{GoldDocumentation}\slshape]{/*!}{*/},
+    morecomment=[l][\color{GoldDocumentation}\slshape]{//!},
+    morecomment=[s][\color{RedTypename}]{\#![}{]},
+    morecomment=[s][\color{RedTypename}]{\#[}{]},
+    stringstyle=\color{GreenString},
+    string=[b]"
+}
+
+\begin{document}
+%
+\title{Verifying the Rust Standard Library}
+%\titlerunning{Verifying the Rust}
+
+\author{
+Rahul Kumar \and 
+Celina Val \and
+Felipe Monteiro \and
+Michael Tautschnig \and
+Zyad Hassan \and
+Qinheping Hu \and
+Adrian Palacios \and
+Remi Delmas \and
+Jaisurya Nanduri \and
+Felix Klock \and
+Justus Adam \and
+Carolyn Zech \and
+Artem Agvanian
+}
+%
+\authorrunning{R. Kumar et al.}
+
+\institute{Amazon Web Services, USA\\ \url{https://aws.amazon.com/}
+}
+
+\maketitle
+
+\begin{abstract}
+The Rust programming language is growing fast and seeing increased adoption due to performance and speed-of-development benefits. It provides strong compile-time guarantees along with blazing performance and an active community of support. The Rust language has experienced steady growth in the last few years with a total developer size of close to 3M developers. Several large projects such as Servo, TiKV, and the Rust compiler itself are in the millions of lines of code. Although Rust provides strong safety guarantees for \texttt{safe} code, the story with \texttt{unsafe} code is incomplete. In this short paper, we motivate the case for verifying the Rust standard library and how we are approaching this endeavor. We describe our effort to verify the Rust standard library via a crowd-sourced verification effort, wherein verifying the Rust standard library is specified as a set of challenges open to all.
+
+\keywords{Rust \and standard library \and verification \and formal methods \and safe
+\and unsafe \and memory safety \and correctness \and challenge}
+\end{abstract}
+
+\section{Rust}
+
+Rust~\cite{matsakis2014rust} is a modern programming language designed to enable developers to efficiently create high performance reliable systems. Rust delivers high performance because it does not use a garbage collector. Combined with a powerful type system that enforces ownership of memory wherein memory can be shared or mutable, but never both. This helps avoid data-races and memory errors, thereby reducing the trade-off between high-level safety guarantees and low-level controls -- a highly desired property of programming languages. Unlike C/C++, the Rust language aims to minimize undefined behavior statically by employing a strong type system and an \textit{extensible} ownership model for memory. 
+
+The extensible model of ownership relies on the simple (yet difficult) principle of enforcing that an object can be accessed by multiple aliases/references only for read purposes. To write to an object, there can only be one reference to it at any given time. Such a principle in practice eliminates significant amounts of memory-related errors~\cite{rustAndroid}. In spite of the great benefits in practice, this principle tends to be restrictive for a certain subset of implementations that are too low-level or require very specific types of synchronization. As a result, the Rust language introduced the \texttt{unsafe} keyword. When used, the compiler may not be able to prove the memory safety rules that are enforced on \texttt{safe} code blocks. Alias tracking is not performed for raw pointers which can only be used in \texttt{unsafe} code blocks, which enables developers to perform actions that would be rejected by the compiler in \texttt{safe} code blocks. This is also referred to as \textit{superpowers}~\cite{superPower} of \texttt{unsafe} code blocks. Examples of these superpowers include dereferencing a raw pointer, calling an unsafe function or method, and accessing fields of unions etc. A clear side-effect of this choice is that most if not all memory related errors in the code are due to the \texttt{unsafe} code blocks introduced by the developer. 
+
+Rust developers use \textit{encapsulation} as a common design pattern to mask unsafe code blocks. The safe abstractions allow \texttt{unsafe} code blocks to be limited in number and not leak into all parts of the codebase. The Rust standard library itself has widespread use of \texttt{unsafe} code blocks, with almost 5.5K \texttt{unsafe} functions and 4.8K \texttt{unsafe} code blocks. In the last 3 years, 40 soundness issues have been filed in the Rust standard library along with 17 reported CVEs, even with the extensive testing and usage of the library. The onus of proving the safety and correctness of these \texttt{unsafe} code blocks is on the developers. Some such efforts have been made, but there is still a lot of ground to cover~\cite{jung2017rustbelt}.
+
+Verifying the Rust standard library is important and rewarding along multiple dimensions such as improving Rust, creating better verification tools, and enabling a safer ecosystem. Given the size and scope of this exercise, we believe doing this in isolation would be expensive and counter-productive. Ergo, we believe that motivating the community and creating a unified crowd-sourced effort is the desirable method, which we hope to catalyze via our proposed effort. 
+
+
+\section{Rust Verification Landscape}
+
+A common misconception Rust developers have is that they are producing \texttt{safe} memory-safe code by simply using Rust as their development language. To counter this, there have been significant efforts to create tools and techniques that enable verification of Rust code. Here we list (alphabetically) some tools:
+
+\begin{itemize}
+
+    \item \textbf{Creusot}~\cite{denis2022creusot} is a Rust verifier that also employs deductive-style verification for \texttt{safe} Rust code. Creusot also introduces \textbf{Pearlite} - a specification language for specifying function and loop contracts. 
+
+    \item \textbf{Gillian-Rust}~\cite{ayoun2024hybrid} is a separation logic based hybrid verification tool for Rust programs with support for \texttt{unsafe} code. Gillian-Rust is also linked to Creusot, but does in certain cases require manual intervention. 
+
+    \item \textbf{Kani}~\cite{vanhattum2022verifying} uses bounded model checking to verify generic memory safety properties and user specified assertions. Kani supports both \texttt{unsafe} and \texttt{safe} code, but cannot guarantee unbounded verification in all cases. 
+ 
+    \item \textbf{Prusti}~\cite{astrauskas2022prusti} employs deductive verification to prove functional correctness of \texttt{safe} Rust code. Specifically, it targets certain type of \textit{panics} and allows users to specify properties of interest. 
+
+    \item \textbf{Verus}~\cite{verus-sys} is an SMT-based tool used to verify Rust code and can support \texttt{unsafe} in certain situations such as the use of raw pointers and unsafe cells. 
+
+    \item There are several other tools which are in the related space, but we do not list them here explicitly.
+\end{itemize}
+
+\section{Verifying the Rust Standard Library}
+
+We are proposing the creation of a crowd-sourced verification effort, wherein verifying the Rust standard library is specified as a set of challenges. Each challenge describes the goal and the success criteria. Currently, we are focusing on doing verification for memory-safety. The challenges are open to anyone. This effort aims to be \textit{tool agnostic} to facilitate the introduction of verification solutions into the Rust mainline and making verification an integral part of the Rust ecosystem. Towards this, we have been working with the Rust language team to introduce function and loop contracts into the Rust mainline and have created a fork of the Rust standard library repository \url{https://github.com/model-checking/verify-rust-std/} wherein all solutions to challenges and verification artifacts are stored. Challenges can come in various flavors: 1/ specifying contracts for a part of the Rust standard library, 2/ specify and verify a part of the Rust standard library, and 3/ introduce new tools/techniques to verify parts of the Rust standard library. The repository provides templates for introducing new challenges, new tools, and instructions on how to submit solutions to challenges. To date, we have over 20 students, academics, and researchers engaging.
+
+As part of this effort, we are also creating challenges. For example, we have created a challenge to verify the String library in the standard library~\cite{stringChallenge}. In this challenge, the goal is to verify the memory safety of \texttt{std::string::String} and prove the absence of undefined behavior (UB). Even though the majority of \texttt{String} methods are safe, many of them are safe abstractions over unsafe code. For instance, the insert method is implemented as follows :
+\begin{lstlisting}[language=rust, caption=Unsafe usage in String, frame=single, numbers=left]
+   pub fn insert(&mut self, idx: usize, ch: char) {
+     assert!(self.is_char_boundary(idx));
+     let mut bits = [0; 4];
+     let bits = ch.encode_utf8(&mut bits).as_bytes();
+
+     unsafe {
+       self.insert_bytes(idx, bits);
+     }
+   }
+\end{lstlisting}
+
+The goal also specifies the \textit{success criteria} that must be met for the solution to be reviewed and merged into the CI pipeline. 
+\begin{lstlisting}[caption=Success criteria for the String challenge.,frame=single]
+Verify the memory safety of all public functions that are
+safe abstractions over unsafe code:
+    unbounded: from_utf16le, from_utf16le_lossy, 
+               from_utf16be, from_utf16be_lossy, 
+               remove_matches, insert_str,
+               split_off, replace_range, retain
+    others: pop, remove, insert, drain, leak, 
+            into_boxed_str
+Ones marked as unbounded must be verified for any 
+string/slice length.
+\end{lstlisting}
+
+Example of a solution for a challenge can be found in~\cite{solution}. This particular solution introduces new contracts for \texttt{char} and \texttt{ascii\_char}. The contracts are also verified using Kani. 
+
+\noindent \textbf{Our call to action} to you is to come and be a part of this effort and contribute by solving challenges, introducing new challenges, introducing new tools, or helping review and refine the current processes!
+
+\begin{credits}
+\subsubsection{\ackname} We would like to thank all the academic partners that have helped us shape challenges, started contributing to challenges, and provide invaluable advice throughout the process of jump starting this initiative. We also would like to thank Niko Matsakis, Byron Cook, and Kurt Kufeld for their support and leadership.
+\end{credits}
+
+%
+% Bibliography
+%
+\bibliographystyle{splncs04}
+\bibliography{paper}
+
+
+\end{document}
