@@ -1,10 +1,11 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-//! This module contains code for resolving strings representing simple paths to
-//! `DefId`s for functions and methods. For the definition of a simple path, see
-//! <https://doc.rust-lang.org/reference/paths.html#simple-paths>.
+//
+//! This module contains code for resolving strings representing paths (simple and qualified) to
+//! `DefId`s for functions and methods. For the definition of a path, see
+//! <https://doc.rust-lang.org/reference/paths.html>.
 //!
-//! TODO: Extend this logic to support resolving qualified paths.
+//! TODO: Change `resolve_fn` in order to return information about trait implementations.
 //! <https://github.com/model-checking/kani/issues/1997>
 //!
 //! Note that glob use statements can form loops. The paths can also walk through the loop.
@@ -18,66 +19,15 @@ use rustc_hir::{ItemKind, UseKind};
 use rustc_middle::ty::fast_reject::{self, TreatParams};
 use rustc_middle::ty::TyCtxt;
 use rustc_smir::rustc_internal;
-use stable_mir::mir::Mutability;
-use stable_mir::ty::{FloatTy, FnDef, IntTy, Region, RegionKind, RigidTy, Ty, TyKind, UintTy};
+use stable_mir::ty::{FnDef, RigidTy, Ty, TyKind};
 use stable_mir::CrateDef;
 use std::collections::HashSet;
 use std::fmt;
 use std::iter::Peekable;
-use std::str::FromStr;
-use strum_macros::{EnumString, IntoStaticStr};
-use syn::{Expr, ExprLit, Lit, PathSegment, QSelf, Type, TypePath};
-use tracing::debug;
+use syn::{PathSegment, QSelf, TypePath};
+use tracing::{debug, debug_span};
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, IntoStaticStr, EnumString)]
-#[strum(serialize_all = "lowercase")]
-enum PrimitiveIdent {
-    Bool,
-    Char,
-    F16,
-    F32,
-    F64,
-    F128,
-    I8,
-    I16,
-    I32,
-    I64,
-    I128,
-    Isize,
-    Str,
-    U8,
-    U16,
-    U32,
-    U64,
-    U128,
-    Usize,
-}
-
-impl From<PrimitiveIdent> for Ty {
-    fn from(value: PrimitiveIdent) -> Self {
-        match value {
-            PrimitiveIdent::Bool => Ty::bool_ty(),
-            PrimitiveIdent::Char => Ty::from_rigid_kind(RigidTy::Char),
-            PrimitiveIdent::F16 => Ty::from_rigid_kind(RigidTy::Float(FloatTy::F16)),
-            PrimitiveIdent::F32 => Ty::from_rigid_kind(RigidTy::Float(FloatTy::F32)),
-            PrimitiveIdent::F64 => Ty::from_rigid_kind(RigidTy::Float(FloatTy::F64)),
-            PrimitiveIdent::F128 => Ty::from_rigid_kind(RigidTy::Float(FloatTy::F128)),
-            PrimitiveIdent::I8 => Ty::signed_ty(IntTy::I8),
-            PrimitiveIdent::I16 => Ty::signed_ty(IntTy::I16),
-            PrimitiveIdent::I32 => Ty::signed_ty(IntTy::I32),
-            PrimitiveIdent::I64 => Ty::signed_ty(IntTy::I64),
-            PrimitiveIdent::I128 => Ty::signed_ty(IntTy::I128),
-            PrimitiveIdent::Isize => Ty::signed_ty(IntTy::Isize),
-            PrimitiveIdent::Str => Ty::from_rigid_kind(RigidTy::Str),
-            PrimitiveIdent::U8 => Ty::unsigned_ty(UintTy::U8),
-            PrimitiveIdent::U16 => Ty::unsigned_ty(UintTy::U16),
-            PrimitiveIdent::U32 => Ty::unsigned_ty(UintTy::U32),
-            PrimitiveIdent::U64 => Ty::unsigned_ty(UintTy::U64),
-            PrimitiveIdent::U128 => Ty::unsigned_ty(UintTy::U128),
-            PrimitiveIdent::Usize => Ty::unsigned_ty(UintTy::Usize),
-        }
-    }
-}
+mod type_resolution;
 
 macro_rules! validate_kind {
     ($tcx:ident, $id:ident, $expected:literal, $kind:pat) => {{
@@ -89,6 +39,7 @@ macro_rules! validate_kind {
         }
     }};
 }
+pub(crate) use validate_kind;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum FnResolution {
@@ -104,17 +55,18 @@ pub fn resolve_fn_path<'tcx>(
     current_module: LocalDefId,
     path: &TypePath,
 ) -> Result<FnResolution, ResolveError<'tcx>> {
+    let _span = debug_span!("resolve_fn_path", ?path).entered();
     match &path.qself {
-        // Qualified path for a trait method implementation
+        // Qualified path for a trait method implementation, like `<Foo as Bar>::bar`.
         Some(QSelf { ty: syn_ty, position, .. }) if *position > 0 => {
-            let ty = resolve_ty(tcx, current_module, &syn_ty)?;
+            let ty = type_resolution::resolve_ty(tcx, current_module, &syn_ty)?;
             let def_id = resolve_path(tcx, current_module, &path.path)?;
             validate_kind!(tcx, def_id, "function / method", DefKind::Fn | DefKind::AssocFn)?;
             Ok(FnResolution::FnImpl { def: stable_fn_def(tcx, def_id).unwrap(), ty })
         }
-        // Qualified path for a primitive type
-        Some(QSelf { ty: syn_ty, .. }) if is_type_primitive(&syn_ty) => {
-            let ty = resolve_ty(tcx, current_module, &syn_ty)?;
+        // Qualified path for a primitive type, such as `<[u8]::sort>`.
+        Some(QSelf { ty: syn_ty, .. }) if type_resolution::is_type_primitive(syn_ty) => {
+            let ty = type_resolution::resolve_ty(tcx, current_module, &syn_ty)?;
             let resolved = resolve_in_primitive(tcx, ty, path.path.segments.iter())?;
             if resolved.segments.is_empty() {
                 Ok(FnResolution::Fn(stable_fn_def(tcx, resolved.base).unwrap()))
@@ -122,8 +74,15 @@ pub fn resolve_fn_path<'tcx>(
                 Err(ResolveError::UnexpectedType { tcx, item: resolved.base, expected: "module" })
             }
         }
+        // Qualified path for a non-primitive type, such as `<Bar>::foo>`.
+        Some(QSelf { ty: syn_ty, .. }) => {
+            let ty = type_resolution::resolve_ty(tcx, current_module, &syn_ty)?;
+            let def_id = resolve_in_user_type(tcx, ty, path.path.segments.iter())?;
+            validate_kind!(tcx, def_id, "function / method", DefKind::Fn | DefKind::AssocFn)?;
+            Ok(FnResolution::Fn(stable_fn_def(tcx, def_id).unwrap()))
+        }
         // Simple path
-        _ => {
+        None => {
             let def_id = resolve_path(tcx, current_module, &path.path)?;
             validate_kind!(tcx, def_id, "function / method", DefKind::Fn | DefKind::AssocFn)?;
             Ok(FnResolution::Fn(stable_fn_def(tcx, def_id).unwrap()))
@@ -131,14 +90,15 @@ pub fn resolve_fn_path<'tcx>(
     }
 }
 
-/// Attempts to resolve a simple path (in the form of a string) to a function / method `DefId`.
+/// Attempts to resolve a *simple path* (in the form of a string) to a function / method `DefId`.
 ///
-/// Use `[resolve_fn_path]` if you want to handle qualified paths and simple paths
+/// Use `[resolve_fn_path]` if you want to handle qualified paths and simple paths.
 pub fn resolve_fn<'tcx>(
     tcx: TyCtxt<'tcx>,
     current_module: LocalDefId,
     path_str: &str,
 ) -> Result<DefId, ResolveError<'tcx>> {
+    let _span = debug_span!("resolve_fn", ?path_str, ?current_module).entered();
     let path = syn::parse_str(path_str).map_err(|err| ResolveError::InvalidPath {
         msg: format!("Expected a path, but found `{path_str}`. {err}"),
     })?;
@@ -177,123 +137,6 @@ pub fn expect_resolve_fn<T: CrateDef>(
     }
 }
 
-/// Attempts to resolve a type.
-pub fn resolve_ty<'tcx>(
-    tcx: TyCtxt<'tcx>,
-    current_module: LocalDefId,
-    typ: &syn::Type,
-) -> Result<Ty, ResolveError<'tcx>> {
-    debug!(?typ, ?current_module, "resolve_ty");
-    let unsupported = |kind: &'static str| Err(ResolveError::UnsupportedPath { kind });
-    let invalid = |kind: &'static str| {
-        Err(ResolveError::InvalidPath {
-            msg: format!("Expected a type, but found {kind} `{}`", typ.to_token_stream()),
-        })
-    };
-    #[warn(non_exhaustive_omitted_patterns)]
-    match typ {
-        Type::Path(TypePath { qself, path }) => {
-            assert_eq!(*qself, None, "Unexpected qualified path");
-            if let Some(primitive) =
-                path.get_ident().and_then(|ident| PrimitiveIdent::from_str(&ident.to_string()).ok())
-            {
-                Ok(primitive.into())
-            } else {
-                let def_id = resolve_path(tcx, current_module, path)?;
-                validate_kind!(
-                    tcx,
-                    def_id,
-                    "type",
-                    DefKind::Struct | DefKind::Union | DefKind::Enum
-                )?;
-                Ok(rustc_internal::stable(tcx.type_of(def_id)).value)
-            }
-        }
-        Type::Array(array) => {
-            let elem_ty = resolve_ty(tcx, current_module, &array.elem)?;
-            let len = parse_len(&array.len).map_err(|msg| ResolveError::InvalidPath { msg })?;
-            Ty::try_new_array(elem_ty, len.try_into().unwrap()).map_err(|err| {
-                ResolveError::InvalidPath { msg: format!("Cannot instantiate array. {err}") }
-            })
-        }
-        Type::Paren(inner) => resolve_ty(tcx, current_module, &inner.elem),
-        Type::Ptr(ptr) => {
-            let elem_ty = resolve_ty(tcx, current_module, &ptr.elem)?;
-            let mutability =
-                if ptr.mutability.is_some() { Mutability::Mut } else { Mutability::Not };
-            Ok(Ty::new_ptr(elem_ty, mutability))
-        }
-        Type::Reference(reference) => {
-            let elem_ty = resolve_ty(tcx, current_module, &reference.elem)?;
-            let mutability =
-                if reference.mutability.is_some() { Mutability::Mut } else { Mutability::Not };
-            Ok(Ty::new_ref(Region { kind: RegionKind::ReErased }, elem_ty, mutability))
-        }
-        Type::Slice(slice) => {
-            let elem_ty = resolve_ty(tcx, current_module, &slice.elem)?;
-            Ok(Ty::from_rigid_kind(RigidTy::Slice(elem_ty)))
-        }
-        Type::Tuple(tuple) => {
-            let elems = tuple
-                .elems
-                .iter()
-                .map(|elem| resolve_ty(tcx, current_module, &elem))
-                .collect::<Result<Vec<_>, _>>()?;
-            Ok(Ty::new_tuple(&elems))
-        }
-        Type::Never(_) => Ok(Ty::from_rigid_kind(RigidTy::Never)),
-        Type::BareFn(_) => unsupported("bare function"),
-        Type::Macro(_) => invalid("macro"),
-        Type::Group(_) => invalid("group paths"),
-        Type::ImplTrait(_) => invalid("trait impl paths"),
-        Type::Infer(_) => invalid("inferred paths"),
-        Type::TraitObject(_) => invalid("trait object paths"),
-        Type::Verbatim(_) => unsupported("unknown paths"),
-        _ => {
-            unreachable!()
-        }
-    }
-}
-
-/// Checks if a Path segment represents a primitive
-fn is_primitive<T>(path: &T) -> bool
-where
-    T: ToTokens,
-{
-    let token = path.to_token_stream();
-    let Ok(typ) = syn::parse2(token) else { return false };
-    is_type_primitive(&typ)
-}
-
-fn is_type_primitive(typ: &syn::Type) -> bool {
-    #[warn(non_exhaustive_omitted_patterns)]
-    match typ {
-        Type::Array(_)
-        | Type::Ptr(_)
-        | Type::Reference(_)
-        | Type::Slice(_)
-        | Type::Never(_)
-        | Type::Tuple(_) => true,
-        Type::Path(TypePath { qself: Some(qself), path }) => {
-            path.segments.is_empty() && is_type_primitive(&qself.ty)
-        }
-        Type::Path(TypePath { qself: None, path }) => path
-            .get_ident()
-            .map_or(false, |ident| PrimitiveIdent::from_str(&ident.to_string()).is_ok()),
-        Type::BareFn(_)
-        | Type::Group(_)
-        | Type::ImplTrait(_)
-        | Type::Infer(_)
-        | Type::Macro(_)
-        | Type::Paren(_)
-        | Type::TraitObject(_)
-        | Type::Verbatim(_) => false,
-        _ => {
-            unreachable!()
-        }
-    }
-}
-
 /// Attempts to resolve a simple path (in the form of a string) to a `DefId`.
 /// The current module is provided as an argument in order to resolve relative
 /// paths.
@@ -303,15 +146,15 @@ fn resolve_path<'tcx>(
     path: &syn::Path,
 ) -> Result<DefId, ResolveError<'tcx>> {
     debug!(?path, "resolve_path");
-    let _span = tracing::span!(tracing::Level::DEBUG, "path_resolution").entered();
-
     let path = resolve_prefix(tcx, current_module, path)?;
     path.segments.into_iter().try_fold(path.base, |base, segment| {
         let name = segment.ident.to_string();
         let def_kind = tcx.def_kind(base);
         let next_item = match def_kind {
             DefKind::ForeignMod | DefKind::Mod => resolve_in_module(tcx, base, &name),
-            DefKind::Struct | DefKind::Enum | DefKind::Union => resolve_in_type(tcx, base, &name),
+            DefKind::Struct | DefKind::Enum | DefKind::Union => {
+                resolve_in_type_def(tcx, base, &name)
+            }
             DefKind::Trait => resolve_in_trait(tcx, base, &name),
             kind => {
                 debug!(?base, ?kind, "resolve_path: unexpected item");
@@ -377,7 +220,7 @@ impl<'tcx> fmt::Display for ResolveError<'tcx> {
                 write!(f, "unable to find `{unresolved}` inside {def_desc}")
             }
             ResolveError::MissingPrimitiveItem { base, unresolved } => {
-                write!(f, "unable to find `{unresolved}` inside {base}")
+                write!(f, "unable to find `{unresolved}` inside `{base}`")
             }
             ResolveError::UnsupportedPath { kind } => {
                 write!(f, "Kani currently cannot resolve {kind}")
@@ -460,9 +303,9 @@ fn resolve_prefix<'tcx>(
             resolve_super(tcx, current_module, path.segments.iter().peekable())
         }
         // Path starting with a primitive, such as "u8::"
-        (None, Some(segment)) if is_primitive(&segment) => {
+        (None, Some(segment)) if type_resolution::is_primitive(&segment) => {
             let syn_ty = syn::parse2(segment.to_token_stream()).unwrap();
-            let ty = resolve_ty(tcx, current_module, &syn_ty)?;
+            let ty = type_resolution::resolve_ty(tcx, current_module, &syn_ty)?;
             resolve_in_primitive(tcx, ty, segments)
         }
         (None, Some(segment)) => {
@@ -657,8 +500,41 @@ fn resolve_in_glob_use(tcx: TyCtxt, res: &Res, name: &str) -> RelativeResolution
     }
 }
 
-/// Resolves a function in a type.
-fn resolve_in_type<'tcx>(
+/// Resolves a function in a user type (non-primitive).
+fn resolve_in_user_type<'tcx, 'a, I>(
+    tcx: TyCtxt<'tcx>,
+    ty: Ty,
+    mut segments: I,
+) -> Result<DefId, ResolveError<'tcx>>
+where
+    I: Iterator<Item = &'a PathSegment>,
+{
+    let def_id = match ty.kind() {
+        TyKind::RigidTy(rigid_ty) => match rigid_ty {
+            RigidTy::Adt(def, _) => rustc_internal::internal(tcx, def.def_id()),
+            RigidTy::Foreign(_) => {
+                return Err(ResolveError::UnsupportedPath { kind: "foreign type" });
+            }
+            _ => {
+                unreachable!("Unexpected type {ty}")
+            }
+        },
+        TyKind::Alias(_, _) => return Err(ResolveError::UnsupportedPath { kind: "alias" }),
+        TyKind::Param(_) | TyKind::Bound(_, _) => {
+            // Name resolution can not resolve in a parameter or bound.
+            unreachable!()
+        }
+    };
+    let Some(name) = segments.next() else { unreachable!() };
+    if segments.next().is_some() {
+        Err(ResolveError::UnexpectedType { tcx, item: def_id, expected: "module" })
+    } else {
+        resolve_in_type_def(tcx, def_id, &name.ident.to_string())
+    }
+}
+
+/// Resolves a function in a type given its `def_id`.
+fn resolve_in_type_def<'tcx>(
     tcx: TyCtxt<'tcx>,
     type_id: DefId,
     name: &str,
@@ -735,15 +611,4 @@ fn is_item_name(tcx: TyCtxt, item: DefId, name: &str) -> bool {
     let item_path = tcx.def_path_str(item);
     let last = item_path.split("::").last().unwrap();
     last == name
-}
-
-fn parse_len(len: &Expr) -> Result<usize, String> {
-    if let Expr::Lit(ExprLit { lit: Lit::Int(lit), .. }) = len {
-        if matches!(lit.suffix(), "" | "usize")
-            && let Ok(val) = usize::from_str(lit.base10_digits())
-        {
-            return Ok(val);
-        }
-    }
-    Err(format!("Expected a `usize` constant, but found `{}`", len.to_token_stream()))
 }

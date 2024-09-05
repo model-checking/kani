@@ -19,7 +19,7 @@ impl Foo for Bar {}
 
 impl Foo for u8 {}
 
-impl<T> Foo for &[T] {}
+impl<T> Foo for [T] {}
 
 impl Foo for [char; 10] {}
 
@@ -30,13 +30,11 @@ pub fn stub_foo() -> bool {
     true
 }
 
+/// We still do not support stubbing for trait methods.
+/// <https://github.com/model-checking/kani/issues/1997>
 #[kani::proof]
-#[kani::stub(<Bar>::foo, stub_foo)]
 #[kani::stub(<Bar as Foo>::foo, stub_foo)]
 #[kani::stub(<Bar as Foo>::bar, stub_foo)]
-#[kani::stub(u8::foo, stub_foo)]
 #[kani::stub(<(i32, i32) as Foo>::foo, stub_foo)]
-#[kani::stub(<&[u32] as Foo>::foo, stub_foo)]
-#[kani::stub(<&[u32]>::foo, stub_foo)]
-#[kani::stub(<[char; 10]>::foo, stub_foo)]
+#[kani::stub(<[u32] as Foo>::foo, stub_foo)]
 fn unsupported_args() {}
