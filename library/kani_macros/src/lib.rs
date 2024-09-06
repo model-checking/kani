@@ -12,7 +12,7 @@ mod derive;
 
 // proc_macro::quote is nightly-only, so we'll cobble things together instead
 use proc_macro::TokenStream;
-use proc_macro_error::proc_macro_error;
+use proc_macro_error2::proc_macro_error;
 
 #[cfg(kani_sysroot)]
 use sysroot as attr_impl;
@@ -398,7 +398,7 @@ pub fn modifies(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// This code should only be activated when pre-building Kani's sysroot.
 #[cfg(kani_sysroot)]
 mod sysroot {
-    use proc_macro_error::{abort, abort_call_site};
+    use proc_macro_error2::{abort, abort_call_site};
 
     mod contracts;
 

@@ -514,6 +514,13 @@ enum ContractConditionsData {
     },
 }
 
+/// Which function are we currently generating?
+#[derive(Copy, Clone, Eq, PartialEq)]
+enum ClosureType {
+    Check,
+    Replace,
+}
+
 impl<'a> ContractConditionsHandler<'a> {
     /// Handle the contract state and return the generated code
     fn dispatch_on(mut self, state: ContractFunctionState) -> TokenStream2 {

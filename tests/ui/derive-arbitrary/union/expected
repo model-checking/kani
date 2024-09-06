@@ -3,10 +3,7 @@ error: Cannot derive `Arbitrary` for `Wrapper` union
 |\
 | #[derive(kani::Arbitrary)]\
 |          ^^^^^^^^^^^^^^^\
-|\
+|
 note: `#[derive(Arbitrary)]` cannot be used for unions such as `Wrapper`
 
-|\
-| union Wrapper {\
-|       ^^^^^^^\
 = note: this error originates in the derive macro `kani::Arbitrary`

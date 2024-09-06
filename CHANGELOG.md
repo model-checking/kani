@@ -4,6 +4,28 @@ This file contains notable changes (e.g. breaking changes, major changes, etc.) 
 
 This file was introduced starting Kani 0.23.0, so it only contains changes from version 0.23.0 onwards.
 
+## [0.55.0]
+
+### Major/Breaking Changes
+* Coverage reporting in Kani is now source-based instead of line-based.
+Consequently, the unstable `-Zline-coverage` flag has been replaced with a `-Zsource-coverage` one.
+Check the [Source-Coverage RFC](https://model-checking.github.io/kani/rfc/rfcs/0011-source-coverage.html) for more details.
+* Several improvements were made to the memory initialization checks. The current state is summarized in https://github.com/model-checking/kani/issues/3300. We welcome your feedback!
+
+### What's Changed
+* Update CBMC build instructions for Amazon Linux 2 by @tautschnig in https://github.com/model-checking/kani/pull/3431
+* Implement memory initialization state copy functionality by @artemagvanian in https://github.com/model-checking/kani/pull/3350
+* Make points-to analysis handle all intrinsics explicitly by @artemagvanian in https://github.com/model-checking/kani/pull/3452
+* Avoid corner-cases by grouping instrumentation into basic blocks and using backward iteration by @artemagvanian in https://github.com/model-checking/kani/pull/3438
+* Fix ICE due to mishandling of Aggregate rvalue for raw pointers to `str` by @celinval in https://github.com/model-checking/kani/pull/3448
+* Basic support for memory initialization checks for unions by @artemagvanian in https://github.com/model-checking/kani/pull/3444
+* Adopt Rust's source-based code coverage instrumentation by @adpaco-aws in https://github.com/model-checking/kani/pull/3119
+* Extra tests and bug fixes to the delayed UB instrumentation by @artemagvanian in https://github.com/model-checking/kani/pull/3419
+* Partially integrate uninit memory checks into `verify_std` by @artemagvanian in https://github.com/model-checking/kani/pull/3470
+* Rust toolchain upgraded to `nightly-2024-09-03` by @jaisnan @carolynzech 
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.54.0...kani-0.55.0
+
 ## [0.54.0]
 
 ### Major Changes

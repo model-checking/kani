@@ -10,7 +10,7 @@
 //!
 //! ```
 use proc_macro2::{Ident, Span, TokenStream};
-use proc_macro_error::abort;
+use proc_macro_error2::abort;
 use quote::{quote, quote_spanned};
 use syn::spanned::Spanned;
 use syn::{
