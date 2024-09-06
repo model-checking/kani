@@ -572,7 +572,7 @@ fn resolve_in_trait<'tcx>(
 
 /// Resolves a primitive type function.
 ///
-/// This function assumes that the Simplified Type is a primitive.
+/// This function assumes that `ty` is a primitive.
 fn resolve_in_primitive<'tcx, 'a, I>(
     tcx: TyCtxt<'tcx>,
     ty: Ty,
