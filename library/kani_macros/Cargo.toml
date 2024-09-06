@@ -13,7 +13,7 @@ proc-macro = true
 
 [dependencies]
 proc-macro2 = "1.0"
-proc-macro-error2 = "2.0.0"
+proc-macro-error2 = { version = "2.0.0", features = ["nightly"] }
 quote = "1.0.20"
 syn = { version = "2.0.18", features = ["full", "visit-mut", "visit", "extra-traits"] }
 
