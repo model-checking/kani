@@ -14,16 +14,20 @@ use crate::kani_middle::attributes;
 use crate::kani_middle::kani_functions::{KaniFunction, KaniHook};
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
 use cbmc::goto_program::CIntType;
+use cbmc::goto_program::Symbol as GotoSymbol;
 use cbmc::goto_program::{BuiltinFn, Expr, Stmt, Type};
 use rustc_middle::ty::TyCtxt;
 use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{BasicBlockIdx, Place};
 use stable_mir::ty::RigidTy;
+use stable_mir::ty::ClosureKind;
 use stable_mir::{CrateDef, ty::Span};
 use std::collections::HashMap;
 use std::rc::Rc;
 use tracing::debug;
+
+use cbmc::goto_program::ExprValue;
 
 pub trait GotocHook {
     /// if the hook applies, it means the codegen would do something special to it
@@ -729,10 +733,212 @@ impl GotocHook for LoopInvariantRegister {
     }
 }
 
+struct Forall;
+
+/// __CROVER_forall
+impl GotocHook for Forall {
+    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+        unreachable!("{UNEXPECTED_CALL}")
+    }
+
+    fn handle(
+        &self,
+        gcx: &mut GotocCtx,
+        instance: Instance,
+        fargs: Vec<Expr>,
+        assign_to: &Place,
+        target: Option<BasicBlockIdx>,
+        span: Span,
+    ) -> Stmt {
+        let args_from_instance = instance.args().0;
+        let loc = gcx.codegen_span_stable(span);
+        let target = target.unwrap();
+        let lower_bound = &fargs[0];
+        let upper_bound = &fargs[1];
+        let predicate = &fargs[2];
+        let mut closure_call_expr: Option<Expr> = None;
+
+        for arg in args_from_instance.iter() {
+            let arg_ty = arg.ty().unwrap();
+            let kind = arg_ty.kind();
+            let arg_kind = kind.rigid().unwrap();
+
+            match arg_kind {
+                RigidTy::Closure(def_id, args) => {
+                    let instance_closure =
+                        Instance::resolve_closure(*def_id, args, ClosureKind::Fn)
+                            .expect("failed to normalize and resolve closure during codegen");
+                    closure_call_expr = Some(gcx.codegen_func_expr(instance_closure, loc));
+                }
+                _ => {
+                    println!("Unexpected type\n");
+                }
+            }
+        }
+
+        // Extract the identifier from the variable expression
+        let ident = match lower_bound.value() {
+            ExprValue::Symbol { identifier } => Some(identifier),
+            _ => None,
+        };
+
+        if let Some(identifier) = ident {
+            let new_identifier = format!("{}_kani", identifier);
+            let new_symbol = GotoSymbol::variable(
+                new_identifier.clone(),
+                new_identifier.clone(),
+                lower_bound.typ().clone(),
+                loc,
+            );
+            println!("Created new symbol with identifier: {:?}", new_identifier);
+            let new_variable_expr = new_symbol.to_expr();
+
+            // Create the lower bound comparison: lower_bound <= new_variable_expr
+            let lower_bound_comparison = lower_bound.clone().le(new_variable_expr.clone());
+
+            // Create the upper bound comparison: new_variable_expr < upper_bound
+            let upper_bound_comparison = new_variable_expr.clone().lt(upper_bound.clone());
+
+            // Combine the comparisons using a logical AND: (lower_bound < new_variable_expr) && (new_variable_expr < upper_bound)
+            let new_range = lower_bound_comparison.and(upper_bound_comparison);
+
+            // Add the new symbol to the symbol table
+            gcx.symbol_table.insert(new_symbol);
+
+            let new_predicate = closure_call_expr
+                .unwrap()
+                .call(vec![Expr::address_of(predicate.clone()), new_variable_expr.clone()]);
+            let domain = new_range.implies(new_predicate.clone());
+
+            Stmt::block(
+                vec![
+                    unwrap_or_return_codegen_unimplemented_stmt!(
+                        gcx,
+                        gcx.codegen_place_stable(assign_to, loc)
+                    )
+                    .goto_expr
+                    .assign(
+                        Expr::forall_expr(Type::Bool, new_variable_expr, domain)
+                            .cast_to(Type::CInteger(CIntType::Bool)),
+                        loc,
+                    ),
+                    Stmt::goto(bb_label(target), loc),
+                ],
+                loc,
+            )
+        } else {
+            println!("Variable is not a symbol");
+            Stmt::block(vec![Stmt::goto(bb_label(target), loc)], loc)
+        }
+    }
+}
+
+struct Exists;
+
+/// __CROVER_exists
+impl GotocHook for Exists {
+    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+        unreachable!("{UNEXPECTED_CALL}")
+    }
+
+    fn handle(
+        &self,
+        gcx: &mut GotocCtx,
+        instance: Instance,
+        fargs: Vec<Expr>,
+        assign_to: &Place,
+        target: Option<BasicBlockIdx>,
+        span: Span,
+    ) -> Stmt {
+        let args_from_instance = instance.args().0;
+        let loc = gcx.codegen_span_stable(span);
+        let target = target.unwrap();
+        let lower_bound = &fargs[0];
+        let upper_bound = &fargs[1];
+        let predicate = &fargs[2];
+        let mut closure_call_expr: Option<Expr> = None;
+
+        for arg in args_from_instance.iter() {
+            let arg_ty = arg.ty().unwrap();
+            let kind = arg_ty.kind();
+            let arg_kind = kind.rigid().unwrap();
+
+            match arg_kind {
+                RigidTy::Closure(def_id, args) => {
+                    let instance_closure =
+                        Instance::resolve_closure(*def_id, args, ClosureKind::Fn)
+                            .expect("failed to normalize and resolve closure during codegen");
+                    closure_call_expr = Some(gcx.codegen_func_expr(instance_closure, loc));
+                }
+                _ => {
+                    println!("Unexpected type\n");
+                }
+            }
+        }
+
+        // Extract the identifier from the variable expression
+        let ident = match lower_bound.value() {
+            ExprValue::Symbol { identifier } => Some(identifier),
+            _ => None,
+        };
+
+        if let Some(identifier) = ident {
+            let new_identifier = format!("{}_kani", identifier);
+            let new_symbol = GotoSymbol::variable(
+                new_identifier.clone(),
+                new_identifier.clone(),
+                lower_bound.typ().clone(),
+                loc,
+            );
+            println!("Created new symbol with identifier: {:?}", new_identifier);
+            let new_variable_expr = new_symbol.to_expr();
+
+            // Create the lower bound comparison: lower_bound <= new_variable_expr
+            let lower_bound_comparison = lower_bound.clone().le(new_variable_expr.clone());
+
+            // Create the upper bound comparison: new_variable_expr < upper_bound
+            let upper_bound_comparison = new_variable_expr.clone().lt(upper_bound.clone());
+
+            // Combine the comparisons using a logical AND: (lower_bound < new_variable_expr) && (new_variable_expr < upper_bound)
+            let new_range = lower_bound_comparison.and(upper_bound_comparison);
+
+            // Add the new symbol to the symbol table
+            gcx.symbol_table.insert(new_symbol);
+
+            let new_predicate = closure_call_expr
+                .unwrap()
+                .call(vec![Expr::address_of(predicate.clone()), new_variable_expr.clone()]);
+            let domain = new_range.implies(new_predicate.clone());
+
+            Stmt::block(
+                vec![
+                    unwrap_or_return_codegen_unimplemented_stmt!(
+                        gcx,
+                        gcx.codegen_place_stable(assign_to, loc)
+                    )
+                    .goto_expr
+                    .assign(
+                        Expr::exists_expr(Type::Bool, new_variable_expr, domain)
+                            .cast_to(Type::CInteger(CIntType::Bool)),
+                        loc,
+                    ),
+                    Stmt::goto(bb_label(target), loc),
+                ],
+                loc,
+            )
+        } else {
+            println!("Variable is not a symbol");
+            Stmt::block(vec![Stmt::goto(bb_label(target), loc)], loc)
+        }
+    }
+}
+
 pub fn fn_hooks() -> GotocHooks {
     let kani_lib_hooks = [
         (KaniHook::Assert, Rc::new(Assert) as Rc<dyn GotocHook>),
         (KaniHook::Assume, Rc::new(Assume)),
+        (KaniHook::Exists, Rc::new(Exists)),
+        (KaniHook::Forall, Rc::new(Forall)),
         (KaniHook::Panic, Rc::new(Panic)),
         (KaniHook::Check, Rc::new(Check)),
         (KaniHook::Cover, Rc::new(Cover)),
