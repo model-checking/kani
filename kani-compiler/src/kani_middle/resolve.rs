@@ -586,7 +586,8 @@ where
         debug!(?name, ?ty, "resolve_in_primitive");
         let internal_ty = rustc_internal::internal(tcx, ty);
         let simple_ty =
-            fast_reject::simplify_type(tcx, internal_ty, TreatParams::AsCandidateKey).unwrap();
+            fast_reject::simplify_type(tcx, internal_ty, TreatParams::InstantiateWithInfer)
+                .unwrap();
         let impls = tcx.incoherent_impls(simple_ty).unwrap();
         // Find the primitive impl.
         let item = impls
