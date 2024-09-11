@@ -5,7 +5,7 @@
 //!
 
 use proc_macro::TokenStream;
-use proc_macro_error::abort_call_site;
+use proc_macro_error2::abort_call_site;
 use quote::{format_ident, quote};
 use syn::spanned::Spanned;
 use syn::{Expr, Stmt};
