@@ -1,3 +1,9 @@
+// Copyright Kani Contributors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! This module contains code related to the MIR-to-MIR pass to enable loop contracts.
+//!
+
 use crate::kani_middle::codegen_units::CodegenUnit;
 use crate::kani_middle::find_fn_def;
 use crate::kani_middle::transform::body::{MutableBody, SourceInstruction};
