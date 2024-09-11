@@ -87,7 +87,3 @@ macro_rules! implies {
 pub(crate) use kani_macros::unstable_feature as unstable;
 
 pub mod contracts;
-
-mod loop_contracts;
-
-pub use loop_contracts::{kani_loop_invariant_begin_marker, kani_loop_invariant_end_marker};

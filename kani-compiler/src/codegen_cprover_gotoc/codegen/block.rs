@@ -20,55 +20,25 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn codegen_block(&mut self, bb: BasicBlockIdx, bbd: &BasicBlock) {
         debug!(?bb, "codegen_block");
         let label = bb_label(bb);
-
-        // record the seen bbidx if loop contracts enabled
-        if self.loop_contracts_ctx.loop_contracts_enabled() {
-            self.loop_contracts_ctx.add_new_seen_bbidx(bb);
-        }
-
         // the first statement should be labelled. if there is no statements, then the
         // terminator should be labelled.
         match bbd.statements.len() {
             0 => {
                 let term = &bbd.terminator;
-                let tcode = if self.loop_contracts_ctx.loop_contracts_enabled() {
-                    let codegen_result = self.codegen_terminator(term);
-                    self.loop_contracts_ctx.push_onto_block(codegen_result)
-                } else {
-                    self.codegen_terminator(term)
-                };
-
+                let tcode = self.codegen_terminator(term);
                 self.current_fn_mut().push_onto_block(tcode.with_label(label));
             }
             _ => {
                 let stmt = &bbd.statements[0];
-                let scode = if self.loop_contracts_ctx.loop_contracts_enabled() {
-                    let codegen_result = self.codegen_statement(stmt);
-                    self.loop_contracts_ctx.push_onto_block(codegen_result)
-                } else {
-                    self.codegen_statement(stmt)
-                };
-
+                let scode = self.codegen_statement(stmt);
                 self.current_fn_mut().push_onto_block(scode.with_label(label));
 
                 for s in &bbd.statements[1..] {
-                    let stmt = if self.loop_contracts_ctx.loop_contracts_enabled() {
-                        let codegen_result = self.codegen_statement(s);
-                        self.loop_contracts_ctx.push_onto_block(codegen_result)
-                    } else {
-                        self.codegen_statement(s)
-                    };
+                    let stmt = self.codegen_statement(s);
                     self.current_fn_mut().push_onto_block(stmt);
                 }
                 let term = &bbd.terminator;
-
-                let tcode = if self.loop_contracts_ctx.loop_contracts_enabled() {
-                    let codegen_result = self.codegen_terminator(term);
-                    self.loop_contracts_ctx.push_onto_block(codegen_result)
-                } else {
-                    self.codegen_terminator(term)
-                };
-
+                let tcode = self.codegen_terminator(term);
                 self.current_fn_mut().push_onto_block(tcode);
             }
         }

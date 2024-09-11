@@ -192,21 +192,12 @@ impl<'tcx> GotocCtx<'tcx> {
     ///
     /// See also [`GotocCtx::codegen_statement`] for ordinary [Statement]s.
     pub fn codegen_terminator(&mut self, term: &Terminator) -> Stmt {
-        let loc: Location = self.codegen_span_stable(term.span);
+        let loc = self.codegen_span_stable(term.span);
         let _trace_span = debug_span!("CodegenTerminator", statement = ?term.kind).entered();
         debug!("handling terminator {:?}", term);
         //TODO: Instead of doing location::none(), and updating, just putit in when we make the stmt.
         match &term.kind {
-            TerminatorKind::Goto { target } => {
-                if self.loop_contracts_ctx.loop_contracts_enabled()
-                    && self.loop_contracts_ctx.is_loop_latch(target)
-                {
-                    Stmt::goto(bb_label(*target), loc)
-                        .with_loop_contracts(self.loop_contracts_ctx.extract_block(loc))
-                } else {
-                    Stmt::goto(bb_label(*target), loc)
-                }
-            }
+            TerminatorKind::Goto { target } => Stmt::goto(bb_label(*target), loc),
             TerminatorKind::SwitchInt { discr, targets } => {
                 self.codegen_switch_int(discr, targets, loc)
             }

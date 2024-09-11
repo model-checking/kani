@@ -15,7 +15,6 @@
 //! Any MIR specific functionality (e.g. codegen etc) should live in specialized files that use
 //! this structure as input.
 use super::current_fn::CurrentFnCtx;
-use super::loop_contracts_ctx::LoopContractsCtx;
 use super::vtable_ctx::VtableCtx;
 use crate::codegen_cprover_gotoc::overrides::{fn_hooks, GotocHooks};
 use crate::codegen_cprover_gotoc::utils::full_crate_name;
@@ -75,8 +74,6 @@ pub struct GotocCtx<'tcx> {
     pub concurrent_constructs: UnsupportedConstructs,
     /// The body transformation agent.
     pub transformer: BodyTransformation,
-    /// The context for loop contracts code generation.
-    pub loop_contracts_ctx: LoopContractsCtx,
 }
 
 /// Constructor
@@ -90,8 +87,6 @@ impl<'tcx> GotocCtx<'tcx> {
         let fhks = fn_hooks();
         let symbol_table = SymbolTable::new(machine_model.clone());
         let emit_vtable_restrictions = queries.args().emit_vtable_restrictions;
-        let loop_contracts_enabled =
-            queries.args().unstable_features.contains(&"loop-contracts".to_string());
         GotocCtx {
             tcx,
             queries,
@@ -108,7 +103,6 @@ impl<'tcx> GotocCtx<'tcx> {
             unsupported_constructs: FxHashMap::default(),
             concurrent_constructs: FxHashMap::default(),
             transformer,
-            loop_contracts_ctx: LoopContractsCtx::new(loop_contracts_enabled),
         }
     }
 }
