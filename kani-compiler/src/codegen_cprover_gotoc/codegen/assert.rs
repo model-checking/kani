@@ -23,9 +23,11 @@ use cbmc::goto_program::{Expr, Location, Stmt, Type};
 use cbmc::InternedString;
 use rustc_middle::mir::coverage::SourceRegion;
 use stable_mir::mir::{Place, ProjectionElem};
-use stable_mir::ty::{Span as SpanStable, TypeAndMut};
+use stable_mir::ty::{Span as SpanStable, Ty};
 use strum_macros::{AsRefStr, EnumString};
 use tracing::debug;
+
+use super::intrinsic::SizeAlign;
 
 /// Classifies the type of CBMC `assert`, as different assertions can have different semantics (e.g. cover)
 ///
@@ -333,6 +335,8 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn codegen_raw_ptr_deref_validity_check(
         &mut self,
         place: &Place,
+        place_ref: Expr,
+        place_ref_ty: Ty,
         loc: &Location,
     ) -> Option<Stmt> {
         if let Some(ProjectionElem::Deref) = place.projection.last() {
@@ -346,41 +350,35 @@ impl<'tcx> GotocCtx<'tcx> {
             let ptr_place_ty = self.place_ty_stable(&ptr_place);
             if ptr_place_ty.kind().is_raw_ptr() {
                 // Extract the size of the pointee.
-                let pointee_size = {
-                    let TypeAndMut { ty: pointee_ty, .. } =
-                        ptr_place_ty.kind().builtin_deref(true).unwrap();
-                    let pointee_ty_layout = pointee_ty.layout().unwrap();
-                    pointee_ty_layout.shape().size.bytes()
-                };
+                let SizeAlign { size: sz, .. } =
+                    self.size_and_align_of_dst(place_ref_ty, place_ref);
 
+                // Encode __CPROVER_r_ok(ptr, size).
+                // First, generate a CBMC expression representing the pointer.
+                let ptr = {
+                    let ptr_projection = self.codegen_place_stable(&ptr_place, *loc).unwrap();
+                    let place_ty = self.place_ty_stable(place);
+                    if self.use_thin_pointer_stable(place_ty) {
+                        ptr_projection.goto_expr().clone()
+                    } else {
+                        ptr_projection.goto_expr().clone().member("data", &self.symbol_table)
+                    }
+                };
+                // Then, generate a __CPROVER_r_ok check.
+                let raw_ptr_read_ok_expr =
+                    Expr::read_ok(ptr.cast_to(Type::void_pointer()), sz.clone())
+                        .cast_to(Type::Bool);
                 // __CPROVER_r_ok fails if size == 0, so need to explicitly avoid the check.
-                if pointee_size != 0 {
-                    // Encode __CPROVER_r_ok(ptr, size).
-                    // First, generate a CBMC expression representing the pointer.
-                    let ptr = {
-                        let ptr_projection = self.codegen_place_stable(&ptr_place, *loc).unwrap();
-                        let place_ty = self.place_ty_stable(place);
-                        if self.use_thin_pointer_stable(place_ty) {
-                            ptr_projection.goto_expr().clone()
-                        } else {
-                            ptr_projection.goto_expr().clone().member("data", &self.symbol_table)
-                        }
-                    };
-                    // Then, generate a __CPROVER_r_ok check.
-                    let raw_ptr_read_ok_expr = Expr::read_ok(
-                        ptr.cast_to(Type::void_pointer()),
-                        Expr::int_constant(pointee_size, Type::size_t()),
-                    )
-                    .cast_to(Type::Bool);
-                    // Finally, assert that the pointer points to a valid memory location.
-                    let raw_ptr_read_ok = self.codegen_assert(
-                        raw_ptr_read_ok_expr,
-                        PropertyClass::SafetyCheck,
-                        "dereference failure: pointer invalid",
-                        *loc,
-                    );
-                    return Some(raw_ptr_read_ok);
-                }
+                let sz_typ = sz.typ().clone();
+                let raw_ptr_read_ok_expr = sz.eq(sz_typ.zero()).or(raw_ptr_read_ok_expr);
+                // Finally, assert that the pointer points to a valid memory location.
+                let raw_ptr_read_ok = self.codegen_assert(
+                    raw_ptr_read_ok_expr,
+                    PropertyClass::SafetyCheck,
+                    "dereference failure: pointer invalid",
+                    *loc,
+                );
+                return Some(raw_ptr_read_ok);
             }
         }
         None

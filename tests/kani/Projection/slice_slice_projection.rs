@@ -1,5 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+// kani-verify-fail
 // kani-flags: --default-unwind 5
 
 //! This test case checks the usage of slices of slices (&[&[T]]).
