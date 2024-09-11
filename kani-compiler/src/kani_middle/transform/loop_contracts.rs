@@ -124,17 +124,19 @@ impl TransformPass for FunctionWithLoopContractPass {
                             {
                                 contain_loop_contracts = true;
 
-                                if self.registered_args.contains_key(&fn_def.def_id()) {
+                                if let std::collections::hash_map::Entry::Occupied(entry) =
+                                    self.registered_args.entry(fn_def.def_id())
+                                {
                                     // This call is a dummy call as it is not the first call
                                     // to the register function.
                                     // Replace it with `self.loop_terminator`.
                                     self.loop_terminator = Some(Terminator {
                                         kind: TerminatorKind::Call {
-                                            func: self.registered_args[&fn_def.def_id()].0.clone(),
-                                            args: self.registered_args[&fn_def.def_id()].1.to_vec(),
+                                            func: entry.get().0.clone(),
+                                            args: entry.get().1.to_vec(),
                                             destination: destination.clone(),
-                                            target: target.clone(),
-                                            unwind: unwind.clone(),
+                                            target: *target,
+                                            unwind: *unwind,
                                         },
                                         span: terminator.span,
                                     });
@@ -190,13 +192,19 @@ impl TransformPass for FunctionWithLoopContractPass {
 }
 
 impl FunctionWithLoopContractPass {
-    pub fn new(tcx: TyCtxt, _unit: &CodegenUnit) -> FunctionWithLoopContractPass {
-        let run_contract_fn = find_fn_def(tcx, "KaniRunContract");
-        assert!(run_contract_fn.is_some(), "Failed to find Kani run contract function");
-        FunctionWithLoopContractPass {
-            run_contract_fn,
-            registered_args: HashMap::new(),
-            loop_terminator: None,
+    pub fn new(tcx: TyCtxt, unit: &CodegenUnit) -> FunctionWithLoopContractPass {
+        if let Some(_harness) = unit.harnesses.first() {
+            let run_contract_fn = find_fn_def(tcx, "KaniRunContract");
+            assert!(run_contract_fn.is_some(), "Failed to find Kani run contract function");
+            FunctionWithLoopContractPass {
+                run_contract_fn,
+                registered_args: HashMap::new(),
+                loop_terminator: None,
+            }
+        } else {
+            // If reachability mode is PubFns or Tests, we just remove any loop contract logic.
+            // Note that in this path there is no proof harness.
+            FunctionWithLoopContractPass::default()
         }
     }
 
@@ -243,7 +251,7 @@ impl FunctionWithLoopContractPass {
                             args: loop_terminator_args.clone(),
                             destination: loop_terminator_destination.clone(),
                             target: Some(target),
-                            unwind: loop_terminator_unwind.clone(),
+                            unwind: *loop_terminator_unwind,
                         },
                         span: loop_terminator_span,
                     },
