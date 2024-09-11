@@ -111,9 +111,12 @@ impl TransformPass for FunctionWithLoopContractPass {
                         } = &terminator.kind
                         {
                             // Get the function signature of the terminator call.
-                            let fn_kind = terminator_func.ty(&[]).unwrap().kind();
+                            let fn_kind = match terminator_func.ty(new_body.locals()) {
+                                Ok(fn_ty) => fn_ty.kind(),
+                                _ => continue,
+                            };
                             let RigidTy::FnDef(fn_def, ..) = fn_kind.rigid().unwrap() else {
-                                unreachable!()
+                                continue;
                             };
 
                             if KaniAttributes::for_def_id(tcx, fn_def.def_id()).fn_marker()
