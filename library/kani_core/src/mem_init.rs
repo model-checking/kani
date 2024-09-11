@@ -22,6 +22,13 @@
 #[allow(clippy::crate_in_macro_def)]
 macro_rules! kani_mem_init {
     ($core:path) => {
+        /// Global object for tracking memory initialization state.
+        #[rustc_diagnostic_item = "KaniMemoryInitializationState"]
+        static mut MEM_INIT_STATE: MemoryInitializationState = MemoryInitializationState::new();
+
+        /// Global object for tracking union initialization state across function boundaries.
+        static mut ARGUMENT_BUFFER: Option<ArgumentBuffer> = None;
+
         /// Bytewise mask, representing which bytes of a type are data and which are padding.
         /// For example, for a type like this:
         /// ```
@@ -97,6 +104,7 @@ macro_rules! kani_mem_init {
 
             /// Copy memory initialization state by non-deterministically switching the tracked object and
             /// adjusting the tracked offset.
+            #[kanitool::disable_checks(pointer)]
             pub fn copy<const LAYOUT_SIZE: usize>(
                 &mut self,
                 from_ptr: *const u8,
@@ -119,6 +127,24 @@ macro_rules! kani_mem_init {
                         self.tracked_offset += to_offset - from_offset;
                         // Note that this preserves the value.
                     }
+                } else {
+                    self.bless::<LAYOUT_SIZE>(to_ptr, 1);
+                }
+            }
+
+            /// Set currently tracked memory initialization state to `true` if `ptr` points to the
+            /// currently tracked object and the tracked offset lies within `LAYOUT_SIZE * num_elts`
+            /// bytes of `ptr`.
+            #[kanitool::disable_checks(pointer)]
+            pub fn bless<const LAYOUT_SIZE: usize>(&mut self, ptr: *const u8, num_elts: usize) {
+                let obj = super::mem::pointer_object(ptr);
+                let offset = super::mem::pointer_offset(ptr);
+
+                if self.tracked_object_id == obj
+                    && self.tracked_offset >= offset
+                    && self.tracked_offset < offset + num_elts * LAYOUT_SIZE
+                {
+                    self.value = true;
                 }
             }
 
@@ -171,10 +197,6 @@ macro_rules! kani_mem_init {
                 }
             }
         }
-
-        /// Global object for tracking memory initialization state.
-        #[rustc_diagnostic_item = "KaniMemoryInitializationState"]
-        static mut MEM_INIT_STATE: MemoryInitializationState = MemoryInitializationState::new();
 
         /// Set tracked object and tracked offset to a non-deterministic value.
         #[kanitool::disable_checks(pointer)]
@@ -342,6 +364,57 @@ macro_rules! kani_mem_init {
         #[rustc_diagnostic_item = "KaniCopyInitStateSingle"]
         fn copy_init_state_single<const LAYOUT_SIZE: usize, T>(from: *const T, to: *const T) {
             copy_init_state::<LAYOUT_SIZE, T>(from, to, 1);
+        }
+
+        /// Information about currently tracked argument, used for passing union initialization
+        /// state across function boundaries. This struct is written to by the caller and read from
+        /// by the callee.
+        #[derive(Clone, Copy)]
+        struct ArgumentBuffer {
+            selected_argument: usize,
+            saved_address: *const (),
+            layout_size: usize,
+        }
+
+        /// Non-deterministically store information about currently tracked argument in the argument
+        /// buffer.
+        #[kanitool::disable_checks(pointer)]
+        #[rustc_diagnostic_item = "KaniStoreArgument"]
+        fn store_argument<const LAYOUT_SIZE: usize, T>(from: *const T, selected_argument: usize) {
+            let (from_ptr, _) = from.to_raw_parts();
+            let should_store: bool = super::any();
+            if should_store {
+                unsafe {
+                    ARGUMENT_BUFFER = Some(ArgumentBuffer {
+                        selected_argument,
+                        saved_address: from_ptr,
+                        layout_size: LAYOUT_SIZE,
+                    })
+                }
+            }
+        }
+
+        /// Load information from the argument buffer (if the argument position matches) via copying
+        /// the memory initialization information from an address in the caller to an address in the
+        /// callee. Otherwise, mark that the argument as initialized, as it will be checked by
+        /// another non-deterministic branch. Reset the argument buffer after loading from it.
+        #[kanitool::disable_checks(pointer)]
+        #[rustc_diagnostic_item = "KaniLoadArgument"]
+        fn load_argument<const LAYOUT_SIZE: usize, T>(to: *const T, selected_argument: usize) {
+            let (to_ptr, _) = to.to_raw_parts();
+            if let Some(buffer) = unsafe { ARGUMENT_BUFFER } {
+                if buffer.selected_argument == selected_argument {
+                    assert!(buffer.layout_size == LAYOUT_SIZE);
+                    copy_init_state_single::<LAYOUT_SIZE, ()>(buffer.saved_address, to_ptr);
+                    unsafe {
+                        ARGUMENT_BUFFER = None;
+                    }
+                    return;
+                }
+            }
+            unsafe {
+                MEM_INIT_STATE.bless::<LAYOUT_SIZE>(to_ptr as *const u8, 1);
+            }
         }
     };
 }

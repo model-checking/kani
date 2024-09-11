@@ -9,8 +9,8 @@ use crate::{
         body::{InsertPosition, MutableBody, SourceInstruction},
         check_uninit::{
             relevant_instruction::{InitRelevantInstruction, MemoryInitOp},
-            ty_layout::tys_layout_compatible_to_size,
-            TargetFinder,
+            ty_layout::{tys_layout_compatible_to_size, LayoutComputationError},
+            PointeeInfo, TargetFinder,
         },
     },
 };
@@ -38,11 +38,38 @@ impl TargetFinder for CheckUninitVisitor {
     fn find_all(mut self, body: &MutableBody) -> Vec<InitRelevantInstruction> {
         self.locals = body.locals().to_vec();
         for (bb_idx, bb) in body.blocks().iter().enumerate() {
-            self.current_target = InitRelevantInstruction {
-                source: SourceInstruction::Statement { idx: 0, bb: bb_idx },
-                before_instruction: vec![],
-                after_instruction: vec![],
+            // Set the first target to start iterating from.
+            self.current_target = if !bb.statements.is_empty() {
+                InitRelevantInstruction {
+                    source: SourceInstruction::Statement { idx: 0, bb: bb_idx },
+                    before_instruction: vec![],
+                    after_instruction: vec![],
+                }
+            } else {
+                InitRelevantInstruction {
+                    source: SourceInstruction::Terminator { bb: bb_idx },
+                    before_instruction: vec![],
+                    after_instruction: vec![],
+                }
             };
+            if bb_idx == 0 {
+                let union_args: Vec<_> = body
+                    .locals()
+                    .iter()
+                    .enumerate()
+                    .skip(1)
+                    .take(body.arg_count())
+                    .filter(|(_, local)| local.ty.kind().is_union())
+                    .collect();
+                if !union_args.is_empty() {
+                    for (idx, _) in union_args {
+                        self.push_target(MemoryInitOp::LoadArgument {
+                            operand: Operand::Copy(Place { local: idx, projection: vec![] }),
+                            argument_no: idx,
+                        })
+                    }
+                }
+            }
             self.visit_basic_block(bb);
         }
         self.targets
@@ -84,6 +111,22 @@ impl MirVisitor for CheckUninitVisitor {
             StatementKind::Assign(place, rvalue) => {
                 // First check rvalue.
                 self.visit_rvalue(rvalue, location);
+
+                // Preemptively check if we do not support computing the layout of a type because of
+                // inner union fields. This allows to inject `assert!(false)` early.
+                if let Err(reason @ LayoutComputationError::UnionAsField(_)) =
+                    PointeeInfo::from_ty(place.ty(&self.locals).unwrap())
+                {
+                    self.push_target(MemoryInitOp::Unsupported {
+                        reason: format!(
+                            "Checking memory initialization of type {} is not supported. {}",
+                            place.ty(&self.locals).unwrap(),
+                            reason
+                        ),
+                    });
+                    return;
+                }
+
                 // Check whether we are assigning into a dereference (*ptr = _).
                 if let Some(place_without_deref) = try_remove_topmost_deref(place) {
                     // First, check that we are not dereferencing extra pointers along the way
@@ -127,9 +170,10 @@ impl MirVisitor for CheckUninitVisitor {
                 // if a union as a subfield is detected, `assert!(false)` will be injected from
                 // the type layout code.
                 let is_inside_union = {
-                    let mut contains_union = false;
                     let mut place_to_add_projections =
                         Place { local: place.local, projection: vec![] };
+                    let mut contains_union =
+                        place_to_add_projections.ty(&self.locals).unwrap().kind().is_union();
                     for projection_elem in place.projection.iter() {
                         if place_to_add_projections.ty(&self.locals).unwrap().kind().is_union() {
                             contains_union = true;
@@ -143,35 +187,37 @@ impl MirVisitor for CheckUninitVisitor {
                 // Need to copy some information about union initialization, since lvalue is
                 // either a union or a field inside a union.
                 if is_inside_union {
-                    if let Rvalue::Use(operand) = rvalue {
-                        // This is a union-to-union assignment, so we need to copy the
-                        // initialization state.
-                        if place.ty(&self.locals).unwrap().kind().is_union() {
-                            self.push_target(MemoryInitOp::AssignUnion {
-                                lvalue: place.clone(),
-                                rvalue: operand.clone(),
-                            });
-                        } else {
-                            // This is assignment to a field of a union.
-                            self.push_target(MemoryInitOp::SetRef {
-                                operand: Operand::Copy(place.clone()),
-                                value: true,
-                                position: InsertPosition::After,
-                            });
+                    match rvalue {
+                        Rvalue::Use(operand) => {
+                            // This is a union-to-union assignment, so we need to copy the
+                            // initialization state.
+                            if place.ty(&self.locals).unwrap().kind().is_union() {
+                                self.push_target(MemoryInitOp::AssignUnion {
+                                    lvalue: place.clone(),
+                                    rvalue: operand.clone(),
+                                });
+                            } else {
+                                // This is assignment to a field of a union.
+                                self.push_target(MemoryInitOp::SetRef {
+                                    operand: Operand::Copy(place.clone()),
+                                    value: true,
+                                    position: InsertPosition::After,
+                                });
+                            }
                         }
-                    }
-                }
-
-                // Create a union from scratch as an aggregate. We handle it here because we
-                // need to know which field is getting assigned.
-                if let Rvalue::Aggregate(AggregateKind::Adt(adt_def, _, _, _, union_field), _) =
-                    rvalue
-                {
-                    if adt_def.kind() == AdtKind::Union {
-                        self.push_target(MemoryInitOp::CreateUnion {
-                            operand: Operand::Copy(place.clone()),
-                            field: union_field.unwrap(), // Safe to unwrap because we know this is a union.
-                        });
+                        Rvalue::Aggregate(AggregateKind::Adt(adt_def, _, _, _, union_field), _) => {
+                            // Create a union from scratch as an aggregate. We handle it here because we
+                            // need to know which field is getting assigned.
+                            if adt_def.kind() == AdtKind::Union {
+                                self.push_target(MemoryInitOp::CreateUnion {
+                                    operand: Operand::Copy(place.clone()),
+                                    field: union_field.unwrap(), // Safe to unwrap because we know this is a union.
+                                });
+                            }
+                        }
+                        // TODO: add support for Rvalue::Cast, etc.
+                        _ => self
+                            .push_target(MemoryInitOp::Unsupported { reason: "Performing a union assignment with a non-supported construct as an Rvalue".to_string() }),
                     }
                 }
             }
@@ -218,7 +264,7 @@ impl MirVisitor for CheckUninitVisitor {
                 before_instruction: vec![],
             };
         } else {
-            unreachable!()
+            // The only instruction in this basic block is the terminator, which was already set.
         }
         // Leave it as an exhaustive match to be notified when a new kind is added.
         match &term.kind {
@@ -339,6 +385,20 @@ impl MirVisitor for CheckUninitVisitor {
                                     });
                                 }
                                 _ => {}
+                            }
+                        } else {
+                            let union_args: Vec<_> = args
+                                .iter()
+                                .enumerate()
+                                .filter(|(_, arg)| arg.ty(&self.locals).unwrap().kind().is_union())
+                                .collect();
+                            if !union_args.is_empty() {
+                                for (idx, operand) in union_args {
+                                    self.push_target(MemoryInitOp::StoreArgument {
+                                        operand: operand.clone(),
+                                        argument_no: idx + 1, // since arguments are 1-indexed
+                                    })
+                                }
                             }
                         }
                     }

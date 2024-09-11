@@ -11,7 +11,7 @@ use syn::Stmt;
 use super::{
     helpers::*,
     shared::{build_ensures, try_as_result_assign},
-    ContractConditionsData, ContractConditionsHandler, INTERNAL_RESULT_IDENT,
+    ClosureType, ContractConditionsData, ContractConditionsHandler, INTERNAL_RESULT_IDENT,
 };
 
 impl<'a> ContractConditionsHandler<'a> {
@@ -84,9 +84,13 @@ impl<'a> ContractConditionsHandler<'a> {
             ContractConditionsData::Ensures { attr } => {
                 let (remembers, ensures_clause) = build_ensures(attr);
                 let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
+
+                let (asserts, rest_of_before) = split_for_remembers(before, ClosureType::Replace);
+
                 quote!({
+                    #(#asserts)*
                     #remembers
-                    #(#before)*
+                    #(#rest_of_before)*
                     #(#after)*
                     kani::assume(#ensures_clause);
                     #result

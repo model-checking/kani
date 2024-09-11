@@ -3,11 +3,12 @@
 //
 //! Utility functions that help calculate type layout.
 
+use std::fmt::Display;
+
 use stable_mir::{
     abi::{FieldsShape, Scalar, TagEncoding, ValueAbi, VariantsShape},
     target::{MachineInfo, MachineSize},
     ty::{AdtKind, IndexedVal, RigidTy, Ty, TyKind, UintTy, VariantIdx},
-    CrateDef,
 };
 
 /// Represents a chunk of data bytes in a data structure.
@@ -68,8 +69,41 @@ pub struct PointeeInfo {
     layout: PointeeLayout,
 }
 
+/// Different layout computation errors that could arise from the currently unsupported constructs.
+pub enum LayoutComputationError {
+    UnknownUnsizedLayout(Ty),
+    EnumWithNicheEncoding(Ty),
+    EnumWithMultiplePaddingVariants(Ty),
+    UnsupportedType(Ty),
+    UnionAsField(Ty),
+}
+
+impl Display for LayoutComputationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LayoutComputationError::UnknownUnsizedLayout(ty) => {
+                write!(f, "Cannot determine layout for an unsized type {ty}")
+            }
+            LayoutComputationError::EnumWithNicheEncoding(ty) => {
+                write!(f, "Cannot determine layout for an Enum with niche encoding of type {ty}")
+            }
+            LayoutComputationError::EnumWithMultiplePaddingVariants(ty) => write!(
+                f,
+                "Cannot determine layout for an Enum of type {ty}, as it has multiple variants that have different padding."
+            ),
+            LayoutComputationError::UnsupportedType(ty) => {
+                write!(f, "Cannot determine layout for an unsupported type {ty}.")
+            }
+            LayoutComputationError::UnionAsField(ty) => write!(
+                f,
+                "Cannot determine layout for a type that contains union of type {ty} as a field."
+            ),
+        }
+    }
+}
+
 impl PointeeInfo {
-    pub fn from_ty(ty: Ty) -> Result<Self, String> {
+    pub fn from_ty(ty: Ty) -> Result<Self, LayoutComputationError> {
         match ty.kind() {
             TyKind::RigidTy(rigid_ty) => match rigid_ty {
                 RigidTy::Adt(adt_def, args) if adt_def.kind() == AdtKind::Union => {
@@ -120,7 +154,7 @@ impl PointeeInfo {
                         };
                         Ok(PointeeInfo { pointee_ty: ty, layout })
                     } else {
-                        Err(format!("Cannot determine type layout for type `{ty}`"))
+                        Err(LayoutComputationError::UnknownUnsizedLayout(ty))
                     }
                 }
             },
@@ -144,7 +178,7 @@ fn data_bytes_for_ty(
     machine_info: &MachineInfo,
     ty: Ty,
     current_offset: usize,
-) -> Result<Vec<DataBytes>, String> {
+) -> Result<Vec<DataBytes>, LayoutComputationError> {
     let layout = ty.layout().unwrap().shape();
 
     match layout.fields {
@@ -201,9 +235,7 @@ fn data_bytes_for_ty(
                                 VariantsShape::Multiple {
                                     tag_encoding: TagEncoding::Niche { .. },
                                     ..
-                                } => {
-                                    Err(format!("Unsupported Enum `{}` check", def.trimmed_name()))?
-                                }
+                                } => Err(LayoutComputationError::EnumWithNicheEncoding(ty)),
                                 VariantsShape::Multiple { variants, tag, .. } => {
                                     // Retrieve data bytes for the tag.
                                     let tag_size = match tag {
@@ -273,10 +305,11 @@ fn data_bytes_for_ty(
                                     } else {
                                         // Struct has multiple padding variants, Kani cannot
                                         // differentiate between them.
-                                        Err(format!(
-                                            "Unsupported Enum `{}` check",
-                                            def.trimmed_name()
-                                        ))
+                                        Err(
+                                            LayoutComputationError::EnumWithMultiplePaddingVariants(
+                                                ty,
+                                            ),
+                                        )
                                     }
                                 }
                             }
@@ -362,10 +395,10 @@ fn data_bytes_for_ty(
                 | RigidTy::Coroutine(_, _, _)
                 | RigidTy::CoroutineWitness(_, _)
                 | RigidTy::Foreign(_)
-                | RigidTy::Dynamic(_, _, _) => Err(format!("Unsupported {ty:?}")),
+                | RigidTy::Dynamic(_, _, _) => Err(LayoutComputationError::UnsupportedType(ty)),
             }
         }
-        FieldsShape::Union(_) => Err(format!("Unions as fields of unions are unsupported {ty:?}")),
+        FieldsShape::Union(_) => Err(LayoutComputationError::UnionAsField(ty)),
         FieldsShape::Array { .. } => Ok(vec![]),
     }
 }

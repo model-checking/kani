@@ -8,15 +8,15 @@ from enum import Enum
 from itertools import chain
 
 
-COMMENT_OR_EMPTY_PATTERN = '^(//.*$|#.*$|\\s*$)'
+COMMENT_OR_EMPTY_PATTERN = '^(//.*$|#.*$|%.*$|\\s*$)'
 
-STANDARD_HEADER_PATTERN_1 = '(//|#) Copyright Kani Contributors'
-STANDARD_HEADER_PATTERN_2 = '(//|#) SPDX-License-Identifier: Apache-2.0 OR MIT'
+STANDARD_HEADER_PATTERN_1 = '(//|#|%) Copyright Kani Contributors'
+STANDARD_HEADER_PATTERN_2 = '(//|#|%) SPDX-License-Identifier: Apache-2.0 OR MIT'
 
-MODIFIED_HEADER_PATTERN_1 = '(//|#) SPDX-License-Identifier: Apache-2.0 OR MIT'
+MODIFIED_HEADER_PATTERN_1 = '(//|#|%) SPDX-License-Identifier: Apache-2.0 OR MIT'
 MODIFIED_HEADER_PATTERN_2 = COMMENT_OR_EMPTY_PATTERN
-MODIFIED_HEADER_PATTERN_3 = '(//|#) Modifications Copyright Kani Contributors'
-MODIFIED_HEADER_PATTERN_4 = '(//|#) See GitHub history for details.'
+MODIFIED_HEADER_PATTERN_3 = '(//|#|%) Modifications Copyright Kani Contributors'
+MODIFIED_HEADER_PATTERN_4 = '(//|#|%) See GitHub history for details.'
 
 class CheckResult(Enum):
     FAIL = 1
