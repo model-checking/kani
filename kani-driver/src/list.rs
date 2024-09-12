@@ -4,11 +4,11 @@
 
 use std::{fs::File, io::BufWriter};
 
-use crate::{args::list_args::{CargoListArgs, Format, StandaloneListArgs}, metadata::from_json, project::{self, Artifact}, session::{KaniSession, ReachabilityMode}, util::crate_name, version::{print_kani_version, KANI_VERSION}, InvocationType};
+use crate::{args::list_args::{CargoListArgs, Format, StandaloneListArgs}, project::{self, standalone_project}, session::{KaniSession, ReachabilityMode}, version::{print_kani_version, KANI_VERSION}, InvocationType};
 use anyhow::Result;
 use cli_table::{print_stdout, Cell, CellStruct, Style, Table};
 use colour::print_ln_bold;
-use kani_metadata::{ArtifactType, ContractedFunction, HarnessKind, KaniMetadata};
+use kani_metadata::{ContractedFunction, HarnessKind, KaniMetadata};
 use serde_json::json;
 
 // Represents the version of our JSON file format.
@@ -66,28 +66,9 @@ pub fn list_standalone(args: StandaloneListArgs) -> Result<()> {
         print_kani_version(InvocationType::Standalone);
     }
     set_session_args(&mut session);
-    
-    let crate_name = if let Some(name) = args.crate_name { name } else { crate_name(&args.input) };
+    let project = standalone_project(&args.input, args.crate_name, &session)?;
 
-    // Ensure the directory exist and it's in its canonical form.
-    let outdir = if let Some(target_dir) = &session.args.target_dir {
-        std::fs::create_dir_all(target_dir)?; // This is a no-op if directory exists.
-        target_dir.canonicalize()?
-    } else {
-        args.input.canonicalize().unwrap().parent().unwrap().to_path_buf()
-    };
-
-    session.compile_single_rust_file(&args.input, &crate_name, &outdir)?;
-
-    // TODO delete intermediate files
-
-    let mut path = outdir.join(crate_name.clone());
-    let _ = path.set_extension(ArtifactType::Metadata);
-    let m = Artifact::try_new(&path, ArtifactType::Metadata)?;
-
-    let metadata: KaniMetadata = from_json(&m)?;
-
-    process_metadata(vec![metadata], args.format)
+    process_metadata(project.metadata, args.format)
 }
 
 pub fn list_std(session: KaniSession, args: CargoListArgs) -> Result<()> {
@@ -143,7 +124,6 @@ fn json(
     contracted_functions: Vec<ContractedFunction>,
     total_contracts: usize,
 ) -> Result<()> {
-    // FIXME
     let filename = "list.json";
 
     let out_file = File::create(filename).unwrap();

@@ -90,6 +90,12 @@ impl Project {
         cargo_metadata: Option<cargo_metadata::Metadata>,
         failed_targets: Option<Vec<String>>,
     ) -> Result<Self> {
+
+        // For the list subcommand, we do not generate any goto, so skip extending the artifacts
+        if session.args.list_enabled {
+            return Ok(Project { outdir, input, metadata, artifacts: vec![], cargo_metadata, failed_targets });
+        }
+
         // For each harness (test or proof) from each metadata, read the path for the goto
         // SymTabGoto file. Use that path to find all the other artifacts.
         let mut artifacts = vec![];
