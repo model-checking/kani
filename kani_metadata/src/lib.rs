@@ -3,8 +3,7 @@
 
 extern crate clap;
 
-use cli_table::Table;
-use std::{collections::HashSet, fmt::Display, path::PathBuf};
+use std::{collections::HashSet, path::PathBuf};
 use serde::{Deserialize, Serialize};
 
 pub use artifact::ArtifactType;
@@ -36,17 +35,15 @@ pub struct KaniMetadata {
     pub contracted_functions: Vec<ContractedFunction>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Table)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ContractedFunction {
     /// The fully qualified name the user gave to the function (i.e. includes the module path).
     pub pretty_name: String,
     /// The (currently full-) path to the file this function was declared within.
-    #[table(skip)]
     pub original_file: String,
     /// The number of contracts applied to this function
     pub contracts_count: usize,
     /// The pretty names of the proof harnesses (`#[kani::proof_for_contract]`) for this function
-    #[table(display_fn = "print_contract_harnesses")]
     pub harnesses: Vec<String>,
 }
 
@@ -70,13 +67,4 @@ pub struct Location {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CompilerArtifactStub {
     pub metadata_path: PathBuf,
-}
-
-fn print_contract_harnesses(harnesses: &Vec<String>) -> impl Display {
-    let joined = harnesses.join("\n");
-    if joined.is_empty() {
-        "NONE".to_string()
-    } else {
-        joined
-    }
 }

@@ -2,11 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Implements the list subcommand logic
 
-use std::collections::BTreeMap;
-
 use crate::{args::list_args::{CargoListArgs, Format, StandaloneListArgs}, metadata::from_json, project::{self, Artifact}, session::{KaniSession, ReachabilityMode}, util::crate_name, version::print_kani_version, InvocationType};
 use anyhow::Result;
-use cli_table::{print_stdout, Cell, Style, Table};
+use cli_table::{print_stdout, Cell, CellStruct, Style, Table};
 use colour::print_ln_bold;
 use kani_metadata::{ArtifactType, ContractedFunction, HarnessKind, KaniMetadata};
 
@@ -17,15 +15,15 @@ fn set_session_args(session: &mut KaniSession) {
 
 fn process_metadata(metadata: Vec<KaniMetadata>, format: Format) -> Result<()> {
     let mut standard_harnesses: Vec<String> = vec![];
-    let mut contract_harnesses: Vec<String> = vec![];
     let mut contracted_functions: Vec<ContractedFunction> = vec![];
     let mut total_contracts = 0;
+    let mut total_contract_harnesses = 0;
     
     for kani_meta in metadata {
         for harness_meta in kani_meta.proof_harnesses {
             match harness_meta.attributes.kind {
                 HarnessKind::Proof => standard_harnesses.push(harness_meta.pretty_name),
-                HarnessKind::ProofForContract { .. } => contract_harnesses.push(harness_meta.pretty_name),
+                HarnessKind::ProofForContract { .. } => total_contract_harnesses += 1,
                 HarnessKind::Test => {}
             }
         }
@@ -37,16 +35,9 @@ fn process_metadata(metadata: Vec<KaniMetadata>, format: Format) -> Result<()> {
         contracted_functions.extend(kani_meta.contracted_functions.into_iter());
     }
 
-    let totals = BTreeMap::from([
-        ("Standard Harnesses", standard_harnesses.len()),
-        ("Contract Harnesses", contract_harnesses.len()),
-        ("Functions with Contracts", contracted_functions.len()),
-        ("Contracts", total_contracts)
-    ]);
-
     match format {
-        Format::Pretty => pretty_print(standard_harnesses, contract_harnesses, contracted_functions, totals),
-        Format::Json => json_print(standard_harnesses, contract_harnesses, contracted_functions, totals),
+        Format::Pretty => pretty_print(standard_harnesses, contracted_functions, total_contract_harnesses, total_contracts),
+        Format::Json => json_print(standard_harnesses, contracted_functions, total_contract_harnesses, total_contracts),
     }
 }
 
@@ -91,51 +82,56 @@ pub fn list_std(session: KaniSession, args: CargoListArgs) -> Result<()> {
 
 fn pretty_print(
     mut standard_harnesses: Vec<String>,
-    mut contract_harnesses: Vec<String>,
     mut contracted_functions: Vec<ContractedFunction>,
-    totals: BTreeMap<&str, usize>
+    total_contract_harnesses: usize,
+    total_contracts: usize,
 ) -> Result<()> {
+    let total_contracted_functions = contracted_functions.len();
 
+    // Print in alphabetical order
     standard_harnesses.sort();
-    contract_harnesses.sort();
     contracted_functions.sort_by_key(|cf| cf.pretty_name.clone());
 
+    fn format_contract_harnesses(harnesses: &mut Vec<String>) -> String {
+        harnesses.sort();
+        let joined = harnesses.join("\n");
+        if joined.is_empty() {
+            "NONE".to_string()
+        } else {
+            joined
+        }
+    }
+
+    let mut contracts_table: Vec<Vec<CellStruct>> = vec![];
+
+    for mut cf in contracted_functions {
+        contracts_table.push(vec!["".cell(), cf.pretty_name.cell(), cf.contracts_count.cell(), format_contract_harnesses(&mut cf.harnesses).cell()]);
+    }
+
+    contracts_table.push(vec!["Total".cell().bold(true), total_contracted_functions.cell(), total_contracts.cell(), total_contract_harnesses.cell()]);
+
     print_ln_bold!("\nContracts:");
-    
-    print_stdout(
-        contracted_functions
-        .table()
-        .title(vec![
-            "Function".cell().bold(true),
-            "# of Contracts".cell().bold(true),
-            "Contract Harnesses".cell().bold(true),
+    print_stdout(contracts_table.table().title(vec![
+        "".cell(),
+        "Function Under Contract".cell().bold(true),
+        "# of Contracts".cell().bold(true),
+        "Contract Harnesses".cell().bold(true),
         ])
     )?;
 
-
-    print_ln_bold!("\nContract Harnesses:");
-    for harness in &contract_harnesses {
-        println!("- {}", harness);
-    }
-
     print_ln_bold!("\nStandard Harnesses:");
-    for harness in &standard_harnesses {
-        println!("- {}", harness);
-    }
-
-    print_ln_bold!("\nTotals:");
-    for (key, total) in totals {
-        println!("{key}: {total}");
+    for (i, harness) in standard_harnesses.iter().enumerate() {
+        println!("{}. {harness}", i+1);
     }
 
     Ok(())
 }
 
 fn json_print(
-    standard_harnesses: Vec<String>,
-    contract_harnesses: Vec<String>,
-    contracted_functions: Vec<ContractedFunction>,
-    totals: BTreeMap<&str, usize>
+    mut standard_harnesses: Vec<String>,
+    mut contracted_functions: Vec<ContractedFunction>,
+    total_contract_harnesses: usize,
+    total_contracts: usize,
 ) -> Result<()> {
     todo!()
 }
