@@ -29,7 +29,7 @@ pub struct KaniSession {
     /// Include all publicly-visible symbols in the generated goto binary, not just those reachable from
     /// a proof harness. Useful when attempting to verify things that were not annotated with kani
     /// proof attributes.
-    pub codegen_tests: bool,
+    pub reachability_mode: ReachabilityMode,
 
     /// The location we found the 'kani_rustc' command
     pub kani_compiler: PathBuf,
@@ -57,7 +57,7 @@ impl KaniSession {
 
         Ok(KaniSession {
             args,
-            codegen_tests: false,
+            reachability_mode: ReachabilityMode::ProofHarnesses,
             kani_compiler: install.kani_compiler()?,
             kani_lib_c: install.kani_lib_c()?,
             temporaries: Mutex::new(vec![]),
@@ -78,12 +78,6 @@ impl KaniSession {
         let mut t = self.temporaries.lock().unwrap();
         t.extend(temps.iter().map(|p| p.as_ref().to_owned()));
     }
-
-    /// Determine which symbols Kani should codegen (i.e. by slicing away symbols
-    /// that are considered unreachable.)
-    pub fn reachability_mode(&self) -> ReachabilityMode {
-        if self.codegen_tests { ReachabilityMode::Tests } else { ReachabilityMode::ProofHarnesses }
-    }
 }
 
 #[derive(Debug, Copy, Clone, Display)]
@@ -92,6 +86,7 @@ pub enum ReachabilityMode {
     #[strum(to_string = "harnesses")]
     ProofHarnesses,
     Tests,
+    None,
 }
 
 impl Drop for KaniSession {

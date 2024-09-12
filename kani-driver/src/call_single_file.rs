@@ -52,7 +52,10 @@ impl KaniSession {
         outdir: &Path,
     ) -> Result<()> {
         let mut kani_args = self.kani_compiler_flags();
-        kani_args.push(format!("--reachability={}", self.reachability_mode()));
+        kani_args.push(format!("--reachability={}", self.reachability_mode));
+        if self.args.list_enabled {
+            kani_args.push("--list".to_string());
+        }
 
         let lib_path = lib_folder().unwrap();
         let mut rustc_args = self.kani_rustc_flags(LibConfig::new(lib_path));
@@ -92,7 +95,7 @@ impl KaniSession {
 
     /// Create a compiler option that represents the reachability mod.
     pub fn reachability_arg(&self) -> String {
-        to_rustc_arg(vec![format!("--reachability={}", self.reachability_mode())])
+        to_rustc_arg(vec![format!("--reachability={}", self.reachability_mode)])
     }
 
     /// These arguments are arguments passed to kani-compiler that are `kani` compiler specific.

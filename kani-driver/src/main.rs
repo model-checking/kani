@@ -12,6 +12,7 @@ use args_toml::join_args;
 
 use crate::args::StandaloneSubcommand;
 use crate::concrete_playback::playback::{playback_cargo, playback_standalone};
+use crate::list::list_standalone;
 use crate::project::Project;
 use crate::session::KaniSession;
 use crate::version::print_kani_version;
@@ -32,6 +33,7 @@ mod cbmc_output_parser;
 mod cbmc_property_renderer;
 mod concrete_playback;
 mod coverage;
+mod list;
 mod harness_runner;
 mod metadata;
 mod project;
@@ -80,6 +82,9 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
         Some(CargoKaniSubcommand::Playback(args)) => {
             return playback_cargo(*args);
         }
+        Some(CargoKaniSubcommand::List(args)) => {
+            return list::list_cargo(session, *args);
+        }
         None => {}
     }
 
@@ -98,6 +103,7 @@ fn standalone_main() -> Result<()> {
 
     let (session, project) = match args.command {
         Some(StandaloneSubcommand::Playback(args)) => return playback_standalone(*args),
+        Some(StandaloneSubcommand::List(args)) => return list_standalone(*args),
         Some(StandaloneSubcommand::VerifyStd(args)) => {
             let session = KaniSession::new(args.verify_opts)?;
             if !session.args.common_args.quiet {
@@ -106,7 +112,7 @@ fn standalone_main() -> Result<()> {
 
             let project = project::std_project(&args.std_path, &session)?;
             (session, project)
-        }
+        },
         None => {
             let session = KaniSession::new(args.verify_opts)?;
             if !session.args.common_args.quiet {
