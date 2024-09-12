@@ -65,7 +65,7 @@ pub fn json(
     contracted_functions: Vec<ContractedFunction>,
     total_contracts: usize,
 ) -> Result<()> {
-    let filename = "list.json";
+    let filename = "kani-list.json";
 
     let out_file = File::create(filename).unwrap();
     let writer = BufWriter::new(out_file);

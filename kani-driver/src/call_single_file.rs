@@ -53,9 +53,6 @@ impl KaniSession {
     ) -> Result<()> {
         let mut kani_args = self.kani_compiler_flags();
         kani_args.push(format!("--reachability={}", self.reachability_mode));
-        if self.args.list_enabled {
-            kani_args.push("--list".to_string());
-        }
 
         let lib_path = lib_folder().unwrap();
         let mut rustc_args = self.kani_rustc_flags(LibConfig::new(lib_path));
@@ -136,6 +133,10 @@ impl KaniSession {
 
         if self.args.common_args.unstable_features.contains(UnstableFeature::ValidValueChecks) {
             flags.push("--ub-check=validity".into())
+        }
+
+        if self.args.common_args.unstable_features.contains(UnstableFeature::List) {
+            flags.push("--list".into())
         }
 
         if self.args.common_args.unstable_features.contains(UnstableFeature::UninitChecks) {

@@ -13,8 +13,11 @@ use super::VerificationArgs;
 /// List information relevant to verification
 #[derive(Debug, Parser)]
 pub struct CargoListArgs {
+    #[command(flatten)]
+    pub verify_opts: VerificationArgs,
+
     /// Output format
-    #[clap(default_value = "pretty")]
+    #[clap(long, default_value = "pretty")]
     pub format: Format,
 }
 
@@ -48,7 +51,15 @@ pub enum Format {
 
 impl ValidateArgs for CargoListArgs {
     fn validate(&self) -> Result<(), Error> {
-        todo!()
+        self.verify_opts.validate()?;
+        if !self.verify_opts.common_args.unstable_features.contains(UnstableFeature::List) {
+            return Err(Error::raw(
+                ErrorKind::MissingRequiredArgument,
+                "The `list` subcommand is unstable and requires -Z list",
+            ));
+        }
+
+        Ok(())
     }
 }
 

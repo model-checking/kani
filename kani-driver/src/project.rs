@@ -8,6 +8,7 @@ use crate::metadata::from_json;
 use crate::session::KaniSession;
 use crate::util::crate_name;
 use anyhow::{Context, Result};
+use kani_metadata::UnstableFeature;
 use kani_metadata::{
     artifact::convert_type, ArtifactType, ArtifactType::*, HarnessMetadata, KaniMetadata,
 };
@@ -91,7 +92,7 @@ impl Project {
         failed_targets: Option<Vec<String>>,
     ) -> Result<Self> {
         // For the list subcommand, we do not generate any goto, so skip extending the artifacts
-        if session.args.list_enabled {
+        if session.args.common_args.unstable_features.contains(UnstableFeature::List) {
             return Ok(Project {
                 outdir,
                 input,

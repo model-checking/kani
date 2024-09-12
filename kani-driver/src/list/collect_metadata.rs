@@ -1,6 +1,6 @@
 use crate::{
     args::list_args::{CargoListArgs, Format, StandaloneListArgs},
-    project::{self, standalone_project},
+    project::{cargo_project, standalone_project},
     session::{KaniSession, ReachabilityMode},
     version::print_kani_version,
     InvocationType,
@@ -9,11 +9,6 @@ use anyhow::Result;
 use kani_metadata::{ContractedFunction, HarnessKind, KaniMetadata};
 
 use super::output::{json, pretty};
-
-fn set_session_args(session: &mut KaniSession) {
-    session.reachability_mode = ReachabilityMode::None;
-    session.args.list_enabled = true;
-}
 
 fn process_metadata(metadata: Vec<KaniMetadata>, format: Format) -> Result<()> {
     let mut standard_harnesses: Vec<String> = vec![];
@@ -57,11 +52,16 @@ fn process_metadata(metadata: Vec<KaniMetadata>, format: Format) -> Result<()> {
     }
 }
 
-pub fn list_cargo(mut session: KaniSession, _args: CargoListArgs) -> Result<()> {
-    set_session_args(&mut session);
-    let _project = project::cargo_project(&session, false)?;
-    // process_project(project.metadata, args.format);
-    todo!()
+pub fn list_cargo(args: CargoListArgs) -> Result<()> {
+    let mut session = KaniSession::new(args.verify_opts)?;
+
+    if !session.args.common_args.quiet {
+        print_kani_version(InvocationType::CargoKani(vec![]));
+    }
+
+    session.reachability_mode = ReachabilityMode::None;
+    let project = cargo_project(&session, false)?;
+    process_metadata(project.metadata, args.format)
 }
 
 pub fn list_standalone(args: StandaloneListArgs) -> Result<()> {
@@ -69,7 +69,7 @@ pub fn list_standalone(args: StandaloneListArgs) -> Result<()> {
     if !session.args.common_args.quiet {
         print_kani_version(InvocationType::Standalone);
     }
-    set_session_args(&mut session);
+    session.reachability_mode = ReachabilityMode::None;
     let project = standalone_project(&args.input, args.crate_name, &session)?;
 
     process_metadata(project.metadata, args.format)

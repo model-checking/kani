@@ -69,6 +69,10 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
     let args = args::CargoKaniArgs::parse_from(&input_args);
     check_is_valid(&args);
 
+    if let Some(CargoKaniSubcommand::List(args)) = args.command {
+        return list_cargo(*args);
+    }
+
     let session = session::KaniSession::new(args.verify_opts)?;
 
     if !session.args.common_args.quiet {
@@ -82,9 +86,7 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
         Some(CargoKaniSubcommand::Playback(args)) => {
             return playback_cargo(*args);
         }
-        Some(CargoKaniSubcommand::List(args)) => {
-            return list_cargo(session, *args);
-        }
+        Some(CargoKaniSubcommand::List(_)) => unreachable!(),
         None => {}
     }
 

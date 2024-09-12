@@ -294,10 +294,6 @@ pub struct VerificationArgs {
 
     #[command(flatten)]
     pub common_args: CommonArgs,
-
-    /// Enable the list subcommand
-    #[arg(long = "list")]
-    pub list_enabled: bool,
 }
 
 impl VerificationArgs {
