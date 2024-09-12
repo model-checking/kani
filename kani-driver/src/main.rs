@@ -12,7 +12,7 @@ use args_toml::join_args;
 
 use crate::args::StandaloneSubcommand;
 use crate::concrete_playback::playback::{playback_cargo, playback_standalone};
-use crate::list::list_standalone;
+use crate::list::collect_metadata::{list_cargo, list_standalone};
 use crate::project::Project;
 use crate::session::KaniSession;
 use crate::version::print_kani_version;
@@ -83,7 +83,7 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
             return playback_cargo(*args);
         }
         Some(CargoKaniSubcommand::List(args)) => {
-            return list::list_cargo(session, *args);
+            return list_cargo(session, *args);
         }
         None => {}
     }
