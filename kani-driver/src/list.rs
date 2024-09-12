@@ -4,7 +4,13 @@
 
 use std::{fs::File, io::BufWriter};
 
-use crate::{args::list_args::{CargoListArgs, Format, StandaloneListArgs}, project::{self, standalone_project}, session::{KaniSession, ReachabilityMode}, version::{print_kani_version, KANI_VERSION}, InvocationType};
+use crate::{
+    args::list_args::{CargoListArgs, Format, StandaloneListArgs},
+    project::{self, standalone_project},
+    session::{KaniSession, ReachabilityMode},
+    version::{print_kani_version, KANI_VERSION},
+    InvocationType,
+};
 use anyhow::Result;
 use cli_table::{print_stdout, Cell, CellStruct, Style, Table};
 use colour::print_ln_bold;
@@ -25,12 +31,14 @@ fn process_metadata(metadata: Vec<KaniMetadata>, format: Format) -> Result<()> {
     let mut contract_harnesses: Vec<String> = vec![];
     let mut contracted_functions: Vec<ContractedFunction> = vec![];
     let mut total_contracts = 0;
-    
+
     for kani_meta in metadata {
         for harness_meta in kani_meta.proof_harnesses {
             match harness_meta.attributes.kind {
                 HarnessKind::Proof => standard_harnesses.push(harness_meta.pretty_name),
-                HarnessKind::ProofForContract { .. } => contract_harnesses.push(harness_meta.pretty_name),
+                HarnessKind::ProofForContract { .. } => {
+                    contract_harnesses.push(harness_meta.pretty_name)
+                }
                 HarnessKind::Test => {}
             }
         }
@@ -48,14 +56,21 @@ fn process_metadata(metadata: Vec<KaniMetadata>, format: Format) -> Result<()> {
     contracted_functions.sort_by_key(|cf| cf.function.clone());
 
     match format {
-        Format::Pretty => pretty_print(standard_harnesses, contracted_functions, contract_harnesses.len(), total_contracts),
-        Format::Json => json(standard_harnesses, contract_harnesses, contracted_functions, total_contracts),
+        Format::Pretty => pretty_print(
+            standard_harnesses,
+            contracted_functions,
+            contract_harnesses.len(),
+            total_contracts,
+        ),
+        Format::Json => {
+            json(standard_harnesses, contract_harnesses, contracted_functions, total_contracts)
+        }
     }
 }
 
-pub fn list_cargo(mut session: KaniSession, args: CargoListArgs) -> Result<()> {
+pub fn list_cargo(mut session: KaniSession, _args: CargoListArgs) -> Result<()> {
     set_session_args(&mut session);
-    let project = project::cargo_project(&session, false)?;
+    let _project = project::cargo_project(&session, false)?;
     // process_project(project, args.format)
     todo!()
 }
@@ -71,7 +86,7 @@ pub fn list_standalone(args: StandaloneListArgs) -> Result<()> {
     process_metadata(project.metadata, args.format)
 }
 
-pub fn list_std(session: KaniSession, args: CargoListArgs) -> Result<()> {
+pub fn _list_std(_session: KaniSession, _args: CargoListArgs) -> Result<()> {
     todo!()
 }
 
@@ -83,23 +98,29 @@ fn pretty_print(
 ) -> Result<()> {
     let total_contracted_functions = contracted_functions.len();
 
-    fn format_contract_harnesses(harnesses: &mut Vec<String>) -> String {
+    fn format_contract_harnesses(harnesses: &mut [String]) -> String {
         harnesses.sort();
         let joined = harnesses.join("\n");
-        if joined.is_empty() {
-            "NONE".to_string()
-        } else {
-            joined
-        }
+        if joined.is_empty() { "NONE".to_string() } else { joined }
     }
 
     let mut contracts_table: Vec<Vec<CellStruct>> = vec![];
 
     for mut cf in contracted_functions {
-        contracts_table.push(vec!["".cell(), cf.function.cell(), cf.total_contracts.cell(), format_contract_harnesses(&mut cf.harnesses).cell()]);
+        contracts_table.push(vec![
+            "".cell(),
+            cf.function.cell(),
+            cf.total_contracts.cell(),
+            format_contract_harnesses(&mut cf.harnesses).cell(),
+        ]);
     }
 
-    contracts_table.push(vec!["Total".cell().bold(true), total_contracted_functions.cell(), total_contracts.cell(), total_contract_harnesses.cell()]);
+    contracts_table.push(vec![
+        "Total".cell().bold(true),
+        total_contracted_functions.cell(),
+        total_contracts.cell(),
+        total_contract_harnesses.cell(),
+    ]);
 
     print_ln_bold!("\nContracts:");
     print_stdout(contracts_table.table().title(vec![
@@ -107,12 +128,11 @@ fn pretty_print(
         "Function Under Contract".cell().bold(true),
         "# of Contracts".cell().bold(true),
         "Contract Harnesses".cell().bold(true),
-        ])
-    )?;
+    ]))?;
 
     print_ln_bold!("\nStandard Harnesses:");
     for (i, harness) in standard_harnesses.iter().enumerate() {
-        println!("{}. {harness}", i+1);
+        println!("{}. {harness}", i + 1);
     }
 
     Ok(())
@@ -142,7 +162,7 @@ fn json(
             "contracts": total_contracts,
         }
     });
-    
+
     serde_json::to_writer_pretty(writer, &json_obj)?;
 
     Ok(())

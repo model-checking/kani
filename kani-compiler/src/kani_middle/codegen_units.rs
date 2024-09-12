@@ -14,7 +14,9 @@ use crate::kani_middle::reachability::filter_crate_items;
 use crate::kani_middle::resolve::expect_resolve_fn;
 use crate::kani_middle::stubbing::{check_compatibility, harness_stub_map};
 use crate::kani_queries::QueryDb;
-use kani_metadata::{ArtifactType, AssignsContract, ContractedFunction, HarnessKind, HarnessMetadata, KaniMetadata};
+use kani_metadata::{
+    ArtifactType, AssignsContract, ContractedFunction, HarnessKind, HarnessMetadata, KaniMetadata,
+};
 use rustc_hir::def_id::DefId;
 use rustc_middle::ty::TyCtxt;
 use rustc_session::config::OutputType;
@@ -59,9 +61,16 @@ impl CodegenUnits {
     pub fn new(queries: &QueryDb, tcx: TyCtxt) -> Self {
         let crate_info = CrateInfo { name: stable_mir::local_crate().name.as_str().into() };
 
-        if queries.args().reachability_analysis != ReachabilityType::Harnesses && !queries.args().list_enabled {
+        if queries.args().reachability_analysis != ReachabilityType::Harnesses
+            && !queries.args().list_enabled
+        {
             // Leave other reachability type handling as is for now.
-            return CodegenUnits { units: vec![], harness_info: HashMap::default(), crate_info, contracted_functions: vec![] };
+            return CodegenUnits {
+                units: vec![],
+                harness_info: HashMap::default(),
+                crate_info,
+                contracted_functions: vec![],
+            };
         }
 
         let base_filepath = tcx.output_filenames(()).path(OutputType::Object);
@@ -82,8 +91,13 @@ impl CodegenUnits {
             validate_units(tcx, &units);
             debug!(?units, "CodegenUnits::new");
         }
-        
-        CodegenUnits { units, harness_info: all_harnesses, crate_info, contracted_functions: vec![] }
+
+        CodegenUnits {
+            units,
+            harness_info: all_harnesses,
+            crate_info,
+            contracted_functions: vec![],
+        }
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &CodegenUnit> {
@@ -117,7 +131,7 @@ impl CodegenUnits {
             proof_harnesses,
             unsupported_features: vec![],
             test_harnesses,
-            contracted_functions: self.contracted_functions.clone()
+            contracted_functions: self.contracted_functions.clone(),
         }
     }
 }

@@ -95,7 +95,7 @@ pub enum UnstableFeature {
     /// Enable an unstable option or subcommand.
     UnstableOptions,
     /// The list subcommand [RFC 13](https://model-checking.github.io/kani/rfc/rfcs/0013-list.html)
-    List
+    List,
 }
 
 impl UnstableFeature {

@@ -5,10 +5,10 @@ use self::metadata::{write_metadata, AssessMetadata};
 use anyhow::{bail, Result};
 use kani_metadata::KaniMetadata;
 
-use crate::{assess::table_builder::TableBuilder, session::ReachabilityMode};
 use crate::metadata::merge_kani_metadata;
 use crate::project;
 use crate::session::KaniSession;
+use crate::{assess::table_builder::TableBuilder, session::ReachabilityMode};
 
 pub use crate::args::{AssessArgs, AssessSubcommand};
 

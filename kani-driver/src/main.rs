@@ -33,8 +33,8 @@ mod cbmc_output_parser;
 mod cbmc_property_renderer;
 mod concrete_playback;
 mod coverage;
-mod list;
 mod harness_runner;
+mod list;
 mod metadata;
 mod project;
 mod session;
@@ -112,7 +112,7 @@ fn standalone_main() -> Result<()> {
 
             let project = project::std_project(&args.std_path, &session)?;
             (session, project)
-        },
+        }
         None => {
             let session = KaniSession::new(args.verify_opts)?;
             if !session.args.common_args.quiet {

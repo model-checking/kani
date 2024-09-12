@@ -297,7 +297,7 @@ pub struct VerificationArgs {
 
     /// Enable the list subcommand
     #[arg(long = "list")]
-    pub list_enabled: bool
+    pub list_enabled: bool,
 }
 
 impl VerificationArgs {

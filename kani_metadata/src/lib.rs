@@ -3,8 +3,8 @@
 
 extern crate clap;
 
-use std::{collections::HashSet, path::PathBuf};
 use serde::{Deserialize, Serialize};
+use std::{collections::HashSet, path::PathBuf};
 
 pub use artifact::ArtifactType;
 pub use cbmc_solver::CbmcSolver;

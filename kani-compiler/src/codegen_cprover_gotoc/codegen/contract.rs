@@ -1,7 +1,9 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use crate::codegen_cprover_gotoc::{codegen::ty_stable::pointee_type_stable, GotocCtx};
-use crate::kani_middle::attributes::{ContractAttributes, KaniAttributes, matches_diagnostic as matches_function};
+use crate::kani_middle::attributes::{
+    matches_diagnostic as matches_function, ContractAttributes, KaniAttributes,
+};
 use cbmc::goto_program::FunctionContract;
 use cbmc::goto_program::{Expr, Lambda, Location, Type};
 use kani_metadata::AssignsContract;
@@ -109,7 +111,8 @@ impl<'tcx> GotocCtx<'tcx> {
         let contract_attrs =
             KaniAttributes::for_instance(self.tcx, instance).contract_attributes()?;
         let check_instance = if contract_attrs.has_recursion {
-            let recursion_check = self.find_closure(instance, contract_attrs.recursion_check.as_str())?;
+            let recursion_check =
+                self.find_closure(instance, contract_attrs.recursion_check.as_str())?;
             self.find_closure(recursion_check, contract_attrs.checked_with.as_str())?
         } else {
             self.find_closure(instance, contract_attrs.checked_with.as_str())?
@@ -245,10 +248,15 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// Count the number of contracts applied to `contracted_function`
-    pub fn count_contracts(&mut self, contracted_function: &Instance, contract_attrs: ContractAttributes) -> usize {
+    pub fn count_contracts(
+        &mut self,
+        contracted_function: &Instance,
+        contract_attrs: ContractAttributes,
+    ) -> usize {
         // Extract the body of the check_closure, which will contain kani::assume() calls for each precondition
         // and kani::assert() calls for each postcondition.
-        let check_closure = self.find_closure(*contracted_function, contract_attrs.checked_with.as_str()).unwrap();
+        let check_closure =
+            self.find_closure(*contracted_function, contract_attrs.checked_with.as_str()).unwrap();
         let body = check_closure.body().unwrap();
 
         let mut count = 0;
@@ -259,8 +267,9 @@ impl<'tcx> GotocCtx<'tcx> {
                 if let TyKind::RigidTy(RigidTy::FnDef(fn_def, args)) = fn_ty.kind() {
                     let instance = Instance::resolve(fn_def, &args).unwrap();
                     // For each precondition or postcondition, increment the count
-                    if matches_function(self.tcx, instance.def, "KaniAssume") 
-                    || matches_function(self.tcx, instance.def, "KaniAssert") {
+                    if matches_function(self.tcx, instance.def, "KaniAssume")
+                        || matches_function(self.tcx, instance.def, "KaniAssert")
+                    {
                         count += 1;
                     }
                 }

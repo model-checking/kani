@@ -15,7 +15,7 @@ use super::VerificationArgs;
 pub struct CargoListArgs {
     /// Output format
     #[clap(default_value = "pretty")]
-    pub format: Format
+    pub format: Format,
 }
 
 /// List information relevant to verification
@@ -33,7 +33,7 @@ pub struct StandaloneListArgs {
 
     /// Output format
     #[clap(long, default_value = "pretty")]
-    pub format: Format
+    pub format: Format,
 }
 
 /// Message formats available for the subcommand.
@@ -55,12 +55,7 @@ impl ValidateArgs for CargoListArgs {
 impl ValidateArgs for StandaloneListArgs {
     fn validate(&self) -> Result<(), Error> {
         self.verify_opts.validate()?;
-        if !self
-            .verify_opts
-            .common_args
-            .unstable_features
-            .contains(UnstableFeature::List)
-        {
+        if !self.verify_opts.common_args.unstable_features.contains(UnstableFeature::List) {
             return Err(Error::raw(
                 ErrorKind::MissingRequiredArgument,
                 "The `list` subcommand is unstable and requires -Z list",
