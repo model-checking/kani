@@ -38,11 +38,11 @@ pub struct KaniMetadata {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ContractedFunction {
     /// The fully qualified name the user gave to the function (i.e. includes the module path).
-    pub pretty_name: String,
+    pub function: String,
     /// The (currently full-) path to the file this function was declared within.
-    pub original_file: String,
+    pub file: String,
     /// The number of contracts applied to this function
-    pub contracts_count: usize,
+    pub total_contracts: usize,
     /// The pretty names of the proof harnesses (`#[kani::proof_for_contract]`) for this function
     pub harnesses: Vec<String>,
 }

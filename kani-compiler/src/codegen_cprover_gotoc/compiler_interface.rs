@@ -382,10 +382,10 @@ impl CodegenBackend for GotocCodegenBackend {
                                 let contracts_count = gcx.count_contracts(&instance, attributes.contract_attributes().unwrap());
     
                                 units.contracted_functions.push(ContractedFunction {
-                                    pretty_name: instance.name(),
-                                    original_file: SourceLocation::new(instance.body().unwrap().span).filename,
+                                    function: instance.name(),
+                                    file: SourceLocation::new(instance.body().unwrap().span).filename,
                                     harnesses,
-                                    contracts_count
+                                    total_contracts: contracts_count
                                 });
                             }
                         }

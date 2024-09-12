@@ -32,7 +32,7 @@ pub struct StandaloneListArgs {
     pub verify_opts: VerificationArgs,
 
     /// Output format
-    #[clap(default_value = "pretty")]
+    #[clap(long, default_value = "pretty")]
     pub format: Format
 }
 
