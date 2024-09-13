@@ -44,6 +44,13 @@ pub struct SummaryArgs {
     pub mapfile: PathBuf,
     #[arg(long, required = true)]
     pub profile: PathBuf,
+    #[arg(long, short, value_parser = clap::value_parser!(SummaryFormat), default_value = "markdown")]
+    pub format: SummaryFormat,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, clap::ValueEnum)]
+pub enum SummaryFormat {
+    Markdown,
 }
 
 #[derive(Debug, clap::Args)]
