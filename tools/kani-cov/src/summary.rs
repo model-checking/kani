@@ -2,13 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use std::{
-    cmp::max, fs::{self, File}, io::BufReader, path::PathBuf
+    cmp::max, fs::File, io::BufReader, path::PathBuf
 };
 
 use anyhow::Result;
-use tree_sitter::{Node, Parser};
 
-use crate::{args::{SummaryArgs, SummaryFormat}, coverage::{CombinedCoverageResults, CovResult, CoverageRegion}};
+use crate::{args::{SummaryArgs, SummaryFormat}, coverage::{function_coverage_results, function_info_from_file, CombinedCoverageResults, CovResult, CoverageMetric, CoverageRegion, FileCoverageInfo, FunctionInfo}};
 
 pub fn summary_main(args: &SummaryArgs) -> Result<()> {
     let mapfile = File::open(&args.mapfile)?;
@@ -46,15 +45,15 @@ pub fn summary_main(args: &SummaryArgs) -> Result<()> {
 fn aggregate_cov_info(file: &PathBuf, file_cov_info: &Vec<FunctionCoverageResults>) -> FileCoverageInfo {
     let total_functions = file_cov_info.len().try_into().unwrap();
     let covered_functions = file_cov_info.iter().filter(|f| f.is_covered).count().try_into().unwrap();
-    let fun_cov_info = FunCovInfo { covered: covered_functions, total: total_functions };
+    let fun_cov_info = CoverageMetric::new(covered_functions, total_functions);
     
     let covered_lines = file_cov_info.iter().map(|c| c.covered_lines).sum();
     let total_lines = file_cov_info.iter().map(|c| c.total_lines).sum();
-    let lines_cov_info = LineCovInfo  { covered: covered_lines, total: total_lines };
+    let lines_cov_info = CoverageMetric::new(covered_lines, total_lines);
     
     let covered_regions = file_cov_info.iter().map(|c| c.covered_regions).sum();
     let total_regions = file_cov_info.iter().map(|c| c.total_regions).sum();
-    let region_cov_info = RegionCovInfo { covered: covered_regions, total: total_regions };
+    let region_cov_info = CoverageMetric::new(covered_regions, total_regions);
 
     FileCoverageInfo {
         filename: file.to_string_lossy().to_string(),
@@ -83,58 +82,6 @@ struct FunctionCoverageResults {
 pub fn validate_summary_args(_args: &SummaryArgs) -> Result<()> {
     Ok(())
 }
-
-fn function_coverage_results(info: &FunctionInfo, file: &PathBuf, results: &CombinedCoverageResults) -> Option<(String, Vec<CovResult>)> {
-    // `info` does not include file so how do we match?
-    // use function just for now...
-    let filename = file.clone().into_os_string().into_string().unwrap();
-    let right_filename = results.data.keys().find(|p| filename.ends_with(*p)).unwrap();
-    // TODO: The filenames in kaniraw files should be absolute, just like in metadata
-    // Otherwise the key for `results` just fails...
-    let file_results = results.data.get(right_filename).unwrap();
-    let function = info.name.clone();
-    let fun_results = file_results.iter().find(|(f, _)| *f == function);
-    fun_results.cloned()
-}
-
-// fn calculate_coverage_info(info: &FunctionInfo, file: &PathBuf, results: &CombinedCoverageResults) -> CovInfo {
-//     let cov_info = calculate_cov_info(info, fun_results);
-//     let lines_total = cov_info.iter().filter(|c|c.is_some()).count();
-//     let lines_covered = cov_info.iter().filter(|c|c.is_some() && c.as_ref().unwrap().0 > 0).count();
-
-//     CovInfo { filename: function, function: FunCovInfo { covered: 0, total: 0 }, line: LineCovInfo { covered: lines_covered.try_into().unwrap(), total: lines_total.try_into().unwrap() }, region: RegionCovInfo { covered: 0, total: 0 }}
-//     // println!("{filename} {lines_covered}/{lines_total}");
-//     // println!("{fun_results:?}");
-// }
-
-struct FileCoverageInfo {
-    filename: String,
-    function: FunCovInfo,
-    line: LineCovInfo,
-    region: RegionCovInfo,
-}
-
-struct FunCovInfo {
-    covered: u32,
-    total: u32,
-}
-
-struct LineCovInfo {
-    covered: u32,
-    total: u32,
-}
-
-struct RegionCovInfo {
-    covered: u32,
-    total: u32,
-}
-
-
-// enum LineCoverStatus {
-//     Full,
-//     Partial,
-//     None,
-// }
 
 fn line_coverage_info(info: &FunctionInfo, fun_results: &Option<(String, Vec<crate::coverage::CovResult>)>) -> (u32, u32) {
     let start_line: u32 = info.start.0.try_into().unwrap();
@@ -170,13 +117,8 @@ fn line_coverage_info(info: &FunctionInfo, fun_results: &Option<(String, Vec<cra
                 line_status.push(Some((max_covered, other_covered)));
             }
         }
-        
-        // println!("{} : {:?}", res.0, line_status);
-        
-        // sanity check
-        // let info_start = (info.start.0.try_into().unwrap(),info.start.1.try_into().unwrap());
-        // assert_eq!(cur_span.region.start, info_start);
     }
+
     let total_lines = line_status.iter().filter(|s| s.is_some()).count().try_into().unwrap();
     let covered_lines = line_status.iter().filter(|s| s.is_some() && s.as_ref().unwrap().0 > 0).count().try_into().unwrap();
     (covered_lines, total_lines)
@@ -189,31 +131,6 @@ fn region_coverage_info(fun_results: &Option<(String, Vec<crate::coverage::CovRe
         (covered_regions, total_regions)
     } else { (0, 0) }
 }
-
-#[derive(Debug)]
-struct FunctionInfo {
-    name: String,
-    start: (usize, usize),
-    end: (usize, usize),
-    num_lines: usize,
-}
-
-#[derive(Debug)]
-struct NewFunctionInfo {
-    // name: String,
-    // start: (usize, usize),
-    // end: (usize, usize),
-    // function_covered: bool,
-    // lines_covered: usize,
-    // lines_total: usize,
-    // regions_covered: Option<usize>,
-    // regions_total: Option<usize>,
-}
-
-// struct SummaryInfo {
-//     covered_functions: u32,
-//     total_functions: u32,
-// }
 
 fn print_coverage_info(info: &Vec<FileCoverageInfo>, format: &SummaryFormat) {
     match format {
@@ -305,45 +222,4 @@ fn print_coverage_markdown_info(info: &Vec<FileCoverageInfo>) {
     }
 
     println!("{}", table_rows.join("\n"));
-}
-
-fn function_info_from_file(filepath: &PathBuf) -> Vec<FunctionInfo> {
-    let source_code = fs::read_to_string(filepath).expect("could not read source file");
-    let mut parser = Parser::new();
-    parser.set_language(&tree_sitter_rust::language()).expect("Error loading Rust grammar");
-
-    let tree = parser.parse(&source_code, None).expect("Failed to parse file");
-
-    let mut cursor = tree.walk();
-    let first_child_exists = cursor.goto_first_child();
-
-    if !first_child_exists {
-        return vec![];
-    }
-
-    let mut function_info: Vec<FunctionInfo> = Vec::new();
-
-    if cursor.node().kind() == "function_item" {
-        function_info.push(function_info_from_node(cursor.node(), source_code.as_bytes()))
-    };
-
-    while cursor.goto_next_sibling() {
-        if cursor.node().kind() == "function_item" {
-            function_info.push(function_info_from_node(cursor.node(), source_code.as_bytes()))
-        }
-    }
-
-    function_info
-}
-
-fn function_info_from_node<'a>(node: Node, source: &'a [u8]) -> FunctionInfo {
-    let name = node
-        .child_by_field_name("name")
-        .and_then(|name| name.utf8_text(source).ok())
-        .expect("couldn't get function name")
-        .to_string();
-    let start = (node.start_position().row + 1, node.start_position().column + 1);
-    let end = (node.end_position().row + 1, node.end_position().column + 1);
-    let num_lines = end.0 - start.0 + 1;
-    FunctionInfo { name, start, end, num_lines }
 }

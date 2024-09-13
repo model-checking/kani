@@ -1,14 +1,37 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+use std::{fs::File, io::BufReader, path::PathBuf};
+
 use anyhow::Result;
 
-use crate::args::ReportArgs;
-// use coverage::CoverageCheck;
+use crate::{args::ReportArgs, coverage::CombinedCoverageResults};
+use crate::coverage::{function_coverage_results, function_info_from_file, FileCoverageInfo};
 // use crate::coverage::CoverageResults;
 // use args::Args;
 
-pub fn report_main(_args: &ReportArgs) -> Result<()> {
+pub fn report_main(args: &ReportArgs) -> Result<()> {
+    let mapfile = File::open(&args.mapfile)?;
+    let reader = BufReader::new(mapfile);
+
+    let covfile = File::open(&args.profile)?;
+    let covreader = BufReader::new(covfile);
+    let results: CombinedCoverageResults =
+        serde_json::from_reader(covreader).expect("could not load coverage results");
+
+    let source_files: Vec<PathBuf> =
+        serde_json::from_reader(reader).expect("could not parse coverage metadata");
+
+    let mut all_cov_info: Vec<FileCoverageInfo> = Vec::new();
+
+    for file in source_files {
+        let fun_info = function_info_from_file(&file);
+        // let mut file_cov_info = Vec::new();
+        for info in fun_info {
+            let cov_results = function_coverage_results(&info, &file, &results);
+        }
+    }
+
     Ok(())
 }
 
