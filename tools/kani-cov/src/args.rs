@@ -51,6 +51,7 @@ pub struct SummaryArgs {
 #[derive(Clone, Debug, PartialEq, Eq, clap::ValueEnum)]
 pub enum SummaryFormat {
     Markdown,
+    // Json,
 }
 
 #[derive(Debug, clap::Args)]

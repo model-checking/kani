@@ -218,6 +218,7 @@ struct NewFunctionInfo {
 fn print_coverage_info(info: &Vec<FileCoverageInfo>, format: &SummaryFormat) {
     match format {
         SummaryFormat::Markdown => print_coverage_markdown_info(info),
+        // SummaryFormat::Json => print_coverage_json_info(info),
     }
 }
 
