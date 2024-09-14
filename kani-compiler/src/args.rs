@@ -6,6 +6,20 @@ use tracing_subscriber::filter::Directive;
 
 #[derive(Debug, Default, Clone, Copy, AsRefStr, EnumString, VariantNames, PartialEq, Eq)]
 #[strum(serialize_all = "snake_case")]
+pub enum BackendOption {
+    /// Aeneas (LLBC) backend
+    Aeneas,
+
+    /// CProver (Goto) backend
+    CProver,
+
+    /// Backend option was not explicitly set
+    #[default]
+    None,
+}
+
+#[derive(Debug, Default, Clone, Copy, AsRefStr, EnumString, VariantNames, PartialEq, Eq)]
+#[strum(serialize_all = "snake_case")]
 pub enum ReachabilityType {
     /// Start the cross-crate reachability analysis from all harnesses in the local crate.
     Harnesses,
@@ -69,11 +83,9 @@ pub struct Arguments {
     /// Pass the kani version to the compiler to ensure cache coherence.
     check_version: Option<String>,
     #[clap(long)]
-    /// A legacy flag that is now ignored.
-    goto_c: bool,
-    /// Enable specific checks.
-    #[clap(long)]
     pub ub_check: Vec<ExtraChecks>,
+    #[clap(long = "backend", default_value = "none")]
+    pub backend: BackendOption,
 }
 
 #[derive(Debug, Clone, Copy, AsRefStr, EnumString, VariantNames, PartialEq, Eq)]

@@ -10,6 +10,7 @@ publish = false
 
 [dependencies]
 cbmc = { path = "../cprover_bindings", package = "cprover_bindings", optional = true }
+charon = { git = "https://github.com/AeneasVerif/charon", optional = true, default-features = false, rev = "cdc1dcde447a50cbc20336c79b21b42ac977b7fd" }
 clap = { version = "4.4.11", features = ["derive", "cargo"] }
 home = "0.5"
 itertools = "0.13"
@@ -30,7 +31,8 @@ tracing-tree = "0.4.0"
 
 # Future proofing: enable backend dependencies using feature.
 [features]
-default = ['cprover']
+default = ['aeneas', 'cprover']
+aeneas = ['charon']
 cprover = ['cbmc', 'num', 'serde']
 write_json_symtab = []
 
