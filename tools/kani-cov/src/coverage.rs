@@ -3,9 +3,9 @@
 
 use console::style;
 use serde_derive::{Deserialize, Serialize};
-use std::{fmt, fs};
 use std::path::PathBuf;
 use std::{collections::BTreeMap, fmt::Display};
+use std::{fmt, fs};
 use tree_sitter::{Node, Parser};
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -190,7 +190,11 @@ pub struct FunctionInfo {
     pub num_lines: usize,
 }
 
-pub fn function_coverage_results(info: &FunctionInfo, file: &PathBuf, results: &CombinedCoverageResults) -> Option<(String, Vec<CovResult>)> {
+pub fn function_coverage_results(
+    info: &FunctionInfo,
+    file: &PathBuf,
+    results: &CombinedCoverageResults,
+) -> Option<(String, Vec<CovResult>)> {
     // `info` does not include file so how do we match?
     // use function just for now...
     let filename = file.clone().into_os_string().into_string().unwrap();

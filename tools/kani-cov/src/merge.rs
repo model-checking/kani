@@ -50,7 +50,14 @@ fn combine_raw_results(results: &Vec<CoverageResults>) -> CombinedCoverageResult
 
         for result in results {
             if result.data.contains_key(&file_name) {
-                this_fun_checks.extend(result.data.get(&file_name).unwrap().iter().filter(|check| check.function == fun_name))
+                this_fun_checks.extend(
+                    result
+                        .data
+                        .get(&file_name)
+                        .unwrap()
+                        .iter()
+                        .filter(|check| check.function == fun_name),
+                )
             }
         }
 

@@ -1,13 +1,17 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use std::{
-    cmp::max, fs::File, io::BufReader, path::PathBuf
-};
+use std::{cmp::max, fs::File, io::BufReader, path::PathBuf};
 
 use anyhow::Result;
 
-use crate::{args::{SummaryArgs, SummaryFormat}, coverage::{function_coverage_results, function_info_from_file, CombinedCoverageResults, CovResult, CoverageMetric, CoverageRegion, FileCoverageInfo, FunctionInfo}};
+use crate::{
+    args::{SummaryArgs, SummaryFormat},
+    coverage::{
+        function_coverage_results, function_info_from_file, CombinedCoverageResults, CovResult,
+        CoverageMetric, CoverageRegion, FileCoverageInfo, FunctionInfo,
+    },
+};
 
 pub fn summary_main(args: &SummaryArgs) -> Result<()> {
     let mapfile = File::open(&args.mapfile)?;
@@ -31,7 +35,13 @@ pub fn summary_main(args: &SummaryArgs) -> Result<()> {
             let function_coverage = function_coverage_info(&cov_results);
             let line_coverage = line_coverage_info(&info, &cov_results);
             let region_coverage = region_coverage_info(&cov_results);
-            let cur_function_coverage_results = FunctionCoverageResults { is_covered: function_coverage, total_lines: line_coverage.1, covered_lines: line_coverage.0, covered_regions: region_coverage.0, total_regions: region_coverage.1 };
+            let cur_function_coverage_results = FunctionCoverageResults {
+                is_covered: function_coverage,
+                total_lines: line_coverage.1,
+                covered_lines: line_coverage.0,
+                covered_regions: region_coverage.0,
+                total_regions: region_coverage.1,
+            };
             file_cov_info.push(cur_function_coverage_results);
         }
         let aggr_cov_info = aggregate_cov_info(&file, &file_cov_info);
@@ -42,15 +52,19 @@ pub fn summary_main(args: &SummaryArgs) -> Result<()> {
     Ok(())
 }
 
-fn aggregate_cov_info(file: &PathBuf, file_cov_info: &Vec<FunctionCoverageResults>) -> FileCoverageInfo {
+fn aggregate_cov_info(
+    file: &PathBuf,
+    file_cov_info: &Vec<FunctionCoverageResults>,
+) -> FileCoverageInfo {
     let total_functions = file_cov_info.len().try_into().unwrap();
-    let covered_functions = file_cov_info.iter().filter(|f| f.is_covered).count().try_into().unwrap();
+    let covered_functions =
+        file_cov_info.iter().filter(|f| f.is_covered).count().try_into().unwrap();
     let fun_cov_info = CoverageMetric::new(covered_functions, total_functions);
-    
+
     let covered_lines = file_cov_info.iter().map(|c| c.covered_lines).sum();
     let total_lines = file_cov_info.iter().map(|c| c.total_lines).sum();
     let lines_cov_info = CoverageMetric::new(covered_lines, total_lines);
-    
+
     let covered_regions = file_cov_info.iter().map(|c| c.covered_regions).sum();
     let total_regions = file_cov_info.iter().map(|c| c.total_regions).sum();
     let region_cov_info = CoverageMetric::new(covered_regions, total_regions);
@@ -64,11 +78,7 @@ fn aggregate_cov_info(file: &PathBuf, file_cov_info: &Vec<FunctionCoverageResult
 }
 
 fn function_coverage_info(cov_results: &Option<(String, Vec<CovResult>)>) -> bool {
-    if let Some(res) = cov_results {
-        res.1.iter().any(|c| c.times_covered > 0)
-    } else {
-        false
-    }
+    if let Some(res) = cov_results { res.1.iter().any(|c| c.times_covered > 0) } else { false }
 }
 
 struct FunctionCoverageResults {
@@ -83,7 +93,10 @@ pub fn validate_summary_args(_args: &SummaryArgs) -> Result<()> {
     Ok(())
 }
 
-fn line_coverage_info(info: &FunctionInfo, fun_results: &Option<(String, Vec<crate::coverage::CovResult>)>) -> (u32, u32) {
+pub fn line_coverage_results(
+    info: &FunctionInfo,
+    fun_results: &Option<(String, Vec<crate::coverage::CovResult>)>,
+) -> Vec<Option<(u32, Vec<crate::coverage::CovResult>)>> {
     let start_line: u32 = info.start.0.try_into().unwrap();
     let end_line: u32 = info.end.0.try_into().unwrap();
     // `line_status` represents all the lines between `start_line` and
@@ -93,43 +106,77 @@ fn line_coverage_info(info: &FunctionInfo, fun_results: &Option<(String, Vec<cra
     // - `Some(max, other)`, where `max` represents the maximum number of times
     // the line was covered by any coverage result, and `other` specifies the
     // coverage results that don't amount to the maximum.
-    let mut line_status: Vec<Option<(u32, Vec<crate::coverage::CovResult>)>> = Vec::with_capacity((end_line - start_line + 1).try_into().unwrap());
+    let mut line_status: Vec<Option<(u32, Vec<crate::coverage::CovResult>)>> =
+        Vec::with_capacity((end_line - start_line + 1).try_into().unwrap());
 
     if let Some(res) = fun_results {
-        let mut cur_results =  res.1.clone();
+        let mut cur_results = res.1.clone();
         // was this sorted already? looks like it was not
         // println!("BEFORE: {cur_results:?}");
-        cur_results.sort_by(|a,b| b.region.start.0.cmp(&a.region.start.0));
+        cur_results.sort_by(|a, b| b.region.start.0.cmp(&a.region.start.0));
         // println!("AFTER: {cur_results:?}");
 
         fn line_contained_in_region(line: u32, region: &CoverageRegion) -> bool {
             region.start.0 <= line && region.end.0 >= line
         }
 
-
         for line in start_line..end_line {
-            let line_results: Vec<crate::coverage::CovResult> = cur_results.iter().filter(|c| line_contained_in_region(line, &c.region)).cloned().collect();
+            let line_results: Vec<crate::coverage::CovResult> = cur_results
+                .iter()
+                .filter(|c| line_contained_in_region(line, &c.region))
+                .cloned()
+                .collect();
             if line_results.is_empty() {
                 line_status.push(None);
             } else {
-                let max_covered = line_results.iter().max_by_key(|obj| obj.times_covered).map(|obj| obj.times_covered).unwrap_or(0);
-                let other_covered: Vec<crate::coverage::CovResult> = line_results.iter().filter(|obj| obj.times_covered != max_covered).cloned().collect();
+                let max_covered = line_results
+                    .iter()
+                    .max_by_key(|obj| obj.times_covered)
+                    .map(|obj| obj.times_covered)
+                    .unwrap_or(0);
+                let other_covered: Vec<crate::coverage::CovResult> = line_results
+                    .iter()
+                    .filter(|obj| obj.times_covered != max_covered)
+                    .cloned()
+                    .collect();
                 line_status.push(Some((max_covered, other_covered)));
             }
         }
+    } else {
+        line_status = std::iter::repeat(Some((0, vec![])))
+            .take((end_line - start_line + 1).try_into().unwrap())
+            .collect();
     }
+    println!("{line_status:?}");
+    line_status
+}
 
+pub fn line_coverage_info(
+    info: &FunctionInfo,
+    fun_results: &Option<(String, Vec<crate::coverage::CovResult>)>,
+) -> (u32, u32) {
+    let line_status = line_coverage_results(info, fun_results);
     let total_lines = line_status.iter().filter(|s| s.is_some()).count().try_into().unwrap();
-    let covered_lines = line_status.iter().filter(|s| s.is_some() && s.as_ref().unwrap().0 > 0).count().try_into().unwrap();
+    let covered_lines = line_status
+        .iter()
+        .filter(|s| s.is_some() && s.as_ref().unwrap().0 > 0)
+        .count()
+        .try_into()
+        .unwrap();
     (covered_lines, total_lines)
 }
 
-fn region_coverage_info(fun_results: &Option<(String, Vec<crate::coverage::CovResult>)>) -> (u32, u32) {
+fn region_coverage_info(
+    fun_results: &Option<(String, Vec<crate::coverage::CovResult>)>,
+) -> (u32, u32) {
     if let Some(res) = fun_results {
         let total_regions = res.1.len().try_into().unwrap();
-        let covered_regions = res.1.iter().filter(|c| c.times_covered > 0).count().try_into().unwrap();
+        let covered_regions =
+            res.1.iter().filter(|c| c.times_covered > 0).count().try_into().unwrap();
         (covered_regions, total_regions)
-    } else { (0, 0) }
+    } else {
+        (0, 0)
+    }
 }
 
 fn print_coverage_info(info: &Vec<FileCoverageInfo>, format: &SummaryFormat) {
@@ -140,10 +187,8 @@ fn print_coverage_info(info: &Vec<FileCoverageInfo>, format: &SummaryFormat) {
 }
 
 fn print_coverage_markdown_info(info: &Vec<FileCoverageInfo>) {
-
     fn safe_div(num: u32, denom: u32) -> Option<f32> {
-        if denom == 0 { None }
-        else { Some(num as f32/denom as f32) }
+        if denom == 0 { None } else { Some(num as f32 / denom as f32) }
     }
 
     const HEADERS_ROWS: usize = 3;
@@ -157,7 +202,7 @@ fn print_coverage_markdown_info(info: &Vec<FileCoverageInfo>) {
     let mut max_function_fmt_width = FUNCTION_HEADER.len();
     let mut max_line_fmt_width = LINE_HEADER.len();
     let mut max_region_fmt_width = REGION_HEADER.len();
-    
+
     let mut data_rows: Vec<(String, String, String, String)> = Vec::with_capacity(info.len());
 
     for cov_info in info {
@@ -191,7 +236,7 @@ fn print_coverage_markdown_info(info: &Vec<FileCoverageInfo>) {
             "N/A".to_string()
         };
         let region_fmt = format!("{region_covered}/{region_total} ({region_rate_fmt})");
-        
+
         max_filename_fmt_width = max(max_filename_fmt_width, filename.len());
         max_function_fmt_width = max(max_function_fmt_width, function_fmt.len());
         max_line_fmt_width = max(max_line_fmt_width, line_fmt.len());
@@ -201,23 +246,38 @@ fn print_coverage_markdown_info(info: &Vec<FileCoverageInfo>) {
     }
 
     let filename_sep: String = std::iter::repeat('-').take(max_filename_fmt_width).collect();
-    let filename_space: String = std::iter::repeat(' ').take(max_filename_fmt_width - FILENAME_HEADER.len()).collect::<String>();
+    let filename_space: String = std::iter::repeat(' ')
+        .take(max_filename_fmt_width - FILENAME_HEADER.len())
+        .collect::<String>();
     let function_sep: String = std::iter::repeat('-').take(max_function_fmt_width).collect();
-    let function_space: String = std::iter::repeat(' ').take(max_function_fmt_width - FUNCTION_HEADER.len()).collect::<String>();
+    let function_space: String = std::iter::repeat(' ')
+        .take(max_function_fmt_width - FUNCTION_HEADER.len())
+        .collect::<String>();
     let line_sep: String = std::iter::repeat('-').take(max_line_fmt_width).collect();
-    let line_space: String = std::iter::repeat(' ').take(max_line_fmt_width - LINE_HEADER.len()).collect::<String>();
+    let line_space: String =
+        std::iter::repeat(' ').take(max_line_fmt_width - LINE_HEADER.len()).collect::<String>();
     let region_sep: String = std::iter::repeat('-').take(max_region_fmt_width).collect();
-    let region_space: String = std::iter::repeat(' ').take(max_region_fmt_width - REGION_HEADER.len()).collect::<String>();
+    let region_space: String =
+        std::iter::repeat(' ').take(max_region_fmt_width - REGION_HEADER.len()).collect::<String>();
 
     let sep_row = format!("| {filename_sep} | {function_sep} | {line_sep} | {region_sep} |");
     table_rows.push(format!("| {FILENAME_HEADER}{filename_space} | {FUNCTION_HEADER}{function_space} | {LINE_HEADER}{line_space} | {REGION_HEADER}{region_space} |"));
     table_rows.push(sep_row);
     for (filename, function_fmt, line_fmt, region_fmt) in data_rows {
-        let filename_space: String = std::iter::repeat(' ').take(max_filename_fmt_width - filename.len()).collect::<String>();
-        let function_space: String = std::iter::repeat(' ').take(max_function_fmt_width - function_fmt.len()).collect::<String>();
-        let line_space: String = std::iter::repeat(' ').take(max_line_fmt_width - line_fmt.len()).collect::<String>();
-        let region_space: String = std::iter::repeat(' ').take(max_region_fmt_width - region_fmt.len()).collect::<String>();
-        let cur_row = format!("| {filename}{filename_space} | {function_fmt}{function_space} | {line_fmt}{line_space} | {region_fmt}{region_space} |");
+        let filename_space: String = std::iter::repeat(' ')
+            .take(max_filename_fmt_width - filename.len())
+            .collect::<String>();
+        let function_space: String = std::iter::repeat(' ')
+            .take(max_function_fmt_width - function_fmt.len())
+            .collect::<String>();
+        let line_space: String =
+            std::iter::repeat(' ').take(max_line_fmt_width - line_fmt.len()).collect::<String>();
+        let region_space: String = std::iter::repeat(' ')
+            .take(max_region_fmt_width - region_fmt.len())
+            .collect::<String>();
+        let cur_row = format!(
+            "| {filename}{filename_space} | {function_fmt}{function_space} | {line_fmt}{line_space} | {region_fmt}{region_space} |"
+        );
         table_rows.push(cur_row);
     }
 
