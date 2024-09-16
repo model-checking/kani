@@ -343,8 +343,7 @@ impl CodegenBackend for GotocCodegenBackend {
                     }
                 }
                 ReachabilityType::None => {
-                    // If the list subcommand is enabled, still don't generate any goto,
-                    // but write the necessary KaniMetadata to a file
+                    // If the list subcommand is enabled, record the necessary KaniMetadata.
                     if queries.args().list_enabled {
                         let mut units: CodegenUnits = CodegenUnits::new(&queries, tcx);
                         collect_contracted_fns(tcx, &mut units);

@@ -122,7 +122,7 @@ pub enum CargoKaniSubcommand {
     /// Execute concrete playback testcases of a local package.
     Playback(Box<playback_args::CargoPlaybackArgs>),
 
-    /// List package/crate metadata relevant to verification
+    /// List metadata relevant to verification, e.g., harnesses.
     List(Box<list_args::CargoListArgs>),
 }
 

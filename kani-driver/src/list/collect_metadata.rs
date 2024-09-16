@@ -1,6 +1,6 @@
 use crate::{
     args::list_args::{CargoListArgs, Format, StandaloneListArgs},
-    project::{cargo_project, std_project},
+    project::{cargo_project, standalone_project, std_project, Project},
     session::{KaniSession, ReachabilityMode},
     version::print_kani_version,
     InvocationType,
@@ -54,12 +54,11 @@ fn process_metadata(metadata: Vec<KaniMetadata>, format: Format) -> Result<()> {
 
 pub fn list_cargo(args: CargoListArgs) -> Result<()> {
     let mut session = KaniSession::new(args.verify_opts)?;
-
     if !session.args.common_args.quiet {
         print_kani_version(InvocationType::CargoKani(vec![]));
     }
-
     session.reachability_mode = ReachabilityMode::None;
+
     let project = cargo_project(&session, false)?;
     process_metadata(project.metadata, args.format)
 }
@@ -70,12 +69,12 @@ pub fn list_standalone(args: StandaloneListArgs) -> Result<()> {
         print_kani_version(InvocationType::Standalone);
     }
     session.reachability_mode = ReachabilityMode::None;
-    //let project = standalone_project(&args.input, args.crate_name, &session)?;
-    let project = std_project(&args.input, &session)?;
+
+    let project: Project = if args.std {
+        std_project(&args.input, &session)?
+    } else {
+        standalone_project(&args.input, args.crate_name, &session)?
+    };
 
     process_metadata(project.metadata, args.format)
-}
-
-pub fn _list_std(_session: KaniSession, _args: CargoListArgs) -> Result<()> {
-    todo!()
 }

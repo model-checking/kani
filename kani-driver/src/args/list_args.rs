@@ -37,6 +37,11 @@ pub struct StandaloneListArgs {
     /// Output format
     #[clap(long, default_value = "pretty")]
     pub format: Format,
+
+    /// Pass this flag to run the `list` command on the standard library.
+    /// Ensure that the provided `path` is the `library` folder.
+    #[arg(long)]
+    pub std: bool,
 }
 
 /// Message formats available for the subcommand.
@@ -73,50 +78,50 @@ impl ValidateArgs for StandaloneListArgs {
             ));
         }
 
-        // if !self.input.is_file() {
-        //     return Err(Error::raw(
-        //         ErrorKind::InvalidValue,
-        //         format!(
-        //             "Invalid argument: Input invalid. `{}` is not a regular file.",
-        //             self.input.display()
-        //         ),
-        //     ));
-        // }
-
-        // Ok(())
-
-        if !self.input.exists() {
-            Err(Error::raw(
-                ErrorKind::InvalidValue,
-                format!(
-                    "Invalid argument: `<input>` argument `{}` does not exist",
-                    self.input.display()
-                ),
-            ))
-        } else if !self.input.is_dir() {
-            Err(Error::raw(
-                ErrorKind::InvalidValue,
-                format!(
-                    "Invalid argument: `<input>` argument `{}` is not a directory",
-                    self.input.display()
-                ),
-            ))
-        } else {
-            let full_path = self.input.canonicalize()?;
-            let dir = full_path.file_stem().unwrap();
-            if dir != "library" {
+        if self.std {
+            if !self.input.exists() {
                 Err(Error::raw(
                     ErrorKind::InvalidValue,
                     format!(
-                        "Invalid argument: Expected `<input>` to point to the `library` folder \
-                    containing the standard library crates.\n\
-                    Found `{}` folder instead",
-                        dir.to_string_lossy()
+                        "Invalid argument: `<input>` argument `{}` does not exist",
+                        self.input.display()
+                    ),
+                ))
+            } else if !self.input.is_dir() {
+                Err(Error::raw(
+                    ErrorKind::InvalidValue,
+                    format!(
+                        "Invalid argument: `<input>` argument `{}` is not a directory",
+                        self.input.display()
                     ),
                 ))
             } else {
-                Ok(())
+                let full_path = self.input.canonicalize()?;
+                let dir = full_path.file_stem().unwrap();
+                if dir != "library" {
+                    Err(Error::raw(
+                        ErrorKind::InvalidValue,
+                        format!(
+                            "Invalid argument: Expected `<input>` to point to the `library` folder \
+                        containing the standard library crates.\n\
+                        Found `{}` folder instead",
+                            dir.to_string_lossy()
+                        ),
+                    ))
+                } else {
+                    Ok(())
+                }
             }
+        } else if self.input.is_file() {
+            Ok(())
+        } else {
+            Err(Error::raw(
+                ErrorKind::InvalidValue,
+                format!(
+                    "Invalid argument: Input invalid. `{}` is not a regular file.",
+                    self.input.display()
+                ),
+            ))
         }
     }
 }
