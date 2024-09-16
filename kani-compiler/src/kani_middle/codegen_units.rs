@@ -79,7 +79,8 @@ impl CodegenUnits {
         let all_harnesses = harnesses
             .into_iter()
             .map(|harness| {
-                let metadata = gen_proof_metadata(tcx, harness, &base_filename);
+                let metadata =
+                    gen_proof_metadata(tcx, harness, &base_filename, queries.args().list_enabled);
                 (harness, metadata)
             })
             .collect::<HashMap<_, _>>();
@@ -91,6 +92,8 @@ impl CodegenUnits {
             validate_units(tcx, &units);
             debug!(?units, "CodegenUnits::new");
         }
+
+        tcx.dcx().abort_if_errors();
 
         CodegenUnits {
             units,
@@ -234,7 +237,6 @@ fn validate_units(tcx: TyCtxt, units: &[CodegenUnit]) {
             tcx.dcx().span_err(rustc_internal::internal(tcx, span), msg);
         }
     }
-    tcx.dcx().abort_if_errors();
 }
 
 /// Apply stub transitivity operations.

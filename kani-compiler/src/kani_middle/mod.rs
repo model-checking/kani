@@ -18,7 +18,8 @@ use rustc_span::source_map::respan;
 use rustc_span::Span;
 use rustc_target::abi::call::FnAbi;
 use rustc_target::abi::{HasDataLayout, TargetDataLayout};
-use stable_mir::mir::mono::MonoItem;
+use stable_mir::mir::mono::{Instance, MonoItem};
+use stable_mir::mir::{Body, VarDebugInfoContents};
 use stable_mir::ty::{FnDef, RigidTy, Span as SpanStable, Ty, TyKind};
 use stable_mir::visitor::{Visitable, Visitor as TyVisitor};
 use stable_mir::CrateDef;
@@ -31,6 +32,7 @@ pub mod attributes;
 pub mod codegen_units;
 pub mod coercion;
 mod intrinsics;
+pub mod list;
 pub mod metadata;
 pub mod points_to;
 pub mod provide;
@@ -237,4 +239,20 @@ pub fn stable_fn_def(tcx: TyCtxt, def_id: InternalDefId) -> Option<FnDef> {
     } else {
         None
     }
+}
+
+/// Find the user-declared closure by the name `name` in `body`.
+pub fn find_closure_in_body(body: &Body, name: &str) -> Option<Instance> {
+    body.var_debug_info.iter().find_map(|var_info| {
+        if var_info.name.as_str() == name {
+            let ty = match &var_info.value {
+                VarDebugInfoContents::Place(place) => place.ty(body.locals()).unwrap(),
+                VarDebugInfoContents::Const(const_op) => const_op.ty(),
+            };
+            if let TyKind::RigidTy(RigidTy::Closure(def, args)) = ty.kind() {
+                return Some(Instance::resolve(FnDef(def.def_id()), &args).unwrap());
+            }
+        }
+        None
+    })
 }

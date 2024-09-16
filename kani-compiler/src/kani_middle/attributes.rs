@@ -477,7 +477,7 @@ impl<'tcx> KaniAttributes<'tcx> {
     ///
     /// We only extract attributes for harnesses that are local to the current crate.
     /// Note that all attributes should be valid by now.
-    pub fn harness_attributes(&self) -> HarnessAttributes {
+    pub fn harness_attributes(&self, is_list_enabled: bool) -> HarnessAttributes {
         // Abort if not local.
         if !self.item.is_local() {
             panic!("Expected a local item, but got: {:?}", self.item);
@@ -505,7 +505,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                     harness.unwind_value = parse_unwind(self.tcx, attributes[0])
                 }
                 KaniAttributeKind::Proof => { /* no-op */ }
-                KaniAttributeKind::ProofForContract => self.handle_proof_for_contract(&mut harness),
+                KaniAttributeKind::ProofForContract => self.handle_proof_for_contract(&mut harness, is_list_enabled),
                 KaniAttributeKind::StubVerified => self.handle_stub_verified(&mut harness),
                 KaniAttributeKind::Unstable => {
                     // Internal attribute which shouldn't exist here.
@@ -531,7 +531,7 @@ impl<'tcx> KaniAttributes<'tcx> {
         })
     }
 
-    fn handle_proof_for_contract(&self, harness: &mut HarnessAttributes) {
+    fn handle_proof_for_contract(&self, harness: &mut HarnessAttributes, is_list_enabled: bool) {
         let dcx = self.tcx.dcx();
         let (name, id, span) = match self.interpret_for_contract_attribute() {
             None => return, // This error was already emitted
@@ -540,6 +540,13 @@ impl<'tcx> KaniAttributes<'tcx> {
         assert!(matches!(
                 &harness.kind, HarnessKind::ProofForContract { target_fn }
                 if *target_fn == name.to_string()));
+
+        // Only emit an error if we are trying to actually verify the contract.
+        // (If we are running the list subcommand, we just report later that there are no contracts for this harness).
+        if is_list_enabled {
+            return;
+        }
+
         if KaniAttributes::for_item(self.tcx, id).contract_attributes().is_none() {
             dcx.struct_span_err(
                 span,

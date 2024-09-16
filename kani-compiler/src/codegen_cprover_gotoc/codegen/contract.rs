@@ -1,17 +1,16 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use crate::codegen_cprover_gotoc::{codegen::ty_stable::pointee_type_stable, GotocCtx};
-use crate::kani_middle::attributes::{
-    matches_diagnostic as matches_function, ContractAttributes, KaniAttributes,
-};
+use crate::kani_middle::attributes::KaniAttributes;
+use crate::kani_middle::find_closure_in_body;
 use cbmc::goto_program::FunctionContract;
 use cbmc::goto_program::{Expr, Lambda, Location, Type};
 use kani_metadata::AssignsContract;
 use rustc_hir::def_id::DefId as InternalDefId;
 use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::{Instance, MonoItem};
-use stable_mir::mir::{Local, TerminatorKind, VarDebugInfoContents};
-use stable_mir::ty::{FnDef, RigidTy, TyKind};
+use stable_mir::mir::Local;
+use stable_mir::ty::{RigidTy, TyKind};
 use stable_mir::CrateDef;
 
 impl<'tcx> GotocCtx<'tcx> {
@@ -91,18 +90,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     fn find_closure(&mut self, inside: Instance, name: &str) -> Option<Instance> {
         let body = self.transformer.body(self.tcx, inside);
-        body.var_debug_info.iter().find_map(|var_info| {
-            if var_info.name.as_str() == name {
-                let ty = match &var_info.value {
-                    VarDebugInfoContents::Place(place) => place.ty(body.locals()).unwrap(),
-                    VarDebugInfoContents::Const(const_op) => const_op.ty(),
-                };
-                if let TyKind::RigidTy(RigidTy::Closure(def, args)) = ty.kind() {
-                    return Some(Instance::resolve(FnDef(def.def_id()), &args).unwrap());
-                }
-            }
-            None
-        })
+        find_closure_in_body(&body, name)
     }
 
     /// Find the modifies recursively since we may have a recursion wrapper.
@@ -238,43 +226,12 @@ impl<'tcx> GotocCtx<'tcx> {
         let body = self.transformer.body(self.tcx, instance);
         self.set_current_fn(instance, &body);
         let mangled_name = instance.mangled_name();
-        let goto_contract = self.codegen_modifies_contract(
+        let goto_contract: FunctionContract = self.codegen_modifies_contract(
             &mangled_name,
             instance,
             self.codegen_span_stable(instance.def.span()),
         );
         self.symbol_table.attach_contract(&mangled_name, goto_contract);
         self.reset_current_fn();
-    }
-
-    /// Count the number of contracts applied to `contracted_function`
-    pub fn count_contracts(
-        &mut self,
-        contracted_function: &Instance,
-        contract_attrs: ContractAttributes,
-    ) -> usize {
-        // Extract the body of the check_closure, which will contain kani::assume() calls for each precondition
-        // and kani::assert() calls for each postcondition.
-        let check_closure =
-            self.find_closure(*contracted_function, contract_attrs.checked_with.as_str()).unwrap();
-        let body = check_closure.body().unwrap();
-
-        let mut count = 0;
-
-        for bb in &body.blocks {
-            if let TerminatorKind::Call { ref func, .. } = bb.terminator.kind {
-                let fn_ty = func.ty(body.locals()).unwrap();
-                if let TyKind::RigidTy(RigidTy::FnDef(fn_def, args)) = fn_ty.kind() {
-                    let instance = Instance::resolve(fn_def, &args).unwrap();
-                    // For each precondition or postcondition, increment the count
-                    if matches_function(self.tcx, instance.def, "KaniAssume")
-                        || matches_function(self.tcx, instance.def, "KaniAssert")
-                    {
-                        count += 1;
-                    }
-                }
-            }
-        }
-        count
     }
 }

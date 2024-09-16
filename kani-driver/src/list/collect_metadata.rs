@@ -1,6 +1,6 @@
 use crate::{
     args::list_args::{CargoListArgs, Format, StandaloneListArgs},
-    project::{cargo_project, standalone_project},
+    project::{cargo_project, std_project},
     session::{KaniSession, ReachabilityMode},
     version::print_kani_version,
     InvocationType,
@@ -70,7 +70,8 @@ pub fn list_standalone(args: StandaloneListArgs) -> Result<()> {
         print_kani_version(InvocationType::Standalone);
     }
     session.reachability_mode = ReachabilityMode::None;
-    let project = standalone_project(&args.input, args.crate_name, &session)?;
+    //let project = standalone_project(&args.input, args.crate_name, &session)?;
+    let project = std_project(&args.input, &session)?;
 
     process_metadata(project.metadata, args.format)
 }

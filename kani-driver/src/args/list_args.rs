@@ -73,16 +73,50 @@ impl ValidateArgs for StandaloneListArgs {
             ));
         }
 
-        if !self.input.is_file() {
-            return Err(Error::raw(
+        // if !self.input.is_file() {
+        //     return Err(Error::raw(
+        //         ErrorKind::InvalidValue,
+        //         format!(
+        //             "Invalid argument: Input invalid. `{}` is not a regular file.",
+        //             self.input.display()
+        //         ),
+        //     ));
+        // }
+
+        // Ok(())
+
+        if !self.input.exists() {
+            Err(Error::raw(
                 ErrorKind::InvalidValue,
                 format!(
-                    "Invalid argument: Input invalid. `{}` is not a regular file.",
+                    "Invalid argument: `<input>` argument `{}` does not exist",
                     self.input.display()
                 ),
-            ));
+            ))
+        } else if !self.input.is_dir() {
+            Err(Error::raw(
+                ErrorKind::InvalidValue,
+                format!(
+                    "Invalid argument: `<input>` argument `{}` is not a directory",
+                    self.input.display()
+                ),
+            ))
+        } else {
+            let full_path = self.input.canonicalize()?;
+            let dir = full_path.file_stem().unwrap();
+            if dir != "library" {
+                Err(Error::raw(
+                    ErrorKind::InvalidValue,
+                    format!(
+                        "Invalid argument: Expected `<input>` to point to the `library` folder \
+                    containing the standard library crates.\n\
+                    Found `{}` folder instead",
+                        dir.to_string_lossy()
+                    ),
+                ))
+            } else {
+                Ok(())
+            }
         }
-
-        Ok(())
     }
 }

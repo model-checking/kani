@@ -56,6 +56,8 @@ pub fn pretty(
         println!("{}. {harness}", i + 1);
     }
 
+    println!();
+
     Ok(())
 }
 

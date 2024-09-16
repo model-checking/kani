@@ -5,25 +5,25 @@
 
 use crate::args::ReachabilityType;
 use crate::codegen_cprover_gotoc::GotocCtx;
+use crate::kani_middle::analysis;
 use crate::kani_middle::attributes::{is_test_harness_description, KaniAttributes};
 use crate::kani_middle::check_reachable_items;
 use crate::kani_middle::codegen_units::{CodegenUnit, CodegenUnits};
+use crate::kani_middle::list::collect_contracted_fns;
 use crate::kani_middle::metadata::gen_test_metadata;
 use crate::kani_middle::provide;
 use crate::kani_middle::reachability::{
     collect_reachable_items, filter_const_crate_items, filter_crate_items,
 };
 use crate::kani_middle::transform::{BodyTransformation, GlobalPasses};
-use crate::kani_middle::{analysis, SourceLocation};
 use crate::kani_queries::QueryDb;
 use cbmc::goto_program::Location;
 use cbmc::irep::goto_binary_serde::write_goto_binary_file;
 use cbmc::RoundingMode;
 use cbmc::{InternedString, MachineModel};
 use kani_metadata::artifact::convert_type;
-use kani_metadata::{ArtifactType, HarnessMetadata, KaniMetadata};
+use kani_metadata::{ArtifactType, HarnessMetadata, KaniMetadata, UnsupportedFeature};
 use kani_metadata::{AssignsContract, CompilerArtifactStub};
-use kani_metadata::{ContractedFunction, UnsupportedFeature};
 use rustc_codegen_ssa::back::archive::{ArArchiveBuilder, ArchiveBuilder, DEFAULT_OBJECT_READER};
 use rustc_codegen_ssa::back::metadata::create_wrapper_file;
 use rustc_codegen_ssa::traits::CodegenBackend;
@@ -47,7 +47,7 @@ use rustc_target::spec::PanicStrategy;
 use stable_mir::mir::mono::{Instance, MonoItem};
 use stable_mir::{CrateDef, DefId};
 use std::any::Any;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::fs::File;
@@ -346,65 +346,8 @@ impl CodegenBackend for GotocCodegenBackend {
                     // If the list subcommand is enabled, still don't generate any goto,
                     // but write the necessary KaniMetadata to a file
                     if queries.args().list_enabled {
-                        let contract_harnesses: Vec<Instance> =
-                            filter_crate_items(tcx, |_, instance| {
-                                let attr = KaniAttributes::for_instance(tcx, instance);
-                                attr.proof_for_contract().is_some_and(|res| res.is_ok())
-                            });
-
-                        let mut function_to_harnesses: HashMap<InternalDefId, Vec<String>> =
-                            HashMap::new();
-
-                        // Map each function under contract to a vector of its proof harnesses.
-                        // Note that this logic will only find contracted functions *with* harnesses.
-                        // We find functions without harnesses by iterating through `crate_fns` later.
-                        for harness in contract_harnesses {
-                            let attr = KaniAttributes::for_instance(tcx, harness);
-                            let target_def_id = attr.interpret_for_contract_attribute().unwrap().1;
-                            if let Some(harnesses) = function_to_harnesses.get_mut(&target_def_id) {
-                                harnesses.push(harness.name());
-                            } else {
-                                function_to_harnesses.insert(target_def_id, vec![harness.name()]);
-                            }
-                        }
-
                         let mut units: CodegenUnits = CodegenUnits::new(&queries, tcx);
-                        let transformer =
-                            BodyTransformation::new(&queries, tcx, &CodegenUnit::default());
-                        let mut gcx = GotocCtx::new(
-                            tcx,
-                            (*self.queries.lock().unwrap()).clone(),
-                            &results.machine_model,
-                            transformer,
-                        );
-
-                        // Get all functions in the crate.
-                        let crate_fns = filter_crate_items(tcx, |_, _| true);
-
-                        // For each function annotated with contracts, construct a ContractedFunction object for it and store it in `units`.
-                        for instance in crate_fns {
-                            let attributes = KaniAttributes::for_instance(tcx, instance);
-                            if attributes.has_contract() {
-                                let fn_def_id =
-                                    rustc_internal::internal(tcx, instance.def.def_id());
-                                let harnesses = function_to_harnesses
-                                    .get(&fn_def_id)
-                                    .map_or(vec![], |v| v.to_owned());
-                                let contracts_count = gcx.count_contracts(
-                                    &instance,
-                                    attributes.contract_attributes().unwrap(),
-                                );
-
-                                units.contracted_functions.push(ContractedFunction {
-                                    function: instance.name(),
-                                    file: SourceLocation::new(instance.body().unwrap().span)
-                                        .filename,
-                                    harnesses,
-                                    total_contracts: contracts_count,
-                                });
-                            }
-                        }
-
+                        collect_contracted_fns(tcx, &mut units);
                         units.write_metadata(&queries, tcx);
                     }
                 }
