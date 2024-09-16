@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use crate::{
     args::list_args::{CargoListArgs, Format, StandaloneListArgs},
     project::{cargo_project, standalone_project, std_project, Project},
@@ -11,23 +13,40 @@ use kani_metadata::{ContractedFunction, HarnessKind, KaniMetadata};
 use super::output::{json, pretty};
 
 fn process_metadata(metadata: Vec<KaniMetadata>, format: Format) -> Result<()> {
-    let mut standard_harnesses: Vec<String> = vec![];
-    let mut contract_harnesses: Vec<String> = vec![];
+    // Map each file to a vector of its harnesses
+    let mut standard_harnesses: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut contract_harnesses: BTreeMap<String, Vec<String>> = BTreeMap::new();
     let mut contracted_functions: Vec<ContractedFunction> = vec![];
     let mut total_contracts = 0;
+    let mut total_contract_harnesses = 0;
 
     for kani_meta in metadata {
         for harness_meta in kani_meta.proof_harnesses {
             match harness_meta.attributes.kind {
-                HarnessKind::Proof => standard_harnesses.push(harness_meta.pretty_name),
+                HarnessKind::Proof => {
+                    if let Some(harnesses) = standard_harnesses.get_mut(&harness_meta.original_file)
+                    {
+                        harnesses.push(harness_meta.pretty_name);
+                    } else {
+                        standard_harnesses
+                            .insert(harness_meta.original_file, vec![harness_meta.pretty_name]);
+                    }
+                }
                 HarnessKind::ProofForContract { .. } => {
-                    contract_harnesses.push(harness_meta.pretty_name)
+                    if let Some(harnesses) = contract_harnesses.get_mut(&harness_meta.original_file)
+                    {
+                        harnesses.push(harness_meta.pretty_name);
+                    } else {
+                        contract_harnesses
+                            .insert(harness_meta.original_file, vec![harness_meta.pretty_name]);
+                    }
                 }
                 HarnessKind::Test => {}
             }
         }
 
         for cf in &kani_meta.contracted_functions {
+            total_contract_harnesses += cf.harnesses.len();
             total_contracts += cf.total_contracts;
         }
 
@@ -35,15 +54,13 @@ fn process_metadata(metadata: Vec<KaniMetadata>, format: Format) -> Result<()> {
     }
 
     // Print in alphabetical order
-    standard_harnesses.sort();
-    contract_harnesses.sort();
     contracted_functions.sort_by_key(|cf| cf.function.clone());
 
     match format {
         Format::Pretty => pretty(
             standard_harnesses,
             contracted_functions,
-            contract_harnesses.len(),
+            total_contract_harnesses,
             total_contracts,
         ),
         Format::Json => {

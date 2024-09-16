@@ -1,4 +1,4 @@
-use std::{fs::File, io::BufWriter};
+use std::{collections::BTreeMap, fs::File, io::BufWriter};
 
 use crate::version::KANI_VERSION;
 use anyhow::Result;
@@ -12,7 +12,7 @@ use serde_json::json;
 const FILE_VERSION: &str = "0.1";
 
 pub fn pretty(
-    standard_harnesses: Vec<String>,
+    standard_harnesses: BTreeMap<String, Vec<String>>,
     contracted_functions: Vec<ContractedFunction>,
     total_contract_harnesses: usize,
     total_contracts: usize,
@@ -25,35 +25,52 @@ pub fn pretty(
         if joined.is_empty() { "NONE".to_string() } else { joined }
     }
 
-    let mut contracts_table: Vec<Vec<CellStruct>> = vec![];
+    print_ln_bold!("\nContracts:");
+    println!(
+        "Each function in the table below either has contracts or is the target of a contract harness (#[kani::proof_for_contract])."
+    );
 
-    for mut cf in contracted_functions {
+    if contracted_functions.is_empty() {
+        println!("No contracts or contract harnesses found.")
+    } else {
+        let mut contracts_table: Vec<Vec<CellStruct>> = vec![];
+
+        for mut cf in contracted_functions {
+            contracts_table.push(vec![
+                "".cell(),
+                cf.function.cell(),
+                cf.total_contracts.cell(),
+                format_contract_harnesses(&mut cf.harnesses).cell(),
+            ]);
+        }
+
         contracts_table.push(vec![
-            "".cell(),
-            cf.function.cell(),
-            cf.total_contracts.cell(),
-            format_contract_harnesses(&mut cf.harnesses).cell(),
+            "Total".cell().bold(true),
+            total_contracted_functions.cell(),
+            total_contracts.cell(),
+            total_contract_harnesses.cell(),
         ]);
+
+        print_stdout(contracts_table.table().title(vec![
+            "".cell(),
+            "Function".cell().bold(true),
+            "# of Contracts".cell().bold(true),
+            "Contract Harnesses".cell().bold(true),
+        ]))?;
     }
 
-    contracts_table.push(vec![
-        "Total".cell().bold(true),
-        total_contracted_functions.cell(),
-        total_contracts.cell(),
-        total_contract_harnesses.cell(),
-    ]);
+    print_ln_bold!("\nStandard Harnesses (#[kani::proof]):");
+    if standard_harnesses.is_empty() {
+        println!("No standard harnesses found.");
+    }
 
-    print_ln_bold!("\nContracts:");
-    print_stdout(contracts_table.table().title(vec![
-        "".cell(),
-        "Function Under Contract".cell().bold(true),
-        "# of Contracts".cell().bold(true),
-        "Contract Harnesses".cell().bold(true),
-    ]))?;
+    let mut std_harness_index = 0;
 
-    print_ln_bold!("\nStandard Harnesses:");
-    for (i, harness) in standard_harnesses.iter().enumerate() {
-        println!("{}. {harness}", i + 1);
+    for (_, harnesses) in standard_harnesses {
+        for harness in harnesses {
+            println!("{}. {harness}", std_harness_index + 1);
+            std_harness_index += 1;
+        }
     }
 
     println!();
@@ -62,8 +79,8 @@ pub fn pretty(
 }
 
 pub fn json(
-    standard_harnesses: Vec<String>,
-    contract_harnesses: Vec<String>,
+    standard_harnesses: BTreeMap<String, Vec<String>>,
+    contract_harnesses: BTreeMap<String, Vec<String>>,
     contracted_functions: Vec<ContractedFunction>,
     total_contracts: usize,
 ) -> Result<()> {
