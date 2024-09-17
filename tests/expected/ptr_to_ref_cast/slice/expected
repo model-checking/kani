@@ -1,6 +1,6 @@
 Status: FAILURE\
 Description: "dereference failure: pointer invalid"\
 
-Verification failed for - check_with_byte_add
-Verification failed for - check_with_metadata
+Verification failed for - check_with_byte_add_fail
+Verification failed for - check_with_metadata_fail
 Complete - 1 successfully verified harnesses, 2 failures, 3 total.

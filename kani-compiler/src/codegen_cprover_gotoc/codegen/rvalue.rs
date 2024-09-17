@@ -744,11 +744,17 @@ impl<'tcx> GotocCtx<'tcx> {
                     self.place_ty_stable(p),
                     &loc,
                 ) {
-                    Some(ptr_validity_check_expr) => Expr::statement_expression(
-                        vec![ptr_validity_check_expr, place_ref.as_stmt(loc)],
-                        place_ref_type,
-                        loc,
-                    ),
+                    Some((ptr_alignment_check_expr, ptr_validity_check_expr)) => {
+                        Expr::statement_expression(
+                            vec![
+                                ptr_alignment_check_expr,
+                                ptr_validity_check_expr,
+                                place_ref.as_stmt(loc),
+                            ],
+                            place_ref_type,
+                            loc,
+                        )
+                    }
                     None => place_ref,
                 }
             }

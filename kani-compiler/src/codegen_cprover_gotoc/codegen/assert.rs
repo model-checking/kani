@@ -338,7 +338,7 @@ impl<'tcx> GotocCtx<'tcx> {
         place_ref: Expr,
         place_ref_ty: Ty,
         loc: &Location,
-    ) -> Option<Stmt> {
+    ) -> Option<(Stmt, Stmt)> {
         if let Some(ProjectionElem::Deref) = place.projection.last() {
             // Create a place without the topmost dereference projection.ß
             let ptr_place = {
@@ -350,7 +350,7 @@ impl<'tcx> GotocCtx<'tcx> {
             let ptr_place_ty = self.place_ty_stable(&ptr_place);
             if ptr_place_ty.kind().is_raw_ptr() {
                 // Extract the size of the pointee.
-                let SizeAlign { size: sz, .. } =
+                let SizeAlign { size: sz, align } =
                     self.size_and_align_of_dst(place_ref_ty, place_ref);
 
                 // Encode __CPROVER_r_ok(ptr, size).
@@ -364,6 +364,13 @@ impl<'tcx> GotocCtx<'tcx> {
                         ptr_projection.goto_expr().clone().member("data", &self.symbol_table)
                     }
                 };
+                // Then generate an alignment check
+                let align_ok =
+                    ptr.clone().cast_to(Type::size_t()).rem(align).eq(Type::size_t().zero());
+                let align_check = self.codegen_assert_assume(align_ok, PropertyClass::SafetyCheck,
+                    "misaligned pointer to reference cast: address must be a multiple of its type's \
+                    alignment", *loc);
+
                 // Then, generate a __CPROVER_r_ok check.
                 let raw_ptr_read_ok_expr =
                     Expr::read_ok(ptr.cast_to(Type::void_pointer()), sz.clone())
@@ -378,7 +385,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     "dereference failure: pointer invalid",
                     *loc,
                 );
-                return Some(raw_ptr_read_ok);
+                return Some((align_check, raw_ptr_read_ok));
             }
         }
         None
