@@ -1,3 +1,7 @@
+// Copyright Kani Contributors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+// This module invokes the compiler to gather the metadata for the list subcommand, then post-processes the output.
+
 use std::collections::BTreeMap;
 
 use crate::{
