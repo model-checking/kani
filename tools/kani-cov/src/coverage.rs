@@ -206,3 +206,9 @@ pub fn function_coverage_results(
     let fun_results = file_results.iter().find(|(f, _)| *f == function);
     fun_results.cloned()
 }
+
+#[derive(Debug, Clone)]
+pub enum MarkerInfo {
+    FullLine,
+    Markers(Vec<(u32, u32, u32)>),
+}

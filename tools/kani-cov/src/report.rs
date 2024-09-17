@@ -8,6 +8,7 @@ use anyhow::Result;
 
 use crate::coverage::{
     function_coverage_results, function_info_from_file, CovResult, FileCoverageInfo, FunctionInfo,
+    MarkerInfo,
 };
 use crate::summary::{line_coverage_info, line_coverage_results};
 use crate::{args::ReportArgs, coverage::CombinedCoverageResults};
@@ -32,14 +33,13 @@ pub fn report_main(args: &ReportArgs) -> Result<()> {
         for info in fun_info {
             let cov_results = function_coverage_results(&info, &file, &results);
             let line_coverage = line_coverage_results(&info, &cov_results);
-            let line_coverage_matched: Vec<(usize, Option<(u32, Vec<CovResult>)>)> =
+            let line_coverage_matched: Vec<(usize, Option<(u32, MarkerInfo)>)> =
                 (info.start.0..=info.end.0).zip(line_coverage.clone()).collect();
             // println!("REG: {line_coverage:?}");
             // println!("MATCHED: {line_coverage_matched:?}");
             // let new_res = line_coverage_matched.into_iter().filter(|(num, data)| data.is_some()).collect();
             file_cov_info.push(line_coverage_matched);
         }
-        // let file_coverage_results = match_line_coverage_file(file_cov_info);
         print_coverage_results(file, file_cov_info)?;
     }
 
@@ -52,9 +52,9 @@ pub fn validate_report_args(_args: &ReportArgs) -> Result<()> {
 
 pub fn print_coverage_results(
     filepath: PathBuf,
-    results: Vec<Vec<(usize, Option<(u32, Vec<CovResult>)>)>>,
+    results: Vec<Vec<(usize, Option<(u32, MarkerInfo)>)>>,
 ) -> Result<()> {
-    let flattened_results: Vec<(usize, Option<(u32, Vec<CovResult>)>)> =
+    let flattened_results: Vec<(usize, Option<(u32, MarkerInfo)>)> =
         results.into_iter().flatten().collect();
     println!("{}", filepath.to_string_lossy().to_string());
 
@@ -66,35 +66,46 @@ pub fn print_coverage_results(
         let idx = i + 1;
         let line = line?;
         let cur_line_result = flattened_results.iter().find(|(num, _)| *num == idx);
-        let max = if let Some((num, data)) = cur_line_result {
-            if data.is_some() {
-                format!("{:4}", data.clone().unwrap().0)
+
+        let (max_times, line_fmt) = if let Some((_, span_data)) = cur_line_result {
+            if let Some((max, marker_info)) = span_data {
+                match marker_info {
+                    MarkerInfo::FullLine => {
+                        (Some(max), insert_escapes(&line, vec![(0, true), (line.len(), false)]))
+                    }
+                    MarkerInfo::Markers(markers) =>
+                    // Note: I'm not sure why we need to offset the columns by -1
+                    {
+                        (
+                            Some(max),
+                            insert_escapes(
+                                &line,
+                                markers
+                                    .iter()
+                                    .filter(|m| m.2 == 0)
+                                    .map(|m| {
+                                        vec![
+                                            ((m.0 - 1) as usize, true),
+                                            ((m.1 - 1) as usize, false),
+                                        ]
+                                    })
+                                    .flatten()
+                                    .collect(),
+                            ),
+                        )
+                    }
+                }
             } else {
-                format!("{:4}", " ".to_string())
+                (None, line)
             }
         } else {
-            format!("{:4}", " ".to_string())
+            (None, line)
         };
-        let line_fmt = if max == "   0" { format!("{}{line}{}", "\x1b[42m", "\x1b[0m") } else {line};
-        println!("{idx:4}| {max}| {line_fmt}");
-        let differing_results: Vec<CovResult> =
-            if let Some((num, data)) = cur_line_result { if data.is_some() {data.clone().unwrap().1} else {vec![]} } else { vec![] };
-        let zero_differing_results: Vec<&CovResult> =
-            differing_results.iter().filter(|x| x.times_covered == 0).collect();
-        let mut str = std::iter::repeat(' ').take(11_usize).collect::<String>();
-        let mut cur_shift = 0;
-        let mut print_differing = false;
-        for res in zero_differing_results {
-            let start: usize = res.region.start.1.try_into().unwrap();
-            let spaces_next = std::iter::repeat(' ').take(start - cur_shift).collect::<String>();
-            str.push_str(&format!("{spaces_next}^0"));
-            cur_shift += start + 2;
-            print_differing = true;
-            // res.region.start
-        }
-        if print_differing {
-            println!("{str}");
-        }
+
+        let max_fmt =
+            if let Some(num) = max_times { format!("{num:4}") } else { format!("{:4}", " ") };
+
+        println!("{idx:4}| {max_fmt}| {line_fmt}");
     }
 
     Ok(())
@@ -176,25 +187,20 @@ pub fn print_coverage_results(
 //     Some(cargo_root_path)
 // }
 
-// fn insert_escapes(str: &String, markers: Vec<(usize, bool)>) -> String {
-//     let mut new_str = str.clone();
-//     let mut offset = 0;
+fn insert_escapes(str: &String, markers: Vec<(usize, bool)>) -> String {
+    let mut new_str = str.clone();
+    let mut offset = 0;
 
-//     let sym_markers = markers.iter().map(|(i, b)| (i, if *b { "\x1b[42m" } else { "\x1b[0m" }));
-//     // let sym_markers = markers.iter().map(|(i, b)| (i, if *b { "```" } else { "'''" }));
-//     for (i, b) in sym_markers {
-//         println!("{}", i + offset);
-//         new_str.insert_str(i + offset, b);
-//         offset = offset + b.bytes().len();
-//     }
-//     new_str
-// }
-
-fn red() -> String {
     let support_color = std::io::stdout().is_terminal();
-    if support_color {
-        "\x1b[42m".to_string()
+    let sym_markers: Vec<(&usize, &str)> = if support_color {
+        markers.iter().map(|(i, b)| (i, if *b { "\x1b[41m" } else { "\x1b[0m" })).collect()
     } else {
-        "```".to_string()
+        markers.iter().map(|(i, b)| (i, if *b { "```" } else { "'''" })).collect()
+    };
+    for (i, b) in sym_markers {
+        // println!("{}", i + offset);
+        new_str.insert_str(i + offset, b);
+        offset = offset + b.bytes().len();
     }
+    new_str
 }

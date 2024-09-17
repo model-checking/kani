@@ -9,7 +9,7 @@ use crate::{
     args::{SummaryArgs, SummaryFormat},
     coverage::{
         function_coverage_results, function_info_from_file, CombinedCoverageResults, CovResult,
-        CoverageMetric, CoverageRegion, FileCoverageInfo, FunctionInfo,
+        CoverageMetric, CoverageRegion, FileCoverageInfo, FunctionInfo, MarkerInfo,
     },
 };
 
@@ -96,7 +96,7 @@ pub fn validate_summary_args(_args: &SummaryArgs) -> Result<()> {
 pub fn line_coverage_results(
     info: &FunctionInfo,
     fun_results: &Option<(String, Vec<crate::coverage::CovResult>)>,
-) -> Vec<Option<(u32, Vec<crate::coverage::CovResult>)>> {
+) -> Vec<Option<(u32, MarkerInfo)>> {
     let start_line: u32 = info.start.0.try_into().unwrap();
     let end_line: u32 = info.end.0.try_into().unwrap();
     // `line_status` represents all the lines between `start_line` and
@@ -106,7 +106,7 @@ pub fn line_coverage_results(
     // - `Some(max, other)`, where `max` represents the maximum number of times
     // the line was covered by any coverage result, and `other` specifies the
     // coverage results that don't amount to the maximum.
-    let mut line_status: Vec<Option<(u32, Vec<crate::coverage::CovResult>)>> =
+    let mut line_status: Vec<Option<(u32, MarkerInfo)>> =
         Vec::with_capacity((end_line - start_line + 1).try_into().unwrap());
 
     if let Some(res) = fun_results {
@@ -134,20 +134,18 @@ pub fn line_coverage_results(
                     .max_by_key(|obj| obj.times_covered)
                     .map(|obj| obj.times_covered)
                     .unwrap_or(0);
-                let other_covered: Vec<crate::coverage::CovResult> = line_results
+                let markers: Vec<(u32, u32, u32)> = line_results
                     .iter()
-                    .filter(|obj| obj.times_covered != max_covered)
-                    .cloned()
+                    .map(|obj| (obj.region.start.1, obj.region.end.1, obj.times_covered))
                     .collect();
-                line_status.push(Some((max_covered, other_covered)));
+                line_status.push(Some((max_covered, MarkerInfo::Markers(markers))));
             }
         }
     } else {
-        line_status = std::iter::repeat(Some((0, vec![])))
+        line_status = std::iter::repeat(Some((0, MarkerInfo::FullLine)))
             .take((end_line - start_line + 1).try_into().unwrap())
             .collect();
     }
-    println!("{line_status:?}");
     line_status
 }
 
