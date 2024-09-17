@@ -61,7 +61,6 @@ pub fn print_coverage_results(
     let file = File::open(filepath)?;
     let reader = BufReader::new(file);
 
-    println!("{flattened_results:?}");
     for (i, line) in reader.lines().enumerate() {
         let idx = i + 1;
         let line = line?;
