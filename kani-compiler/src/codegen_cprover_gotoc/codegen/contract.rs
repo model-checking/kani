@@ -226,7 +226,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let body = self.transformer.body(self.tcx, instance);
         self.set_current_fn(instance, &body);
         let mangled_name = instance.mangled_name();
-        let goto_contract: FunctionContract = self.codegen_modifies_contract(
+        let goto_contract = self.codegen_modifies_contract(
             &mangled_name,
             instance,
             self.codegen_span_stable(instance.def.span()),

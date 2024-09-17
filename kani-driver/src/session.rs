@@ -26,9 +26,7 @@ pub struct KaniSession {
     /// The common command-line arguments
     pub args: VerificationArgs,
 
-    /// Include all publicly-visible symbols in the generated goto binary, not just those reachable from
-    /// a proof harness. Useful when attempting to verify things that were not annotated with kani
-    /// proof attributes.
+    /// The reachability mode to use for code generation.
     pub reachability_mode: ReachabilityMode,
 
     /// The location we found the 'kani_rustc' command
