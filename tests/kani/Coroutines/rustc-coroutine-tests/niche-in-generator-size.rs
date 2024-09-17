@@ -26,7 +26,7 @@ fn main() {
         take(x);
     };
 
-    // FIXME(https://github.com/rust-lang/rust/issues/63818#issuecomment-2264915918): 
+    // FIXME(https://github.com/rust-lang/rust/issues/63818#issuecomment-2264915918):
     // niches in coroutines are disabled. Should be `assert_eq`.
     assert_ne!(size_of_val(&gen1), size_of_val(&Some(gen1)));
 }
