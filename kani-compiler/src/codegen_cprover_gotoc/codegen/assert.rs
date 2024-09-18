@@ -21,9 +21,13 @@
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::{Expr, Location, Stmt, Type};
 use cbmc::InternedString;
-use stable_mir::ty::Span as SpanStable;
+use rustc_middle::mir::coverage::SourceRegion;
+use stable_mir::mir::{Place, ProjectionElem};
+use stable_mir::ty::{Span as SpanStable, Ty};
 use strum_macros::{AsRefStr, EnumString};
 use tracing::debug;
+
+use super::intrinsic::SizeAlign;
 
 /// Classifies the type of CBMC `assert`, as different assertions can have different semantics (e.g. cover)
 ///
@@ -147,18 +151,19 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// Generate a cover statement for code coverage reports.
-    pub fn codegen_coverage(&self, span: SpanStable) -> Stmt {
+    pub fn codegen_coverage(
+        &self,
+        counter_data: &str,
+        span: SpanStable,
+        source_region: SourceRegion,
+    ) -> Stmt {
         let loc = self.codegen_caller_span_stable(span);
         // Should use Stmt::cover, but currently this doesn't work with CBMC
         // unless it is run with '--cover cover' (see
         // https://github.com/diffblue/cbmc/issues/6613). So for now use
         // `assert(false)`.
-        self.codegen_assert(
-            Expr::bool_false(),
-            PropertyClass::CodeCoverage,
-            "code coverage for location",
-            loc,
-        )
+        let msg = format!("{counter_data} - {source_region:?}");
+        self.codegen_assert(Expr::bool_false(), PropertyClass::CodeCoverage, &msg, loc)
     }
 
     // The above represent the basic operations we can perform w.r.t. assert/assume/cover
@@ -251,7 +256,7 @@ impl<'tcx> GotocCtx<'tcx> {
             t.nondet().as_stmt(loc),
         ];
 
-        Expr::statement_expression(body, t).with_location(loc)
+        Expr::statement_expression(body, t, loc)
     }
 
     /// Kani does not currently support all MIR constructs.
@@ -322,5 +327,67 @@ impl<'tcx> GotocCtx<'tcx> {
         );
 
         self.codegen_assert_assume(cond, PropertyClass::SanityCheck, &assert_msg, loc)
+    }
+
+    /// If converting a raw pointer to a reference, &(*ptr), need to inject
+    /// a check to make sure that the pointer points to a valid memory location,
+    /// since dereferencing an invalid pointer is UB in Rust.
+    pub fn codegen_raw_ptr_deref_validity_check(
+        &mut self,
+        place: &Place,
+        place_ref: Expr,
+        place_ref_ty: Ty,
+        loc: &Location,
+    ) -> Option<(Stmt, Stmt)> {
+        if let Some(ProjectionElem::Deref) = place.projection.last() {
+            // Create a place without the topmost dereference projection.ß
+            let ptr_place = {
+                let mut ptr_place = place.clone();
+                ptr_place.projection.pop();
+                ptr_place
+            };
+            // Only inject the check if dereferencing a raw pointer.
+            let ptr_place_ty = self.place_ty_stable(&ptr_place);
+            if ptr_place_ty.kind().is_raw_ptr() {
+                // Extract the size of the pointee.
+                let SizeAlign { size: sz, align } =
+                    self.size_and_align_of_dst(place_ref_ty, place_ref);
+
+                // Encode __CPROVER_r_ok(ptr, size).
+                // First, generate a CBMC expression representing the pointer.
+                let ptr = {
+                    let ptr_projection = self.codegen_place_stable(&ptr_place, *loc).unwrap();
+                    let place_ty = self.place_ty_stable(place);
+                    if self.use_thin_pointer_stable(place_ty) {
+                        ptr_projection.goto_expr().clone()
+                    } else {
+                        ptr_projection.goto_expr().clone().member("data", &self.symbol_table)
+                    }
+                };
+                // Then generate an alignment check
+                let align_ok =
+                    ptr.clone().cast_to(Type::size_t()).rem(align).eq(Type::size_t().zero());
+                let align_check = self.codegen_assert_assume(align_ok, PropertyClass::SafetyCheck,
+                    "misaligned pointer to reference cast: address must be a multiple of its type's \
+                    alignment", *loc);
+
+                // Then, generate a __CPROVER_r_ok check.
+                let raw_ptr_read_ok_expr =
+                    Expr::read_ok(ptr.cast_to(Type::void_pointer()), sz.clone())
+                        .cast_to(Type::Bool);
+                // __CPROVER_r_ok fails if size == 0, so need to explicitly avoid the check.
+                let sz_typ = sz.typ().clone();
+                let raw_ptr_read_ok_expr = sz.eq(sz_typ.zero()).or(raw_ptr_read_ok_expr);
+                // Finally, assert that the pointer points to a valid memory location.
+                let raw_ptr_read_ok = self.codegen_assert(
+                    raw_ptr_read_ok_expr,
+                    PropertyClass::SafetyCheck,
+                    "dereference failure: pointer invalid",
+                    *loc,
+                );
+                return Some((align_check, raw_ptr_read_ok));
+            }
+        }
+        None
     }
 }

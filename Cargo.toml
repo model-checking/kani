@@ -3,7 +3,7 @@
 
 [package]
 name = "kani-verifier"
-version = "0.51.0"
+version = "0.55.0"
 edition = "2021"
 description = "A bit-precise model checker for Rust."
 readme = "README.md"
@@ -40,9 +40,11 @@ members = [
   "library/std",
   "tools/compiletest",
   "tools/build-kani",
+  "tools/scanner",
   "kani-driver",
   "kani-compiler",
   "kani_metadata",
+  "library/kani_core",
 ]
 
 # This indicates what package to e.g. build with 'cargo build' without --workspace
@@ -62,8 +64,13 @@ exclude = [
   "tests/perf",
   "tests/cargo-ui",
   "tests/slow",
+  "tests/std-checks",
   "tests/assess-scan-test-scaffold",
   "tests/script-based-pre",
   "tests/script-based-pre/build-cache-bin/target/new_dep",
   "tests/script-based-pre/build-cache-dirty/target/new_dep",
+  "tests/script-based-pre/verify_std_cmd/tmp_dir/target/kani_verify_std",
 ]
+
+[workspace.lints.clippy]
+too_long_first_doc_paragraph = "allow"

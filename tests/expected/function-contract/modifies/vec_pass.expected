@@ -1,20 +1,20 @@
-modify.assertion\
+.assertion\
 - Status: SUCCESS\
 - Description: "v.len() > 0"\
 in function modify
 
-modify_replace.assertion\
+.assertion\
 - Status: SUCCESS\
 - Description: "element set"\
-in function modify_replace
+in function modify
 
-modify_replace.assertion\
+.assertion\
 - Status: SUCCESS\
 - Description: "vector tail equality"\
-in function modify_replace
+in function modify
 
 assertion\
 - Status: SUCCESS\
-- Description: "v[0] == src"
+- Description: "|result| v[0] == src"
 
 VERIFICATION:- SUCCESSFUL

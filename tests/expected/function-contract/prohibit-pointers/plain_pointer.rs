@@ -4,7 +4,7 @@
 
 #![allow(unreachable_code, unused_variables)]
 
-#[kani::ensures(true)]
+#[kani::ensures(|result| true)]
 fn plain_pointer(t: *mut i32) {}
 
 #[kani::proof_for_contract(plain_pointer)]

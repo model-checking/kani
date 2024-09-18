@@ -1,0 +1,5 @@
+.assertion\
+- Status: SUCCESS\
+- Description: "ptr NULL or writable up to size"\
+
+VERIFICATION:- SUCCESSFUL

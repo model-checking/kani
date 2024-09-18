@@ -1,3 +1,2 @@
-error: `&str` doesn't implement `kani::Arbitrary`. Callee: `kani::Arbitrary::any` \
-       Please, check whether the type of all objects in the modifies clause (including return types) implement `kani::Arbitrary`. \
-       This is a strict condition to use function contracts as verified stubs.
+error: `&str` doesn't implement `kani::Arbitrary`.
+= help: All objects in the modifies clause must implement the Arbitrary. The return type must also implement the Arbitrary trait if you are checking recursion or using verified stub.

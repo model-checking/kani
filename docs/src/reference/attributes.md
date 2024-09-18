@@ -60,7 +60,7 @@ For example, the class in `Check 1: my_harness.assertion.1` is `assertion`, so t
 
 > **NOTE**: The `#[kani::should_panic]` is only recommended for writing
 > harnesses which complement existing harnesses that don't use the same
-> attribute. In order words, it's only recommended to write *negative harnesses*
+> attribute. In other words, it's only recommended to write *negative harnesses*
 > after having written *positive* harnesses that successfully verify interesting
 > properties about the function under verification.
 

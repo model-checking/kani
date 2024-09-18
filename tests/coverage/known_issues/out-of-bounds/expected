@@ -1,0 +1,7 @@
+Source-based code coverage results:
+
+test.rs (get)\
+ * 8:1 - 10:2 COVERED
+
+test.rs (main)\
+ * 13:1 - 15:2 COVERED

@@ -1,0 +1,44 @@
+std::ptr::write::<std::mem::MaybeUninit<u8>>.assertion.1\
+	 - Status: FAILURE\
+	 - Description: "Interaction between raw pointers and unions is not yet supported."
+
+std::ptr::write::<std::mem::MaybeUninit<u8>>.assertion.1\
+	 - Status: FAILURE\
+	 - Description: "Interaction between raw pointers and unions is not yet supported."\
+
+check_typed_swap.assertion.1\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `*mut u8`"
+
+check_typed_swap.assertion.2\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `*mut u8`"
+
+check_volatile_load.assertion.1\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `*const u8`"
+
+check_compare_bytes.assertion.1\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `*const u8`"
+
+check_compare_bytes.assertion.2\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `*const u8`"
+
+std::ptr::read::<u8>.assertion.1\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `*const u8`"
+
+std::ptr::read::<u8>.assertion.2\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u8`"
+
+Summary:
+Verification failed for - check_typed_swap_safe
+Verification failed for - check_typed_swap
+Verification failed for - check_volatile_load
+Verification failed for - check_compare_bytes
+Verification failed for - check_copy_read
+Verification failed for - check_copy_nonoverlapping_read
+Complete - 7 successfully verified harnesses, 6 failures, 13 total.

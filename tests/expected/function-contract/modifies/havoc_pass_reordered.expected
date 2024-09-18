@@ -7,32 +7,7 @@ VERIFICATION:- SUCCESSFUL
 
 copy.assigns\
 - Status: SUCCESS\
-- Description: "Check that var_4 is assignable"\
-in function copy
-
-copy.assigns\
-- Status: SUCCESS\
-- Description: "Check that var_3 is assignable"\
-in function copy\
-
-copy.assigns\
-- Status: SUCCESS\
-- Description: "Check that var_5 is assignable"\
-in function copy
-
-copy.assigns\
-- Status: SUCCESS\
-- Description: "Check that *var_5 is assignable"\
-in function copy\
-
-copy.assigns\
-- Status: SUCCESS\
-- Description: "Check that var_7 is assignable"\
-in function copy
-
-copy.assigns\
-- Status: SUCCESS\
-- Description: "Check that *var_7 is assignable"\
+- Description: "Check that *dst is assignable"\
 in function copy
 
 VERIFICATION:- SUCCESSFUL

@@ -1,4 +1,4 @@
-div.assertion\
+.assertion\
 - Status: SUCCESS\
 - Description: "divisor != 0"
 
