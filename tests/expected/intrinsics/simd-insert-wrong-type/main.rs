@@ -10,11 +10,11 @@ use std::intrinsics::simd::simd_insert;
 #[repr(simd)]
 #[allow(non_camel_case_types)]
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub struct i64x2(i64, i64);
+pub struct i64x2([i64; 2]);
 
 #[kani::proof]
 fn main() {
-    let y = i64x2(0, 1);
+    let y = i64x2([0, 1]);
     let _ = unsafe { simd_insert(y, 0, 1) };
     // ^^^^ The code above fails to type-check in Rust with the error:
     // ```
