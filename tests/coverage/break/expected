@@ -1,13 +1,20 @@
-Source-based code coverage results:
-
-main.rs (find_positive)\
- * 4:1 - 4:47 COVERED\
- * 5:10 - 5:13 COVERED\
- * 5:17 - 5:21 COVERED\
- * 7:20 - 7:29 COVERED\
- * 8:10 - 8:11 COVERED\
- * 11:5 - 11:9 UNCOVERED\
- * 12:1 - 12:2 COVERED
-
-main.rs (main)\
- * 15:1 - 19:2 COVERED
+/home/ubuntu/kani/tests/coverage/break/main.rs
+   1|     | // Copyright Kani Contributors
+   2|     | // SPDX-License-Identifier: Apache-2.0 OR MIT
+   3|     | 
+   4|    2| fn find_positive(nums: &[i32]) -> Option<i32> {
+   5|    2|     for &num in nums {
+   6|     |         if num > 0 {
+   7|    2|             return Some(num);
+   8|    2|         }
+   9|     |     }
+  10|     |     // `None` is unreachable because there is at least one positive number.
+  11|    0|     None
+  12|     | }
+  13|     | 
+  14|     | #[kani::proof]
+  15|    2| fn main() {
+  16|    2|     let numbers = [-3, -1, 0, 2, 4];
+  17|    2|     let result = find_positive(&numbers);
+  18|    2|     assert_eq!(result, Some(2));
+  19|     | }

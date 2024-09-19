@@ -1,37 +1,45 @@
-Source-based code coverage results:
-
-main.rs (estimate_size)\
- * 4:1 - 7:15 COVERED\
- * 8:12 - 8:19 COVERED\
- * 9:20 - 9:21 COVERED\
- * 11:20 - 11:21 COVERED\
- * 13:15 - 13:23 COVERED\
- * 14:12 - 14:20 COVERED\
- * 15:20 - 15:21 COVERED\
- * 17:20 - 17:21 COVERED\
- * 20:12 - 20:20 COVERED\
- * 21:20 - 21:21 COVERED\
- * 23:20 - 23:21 COVERED\
- * 26:1 - 26:2 COVERED
-
-main.rs (fully_covered)\
- * 39:1 - 44:2 COVERED
-
-Source-based code coverage results:
-
-main.rs (estimate_size)\
- * 4:1 - 7:15 COVERED\
- * 8:12 - 8:19 COVERED\
- * 9:20 - 9:21 COVERED\
- * 11:20 - 11:21 COVERED\
- * 13:15 - 13:23 COVERED\
- * 14:12 - 14:20 COVERED\
- * 15:20 - 15:21 COVERED\
- * 17:20 - 17:21 COVERED\
- * 20:12 - 20:20 COVERED\
- * 21:20 - 21:21 COVERED\
- * 23:20 - 23:21 UNCOVERED\
- * 26:1 - 26:2 COVERED
-
-main.rs (mostly_covered)\
- * 30:1 - 35:2 COVERED
+/home/ubuntu/kani/tests/coverage/multiple-harnesses/main.rs
+   1|     | // Copyright Kani Contributors
+   2|     | // SPDX-License-Identifier: Apache-2.0 OR MIT
+   3|     | 
+   4|    3| fn estimate_size(x: u32) -> u32 {
+   5|    3|     assert!(x < 4096);
+   6|    3| 
+   7|    3|     if x < 256 {
+   8|    3|         if x < 128 {
+   9|    3|             return 1;
+  10|     |         } else {
+  11|    3|             return 3;
+  12|     |         }
+  13|    3|     } else if x < 1024 {
+  14|    3|         if x > 1022 {
+  15|    3|             return 4;
+  16|     |         } else {
+  17|    3|             return 5;
+  18|     |         }
+  19|     |     } else {
+  20|    3|         if x < 2048 {
+  21|    3|             return 7;
+  22|     |         } else {
+  23|    2|             return 9;
+  24|     |         }
+  25|     |     }
+  26|     | }
+  27|     | 
+  28|     | #[cfg(kani)]
+  29|     | #[kani::proof]
+  30|    2| fn mostly_covered() {
+  31|    2|     let x: u32 = kani::any();
+  32|    2|     kani::assume(x < 2048);
+  33|    2|     let y = estimate_size(x);
+  34|    2|     assert!(y < 10);
+  35|     | }
+  36|     | 
+  37|     | #[cfg(kani)]
+  38|     | #[kani::proof]
+  39|    2| fn fully_covered() {
+  40|    2|     let x: u32 = kani::any();
+  41|    2|     kani::assume(x < 4096);
+  42|    2|     let y = estimate_size(x);
+  43|    2|     assert!(y < 10);
+  44|     | }

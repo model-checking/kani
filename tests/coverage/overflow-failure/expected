@@ -1,9 +1,16 @@
-Source-based code coverage results:
-
-test.rs (cond_reduce)\
- * 7:1 - 8:18 COVERED\
- * 8:21 - 8:27 COVERED\
- * 8:37 - 8:38 UNCOVERED
-
-test.rs (main)\
- * 12:1 - 15:2 COVERED
+/home/ubuntu/kani/tests/coverage/overflow-failure/test.rs
+   1|     | // Copyright Kani Contributors
+   2|     | // SPDX-License-Identifier: Apache-2.0 OR MIT
+   3|     | 
+   4|     | //! Checks that Kani reports the correct coverage results in the case of an
+   5|     | //! arithmetic overflow failure (caused by the second call to `cond_reduce`).
+   6|     | 
+   7|    2| fn cond_reduce(thresh: u32, x: u32) -> u32 {
+   8|    2|     if x > thresh { x - 50 } else { x }
+   9|     | }
+  10|     | 
+  11|     | #[kani::proof]
+  12|    2| fn main() {
+  13|    2|     cond_reduce(60, 70);
+  14|    2|     cond_reduce(40, 42);
+  15|     | }

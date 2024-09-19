@@ -1,13 +1,22 @@
-Source-based code coverage results:
-
-main.rs (main)\
- * 9:1 - 9:11 COVERED\
- * 10:9 - 10:10 COVERED\
- * 10:14 - 10:18 COVERED\
- * 13:13 - 13:29 COVERED\
- * 14:10 - 15:18 COVERED\
- * 17:13 - 17:29 UNCOVERED\
- * 18:10 - 18:11 COVERED\
- * 20:5 - 20:12 UNCOVERED\
- * 20:20 - 20:41 UNCOVERED\
- * 21:1 - 21:2 UNCOVERED
+/home/ubuntu/kani/tests/coverage/abort/main.rs
+   1|     | // Copyright Kani Contributors
+   2|     | // SPDX-License-Identifier: Apache-2.0 OR MIT
+   3|     | 
+   4|     | //! Test that the abort() function is respected and nothing beyond it will execute.
+   5|     | 
+   6|     | use std::process;
+   7|     | 
+   8|     | #[kani::proof]
+   9|    2| fn main() {
+  10|    2|     for i in 0..4 {
+  11|     |         if i == 1 {
+  12|     |             // This comes first and it should be reachable.
+  13|    2|             process::abort();
+  14|    2|         }
+  15|    2|         if i == 2 {
+  16|     |             // This should never happen.
+  17|    0|             process::exit(1);
+  18|    2|         }
+  19|     |     }
+  20|    0|     ```assert!'''(false, ```"This is unreachable"''');
+  21|     | }
