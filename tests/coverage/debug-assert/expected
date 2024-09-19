@@ -1,16 +1,15 @@
-/home/ubuntu/kani/tests/coverage/debug-assert/main.rs
-   1|     | // Copyright Kani Contributors
-   2|     | // SPDX-License-Identifier: Apache-2.0 OR MIT
-   3|     | 
-   4|     | //! This test checks that the regions after the `debug_assert` macro are
-   5|     | //! `UNCOVERED`. In fact, for this example, the region associated to `"This
-   6|     | //! should fail and stop the execution"` is also `UNCOVERED` because the macro
-   7|     | //! calls span two regions each.
-   8|     | 
-   9|     | #[kani::proof]
-  10|    2| fn main() {
-  11|    2|     for i in 0..4 {
-  12|    0|         debug_assert!(i > 0, ```"This should fail and stop the execution"''');
-  13|    0|         ```assert!(i == 0''', ```"This should be unreachable"''');
-  14|     |     }
-  15|     | }
+   1|     | // Copyright Kani Contributors\
+   2|     | // SPDX-License-Identifier: Apache-2.0 OR MIT\
+   3|     | \
+   4|     | //! This test checks that the regions after the `debug_assert` macro are\
+   5|     | //! `UNCOVERED`. In fact, for this example, the region associated to `"This\
+   6|     | //! should fail and stop the execution"` is also `UNCOVERED` because the macro\
+   7|     | //! calls span two regions each.\
+   8|     | \
+   9|     | #[kani::proof]\
+  10|    2| fn main() {\
+  11|    2|     for i in 0..4 {\
+  12|    0|         debug_assert!(i > 0, ```"This should fail and stop the execution"''');\
+  13|    0|         ```assert!(i == 0''', ```"This should be unreachable"''');\
+  14|     |     }\
+  15|     | }\

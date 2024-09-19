@@ -1,12 +1,11 @@
-/home/ubuntu/kani/tests/coverage/div-zero/test.rs
-   1|     | // Copyright Kani Contributors
-   2|     | // SPDX-License-Identifier: Apache-2.0 OR MIT
-   3|     | 
-   4|    2| fn div(x: u16, y: u16) -> u16 {
-   5|    2|     if y != 0 { x / y } else { 0 }
-   6|     | }
-   7|     | 
-   8|     | #[kani::proof]
-   9|    2| fn main() {
-  10|    2|     div(11, 3);
-  11|     | }
+   1|     | // Copyright Kani Contributors\
+   2|     | // SPDX-License-Identifier: Apache-2.0 OR MIT\
+   3|     | \
+   4|    2| fn div(x: u16, y: u16) -> u16 {\
+   5|    2|     if y != 0 { x / y } else { 0 }\
+   6|     | }\
+   7|     | \
+   8|     | #[kani::proof]\
+   9|    2| fn main() {\
+  10|    2|     div(11, 3);\
+  11|     | }\

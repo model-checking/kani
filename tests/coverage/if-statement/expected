@@ -1,21 +1,20 @@
-/home/ubuntu/kani/tests/coverage/if-statement/main.rs
-   1|     | // Copyright Kani Contributors
-   2|     | // SPDX-License-Identifier: Apache-2.0 OR MIT
-   3|     | 
-   4|    2| fn check_number(num: i32) -> &'static str {
-   5|    2|     if num > 0 {
-   6|     |         // The next line is partially covered
-   7|    2|         if num % 2 == 0 { ```"Positive and Even"''' } else { "Positive and Odd" }
-   8|    0|     } else if ```num < 0''' {
-   9|    0|         "Negative"
-  10|     |     } else {
-  11|    0|         "Zero"
-  12|     |     }
-  13|     | }
-  14|     | 
-  15|     | #[kani::proof]
-  16|    2| fn main() {
-  17|    2|     let number = 7;
-  18|    2|     let result = check_number(number);
-  19|    2|     assert_eq!(result, "Positive and Odd");
-  20|     | }
+   1|     | // Copyright Kani Contributors\
+   2|     | // SPDX-License-Identifier: Apache-2.0 OR MIT\
+   3|     | \
+   4|    2| fn check_number(num: i32) -> &'static str {\
+   5|    2|     if num > 0 {\
+   6|     |         // The next line is partially covered\
+   7|    2|         if num % 2 == 0 { ```"Positive and Even"''' } else { "Positive and Odd" }\
+   8|    0|     } else if ```num < 0''' {\
+   9|    0|         "Negative"\
+  10|     |     } else {\
+  11|    0|         "Zero"\
+  12|     |     }\
+  13|     | }\
+  14|     | \
+  15|     | #[kani::proof]\
+  16|    2| fn main() {\
+  17|    2|     let number = 7;\
+  18|    2|     let result = check_number(number);\
+  19|    2|     assert_eq!(result, "Positive and Odd");\
+  20|     | }\

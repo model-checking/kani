@@ -1,17 +1,16 @@
-/home/ubuntu/kani/tests/coverage/compare/main.rs
-   1|     | // Copyright Kani Contributors
-   2|     | // SPDX-License-Identifier: Apache-2.0 OR MIT
-   3|     | 
-   4|    2| fn compare(x: u16, y: u16) -> u16 {
-   5|    2|     // The case where `x < y` isn't possible so its region is `UNCOVERED`
-   6|    2|     if x >= y { 1 } else { 0 }
-   7|     | }
-   8|     | 
-   9|     | #[kani::proof]
-  10|    2| fn main() {
-  11|    2|     let x: u16 = kani::any();
-  12|    2|     let y: u16 = kani::any();
-  13|    2|     if x >= y {
-  14|    2|         compare(x, y);
-  15|    2|     }
-  16|     | }
+   1|     | // Copyright Kani Contributors\
+   2|     | // SPDX-License-Identifier: Apache-2.0 OR MIT\
+   3|     | \
+   4|    2| fn compare(x: u16, y: u16) -> u16 {\
+   5|    2|     // The case where `x < y` isn't possible so its region is `UNCOVERED`\
+   6|    2|     if x >= y { 1 } else { 0 }\
+   7|     | }\
+   8|     | \
+   9|     | #[kani::proof]\
+  10|    2| fn main() {\
+  11|    2|     let x: u16 = kani::any();\
+  12|    2|     let y: u16 = kani::any();\
+  13|    2|     if x >= y {\
+  14|    2|         compare(x, y);\
+  15|    2|     }\
+  16|     | }\

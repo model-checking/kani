@@ -1,15 +1,14 @@
-/home/ubuntu/kani/tests/coverage/contradiction/main.rs
-   1|     | // Copyright Kani Contributors
-   2|     | // SPDX-License-Identifier: Apache-2.0 OR MIT
-   3|     | #[kani::proof]
-   4|    2| fn contradiction() {
-   5|    2|     let x: u8 = kani::any();
-   6|    2|     let mut y: u8 = 0;
-   7|    2|     if x > 5 {
-   8|    2|         if x < 2 ```{'''
-   9|    0| ```            y = x;'''
-  10|    2| ```        }'''
-  11|    2|     } else {
-  12|    2|         assert!(x < 10);
-  13|    2|     }
-  14|     | }
+   1|     | // Copyright Kani Contributors\
+   2|     | // SPDX-License-Identifier: Apache-2.0 OR MIT\
+   3|     | #[kani::proof]\
+   4|    2| fn contradiction() {\
+   5|    2|     let x: u8 = kani::any();\
+   6|    2|     let mut y: u8 = 0;\
+   7|    2|     if x > 5 {\
+   8|    2|         if x < 2 ```{'''\
+   9|    0| ```            y = x;'''\
+  10|    2| ```        }'''\
+  11|    2|     } else {\
+  12|    2|         assert!(x < 10);\
+  13|    2|     }\
+  14|     | }\
