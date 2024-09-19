@@ -412,10 +412,69 @@ impl<'test> TestCx<'test> {
     /// Runs Kani in coverage mode on the test file specified by `self.testpaths.file`.
     fn run_expected_coverage_test(&self) {
         let proc_res = self.run_kani_with_coverage();
+        let cov_results_path = self.extract_cov_results_path(&proc_res);
+        let (kanimap, kaniraws, kanicov) = self.find_cov_files(&cov_results_path);
+        let kanicov_proc = self.run_kanicov_report(&kanimap, &kaniraws, &kanicov);
         let expected_path = self.testpaths.file.parent().unwrap().join("expected");
-        self.verify_output(&proc_res, &expected_path);
+        self.verify_output(&kanicov_proc, &expected_path);
     }
 
+    fn run_kanicov_report(&self, kanimap: &PathBuf, kaniraws: &Vec<PathBuf>, kanicov: &PathBuf) -> ProcRes {
+        let mut kanicov_merge = Command::new("kani-cov");
+        kanicov_merge.arg("merge");
+        kanicov_merge.args(kaniraws);
+        kanicov_merge.arg("--output");
+        kanicov_merge.arg(kanicov);
+        let merge_cmd = self.compose_and_run(kanicov_merge);
+
+        if !merge_cmd.status.success() {
+            self.fatal_proc_rec(
+                "test failed: could not run `kani-cov merge` command",
+                &merge_cmd,
+            );
+        }
+
+        let mut kanicov_report = Command::new("kani-cov");
+        kanicov_report.arg("report").arg(kanimap).arg("--profile").arg(kanicov);
+        let report_cmd = self.compose_and_run(kanicov_report);
+        
+        if !report_cmd.status.success() {
+            self.fatal_proc_rec(
+                "test failed: could not run `kani-cov report` command",
+                &report_cmd,
+            );
+        }
+        report_cmd
+    }
+
+    fn find_cov_files(&self, folder_path: &PathBuf) -> (PathBuf, Vec<PathBuf>, PathBuf) {
+        let folder_name = folder_path.file_name().unwrap();
+        let kanimap = folder_path.join(format!("{}_kanimap.json", folder_name.to_string_lossy()));
+
+        let kanicov = folder_path.join(format!("{}_kanicov.json", folder_name.to_string_lossy()));
+
+        let kaniraw_glob = format!("{}/*_kaniraw.json", folder_path.display());
+        // self.error(&format!("kaniraw_glob: {kaniraw_glob}"));
+        let kaniraws: Vec<PathBuf> = glob::glob(&kaniraw_glob)
+        .expect("Failed to read glob pattern")
+        .filter_map(|entry| entry.ok())
+        .collect();
+
+        (kanimap, kaniraws, kanicov)
+    }
+
+    fn  extract_cov_results_path(&self, proc_res: &ProcRes) -> PathBuf {
+        let output_lines = proc_res.stdout.split('\n').collect::<Vec<&str>>();
+        let coverage_info = output_lines.iter().find(|l| l.contains("Coverage results saved to"));
+        if coverage_info.is_none() {
+            self.fatal_proc_rec(
+                &format!(
+                    "failed to find the path to the coverage results!"),
+                proc_res);
+        }
+        let coverage_path = coverage_info.unwrap().split(' ').last().unwrap();
+        PathBuf::from(coverage_path)
+    }   
     /// Runs Kani with stub implementations of various data structures.
     /// Currently, it only runs tests for the Vec module with the (Kani)Vec
     /// abstraction. At a later stage, it should be possible to add command-line
@@ -511,7 +570,7 @@ impl<'test> TestCx<'test> {
 
 pub struct ProcRes {
     status: ExitStatus,
-    stdout: String,
+    pub stdout: String,
     stderr: String,
     cmdline: String,
 }
