@@ -35,9 +35,6 @@ pub fn report_main(args: &ReportArgs) -> Result<()> {
             let line_coverage = line_coverage_results(&info, &cov_results);
             let line_coverage_matched: Vec<(usize, Option<(u32, MarkerInfo)>)> =
                 (info.start.0..=info.end.0).zip(line_coverage.clone()).collect();
-            // println!("REG: {line_coverage:?}");
-            // println!("MATCHED: {line_coverage_matched:?}");
-            // let new_res = line_coverage_matched.into_iter().filter(|(num, data)| data.is_some()).collect();
             file_cov_info.push(line_coverage_matched);
         }
         print_coverage_results(file, file_cov_info)?;
@@ -61,9 +58,54 @@ pub fn print_coverage_results(
     let file = File::open(filepath)?;
     let reader = BufReader::new(file);
 
+    let mut must_highlight = false;
+
     for (i, line) in reader.lines().enumerate() {
         let idx = i + 1;
         let line = line?;
+
+    //     let line_checks: Vec<&CoverageCheck> = checks
+    //     .iter()
+    //     .filter(|c| {
+    //         c.is_covered()
+    //             && (cur_idx == c.region.start.0 as usize
+    //                 || cur_idx == c.region.end.0 as usize)
+    //     })
+    //     .collect();
+    // let new_line = if line_checks.is_empty() {
+    //     if must_highlight {
+    //         insert_escapes(&line, vec![(0, true), (line.len() - 1, false)])
+    //     } else {
+    //         line
+    //     }
+    // } else {
+    //     let mut markers = vec![];
+    //     if must_highlight {
+    //         markers.push((0, true))
+    //     };
+
+    //     for check in line_checks {
+    //         let start_line = check.region.start.0 as usize;
+    //         let start_column = (check.region.start.1 - 1u32) as usize;
+    //         let end_line = check.region.end.0 as usize;
+    //         let end_column = (check.region.end.1 - 1u32) as usize;
+    //         if start_line == cur_idx {
+    //             markers.push((start_column, true))
+    //         }
+    //         if end_line == cur_idx {
+    //             markers.push((end_column, false))
+    //         }
+    //     }
+
+    //     if markers.last().unwrap().1 {
+    //         must_highlight = true;
+    //         markers.push((line.len() - 1, false))
+    //     } else {
+    //         must_highlight = false;
+    //     }
+    //     println!("{:?}", markers);
+    //     insert_escapes(&line, markers)
+    // };
         let cur_line_result = flattened_results.iter().find(|(num, _)| *num == idx);
 
         let (max_times, line_fmt) = if let Some((_, span_data)) = cur_line_result {
@@ -72,33 +114,75 @@ pub fn print_coverage_results(
                     MarkerInfo::FullLine => {
                         (Some(max), insert_escapes(&line, vec![(0, true), (line.len(), false)]))
                     }
-                    MarkerInfo::Markers(markers) =>
+                    MarkerInfo::Markers(results) =>
                     // Note: I'm not sure why we need to offset the columns by -1
                     {
+                        // Filter out cases where the span is a single unit AND it ends after the line
+                        let results: Vec<&CovResult> = results.into_iter().filter(|m|  if m.region.start.0 as usize == idx && m.region.end.0 as usize == idx { (m.region.end.1 - m.region.start.1 != 1) && (m.region.end.1 as usize) < line.len() } else {true }).collect();
+                        let mut complete_escapes: Vec<(usize, bool)> = results
+                        .iter()
+                        .filter(|m| m.times_covered == 0 && m.region.start.0 as usize == idx && m.region.end.0 as usize == idx)
+                        .map(|m| {
+                            vec![
+                                ((m.region.start.1 - 1) as usize, true),
+                                ((m.region.end.1 - 1) as usize, false),
+                            ]
+                        })
+                        .flatten()
+                        .collect();
+                        // println!("COMPLETE: {complete_escapes:?}");
+                        let mut starting_escapes: Vec<(usize, bool)> = results
+                        .iter()
+                        .filter(|m| m.times_covered == 0 && m.region.start.0 as usize == idx && m.region.end.0 as usize != idx)
+                        .map(|m| {
+                            vec![
+                                ((m.region.start.1 - 1) as usize, true),
+                            ]
+                        })
+                        .flatten()
+                        .collect();
+                        // println!("{starting_escapes:?}");
+                        let mut ending_escapes: Vec<(usize, bool)> = results
+                        .iter()
+                        .filter(|m| m.times_covered == 0 && m.region.start.0 as usize != idx && m.region.end.0 as usize == idx)
+                        .map(|m| {
+                            vec![
+                                ((m.region.end.1 - 1) as usize, false),
+                            ]
+                        })
+                        .flatten()
+                        .collect();
+
+                        // println!("{starting_escapes:?}");
+                        // println!("{ending_escapes:?}");
+                        if must_highlight && ending_escapes.len() > 0 {
+                            ending_escapes.push((0_usize, true));
+                            must_highlight = false;
+                        }
+                        if starting_escapes.len() > 0 {
+                            starting_escapes.push((line.len(), false));
+                            must_highlight = true;
+                        }
+
+                        ending_escapes.extend(complete_escapes);
+                        ending_escapes.extend(starting_escapes);
+                        
+                        if must_highlight && ending_escapes.is_empty() {
+                            ending_escapes.push((0, true));
+                            ending_escapes.push((line.len(), false));
+                        }
+
                         (
                             Some(max),
-                            insert_escapes(
-                                &line,
-                                markers
-                                    .iter()
-                                    .filter(|m| m.2 == 0)
-                                    .map(|m| {
-                                        vec![
-                                            ((m.0 - 1) as usize, true),
-                                            ((m.1 - 1) as usize, false),
-                                        ]
-                                    })
-                                    .flatten()
-                                    .collect(),
-                            ),
+                            insert_escapes(&line, ending_escapes)
                         )
                     }
                 }
             } else {
-                (None, line)
+                (None, if !must_highlight { line } else {insert_escapes(&line, vec![(0, true), (line.len(), false)])})
             }
         } else {
-            (None, line)
+            (None, if !must_highlight { line } else {insert_escapes(&line, vec![(0, true), (line.len(), false)])})
         };
 
         let max_fmt =
@@ -115,13 +199,14 @@ fn insert_escapes(str: &String, markers: Vec<(usize, bool)>) -> String {
     let mut offset = 0;
 
     let support_color = std::io::stdout().is_terminal();
-    let sym_markers: Vec<(&usize, &str)> = if support_color {
+    let mut sym_markers: Vec<(&usize, &str)> = if support_color {
         markers.iter().map(|(i, b)| (i, if *b { "\x1b[41m" } else { "\x1b[0m" })).collect()
     } else {
         markers.iter().map(|(i, b)| (i, if *b { "```" } else { "'''" })).collect()
     };
+    // Sorting
+    sym_markers.sort();
     for (i, b) in sym_markers {
-        // println!("{}", i + offset);
         new_str.insert_str(i + offset, b);
         offset = offset + b.bytes().len();
     }

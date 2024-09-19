@@ -134,11 +134,7 @@ pub fn line_coverage_results(
                     .max_by_key(|obj| obj.times_covered)
                     .map(|obj| obj.times_covered)
                     .unwrap_or(0);
-                let markers: Vec<(u32, u32, u32)> = line_results
-                    .iter()
-                    .map(|obj| (obj.region.start.1, obj.region.end.1, obj.times_covered))
-                    .collect();
-                line_status.push(Some((max_covered, MarkerInfo::Markers(markers))));
+                line_status.push(Some((max_covered, MarkerInfo::Markers(line_results))));
             }
         }
     } else {

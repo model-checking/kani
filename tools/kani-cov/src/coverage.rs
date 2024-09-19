@@ -210,5 +210,5 @@ pub fn function_coverage_results(
 #[derive(Debug, Clone)]
 pub enum MarkerInfo {
     FullLine,
-    Markers(Vec<(u32, u32, u32)>),
+    Markers(Vec<CovResult>),
 }
