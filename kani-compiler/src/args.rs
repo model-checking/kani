@@ -47,9 +47,6 @@ pub struct Arguments {
     pub reachability_analysis: ReachabilityType,
     #[clap(long = "enable-stubbing")]
     pub stubbing_enabled: bool,
-    /// Option name used to tell the compiler to execute the list subcommand
-    #[clap(long = "list")]
-    pub list_enabled: bool,
     /// Option name used to define unstable features.
     #[clap(short = 'Z', long = "unstable")]
     pub unstable_features: Vec<String>,

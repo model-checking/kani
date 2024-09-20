@@ -6,7 +6,6 @@
 use std::collections::HashMap;
 
 use crate::kani_middle::attributes::{matches_diagnostic as matches_function, KaniAttributes};
-use crate::kani_middle::codegen_units::CodegenUnits;
 use crate::kani_middle::{find_closure_in_body, InternalDefId, SourceLocation};
 use kani_metadata::ContractedFunction;
 use rustc_middle::ty::TyCtxt;
@@ -69,7 +68,8 @@ fn count_contracts(tcx: TyCtxt, check_body: &Body) -> usize {
 
 /// For each function with contracts (or that is a target of a contract harness),
 /// construct a ContractedFunction object for it and store it in `units`.
-pub fn collect_contracted_fns(tcx: TyCtxt, units: &mut CodegenUnits) {
+pub fn collect_contracted_fns(tcx: TyCtxt) -> Vec<ContractedFunction> {
+    let mut contracted_fns = vec![];
     for (fn_def_id, harnesses) in fns_to_harnesses(tcx) {
         let attrs = KaniAttributes::for_item(tcx, fn_def_id);
 
@@ -90,11 +90,13 @@ pub fn collect_contracted_fns(tcx: TyCtxt, units: &mut CodegenUnits) {
             0
         };
 
-        units.contracted_functions.push(ContractedFunction {
+        contracted_fns.push(ContractedFunction {
             function: tcx.def_path_str(fn_def_id),
             file: SourceLocation::new(rustc_internal::stable(tcx.def_span(fn_def_id))).filename,
             harnesses,
             total_contracts,
         });
     }
+
+    contracted_fns
 }

@@ -6,28 +6,31 @@ use std::collections::BTreeMap;
 
 use crate::{
     args::list_args::{CargoListArgs, Format, StandaloneListArgs},
+    list::output::{json, pretty},
+    list::Totals,
     project::{cargo_project, standalone_project, std_project, Project},
-    session::{KaniSession, ReachabilityMode},
+    session::KaniSession,
     version::print_kani_version,
     InvocationType,
 };
 use anyhow::Result;
 use kani_metadata::{ContractedFunction, HarnessKind, KaniMetadata};
 
-use super::output::{json, pretty};
-
 fn process_metadata(metadata: Vec<KaniMetadata>, format: Format) -> Result<()> {
     // Map each file to a vector of its harnesses
     let mut standard_harnesses: BTreeMap<String, Vec<String>> = BTreeMap::new();
     let mut contract_harnesses: BTreeMap<String, Vec<String>> = BTreeMap::new();
     let mut contracted_functions: Vec<ContractedFunction> = vec![];
-    let mut total_contracts = 0;
+
+    let mut total_standard_harnesses = 0;
     let mut total_contract_harnesses = 0;
+    let mut total_contracts = 0;
 
     for kani_meta in metadata {
         for harness_meta in kani_meta.proof_harnesses {
             match harness_meta.attributes.kind {
                 HarnessKind::Proof => {
+                    total_standard_harnesses += 1;
                     if let Some(harnesses) = standard_harnesses.get_mut(&harness_meta.original_file)
                     {
                         harnesses.push(harness_meta.pretty_name);
@@ -37,6 +40,7 @@ fn process_metadata(metadata: Vec<KaniMetadata>, format: Format) -> Result<()> {
                     }
                 }
                 HarnessKind::ProofForContract { .. } => {
+                    total_contract_harnesses += 1;
                     if let Some(harnesses) = contract_harnesses.get_mut(&harness_meta.original_file)
                     {
                         harnesses.push(harness_meta.pretty_name);
@@ -50,7 +54,6 @@ fn process_metadata(metadata: Vec<KaniMetadata>, format: Format) -> Result<()> {
         }
 
         for cf in &kani_meta.contracted_functions {
-            total_contract_harnesses += cf.harnesses.len();
             total_contracts += cf.total_contracts;
         }
 
@@ -60,36 +63,34 @@ fn process_metadata(metadata: Vec<KaniMetadata>, format: Format) -> Result<()> {
     // Print in alphabetical order
     contracted_functions.sort_by_key(|cf| cf.function.clone());
 
+    let totals = Totals {
+        standard_harnesses: total_standard_harnesses,
+        contract_harnesses: total_contract_harnesses,
+        contracted_functions: contracted_functions.len(),
+        contracts: total_contracts,
+    };
+
     match format {
-        Format::Pretty => pretty(
-            standard_harnesses,
-            contracted_functions,
-            total_contract_harnesses,
-            total_contracts,
-        ),
-        Format::Json => {
-            json(standard_harnesses, contract_harnesses, contracted_functions, total_contracts)
-        }
+        Format::Pretty => pretty(standard_harnesses, contracted_functions, totals),
+        Format::Json => json(standard_harnesses, contract_harnesses, contracted_functions, totals),
     }
 }
 
 pub fn list_cargo(args: CargoListArgs) -> Result<()> {
-    let mut session = KaniSession::new(args.verify_opts)?;
+    let session = KaniSession::new(args.verify_opts)?;
     if !session.args.common_args.quiet {
         print_kani_version(InvocationType::CargoKani(vec![]));
     }
-    session.reachability_mode = ReachabilityMode::None;
 
     let project = cargo_project(&session, false)?;
     process_metadata(project.metadata, args.format)
 }
 
 pub fn list_standalone(args: StandaloneListArgs) -> Result<()> {
-    let mut session = KaniSession::new(args.verify_opts)?;
+    let session = KaniSession::new(args.verify_opts)?;
     if !session.args.common_args.quiet {
         print_kani_version(InvocationType::Standalone);
     }
-    session.reachability_mode = ReachabilityMode::None;
 
     let project: Project = if args.std {
         std_project(&args.input, &session)?

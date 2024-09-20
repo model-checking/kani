@@ -343,12 +343,8 @@ impl CodegenBackend for GotocCodegenBackend {
                     }
                 }
                 ReachabilityType::None => {
-                    // If the list subcommand is enabled, record the necessary KaniMetadata.
-                    if queries.args().list_enabled {
-                        let mut units: CodegenUnits = CodegenUnits::new(&queries, tcx);
-                        collect_contracted_fns(tcx, &mut units);
-                        units.write_metadata(&queries, tcx);
-                    }
+                    let units = CodegenUnits::new(&queries, tcx);
+                    units.write_metadata(&queries, tcx);
                 }
                 ReachabilityType::PubFns => {
                     let unit = CodegenUnit::default();
@@ -388,7 +384,7 @@ impl CodegenBackend for GotocCodegenBackend {
                     write_file(
                         &base_filename,
                         ArtifactType::Metadata,
-                        &results.generate_metadata(),
+                        &results.generate_metadata(tcx),
                         queries.args().output_pretty_json,
                     );
                 }
@@ -627,7 +623,7 @@ impl GotoCodegenResults {
         }
     }
     /// Method that generates `KaniMetadata` from the given compilation results.
-    pub fn generate_metadata(&self) -> KaniMetadata {
+    pub fn generate_metadata(&self, tcx: TyCtxt) -> KaniMetadata {
         // Maps the goto-context "unsupported features" data into the KaniMetadata "unsupported features" format.
         // TODO: Do we really need different formats??
         let unsupported_features = self
@@ -659,10 +655,7 @@ impl GotoCodegenResults {
             proof_harnesses: proofs,
             unsupported_features,
             test_harnesses: tests,
-            // Just leave contracted_functions empty, since we don't use this field unless we're running the
-            // list subcommand and that uses CodegenUnits::generate_metadata instead.
-            // TODO: should we consolidate these generate_metadata functions?
-            contracted_functions: vec![],
+            contracted_functions: collect_contracted_fns(tcx),
         }
     }
 

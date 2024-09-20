@@ -9,14 +9,13 @@
 
 use crate::args::ReachabilityType;
 use crate::kani_middle::attributes::is_proof_harness;
+use crate::kani_middle::list::collect_contracted_fns;
 use crate::kani_middle::metadata::gen_proof_metadata;
 use crate::kani_middle::reachability::filter_crate_items;
 use crate::kani_middle::resolve::expect_resolve_fn;
 use crate::kani_middle::stubbing::{check_compatibility, harness_stub_map};
 use crate::kani_queries::QueryDb;
-use kani_metadata::{
-    ArtifactType, AssignsContract, ContractedFunction, HarnessKind, HarnessMetadata, KaniMetadata,
-};
+use kani_metadata::{ArtifactType, AssignsContract, HarnessKind, HarnessMetadata, KaniMetadata};
 use rustc_hir::def_id::DefId;
 use rustc_middle::ty::TyCtxt;
 use rustc_session::config::OutputType;
@@ -48,7 +47,6 @@ pub struct CodegenUnits {
     units: Vec<CodegenUnit>,
     harness_info: HashMap<Harness, HarnessMetadata>,
     crate_info: CrateInfo,
-    pub contracted_functions: Vec<ContractedFunction>,
 }
 
 #[derive(Clone, Default, Debug)]
@@ -60,46 +58,29 @@ pub struct CodegenUnit {
 impl CodegenUnits {
     pub fn new(queries: &QueryDb, tcx: TyCtxt) -> Self {
         let crate_info = CrateInfo { name: stable_mir::local_crate().name.as_str().into() };
-
-        if queries.args().reachability_analysis != ReachabilityType::Harnesses
-            && !queries.args().list_enabled
-        {
-            // Leave other reachability type handling as is for now.
-            return CodegenUnits {
-                units: vec![],
-                harness_info: HashMap::default(),
-                crate_info,
-                contracted_functions: vec![],
-            };
-        }
-
         let base_filepath = tcx.output_filenames(()).path(OutputType::Object);
         let base_filename = base_filepath.as_path();
         let harnesses = filter_crate_items(tcx, |_, instance| is_proof_harness(tcx, instance));
         let all_harnesses = harnesses
             .into_iter()
             .map(|harness| {
-                let metadata =
-                    gen_proof_metadata(tcx, harness, &base_filename, queries.args().list_enabled);
+                let metadata = gen_proof_metadata(tcx, harness, &base_filename);
                 (harness, metadata)
             })
             .collect::<HashMap<_, _>>();
-        let mut units = vec![];
 
         if queries.args().reachability_analysis == ReachabilityType::Harnesses {
             // Even if no_stubs is empty we still need to store rustc metadata.
-            units = group_by_stubs(tcx, &all_harnesses);
+            let units = group_by_stubs(tcx, &all_harnesses);
             validate_units(tcx, &units);
             debug!(?units, "CodegenUnits::new");
-        }
-
-        tcx.dcx().abort_if_errors();
-
-        CodegenUnits {
-            units,
-            harness_info: all_harnesses,
-            crate_info,
-            contracted_functions: vec![],
+            CodegenUnits { units, harness_info: all_harnesses, crate_info }
+        } else {
+            // Only ReachabilityType::Harnesses uses harness_info directly,
+            // but we collect it for the other ReachabilityTypes so that we can write the metadata to a file.
+            // Then, if the user invokes the list subcommand after verification, the metadata will already be cached
+            // and we do not need to recompile.
+            CodegenUnits { units: vec![], harness_info: all_harnesses, crate_info }
         }
     }
 
@@ -116,7 +97,7 @@ impl CodegenUnits {
 
     /// Write compilation metadata into a file.
     pub fn write_metadata(&self, queries: &QueryDb, tcx: TyCtxt) {
-        let metadata = self.generate_metadata();
+        let metadata = self.generate_metadata(tcx);
         let outpath = metadata_output_path(tcx);
         store_metadata(queries, &metadata, &outpath);
     }
@@ -126,7 +107,7 @@ impl CodegenUnits {
     }
 
     /// Generate [KaniMetadata] for the target crate.
-    fn generate_metadata(&self) -> KaniMetadata {
+    fn generate_metadata(&self, tcx: TyCtxt) -> KaniMetadata {
         let (proof_harnesses, test_harnesses) =
             self.harness_info.values().cloned().partition(|md| md.attributes.is_proof_harness());
         KaniMetadata {
@@ -134,7 +115,7 @@ impl CodegenUnits {
             proof_harnesses,
             unsupported_features: vec![],
             test_harnesses,
-            contracted_functions: self.contracted_functions.clone(),
+            contracted_functions: collect_contracted_fns(tcx),
         }
     }
 }
@@ -237,6 +218,7 @@ fn validate_units(tcx: TyCtxt, units: &[CodegenUnit]) {
             tcx.dcx().span_err(rustc_internal::internal(tcx, span), msg);
         }
     }
+    tcx.dcx().abort_if_errors();
 }
 
 /// Apply stub transitivity operations.

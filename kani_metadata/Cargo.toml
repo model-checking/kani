@@ -16,7 +16,6 @@ cbmc = { path = "../cprover_bindings", package = "cprover_bindings" }
 strum = "0.26"
 strum_macros = "0.26"
 clap = { version = "4.4.11", features = ["derive"] }
-cli-table = "0.4.9"
 
 [lints]
 workspace = true

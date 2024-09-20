@@ -4,3 +4,10 @@
 
 pub mod collect_metadata;
 mod output;
+
+struct Totals {
+    standard_harnesses: usize,
+    contract_harnesses: usize,
+    contracted_functions: usize,
+    contracts: usize,
+}

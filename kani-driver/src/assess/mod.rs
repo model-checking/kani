@@ -5,10 +5,10 @@ use self::metadata::{write_metadata, AssessMetadata};
 use anyhow::{bail, Result};
 use kani_metadata::KaniMetadata;
 
+use crate::assess::table_builder::TableBuilder;
 use crate::metadata::merge_kani_metadata;
 use crate::project;
 use crate::session::KaniSession;
-use crate::{assess::table_builder::TableBuilder, session::ReachabilityMode};
 
 pub use crate::args::{AssessArgs, AssessSubcommand};
 
@@ -46,7 +46,7 @@ fn assess_project(mut session: KaniSession) -> Result<AssessMetadata> {
     session.args.unwind = Some(session.args.default_unwind.unwrap_or(1));
     session.args.tests = true;
     session.args.output_format = crate::args::OutputFormat::Terse;
-    session.reachability_mode = ReachabilityMode::Tests;
+    session.codegen_tests = true;
     if session.args.jobs.is_none() {
         // assess will default to fully parallel instead of single-threaded.
         // can be overridden with e.g. `cargo kani --enable-unstable -j 8 assess`

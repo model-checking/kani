@@ -13,13 +13,7 @@ use stable_mir::CrateDef;
 
 use super::{attributes::KaniAttributes, SourceLocation};
 
-/// Create the harness metadata for a proof harness for a given function.
-pub fn gen_proof_metadata(
-    tcx: TyCtxt,
-    instance: Instance,
-    base_name: &Path,
-    is_list_enabled: bool,
-) -> HarnessMetadata {
+pub fn gen_proof_metadata(tcx: TyCtxt, instance: Instance, base_name: &Path) -> HarnessMetadata {
     let def = instance.def;
     let kani_attributes = KaniAttributes::for_instance(tcx, instance);
     let pretty_name = instance.name();
@@ -38,7 +32,7 @@ pub fn gen_proof_metadata(
         original_file: loc.filename,
         original_start_line: loc.start_line,
         original_end_line: loc.end_line,
-        attributes: kani_attributes.harness_attributes(is_list_enabled),
+        attributes: kani_attributes.harness_attributes(),
         // TODO: This no longer needs to be an Option.
         goto_file: Some(model_file),
         contract: Default::default(),
