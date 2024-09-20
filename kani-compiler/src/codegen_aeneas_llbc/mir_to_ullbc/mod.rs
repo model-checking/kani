@@ -315,7 +315,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             rust_span_data: rustc_internal::internal(self.tcx(), span).data(),
         };
 
-        // TODO
+        // TODO: populate `generated_from_span` info
         CharonSpan { span: rspan, generated_from_span: None }
     }
 
