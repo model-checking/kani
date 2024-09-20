@@ -69,7 +69,7 @@ pub fn print_coverage_results(
 ) -> Result<()> {
     let flattened_results: Vec<(usize, Option<(u32, MarkerInfo)>)> =
         results.into_iter().flatten().collect();
-    println!("{}", filepath.to_string_lossy().to_string());
+    println!("{}", filepath.to_string_lossy());
 
     let file = File::open(filepath)?;
     let reader = BufReader::new(file);
@@ -94,7 +94,7 @@ pub fn print_coverage_results(
                     {
                         // Filter out cases where the span is a single unit AND it ends after the line
                         let results: Vec<&CovResult> = results
-                            .into_iter()
+                            .iter()
                             .filter(|m| {
                                 if m.region.start.0 as usize == idx
                                     && m.region.end.0 as usize == idx
@@ -113,13 +113,12 @@ pub fn print_coverage_results(
                                     && m.region.start.0 as usize == idx
                                     && m.region.end.0 as usize == idx
                             })
-                            .map(|m| {
+                            .flat_map(|m| {
                                 vec![
                                     ((m.region.start.1 - 1) as usize, true),
                                     ((m.region.end.1 - 1) as usize, false),
                                 ]
                             })
-                            .flatten()
                             .collect();
                         // println!("COMPLETE: {complete_escapes:?}");
                         let mut starting_escapes: Vec<(usize, bool)> = results
@@ -129,8 +128,7 @@ pub fn print_coverage_results(
                                     && m.region.start.0 as usize == idx
                                     && m.region.end.0 as usize != idx
                             })
-                            .map(|m| vec![((m.region.start.1 - 1) as usize, true)])
-                            .flatten()
+                            .flat_map(|m| vec![((m.region.start.1 - 1) as usize, true)])
                             .collect();
                         // println!("{starting_escapes:?}");
                         let mut ending_escapes: Vec<(usize, bool)> = results
@@ -146,11 +144,11 @@ pub fn print_coverage_results(
 
                         // println!("{starting_escapes:?}");
                         // println!("{ending_escapes:?}");
-                        if must_highlight && ending_escapes.len() > 0 {
+                        if must_highlight && !ending_escapes.is_empty() {
                             ending_escapes.push((0_usize, true));
                             must_highlight = false;
                         }
-                        if starting_escapes.len() > 0 {
+                        if !starting_escapes.is_empty() {
                             starting_escapes.push((line.len(), false));
                             must_highlight = true;
                         }
@@ -211,7 +209,7 @@ fn insert_escapes(str: &String, markers: Vec<(usize, bool)>, format: &ReportForm
     sym_markers.sort();
     for (i, b) in sym_markers {
         new_str.insert_str(i + offset, b);
-        offset = offset + b.bytes().len();
+        offset += b.bytes().len();
     }
     new_str
 }

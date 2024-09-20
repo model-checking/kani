@@ -3,10 +3,12 @@
 
 use console::style;
 use serde_derive::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::{collections::BTreeMap, fmt::Display};
 use std::{fmt, fs};
 use tree_sitter::{Node, Parser};
+
+pub type LineResults = Vec<Option<(u32, MarkerInfo)>>;
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "UPPERCASE")]
@@ -61,17 +63,6 @@ impl Display for CoverageRegion {
         write!(f, "{}:{} - {}:{}", self.start.0, self.start.1, self.end.0, self.end.1)
     }
 }
-
-// impl CoverageRegion {
-//     pub fn from_str(str: String) -> Self {
-//         let str_splits: Vec<&str> = str.split([':', '-']).map(|s| s.trim()).collect();
-//         assert_eq!(str_splits.len(), 5, "{str:?}");
-//         let file = str_splits[0].to_string();
-//         let start = (str_splits[1].parse().unwrap(), str_splits[2].parse().unwrap());
-//         let end = (str_splits[3].parse().unwrap(), str_splits[4].parse().unwrap());
-//         Self { file, start, end }
-//     }
-// }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum CoverageTerm {
@@ -143,7 +134,7 @@ pub fn function_info_from_file(filepath: &PathBuf) -> Vec<FunctionInfo> {
     function_info
 }
 
-fn function_info_from_node<'a>(node: Node, source: &'a [u8]) -> FunctionInfo {
+fn function_info_from_node(node: Node, source: &[u8]) -> FunctionInfo {
     let name = node
         .child_by_field_name("name")
         .and_then(|name| name.utf8_text(source).ok())
@@ -163,12 +154,12 @@ pub struct FunctionInfo {
 
 pub fn function_coverage_results(
     info: &FunctionInfo,
-    file: &PathBuf,
+    file: &Path,
     results: &CombinedCoverageResults,
 ) -> Option<(String, Vec<CovResult>)> {
     // `info` does not include file so how do we match?
     // use function just for now...
-    let filename = file.clone().into_os_string().into_string().unwrap();
+    let filename = file.to_path_buf().into_os_string().into_string().unwrap();
     let right_filename = results.data.keys().find(|p| filename.ends_with(*p)).unwrap();
     // TODO: The filenames in kaniraw files should be absolute, just like in metadata
     // Otherwise the key for `results` just fails...

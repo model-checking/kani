@@ -111,7 +111,7 @@ fn save_combined_results(
     let output_path =
         if let Some(out) = output { out } else { &PathBuf::from("default_kanicov.json") };
 
-    let file = OpenOptions::new().write(true).create(true).open(output_path)?;
+    let file = OpenOptions::new().write(true).create(true).truncate(true).open(output_path)?;
     let writer = BufWriter::new(file);
 
     serde_json::to_writer(writer, results)?;
