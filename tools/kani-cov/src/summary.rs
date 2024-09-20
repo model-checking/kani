@@ -1,7 +1,12 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use std::{cmp::max, fs::File, io::BufReader, path::PathBuf};
+use std::{
+    cmp::max,
+    fs::File,
+    io::BufReader,
+    path::{Path, PathBuf},
+};
 
 use anyhow::Result;
 
@@ -9,7 +14,7 @@ use crate::{
     args::{SummaryArgs, SummaryFormat},
     coverage::{
         function_coverage_results, function_info_from_file, CombinedCoverageResults, CovResult,
-        CoverageMetric, CoverageRegion, FileCoverageInfo, FunctionInfo, LineResults, MarkerInfo,
+        CoverageMetric, CoverageRegion, FileCoverageInfo, FunctionInfo, MarkerInfo,
     },
 };
 
@@ -52,10 +57,7 @@ pub fn summary_main(args: &SummaryArgs) -> Result<()> {
     Ok(())
 }
 
-fn aggregate_cov_info(
-    file: &PathBuf,
-    file_cov_info: &Vec<FunctionCoverageResults>,
-) -> FileCoverageInfo {
+fn aggregate_cov_info(file: &Path, file_cov_info: &[FunctionCoverageResults]) -> FileCoverageInfo {
     let total_functions = file_cov_info.len().try_into().unwrap();
     let covered_functions =
         file_cov_info.iter().filter(|f| f.is_covered).count().try_into().unwrap();
@@ -89,8 +91,8 @@ struct FunctionCoverageResults {
     total_regions: u32,
 }
 
-// Validate arguments to the `summary` subcommand in addition to clap's
-// validation.
+/// Validate arguments to the `summary` subcommand in addition to clap's
+/// validation.
 pub fn validate_summary_args(_args: &SummaryArgs) -> Result<()> {
     // No validation is done at the moment
     Ok(())
@@ -113,8 +115,8 @@ pub fn validate_summary_args(_args: &SummaryArgs) -> Result<()> {
 /// for the generation of coverage reports.
 pub fn line_coverage_results(
     info: &FunctionInfo,
-    fun_results: &Option<(String, Vec<crate::coverage::CovResult>)>,
-) -> LineResults {
+    fun_results: &Option<(String, Vec<CovResult>)>,
+) -> Vec<Option<(u32, MarkerInfo)>> {
     let start_line: u32 = info.start.0.try_into().unwrap();
     let end_line: u32 = info.end.0.try_into().unwrap();
 

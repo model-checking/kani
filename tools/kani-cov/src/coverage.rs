@@ -8,7 +8,7 @@ use std::{collections::BTreeMap, fmt::Display};
 use std::{fmt, fs};
 use tree_sitter::{Node, Parser};
 
-pub type LineResults = Vec<Option<(u32, MarkerInfo)>>;
+pub type LineResults = Vec<(usize, Option<(u32, MarkerInfo)>)>;
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "UPPERCASE")]
