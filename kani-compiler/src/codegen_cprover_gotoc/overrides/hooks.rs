@@ -547,7 +547,7 @@ impl GotocHook for InitContracts {
 ///    is the closure wrapping loop invariants
 /// 2. is the last statement in some loop, so that its `target`` is
 ///    the head of the loop
-/// 
+///
 /// Such call will be translate to
 /// ```c
 /// goto target
