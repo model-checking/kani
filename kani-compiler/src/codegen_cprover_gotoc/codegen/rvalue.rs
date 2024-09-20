@@ -738,12 +738,23 @@ impl<'tcx> GotocCtx<'tcx> {
             Rvalue::Ref(_, _, p) | Rvalue::AddressOf(_, p) => {
                 let place_ref = self.codegen_place_ref_stable(&p, loc);
                 let place_ref_type = place_ref.typ().clone();
-                match self.codegen_raw_ptr_deref_validity_check(&p, &loc) {
-                    Some(ptr_validity_check_expr) => Expr::statement_expression(
-                        vec![ptr_validity_check_expr, place_ref.as_stmt(loc)],
-                        place_ref_type,
-                        loc,
-                    ),
+                match self.codegen_raw_ptr_deref_validity_check(
+                    &p,
+                    place_ref.clone(),
+                    self.place_ty_stable(p),
+                    &loc,
+                ) {
+                    Some((ptr_alignment_check_expr, ptr_validity_check_expr)) => {
+                        Expr::statement_expression(
+                            vec![
+                                ptr_alignment_check_expr,
+                                ptr_validity_check_expr,
+                                place_ref.as_stmt(loc),
+                            ],
+                            place_ref_type,
+                            loc,
+                        )
+                    }
                     None => place_ref,
                 }
             }

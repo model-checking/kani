@@ -9,16 +9,16 @@ use std::intrinsics::simd::{simd_extract, simd_insert};
 #[repr(simd)]
 #[allow(non_camel_case_types)]
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub struct i64x2(i64, i64);
+pub struct i64x2([i64; 2]);
 
 #[kani::proof]
 fn main() {
-    let y = i64x2(0, 1);
-    let z = i64x2(1, 2);
+    let y = i64x2([0, 1]);
+    let z = i64x2([1, 2]);
 
     // Indexing into the vectors
-    assert!(z.0 == 1);
-    assert!(z.1 == 2);
+    assert!(z.0[0] == 1);
+    assert!(z.0[1] == 2);
 
     {
         // Intrinsic indexing
@@ -31,9 +31,9 @@ fn main() {
         // Intrinsic updating
         let m = unsafe { simd_insert(y, 0, 1_i64) };
         let n = unsafe { simd_insert(y, 1, 5_i64) };
-        assert!(m.0 == 1 && m.1 == 1);
-        assert!(n.0 == 0 && n.1 == 5);
+        assert!(m.0[0] == 1 && m.0[1] == 1);
+        assert!(n.0[0] == 0 && n.0[1] == 5);
         // Original unchanged
-        assert!(y.0 == 0 && y.1 == 1);
+        assert!(y.0[0] == 0 && y.0[1] == 1);
     }
 }
