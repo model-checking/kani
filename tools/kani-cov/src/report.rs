@@ -13,6 +13,12 @@ use crate::coverage::{
 use crate::summary::line_coverage_results;
 use crate::{args::ReportArgs, coverage::CombinedCoverageResults};
 
+/// Executes the `report` subcommand.
+///
+/// First, it loads the coverage metadata and results from the files passed as
+/// arguments. Then, for each file referenced in the metadata, it computes its
+/// associated coverage information on a per-function basis, producing a
+/// human-readable report for each one of the files.
 pub fn report_main(args: &ReportArgs) -> Result<()> {
     let mapfile = File::open(&args.mapfile)?;
     let reader = BufReader::new(mapfile);
@@ -203,6 +209,7 @@ pub fn print_coverage_results(
 ///  * `offset` represents the offset in which the marker must be inserted, and
 ///  * `type` represents whether it is an opening (`true`) or closing (`false`)
 ///    escape.
+///
 /// The specific escape to be used are determined by the report format.
 fn insert_escapes(str: &str, markers: Vec<(usize, bool)>, format: &ReportFormat) -> String {
     // Determine the escape strings based on the format

@@ -18,6 +18,12 @@ use crate::{
     },
 };
 
+/// Executes the `summary` subcommand.
+///
+/// First, it loads the coverage metadata and results from the files passed as
+/// arguments. Then, for each file referenced in the metadata, it computes its
+/// associated coverage information on a per-function basis, producing coverage
+/// metrics for each one of the files.
 pub fn summary_main(args: &SummaryArgs) -> Result<()> {
     let mapfile = File::open(&args.mapfile)?;
     let reader = BufReader::new(mapfile);
