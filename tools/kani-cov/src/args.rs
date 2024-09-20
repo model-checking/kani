@@ -60,6 +60,14 @@ pub struct ReportArgs {
     pub mapfile: PathBuf,
     #[arg(long, required = true)]
     pub profile: PathBuf,
+    #[arg(long, short, value_parser = clap::value_parser!(ReportFormat), default_value = "terminal")]
+    pub format: ReportFormat,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, clap::ValueEnum)]
+pub enum ReportFormat {
+    Terminal,
+    Escapes,
 }
 
 pub fn validate_args(args: &Args) -> Result<()> {

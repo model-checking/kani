@@ -9,8 +9,6 @@ use anyhow::Result;
 use crate::coverage::{function_coverage_results, function_info_from_file, CovResult, MarkerInfo};
 use crate::summary::line_coverage_results;
 use crate::{args::ReportArgs, coverage::CombinedCoverageResults};
-// use crate::coverage::CoverageResults;
-// use args::Args;
 
 pub fn report_main(args: &ReportArgs) -> Result<()> {
     let mapfile = File::open(&args.mapfile)?;
