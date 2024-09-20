@@ -449,7 +449,7 @@ impl<'test> TestCx<'test> {
         report_cmd
     }
 
-    fn find_cov_files(&self, folder_path: &PathBuf) -> (PathBuf, Vec<PathBuf>, PathBuf) {
+    fn find_cov_files(&self, folder_path: &Path) -> (PathBuf, Vec<PathBuf>, PathBuf) {
         let folder_name = folder_path.file_name().unwrap();
         let kanimap = folder_path.join(format!("{}_kanimap.json", folder_name.to_string_lossy()));
 
@@ -470,7 +470,7 @@ impl<'test> TestCx<'test> {
         let coverage_info = output_lines.iter().find(|l| l.contains("Coverage results saved to"));
         if coverage_info.is_none() {
             self.fatal_proc_rec(
-                &format!("failed to find the path to the coverage results!"),
+                "failed to find the path to the coverage results",
                 proc_res,
             );
         }
