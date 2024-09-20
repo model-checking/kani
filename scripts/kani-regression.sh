@@ -60,6 +60,7 @@ TESTS=(
     "cargo-ui cargo-kani"
     "script-based-pre exec"
     "coverage coverage-based"
+    "cargo-coverage cargo-coverage"
     "kani-docs cargo-kani"
     "kani-fixme kani-fixme"
 )
