@@ -4,18 +4,17 @@
 use strum_macros::{AsRefStr, EnumString, VariantNames};
 use tracing_subscriber::filter::Directive;
 
-#[derive(Debug, Default, Clone, Copy, AsRefStr, EnumString, VariantNames, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, AsRefStr, EnumString, VariantNames, PartialEq, Eq)]
 #[strum(serialize_all = "snake_case")]
 pub enum BackendOption {
     /// Aeneas (LLBC) backend
+    #[cfg(feature = "aeneas")]
     Aeneas,
 
     /// CProver (Goto) backend
+    #[cfg(feature = "cprover")]
+    #[strum(serialize = "cprover")]
     CProver,
-
-    /// Backend option was not explicitly set
-    #[default]
-    None,
 }
 
 #[derive(Debug, Default, Clone, Copy, AsRefStr, EnumString, VariantNames, PartialEq, Eq)]
@@ -84,8 +83,11 @@ pub struct Arguments {
     check_version: Option<String>,
     #[clap(long)]
     pub ub_check: Vec<ExtraChecks>,
-    #[clap(long = "backend", default_value = "none")]
-    pub backend: BackendOption,
+    #[clap(long = "backend")]
+    pub backend: Option<BackendOption>,
+    /// Print the final LLBC file to stdout.
+    #[clap(long)]
+    pub print_llbc: bool,
 }
 
 #[derive(Debug, Clone, Copy, AsRefStr, EnumString, VariantNames, PartialEq, Eq)]

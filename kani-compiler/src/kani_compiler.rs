@@ -49,30 +49,28 @@ fn aeneas_backend(_queries: Arc<Mutex<QueryDb>>) -> Box<dyn CodegenBackend> {
     #[cfg(feature = "aeneas")]
     return Box::new(LlbcCodegenBackend::new(_queries));
     #[cfg(not(feature = "aeneas"))]
-    //rustc_session::early_error(
-    //    ErrorOutputType::default(),
-    //    "`--backend aeneas` requires enabling the `aeneas` feature",
-    //);
-    panic!("`--backend aeneas` requires enabling the `aeneas` feature");
+    unreachable!()
 }
 
 /// Configure the cprover backend that generates goto-programs.
-fn cprover_backend(queries: Arc<Mutex<QueryDb>>) -> Box<dyn CodegenBackend> {
+fn cprover_backend(_queries: Arc<Mutex<QueryDb>>) -> Box<dyn CodegenBackend> {
     #[cfg(feature = "cprover")]
-    return Box::new(GotocCodegenBackend::new(queries));
+    return Box::new(GotocCodegenBackend::new(_queries));
     #[cfg(not(feature = "cprover"))]
-    //rustc_session::early_error(
-    //    ErrorOutputType::default(),
-    //    "`--backend cprover` requires enabling the `cprover` feature",
-    //);
-    panic!("`--backend cprover` requires enabling the `cprover` feature")
+    unreachable!()
 }
 
 #[cfg(any(feature = "aeneas", feature = "cprover"))]
 fn backend(queries: Arc<Mutex<QueryDb>>) -> Box<dyn CodegenBackend> {
     let backend = queries.lock().unwrap().args().backend;
     match backend {
-        BackendOption::None => {
+        Some(backend) => match backend {
+            #[cfg(feature = "aeneas")]
+            BackendOption::Aeneas => aeneas_backend(queries),
+            #[cfg(feature = "cprover")]
+            BackendOption::CProver => cprover_backend(queries),
+        },
+        None => {
             // priority list of backends
             if cfg!(feature = "cprover") {
                 cprover_backend(queries)
@@ -82,8 +80,6 @@ fn backend(queries: Arc<Mutex<QueryDb>>) -> Box<dyn CodegenBackend> {
                 unreachable!();
             }
         }
-        BackendOption::Aeneas => aeneas_backend(queries),
-        BackendOption::CProver => cprover_backend(queries),
     }
 }
 

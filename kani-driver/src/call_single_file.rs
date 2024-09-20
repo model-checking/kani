@@ -56,7 +56,7 @@ impl KaniSession {
         if self.args.common_args.unstable_features.contains(UnstableFeature::Aeneas) {
             kani_args.push("--backend=aeneas".into());
         } else {
-            kani_args.push("--backend=c_prover".into());
+            kani_args.push("--backend=cprover".into());
         }
 
         let lib_path = lib_folder().unwrap();
@@ -153,6 +153,10 @@ impl KaniSession {
             // without non-determinism depends on it.
             flags.push("-Z ghost-state".into());
             flags.push("--ub-check=uninit".into());
+        }
+
+        if self.args.print_llbc {
+            flags.push("--print-llbc".into());
         }
 
         flags.extend(self.args.common_args.unstable_features.as_arguments().map(str::to_string));

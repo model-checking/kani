@@ -122,7 +122,7 @@ impl LlbcCodegenBackend {
             }
         }
 
-        info!("# ULLBC after translation from MIR:\n\n{}\n", ccx);
+        trace!("# ULLBC after translation from MIR:\n\n{}\n", ccx);
 
         // # Reorder the graph of dependencies and compute the strictly
         // connex components to:
@@ -149,19 +149,22 @@ impl LlbcCodegenBackend {
         // the control flow.
         charon_lib::ullbc_to_llbc::translate_functions(&mut ccx);
 
-        info!("# LLBC resulting from control-flow reconstruction:\n\n{}\n", ccx);
+        trace!("# LLBC resulting from control-flow reconstruction:\n\n{}\n", ccx);
 
         // Run the micro-passes that clean up bodies.
         for pass in charon_lib::transform::LLBC_PASSES.iter() {
             pass.transform_ctx(&mut ccx)
         }
 
-        println!("# Final LLBC before serialization:\n\n{}\n", ccx);
+        // Print the LLBC if requested. This is useful for expected tests.
+        if queries.args().print_llbc {
+            println!("# Final LLBC before serialization:\n\n{}\n", ccx);
+        } else {
+            debug!("# Final LLBC before serialization:\n\n{}\n", ccx);
+        }
 
         // Display an error report about the external dependencies, if necessary
         ccx.errors.report_external_deps_errors();
-
-        trace!("Done");
 
         let crate_data: charon_lib::export::CrateData = charon_lib::export::CrateData::new(&ccx);
 
@@ -172,7 +175,6 @@ impl LlbcCodegenBackend {
             let mut pb = llbc_file.to_path_buf();
             pb.set_extension("llbc");
             println!("Writing LLBC file to {}", pb.display());
-            trace!("Target file: {:?}", pb);
             if let Err(()) = crate_data.serialize_to_file(&pb) {
                 tcx.sess.dcx().err("Failed to write LLBC file");
             }

@@ -278,6 +278,10 @@ pub struct VerificationArgs {
     #[arg(long, hide_short_help = true)]
     pub coverage: bool,
 
+    /// Print final LLBC for Aeneas backend
+    #[arg(long, hide_short_help = true)]
+    pub print_llbc: bool,
+
     /// Arguments to pass down to Cargo
     #[command(flatten)]
     pub cargo: CargoCommonArgs,
@@ -621,6 +625,14 @@ impl ValidateArgs for VerificationArgs {
                 ErrorKind::MissingRequiredArgument,
                 "The `--coverage` argument is unstable and requires `-Z \
             source-coverage` to be used.",
+            ));
+        }
+
+        if self.print_llbc && !self.common_args.unstable_features.contains(UnstableFeature::Aeneas)
+        {
+            return Err(Error::raw(
+                ErrorKind::MissingRequiredArgument,
+                "The `--print-llbc` argument is unstable and requires `-Z aeneas` to be used.",
             ));
         }
 
