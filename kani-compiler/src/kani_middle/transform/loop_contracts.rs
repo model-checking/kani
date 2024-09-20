@@ -48,9 +48,9 @@ use tracing::trace;
 ///
 /// ```
 ///
-/// 3. Move the call to the register function to the loop latch terminator. This is required
-///    as in MIR, there could be some `StorageDead` statements between register calls and
-///    loop latches.
+/// 3. Move the call to the register function to the loop latch terminator
+///    to make sure that they will be correctly codegened as a backward goto
+///    with loop contracts annotated.
 #[derive(Debug, Default)]
 pub struct FunctionWithLoopContractPass {
     /// Cache KaniRunContract function used to implement contracts.
@@ -69,11 +69,11 @@ impl TransformPass for FunctionWithLoopContractPass {
         TransformationType::Stubbing
     }
 
-    fn is_enabled(&self, _query_db: &QueryDb) -> bool
+    fn is_enabled(&self, query_db: &QueryDb) -> bool
     where
         Self: Sized,
     {
-        true
+        query_db.args().unstable_features.contains(&"loop-contracts".to_string())
     }
 
     /// Transform the function body by replacing it with the stub body.

@@ -83,7 +83,7 @@ pub enum UnstableFeature {
     SourceCoverage,
     /// Enable function contracts [RFC 9](https://model-checking.github.io/kani/rfc/rfcs/0009-function-contracts.html)
     FunctionContracts,
-    /// Enable loop contracts [RFC 12]
+    /// Enable loop contracts [RFC 12](https://model-checking.github.io/kani/rfc/rfcs/0012-loop-contracts.html)
     LoopContracts,
     /// Memory predicate APIs.
     MemPredicates,

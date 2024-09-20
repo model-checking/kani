@@ -10,18 +10,6 @@ use quote::{format_ident, quote};
 use syn::spanned::Spanned;
 use syn::{Expr, Stmt};
 
-fn generate_unique_id_from_span(stmt: &Stmt) -> String {
-    // Extract the span of the expression
-    let span = stmt.span().unwrap();
-
-    // Get the start and end line and column numbers
-    let start = span.start();
-    let end = span.end();
-
-    // Create a tuple of location information (file path, start line, start column, end line, end column)
-    format!("_{:?}_{:?}_{:?}_{:?}", start.line(), start.column(), end.line(), end.column())
-}
-
 /// Expand loop contracts macros.
 ///
 /// A while loop of the form
@@ -78,9 +66,13 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
                 .unwrap();
                 ew.body.stmts.push(inv_end_stmt);
             }
-            _ => (),
+            _ => {
+                abort_call_site!("`#[kani::loop_invariant]` is now only supported for while-loops.";
+                    note = "for now, loop contracts is only supported for while-loops.";
+                )
+            }
         },
-        _ => abort_call_site!("`#[kani::loop_invariant]` is not only supported for while-loops.";
+        _ => abort_call_site!("`#[kani::loop_invariant]` is now only supported for while-loops.";
             note = "for now, loop contracts is only supported for while-loops.";
         ),
     }
@@ -98,4 +90,16 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
         #register_ident(#inv_ident);
         #loop_stmt})
     .into()
+}
+
+fn generate_unique_id_from_span(stmt: &Stmt) -> String {
+    // Extract the span of the expression
+    let span = stmt.span().unwrap();
+
+    // Get the start and end line and column numbers
+    let start = span.start();
+    let end = span.end();
+
+    // Create a tuple of location information (file path, start line, start column, end line, end column)
+    format!("_{:?}_{:?}_{:?}_{:?}", start.line(), start.column(), end.line(), end.column())
 }
