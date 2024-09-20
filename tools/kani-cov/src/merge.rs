@@ -22,7 +22,10 @@ pub fn merge_main(args: &MergeArgs) -> Result<()> {
     Ok(())
 }
 
+// Validate arguments to the `merge` subcommand in addition to clap's
+// validation.
 pub fn validate_merge_args(_args: &MergeArgs) -> Result<()> {
+    // No validation is done at the moment
     Ok(())
 }
 

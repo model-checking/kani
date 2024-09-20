@@ -89,50 +89,65 @@ struct FunctionCoverageResults {
     total_regions: u32,
 }
 
+// Validate arguments to the `summary` subcommand in addition to clap's
+// validation.
 pub fn validate_summary_args(_args: &SummaryArgs) -> Result<()> {
+    // No validation is done at the moment
     Ok(())
 }
 
+/// Computes coverage results from a line-based perspective.
+///
+/// Basically, for each line we produce an `<Option<(u32, MarkerInfo)>>` result
+/// where:
+///  * `None` means there were no coverage results associated with this line.
+/// This may happen in lines that only contain a closing `}`, for example.
+///  * `Some(max, markers)` means there were coverage results associated with
+/// the line or we deduced no results were possible based on function
+/// information (i.e., the function was not reachable during verification).
+/// Here, `max` represents the maximum number of times the line was covered by
+/// any coverage result, and `markers` represents marker information which is
+/// relevant to the line (including coverage results).
+///
+/// As a result, we essentially precompute here most of the information required
+/// for the generation of coverage reports.
 pub fn line_coverage_results(
     info: &FunctionInfo,
     fun_results: &Option<(String, Vec<crate::coverage::CovResult>)>,
 ) -> Vec<Option<(u32, MarkerInfo)>> {
     let start_line: u32 = info.start.0.try_into().unwrap();
     let end_line: u32 = info.end.0.try_into().unwrap();
-    // `line_status` represents all the lines between `start_line` and
-    // `end_line`. For each line, we will have either:
-    // - `None`, meaning there were no results associated with this line (this
-    // may happen with lines that only contain a closing `}`, for example).
-    // - `Some(max, other)`, where `max` represents the maximum number of times
-    // the line was covered by any coverage result, and `other` specifies the
-    // coverage results that don't amount to the maximum.
+
     let mut line_status: Vec<Option<(u32, MarkerInfo)>> =
         Vec::with_capacity((end_line - start_line + 1).try_into().unwrap());
 
     if let Some(res) = fun_results {
         let mut cur_results = res.1.clone();
-        // was this sorted already? looks like it was not
-        // println!("BEFORE: {cur_results:?}");
+        // Sort the results by row
         cur_results.sort_by(|a, b| b.region.start.0.cmp(&a.region.start.0));
-        // println!("AFTER: {cur_results:?}");
 
-        fn line_contained_in_region(line: u32, region: &CoverageRegion) -> bool {
+        /// Checks if a line is relevant to a region.
+        /// Here, we define "relevant" as the line appearing after/at the start
+        /// of a region and before/at the end of a region.
+        fn line_relevant_to_region(line: u32, region: &CoverageRegion) -> bool {
             region.start.0 <= line && region.end.0 >= line
         }
 
         for line in start_line..end_line {
+            // Filter results which are relevant to the current line
             let line_results: Vec<crate::coverage::CovResult> = cur_results
                 .iter()
-                .filter(|c| line_contained_in_region(line, &c.region))
+                .filter(|c| line_relevant_to_region(line, &c.region))
                 .cloned()
                 .collect();
+
             if line_results.is_empty() {
                 line_status.push(None);
             } else {
                 let max_covered = line_results
                     .iter()
-                    .max_by_key(|obj| obj.times_covered)
-                    .map(|obj| obj.times_covered)
+                    .max_by_key(|res| res.times_covered)
+                    .map(|res| res.times_covered)
                     .unwrap_or(0);
                 line_status.push(Some((max_covered, MarkerInfo::Markers(line_results))));
             }
@@ -145,6 +160,8 @@ pub fn line_coverage_results(
     line_status
 }
 
+/// Compute the number of covered lines and number of total lines given the
+/// coverage results for a given function.
 pub fn line_coverage_info(
     info: &FunctionInfo,
     fun_results: &Option<(String, Vec<crate::coverage::CovResult>)>,
@@ -160,6 +177,8 @@ pub fn line_coverage_info(
     (covered_lines, total_lines)
 }
 
+/// Compute the number of covered regions and number of total regions given the
+/// coverage results for a given function.
 fn region_coverage_info(
     fun_results: &Option<(String, Vec<crate::coverage::CovResult>)>,
 ) -> (u32, u32) {
