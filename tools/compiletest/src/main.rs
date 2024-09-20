@@ -378,7 +378,11 @@ fn collect_expected_tests_from_dir(
     // output directory corresponding to each to avoid race conditions during
     // the testing phase. We immediately return after adding the tests to avoid
     // treating `*.rs` files as tests.
-    assert!(config.mode == Mode::CargoCoverage || config.mode == Mode::CargoKani || config.mode == Mode::CargoKaniTest);
+    assert!(
+        config.mode == Mode::CargoCoverage
+            || config.mode == Mode::CargoKani
+            || config.mode == Mode::CargoKaniTest
+    );
 
     let has_cargo_toml = dir.join("Cargo.toml").exists();
     for file in fs::read_dir(dir)? {
