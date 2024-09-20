@@ -45,6 +45,9 @@ const KANI_IS_STR_PTR_INITIALIZED_DIAGNOSTIC: &str = "KaniIsStrPtrInitialized";
 const KANI_SET_STR_PTR_INITIALIZED_DIAGNOSTIC: &str = "KaniSetStrPtrInitialized";
 const KANI_COPY_INIT_STATE_DIAGNOSTIC: &str = "KaniCopyInitState";
 const KANI_COPY_INIT_STATE_SINGLE_DIAGNOSTIC: &str = "KaniCopyInitStateSingle";
+const KANI_LOAD_ARGUMENT_DIAGNOSTIC: &str = "KaniLoadArgument";
+const KANI_STORE_ARGUMENT_DIAGNOSTIC: &str = "KaniStoreArgument";
+const KANI_RESET_ARGUMENT_BUFFER_DIAGNOSTIC: &str = "KaniResetArgumentBuffer";
 
 // Function bodies of those functions will not be instrumented as not to cause infinite recursion.
 const SKIPPED_DIAGNOSTIC_ITEMS: &[&str] = &[
@@ -58,6 +61,9 @@ const SKIPPED_DIAGNOSTIC_ITEMS: &[&str] = &[
     KANI_SET_STR_PTR_INITIALIZED_DIAGNOSTIC,
     KANI_COPY_INIT_STATE_DIAGNOSTIC,
     KANI_COPY_INIT_STATE_SINGLE_DIAGNOSTIC,
+    KANI_LOAD_ARGUMENT_DIAGNOSTIC,
+    KANI_STORE_ARGUMENT_DIAGNOSTIC,
+    KANI_RESET_ARGUMENT_BUFFER_DIAGNOSTIC,
 ];
 
 /// Instruments the code with checks for uninitialized memory, agnostic to the source of targets.
@@ -159,9 +165,9 @@ impl<'a, 'tcx> UninitInstrumenter<'a, 'tcx> {
             // Calculate pointee layout for byte-by-byte memory initialization checks.
             match PointeeInfo::from_ty(pointee_ty) {
                 Ok(type_info) => type_info,
-                Err(_) => {
+                Err(reason) => {
                     let reason = format!(
-                        "Kani currently doesn't support checking memory initialization for pointers to `{pointee_ty}.",
+                        "Kani currently doesn't support checking memory initialization for pointers to `{pointee_ty}. {reason}",
                     );
                     self.inject_assert_false(self.tcx, body, source, operation.position(), &reason);
                     return;
@@ -184,6 +190,9 @@ impl<'a, 'tcx> UninitInstrumenter<'a, 'tcx> {
             MemoryInitOp::Copy { .. } => self.build_copy(body, source, operation, pointee_info),
             MemoryInitOp::AssignUnion { .. } => {
                 self.build_assign_union(body, source, operation, pointee_info)
+            }
+            MemoryInitOp::StoreArgument { .. } | MemoryInitOp::LoadArgument { .. } => {
+                self.build_argument_operation(body, source, operation, pointee_info)
             }
             MemoryInitOp::Unsupported { .. } | MemoryInitOp::TriviallyUnsafe { .. } => {
                 unreachable!()
@@ -530,6 +539,61 @@ impl<'a, 'tcx> UninitInstrumenter<'a, 'tcx> {
             vec![from, to, count],
             ret_place.clone(),
         );
+    }
+
+    /// Instrument the code to pass information about arguments containing unions. Whenever a
+    /// function is called and some of the arguments contain unions, we store the information. And
+    /// when we enter the callee, we load the information.
+    fn build_argument_operation(
+        &mut self,
+        body: &mut MutableBody,
+        source: &mut SourceInstruction,
+        operation: MemoryInitOp,
+        pointee_info: PointeeInfo,
+    ) {
+        let ret_place = Place {
+            local: body.new_local(Ty::new_tuple(&[]), source.span(body.blocks()), Mutability::Not),
+            projection: vec![],
+        };
+        let mut statements = vec![];
+        let layout_size = pointee_info.layout().maybe_size().unwrap();
+        let diagnostic = match operation {
+            MemoryInitOp::LoadArgument { .. } => KANI_LOAD_ARGUMENT_DIAGNOSTIC,
+            MemoryInitOp::StoreArgument { .. } => KANI_STORE_ARGUMENT_DIAGNOSTIC,
+            _ => unreachable!(),
+        };
+        let argument_operation_instance = resolve_mem_init_fn(
+            get_mem_init_fn_def(self.tcx, diagnostic, &mut self.mem_init_fn_cache),
+            layout_size,
+            *pointee_info.ty(),
+        );
+        let operand = operation.mk_operand(body, &mut statements, source);
+        let argument_no = operation.expect_argument_no();
+        let terminator = Terminator {
+            kind: TerminatorKind::Call {
+                func: Operand::Copy(Place::from(body.new_local(
+                    argument_operation_instance.ty(),
+                    source.span(body.blocks()),
+                    Mutability::Not,
+                ))),
+                args: vec![
+                    operand,
+                    Operand::Constant(ConstOperand {
+                        span: source.span(body.blocks()),
+                        user_ty: None,
+                        const_: MirConst::try_from_uint(argument_no as u128, UintTy::Usize)
+                            .unwrap(),
+                    }),
+                ],
+                destination: ret_place.clone(),
+                target: Some(0), // this will be overriden in add_bb
+                unwind: UnwindAction::Terminate,
+            },
+            span: source.span(body.blocks()),
+        };
+
+        // Construct the basic block and insert it into the body.
+        body.insert_bb(BasicBlock { statements, terminator }, source, operation.position());
     }
 
     /// Copy memory initialization state from one union variable to another.

@@ -118,25 +118,70 @@ impl<'a, 'tcx> MirVisitor for InstrumentationVisitor<'a, 'tcx> {
     }
 
     fn visit_place(&mut self, place: &Place, ptx: PlaceContext, location: Location) {
-        // Match the place by whatever it is pointing to and find an intersection with the targets.
-        if self
-            .points_to
-            .resolve_place_stable(place.clone(), self.current_instance, self.tcx)
-            .intersection(&self.analysis_targets)
-            .next()
-            .is_some()
-        {
-            // If we are mutating the place, initialize it.
-            if ptx.is_mutating() {
-                self.push_target(MemoryInitOp::SetRef {
-                    operand: Operand::Copy(place.clone()),
-                    value: true,
-                    position: InsertPosition::After,
-                });
-            } else {
-                // Otherwise, check its initialization.
-                self.push_target(MemoryInitOp::CheckRef { operand: Operand::Copy(place.clone()) });
+        // In order to check whether we should get-instrument the place, see if it resolves to the
+        // analysis target.
+        let needs_get = {
+            self.points_to
+                .resolve_place_stable(place.clone(), self.current_instance, self.tcx)
+                .intersection(&self.analysis_targets)
+                .next()
+                .is_some()
+        };
+
+        // In order to check whether we should set-instrument the place, we need to figure out if
+        // the place has a common ancestor of the same level with the target.
+        //
+        // This is needed because instrumenting the place only if it resolves to the target could give
+        // false positives in presence of some aliasing relations.
+        //
+        // Here is a simple example:
+        // ```
+        // fn foo(val_1: u32, val_2: u32, flag: bool) {
+        //   let reference = if flag {
+        //     &val_1
+        //   } else {
+        //     &val_2
+        //   };
+        //   let _ = *reference;
+        // }
+        // ```
+        // It yields the following aliasing graph:
+        //
+        // `val_1 <-- reference --> val_2`
+        //
+        // If `val_1` is a legitimate instrumentation target, we would get-instrument an instruction
+        // that reads from `*reference`, but that could mean that `val_2` is checked, too. Hence,
+        // if we don't set-instrument `val_2` we will get a false-positive.
+        //
+        // See `tests/expected/uninit/delayed-ub-overapprox.rs` for a more specific example.
+        let needs_set = {
+            let mut has_common_ancestor = false;
+            let mut self_ancestors =
+                self.points_to.resolve_place_stable(place.clone(), self.current_instance, self.tcx);
+            let mut target_ancestors = self.analysis_targets.clone();
+
+            while !self_ancestors.is_empty() || !target_ancestors.is_empty() {
+                if self_ancestors.intersection(&target_ancestors).next().is_some() {
+                    has_common_ancestor = true;
+                    break;
+                }
+                self_ancestors = self.points_to.ancestors(&self_ancestors);
+                target_ancestors = self.points_to.ancestors(&target_ancestors);
             }
+
+            has_common_ancestor
+        };
+
+        // If we are mutating the place, initialize it.
+        if ptx.is_mutating() && needs_set {
+            self.push_target(MemoryInitOp::SetRef {
+                operand: Operand::Copy(place.clone()),
+                value: true,
+                position: InsertPosition::After,
+            });
+        } else if !ptx.is_mutating() && needs_get {
+            // Otherwise, check its initialization.
+            self.push_target(MemoryInitOp::CheckRef { operand: Operand::Copy(place.clone()) });
         }
         self.super_place(place, ptx, location)
     }

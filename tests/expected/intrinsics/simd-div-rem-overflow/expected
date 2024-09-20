@@ -1,8 +1,8 @@
 FAILURE\
 attempt to compute simd_div which would overflow
 UNREACHABLE\
-assertion failed: quotients.0 == quotients.1
+assertion failed: quotients.0[0] == quotients.0[1]
 FAILURE\
 attempt to compute simd_rem which would overflow
 UNREACHABLE\
-assertion failed: remainders.0 == remainders.1
+assertion failed: remainders.0[0] == remainders.0[1]
