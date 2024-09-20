@@ -6,11 +6,8 @@ use std::{fs::File, io::BufReader, path::PathBuf};
 
 use anyhow::Result;
 
-use crate::coverage::{
-    function_coverage_results, function_info_from_file, CovResult, FileCoverageInfo, FunctionInfo,
-    MarkerInfo,
-};
-use crate::summary::{line_coverage_info, line_coverage_results};
+use crate::coverage::{function_coverage_results, function_info_from_file, CovResult, MarkerInfo};
+use crate::summary::line_coverage_results;
 use crate::{args::ReportArgs, coverage::CombinedCoverageResults};
 // use crate::coverage::CoverageResults;
 // use args::Args;
@@ -64,48 +61,6 @@ pub fn print_coverage_results(
         let idx = i + 1;
         let line = line?;
 
-        //     let line_checks: Vec<&CoverageCheck> = checks
-        //     .iter()
-        //     .filter(|c| {
-        //         c.is_covered()
-        //             && (cur_idx == c.region.start.0 as usize
-        //                 || cur_idx == c.region.end.0 as usize)
-        //     })
-        //     .collect();
-        // let new_line = if line_checks.is_empty() {
-        //     if must_highlight {
-        //         insert_escapes(&line, vec![(0, true), (line.len() - 1, false)])
-        //     } else {
-        //         line
-        //     }
-        // } else {
-        //     let mut markers = vec![];
-        //     if must_highlight {
-        //         markers.push((0, true))
-        //     };
-
-        //     for check in line_checks {
-        //         let start_line = check.region.start.0 as usize;
-        //         let start_column = (check.region.start.1 - 1u32) as usize;
-        //         let end_line = check.region.end.0 as usize;
-        //         let end_column = (check.region.end.1 - 1u32) as usize;
-        //         if start_line == cur_idx {
-        //             markers.push((start_column, true))
-        //         }
-        //         if end_line == cur_idx {
-        //             markers.push((end_column, false))
-        //         }
-        //     }
-
-        //     if markers.last().unwrap().1 {
-        //         must_highlight = true;
-        //         markers.push((line.len() - 1, false))
-        //     } else {
-        //         must_highlight = false;
-        //     }
-        //     println!("{:?}", markers);
-        //     insert_escapes(&line, markers)
-        // };
         let cur_line_result = flattened_results.iter().find(|(num, _)| *num == idx);
 
         let (max_times, line_fmt) = if let Some((_, span_data)) = cur_line_result {

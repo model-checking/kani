@@ -4,7 +4,7 @@
 use std::{
     collections::BTreeMap,
     fs::{File, OpenOptions},
-    io::{BufReader, BufWriter, Write},
+    io::{BufReader, BufWriter},
     path::PathBuf,
 };
 
@@ -91,14 +91,12 @@ fn combine_raw_results(results: &Vec<CoverageResults>) -> CombinedCoverageResult
             new_results.push(new_result);
         }
 
-        // let pair_string = format!("{file_name}+{fun_name}");
         let filename_copy = file_name.clone();
         if new_data.contains_key(&file_name) {
             new_data.get_mut(&filename_copy).unwrap().push((fun_name, new_results));
         } else {
             new_data.insert(file_name.clone(), vec![(fun_name, new_results)]);
         }
-        // new_data.insert(file_name, (fun_name, new_results));
     }
     CombinedCoverageResults { data: new_data }
 }

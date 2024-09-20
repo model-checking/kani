@@ -469,10 +469,7 @@ impl<'test> TestCx<'test> {
         let output_lines = proc_res.stdout.split('\n').collect::<Vec<&str>>();
         let coverage_info = output_lines.iter().find(|l| l.contains("Coverage results saved to"));
         if coverage_info.is_none() {
-            self.fatal_proc_rec(
-                "failed to find the path to the coverage results",
-                proc_res,
-            );
+            self.fatal_proc_rec("failed to find the path to the coverage results", proc_res);
         }
         let coverage_path = coverage_info.unwrap().split(' ').last().unwrap();
         PathBuf::from(coverage_path)
