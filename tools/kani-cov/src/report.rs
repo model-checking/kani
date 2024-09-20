@@ -6,6 +6,7 @@ use std::{fs::File, io::BufReader, path::PathBuf};
 
 use anyhow::Result;
 
+use crate::args::ReportFormat;
 use crate::coverage::{function_coverage_results, function_info_from_file, CovResult, MarkerInfo};
 use crate::summary::line_coverage_results;
 use crate::{args::ReportArgs, coverage::CombinedCoverageResults};
@@ -22,6 +23,8 @@ pub fn report_main(args: &ReportArgs) -> Result<()> {
     let source_files: Vec<PathBuf> =
         serde_json::from_reader(reader).expect("could not parse coverage metadata");
 
+    let checked_format = check_format(&args.format);
+
     for file in source_files {
         let fun_info = function_info_from_file(&file);
         let mut file_cov_info = Vec::new();
@@ -32,17 +35,35 @@ pub fn report_main(args: &ReportArgs) -> Result<()> {
                 (info.start.0..=info.end.0).zip(line_coverage.clone()).collect();
             file_cov_info.push(line_coverage_matched);
         }
-        print_coverage_results(file, file_cov_info)?;
+        print_coverage_results(&checked_format, file, file_cov_info)?;
     }
 
     Ok(())
 }
 
+// Validate arguments to the `report` subcommand in addition to clap's
+// validation.
 pub fn validate_report_args(_args: &ReportArgs) -> Result<()> {
+    // No validation is done at the moment
     Ok(())
 }
 
+fn check_format(format: &ReportFormat) -> ReportFormat {
+    let is_terminal = std::io::stdout().is_terminal();
+    match format {
+        ReportFormat::Terminal => {
+            if is_terminal {
+                ReportFormat::Terminal
+            } else {
+                ReportFormat::Escapes
+            }
+        }
+        ReportFormat::Escapes => ReportFormat::Escapes,
+    }
+}
+
 pub fn print_coverage_results(
+    format: &ReportFormat,
     filepath: PathBuf,
     results: Vec<Vec<(usize, Option<(u32, MarkerInfo)>)>>,
 ) -> Result<()> {
@@ -64,9 +85,10 @@ pub fn print_coverage_results(
         let (max_times, line_fmt) = if let Some((_, span_data)) = cur_line_result {
             if let Some((max, marker_info)) = span_data {
                 match marker_info {
-                    MarkerInfo::FullLine => {
-                        (Some(max), insert_escapes(&line, vec![(0, true), (line.len(), false)]))
-                    }
+                    MarkerInfo::FullLine => (
+                        Some(max),
+                        insert_escapes(&line, vec![(0, true), (line.len(), false)], format),
+                    ),
                     MarkerInfo::Markers(results) =>
                     // Note: I'm not sure why we need to offset the columns by -1
                     {
@@ -84,7 +106,7 @@ pub fn print_coverage_results(
                                 }
                             })
                             .collect();
-                        let mut complete_escapes: Vec<(usize, bool)> = results
+                        let complete_escapes: Vec<(usize, bool)> = results
                             .iter()
                             .filter(|m| {
                                 m.times_covered == 0
@@ -141,7 +163,7 @@ pub fn print_coverage_results(
                             ending_escapes.push((line.len(), false));
                         }
 
-                        (Some(max), insert_escapes(&line, ending_escapes))
+                        (Some(max), insert_escapes(&line, ending_escapes, format))
                     }
                 }
             } else {
@@ -150,7 +172,7 @@ pub fn print_coverage_results(
                     if !must_highlight {
                         line
                     } else {
-                        insert_escapes(&line, vec![(0, true), (line.len(), false)])
+                        insert_escapes(&line, vec![(0, true), (line.len(), false)], format)
                     },
                 )
             }
@@ -160,7 +182,7 @@ pub fn print_coverage_results(
                 if !must_highlight {
                     line
                 } else {
-                    insert_escapes(&line, vec![(0, true), (line.len(), false)])
+                    insert_escapes(&line, vec![(0, true), (line.len(), false)], format)
                 },
             )
         };
@@ -174,17 +196,18 @@ pub fn print_coverage_results(
     Ok(())
 }
 
-fn insert_escapes(str: &String, markers: Vec<(usize, bool)>) -> String {
+fn insert_escapes(str: &String, markers: Vec<(usize, bool)>, format: &ReportFormat) -> String {
     let mut new_str = str.clone();
     let mut offset = 0;
 
-    let support_color = std::io::stdout().is_terminal();
-    let mut sym_markers: Vec<(&usize, &str)> = if support_color {
-        markers.iter().map(|(i, b)| (i, if *b { "\x1b[41m" } else { "\x1b[0m" })).collect()
-    } else {
-        markers.iter().map(|(i, b)| (i, if *b { "```" } else { "'''" })).collect()
+    let (open_escape, close_escape) = match format {
+        ReportFormat::Terminal => ("\x1b[41m", "\x1b[0m"),
+        ReportFormat::Escapes => ("```", "'''"),
     };
-    // Sorting
+
+    let mut sym_markers: Vec<(&usize, &str)> =
+        markers.iter().map(|(i, b)| (i, if *b { open_escape } else { close_escape })).collect();
+
     sym_markers.sort();
     for (i, b) in sym_markers {
         new_str.insert_str(i + offset, b);

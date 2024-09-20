@@ -25,6 +25,7 @@ pub enum Subcommand {
     subcommand_precedence_over_arg = true,
     args_conflicts_with_subcommands = true
 )]
+
 pub struct Args {
     #[command(subcommand)]
     pub command: Option<Subcommand>,
