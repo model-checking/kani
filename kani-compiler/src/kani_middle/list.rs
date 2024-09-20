@@ -53,12 +53,13 @@ fn count_contracts(tcx: TyCtxt, check_body: &Body) -> usize {
         if let TerminatorKind::Call { ref func, .. } = bb.terminator.kind {
             let fn_ty = func.ty(check_body.locals()).unwrap();
             if let TyKind::RigidTy(RigidTy::FnDef(fn_def, args)) = fn_ty.kind() {
-                let instance = Instance::resolve(fn_def, &args).unwrap();
-                // For each precondition or postcondition, increment the count
-                if matches_function(tcx, instance.def, "KaniAssume")
-                    || matches_function(tcx, instance.def, "KaniAssert")
-                {
-                    count += 1;
+                if let Ok(instance) = Instance::resolve(fn_def, &args) {
+                    // For each precondition or postcondition, increment the count
+                    if matches_function(tcx, instance.def, "KaniAssume")
+                        || matches_function(tcx, instance.def, "KaniAssert")
+                    {
+                        count += 1;
+                    }
                 }
             }
         }
