@@ -1243,35 +1243,27 @@ impl<'tcx> GotocCtx<'tcx> {
     ///  1. `simd_shuffleN`, where `N` is a number which is part of the name
     ///     (e.g., `simd_shuffle4`).
     ///  2. `simd_shuffle`, where `N` isn't specified and must be computed from
-    ///     the length of the indexes array (the third argument).
+    ///     the length of the indexes SIMD vector (the third argument).
     fn simd_shuffle_length(&mut self, stripped: &str, farg_types: &[Ty], span: Span) -> u64 {
         let n = if stripped.is_empty() {
-            // Make sure that this is an array, since only the
+            // Make sure that this is an SIMD vector, since only the
             // length-suffixed version of `simd_shuffle` (e.g.,
             // `simd_shuffle4`) is type-checked
-            match farg_types[2].kind() {
-                TyKind::RigidTy(RigidTy::Array(ty, len))
-                    if matches!(ty.kind(), TyKind::RigidTy(RigidTy::Uint(UintTy::U32))) =>
-                {
-                    len.eval_target_usize().unwrap_or_else(|err| {
-                        utils::span_err(
-                            self.tcx,
-                            span,
-                            format!("could not evaluate shuffle index array length: {err}"),
-                        );
-                        // Return a dummy value
-                        u64::MIN
-                    })
-                }
-                _ => {
-                    let err_msg = format!(
-                        "simd_shuffle index must be an array of `u32`, got `{}`",
-                        self.pretty_ty(farg_types[2])
-                    );
-                    utils::span_err(self.tcx, span, err_msg);
-                    // Return a dummy value
-                    u64::MIN
-                }
+            if farg_types[2].kind().is_simd()
+                && matches!(
+                    self.simd_size_and_type(farg_types[2]).1.kind(),
+                    TyKind::RigidTy(RigidTy::Uint(UintTy::U32))
+                )
+            {
+                self.simd_size_and_type(farg_types[2]).0.try_into().unwrap()
+            } else {
+                let err_msg = format!(
+                    "simd_shuffle index must be a SIMD vector of `u32`, got `{}`",
+                    self.pretty_ty(farg_types[2])
+                );
+                utils::span_err(self.tcx, span, err_msg);
+                // Return a dummy value
+                u64::MIN
             }
         } else {
             stripped.parse().unwrap_or_else(|_| {
