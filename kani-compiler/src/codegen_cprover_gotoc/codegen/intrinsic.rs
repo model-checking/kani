@@ -1255,7 +1255,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     TyKind::RigidTy(RigidTy::Uint(UintTy::U32))
                 )
             {
-                self.simd_size_and_type(farg_types[2]).0.try_into().unwrap()
+                self.simd_size_and_type(farg_types[2]).0
             } else {
                 let err_msg = format!(
                     "simd_shuffle index must be a SIMD vector of `u32`, got `{}`",
