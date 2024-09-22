@@ -16,12 +16,15 @@ pub struct i64x2([i64; 2]);
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct i64x4([i64; 4]);
 
+#[repr(simd)]
+struct SimdShuffleIdx<const LEN: usize>([u32; LEN]);
+
 #[kani::proof]
 fn main() {
     {
         let y = i64x2([0, 1]);
         let z = i64x2([1, 2]);
-        const I: [u32; 2] = [1, 2];
+        const I: SimdShuffleIdx<2> = SimdShuffleIdx([1, 2]);
         let x: i64x2 = unsafe { simd_shuffle(y, z, I) };
         assert!(x.0[0] == 1);
         assert!(x.0[1] == 1);
@@ -29,7 +32,7 @@ fn main() {
     {
         let y = i64x2([0, 1]);
         let z = i64x2([1, 2]);
-        const I: [u32; 2] = [1, 2];
+        const I: SimdShuffleIdx<2> = SimdShuffleIdx([1, 2]);
         let x: i64x2 = unsafe { simd_shuffle(y, z, I) };
         assert!(x.0[0] == 1);
         assert!(x.0[1] == 1);
@@ -37,7 +40,7 @@ fn main() {
     {
         let a = i64x4([1, 2, 3, 4]);
         let b = i64x4([5, 6, 7, 8]);
-        const I: [u32; 4] = [1, 3, 5, 7];
+        const I: SimdShuffleIdx<4> = SimdShuffleIdx([1, 3, 5, 7]);
         let c: i64x4 = unsafe { simd_shuffle(a, b, I) };
         assert!(c == i64x4([2, 4, 6, 8]));
     }
@@ -48,7 +51,7 @@ fn check_shuffle() {
     {
         let y = i64x2([0, 1]);
         let z = i64x2([1, 2]);
-        const I: [u32; 4] = [1, 2, 0, 3];
+        const I: SimdShuffleIdx<4> = SimdShuffleIdx([1, 2, 0, 3]);
         let _x: i64x4 = unsafe { simd_shuffle(y, z, I) };
     }
 }
