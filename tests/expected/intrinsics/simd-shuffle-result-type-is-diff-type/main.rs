@@ -16,11 +16,14 @@ pub struct i64x2([i64; 2]);
 #[derive(Clone, Copy, PartialEq)]
 pub struct f64x2([f64; 2]);
 
+#[repr(simd)]
+struct SimdShuffleIdx<const LEN: usize>([u32; LEN]);
+
 #[kani::proof]
 fn main() {
     let y = i64x2([0, 1]);
     let z = i64x2([1, 2]);
-    const I: [u32; 2] = [1, 2];
+    const I: SimdShuffleIdx<2> = SimdShuffleIdx([1, 2]);
     let x: f64x2 = unsafe { simd_shuffle(y, z, I) };
     // ^^^^ The code above fails to type-check in Rust with the error:
     // ```
