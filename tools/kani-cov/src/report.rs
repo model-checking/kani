@@ -96,93 +96,82 @@ pub fn print_coverage_results(
 
         let cur_line_result = flattened_results.iter().find(|(num, _)| *num == idx);
 
-        let (max_times, line_fmt) = if let Some((_, span_data)) = cur_line_result {
-            if let Some((max, marker_info)) = span_data {
-                match marker_info {
-                    MarkerInfo::FullLine => (
-                        Some(max),
-                        insert_escapes(&line, vec![(0, true), (line.len(), false)], format),
-                    ),
-                    MarkerInfo::Markers(results) => {
-                        // Filter out cases where the span is a single unit AND it ends after the line
-                        // TODO: Create issue and link
-                        let results: Vec<&CovResult> = results
-                            .iter()
-                            .filter(|m| {
-                                if m.region.start.0 as usize == idx
-                                    && m.region.end.0 as usize == idx
-                                {
-                                    (m.region.end.1 - m.region.start.1 != 1)
-                                        && (m.region.end.1 as usize) < line.len()
-                                } else {
-                                    true
-                                }
-                            })
-                            .collect();
-                        let complete_escapes: Vec<(usize, bool)> = results
-                            .iter()
-                            .filter(|m| {
-                                m.times_covered == 0
-                                    && m.region.start.0 as usize == idx
-                                    && m.region.end.0 as usize == idx
-                            })
-                            .flat_map(|m| {
-                                vec![
-                                    ((m.region.start.1 - 1) as usize, true),
-                                    ((m.region.end.1 - 1) as usize, false),
-                                ]
-                            })
-                            .collect();
+        let (max_times, line_fmt) = if let Some((_, Some((max, marker_info)))) = cur_line_result {
+            match marker_info {
+                MarkerInfo::FullLine => (
+                    Some(max),
+                    insert_escapes(&line, vec![(0, true), (line.len(), false)], format),
+                ),
+                MarkerInfo::Markers(results) => {
+                    // Filter out cases where the span is a single unit AND it ends after the line
+                    // TODO: Create issue and link
+                    let results: Vec<&CovResult> = results
+                        .iter()
+                        .filter(|m| {
+                            if m.region.start.0 as usize == idx
+                                && m.region.end.0 as usize == idx
+                            {
+                                (m.region.end.1 - m.region.start.1 != 1)
+                                    && (m.region.end.1 as usize) < line.len()
+                            } else {
+                                true
+                            }
+                        })
+                        .collect();
+                    let complete_escapes: Vec<(usize, bool)> = results
+                        .iter()
+                        .filter(|m| {
+                            m.times_covered == 0
+                                && m.region.start.0 as usize == idx
+                                && m.region.end.0 as usize == idx
+                        })
+                        .flat_map(|m| {
+                            vec![
+                                ((m.region.start.1 - 1) as usize, true),
+                                ((m.region.end.1 - 1) as usize, false),
+                            ]
+                        })
+                        .collect();
 
-                        let mut starting_escapes: Vec<(usize, bool)> = results
-                            .iter()
-                            .filter(|m| {
-                                m.times_covered == 0
-                                    && m.region.start.0 as usize == idx
-                                    && m.region.end.0 as usize != idx
-                            })
-                            .flat_map(|m| vec![((m.region.start.1 - 1) as usize, true)])
-                            .collect();
+                    let mut starting_escapes: Vec<(usize, bool)> = results
+                        .iter()
+                        .filter(|m| {
+                            m.times_covered == 0
+                                && m.region.start.0 as usize == idx
+                                && m.region.end.0 as usize != idx
+                        })
+                        .flat_map(|m| vec![((m.region.start.1 - 1) as usize, true)])
+                        .collect();
 
-                        let mut ending_escapes: Vec<(usize, bool)> = results
-                            .iter()
-                            .filter(|m| {
-                                m.times_covered == 0
-                                    && m.region.start.0 as usize != idx
-                                    && m.region.end.0 as usize == idx
-                            })
-                            .flat_map(|m| vec![((m.region.end.1 - 1) as usize, false)])
-                            .collect();
+                    let mut ending_escapes: Vec<(usize, bool)> = results
+                        .iter()
+                        .filter(|m| {
+                            m.times_covered == 0
+                                && m.region.start.0 as usize != idx
+                                && m.region.end.0 as usize == idx
+                        })
+                        .flat_map(|m| vec![((m.region.end.1 - 1) as usize, false)])
+                        .collect();
 
-                        if must_highlight && !ending_escapes.is_empty() {
-                            ending_escapes.push((0_usize, true));
-                            must_highlight = false;
-                        }
-                        if !starting_escapes.is_empty() {
-                            starting_escapes.push((line.len(), false));
-                            must_highlight = true;
-                        }
-
-                        ending_escapes.extend(complete_escapes);
-                        ending_escapes.extend(starting_escapes);
-
-                        if must_highlight && ending_escapes.is_empty() {
-                            ending_escapes.push((0, true));
-                            ending_escapes.push((line.len(), false));
-                        }
-
-                        (Some(max), insert_escapes(&line, ending_escapes, format))
+                    if must_highlight && !ending_escapes.is_empty() {
+                        ending_escapes.push((0_usize, true));
+                        must_highlight = false;
                     }
+                    if !starting_escapes.is_empty() {
+                        starting_escapes.push((line.len(), false));
+                        must_highlight = true;
+                    }
+
+                    ending_escapes.extend(complete_escapes);
+                    ending_escapes.extend(starting_escapes);
+
+                    if must_highlight && ending_escapes.is_empty() {
+                        ending_escapes.push((0, true));
+                        ending_escapes.push((line.len(), false));
+                    }
+
+                    (Some(max), insert_escapes(&line, ending_escapes, format))
                 }
-            } else {
-                (
-                    None,
-                    if !must_highlight {
-                        line
-                    } else {
-                        insert_escapes(&line, vec![(0, true), (line.len(), false)], format)
-                    },
-                )
             }
         } else {
             (
