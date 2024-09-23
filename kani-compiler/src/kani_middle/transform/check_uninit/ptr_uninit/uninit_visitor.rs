@@ -8,20 +8,20 @@ use crate::{
     kani_middle::transform::{
         body::{InsertPosition, MutableBody, SourceInstruction},
         check_uninit::{
-            relevant_instruction::{InitRelevantInstruction, MemoryInitOp},
-            ty_layout::{tys_layout_compatible_to_size, LayoutComputationError},
             PointeeInfo, TargetFinder,
+            relevant_instruction::{InitRelevantInstruction, MemoryInitOp},
+            ty_layout::{LayoutComputationError, tys_layout_compatible_to_size},
         },
     },
 };
 use stable_mir::{
     mir::{
-        alloc::GlobalAlloc,
-        mono::{Instance, InstanceKind},
-        visit::{Location, PlaceContext},
         AggregateKind, CastKind, LocalDecl, MirVisitor, NonDivergingIntrinsic, Operand, Place,
         PointerCoercion, ProjectionElem, Rvalue, Statement, StatementKind, Terminator,
         TerminatorKind,
+        alloc::GlobalAlloc,
+        mono::{Instance, InstanceKind},
+        visit::{Location, PlaceContext},
     },
     ty::{AdtKind, ConstantKind, RigidTy, TyKind},
 };

@@ -6,7 +6,7 @@
 // It checks that shadow memory can be used to track whether a memory location
 // is initialized.
 
-use std::alloc::{alloc, dealloc, Layout};
+use std::alloc::{Layout, alloc, dealloc};
 
 static mut SM: kani::shadow::ShadowMem<bool> = kani::shadow::ShadowMem::new(false);
 

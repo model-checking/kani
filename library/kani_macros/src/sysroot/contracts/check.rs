@@ -6,11 +6,11 @@
 use proc_macro2::{Ident, Span, TokenStream as TokenStream2};
 use quote::quote;
 use std::mem;
-use syn::{parse_quote, Block, Expr, FnArg, Local, LocalInit, Pat, PatIdent, ReturnType, Stmt};
+use syn::{Block, Expr, FnArg, Local, LocalInit, Pat, PatIdent, ReturnType, Stmt, parse_quote};
 
 use super::{
-    helpers::*, shared::build_ensures, ClosureType, ContractConditionsData,
-    ContractConditionsHandler, INTERNAL_RESULT_IDENT,
+    ClosureType, ContractConditionsData, ContractConditionsHandler, INTERNAL_RESULT_IDENT,
+    helpers::*, shared::build_ensures,
 };
 
 const WRAPPER_ARG: &str = "_wrapper_arg";

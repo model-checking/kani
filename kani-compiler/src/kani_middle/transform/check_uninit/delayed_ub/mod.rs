@@ -8,11 +8,11 @@ use std::collections::HashSet;
 
 use crate::args::ExtraChecks;
 use crate::kani_middle::{
-    points_to::{run_points_to_analysis, MemLoc, PointsToGraph},
+    points_to::{MemLoc, PointsToGraph, run_points_to_analysis},
     reachability::CallGraph,
     transform::{
-        body::CheckType, check_uninit::UninitInstrumenter, BodyTransformation, GlobalPass,
-        TransformationResult,
+        BodyTransformation, GlobalPass, TransformationResult, body::CheckType,
+        check_uninit::UninitInstrumenter,
     },
 };
 use crate::kani_queries::QueryDb;
@@ -22,8 +22,8 @@ use rustc_middle::ty::TyCtxt;
 use rustc_mir_dataflow::JoinSemiLattice;
 use rustc_session::config::OutputType;
 use stable_mir::{
-    mir::mono::{Instance, MonoItem},
     mir::MirVisitor,
+    mir::mono::{Instance, MonoItem},
     ty::FnDef,
 };
 

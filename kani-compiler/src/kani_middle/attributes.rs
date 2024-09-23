@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 use kani_metadata::{CbmcSolver, HarnessAttributes, HarnessKind, Stub};
 use quote::ToTokens;
 use rustc_ast::{
-    attr, AttrArgs, AttrArgsEq, AttrKind, Attribute, ExprKind, LitKind, MetaItem, MetaItemKind,
+    AttrArgs, AttrArgsEq, AttrKind, Attribute, ExprKind, LitKind, MetaItem, MetaItemKind, attr,
 };
 use rustc_errors::ErrorGuaranteed;
 use rustc_hir::{def::DefKind, def_id::DefId};
@@ -25,7 +25,7 @@ use syn::{PathSegment, TypePath};
 
 use tracing::{debug, trace};
 
-use super::resolve::{resolve_fn, resolve_fn_path, FnResolution, ResolveError};
+use super::resolve::{FnResolution, ResolveError, resolve_fn, resolve_fn_path};
 
 #[derive(Debug, Clone, Copy, AsRefStr, EnumString, PartialEq, Eq, PartialOrd, Ord)]
 #[strum(serialize_all = "snake_case")]

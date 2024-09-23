@@ -7,18 +7,18 @@ use crate::args::Arguments;
 use rustc_data_structures::sync::Lrc;
 use rustc_errors::emitter::Emitter;
 use rustc_errors::{
-    emitter::HumanReadableErrorType, fallback_fluent_bundle, json::JsonEmitter, ColorConfig,
-    DiagInner,
+    ColorConfig, DiagInner, emitter::HumanReadableErrorType, fallback_fluent_bundle,
+    json::JsonEmitter,
 };
-use rustc_session::config::ErrorOutputType;
 use rustc_session::EarlyDiagCtxt;
+use rustc_session::config::ErrorOutputType;
 use rustc_span::source_map::FilePathMapping;
 use rustc_span::source_map::SourceMap;
 use std::io;
 use std::io::IsTerminal;
 use std::panic;
 use std::sync::LazyLock;
-use tracing_subscriber::{layer::SubscriberExt, EnvFilter, Registry};
+use tracing_subscriber::{EnvFilter, Registry, layer::SubscriberExt};
 use tracing_tree::HierarchicalLayer;
 
 /// Environment variable used to control this session log tracing.

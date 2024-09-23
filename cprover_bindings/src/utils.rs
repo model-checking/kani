@@ -3,8 +3,8 @@
 //! Useful utilities for CBMC
 
 use crate::InternedString;
-use num::bigint::{BigInt, Sign};
 use num::Signed;
+use num::bigint::{BigInt, Sign};
 use num_traits::Zero;
 
 /// The aggregate name used in CBMC for aggregates of type `n`.

@@ -19,8 +19,8 @@
 //!
 
 use crate::codegen_cprover_gotoc::GotocCtx;
-use cbmc::goto_program::{Expr, Location, Stmt, Type};
 use cbmc::InternedString;
+use cbmc::goto_program::{Expr, Location, Stmt, Type};
 use rustc_middle::mir::coverage::SourceRegion;
 use stable_mir::mir::{Place, ProjectionElem};
 use stable_mir::ty::{Span as SpanStable, Ty};
