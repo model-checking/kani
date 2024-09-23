@@ -52,7 +52,7 @@ jobs:
             sed -i "s/^CBMC_VERSION=.*/CBMC_VERSION=\"$CBMC_LATEST\"/" kani-dependencies
             git diff
             # install the newer CBMC version
-            scripts/setup/ubuntu/install_cbmc.sh
+            ./scripts/setup/ubuntu/install_cbmc.sh
             if ! ./scripts/kani-regression.sh ; then
               echo "next_step=create_issue" >> $GITHUB_ENV
             else
