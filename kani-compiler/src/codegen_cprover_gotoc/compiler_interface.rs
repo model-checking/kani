@@ -376,14 +376,13 @@ fn create_object_file(sess: &Session) -> Option<write::Object<'static>> {
         }
         Architecture::Mips64 => {
             // copied from `mips64el-linux-gnuabi64-gcc foo.c -c`
-            let e_flags = elf::EF_MIPS_CPIC
+            elf::EF_MIPS_CPIC
                 | elf::EF_MIPS_PIC
                 | if sess.target.options.cpu.contains("r6") {
                     elf::EF_MIPS_ARCH_64R6 | elf::EF_MIPS_NAN2008
                 } else {
                     elf::EF_MIPS_ARCH_64R2
-                };
-            e_flags
+                }
         }
         Architecture::Riscv32 | Architecture::Riscv64 => {
             // Source: https://github.com/riscv-non-isa/riscv-elf-psabi-doc/blob/079772828bd10933d34121117a222b4cc0ee2200/riscv-elf.adoc
