@@ -95,15 +95,15 @@ fn check_format(format: &ReportFormat) -> ReportFormat {
 /// }
 ///
 /// It will be highlighted as follows:
-/// 
+///
 /// ```fn _other_function() {'''
 /// ```    println!("Hello, world!");'''
 /// ```}'''
-/// 
+///
 /// Note how there is always a corresponding escape for each line.
 /// This is more sophisticated than the naive solution, which would simply emit two escapes
-/// per region (one opening, one closing) as follows: 
-/// 
+/// per region (one opening, one closing) as follows:
+///
 /// ```fn _other_function() {
 ///     println!("Hello, world!");
 /// }'''
