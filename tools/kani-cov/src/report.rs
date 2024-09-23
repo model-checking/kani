@@ -98,19 +98,16 @@ pub fn print_coverage_results(
 
         let (max_times, line_fmt) = if let Some((_, Some((max, marker_info)))) = cur_line_result {
             match marker_info {
-                MarkerInfo::FullLine => (
-                    Some(max),
-                    insert_escapes(&line, vec![(0, true), (line.len(), false)], format),
-                ),
+                MarkerInfo::FullLine => {
+                    (Some(max), insert_escapes(&line, vec![(0, true), (line.len(), false)], format))
+                }
                 MarkerInfo::Markers(results) => {
                     // Filter out cases where the span is a single unit AND it ends after the line
                     // TODO: Create issue and link
                     let results: Vec<&CovResult> = results
                         .iter()
                         .filter(|m| {
-                            if m.region.start.0 as usize == idx
-                                && m.region.end.0 as usize == idx
-                            {
+                            if m.region.start.0 as usize == idx && m.region.end.0 as usize == idx {
                                 (m.region.end.1 - m.region.start.1 != 1)
                                     && (m.region.end.1 as usize) < line.len()
                             } else {
