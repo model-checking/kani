@@ -1,6 +1,9 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+//! This module defines coverage-oriented data structures shared among
+//! subcommands and other utilities like the Rust tree-sitter.
+
 use console::style;
 use serde_derive::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -10,6 +13,10 @@ use tree_sitter::{Node, Parser};
 
 pub type LineResults = Vec<(usize, Option<(u32, MarkerInfo)>)>;
 
+/// The possible outcomes for a Kani check.
+///
+/// Note: This data structure should not be duplicated in Kani -
+/// <https://github.com/model-checking/kani/issues/3541>
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum CheckStatus {
@@ -23,16 +30,10 @@ pub enum CheckStatus {
     Unsatisfiable, // for `cover` properties only
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct CoverageResults {
-    pub data: BTreeMap<String, Vec<CoverageCheck>>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct CombinedCoverageResults {
-    pub data: BTreeMap<String, Vec<(String, Vec<CovResult>)>>,
-}
-
+/// Kani coverage check.
+///
+/// Note: This data structure should not be duplicated in Kani -
+/// <https://github.com/model-checking/kani/issues/3541>
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CoverageCheck {
     pub function: String,
@@ -41,35 +42,8 @@ pub struct CoverageCheck {
     pub status: CheckStatus,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CovResult {
-    pub function: String,
-    // term: CoverageTerm,
-    pub region: CoverageRegion,
-    // status: CheckStatus,
-    pub times_covered: u32,
-    pub total_times: u32,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct CoverageRegion {
-    pub file: String,
-    pub start: (u32, u32),
-    pub end: (u32, u32),
-}
-
-impl Display for CoverageRegion {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}:{} - {}:{}", self.start.0, self.start.1, self.end.0, self.end.1)
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum CoverageTerm {
-    Counter(u32),
-    Expression(u32),
-}
-
+// Note: This `impl` should not be duplicated in Kani -
+// <https://github.com/model-checking/kani/issues/3541>
 impl std::fmt::Display for CheckStatus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let check_str = match self {
@@ -86,6 +60,59 @@ impl std::fmt::Display for CheckStatus {
     }
 }
 
+/// Raw Kani coverage results.
+///
+/// Note: This data structure should not be duplicated in Kani -
+/// <https://github.com/model-checking/kani/issues/3541>
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CoverageResults {
+    pub data: BTreeMap<String, Vec<CoverageCheck>>,
+}
+
+/// Aggregated coverage results.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CombinedCoverageResults {
+    pub data: BTreeMap<String, Vec<(String, Vec<CovResult>)>>,
+}
+
+/// The coverage result associated to a particular coverage region.
+/// Basically, this aggregates the information of one or more `CoverageCheck`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CovResult {
+    pub function: String,
+    pub region: CoverageRegion,
+    pub times_covered: u32,
+    pub total_times: u32,
+}
+
+/// A coverage region.
+///
+/// Note: This data structure should not be duplicated in Kani -
+/// <https://github.com/model-checking/kani/issues/3541>
+#[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct CoverageRegion {
+    pub file: String,
+    pub start: (u32, u32),
+    pub end: (u32, u32),
+}
+
+impl Display for CoverageRegion {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}:{} - {}:{}", self.start.0, self.start.1, self.end.0, self.end.1)
+    }
+}
+
+/// A coverage term.
+///
+/// Note: This data structure should not be duplicated in Kani -
+/// <https://github.com/model-checking/kani/issues/3541>
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum CoverageTerm {
+    Counter(u32),
+    Expression(u32),
+}
+
+/// The coverage information to produce for a particular file.
 pub struct FileCoverageInfo {
     pub filename: String,
     pub function: CoverageMetric,
@@ -93,10 +120,10 @@ pub struct FileCoverageInfo {
     pub region: CoverageMetric,
 }
 
+/// A coverage metric.
 pub struct CoverageMetric {
     pub covered: u32,
     pub total: u32,
-    // rate: Option<f32>
 }
 
 impl CoverageMetric {
@@ -105,6 +132,15 @@ impl CoverageMetric {
     }
 }
 
+/// Function information obtained through a tree-sitter
+#[derive(Debug)]
+pub struct FunctionInfo {
+    pub name: String,
+    pub start: (usize, usize),
+    pub end: (usize, usize),
+}
+
+/// Extract function information from a file using a tree-sitter
 pub fn function_info_from_file(filepath: &PathBuf) -> Vec<FunctionInfo> {
     let source_code = fs::read_to_string(filepath).expect("could not read source file");
     let mut parser = Parser::new();
@@ -134,6 +170,7 @@ pub fn function_info_from_file(filepath: &PathBuf) -> Vec<FunctionInfo> {
     function_info
 }
 
+/// Helper function to extract function information using a tree-sitter
 fn function_info_from_node(node: Node, source: &[u8]) -> FunctionInfo {
     let name = node
         .child_by_field_name("name")
@@ -145,30 +182,26 @@ fn function_info_from_node(node: Node, source: &[u8]) -> FunctionInfo {
     FunctionInfo { name, start, end }
 }
 
-#[derive(Debug)]
-pub struct FunctionInfo {
-    pub name: String,
-    pub start: (usize, usize),
-    pub end: (usize, usize),
-}
-
+/// Extract the coverage results associated to a function
 pub fn function_coverage_results(
     info: &FunctionInfo,
     file: &Path,
     results: &CombinedCoverageResults,
 ) -> Option<(String, Vec<CovResult>)> {
-    // `info` does not include file so how do we match?
-    // use function just for now...
+    // The filenames in "kaniraw" files are not absolute, so we need to match
+    // them with the ones we have in the aggregated results (i.e., the filenames
+    // in the "kanimap" files).
     let filename = file.to_path_buf().into_os_string().into_string().unwrap();
     let right_filename = results.data.keys().find(|p| filename.ends_with(*p)).unwrap();
-    // TODO: The filenames in kaniraw files should be absolute, just like in metadata
-    // Otherwise the key for `results` just fails...
+    // TODO: The filenames in kaniraw files should be absolute, just like in metadata.
+    // Otherwise the key for `results` just fails... <https://github.com/model-checking/kani/issues/3542>
     let file_results = results.data.get(right_filename).unwrap();
     let function = info.name.clone();
     let fun_results = file_results.iter().find(|(f, _)| *f == function);
     fun_results.cloned()
 }
 
+/// Marker information, mainly useful for highlighting coverage
 #[derive(Debug, Clone)]
 pub enum MarkerInfo {
     FullLine,

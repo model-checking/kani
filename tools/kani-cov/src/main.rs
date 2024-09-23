@@ -1,6 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+//! Main module of `kani-cov`, containing its main function.
+
 mod args;
 mod coverage;
 mod merge;
@@ -11,6 +13,9 @@ use anyhow::Result;
 use args::{validate_args, Subcommand};
 use clap::Parser;
 
+/// The main function of `kani-cov`.
+/// First, we parse and validate the subcommand and arguments. Then, we call the
+/// main function for the subcommand that had been specified.
 fn main() -> Result<()> {
     let args = args::Args::parse();
 

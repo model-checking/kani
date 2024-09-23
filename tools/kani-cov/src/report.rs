@@ -1,6 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+//! This module includes the implementation of the `report` subcommand.
+
 use std::io::{BufRead, IsTerminal};
 use std::{fs::File, io::BufReader, path::PathBuf};
 
@@ -43,7 +45,7 @@ pub fn report_main(args: &ReportArgs) -> Result<()> {
                 (info.start.0..=info.end.0).zip(line_coverage.clone()).collect();
             file_cov_info.push(line_coverage_matched);
         }
-        print_coverage_results(&checked_format, file, file_cov_info)?;
+        output_coverage_results(&checked_format, file, file_cov_info)?;
     }
 
     Ok(())
@@ -76,7 +78,37 @@ fn check_format(format: &ReportFormat) -> ReportFormat {
     }
 }
 
-pub fn print_coverage_results(
+/// Output coverage results, and highlight regions or lines which are not
+/// covered.
+///
+/// When highlighting the terminal, highlighted areas must be closed on the each
+/// line to avoid highlighting beyond the source code area. Therefore, this
+/// highlighting algorithm emits codes for both opening and closing the
+/// highlighted area if any highlighting must be done for a line.
+///
+/// Therefore, a coverage region spanning multiple lines will be represented
+/// with multiple highlighted lines. For example, let's take this uncovered
+/// function:
+///
+/// fn _other_function() {
+///     println!("Hello, world!");
+/// }
+///
+/// It will be highlighted as follows:
+/// 
+/// ```fn _other_function() {'''
+/// ```    println!("Hello, world!");'''
+/// ```}'''
+/// 
+/// Note how there is always a corresponding escape for each line.
+/// This is more sophisticated than the naive solution, which would simply emit two escapes
+/// per region (one opening, one closing) as follows: 
+/// 
+/// ```fn _other_function() {
+///     println!("Hello, world!");
+/// }'''
+///
+pub fn output_coverage_results(
     format: &ReportFormat,
     filepath: PathBuf,
     results: Vec<LineResults>,
@@ -102,8 +134,10 @@ pub fn print_coverage_results(
                     (Some(max), insert_escapes(&line, vec![(0, true), (line.len(), false)], format))
                 }
                 MarkerInfo::Markers(results) => {
-                    // Filter out cases where the span is a single unit AND it ends after the line
-                    // TODO: Create issue and link
+                    // Filter out cases where the region represents a
+                    // single-column span and the regions ends after the line.
+                    // TODO: Avoid filtering out these coverage results.
+                    // <https://github.com/model-checking/kani/issues/3543>
                     let results: Vec<&CovResult> = results
                         .iter()
                         .filter(|m| {
@@ -115,6 +149,7 @@ pub fn print_coverage_results(
                             }
                         })
                         .collect();
+                    // Escapes for the regions which start and finish in this line
                     let complete_escapes: Vec<(usize, bool)> = results
                         .iter()
                         .filter(|m| {
@@ -129,8 +164,8 @@ pub fn print_coverage_results(
                             ]
                         })
                         .collect();
-
-                    let mut starting_escapes: Vec<(usize, bool)> = results
+                    // Escapes for the regions which only start in this line
+                    let mut opening_escapes: Vec<(usize, bool)> = results
                         .iter()
                         .filter(|m| {
                             m.times_covered == 0
@@ -139,8 +174,8 @@ pub fn print_coverage_results(
                         })
                         .flat_map(|m| vec![((m.region.start.1 - 1) as usize, true)])
                         .collect();
-
-                    let mut ending_escapes: Vec<(usize, bool)> = results
+                    // Escapes for the regions which only finish in this line
+                    let mut closing_escapes: Vec<(usize, bool)> = results
                         .iter()
                         .filter(|m| {
                             m.times_covered == 0
@@ -150,24 +185,29 @@ pub fn print_coverage_results(
                         .flat_map(|m| vec![((m.region.end.1 - 1) as usize, false)])
                         .collect();
 
-                    if must_highlight && !ending_escapes.is_empty() {
-                        ending_escapes.push((0_usize, true));
+                    // Emit an opening escape if there was a closing one and we
+                    // had to continue the highlight
+                    if must_highlight && !closing_escapes.is_empty() {
+                        closing_escapes.push((0_usize, true));
                         must_highlight = false;
                     }
-                    if !starting_escapes.is_empty() {
-                        starting_escapes.push((line.len(), false));
+                    // Continue the highlight in the next lines if we had an
+                    // opening escape
+                    if !opening_escapes.is_empty() {
+                        opening_escapes.push((line.len(), false));
                         must_highlight = true;
                     }
 
-                    ending_escapes.extend(complete_escapes);
-                    ending_escapes.extend(starting_escapes);
+                    // Join all the escapes, then insert them
+                    closing_escapes.extend(complete_escapes);
+                    closing_escapes.extend(opening_escapes);
 
-                    if must_highlight && ending_escapes.is_empty() {
-                        ending_escapes.push((0, true));
-                        ending_escapes.push((line.len(), false));
+                    if must_highlight && closing_escapes.is_empty() {
+                        closing_escapes.push((0, true));
+                        closing_escapes.push((line.len(), false));
                     }
 
-                    (Some(max), insert_escapes(&line, ending_escapes, format))
+                    (Some(max), insert_escapes(&line, closing_escapes, format))
                 }
             }
         } else {

@@ -1,6 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+//! This module includes the implementation of the `summary` subcommand.
+
 use std::{
     cmp::max,
     fs::File,
@@ -55,7 +57,7 @@ pub fn summary_main(args: &SummaryArgs) -> Result<()> {
             };
             file_cov_info.push(cur_function_coverage_results);
         }
-        let aggr_cov_info = aggregate_cov_info(&file, &file_cov_info);
+        let aggr_cov_info = calculate_cov_info(&file, &file_cov_info);
         all_cov_info.push(aggr_cov_info);
     }
     print_coverage_info(&all_cov_info, &args.format);
@@ -63,7 +65,8 @@ pub fn summary_main(args: &SummaryArgs) -> Result<()> {
     Ok(())
 }
 
-fn aggregate_cov_info(file: &Path, file_cov_info: &[FunctionCoverageResults]) -> FileCoverageInfo {
+/// Calculate the coverage information (metrics) for a file
+fn calculate_cov_info(file: &Path, file_cov_info: &[FunctionCoverageResults]) -> FileCoverageInfo {
     let total_functions = file_cov_info.len().try_into().unwrap();
     let covered_functions =
         file_cov_info.iter().filter(|f| f.is_covered).count().try_into().unwrap();
@@ -89,6 +92,7 @@ fn function_coverage_info(cov_results: &Option<(String, Vec<CovResult>)>) -> boo
     if let Some(res) = cov_results { res.1.iter().any(|c| c.times_covered > 0) } else { false }
 }
 
+/// Function coverage results
 struct FunctionCoverageResults {
     is_covered: bool,
     covered_lines: u32,
@@ -230,6 +234,7 @@ fn print_coverage_markdown_info(info: &Vec<FileCoverageInfo>) {
 
     for cov_info in info {
         let filename = cov_info.filename.to_string();
+
         let function_covered = cov_info.function.covered;
         let function_total = cov_info.function.total;
         let function_rate = safe_div(function_covered, function_total);

@@ -1,6 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+//! This module includes the implementation of the `merge` subcommand.
+
 use std::{
     collections::BTreeMap,
     fs::{File, OpenOptions},
@@ -15,6 +17,12 @@ use crate::{
     coverage::{CheckStatus, CombinedCoverageResults, CovResult, CoverageCheck, CoverageResults},
 };
 
+/// Executes the `merge` subcommand.
+///
+/// First, it loads the raw coverage results from "kaniraw" files. Then, it
+/// combines those results by coverage region thereby producing aggregated
+/// coverage information. Finally, it saves that information into another file
+/// (the coverage profile also known as the "kanicov" file).
 pub fn merge_main(args: &MergeArgs) -> Result<()> {
     let raw_results = parse_raw_results(&args.files)?;
     let combined_results = combine_raw_results(&raw_results);
@@ -29,6 +37,7 @@ pub fn validate_merge_args(_args: &MergeArgs) -> Result<()> {
     Ok(())
 }
 
+/// Parse raw coverage results from a set of files (AKA "kaniraw" files)
 fn parse_raw_results(paths: &Vec<PathBuf>) -> Result<Vec<CoverageResults>> {
     let mut raw_results = Vec::with_capacity(paths.len());
     for path in paths {
@@ -43,6 +52,7 @@ fn parse_raw_results(paths: &Vec<PathBuf>) -> Result<Vec<CoverageResults>> {
     Ok(raw_results)
 }
 
+/// Combine raw coverage results into an aggregated form
 fn combine_raw_results(results: &Vec<CoverageResults>) -> CombinedCoverageResults {
     let all_file_function_names = function_names_from_results(results);
 
@@ -104,6 +114,7 @@ fn combine_raw_results(results: &Vec<CoverageResults>) -> CombinedCoverageResult
     CombinedCoverageResults { data: new_data }
 }
 
+/// Save the combined coverage results into a file
 fn save_combined_results(
     results: &CombinedCoverageResults,
     output: &Option<PathBuf>,
@@ -119,6 +130,7 @@ fn save_combined_results(
     Ok(())
 }
 
+/// All function names appearing in raw coverage results
 fn function_names_from_results(results: &[CoverageResults]) -> Vec<(String, String)> {
     let mut file_function_pairs = vec![];
     for result in results {
