@@ -1,15 +1,14 @@
-/home/ubuntu/kani/tests/coverage/known_issues/assert_uncovered_end/test.rs
-   1|     | // Copyright Kani Contributors
-   2|     | // SPDX-License-Identifier: Apache-2.0 OR MIT
-   3|     | 
-   4|     | //! Checks that `check_assert` is fully covered. At present, the coverage for
-   5|     | //! this test reports an uncovered single-column region at the end of the `if`
-   6|     | //! statement: <https://github.com/model-checking/kani/issues/3455>
-   7|     | 
-   8|     | #[kani::proof]
-   9|    2| fn check_assert() {
-  10|    2|     let x: u32 = kani::any_where(|val| *val == 5);
-  11|    2|     if x > 3 {
-  12|    2|         assert!(x > 4);
-  13|    2|     }
-  14|     | }
+   1|     | // Copyright Kani Contributors\
+   2|     | // SPDX-License-Identifier: Apache-2.0 OR MIT\
+   3|     | \
+   4|     | //! Checks that `check_assert` is fully covered. At present, the coverage for\
+   5|     | //! this test reports an uncovered single-column region at the end of the `if`\
+   6|     | //! statement: <https://github.com/model-checking/kani/issues/3455>\
+   7|     | \
+   8|     | #[kani::proof]\
+   9|    2| fn check_assert() {\
+  10|    2|     let x: u32 = kani::any_where(|val| *val == 5);\
+  11|    2|     if x > 3 {\
+  12|    2|         assert!(x > 4);\
+  13|    2|     }\
+  14|     | }\

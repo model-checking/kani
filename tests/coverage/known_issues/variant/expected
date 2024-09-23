@@ -1,33 +1,32 @@
-/home/ubuntu/kani/tests/coverage/known_issues/variant/main.rs
-   1|     | // Copyright Kani Contributors
-   2|     | // SPDX-License-Identifier: Apache-2.0 OR MIT
-   3|     | 
-   4|     | //! Checks coverage results in an example with a `match` statement matching on
-   5|     | //! all enum variants. Currently, it does not yield the expected results because
-   6|     | //! it reports the `dir` in the match statement as `UNCOVERED`:
-   7|     | //! <https://github.com/model-checking/kani/issues/3456>
-   8|     | 
-   9|     | enum Direction {
-  10|     |     Up,
-  11|     |     Down,
-  12|     |     Left,
-  13|     |     Right,
-  14|     | }
-  15|     | 
-  16|    2| fn print_direction(dir: Direction) {
-  17|     |     // For some reason, `dir`'s span is reported as `UNCOVERED` too
-  18|    0|     match ```dir''' {
-  19|    0|         Direction::Up => println!("Going up!"),
-  20|    0|         Direction::Down => println!("Going down!"),
-  21|    2|         Direction::Left => println!("Going left!"),
-  22|    0|         Direction::Right if 1 == 1 => println!("Going right!"),
-  23|     |         // This part is unreachable since we cover all variants in the match.
-  24|    0|         _ => println!("Not going anywhere!"),
-  25|     |     }
-  26|     | }
-  27|     | 
-  28|     | #[kani::proof]
-  29|    2| fn main() {
-  30|    2|     let direction = Direction::Left;
-  31|    2|     print_direction(direction);
-  32|     | }
+   1|     | // Copyright Kani Contributors\
+   2|     | // SPDX-License-Identifier: Apache-2.0 OR MIT\
+   3|     | \
+   4|     | //! Checks coverage results in an example with a `match` statement matching on\
+   5|     | //! all enum variants. Currently, it does not yield the expected results because\
+   6|     | //! it reports the `dir` in the match statement as `UNCOVERED`:\
+   7|     | //! <https://github.com/model-checking/kani/issues/3456>\
+   8|     | \
+   9|     | enum Direction {\
+  10|     |     Up,\
+  11|     |     Down,\
+  12|     |     Left,\
+  13|     |     Right,\
+  14|     | }\
+  15|     | \
+  16|    2| fn print_direction(dir: Direction) {\
+  17|     |     // For some reason, `dir`'s span is reported as `UNCOVERED` too\
+  18|    0|     match ```dir''' {\
+  19|    0|         Direction::Up => println!("Going up!"),\
+  20|    0|         Direction::Down => println!("Going down!"),\
+  21|    2|         Direction::Left => println!("Going left!"),\
+  22|    0|         Direction::Right if 1 == 1 => println!("Going right!"),\
+  23|     |         // This part is unreachable since we cover all variants in the match.\
+  24|    0|         _ => println!("Not going anywhere!"),\
+  25|     |     }\
+  26|     | }\
+  27|     | \
+  28|     | #[kani::proof]\
+  29|    2| fn main() {\
+  30|    2|     let direction = Direction::Left;\
+  31|    2|     print_direction(direction);\
+  32|     | }\

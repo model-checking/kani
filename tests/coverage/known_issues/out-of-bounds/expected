@@ -1,16 +1,15 @@
-/home/ubuntu/kani/tests/coverage/known_issues/out-of-bounds/test.rs
-   1|     | // Copyright Kani Contributors
-   2|     | // SPDX-License-Identifier: Apache-2.0 OR MIT
-   3|     | 
-   4|     | //! This test should check that the return in `get` is `UNCOVERED`. However, the
-   5|     | //! coverage results currently report that the whole function is `COVERED`,
-   6|     | //! likely due to <https://github.com/model-checking/kani/issues/3441>
-   7|     | 
-   8|    2| fn get(s: &[i16], index: usize) -> i16 {
-   9|    2|     s[index]
-  10|     | }
-  11|     | 
-  12|     | #[kani::proof]
-  13|    2| fn main() {
-  14|    2|     get(&[7, -83, 19], 15);
-  15|     | }
+   1|     | // Copyright Kani Contributors\
+   2|     | // SPDX-License-Identifier: Apache-2.0 OR MIT\
+   3|     | \
+   4|     | //! This test should check that the return in `get` is `UNCOVERED`. However, the\
+   5|     | //! coverage results currently report that the whole function is `COVERED`,\
+   6|     | //! likely due to <https://github.com/model-checking/kani/issues/3441>\
+   7|     | \
+   8|    2| fn get(s: &[i16], index: usize) -> i16 {\
+   9|    2|     s[index]\
+  10|     | }\
+  11|     | \
+  12|     | #[kani::proof]\
+  13|    2| fn main() {\
+  14|    2|     get(&[7, -83, 19], 15);\
+  15|     | }\
