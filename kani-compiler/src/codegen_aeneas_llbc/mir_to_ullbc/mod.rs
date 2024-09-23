@@ -1,7 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-//! This module contains a context for translating stable MIR into ULLBC
+//! This module contains a context for translating stable MIR into Charon's
+//! unstructured low-level borrow calculus (ULLBC)
 
 use core::panic;
 use std::path::PathBuf;
@@ -17,7 +18,8 @@ use charon_lib::ast::{make_locals_generator, AbortKind, Body as CharonBody, Var,
 use charon_lib::ast::{
     AnyTransId, Assert, BodyId, BuiltinTy, Disambiguator, FileName, FunDecl, FunSig, GenericArgs,
     GenericParams, IntegerTy, ItemKind, ItemMeta, ItemOpacity, Literal, LiteralTy, Name, Opaque,
-    PathElem, RawConstantExpr, RefKind, Region, ScalarValue, TranslatedCrate, TypeId,
+    PathElem, RawConstantExpr, RefKind, Region as CharonRegion, ScalarValue, TranslatedCrate,
+    TypeId,
 };
 use charon_lib::ast::{
     BinOp as CharonBinOp, Call, FnOperand, FnPtr, FunDeclId, FunId, FunIdOrTraitMethodRef,
@@ -46,12 +48,15 @@ use stable_mir::mir::{
     ProjectionElem, Rvalue, Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind,
 };
 use stable_mir::ty::{
-    Allocation, ConstantKind, IndexedVal, IntTy, MirConst, RigidTy, Span, Ty, TyKind, UintTy,
+    Allocation, ConstantKind, IndexedVal, IntTy, MirConst, Region, RegionKind, RigidTy, Span, Ty,
+    TyKind, UintTy,
 };
 
 use stable_mir::{CrateDef, DefId};
 use tracing::{debug, trace};
 
+/// A context for translating a single MIR function to ULLBC.
+/// The results of the translation are stored in the `translated` field.
 pub struct Context<'a, 'tcx> {
     tcx: TyCtxt<'tcx>,
     instance: Instance,
@@ -60,6 +65,8 @@ pub struct Context<'a, 'tcx> {
 }
 
 impl<'a, 'tcx> Context<'a, 'tcx> {
+    /// Create a new context for translating the function `instance`, populating
+    /// the results of the translation in `translated`
     pub fn new(
         tcx: TyCtxt<'tcx>,
         instance: Instance,
@@ -81,11 +88,13 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         self.errors.continue_on_failure()
     }
 
+    /// Perform the translation
     pub fn translate(&mut self) -> Result<(), ()> {
         // Charon's `id_map` is in terms of internal `DefId`
         let def_id = rustc_internal::internal(self.tcx(), self.instance.def.def_id());
 
-        // TODO: might want to populate errors.dep_sources to help with debugging
+        // TODO: might want to populate `errors.dep_sources` to help with
+        // debugging
 
         let fid = self.register_fun_decl_id(def_id);
 
@@ -118,6 +127,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         Ok(())
     }
 
+    /// Get or create a `FunDeclId` for the given function
     fn register_fun_decl_id(&mut self, def_id: InternalDefId) -> FunDeclId {
         let tid = match self.translated.id_map.get(&def_id) {
             Some(tid) => *tid,
@@ -133,17 +143,21 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
     }
 
     /// Compute the meta information for a Rust item identified by its id.
-    pub(crate) fn translate_item_meta_from_rid(
-        &mut self,
-        instance: Instance,
-    ) -> Result<ItemMeta, Error> {
-        let span = self.translate_span_from_rid(instance);
+    fn translate_item_meta_from_rid(&mut self, instance: Instance) -> Result<ItemMeta, Error> {
+        let span = self.translate_instance_span(instance);
         let name = self.def_id_to_name(instance.def.def_id())?;
+        // TODO: populate the source text
         let source_text = None;
+        // TODO: populate the attribute info
         let attr_info =
             AttrInfo { attributes: Vec::new(), inline: None, rename: None, public: true };
-        let is_local = true; //def_id.is_local();
 
+        // Aeneas only translates items that are local to the top-level crate
+        // Since we want all reachable items (including those in external
+        // crates) to be translated, always set `is_local` to true
+        let is_local = true;
+
+        // For now, assume all items are transparent
         let opacity = ItemOpacity::Transparent;
 
         Ok(ItemMeta { span, source_text, attr_info, name, is_local, opacity })
@@ -152,7 +166,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
     /// Retrieve an item name from a [DefId].
     /// This function is adapted from Charon:
     /// https://github.com/AeneasVerif/charon/blob/53530427db2941ce784201e64086766504bc5642/charon/src/bin/charon-driver/translate/translate_ctx.rs#L344
-    pub fn def_id_to_name(&mut self, def_id: DefId) -> Result<Name, Error> {
+    fn def_id_to_name(&mut self, def_id: DefId) -> Result<Name, Error> {
         trace!("{:?}", def_id);
         let def_id = rustc_internal::internal(self.tcx(), def_id);
         let tcx = self.tcx();
@@ -291,13 +305,13 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         Ok(Name { name })
     }
 
-    /// Compute the span information for a Rust definition identified by its id.
-    pub(crate) fn translate_span_from_rid(&mut self, instance: Instance) -> CharonSpan {
+    /// Compute the span information for the given instance
+    fn translate_instance_span(&mut self, instance: Instance) -> CharonSpan {
         self.translate_span(instance.def.span())
     }
 
     /// Compute the span information for MIR span
-    pub(crate) fn translate_span(&mut self, span: Span) -> CharonSpan {
+    fn translate_span(&mut self, span: Span) -> CharonSpan {
         let filename = FileName::Local(PathBuf::from(span.get_filename()));
         let file_id = match self.translated.file_to_id.get(&filename) {
             Some(file_id) => *file_id,
@@ -319,7 +333,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         CharonSpan { span: rspan, generated_from_span: None }
     }
 
-    pub(crate) fn translate_function_signature(&mut self) -> FunSig {
+    fn translate_function_signature(&mut self) -> FunSig {
         let instance = self.instance;
         let fn_abi = instance.fn_abi().unwrap();
         let requires_caller_location = self.requires_caller_location(instance);
@@ -328,18 +342,18 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             .args
             .iter()
             .enumerate()
-            .filter(move |(idx, arg_abi)| {
-                arg_abi.mode != PassMode::Ignore
-                    && !(requires_caller_location && idx + 1 == num_args)
-            })
-            .filter_map(|(i, arg_abi)| {
-                let ty = arg_abi.ty;
-                debug!(?i, ?arg_abi, "fn_typ");
-                if arg_abi.mode == PassMode::Ignore {
-                    // We ignore zero-sized parameters.
-                    // See https://github.com/model-checking/kani/issues/274 for more details.
+            .filter_map(|(idx, arg_abi)| {
+                // We ignore zero-sized parameters.
+                // See https://github.com/model-checking/kani/issues/274 for more details.
+                // We also ingore the last parameter if the function requires
+                // caller location.
+                if arg_abi.mode == PassMode::Ignore
+                    || (requires_caller_location && idx + 1 == num_args)
+                {
                     None
                 } else {
+                    let ty = arg_abi.ty;
+                    debug!(?idx, ?arg_abi, "fn_typ");
                     Some(self.translate_ty(ty))
                 }
             })
@@ -348,6 +362,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         debug!(?args, ?fn_abi, "function_type");
         let ret_type = self.translate_ty(fn_abi.ret.ty);
 
+        // TODO: populate the rest of the information (`is_unsafe`, `is_closure`, etc.)
         FunSig {
             is_unsafe: false,
             is_closure: false,
@@ -359,7 +374,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         }
     }
 
-    pub(crate) fn translate_function_body(&mut self) -> Result<BodyId, Opaque> {
+    fn translate_function_body(&mut self) -> Result<BodyId, Opaque> {
         let instance = self.instance;
         let mir_body = instance.body().unwrap();
         let body_id = self.translated.bodies.reserve_slot();
@@ -368,7 +383,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         Ok(body_id)
     }
 
-    pub(crate) fn translate_body(&mut self, mir_body: Body) -> CharonBody {
+    fn translate_body(&mut self, mir_body: Body) -> CharonBody {
         let span = self.translate_span(mir_body.span);
         let arg_count = self.instance.fn_abi().unwrap().args.len();
         let locals = self.translate_body_locals(&mir_body);
@@ -379,19 +394,19 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         CharonBody::Unstructured(body_expr)
     }
 
-    pub fn requires_caller_location(&self, instance: Instance) -> bool {
+    fn requires_caller_location(&self, instance: Instance) -> bool {
         let instance_internal = rustc_internal::internal(self.tcx(), instance);
         instance_internal.def.requires_caller_location(self.tcx())
     }
 
-    pub fn translate_ty(&self, ty: Ty) -> CharonTy {
+    fn translate_ty(&self, ty: Ty) -> CharonTy {
         match ty.kind() {
             TyKind::RigidTy(rigid_ty) => self.translate_rigid_ty(rigid_ty),
             _ => todo!(),
         }
     }
 
-    pub fn translate_rigid_ty(&self, rigid_ty: RigidTy) -> CharonTy {
+    fn translate_rigid_ty(&self, rigid_ty: RigidTy) -> CharonTy {
         debug!("translate_rigid_ty: {rigid_ty:?}");
         match rigid_ty {
             RigidTy::Bool => CharonTy::Literal(LiteralTy::Bool),
@@ -401,6 +416,8 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             RigidTy::Never => CharonTy::Never,
             RigidTy::Str => CharonTy::Adt(
                 TypeId::Builtin(BuiltinTy::Str),
+                // TODO: find out whether any of the information below should be
+                // populated for strings
                 GenericArgs {
                     regions: Vector::new(),
                     types: Vector::new(),
@@ -408,8 +425,8 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     trait_refs: Vector::new(),
                 },
             ),
-            RigidTy::Ref(_region, ty, mutability) => CharonTy::Ref(
-                Region::Static,
+            RigidTy::Ref(region, ty, mutability) => CharonTy::Ref(
+                self.translate_region(region),
                 Box::new(self.translate_ty(ty)),
                 match mutability {
                     Mutability::Mut => RefKind::Mut,
@@ -418,6 +435,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             ),
             RigidTy::Tuple(ty) => {
                 let types = ty.iter().map(|ty| self.translate_ty(*ty)).collect();
+                // TODO: find out if any of the information below is needed
                 let generic_args = GenericArgs {
                     regions: Vector::new(),
                     types,
@@ -430,6 +448,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 let sig = def_id.fn_sig().value;
                 let inputs = sig.inputs().iter().map(|ty| self.translate_ty(*ty)).collect();
                 let output = self.translate_ty(sig.output());
+                // TODO: populate regions?
                 CharonTy::Arrow(Vector::new(), inputs, Box::new(output))
             }
             _ => todo!(),
@@ -442,11 +461,8 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         // - the input arguments
         // - the remaining locals, used for the intermediate computations
         let mut locals = Vector::new();
-        //let ret_local = mir_body.ret_local();
         {
             let mut add_variable = make_locals_generator(&mut locals);
-            //let ret_ty = self.translate_ty_stable(ret_local.ty);
-            //add_variable(ret_ty);
             mir_body.local_decls().for_each(|(_, local)| {
                 add_variable(self.translate_ty(local.ty));
             });
@@ -454,14 +470,14 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         locals
     }
 
-    pub fn translate_block(&mut self, bb: &BasicBlock) -> BlockData {
+    fn translate_block(&mut self, bb: &BasicBlock) -> BlockData {
         let statements =
             bb.statements.iter().filter_map(|stmt| self.translate_statement(stmt)).collect();
         let terminator = self.translate_terminator(&bb.terminator);
         BlockData { statements, terminator }
     }
 
-    pub fn translate_statement(&mut self, stmt: &Statement) -> Option<CharonStatement> {
+    fn translate_statement(&mut self, stmt: &Statement) -> Option<CharonStatement> {
         let content = match &stmt.kind {
             StatementKind::Assign(place, rhs) => Some(RawStatement::Assign(
                 self.translate_place(&place),
@@ -487,7 +503,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         None
     }
 
-    pub fn translate_terminator(&mut self, terminator: &Terminator) -> CharonTerminator {
+    fn translate_terminator(&mut self, terminator: &Terminator) -> CharonTerminator {
         let span = self.translate_span(terminator.span);
         let content = match &terminator.kind {
             TerminatorKind::Return => RawTerminator::Return,
@@ -513,6 +529,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                         let fid = self.register_fun_decl_id(def_id);
                         FnPtr {
                             func: FunIdOrTraitMethodRef::Fun(FunId::Regular(fid)),
+                            // TODO: populate generics?
                             generics: GenericArgs {
                                 regions: Vector::new(),
                                 types: Vector::new(),
@@ -546,14 +563,14 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         CharonTerminator { span, content }
     }
 
-    pub fn translate_place(&self, place: &Place) -> CharonPlace {
+    fn translate_place(&self, place: &Place) -> CharonPlace {
         let projection = self.translate_projection(&place.projection);
         let local = place.local;
         let var_id = VarId::from_usize(local);
         CharonPlace { var_id, projection }
     }
 
-    pub fn translate_rvalue(&self, rvalue: &Rvalue) -> CharonRvalue {
+    fn translate_rvalue(&self, rvalue: &Rvalue) -> CharonRvalue {
         trace!("translate_rvalue: {rvalue:?}");
         match rvalue {
             Rvalue::Use(operand) => CharonRvalue::Use(self.translate_operand(operand)),
@@ -587,7 +604,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         }
     }
 
-    pub fn translate_operand(&self, operand: &Operand) -> CharonOperand {
+    fn translate_operand(&self, operand: &Operand) -> CharonOperand {
         trace!("translate_operand: {operand:?}");
         match operand {
             Operand::Constant(constant) => CharonOperand::Const(self.translate_constant(constant)),
@@ -596,13 +613,13 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         }
     }
 
-    pub fn translate_constant(&self, constant: &ConstOperand) -> ConstantExpr {
+    fn translate_constant(&self, constant: &ConstOperand) -> ConstantExpr {
         trace!("translate_constant: {constant:?}");
         let value = self.translate_constant_value(&constant.const_);
         ConstantExpr { value, ty: self.translate_ty(constant.ty()) }
     }
 
-    pub fn translate_constant_value(&self, constant: &MirConst) -> RawConstantExpr {
+    fn translate_constant_value(&self, constant: &MirConst) -> RawConstantExpr {
         trace!("translate_constant_value: {constant:?}");
         match constant.kind() {
             ConstantKind::Allocated(alloc) => self.translate_allocation(alloc, constant.ty()),
@@ -613,7 +630,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         }
     }
 
-    pub fn translate_allocation(&self, alloc: &Allocation, ty: Ty) -> RawConstantExpr {
+    fn translate_allocation(&self, alloc: &Allocation, ty: Ty) -> RawConstantExpr {
         match ty.kind() {
             TyKind::RigidTy(RigidTy::Int(it)) => {
                 let value = alloc.read_int().unwrap();
@@ -651,11 +668,11 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         }
     }
 
-    pub fn translate_cast(&self, _kind: CastKind, _operand: &Operand, _ty: Ty) -> CharonCastKind {
+    fn translate_cast(&self, _kind: CastKind, _operand: &Operand, _ty: Ty) -> CharonCastKind {
         todo!()
     }
 
-    pub fn translate_switch_targets(
+    fn translate_switch_targets(
         &self,
         discr: &Operand,
         targets: &SwitchTargets,
@@ -712,6 +729,16 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             _ => todo!(),
         }
     }
+
+    fn translate_region(&self, region: Region) -> CharonRegion {
+        match region.kind {
+            RegionKind::ReStatic => CharonRegion::Static,
+            RegionKind::ReErased => CharonRegion::Erased,
+            RegionKind::ReEarlyParam(_)
+            | RegionKind::ReBound(_, _)
+            | RegionKind::RePlaceholder(_) => todo!(),
+        }
+    }
 }
 
 fn translate_int_ty(int_ty: IntTy) -> IntegerTy {
@@ -738,7 +765,7 @@ fn translate_uint_ty(uint_ty: UintTy) -> IntegerTy {
     }
 }
 
-pub fn translate_bin_op(bin_op: BinOp) -> CharonBinOp {
+fn translate_bin_op(bin_op: BinOp) -> CharonBinOp {
     match bin_op {
         BinOp::Add | BinOp::AddUnchecked => CharonBinOp::Add,
         BinOp::Sub | BinOp::SubUnchecked => CharonBinOp::Sub,
