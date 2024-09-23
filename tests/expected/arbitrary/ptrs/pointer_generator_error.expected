@@ -1,0 +1,10 @@
+error[E0080]: evaluation of `kani::PointerGenerator::<char, 0>::_VALID` failed
+
+the evaluated program panicked at 'PointerGenerator requires non-zero length.'
+
+note: the above error was encountered while instantiating `fn kani::PointerGenerator::<char, 0>::new`\
+pointer_generator_error.rs\
+|\
+|     let _generator = PointerGenerator::<char, 0>::new();\
+|                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+

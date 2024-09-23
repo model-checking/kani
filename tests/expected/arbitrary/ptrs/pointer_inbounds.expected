@@ -1,0 +1,39 @@
+Checking harness check_overlap...
+
+Status: SATISFIED\
+Description: "Same"
+
+Status: SATISFIED\
+Description: "Overlap"
+
+Status: SATISFIED\
+Description: "Greater"
+
+Status: SATISFIED\
+Description: "Smaller"
+
+Checking harness check_alignment...
+
+Status: SATISFIED\
+Description: "Aligned"
+
+Status: SATISFIED\
+Description: "Unaligned"
+
+Checking harness check_inbounds_initialized...
+
+Status: SUCCESS\
+Description: ""ValidRead""
+
+Checking harness check_inbounds...
+
+Status: SATISFIED\
+Description: "Uninitialized"
+
+Status: SATISFIED\
+Description: "Initialized"
+
+Status: SUCCESS\
+Description: ""ValidWrite""
+
+Complete - 4 successfully verified harnesses, 0 failures, 4 total.
