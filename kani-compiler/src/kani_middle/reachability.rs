@@ -60,7 +60,7 @@ pub fn collect_reachable_items(
     #[cfg(debug_assertions)]
     collector
         .call_graph
-        .dump_dot(tcx)
+        .dump_dot(tcx, starting_points.first().cloned())
         .unwrap_or_else(|e| tracing::error!("Failed to dump call graph: {e}"));
 
     tcx.dcx().abort_if_errors();
@@ -579,12 +579,18 @@ impl CallGraph {
 
     /// Print the graph in DOT format to a file.
     /// See <https://graphviz.org/doc/info/lang.html> for more information.
-    fn dump_dot(&self, tcx: TyCtxt) -> std::io::Result<()> {
+    fn dump_dot(&self, tcx: TyCtxt, initial: Option<MonoItem>) -> std::io::Result<()> {
         if let Ok(target) = std::env::var("KANI_REACH_DEBUG") {
             debug!(?target, "dump_dot");
+            let name = initial.map(|item| Node(item).to_string()).unwrap_or_default();
             let outputs = tcx.output_filenames(());
             let base_path = outputs.path(OutputType::Metadata);
-            let path = base_path.as_path().with_extension("dot");
+            let file_stem = format!(
+                "{}_{}.dot",
+                base_path.as_path().file_stem().unwrap().to_string_lossy(),
+                name
+            );
+            let path = base_path.as_path().parent().unwrap().join(file_stem);
             let out_file = File::create(path)?;
             let mut writer = BufWriter::new(out_file);
             writeln!(writer, "digraph ReachabilityGraph {{")?;
