@@ -8,8 +8,8 @@
 // in the context of vtables.
 
 use std::sync::{
-    atomic::{AtomicI64, Ordering},
     Arc,
+    atomic::{AtomicI64, Ordering},
 };
 
 #[kani::proof]

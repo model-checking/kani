@@ -6,8 +6,8 @@
 use crate::args::common::Verbosity;
 use crate::args::playback_args::{CargoPlaybackArgs, KaniPlaybackArgs, MessageFormat};
 use crate::call_cargo::cargo_config_args;
-use crate::call_single_file::{base_rustc_flags, LibConfig};
-use crate::session::{lib_playback_folder, setup_cargo_command, InstallType};
+use crate::call_single_file::{LibConfig, base_rustc_flags};
+use crate::session::{InstallType, lib_playback_folder, setup_cargo_command};
 use crate::{session, util};
 use anyhow::Result;
 use std::ffi::OsString;

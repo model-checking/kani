@@ -27,8 +27,8 @@ use crate::kani_middle::transform::stubs::{ExternFnStubPass, FnStubPass};
 use crate::kani_queries::QueryDb;
 use dump_mir_pass::DumpMirPass;
 use rustc_middle::ty::TyCtxt;
-use stable_mir::mir::mono::{Instance, MonoItem};
 use stable_mir::mir::Body;
+use stable_mir::mir::mono::{Instance, MonoItem};
 use std::collections::HashMap;
 use std::fmt::Debug;
 
@@ -79,22 +79,16 @@ impl BodyTransformation {
         // would also make sense to check that the values are initialized before checking their
         // validity. In the future, it would be nice to have a mechanism to skip automatically
         // generated code for future instrumentation passes.
-        transformer.add_pass(
-            queries,
-            UninitPass {
-                // Since this uses demonic non-determinism under the hood, should not assume the assertion.
-                check_type: CheckType::new_assert(tcx),
-                mem_init_fn_cache: HashMap::new(),
-            },
-        );
-        transformer.add_pass(
-            queries,
-            IntrinsicGeneratorPass {
-                check_type,
-                mem_init_fn_cache: HashMap::new(),
-                arguments: queries.args().clone(),
-            },
-        );
+        transformer.add_pass(queries, UninitPass {
+            // Since this uses demonic non-determinism under the hood, should not assume the assertion.
+            check_type: CheckType::new_assert(tcx),
+            mem_init_fn_cache: HashMap::new(),
+        });
+        transformer.add_pass(queries, IntrinsicGeneratorPass {
+            check_type,
+            mem_init_fn_cache: HashMap::new(),
+            arguments: queries.args().clone(),
+        });
         transformer
     }
 

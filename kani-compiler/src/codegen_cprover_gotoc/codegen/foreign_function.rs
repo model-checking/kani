@@ -9,17 +9,17 @@
 //! linking and usability unless unstable C-FFI support is enabled.
 use std::collections::HashSet;
 
-use crate::codegen_cprover_gotoc::codegen::PropertyClass;
 use crate::codegen_cprover_gotoc::GotocCtx;
+use crate::codegen_cprover_gotoc::codegen::PropertyClass;
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
 use cbmc::goto_program::{Expr, Location, Stmt, Symbol, Type};
 use cbmc::{InternString, InternedString};
 use lazy_static::lazy_static;
-use stable_mir::abi::{CallConvention, PassMode};
-use stable_mir::mir::mono::Instance;
-use stable_mir::mir::Place;
-use stable_mir::ty::{RigidTy, TyKind};
 use stable_mir::CrateDef;
+use stable_mir::abi::{CallConvention, PassMode};
+use stable_mir::mir::Place;
+use stable_mir::mir::mono::Instance;
+use stable_mir::ty::{RigidTy, TyKind};
 use tracing::{debug, trace};
 
 lazy_static! {

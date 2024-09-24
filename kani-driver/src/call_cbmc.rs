@@ -1,12 +1,12 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use kani_metadata::{CbmcSolver, HarnessMetadata};
 use regex::Regex;
 use rustc_demangle::demangle;
-use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
+use std::collections::btree_map::Entry;
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::path::Path;
@@ -16,7 +16,7 @@ use std::time::{Duration, Instant};
 
 use crate::args::{OutputFormat, VerificationArgs};
 use crate::cbmc_output_parser::{
-    extract_results, process_cbmc_output, CheckStatus, Property, VerificationOutput,
+    CheckStatus, Property, VerificationOutput, extract_results, process_cbmc_output,
 };
 use crate::cbmc_property_renderer::{format_coverage, format_result, kani_cbmc_output_filter};
 use crate::coverage::cov_results::{CoverageCheck, CoverageResults};

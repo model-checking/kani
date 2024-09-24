@@ -409,7 +409,7 @@ mod sysroot {
     use {
         quote::{format_ident, quote},
         syn::parse::{Parse, ParseStream},
-        syn::{parse_macro_input, ItemFn},
+        syn::{ItemFn, parse_macro_input},
     };
 
     /// Annotate the harness with a #[kanitool::<name>] with optional arguments.

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Z uninit-checks
 
-use std::alloc::{alloc, Layout};
+use std::alloc::{Layout, alloc};
 use std::slice::from_raw_parts;
 
 /// Checks that Kani catches an attempt to form a slice from uninitialized memory.

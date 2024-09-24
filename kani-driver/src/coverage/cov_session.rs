@@ -5,10 +5,10 @@ use std::fs;
 use std::fs::File;
 use std::io::Write;
 
+use crate::KaniSession;
 use crate::harness_runner::HarnessResult;
 use crate::project::Project;
-use crate::KaniSession;
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 
 impl KaniSession {
     /// Saves metadata required for coverage-related features.

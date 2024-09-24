@@ -4,7 +4,7 @@
 
 #![feature(core_intrinsics)]
 
-use std::alloc::{alloc, Layout};
+use std::alloc::{Layout, alloc};
 use std::sync::atomic::{AtomicU8, Ordering};
 
 // Checks if memory initialization checks correctly fail when uninitialized memory is passed to

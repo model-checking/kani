@@ -8,9 +8,9 @@ use proc_macro2::TokenStream as TokenStream2;
 use syn::ItemFn;
 
 use super::{
-    helpers::{chunks_by, is_token_stream_2_comma, matches_path},
     ContractConditionsData, ContractConditionsHandler, ContractConditionsType,
     ContractFunctionState,
+    helpers::{chunks_by, is_token_stream_2_comma, matches_path},
 };
 
 impl<'a> TryFrom<&'a syn::Attribute> for ContractFunctionState {
