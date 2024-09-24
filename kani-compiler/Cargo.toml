@@ -28,11 +28,6 @@ tracing = {version = "0.1", features = ["max_level_trace", "release_max_level_de
 tracing-subscriber = {version = "0.3.8", features = ["env-filter", "json", "fmt"]}
 tracing-tree = "0.4.0"
 
-[dependencies.object]
-version = "0.36.2"
-default-features = false
-features = ["elf", "macho", "pe", "xcoff", "write", "wasm"]
-
 # Future proofing: enable backend dependencies using feature.
 [features]
 default = ['cprover']

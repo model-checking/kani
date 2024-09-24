@@ -24,19 +24,15 @@ use kani_metadata::artifact::convert_type;
 use kani_metadata::UnsupportedFeature;
 use kani_metadata::{ArtifactType, HarnessMetadata, KaniMetadata};
 use kani_metadata::{AssignsContract, CompilerArtifactStub};
-use object::write::{self, StandardSegment, Symbol, SymbolSection};
-use object::{
-    elf, pe, xcoff, Architecture, BinaryFormat, Endianness, FileFlags, SectionFlags, SectionKind,
-    SubArchitecture, SymbolFlags, SymbolKind, SymbolScope,
-};
 use rustc_codegen_ssa::back::archive::{ArArchiveBuilder, ArchiveBuilder, DEFAULT_OBJECT_READER};
-use rustc_codegen_ssa::back::metadata::create_metadata_file_for_wasm;
+use rustc_codegen_ssa::back::metadata::create_wrapper_file;
 use rustc_codegen_ssa::traits::CodegenBackend;
 use rustc_codegen_ssa::{CodegenResults, CrateInfo};
 use rustc_data_structures::fx::{FxHashMap, FxIndexMap};
 use rustc_data_structures::temp_dir::MaybeTempDir;
 use rustc_errors::{ErrorGuaranteed, DEFAULT_LOCALE_RESOURCE};
 use rustc_hir::def_id::{DefId as InternalDefId, LOCAL_CRATE};
+use rustc_metadata::creader::MetadataLoaderDyn;
 use rustc_metadata::fs::{emit_wrapper_file, METADATA_FILENAME};
 use rustc_metadata::EncodedMetadata;
 use rustc_middle::dep_graph::{WorkProduct, WorkProductId};
@@ -46,9 +42,8 @@ use rustc_session::config::{CrateType, OutputFilenames, OutputType};
 use rustc_session::output::out_filename;
 use rustc_session::Session;
 use rustc_smir::rustc_internal;
-use rustc_span::sym;
 use rustc_target::abi::Endian;
-use rustc_target::spec::{ef_avr_arch, PanicStrategy, RelocModel, Target};
+use rustc_target::spec::PanicStrategy;
 use stable_mir::mir::mono::{Instance, MonoItem};
 use stable_mir::{CrateDef, DefId};
 use std::any::Any;
@@ -229,293 +224,11 @@ impl GotocCodegenBackend {
     }
 }
 
-// Copy of macho_object_build_version_for_target from
-// rust/compiler/rustc_codegen_ssa/src/back/metadata.rs
-fn macho_object_build_version_for_target(target: &Target) -> object::write::MachOBuildVersion {
-    /// The `object` crate demands "X.Y.Z encoded in nibbles as xxxx.yy.zz"
-    /// e.g. minOS 14.0 = 0x000E0000, or SDK 16.2 = 0x00100200
-    fn pack_version((major, minor, patch): (u16, u8, u8)) -> u32 {
-        let (major, minor, patch) = (major as u32, minor as u32, patch as u32);
-        (major << 16) | (minor << 8) | patch
-    }
-
-    let platform =
-        rustc_target::spec::current_apple_platform(target).expect("unknown Apple target OS");
-    let min_os = rustc_target::spec::current_apple_deployment_target(target);
-    let (sdk_major, sdk_minor) =
-        rustc_target::spec::current_apple_sdk_version(platform).expect("unknown Apple target OS");
-
-    let mut build_version = object::write::MachOBuildVersion::default();
-    build_version.platform = platform;
-    build_version.minos = pack_version(min_os);
-    build_version.sdk = pack_version((sdk_major, sdk_minor, 0));
-    build_version
-}
-
-// Copy of create_object_file from
-// rust/compiler/rustc_codegen_ssa/src/back/metadata.rs
-fn create_object_file(sess: &Session) -> Option<write::Object<'static>> {
-    let endianness = match sess.target.options.endian {
-        Endian::Little => Endianness::Little,
-        Endian::Big => Endianness::Big,
-    };
-    let (architecture, sub_architecture) = match &sess.target.arch[..] {
-        "arm" => (Architecture::Arm, None),
-        "aarch64" => (
-            if sess.target.pointer_width == 32 {
-                Architecture::Aarch64_Ilp32
-            } else {
-                Architecture::Aarch64
-            },
-            None,
-        ),
-        "x86" => (Architecture::I386, None),
-        "s390x" => (Architecture::S390x, None),
-        "mips" | "mips32r6" => (Architecture::Mips, None),
-        "mips64" | "mips64r6" => (Architecture::Mips64, None),
-        "x86_64" => (
-            if sess.target.pointer_width == 32 {
-                Architecture::X86_64_X32
-            } else {
-                Architecture::X86_64
-            },
-            None,
-        ),
-        "powerpc" => (Architecture::PowerPc, None),
-        "powerpc64" => (Architecture::PowerPc64, None),
-        "riscv32" => (Architecture::Riscv32, None),
-        "riscv64" => (Architecture::Riscv64, None),
-        "sparc" => (Architecture::Sparc32Plus, None),
-        "sparc64" => (Architecture::Sparc64, None),
-        "avr" => (Architecture::Avr, None),
-        "msp430" => (Architecture::Msp430, None),
-        "hexagon" => (Architecture::Hexagon, None),
-        "bpf" => (Architecture::Bpf, None),
-        "loongarch64" => (Architecture::LoongArch64, None),
-        "csky" => (Architecture::Csky, None),
-        "arm64ec" => (Architecture::Aarch64, Some(SubArchitecture::Arm64EC)),
-        // Unsupported architecture.
-        _ => return None,
-    };
-    let binary_format = if sess.target.is_like_osx {
-        BinaryFormat::MachO
-    } else if sess.target.is_like_windows {
-        BinaryFormat::Coff
-    } else if sess.target.is_like_aix {
-        BinaryFormat::Xcoff
-    } else {
-        BinaryFormat::Elf
-    };
-
-    let mut file = write::Object::new(binary_format, architecture, endianness);
-    file.set_sub_architecture(sub_architecture);
-    if sess.target.is_like_osx {
-        if sess.target.llvm_target.starts_with("arm64e") {
-            file.set_macho_cpu_subtype(object::macho::CPU_SUBTYPE_ARM64E);
-        }
-
-        file.set_macho_build_version(macho_object_build_version_for_target(&sess.target))
-    }
-    if binary_format == BinaryFormat::Coff {
-        // Disable the default mangler to avoid mangling the special "@feat.00" symbol name.
-        let original_mangling = file.mangling();
-        file.set_mangling(object::write::Mangling::None);
-
-        let mut feature = 0;
-
-        if file.architecture() == object::Architecture::I386 {
-            // When linking with /SAFESEH on x86, lld requires that all linker inputs be marked as
-            // safe exception handling compatible. Metadata files masquerade as regular COFF
-            // objects and are treated as linker inputs, despite containing no actual code. Thus,
-            // they still need to be marked as safe exception handling compatible. See #96498.
-            // Reference: https://docs.microsoft.com/en-us/windows/win32/debug/pe-format
-            feature |= 1;
-        }
-
-        file.add_symbol(object::write::Symbol {
-            name: "@feat.00".into(),
-            value: feature,
-            size: 0,
-            kind: object::SymbolKind::Data,
-            scope: object::SymbolScope::Compilation,
-            weak: false,
-            section: object::write::SymbolSection::Absolute,
-            flags: object::SymbolFlags::None,
-        });
-
-        file.set_mangling(original_mangling);
-    }
-    let e_flags = match architecture {
-        Architecture::Mips => {
-            let arch = match sess.target.options.cpu.as_ref() {
-                "mips1" => elf::EF_MIPS_ARCH_1,
-                "mips2" => elf::EF_MIPS_ARCH_2,
-                "mips3" => elf::EF_MIPS_ARCH_3,
-                "mips4" => elf::EF_MIPS_ARCH_4,
-                "mips5" => elf::EF_MIPS_ARCH_5,
-                s if s.contains("r6") => elf::EF_MIPS_ARCH_32R6,
-                _ => elf::EF_MIPS_ARCH_32R2,
-            };
-
-            let mut e_flags = elf::EF_MIPS_CPIC | arch;
-
-            // If the ABI is explicitly given, use it or default to O32.
-            match sess.target.options.llvm_abiname.to_lowercase().as_str() {
-                "n32" => e_flags |= elf::EF_MIPS_ABI2,
-                "o32" => e_flags |= elf::EF_MIPS_ABI_O32,
-                _ => e_flags |= elf::EF_MIPS_ABI_O32,
-            };
-
-            if sess.target.options.relocation_model != RelocModel::Static {
-                e_flags |= elf::EF_MIPS_PIC;
-            }
-            if sess.target.options.cpu.contains("r6") {
-                e_flags |= elf::EF_MIPS_NAN2008;
-            }
-            e_flags
-        }
-        Architecture::Mips64 => {
-            // copied from `mips64el-linux-gnuabi64-gcc foo.c -c`
-            elf::EF_MIPS_CPIC
-                | elf::EF_MIPS_PIC
-                | if sess.target.options.cpu.contains("r6") {
-                    elf::EF_MIPS_ARCH_64R6 | elf::EF_MIPS_NAN2008
-                } else {
-                    elf::EF_MIPS_ARCH_64R2
-                }
-        }
-        Architecture::Riscv32 | Architecture::Riscv64 => {
-            // Source: https://github.com/riscv-non-isa/riscv-elf-psabi-doc/blob/079772828bd10933d34121117a222b4cc0ee2200/riscv-elf.adoc
-            let mut e_flags: u32 = 0x0;
-
-            // Check if compressed is enabled
-            // `unstable_target_features` is used here because "c" is gated behind riscv_target_feature.
-            if sess.unstable_target_features.contains(&sym::c) {
-                e_flags |= elf::EF_RISCV_RVC;
-            }
-
-            // Set the appropriate flag based on ABI
-            // This needs to match LLVM `RISCVELFStreamer.cpp`
-            match &*sess.target.llvm_abiname {
-                "" | "ilp32" | "lp64" => (),
-                "ilp32f" | "lp64f" => e_flags |= elf::EF_RISCV_FLOAT_ABI_SINGLE,
-                "ilp32d" | "lp64d" => e_flags |= elf::EF_RISCV_FLOAT_ABI_DOUBLE,
-                "ilp32e" => e_flags |= elf::EF_RISCV_RVE,
-                _ => panic!("unknown RISC-V ABI name"),
-            }
-
-            e_flags
-        }
-        Architecture::LoongArch64 => {
-            // Source: https://github.com/loongson/la-abi-specs/blob/release/laelf.adoc#e_flags-identifies-abi-type-and-version
-            let mut e_flags: u32 = elf::EF_LARCH_OBJABI_V1;
-
-            // Set the appropriate flag based on ABI
-            // This needs to match LLVM `LoongArchELFStreamer.cpp`
-            match &*sess.target.llvm_abiname {
-                "ilp32s" | "lp64s" => e_flags |= elf::EF_LARCH_ABI_SOFT_FLOAT,
-                "ilp32f" | "lp64f" => e_flags |= elf::EF_LARCH_ABI_SINGLE_FLOAT,
-                "ilp32d" | "lp64d" => e_flags |= elf::EF_LARCH_ABI_DOUBLE_FLOAT,
-                _ => panic!("unknown LoongArch ABI name"),
-            }
-
-            e_flags
-        }
-        Architecture::Avr => {
-            // Resolve the ISA revision and set
-            // the appropriate EF_AVR_ARCH flag.
-            ef_avr_arch(&sess.target.options.cpu)
-        }
-        Architecture::Csky => {
-            let e_flags = match sess.target.options.abi.as_ref() {
-                "abiv2" => elf::EF_CSKY_ABIV2,
-                _ => elf::EF_CSKY_ABIV1,
-            };
-            e_flags
-        }
-        _ => 0,
-    };
-    // adapted from LLVM's `MCELFObjectTargetWriter::getOSABI`
-    let os_abi = match sess.target.options.os.as_ref() {
-        "hermit" => elf::ELFOSABI_STANDALONE,
-        "freebsd" => elf::ELFOSABI_FREEBSD,
-        "solaris" => elf::ELFOSABI_SOLARIS,
-        _ => elf::ELFOSABI_NONE,
-    };
-    let abi_version = 0;
-    // rustc implementation also does:
-    // add_gnu_property_note(&mut file, architecture, binary_format, endianness);
-    file.flags = FileFlags::Elf { os_abi, abi_version, e_flags };
-    Some(file)
-}
-
-// copy of create_wrapper_file from
-// rust/compiler/rustc_codegen_ssa/src/back/metadata.rs
-// without the MetadataPosition return value, which we don't need
-fn create_wrapper_file(sess: &Session, section_name: String, data: &[u8]) -> Vec<u8> {
-    let Some(mut file) = create_object_file(sess) else {
-        if sess.target.is_like_wasm {
-            return create_metadata_file_for_wasm(sess, data, &section_name);
-        }
-
-        // Targets using this branch don't have support implemented here yet or
-        // they're not yet implemented in the `object` crate and will likely
-        // fill out this module over time.
-        return data.to_vec();
-    };
-    let section = if file.format() == BinaryFormat::Xcoff {
-        file.add_section(Vec::new(), b".info".to_vec(), SectionKind::Debug)
-    } else {
-        file.add_section(
-            file.segment_name(StandardSegment::Debug).to_vec(),
-            section_name.into_bytes(),
-            SectionKind::Debug,
-        )
-    };
-    match file.format() {
-        BinaryFormat::Coff => {
-            file.section_mut(section).flags =
-                SectionFlags::Coff { characteristics: pe::IMAGE_SCN_LNK_REMOVE };
-        }
-        BinaryFormat::Elf => {
-            file.section_mut(section).flags =
-                SectionFlags::Elf { sh_flags: elf::SHF_EXCLUDE as u64 };
-        }
-        BinaryFormat::Xcoff => {
-            // AIX system linker may aborts if it meets a valid XCOFF file in archive with no .text, no .data and no .bss.
-            file.add_section(Vec::new(), b".text".to_vec(), SectionKind::Text);
-            file.section_mut(section).flags =
-                SectionFlags::Xcoff { s_flags: xcoff::STYP_INFO as u32 };
-            // Encode string stored in .info section of XCOFF.
-            // FIXME: The length of data here is not guaranteed to fit in a u32.
-            // We may have to split the data into multiple pieces in order to
-            // store in .info section.
-            let len: u32 = data.len().try_into().unwrap();
-            let offset = file.append_section_data(section, &len.to_be_bytes(), 1);
-            // Add a symbol referring to the data in .info section.
-            file.add_symbol(Symbol {
-                name: "__aix_rust_metadata".into(),
-                value: offset + 4,
-                size: 0,
-                kind: SymbolKind::Unknown,
-                scope: SymbolScope::Compilation,
-                weak: false,
-                section: SymbolSection::Section(section),
-                flags: SymbolFlags::Xcoff {
-                    n_sclass: xcoff::C_INFO,
-                    x_smtyp: xcoff::C_HIDEXT,
-                    x_smclas: xcoff::C_HIDEXT,
-                    containing_csect: None,
-                },
-            });
-        }
-        _ => {}
-    };
-    file.append_section_data(section, data, 1);
-    file.write().unwrap()
-}
-
 impl CodegenBackend for GotocCodegenBackend {
+    fn metadata_loader(&self) -> Box<MetadataLoaderDyn> {
+        Box::new(rustc_codegen_ssa::back::metadata::DefaultMetadataLoader)
+    }
+
     fn provide(&self, providers: &mut Providers) {
         provide::provide(providers, &self.queries.lock().unwrap());
     }
@@ -726,7 +439,7 @@ impl CodegenBackend for GotocCodegenBackend {
                 let mut builder = Box::new(ArArchiveBuilder::new(sess, &DEFAULT_OBJECT_READER));
                 let tmp_dir = TempFileBuilder::new().prefix("kani").tempdir().unwrap();
                 let path = MaybeTempDir::new(tmp_dir, sess.opts.cg.save_temps);
-                let metadata = create_wrapper_file(
+                let (metadata, _metadata_position) = create_wrapper_file(
                     sess,
                     ".rmeta".to_string(),
                     codegen_results.metadata.raw_data(),
