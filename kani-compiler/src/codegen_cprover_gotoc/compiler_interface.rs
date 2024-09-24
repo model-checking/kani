@@ -34,7 +34,6 @@ use rustc_data_structures::fx::{FxHashMap, FxIndexMap};
 use rustc_errors::{DEFAULT_LOCALE_RESOURCE, ErrorGuaranteed};
 use rustc_hir::def_id::{DefId as InternalDefId, LOCAL_CRATE};
 use rustc_metadata::EncodedMetadata;
-use rustc_metadata::fs::{METADATA_FILENAME, emit_wrapper_file};
 use rustc_middle::dep_graph::{WorkProduct, WorkProductId};
 use rustc_middle::ty::TyCtxt;
 use rustc_middle::util::Providers;
