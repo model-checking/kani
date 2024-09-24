@@ -3,14 +3,14 @@
 
 //! This file contains functions related to codegenning MIR functions into gotoc
 
-use crate::codegen_cprover_gotoc::codegen::block::reverse_postorder;
 use crate::codegen_cprover_gotoc::GotocCtx;
-use cbmc::goto_program::{Expr, Stmt, Symbol};
+use crate::codegen_cprover_gotoc::codegen::block::reverse_postorder;
 use cbmc::InternString;
+use cbmc::goto_program::{Expr, Stmt, Symbol};
+use stable_mir::CrateDef;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{Body, Local};
 use stable_mir::ty::{RigidTy, TyKind};
-use stable_mir::CrateDef;
 use std::collections::BTreeMap;
 use tracing::{debug, debug_span};
 
@@ -223,8 +223,8 @@ pub mod rustc_smir {
     use rustc_middle::mir::coverage::MappingKind::Code;
     use rustc_middle::mir::coverage::SourceRegion;
     use rustc_middle::ty::TyCtxt;
-    use stable_mir::mir::mono::Instance;
     use stable_mir::Opaque;
+    use stable_mir::mir::mono::Instance;
 
     type CoverageOpaque = stable_mir::Opaque;
 

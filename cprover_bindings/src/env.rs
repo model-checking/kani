@@ -8,8 +8,8 @@
 //! c.f. CBMC code [src/ansi-c/ansi_c_internal_additions.cpp].
 //! One possible invocation of this insertion in CBMC can be found in \[ansi_c_languaget::parse\].
 
-use super::goto_program::{Expr, Location, Symbol, SymbolTable, Type};
 use super::MachineModel;
+use super::goto_program::{Expr, Location, Symbol, SymbolTable, Type};
 use num::bigint::BigInt;
 fn int_constant<T>(name: &str, value: T) -> Symbol
 where

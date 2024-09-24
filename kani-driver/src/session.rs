@@ -1,10 +1,10 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use crate::args::common::Verbosity;
 use crate::args::VerificationArgs;
+use crate::args::common::Verbosity;
 use crate::util::render_command;
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use std::io::IsTerminal;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -13,7 +13,7 @@ use std::sync::Mutex;
 use std::time::Instant;
 use strum_macros::Display;
 use tracing::level_filters::LevelFilter;
-use tracing_subscriber::{layer::SubscriberExt, EnvFilter, Registry};
+use tracing_subscriber::{EnvFilter, Registry, layer::SubscriberExt};
 
 /// Environment variable used to control this session log tracing.
 /// This is the same variable used to control `kani-compiler` logs. Note that you can still control

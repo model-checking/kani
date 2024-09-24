@@ -9,7 +9,7 @@ use crate::session::KaniSession;
 use crate::util::crate_name;
 use anyhow::{Context, Result};
 use kani_metadata::{
-    artifact::convert_type, ArtifactType, ArtifactType::*, HarnessMetadata, KaniMetadata,
+    ArtifactType, ArtifactType::*, HarnessMetadata, KaniMetadata, artifact::convert_type,
 };
 use std::env::current_dir;
 use std::fs;

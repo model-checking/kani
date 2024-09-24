@@ -14,9 +14,9 @@ use rustc_hir::def_id::DefId;
 use rustc_middle::mir::Const;
 use rustc_middle::ty::{self, EarlyBinder, ParamEnv, TyCtxt, TypeFoldable};
 use rustc_smir::rustc_internal;
+use stable_mir::mir::ConstOperand;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::visit::{Location, MirVisitor};
-use stable_mir::mir::ConstOperand;
 use stable_mir::ty::{FnDef, RigidTy, TyKind};
 use stable_mir::{CrateDef, CrateItem};
 
