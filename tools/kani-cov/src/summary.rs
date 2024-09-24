@@ -15,8 +15,8 @@ use anyhow::Result;
 use crate::{
     args::{SummaryArgs, SummaryFormat},
     coverage::{
-        function_coverage_results, function_info_from_file, CombinedCoverageResults, CovResult,
-        CoverageMetric, CoverageRegion, FileCoverageInfo, FunctionInfo, MarkerInfo,
+        CombinedCoverageResults, CovResult, CoverageMetric, CoverageRegion, FileCoverageInfo,
+        FunctionInfo, MarkerInfo, function_coverage_results, function_info_from_file,
     },
 };
 

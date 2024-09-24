@@ -10,7 +10,7 @@ mod report;
 mod summary;
 
 use anyhow::Result;
-use args::{validate_args, Subcommand};
+use args::{Subcommand, validate_args};
 use clap::Parser;
 
 /// The main function of `kani-cov`.

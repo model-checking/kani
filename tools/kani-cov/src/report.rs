@@ -10,7 +10,7 @@ use anyhow::Result;
 
 use crate::args::ReportFormat;
 use crate::coverage::{
-    function_coverage_results, function_info_from_file, CovResult, LineResults, MarkerInfo,
+    CovResult, LineResults, MarkerInfo, function_coverage_results, function_info_from_file,
 };
 use crate::summary::line_coverage_results;
 use crate::{args::ReportArgs, coverage::CombinedCoverageResults};
