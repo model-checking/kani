@@ -10,8 +10,8 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use std::time::Duration;
-use test::test::TestTimeOptions;
 use test::ColorConfig;
+use test::test::TestTimeOptions;
 
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]
 pub enum Mode {

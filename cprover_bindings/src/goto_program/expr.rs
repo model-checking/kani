@@ -285,13 +285,10 @@ pub fn arithmetic_overflow_result_type(operand_type: Type) -> Type {
     // give the struct the name "overflow_result_<type>", e.g.
     // "overflow_result_Unsignedbv"
     let name: InternedString = format!("overflow_result_{operand_type:?}").into();
-    Type::struct_type(
-        name,
-        vec![
-            DatatypeComponent::field(ARITH_OVERFLOW_RESULT_FIELD, operand_type),
-            DatatypeComponent::field(ARITH_OVERFLOW_OVERFLOWED_FIELD, Type::bool()),
-        ],
-    )
+    Type::struct_type(name, vec![
+        DatatypeComponent::field(ARITH_OVERFLOW_RESULT_FIELD, operand_type),
+        DatatypeComponent::field(ARITH_OVERFLOW_OVERFLOWED_FIELD, Type::bool()),
+    ])
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////

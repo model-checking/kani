@@ -2,16 +2,16 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! this module handles intrinsics
 use super::typ;
-use super::{bb_label, PropertyClass};
+use super::{PropertyClass, bb_label};
 use crate::codegen_cprover_gotoc::codegen::ty_stable::pointee_type_stable;
-use crate::codegen_cprover_gotoc::{utils, GotocCtx};
+use crate::codegen_cprover_gotoc::{GotocCtx, utils};
 use crate::intrinsics::Intrinsic;
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
 use cbmc::goto_program::{
     ArithmeticOverflowResult, BinaryOperator, BuiltinFn, Expr, Location, Stmt, Type,
 };
-use rustc_middle::ty::layout::ValidityRequirement;
 use rustc_middle::ty::ParamEnv;
+use rustc_middle::ty::layout::ValidityRequirement;
 use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{BasicBlockIdx, Operand, Place};

@@ -1205,12 +1205,12 @@ mod sharing_stats {
 mod tests {
     use super::GotoBinarySerializer;
     use super::IrepNumbering;
+    use crate::InternedString;
     use crate::cbmc_string::InternString;
-    use crate::irep::goto_binary_serde::GotoBinaryDeserializer;
     use crate::irep::Irep;
     use crate::irep::IrepId;
+    use crate::irep::goto_binary_serde::GotoBinaryDeserializer;
     use crate::linear_map;
-    use crate::InternedString;
     use linear_map::LinearMap;
     use std::io::BufWriter;
     /// Utility function : creates a Irep representing a single symbol.

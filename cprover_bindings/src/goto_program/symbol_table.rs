@@ -1,6 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-use super::super::{env, MachineModel};
+use super::super::{MachineModel, env};
 use super::{BuiltinFn, FunctionContract, Stmt, Symbol};
 use crate::InternedString;
 use std::collections::BTreeMap;

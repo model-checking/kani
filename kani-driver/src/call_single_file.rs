@@ -7,7 +7,7 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::session::{lib_folder, KaniSession};
+use crate::session::{KaniSession, lib_folder};
 
 pub struct LibConfig {
     args: Vec<OsString>,
