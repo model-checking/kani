@@ -164,7 +164,7 @@ macro_rules! generate_arbitrary {
             T: Arbitrary,
         {
             fn any() -> Self {
-                if kani::any() { MaybeUninit::new(T::any()) } else { MaybeUninit::uninit() }
+                if crate::kani::any() { MaybeUninit::new(T::any()) } else { MaybeUninit::uninit() }
             }
         }
 
@@ -182,7 +182,7 @@ macro_rules! generate_arbitrary {
         arbitrary_tuple!(A, B, C, D, E, F, G, H, I, J, K, L);
 
         /// Enumeration with the cases currently covered by the pointer generator.
-        #[derive(Copy, Clone, Debug, PartialEq, Eq, kani::Arbitrary)]
+        #[derive(Copy, Clone, Debug, PartialEq, Eq, crate::kani::Arbitrary)]
         pub enum AllocationStatus {
             /// Dangling pointers
             Dangling,
@@ -251,7 +251,7 @@ macro_rules! generate_arbitrary {
             phantom: PhantomData<&'a T>,
         }
 
-        impl<T: kani::Arbitrary, const BUF_LEN: usize> PointerGenerator<T, BUF_LEN> {
+        impl<T: crate::kani::Arbitrary, const BUF_LEN: usize> PointerGenerator<T, BUF_LEN> {
             const _VALID: () = assert!(BUF_LEN > 0, "PointerGenerator requires non-zero length.");
 
             /// Create a new PointerGenerator.
@@ -279,36 +279,36 @@ macro_rules! generate_arbitrary {
                 let mut arbitrary = ArbitraryPointer {
                     ptr: ptr::null_mut::<T>(),
                     is_initialized: false,
-                    status: kani::any(),
+                    status: crate::kani::any(),
                     phantom: PhantomData,
                 };
 
                 let buf_ptr = addr_of_mut!(self.buf) as *mut T;
 
                 // Offset is used to potentially generate unaligned pointer.
-                let offset = kani::any_where(|b: &usize| *b < size_of::<T>());
+                let offset = crate::kani::any_where(|b: &usize| *b < size_of::<T>());
                 arbitrary.ptr = match arbitrary.status {
                     AllocationStatus::Dangling => {
                         crate::ptr::NonNull::<T>::dangling().as_ptr().wrapping_add(offset)
                     }
                     AllocationStatus::DeadObj => {
-                        let mut obj: T = kani::any();
+                        let mut obj: T = crate::kani::any();
                         &mut obj as *mut _
                     }
                     AllocationStatus::Null => crate::ptr::null_mut::<T>(),
                     AllocationStatus::InBounds => {
                         // Note that compilation fails if BUF_LEN is 0.
-                        let pos = kani::any_where(|i: &usize| *i < (BUF_LEN - 1));
+                        let pos = crate::kani::any_where(|i: &usize| *i < (BUF_LEN - 1));
                         let ptr: *mut T = buf_ptr.wrapping_add(pos).wrapping_byte_add(offset);
-                        if kani::any() {
+                        if crate::kani::any() {
                             arbitrary.is_initialized = true;
                             // This should be in bounds of arbitrary.alloc.
-                            unsafe { ptr.write_unaligned(kani::any()) };
+                            unsafe { ptr.write_unaligned(crate::kani::any()) };
                         }
                         ptr
                     }
                     AllocationStatus::OutBounds => {
-                        if kani::any() {
+                        if crate::kani::any() {
                             buf_ptr.wrapping_add(BUF_LEN).wrapping_byte_sub(offset)
                         } else {
                             buf_ptr.wrapping_add(BUF_LEN).wrapping_byte_add(offset)
@@ -330,12 +330,12 @@ macro_rules! generate_arbitrary {
             )]
             pub fn any_in_bounds<'a>(&'a mut self) -> ArbitraryPointer<'a, T> {
                 let buf_ptr = addr_of_mut!(self.buf) as *mut T;
-                let pos = kani::any_where(|i: &usize| *i < (BUF_LEN - 1));
-                let offset = kani::any_where(|b: &usize| *b < size_of::<T>());
+                let pos = crate::kani::any_where(|i: &usize| *i < (BUF_LEN - 1));
+                let offset = crate::kani::any_where(|b: &usize| *b < size_of::<T>());
                 let ptr: *mut T = buf_ptr.wrapping_add(pos).wrapping_byte_add(offset);
-                let is_initialized = kani::any();
+                let is_initialized = crate::kani::any();
                 if is_initialized {
-                    unsafe { ptr.write_unaligned(kani::any()) };
+                    unsafe { ptr.write_unaligned(crate::kani::any()) };
                 }
                 ArbitraryPointer {
                     ptr,
