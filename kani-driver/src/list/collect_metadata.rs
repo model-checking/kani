@@ -35,8 +35,10 @@ fn process_metadata(metadata: Vec<KaniMetadata>, format: Format) -> Result<()> {
                     {
                         harnesses.insert(harness_meta.pretty_name);
                     } else {
-                        standard_harnesses
-                            .insert(harness_meta.original_file, BTreeSet::from([harness_meta.pretty_name]));
+                        standard_harnesses.insert(
+                            harness_meta.original_file,
+                            BTreeSet::from([harness_meta.pretty_name]),
+                        );
                     }
                 }
                 HarnessKind::ProofForContract { .. } => {
@@ -45,8 +47,10 @@ fn process_metadata(metadata: Vec<KaniMetadata>, format: Format) -> Result<()> {
                     {
                         harnesses.insert(harness_meta.pretty_name);
                     } else {
-                        contract_harnesses
-                            .insert(harness_meta.original_file, BTreeSet::from([harness_meta.pretty_name]));
+                        contract_harnesses.insert(
+                            harness_meta.original_file,
+                            BTreeSet::from([harness_meta.pretty_name]),
+                        );
                     }
                 }
                 HarnessKind::Test => {}

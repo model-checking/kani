@@ -9,7 +9,7 @@
 
 use crate::args::ReachabilityType;
 use crate::kani_middle::attributes::is_proof_harness;
-use crate::kani_middle::metadata::{gen_proof_metadata, gen_contracts_metadata};
+use crate::kani_middle::metadata::{gen_contracts_metadata, gen_proof_metadata};
 use crate::kani_middle::reachability::filter_crate_items;
 use crate::kani_middle::resolve::expect_resolve_fn;
 use crate::kani_middle::stubbing::{check_compatibility, harness_stub_map};

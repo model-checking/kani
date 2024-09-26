@@ -2,7 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // This module handles outputting the result for the list subcommand
 
-use std::{collections::{BTreeMap, BTreeSet}, fs::File, io::BufWriter};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fs::File,
+    io::BufWriter,
+};
 
 use crate::{list::Totals, version::KANI_VERSION};
 use anyhow::Result;
