@@ -5,6 +5,13 @@
 //! It ensures that the list command across modules, and with modifies clauses, history expressions, and generic functions.
 
 mod example {
+    mod prep {
+        #[kani::requires(s.len() < 10)]
+        fn parse(s: &str) -> u32 {
+            s.parse().unwrap()
+        }
+    }
+
     pub mod implementation {
         #[kani::requires(*x < 4)]
         #[kani::requires(*x > 2)]
@@ -25,17 +32,6 @@ mod example {
         #[kani::modifies(x)]
         pub fn func(x: &mut i32) {
             *x *= 1;
-        }
-
-        pub fn baz(x: &mut i32) {
-            *x /= 1;
-        }
-    }
-
-    mod prep {
-        #[kani::requires(s.len() < 10)]
-        fn parse(s: &str) -> u32 {
-            s.parse().unwrap()
         }
     }
 
@@ -64,12 +60,6 @@ mod example {
         fn check_func() {
             let mut x = 7;
             implementation::func(&mut x);
-        }
-
-        #[kani::proof_for_contract(implementation::baz)]
-        fn check_baz() {
-            let mut x = 7;
-            implementation::baz(&mut x);
         }
 
         #[kani::proof]

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // This module invokes the compiler to gather the metadata for the list subcommand, then post-processes the output.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
     args::list_args::{CargoListArgs, Format, StandaloneListArgs},
@@ -18,9 +18,9 @@ use kani_metadata::{ContractedFunction, HarnessKind, KaniMetadata};
 
 fn process_metadata(metadata: Vec<KaniMetadata>, format: Format) -> Result<()> {
     // Map each file to a vector of its harnesses
-    let mut standard_harnesses: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    let mut contract_harnesses: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    let mut contracted_functions: Vec<ContractedFunction> = vec![];
+    let mut standard_harnesses: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    let mut contract_harnesses: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    let mut contracted_functions: BTreeSet<ContractedFunction> = BTreeSet::new();
 
     let mut total_standard_harnesses = 0;
     let mut total_contract_harnesses = 0;
@@ -33,20 +33,20 @@ fn process_metadata(metadata: Vec<KaniMetadata>, format: Format) -> Result<()> {
                     total_standard_harnesses += 1;
                     if let Some(harnesses) = standard_harnesses.get_mut(&harness_meta.original_file)
                     {
-                        harnesses.push(harness_meta.pretty_name);
+                        harnesses.insert(harness_meta.pretty_name);
                     } else {
                         standard_harnesses
-                            .insert(harness_meta.original_file, vec![harness_meta.pretty_name]);
+                            .insert(harness_meta.original_file, BTreeSet::from([harness_meta.pretty_name]));
                     }
                 }
                 HarnessKind::ProofForContract { .. } => {
                     total_contract_harnesses += 1;
                     if let Some(harnesses) = contract_harnesses.get_mut(&harness_meta.original_file)
                     {
-                        harnesses.push(harness_meta.pretty_name);
+                        harnesses.insert(harness_meta.pretty_name);
                     } else {
                         contract_harnesses
-                            .insert(harness_meta.original_file, vec![harness_meta.pretty_name]);
+                            .insert(harness_meta.original_file, BTreeSet::from([harness_meta.pretty_name]));
                     }
                 }
                 HarnessKind::Test => {}
@@ -59,9 +59,6 @@ fn process_metadata(metadata: Vec<KaniMetadata>, format: Format) -> Result<()> {
 
         contracted_functions.extend(kani_meta.contracted_functions.into_iter());
     }
-
-    // Print in alphabetical order
-    contracted_functions.sort_by_key(|cf| cf.function.clone());
 
     let totals = Totals {
         standard_harnesses: total_standard_harnesses,

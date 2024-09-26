@@ -35,7 +35,7 @@ pub struct KaniMetadata {
     pub contracted_functions: Vec<ContractedFunction>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord)]
 pub struct ContractedFunction {
     /// The fully qualified name the user gave to the function (i.e. includes the module path).
     pub function: String,

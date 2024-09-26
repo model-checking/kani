@@ -9,7 +9,6 @@ use crate::kani_middle::analysis;
 use crate::kani_middle::attributes::{is_test_harness_description, KaniAttributes};
 use crate::kani_middle::check_reachable_items;
 use crate::kani_middle::codegen_units::{CodegenUnit, CodegenUnits};
-use crate::kani_middle::list::collect_contracted_fns;
 use crate::kani_middle::metadata::gen_test_metadata;
 use crate::kani_middle::provide;
 use crate::kani_middle::reachability::{
@@ -342,10 +341,7 @@ impl CodegenBackend for GotocCodegenBackend {
                         results.harnesses.push(metadata);
                     }
                 }
-                ReachabilityType::None => {
-                    let units = CodegenUnits::new(&queries, tcx);
-                    units.write_metadata(&queries, tcx);
-                }
+                ReachabilityType::None => {}
                 ReachabilityType::PubFns => {
                     let unit = CodegenUnit::default();
                     let transformer = BodyTransformation::new(&queries, tcx, &unit);
@@ -384,7 +380,7 @@ impl CodegenBackend for GotocCodegenBackend {
                     write_file(
                         &base_filename,
                         ArtifactType::Metadata,
-                        &results.generate_metadata(tcx),
+                        &results.generate_metadata(),
                         queries.args().output_pretty_json,
                     );
                 }
@@ -623,7 +619,7 @@ impl GotoCodegenResults {
         }
     }
     /// Method that generates `KaniMetadata` from the given compilation results.
-    pub fn generate_metadata(&self, tcx: TyCtxt) -> KaniMetadata {
+    pub fn generate_metadata(&self) -> KaniMetadata {
         // Maps the goto-context "unsupported features" data into the KaniMetadata "unsupported features" format.
         // TODO: Do we really need different formats??
         let unsupported_features = self
@@ -655,7 +651,10 @@ impl GotoCodegenResults {
             proof_harnesses: proofs,
             unsupported_features,
             test_harnesses: tests,
-            contracted_functions: collect_contracted_fns(tcx),
+            // We don't collect the functions under contract because the logic assumes that, if contract attributes are present,
+            // they are well-formed, which Kani only checks if we run verification or the list subcommand (i.e., for ReachabilityType::Harnesses).
+            // In those cases, we use the CodegenUnits object to generate the metadata instead of this function.
+            contracted_functions: vec![],
         }
     }
 

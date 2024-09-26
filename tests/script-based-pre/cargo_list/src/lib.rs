@@ -8,6 +8,13 @@ mod standard_harnesses;
 
 #[cfg(kani)]
 mod example {
+    mod prep {
+        #[kani::requires(s.len() < 10)]
+        fn parse(s: &str) -> u32 {
+            s.parse().unwrap()
+        }
+    }
+
     pub mod implementation {
         #[kani::requires(*x < 4)]
         #[kani::requires(*x > 2)]
@@ -18,27 +25,16 @@ mod example {
             *x += 1;
         }
 
-        #[kani::requires(true)]
-        #[kani::ensures(|_| old(*x) == *x)]
-        pub fn foo<T: Copy + std::cmp::PartialEq>(x: &mut T) -> T {
-            *x
-        }
-
         #[kani::requires(*x < 100)]
         #[kani::modifies(x)]
         pub fn func(x: &mut i32) {
             *x *= 1;
         }
 
-        pub fn baz(x: &mut i32) {
-            *x /= 1;
-        }
-    }
-
-    mod prep {
-        #[kani::requires(s.len() < 10)]
-        fn parse(s: &str) -> u32 {
-            s.parse().unwrap()
+        #[kani::requires(true)]
+        #[kani::ensures(|_| old(*x) == *x)]
+        pub fn foo<T: Copy + std::cmp::PartialEq>(x: &mut T) -> T {
+            *x
         }
     }
 
@@ -67,12 +63,6 @@ mod example {
         fn check_func() {
             let mut x = 7;
             implementation::func(&mut x);
-        }
-
-        #[kani::proof_for_contract(implementation::baz)]
-        fn check_baz() {
-            let mut x = 7;
-            implementation::baz(&mut x);
         }
     }
 }

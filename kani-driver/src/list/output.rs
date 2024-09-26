@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // This module handles outputting the result for the list subcommand
 
-use std::{collections::BTreeMap, fs::File, io::BufWriter};
+use std::{collections::{BTreeMap, BTreeSet}, fs::File, io::BufWriter};
 
 use crate::{list::Totals, version::KANI_VERSION};
 use anyhow::Result;
@@ -14,10 +14,11 @@ use serde_json::json;
 // Represents the version of our JSON file format.
 // Increment this version (according to semantic versioning rules) whenever the JSON output format changes.
 const FILE_VERSION: &str = "0.1";
+const JSON_FILENAME: &str = "kani-list.json";
 
 pub fn pretty(
-    standard_harnesses: BTreeMap<String, Vec<String>>,
-    contracted_functions: Vec<ContractedFunction>,
+    standard_harnesses: BTreeMap<String, BTreeSet<String>>,
+    contracted_functions: BTreeSet<ContractedFunction>,
     totals: Totals,
 ) -> Result<()> {
     fn format_contract_harnesses(harnesses: &mut [String]) -> String {
@@ -80,14 +81,12 @@ pub fn pretty(
 }
 
 pub fn json(
-    standard_harnesses: BTreeMap<String, Vec<String>>,
-    contract_harnesses: BTreeMap<String, Vec<String>>,
-    contracted_functions: Vec<ContractedFunction>,
+    standard_harnesses: BTreeMap<String, BTreeSet<String>>,
+    contract_harnesses: BTreeMap<String, BTreeSet<String>>,
+    contracted_functions: BTreeSet<ContractedFunction>,
     totals: Totals,
 ) -> Result<()> {
-    let filename = "kani-list.json";
-
-    let out_file = File::create(filename).unwrap();
+    let out_file = File::create(JSON_FILENAME).unwrap();
     let writer = BufWriter::new(out_file);
 
     let json_obj = json!({
