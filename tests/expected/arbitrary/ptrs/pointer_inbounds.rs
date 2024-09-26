@@ -3,7 +3,10 @@
 //
 // kani-flags: -Z mem-predicates
 //! Check different cases for `PointerGenerator` for in-bounds pointers.
-//! TODO: Enable initialization checks once we enable reasoning about unions.
+//! TODO: Enable initialization checks (`-Z uninit-checks`) once we add support to unions.
+//! The current instrumentation does not work in the presence of MaybeUninit which we use
+//! to implement PointerGenerator.
+//! Kani will detect the usage of MaybeUninit and fail the verification.
 extern crate kani;
 
 use kani::PointerGenerator;

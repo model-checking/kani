@@ -10,42 +10,143 @@ macro_rules! ptr_generator {
         use core::mem::MaybeUninit;
         use core::ptr::{self, addr_of_mut};
 
-        /// Pointer generator that can be used to generate an arbitrary pointer.
+        /// Pointer generator that can be used to generate arbitrary pointers.
         ///
         /// This generator allows users to build pointers with different safety properties.
-        /// It contains an internal buffer that it uses to generate `InBounds` and `OutBounds` pointers.
+        /// It contains an internal buffer that it uses to generate `InBounds` and `OutOfBounds` pointers.
         /// In those cases, the pointers will have the same provenance as the generator, and the same lifetime.
         ///
         /// For example:
         /// ```ignore
+        /// # use kani::*;
+        /// # #[kani::proof]
+        /// # fn harness() {
         ///     let generator = PointerGenerator<char, 5>::new();
-        ///     let arbitrary = generator.generate_ptr();
+        ///     let arbitrary = generator.any_alloc_status();
         ///     kani::assume(arbitrary.status == AllocationStatus::InBounds);
         ///     // Pointer may be unaligned but it should be in-bounds.
-        ///     unsafe { arbitrary.ptr.write_unaligned(kani::any() }
+        ///     unsafe { arbitrary.ptr.write_unaligned(kani::any()) }
+        /// # }
         /// ```
+        ///
+        /// The generator takes a type for the pointers that will be generated, as well as a
+        /// number of elements that it can hold without overlapping.
+        ///
+        /// ## Number of Elements
+        ///
+        /// The number of elements determine the size of the internal buffer used to generate
+        /// pointers. Larger values will cover more cases related to the distance between each
+        /// pointer that is generated.
+        ///
+        /// We recommend this number to be at least greater than the number of pointers that
+        /// your harness generate.
+        /// This guarantees that your harness covers cases where all generated pointers
+        /// points to allocated positions that do not overlap.
+        ///
+        /// For example, le't say your harness calls `any_in_bounds()` 3 times, and your generator
+        /// has 5 elements. Something like:
+        ///
+        /// ```ignore
+        /// # use kani::*;
+        /// # #[kani::proof]
+        /// # fn harness() {
+        ///     let generator = PointerGenerator<char, 5>::new();
+        ///     let ptr1 = generator.any_in_bounds().ptr;
+        ///     let ptr2 = generator.any_in_bounds().ptr;
+        ///     let ptr3 = generator.any_in_bounds().ptr;
+        ///     // This cover is satisfied.
+        ///     cover!((ptr1 as usize) > (ptr2 as usize) + size_of::<char>()
+        ///            && (ptr2 as usize) > (ptr3 as usize) + size_of::<char>());
+        /// # }
+        /// ```
+        ///
+        /// The cover statement will be satisfied, since there exists at least one path where
+        /// the generator produces inbounds pointers that do not overlap.
+        /// I.e., the generator buffer is large enough to fit all 3 objects without overlapping.
+        ///
+        /// In contrast, if we had used a size of 1 element, all calls to `any_in_bounds()` would
+        /// return elements that overlap.
+        ///
+        /// Note that the generator requires a minimum number of 1 element, otherwise the
+        /// `InBounds` case would never be covered.
+        /// Compilation will fail if you try to create a generator of size `0`.
+        ///
+        /// Use larger number of elements if you want to cover scenarios where the distance
+        /// between the generated pointers matters.
+        ///
+        /// The maximum distance between two generated pointers will be
+        /// `(NUM_ELTS - 2) * size_of::<T>()` bytes
+        ///
+        /// # Pointer provenance
+        ///
+        /// The pointer returned in the `InBounds` and `OutOfBounds` case will have the same
+        /// provenance as the generator.
         ///
         /// Use the same generator if you want to handle cases where 2 or more pointers may overlap. E.g.:
         /// ```ignore
+        /// # use kani::*;
+        /// # #[kani::proof]
+        /// # fn harness() {
         ///     let generator = PointerGenerator<char, 5>::new();
-        ///     let arbitrary = generator.generate_ptr();
-        ///     kani::assume(arbitrary.status == AllocationStatus::InBounds);
-        ///     let ptr = arbitrary.ptr;
-        ///     kani::cover!(arbitrary.ptr == generator.generate_ptr());
-        ///     kani::cover!(arbitrary.ptr != generator.generate_ptr());
+        ///     let ptr1 = generator.any_in_bounds().ptr;
+        ///     let ptr2 = generator.any_in_bounds().ptr;
+        ///     // This cover is satisfied.
+        ///     cover!(ptr1 == ptr2)
+        /// # }
         /// ```
         ///
-        /// Note: This code is different than generating a pointer with any address. I.e.:
+        /// If you want to cover cases where two or more pointers may not have the same
+        /// provenance, you will need to instantiate multiple generators.
+        /// You can also apply non-determinism to cover cases where the pointers may or may not
+        /// have the same provenance. E.g.:
+        ///
         /// ```ignore
-        ///     // This pointer represents any address.
-        ///     let ptr = kani::any::<usize>() as *const u8;
-        ///     // Which is different from:
+        /// # use kani::*;
+        /// # unsafe fn my_target<T>(_ptr1: *const T; _ptr2: *const T) {}
+        /// # #[kani::proof]
+        /// # fn harness() {
+        ///     let generator1 = PointerGenerator<char, 5>::new();
+        ///     let generator2 = PointerGenerator<char, 5>::new();
+        ///     let ptr1 = generator1.any_in_bounds().ptr;
+        ///     let ptr2 = if kani::any() {
+        ///         // Pointers will have same provenance and may overlap.
+        ///         generator1.any_in_bounds().ptr;
+        ///     } else {
+        ///         // Pointers will have different provenance and will not overlap.
+        ///         generator2.any_in_bounds().ptr;
+        ///     }
+        ///     // Invoke the function under verification
+        ///     unsafe { my_target(ptr1, ptr2) };
+        /// # }
+        /// ```
+        ///
+        /// # Pointer Generator vs Pointer with any address
+        ///
+        /// Creating a pointer using the generator is different than generating a pointer
+        /// with any address.
+        ///
+        /// I.e.:
+        /// ```ignore
+        ///     // This pointer represents any address, and it may point to anything in memory,
+        ///     // allocated or not.
+        ///     let ptr1 = kani::any::<usize>() as *const u8;
+        ///
+        ///     // This pointer address will either point to unallocated memory, to a dead object
+        ///     // or to allocated memory within the generator address space.
         ///     let generator = PointerGenerator<u8, 5>::new();
-        ///     let ptr = generator.generate_ptr().ptr;
+        ///     let ptr2 = generator.any_alloc_status().ptr;
         /// ```
         ///
         /// Kani cannot reason about a pointer allocation status (except for asserting its validity).
-        /// Thus, this interface allow users to write harnesses that impose constraints to the arbitrary pointer.
+        /// Thus, the generator was introduced to help writing harnesses that need to impose
+        /// constraints to the arbitrary pointer allocation status.
+        /// It also allow us to restrict the pointer provenance, excluding for example address of
+        /// variables that are not available in the current context.
+        /// As a limitation, it will not cover the entire address space that a pointer can take.
+        ///
+        /// If your harness do not need to reason about pointer allocation, for example, verifying
+        /// pointer wrapping arithmetic, using a pointer with any address will allow you to cover
+        /// all possible scenarios.
         #[derive(Debug)]
         pub struct PointerGenerator<T, const BUF_LEN: usize> {
             // Internal allocation that may be used to generate valid pointers.
@@ -58,13 +159,13 @@ macro_rules! ptr_generator {
             /// Dangling pointers
             Dangling,
             /// Pointer to dead object
-            DeadObj,
+            DeadObject,
             /// Null pointers
             Null,
             /// In bounds pointer (it may be unaligned)
             InBounds,
             /// Out of bounds
-            OutBounds,
+            OutOfBounds,
         }
 
         /// Holds information about a pointer that is generated non-deterministically.
@@ -120,7 +221,7 @@ macro_rules! ptr_generator {
                     AllocationStatus::Dangling => {
                         crate::ptr::NonNull::<T>::dangling().as_ptr().wrapping_add(offset)
                     }
-                    AllocationStatus::DeadObj => {
+                    AllocationStatus::DeadObject => {
                         let mut obj: T = crate::kani::any();
                         &mut obj as *mut _
                     }
@@ -136,7 +237,7 @@ macro_rules! ptr_generator {
                         }
                         ptr
                     }
-                    AllocationStatus::OutBounds => {
+                    AllocationStatus::OutOfBounds => {
                         if crate::kani::any() {
                             buf_ptr.wrapping_add(BUF_LEN).wrapping_byte_sub(offset)
                         } else {

@@ -9,7 +9,7 @@ use kani::{cover, AllocationStatus, PointerGenerator};
 
 /// Harness that checks that all cases are covered and the code behaves as expected.
 ///
-/// Note that for `DeadObj`, `Dangling`, and `OutBounds` the predicate will fail due to demonic non-determinism.
+/// Note that for `DeadObject`, `Dangling`, and `OutOfBounds` the predicate will fail due to demonic non-determinism.
 #[kani::proof]
 fn check_arbitrary_ptr() {
     let mut generator = PointerGenerator::<char, 3>::new();
@@ -23,12 +23,12 @@ fn check_arbitrary_ptr() {
         AllocationStatus::Null => {
             assert!(!kani::mem::can_write_unaligned(ptr), "NullPtr");
         }
-        AllocationStatus::DeadObj => {
+        AllocationStatus::DeadObject => {
             // Due to demonic non-determinism, the API will trigger an error.
-            assert!(!kani::mem::can_write_unaligned(ptr), "DeadObj");
+            assert!(!kani::mem::can_write_unaligned(ptr), "DeadObject");
         }
-        AllocationStatus::OutBounds => {
-            assert!(!kani::mem::can_write_unaligned(ptr), "OutBounds");
+        AllocationStatus::OutOfBounds => {
+            assert!(!kani::mem::can_write_unaligned(ptr), "OutOfBounds");
         }
         AllocationStatus::InBounds => {
             // This should always succeed
