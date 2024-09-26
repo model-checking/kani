@@ -8,5 +8,5 @@ extern crate kani;
 use kani::PointerGenerator;
 
 pub fn check_invalid_generator() {
-    let _generator = PointerGenerator::<char, 0>::new();
+    let _generator = PointerGenerator::<0>::new();
 }

@@ -9,6 +9,7 @@ macro_rules! ptr_generator {
         use core::marker::PhantomData;
         use core::mem::MaybeUninit;
         use core::ptr::{self, addr_of_mut};
+        use crate::kani;
 
         /// Pointer generator that can be used to generate arbitrary pointers.
         ///
@@ -21,61 +22,80 @@ macro_rules! ptr_generator {
         /// # use kani::*;
         /// # #[kani::proof]
         /// # fn harness() {
-        ///     let generator = PointerGenerator<char, 5>::new();
-        ///     let arbitrary = generator.any_alloc_status();
+        ///     let generator = PointerGenerator<10>::new();
+        ///     let arbitrary = generator.any_alloc_status::<char>();
         ///     kani::assume(arbitrary.status == AllocationStatus::InBounds);
         ///     // Pointer may be unaligned but it should be in-bounds.
         ///     unsafe { arbitrary.ptr.write_unaligned(kani::any()) }
         /// # }
         /// ```
         ///
-        /// The generator takes a type for the pointers that will be generated, as well as a
-        /// number of elements that it can hold without overlapping.
-        ///
-        /// ## Number of Elements
-        ///
-        /// The number of elements determine the size of the internal buffer used to generate
-        /// pointers. Larger values will cover more cases related to the distance between each
-        /// pointer that is generated.
-        ///
-        /// We recommend this number to be at least greater than the number of pointers that
-        /// your harness generate.
-        /// This guarantees that your harness covers cases where all generated pointers
-        /// points to allocated positions that do not overlap.
-        ///
-        /// For example, le't say your harness calls `any_in_bounds()` 3 times, and your generator
-        /// has 5 elements. Something like:
+        /// The generator is parameterized on the number of bytes of its internal buffer.
+        /// See [pointer_generator] function if you would like to create a generator that fits
+        /// a minimum number of objects of a given type. Example:
         ///
         /// ```ignore
         /// # use kani::*;
         /// # #[kani::proof]
         /// # fn harness() {
-        ///     let generator = PointerGenerator<char, 5>::new();
-        ///     let ptr1 = generator.any_in_bounds().ptr;
-        ///     let ptr2 = generator.any_in_bounds().ptr;
-        ///     let ptr3 = generator.any_in_bounds().ptr;
-        ///     // This cover is satisfied.
-        ///     cover!((ptr1 as usize) > (ptr2 as usize) + size_of::<char>()
-        ///            && (ptr2 as usize) > (ptr3 as usize) + size_of::<char>());
+        ///     // These generators have the same capacity of 6 bytes.
+        ///     let generator1 = PointerGenerator<6>::new();
+        ///     let generator2 = pointer_generator::<i16, 3>();
         /// # }
         /// ```
         ///
-        /// The cover statement will be satisfied, since there exists at least one path where
+        /// ## Buffer size
+        ///
+        /// The internal buffer is used to generate pointers, and its size determines the maximum
+        /// number of pointers it can generate without overlapping.
+        /// Larger values will also impact on the maximum distance between each generated pointer.
+        ///
+        /// We recommend that you pick a size that is at least big enough to
+        /// cover the cases where all pointers produced are non-overlapping.
+        /// The buffer size in bytes must be big enough to fit distinct objects for each call
+        /// of generate pointer.
+        /// For example, generating two `*mut u8` and one `*mut u32` requires a buffer
+        /// of at least 6 bytes.
+        /// This guarantees that your harness covers cases where all generated pointers
+        /// points to allocated positions that do not overlap.
+        ///
+        /// ```ignore
+        /// # use kani::*;
+        /// # #[kani::proof]
+        /// # fn harness() {
+        ///     let generator = PointerGenerator<6>::new();
+        ///     let ptr1: *mut u8 = generator.any_in_bounds().ptr;
+        ///     let ptr2: *mut u8 = generator.any_in_bounds().ptr;
+        ///     let ptr3: *mut u32 = generator.any_in_bounds().ptr;
+        ///     // This cover is satisfied.
+        ///     cover!((ptr1 as usize) > (ptr2 as usize) + size_of::<char>()
+        ///            && (ptr2 as usize) > (ptr3 as usize) + size_of::<char>());
+        ///     // As well as having overlapping pointers.
+        ///     cover!((ptr1 as usize) == (ptr3 as usize));
+        /// # }
+        /// ```
+        ///
+        /// The first cover will be satisfied, since there exists at least one path where
         /// the generator produces inbounds pointers that do not overlap.
         /// I.e., the generator buffer is large enough to fit all 3 objects without overlapping.
         ///
         /// In contrast, if we had used a size of 1 element, all calls to `any_in_bounds()` would
-        /// return elements that overlap.
+        /// return elements that overlap, and the first cover would no longer be satisfied.
         ///
-        /// Note that the generator requires a minimum number of 1 element, otherwise the
+        /// Note that the generator requires a minimum number of 1 byte, otherwise the
         /// `InBounds` case would never be covered.
         /// Compilation will fail if you try to create a generator of size `0`.
         ///
-        /// Use larger number of elements if you want to cover scenarios where the distance
+        /// Additionally, the verification will fail if you try to generate a pointer for a type
+        /// with size greater than the buffer size.
+        ///
+        /// Use larger buffer size if you want to cover scenarios where the distance
         /// between the generated pointers matters.
         ///
-        /// The maximum distance between two generated pointers will be
-        /// `(NUM_ELTS - 2) * size_of::<T>()` bytes
+        /// The only caveats of using very large numbers are:
+        ///  1. The value cannot exceed the solver maximum object size, neither Rust's
+        ///     maximum object size (`isize::MAX`).
+        ///  2. Larger sizes could impact performance.
         ///
         /// # Pointer provenance
         ///
@@ -87,9 +107,9 @@ macro_rules! ptr_generator {
         /// # use kani::*;
         /// # #[kani::proof]
         /// # fn harness() {
-        ///     let generator = PointerGenerator<char, 5>::new();
-        ///     let ptr1 = generator.any_in_bounds().ptr;
-        ///     let ptr2 = generator.any_in_bounds().ptr;
+        ///     let generator = pointer_generator::<char, 5>();
+        ///     let ptr1 = generator.any_in_bounds::<char>().ptr;
+        ///     let ptr2 = generator.any_in_bounds::<char>().ptr;
         ///     // This cover is satisfied.
         ///     cover!(ptr1 == ptr2)
         /// # }
@@ -105,8 +125,8 @@ macro_rules! ptr_generator {
         /// # unsafe fn my_target<T>(_ptr1: *const T; _ptr2: *const T) {}
         /// # #[kani::proof]
         /// # fn harness() {
-        ///     let generator1 = PointerGenerator<char, 5>::new();
-        ///     let generator2 = PointerGenerator<char, 5>::new();
+        ///     let generator1 = pointer_generator::<char, 5>();
+        ///     let generator2 = pointer_generator::<char, 5>();
         ///     let ptr1 = generator1.any_in_bounds().ptr;
         ///     let ptr2 = if kani::any() {
         ///         // Pointers will have same provenance and may overlap.
@@ -148,13 +168,13 @@ macro_rules! ptr_generator {
         /// pointer wrapping arithmetic, using a pointer with any address will allow you to cover
         /// all possible scenarios.
         #[derive(Debug)]
-        pub struct PointerGenerator<T, const BUF_LEN: usize> {
+        pub struct PointerGenerator<const BYTES: usize> {
             // Internal allocation that may be used to generate valid pointers.
-            buf: MaybeUninit<[T; BUF_LEN]>,
+            buf: MaybeUninit<[u8; BYTES]>,
         }
 
         /// Enumeration with the cases currently covered by the pointer generator.
-        #[derive(Copy, Clone, Debug, PartialEq, Eq, crate::kani::Arbitrary)]
+        #[derive(Copy, Clone, Debug, PartialEq, Eq, kani::Arbitrary)]
         pub enum AllocationStatus {
             /// Dangling pointers
             Dangling,
@@ -164,7 +184,8 @@ macro_rules! ptr_generator {
             Null,
             /// In bounds pointer (it may be unaligned)
             InBounds,
-            /// Out of bounds
+            /// The pointer cannot be read / writtent to for the given type since one or more bytes
+            /// would be out of bounds of the current allocation.
             OutOfBounds,
         }
 
@@ -181,68 +202,70 @@ macro_rules! ptr_generator {
             phantom: PhantomData<&'a T>,
         }
 
-        impl<T: crate::kani::Arbitrary, const BUF_LEN: usize> PointerGenerator<T, BUF_LEN> {
-            const _VALID: () = assert!(BUF_LEN > 0, "PointerGenerator requires non-zero length.");
+        impl<const BYTES: usize> PointerGenerator<BYTES> {
+            const BUF_LEN: usize = BYTES;
+            const VALID : () = assert!(BYTES > 0, "PointerGenerator requires at least one byte.");
 
             /// Create a new PointerGenerator.
-            #[crate::kani::unstable_feature(
+            #[kani::unstable_feature(
                 feature = "mem-predicates",
                 issue = 2690,
                 reason = "experimental memory predicates and manipulation feature"
             )]
             pub fn new() -> Self {
-                // Use constant to trigger static length validation.
-                let _ = Self::_VALID;
+                let _ = Self::VALID;
                 PointerGenerator { buf: MaybeUninit::uninit() }
             }
 
             /// Creates a raw pointer with non-deterministic properties.
             ///
             /// The pointer returned is either dangling or has the same provenance of the generator.
-            #[crate::kani::unstable_feature(
+            #[kani::unstable_feature(
                 feature = "mem-predicates",
                 issue = 2690,
                 reason = "experimental memory predicates and manipulation feature"
             )]
-            pub fn any_alloc_status<'a>(&'a mut self) -> ArbitraryPointer<'a, T> {
-                // Create an arbitrary pointer, but leave `ptr` as unset for now.
+            pub fn any_alloc_status<'a, T>(&'a mut self) -> ArbitraryPointer<'a, T>
+             where T: kani::Arbitrary
+            {
+                assert!(core::mem::size_of::<T>() <= Self::BUF_LEN,
+                    "Cannot generate in-bounds object of the requested type. Buffer is not big enough."
+                );
+
+                // Create an arbitrary pointer, but leave `ptr` as null.
                 let mut arbitrary = ArbitraryPointer {
                     ptr: ptr::null_mut::<T>(),
                     is_initialized: false,
-                    status: crate::kani::any(),
+                    status: kani::any(),
                     phantom: PhantomData,
                 };
 
-                let buf_ptr = addr_of_mut!(self.buf) as *mut T;
-
                 // Offset is used to potentially generate unaligned pointer.
-                let offset = crate::kani::any_where(|b: &usize| *b < size_of::<T>());
                 arbitrary.ptr = match arbitrary.status {
                     AllocationStatus::Dangling => {
+                        let offset = kani::any_where(|b: &usize| *b < size_of::<T>());
                         crate::ptr::NonNull::<T>::dangling().as_ptr().wrapping_add(offset)
                     }
                     AllocationStatus::DeadObject => {
-                        let mut obj: T = crate::kani::any();
+                        let mut obj: T = kani::any();
                         &mut obj as *mut _
                     }
                     AllocationStatus::Null => crate::ptr::null_mut::<T>(),
                     AllocationStatus::InBounds => {
-                        // Note that compilation fails if BUF_LEN is 0.
-                        let pos = crate::kani::any_where(|i: &usize| *i < (BUF_LEN - 1));
-                        let ptr: *mut T = buf_ptr.wrapping_add(pos).wrapping_byte_add(offset);
-                        if crate::kani::any() {
+                        let buf_ptr = addr_of_mut!(self.buf) as *mut u8;
+                        let offset = kani::any_where(|b: &usize| *b <= Self::BUF_LEN - size_of::<T>());
+                        let ptr = unsafe { buf_ptr.add(offset) } as *mut T;
+                        if kani::any() {
                             arbitrary.is_initialized = true;
                             // This should be in bounds of arbitrary.alloc.
-                            unsafe { ptr.write_unaligned(crate::kani::any()) };
+                            unsafe { ptr.write_unaligned(kani::any()) };
                         }
                         ptr
                     }
                     AllocationStatus::OutOfBounds => {
-                        if crate::kani::any() {
-                            buf_ptr.wrapping_add(BUF_LEN).wrapping_byte_sub(offset)
-                        } else {
-                            buf_ptr.wrapping_add(BUF_LEN).wrapping_byte_add(offset)
-                        }
+                        let buf_ptr = addr_of_mut!(self.buf) as *mut u8;
+                        let offset = kani::any_where(|b: &usize| *b < size_of::<T>());
+                        unsafe { buf_ptr.add(Self::BUF_LEN - offset) as *mut T }
                     }
                 };
 
@@ -253,19 +276,22 @@ macro_rules! ptr_generator {
             ///
             /// The pointer points to an allocated location with the same provenance of the generator.
             /// The pointer may be unaligned, and the pointee may be uninitialized.
-            #[crate::kani::unstable_feature(
+            #[kani::unstable_feature(
                 feature = "mem-predicates",
                 issue = 2690,
                 reason = "experimental memory predicates and manipulation feature"
             )]
-            pub fn any_in_bounds<'a>(&'a mut self) -> ArbitraryPointer<'a, T> {
-                let buf_ptr = addr_of_mut!(self.buf) as *mut T;
-                let pos = crate::kani::any_where(|i: &usize| *i < (BUF_LEN - 1));
-                let offset = crate::kani::any_where(|b: &usize| *b < size_of::<T>());
-                let ptr: *mut T = buf_ptr.wrapping_add(pos).wrapping_byte_add(offset);
-                let is_initialized = crate::kani::any();
+            pub fn any_in_bounds<'a, T>(&'a mut self) -> ArbitraryPointer<'a, T>
+            where T: kani::Arbitrary {
+                assert!(core::mem::size_of::<T>() <= Self::BUF_LEN,
+                    "Cannot generate in-bounds object of the requested type. Buffer is not big enough."
+                );
+                let buf_ptr = addr_of_mut!(self.buf) as *mut u8;
+                let offset = kani::any_where(|b: &usize| *b <= Self::BUF_LEN - size_of::<T>());
+                let ptr = unsafe { buf_ptr.add(offset) as *mut T };
+                let is_initialized = kani::any();
                 if is_initialized {
-                    unsafe { ptr.write_unaligned(crate::kani::any()) };
+                    unsafe { ptr.write_unaligned(kani::any()) };
                 }
                 ArbitraryPointer {
                     ptr,
@@ -275,5 +301,27 @@ macro_rules! ptr_generator {
                 }
             }
         }
+
+        kani_core::ptr_generator_fn!();
     };
+}
+
+#[cfg(not(feature = "no_core"))]
+#[macro_export]
+macro_rules! ptr_generator_fn {
+    () => {
+        /// Create a pointer generator that fits at least `N` elements of type `T`.
+        pub fn pointer_generator<T, const NUM_ELTS: usize>()
+        -> PointerGenerator<{ size_of::<T>() * NUM_ELTS }> {
+            PointerGenerator::<{ size_of::<T>() * NUM_ELTS }>::new()
+        }
+    };
+}
+
+/// Don't generate the pointer_generator function here since it requires generic constant
+/// expression.
+#[cfg(feature = "no_core")]
+#[macro_export]
+macro_rules! ptr_generator_fn {
+    () => {};
 }

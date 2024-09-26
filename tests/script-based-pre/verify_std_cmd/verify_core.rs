@@ -78,11 +78,13 @@ pub mod verify {
     }
 
     /// Test that arbitrary pointer works as expected.
+    /// Disable it for uninit checks, since these checks do not support `MaybeUninit` which is used
+    /// by the pointer generator.
     #[kani::proof]
-    #[kani::should_panic]
+    #[cfg(not(uninit_checks))]
     fn check_any_ptr() {
-        let mut generator = kani::PointerGenerator::<u32, 3>::new();
-        let ptr = generator.any_in_bounds().ptr;
+        let mut generator = kani::PointerGenerator::<8>::new();
+        let ptr = generator.any_in_bounds::<i32>().ptr;
         assert!(kani::mem::can_write_unaligned(ptr));
     }
 }

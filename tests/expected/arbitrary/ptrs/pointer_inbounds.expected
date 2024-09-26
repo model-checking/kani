@@ -14,11 +14,11 @@ Description: "Smaller"
 
 Checking harness check_alignment...
 
-Status: SATISFIED\
-Description: "Aligned"
+Status: SUCCESS\
+Description: ""Aligned""
 
-Status: SATISFIED\
-Description: "Unaligned"
+Status: SUCCESS\
+Description: ""Unaligned""
 
 Checking harness check_inbounds_initialized...
 

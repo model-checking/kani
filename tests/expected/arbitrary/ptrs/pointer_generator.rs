@@ -12,8 +12,8 @@ use kani::{cover, AllocationStatus, PointerGenerator};
 /// Note that for `DeadObject`, `Dangling`, and `OutOfBounds` the predicate will fail due to demonic non-determinism.
 #[kani::proof]
 fn check_arbitrary_ptr() {
-    let mut generator = PointerGenerator::<char, 3>::new();
-    let arbitrary = generator.any_alloc_status();
+    let mut generator = PointerGenerator::<10>::new();
+    let arbitrary = generator.any_alloc_status::<char>();
     let ptr = arbitrary.ptr;
     match arbitrary.status {
         AllocationStatus::Dangling => {
