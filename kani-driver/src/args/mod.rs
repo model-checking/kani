@@ -636,6 +636,16 @@ impl ValidateArgs for VerificationArgs {
             ));
         }
 
+        if self.common_args.unstable_features.contains(UnstableFeature::Aeneas) {
+            if !self.cbmc_args.is_empty() {
+                return Err(Error::raw(
+                    ErrorKind::ArgumentConflict,
+                    "The `--cbmc-args` argument cannot be used with -Z aeneas.",
+                ));
+            }
+            // TODO: error out for other CBMC-backend-specific arguments
+        }
+
         Ok(())
     }
 }
@@ -925,5 +935,12 @@ mod tests {
         check_invalid_args("kani input.rs --workspace".split_whitespace());
         check_invalid_args("kani input.rs --package foo".split_whitespace());
         check_invalid_args("kani input.rs --exclude bar --workspace".split_whitespace());
+    }
+
+    #[test]
+    fn check_cbmc_args_aeneas_backend() {
+        let args = "kani input.rs -Z aeneas --enable-unstable --cbmc-args --object-bits 10".split_whitespace();
+        let err = StandaloneArgs::try_parse_from(args).unwrap().validate().unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::ArgumentConflict);
     }
 }
