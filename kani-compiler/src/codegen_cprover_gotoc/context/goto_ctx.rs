@@ -249,7 +249,6 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Ensures that a struct with name `struct_name` appears in the symbol table.
     /// If it doesn't, inserts it using `f`.
     /// Returns: a struct-tag referencing the inserted struct.
-
     pub fn ensure_struct<
         T: Into<InternedString>,
         U: Into<InternedString>,
