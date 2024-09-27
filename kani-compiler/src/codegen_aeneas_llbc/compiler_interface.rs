@@ -14,27 +14,26 @@ use crate::kani_middle::transform::{BodyTransformation, GlobalPasses};
 use crate::kani_queries::QueryDb;
 use charon_lib::ast::TranslatedCrate;
 use charon_lib::errors::ErrorCtx;
-use charon_lib::transform::ctx::TransformOptions;
 use charon_lib::transform::TransformCtx;
+use charon_lib::transform::ctx::TransformOptions;
 use kani_metadata::ArtifactType;
 use kani_metadata::{AssignsContract, CompilerArtifactStub};
-use rustc_codegen_ssa::back::archive::{ArArchiveBuilder, ArchiveBuilder, DEFAULT_OBJECT_READER};
-use rustc_codegen_ssa::back::metadata::create_wrapper_file;
+use rustc_codegen_ssa::back::archive::{
+    ArArchiveBuilder, ArchiveBuilder, ArchiveBuilderBuilder, DEFAULT_OBJECT_READER,
+};
+use rustc_codegen_ssa::back::link::link_binary;
 use rustc_codegen_ssa::traits::CodegenBackend;
 use rustc_codegen_ssa::{CodegenResults, CrateInfo};
 use rustc_data_structures::fx::FxIndexMap;
-use rustc_data_structures::temp_dir::MaybeTempDir;
-use rustc_errors::{ErrorGuaranteed, DEFAULT_LOCALE_RESOURCE};
+use rustc_errors::{DEFAULT_LOCALE_RESOURCE, ErrorGuaranteed};
 use rustc_hir::def_id::{DefId as InternalDefId, LOCAL_CRATE};
-use rustc_metadata::creader::MetadataLoaderDyn;
-use rustc_metadata::fs::{emit_wrapper_file, METADATA_FILENAME};
 use rustc_metadata::EncodedMetadata;
 use rustc_middle::dep_graph::{WorkProduct, WorkProductId};
 use rustc_middle::ty::TyCtxt;
 use rustc_middle::util::Providers;
+use rustc_session::Session;
 use rustc_session::config::{CrateType, OutputFilenames, OutputType};
 use rustc_session::output::out_filename;
-use rustc_session::Session;
 use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::{Instance, MonoItem};
 use stable_mir::{CrateDef, DefId};
@@ -44,7 +43,6 @@ use std::fs::File;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
-use tempfile::Builder as TempFileBuilder;
 use tracing::{debug, info, trace};
 
 #[derive(Clone)]
@@ -185,10 +183,6 @@ impl LlbcCodegenBackend {
 }
 
 impl CodegenBackend for LlbcCodegenBackend {
-    fn metadata_loader(&self) -> Box<MetadataLoaderDyn> {
-        Box::new(rustc_codegen_ssa::back::metadata::DefaultMetadataLoader)
-    }
-
     fn provide(&self, providers: &mut Providers) {
         provide::provide(providers, &self.queries.lock().unwrap());
     }
@@ -336,17 +330,7 @@ impl CodegenBackend for LlbcCodegenBackend {
             debug!(?crate_type, ?out_path, "link");
             if *crate_type == CrateType::Rlib {
                 // Emit the `rlib` that contains just one file: `<crate>.rmeta`
-                let mut builder = Box::new(ArArchiveBuilder::new(sess, &DEFAULT_OBJECT_READER));
-                let tmp_dir = TempFileBuilder::new().prefix("kani").tempdir().unwrap();
-                let path = MaybeTempDir::new(tmp_dir, sess.opts.cg.save_temps);
-                let (metadata, _metadata_position) = create_wrapper_file(
-                    sess,
-                    ".rmeta".to_string(),
-                    codegen_results.metadata.raw_data(),
-                );
-                let metadata = emit_wrapper_file(sess, &metadata, &path, METADATA_FILENAME);
-                builder.add_file(&metadata);
-                builder.build(&out_path);
+                link_binary(sess, &ArArchiveBuilderBuilder, &codegen_results, outputs)?
             } else {
                 // Write the location of the kani metadata file in the requested compiler output file.
                 let base_filepath = outputs.path(OutputType::Object);
@@ -359,6 +343,13 @@ impl CodegenBackend for LlbcCodegenBackend {
             }
         }
         Ok(())
+    }
+}
+
+struct ArArchiveBuilderBuilder;
+impl ArchiveBuilderBuilder for ArArchiveBuilderBuilder {
+    fn new_archive_builder<'a>(&self, sess: &'a Session) -> Box<dyn ArchiveBuilder + 'a> {
+        Box::new(ArArchiveBuilder::new(sess, &DEFAULT_OBJECT_READER))
     }
 }
 

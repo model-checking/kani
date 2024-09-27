@@ -7,14 +7,14 @@
 use core::panic;
 use std::path::PathBuf;
 
-use charon_lib::ast::meta::{AttrInfo, Loc, RawSpan};
-use charon_lib::ast::types::Ty as CharonTy;
 use charon_lib::ast::CastKind as CharonCastKind;
 use charon_lib::ast::Place as CharonPlace;
 use charon_lib::ast::ProjectionElem as CharonProjectionElem;
 use charon_lib::ast::Rvalue as CharonRvalue;
 use charon_lib::ast::Span as CharonSpan;
-use charon_lib::ast::{make_locals_generator, AbortKind, Body as CharonBody, Var, VarId};
+use charon_lib::ast::meta::{AttrInfo, Loc, RawSpan};
+use charon_lib::ast::types::Ty as CharonTy;
+use charon_lib::ast::{AbortKind, Body as CharonBody, Var, VarId, make_locals_generator};
 use charon_lib::ast::{
     AnyTransId, Assert, BodyId, BuiltinTy, Disambiguator, FileName, FunDecl, FunSig, GenericArgs,
     GenericParams, IntegerTy, ItemKind, ItemMeta, ItemOpacity, Literal, LiteralTy, Name, Opaque,
