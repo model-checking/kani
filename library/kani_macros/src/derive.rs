@@ -18,6 +18,26 @@ use syn::{
     parse_quote,
 };
 
+#[cfg(feature = "no_core")]
+macro_rules! kani_path {
+    ($span:expr) => {
+        quote_spanned! { $span => core::kani }
+    };
+    () => {
+        quote! { core::kani }
+    };
+}
+
+#[cfg(not(feature = "no_core"))]
+macro_rules! kani_path {
+    ($span:expr) => {
+        quote_spanned! { $span => kani }
+    };
+    () => {
+        quote! { kani }
+    };
+}
+
 /// Generate the Arbitrary implementation for the given type.
 ///
 /// Note that we cannot use `proc_macro_crate::crate_name()` to discover the name for `kani` crate
@@ -28,7 +48,7 @@ pub fn expand_derive_arbitrary(item: proc_macro::TokenStream) -> proc_macro::Tok
     let trait_name = "Arbitrary";
     let derive_item = parse_macro_input!(item as DeriveInput);
     let item_name = &derive_item.ident;
-    let kani_path = kani_path();
+    let kani_path = kani_path!();
 
     let body = fn_any_body(&item_name, &derive_item.data);
     // Get the safety constraints (if any) to produce type-safe values
@@ -67,7 +87,7 @@ pub fn expand_derive_arbitrary(item: proc_macro::TokenStream) -> proc_macro::Tok
 
 /// Add a bound `T: Arbitrary` to every type parameter T.
 fn add_trait_bound_arbitrary(mut generics: Generics) -> Generics {
-    let kani_path = kani_path();
+    let kani_path = kani_path!();
     generics.params.iter_mut().for_each(|param| {
         if let GenericParam::Type(type_param) = param {
             type_param.bounds.push(parse_quote!(#kani_path::Arbitrary));
@@ -211,7 +231,6 @@ fn safe_body_default_inner(_ident: &Ident, fields: &Fields) -> TokenStream {
 /// For unnamed fields, this will generate: `Item (kani::any(), kani::any(), ..)`
 /// For unit field, generate an empty initialization.
 fn init_symbolic_item(ident: &Ident, fields: &Fields) -> TokenStream {
-    let kani_path = kani_path();
     match fields {
         Fields::Named(ref fields) => {
             // Use the span of each `syn::Field`. This way if one of the field types does not
@@ -220,7 +239,7 @@ fn init_symbolic_item(ident: &Ident, fields: &Fields) -> TokenStream {
             let init = fields.named.iter().map(|field| {
                 let name = &field.ident;
                 quote_spanned! {field.span()=>
-                    #name: #kani_path::any()
+                    #name: kani::any()
                 }
             });
             quote! {
@@ -231,7 +250,9 @@ fn init_symbolic_item(ident: &Ident, fields: &Fields) -> TokenStream {
             // Expands to an expression like
             // Self(kani::any(), kani::any(), ..., kani::any());
             let init = fields.unnamed.iter().map(|field| {
-                quote_spanned! {field.span()=>
+                let span = field.span();
+                let kani_path = kani_path!(span);
+                quote_spanned! {span=>
                     #kani_path::any()
                 }
             });
@@ -358,7 +379,7 @@ fn fn_any_enum(ident: &Ident, data: &DataEnum) -> TokenStream {
             }
         });
 
-        let kani_path = kani_path();
+        let kani_path = kani_path!();
         quote! {
             match #kani_path::any() {
                 #(#arms)*
@@ -386,7 +407,7 @@ pub fn expand_derive_invariant(item: proc_macro::TokenStream) -> proc_macro::Tok
     let trait_name = "Invariant";
     let derive_item = parse_macro_input!(item as DeriveInput);
     let item_name = &derive_item.ident;
-    let kani_path = kani_path();
+    let kani_path = kani_path!();
 
     let safe_body = safe_body_with_calls(&item_name, &derive_item, trait_name);
     let field_refs = field_refs(&item_name, &derive_item.data);
@@ -474,7 +495,7 @@ fn has_field_safety_constraints_inner(_ident: &Ident, fields: &Fields) -> bool {
 
 /// Add a bound `T: Invariant` to every type parameter T.
 pub fn add_trait_bound_invariant(mut generics: Generics) -> Generics {
-    let kani_path = kani_path();
+    let kani_path = kani_path!();
     generics.params.iter_mut().for_each(|param| {
         if let GenericParam::Type(type_param) = param {
             type_param.bounds.push(parse_quote!(#kani_path::Invariant));
@@ -561,14 +582,4 @@ fn safe_body_from_fields_attr_inner(ident: &Ident, fields: &Fields) -> TokenStre
             }
         }
     }
-}
-
-#[cfg(feature = "no_core")]
-fn kani_path() -> TokenStream {
-    quote! { core::kani }
-}
-
-#[cfg(not(feature = "no_core"))]
-fn kani_path() -> TokenStream {
-    quote! { kani }
 }
