@@ -643,9 +643,9 @@ impl GotoCodegenResults {
             proof_harnesses: proofs,
             unsupported_features,
             test_harnesses: tests,
-            // We don't collect the functions under contract because the logic assumes that, if contract attributes are present,
-            // they are well-formed, which Kani only checks if we run verification or the list subcommand (i.e., for ReachabilityType::Harnesses).
-            // In those cases, we use the CodegenUnits object to generate the metadata instead of this function.
+            // We don't collect the contracts metadata because the FunctionWithContractPass
+            // removes any contracts logic for ReachabilityType::Test or ReachabilityType::PubFns,
+            // which are the two ReachabilityTypes under which the compiler calls this function.
             contracted_functions: vec![],
         }
     }
