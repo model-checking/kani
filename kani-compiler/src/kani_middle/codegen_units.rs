@@ -57,29 +57,26 @@ pub struct CodegenUnit {
 impl CodegenUnits {
     pub fn new(queries: &QueryDb, tcx: TyCtxt) -> Self {
         let crate_info = CrateInfo { name: stable_mir::local_crate().name.as_str().into() };
-        let base_filepath = tcx.output_filenames(()).path(OutputType::Object);
-        let base_filename = base_filepath.as_path();
-        let harnesses = filter_crate_items(tcx, |_, instance| is_proof_harness(tcx, instance));
-        let all_harnesses = harnesses
-            .into_iter()
-            .map(|harness| {
-                let metadata = gen_proof_metadata(tcx, harness, &base_filename);
-                (harness, metadata)
-            })
-            .collect::<HashMap<_, _>>();
-
         if queries.args().reachability_analysis == ReachabilityType::Harnesses {
+            let base_filepath = tcx.output_filenames(()).path(OutputType::Object);
+            let base_filename = base_filepath.as_path();
+            let harnesses = filter_crate_items(tcx, |_, instance| is_proof_harness(tcx, instance));
+            let all_harnesses = harnesses
+                .into_iter()
+                .map(|harness| {
+                    let metadata = gen_proof_metadata(tcx, harness, &base_filename);
+                    (harness, metadata)
+                })
+                .collect::<HashMap<_, _>>();
+
             // Even if no_stubs is empty we still need to store rustc metadata.
             let units = group_by_stubs(tcx, &all_harnesses);
             validate_units(tcx, &units);
             debug!(?units, "CodegenUnits::new");
             CodegenUnits { units, harness_info: all_harnesses, crate_info }
         } else {
-            // Only ReachabilityType::Harnesses uses harness_info directly,
-            // but we collect it for the other ReachabilityTypes so that we can write the metadata to a file.
-            // Then, if the user invokes the list subcommand after verification, the metadata will already be cached
-            // and we do not need to recompile.
-            CodegenUnits { units: vec![], harness_info: all_harnesses, crate_info }
+            // Leave other reachability type handling as is for now.
+            CodegenUnits { units: vec![], harness_info: HashMap::default(), crate_info }
         }
     }
 

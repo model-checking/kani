@@ -8,7 +8,6 @@ use crate::metadata::from_json;
 use crate::session::KaniSession;
 use crate::util::crate_name;
 use anyhow::{Context, Result};
-use kani_metadata::UnstableFeature;
 use kani_metadata::{
     ArtifactType, ArtifactType::*, HarnessMetadata, KaniMetadata, artifact::convert_type,
 };
@@ -91,18 +90,6 @@ impl Project {
         cargo_metadata: Option<cargo_metadata::Metadata>,
         failed_targets: Option<Vec<String>>,
     ) -> Result<Self> {
-        // For the list subcommand, we do not generate any goto, so skip extending the artifacts
-        if session.args.common_args.unstable_features.contains(UnstableFeature::List) {
-            return Ok(Project {
-                outdir,
-                input,
-                metadata,
-                artifacts: vec![],
-                cargo_metadata,
-                failed_targets,
-            });
-        }
-
         // For each harness (test or proof) from each metadata, read the path for the goto
         // SymTabGoto file. Use that path to find all the other artifacts.
         let mut artifacts = vec![];
