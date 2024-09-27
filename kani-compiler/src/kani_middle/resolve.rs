@@ -544,7 +544,6 @@ fn resolve_in_type_def<'tcx>(
         || ResolveError::MissingItem { tcx, base: type_id, unresolved: name.to_string() };
     // Try the inherent `impl` blocks (i.e., non-trait `impl`s).
     tcx.inherent_impls(type_id)
-        .map_err(|_| missing_item_err())?
         .iter()
         .flat_map(|impl_id| tcx.associated_item_def_ids(impl_id))
         .cloned()
@@ -588,7 +587,7 @@ where
         let simple_ty =
             fast_reject::simplify_type(tcx, internal_ty, TreatParams::InstantiateWithInfer)
                 .unwrap();
-        let impls = tcx.incoherent_impls(simple_ty).unwrap();
+        let impls = tcx.incoherent_impls(simple_ty);
         // Find the primitive impl.
         let item = impls
             .iter()
