@@ -10,7 +10,7 @@ publish = false
 
 [dependencies]
 cbmc = { path = "../cprover_bindings", package = "cprover_bindings", optional = true }
-charon = { git = "https://github.com/AeneasVerif/charon", optional = true, default-features = false, rev = "cdc1dcde447a50cbc20336c79b21b42ac977b7fd" }
+charon = { path = "../charon/charon", optional = true, default-features = false } 
 clap = { version = "4.4.11", features = ["derive", "cargo"] }
 home = "0.5"
 itertools = "0.13"

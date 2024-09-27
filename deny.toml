@@ -11,7 +11,10 @@ yanked = "deny"
 # A list of advisory IDs to ignore. Note that ignored advisories will still
 # output a note when they are encountered.
 ignore = [
-    #"RUSTSEC-0000-0000",
+    # This is for a crate that is used by Charon
+    "RUSTSEC-2021-0139",
+    # This is for a crate that is used by Charon
+    "RUSTSEC-2020-0095",
 ]
 
 # This section is considered when running `cargo deny check licenses`
@@ -48,5 +51,5 @@ unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 allow-git = [
-    "https://github.com/AeneasVerif/charon",
+    "https://github.com/hacspec/hax",
 ]
