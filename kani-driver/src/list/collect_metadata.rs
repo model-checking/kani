@@ -5,13 +5,13 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
+    InvocationType,
     args::list_args::{CargoListArgs, Format, StandaloneListArgs},
-    list::output::{json, pretty},
     list::Totals,
-    project::{cargo_project, standalone_project, std_project, Project},
+    list::output::{json, pretty},
+    project::{Project, cargo_project, standalone_project, std_project},
     session::KaniSession,
     version::print_kani_version,
-    InvocationType,
 };
 use anyhow::Result;
 use kani_metadata::{ContractedFunction, HarnessKind, KaniMetadata};

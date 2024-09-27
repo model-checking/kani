@@ -10,7 +10,7 @@ use std::{
 
 use crate::{list::Totals, version::KANI_VERSION};
 use anyhow::Result;
-use cli_table::{print_stdout, Cell, CellStruct, Style, Table};
+use cli_table::{Cell, CellStruct, Style, Table, print_stdout};
 use colour::print_ln_bold;
 use kani_metadata::ContractedFunction;
 use serde_json::json;

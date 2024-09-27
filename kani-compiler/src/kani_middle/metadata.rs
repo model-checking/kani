@@ -8,9 +8,9 @@ use std::path::Path;
 
 use crate::kani_middle::attributes::test_harness_name;
 use crate::kani_middle::attributes::{
-    matches_diagnostic as matches_function, ContractAttributes, KaniAttributes,
+    ContractAttributes, KaniAttributes, matches_diagnostic as matches_function,
 };
-use crate::kani_middle::{find_closure_in_body, InternalDefId, SourceLocation};
+use crate::kani_middle::{InternalDefId, SourceLocation, find_closure_in_body};
 use kani_metadata::ContractedFunction;
 use kani_metadata::{ArtifactType, HarnessAttributes, HarnessKind, HarnessMetadata};
 use rustc_middle::ty::TyCtxt;

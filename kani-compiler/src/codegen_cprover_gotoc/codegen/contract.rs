@@ -9,9 +9,9 @@ use kani_metadata::AssignsContract;
 use rustc_hir::def_id::DefId as InternalDefId;
 use rustc_smir::rustc_internal;
 use stable_mir::CrateDef;
+use stable_mir::mir::Local;
 use stable_mir::mir::mono::{Instance, MonoItem};
-use stable_mir::mir::{Local, VarDebugInfoContents};
-use stable_mir::ty::{FnDef, RigidTy, TyKind};
+use stable_mir::ty::{RigidTy, TyKind};
 
 impl<'tcx> GotocCtx<'tcx> {
     /// Given the `proof_for_contract` target `function_under_contract` and the reachable `items`,

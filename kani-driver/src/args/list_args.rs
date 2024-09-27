@@ -5,7 +5,7 @@
 use std::path::PathBuf;
 
 use crate::args::ValidateArgs;
-use clap::{error::ErrorKind, Error, Parser, ValueEnum};
+use clap::{Error, Parser, ValueEnum, error::ErrorKind};
 use kani_metadata::UnstableFeature;
 
 use super::VerificationArgs;
