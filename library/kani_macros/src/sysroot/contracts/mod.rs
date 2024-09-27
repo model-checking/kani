@@ -395,7 +395,7 @@
 use proc_macro::TokenStream;
 use proc_macro2::{Ident, TokenStream as TokenStream2};
 use quote::quote;
-use syn::{parse_macro_input, parse_quote, Expr, ExprClosure, ItemFn};
+use syn::{Expr, ExprClosure, ItemFn, parse_macro_input, parse_quote};
 
 mod bootstrap;
 mod check;

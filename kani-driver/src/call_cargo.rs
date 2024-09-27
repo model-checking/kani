@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use crate::args::VerificationArgs;
-use crate::call_single_file::{to_rustc_arg, LibConfig};
+use crate::call_single_file::{LibConfig, to_rustc_arg};
 use crate::project::Artifact;
-use crate::session::{lib_folder, lib_no_core_folder, setup_cargo_command, KaniSession};
+use crate::session::{KaniSession, lib_folder, lib_no_core_folder, setup_cargo_command};
 use crate::util;
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use cargo_metadata::diagnostic::{Diagnostic, DiagnosticLevel};
 use cargo_metadata::{
     Artifact as RustcArtifact, Message, Metadata, MetadataCommand, Package, Target,

@@ -11,11 +11,14 @@ use std::intrinsics::simd::simd_shuffle;
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct i64x2([i64; 2]);
 
+#[repr(simd)]
+struct SimdShuffleIdx<const LEN: usize>([u32; LEN]);
+
 #[kani::proof]
 fn main() {
     let y = i64x2([0, 1]);
     let z = i64x2([1, 2]);
     // Only [0, 3] are valid indexes, 4 is out of bounds
-    const I: [u32; 2] = [1, 4];
+    const I: SimdShuffleIdx<2> = SimdShuffleIdx([1, 4]);
     let _: i64x2 = unsafe { simd_shuffle(y, z, I) };
 }

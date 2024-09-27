@@ -7,6 +7,7 @@
 //! other maintainers wanted to keep the conversions minimal. For more information, see
 //! https://github.com/rust-lang/rust/pull/127782
 
+use rustc_middle::mir::CoercionSource;
 use rustc_middle::ty::{self as rustc_ty, TyCtxt};
 use rustc_smir::rustc_internal::internal;
 use stable_mir::mir::{
@@ -125,10 +126,17 @@ impl RustcInternalMir for CastKind {
             CastKind::PointerWithExposedProvenance => {
                 rustc_middle::mir::CastKind::PointerWithExposedProvenance
             }
+            // smir doesn't yet have CoercionSource information, so we just choose "Implicit"
             CastKind::PointerCoercion(ptr_coercion) => {
-                rustc_middle::mir::CastKind::PointerCoercion(ptr_coercion.internal_mir(tcx))
+                rustc_middle::mir::CastKind::PointerCoercion(
+                    ptr_coercion.internal_mir(tcx),
+                    CoercionSource::Implicit,
+                )
             }
-            CastKind::DynStar => rustc_middle::mir::CastKind::DynStar,
+            CastKind::DynStar => rustc_middle::mir::CastKind::PointerCoercion(
+                rustc_ty::adjustment::PointerCoercion::DynStar,
+                CoercionSource::Implicit,
+            ),
             CastKind::IntToInt => rustc_middle::mir::CastKind::IntToInt,
             CastKind::FloatToInt => rustc_middle::mir::CastKind::FloatToInt,
             CastKind::FloatToFloat => rustc_middle::mir::CastKind::FloatToFloat,

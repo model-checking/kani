@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use kani_metadata::{ArtifactType, HarnessMetadata};
 use rayon::prelude::*;
 use std::path::Path;
