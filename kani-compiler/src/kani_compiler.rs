@@ -64,22 +64,10 @@ fn cprover_backend(_queries: Arc<Mutex<QueryDb>>) -> Box<dyn CodegenBackend> {
 fn backend(queries: Arc<Mutex<QueryDb>>) -> Box<dyn CodegenBackend> {
     let backend = queries.lock().unwrap().args().backend;
     match backend {
-        Some(backend) => match backend {
-            #[cfg(feature = "aeneas")]
-            BackendOption::Aeneas => aeneas_backend(queries),
-            #[cfg(feature = "cprover")]
-            BackendOption::CProver => cprover_backend(queries),
-        },
-        None => {
-            // priority list of backends
-            if cfg!(feature = "cprover") {
-                cprover_backend(queries)
-            } else if cfg!(feature = "aeneas") {
-                aeneas_backend(queries)
-            } else {
-                unreachable!();
-            }
-        }
+        #[cfg(feature = "aeneas")]
+        BackendOption::Aeneas => aeneas_backend(queries),
+        #[cfg(feature = "cprover")]
+        BackendOption::CProver => cprover_backend(queries),
     }
 }
 
