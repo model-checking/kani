@@ -87,7 +87,7 @@ pub struct Arguments {
     /// Option name used to select which backend to use.
     #[clap(long = "backend", default_value_t = BackendOption::CProver)]
     pub backend: BackendOption,
-    /// Print the final LLBC file to stdout.
+    /// Print the final LLBC file to stdout. This requires `-Zaeneas`.
     #[clap(long)]
     pub print_llbc: bool,
 }
