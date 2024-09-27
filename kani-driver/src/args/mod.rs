@@ -939,7 +939,8 @@ mod tests {
 
     #[test]
     fn check_cbmc_args_aeneas_backend() {
-        let args = "kani input.rs -Z aeneas --enable-unstable --cbmc-args --object-bits 10".split_whitespace();
+        let args = "kani input.rs -Z aeneas --enable-unstable --cbmc-args --object-bits 10"
+            .split_whitespace();
         let err = StandaloneArgs::try_parse_from(args).unwrap().validate().unwrap_err();
         assert_eq!(err.kind(), ErrorKind::ArgumentConflict);
     }
