@@ -4,7 +4,7 @@
 //! Single source of truth about which intrinsics we support.
 
 use stable_mir::{
-    mir::{mono::Instance, Mutability},
+    mir::{Mutability, mono::Instance},
     ty::{FloatTy, IntTy, RigidTy, TyKind, UintTy},
 };
 

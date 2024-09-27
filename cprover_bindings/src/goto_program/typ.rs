@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use self::DatatypeComponent::*;
 use self::Type::*;
-use super::super::utils::{aggr_tag, max_int, min_int};
 use super::super::MachineModel;
+use super::super::utils::{aggr_tag, max_int, min_int};
 use super::{Expr, SymbolTable};
 use crate::cbmc_string::InternedString;
 use std::collections::BTreeMap;
@@ -1598,10 +1598,10 @@ mod type_tests {
     fn check_typedef_struct_properties() {
         // Create a struct with a random field.
         let struct_name: InternedString = "MyStruct".into();
-        let struct_type = Type::struct_type(
-            struct_name,
-            vec![DatatypeComponent::Field { name: "field".into(), typ: Double }],
-        );
+        let struct_type = Type::struct_type(struct_name, vec![DatatypeComponent::Field {
+            name: "field".into(),
+            typ: Double,
+        }]);
         // Insert a field to the sym table to represent the struct field.
         let mut sym_table = SymbolTable::new(machine_model_test_stub());
         sym_table.ensure(struct_type.type_name().unwrap(), |_, name| {

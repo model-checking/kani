@@ -14,7 +14,7 @@ use crate::kani_middle::transform::body::{
 };
 use crate::kani_middle::transform::check_uninit::PointeeInfo;
 use crate::kani_middle::transform::check_uninit::{
-    get_mem_init_fn_def, mk_layout_operand, resolve_mem_init_fn, PointeeLayout,
+    PointeeLayout, get_mem_init_fn_def, mk_layout_operand, resolve_mem_init_fn,
 };
 use crate::kani_middle::transform::check_values::{build_limits, ty_validity_per_offset};
 use crate::kani_middle::transform::{TransformPass, TransformationType};
@@ -22,8 +22,8 @@ use crate::kani_queries::QueryDb;
 use rustc_middle::ty::TyCtxt;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{
-    BasicBlock, BinOp, Body, ConstOperand, Mutability, Operand, Place, Rvalue, Statement,
-    StatementKind, Terminator, TerminatorKind, UnwindAction, RETURN_LOCAL,
+    BasicBlock, BinOp, Body, ConstOperand, Mutability, Operand, Place, RETURN_LOCAL, Rvalue,
+    Statement, StatementKind, Terminator, TerminatorKind, UnwindAction,
 };
 use stable_mir::target::MachineInfo;
 use stable_mir::ty::{FnDef, MirConst, RigidTy, Ty, TyKind, UintTy};

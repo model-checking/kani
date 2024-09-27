@@ -9,8 +9,8 @@ use std::time::Instant;
 use anyhow::Result;
 use cargo_metadata::Package;
 
-use crate::session::setup_cargo_command;
 use crate::session::KaniSession;
+use crate::session::setup_cargo_command;
 
 use super::metadata::AssessMetadata;
 use super::metadata::{aggregate_metadata, read_metadata};

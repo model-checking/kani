@@ -42,8 +42,8 @@ use rustc_middle::{
 };
 use rustc_mir_dataflow::{Analysis, AnalysisDomain, Forward, JoinSemiLattice};
 use rustc_smir::rustc_internal;
-use rustc_span::{source_map::Spanned, DUMMY_SP};
-use stable_mir::mir::{mono::Instance as StableInstance, Body as StableBody};
+use rustc_span::{DUMMY_SP, source_map::Spanned};
+use stable_mir::mir::{Body as StableBody, mono::Instance as StableInstance};
 use std::collections::HashSet;
 
 /// Main points-to analysis object.
@@ -458,22 +458,19 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
             // Sanity check. The first argument is the closure itself and the second argument is the tupled arguments from the caller.
             assert!(args.len() == 2);
             // First, connect all upvars.
-            let lvalue_set = HashSet::from([MemLoc::new_stack_allocation(
-                instance,
-                Place { local: 1usize.into(), projection: List::empty() },
-            )]);
+            let lvalue_set = HashSet::from([MemLoc::new_stack_allocation(instance, Place {
+                local: 1usize.into(),
+                projection: List::empty(),
+            })]);
             let rvalue_set = self.successors_for_operand(state, args[0].node.clone());
             initial_graph.extend(&lvalue_set, &rvalue_set);
             // Then, connect the argument tuple to each of the spread arguments.
             let spread_arg_operand = args[1].node.clone();
             for i in 0..new_body.arg_count {
-                let lvalue_set = HashSet::from([MemLoc::new_stack_allocation(
-                    instance,
-                    Place {
-                        local: (i + 1).into(), // Since arguments in the callee are starting with 1, account for that.
-                        projection: List::empty(),
-                    },
-                )]);
+                let lvalue_set = HashSet::from([MemLoc::new_stack_allocation(instance, Place {
+                    local: (i + 1).into(), // Since arguments in the callee are starting with 1, account for that.
+                    projection: List::empty(),
+                })]);
                 // This conservatively assumes all arguments alias to all parameters.
                 let rvalue_set = self.successors_for_operand(state, spread_arg_operand.clone());
                 initial_graph.extend(&lvalue_set, &rvalue_set);
@@ -481,13 +478,10 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
         } else {
             // Otherwise, simply connect all arguments to parameters.
             for (i, arg) in args.iter().enumerate() {
-                let lvalue_set = HashSet::from([MemLoc::new_stack_allocation(
-                    instance,
-                    Place {
-                        local: (i + 1).into(), // Since arguments in the callee are starting with 1, account for that.
-                        projection: List::empty(),
-                    },
-                )]);
+                let lvalue_set = HashSet::from([MemLoc::new_stack_allocation(instance, Place {
+                    local: (i + 1).into(), // Since arguments in the callee are starting with 1, account for that.
+                    projection: List::empty(),
+                })]);
                 let rvalue_set = self.successors_for_operand(state, arg.node.clone());
                 initial_graph.extend(&lvalue_set, &rvalue_set);
             }
@@ -501,10 +495,10 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
 
         // Connect the return value to the return destination.
         let lvalue_set = state.resolve_place(*destination, self.instance);
-        let rvalue_set = HashSet::from([MemLoc::new_stack_allocation(
-            instance,
-            Place { local: 0usize.into(), projection: List::empty() },
-        )]);
+        let rvalue_set = HashSet::from([MemLoc::new_stack_allocation(instance, Place {
+            local: 0usize.into(),
+            projection: List::empty(),
+        })]);
         state.extend(&lvalue_set, &state.successors(&rvalue_set));
     }
 

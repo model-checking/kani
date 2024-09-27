@@ -5,7 +5,7 @@
 //! Check the behavior of the new `PointerGenerator`.
 extern crate kani;
 
-use kani::{cover, AllocationStatus, PointerGenerator};
+use kani::{AllocationStatus, PointerGenerator, cover};
 
 /// Harness that checks that all cases are covered and the code behaves as expected.
 ///

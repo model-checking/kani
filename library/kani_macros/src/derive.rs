@@ -9,13 +9,13 @@
 //! struct S;
 //!
 //! ```
-use proc_macro2::{Ident, Span, TokenStream};
 use proc_macro_error2::abort;
+use proc_macro2::{Ident, Span, TokenStream};
 use quote::{quote, quote_spanned};
 use syn::spanned::Spanned;
 use syn::{
-    parse_macro_input, parse_quote, Data, DataEnum, DeriveInput, Fields, GenericParam, Generics,
-    Index,
+    Data, DataEnum, DeriveInput, Fields, GenericParam, Generics, Index, parse_macro_input,
+    parse_quote,
 };
 
 /// Generate the Arbitrary implementation for the given type.

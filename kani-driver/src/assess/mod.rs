@@ -1,8 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use self::metadata::{write_metadata, AssessMetadata};
-use anyhow::{bail, Result};
+use self::metadata::{AssessMetadata, write_metadata};
+use anyhow::{Result, bail};
 use kani_metadata::KaniMetadata;
 
 use crate::assess::table_builder::TableBuilder;

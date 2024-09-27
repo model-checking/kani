@@ -8,7 +8,7 @@ use rustc_middle::mir::{Local, LocalDecl};
 use rustc_middle::ty::{self, Ty, TyCtxt};
 use rustc_middle::ty::{Const, GenericArgsRef, IntrinsicDef};
 use rustc_span::source_map::Spanned;
-use rustc_span::symbol::{sym, Symbol};
+use rustc_span::symbol::{Symbol, sym};
 use tracing::{debug, trace};
 
 pub struct ModelIntrinsics<'tcx> {

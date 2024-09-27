@@ -8,15 +8,15 @@ use std::intrinsics::simd::simd_div;
 #[repr(simd)]
 #[allow(non_camel_case_types)]
 #[derive(Clone, Copy, PartialEq, kani::Arbitrary)]
-pub struct f32x2(f32, f32);
+pub struct f32x2([f32; 2]);
 
 impl f32x2 {
     fn new_with(f: impl Fn() -> f32) -> Self {
-        f32x2(f(), f())
+        f32x2([f(), f()])
     }
 
     fn non_simd_div(self, divisors: Self) -> Self {
-        f32x2(self.0 / divisors.0, self.1 / divisors.1)
+        f32x2([self.0[0] / divisors.0[0], self.0[1] / divisors.0[1]])
     }
 }
 

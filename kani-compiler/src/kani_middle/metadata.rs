@@ -8,10 +8,10 @@ use std::path::Path;
 use crate::kani_middle::attributes::test_harness_name;
 use kani_metadata::{ArtifactType, HarnessAttributes, HarnessKind, HarnessMetadata};
 use rustc_middle::ty::TyCtxt;
-use stable_mir::mir::mono::Instance;
 use stable_mir::CrateDef;
+use stable_mir::mir::mono::Instance;
 
-use super::{attributes::KaniAttributes, SourceLocation};
+use super::{SourceLocation, attributes::KaniAttributes};
 
 /// Create the harness metadata for a proof harness for a given function.
 pub fn gen_proof_metadata(tcx: TyCtxt, instance: Instance, base_name: &Path) -> HarnessMetadata {

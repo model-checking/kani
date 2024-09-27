@@ -5,7 +5,7 @@
 
 #![feature(core_intrinsics)]
 
-use std::alloc::{alloc, alloc_zeroed, Layout};
+use std::alloc::{Layout, alloc, alloc_zeroed};
 use std::intrinsics::*;
 
 #[kani::proof]

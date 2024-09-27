@@ -1,6 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-use crate::{any, any_where, Arbitrary};
+use crate::{Arbitrary, any, any_where};
 
 /// Generates an arbitrary vector whose length is at most MAX_LENGTH.
 pub fn any_vec<T, const MAX_LENGTH: usize>() -> Vec<T>

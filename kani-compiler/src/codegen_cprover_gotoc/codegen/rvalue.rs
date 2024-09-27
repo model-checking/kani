@@ -1,21 +1,21 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+use crate::codegen_cprover_gotoc::codegen::PropertyClass;
 use crate::codegen_cprover_gotoc::codegen::place::ProjectedPlace;
 use crate::codegen_cprover_gotoc::codegen::ty_stable::pointee_type_stable;
-use crate::codegen_cprover_gotoc::codegen::PropertyClass;
 use crate::codegen_cprover_gotoc::utils::{dynamic_fat_ptr, slice_fat_ptr};
 use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
 use crate::kani_middle::coercion::{
-    extract_unsize_casting_stable, CoerceUnsizedInfo, CoerceUnsizedIterator, CoercionBaseStable,
+    CoerceUnsizedInfo, CoerceUnsizedIterator, CoercionBaseStable, extract_unsize_casting_stable,
 };
 use crate::unwrap_or_return_codegen_unimplemented;
-use cbmc::goto_program::{
-    arithmetic_overflow_result_type, BinaryOperator, Expr, Location, Stmt, Type,
-    ARITH_OVERFLOW_OVERFLOWED_FIELD, ARITH_OVERFLOW_RESULT_FIELD,
-};
 use cbmc::MachineModel;
-use cbmc::{btree_string_map, InternString, InternedString};
+use cbmc::goto_program::{
+    ARITH_OVERFLOW_OVERFLOWED_FIELD, ARITH_OVERFLOW_RESULT_FIELD, BinaryOperator, Expr, Location,
+    Stmt, Type, arithmetic_overflow_result_type,
+};
+use cbmc::{InternString, InternedString, btree_string_map};
 use num::bigint::BigInt;
 use rustc_middle::ty::{ParamEnv, TyCtxt, VtblEntry};
 use rustc_smir::rustc_internal;
@@ -738,12 +738,23 @@ impl<'tcx> GotocCtx<'tcx> {
             Rvalue::Ref(_, _, p) | Rvalue::AddressOf(_, p) => {
                 let place_ref = self.codegen_place_ref_stable(&p, loc);
                 let place_ref_type = place_ref.typ().clone();
-                match self.codegen_raw_ptr_deref_validity_check(&p, &loc) {
-                    Some(ptr_validity_check_expr) => Expr::statement_expression(
-                        vec![ptr_validity_check_expr, place_ref.as_stmt(loc)],
-                        place_ref_type,
-                        loc,
-                    ),
+                match self.codegen_raw_ptr_deref_validity_check(
+                    &p,
+                    place_ref.clone(),
+                    self.place_ty_stable(p),
+                    &loc,
+                ) {
+                    Some((ptr_alignment_check_expr, ptr_validity_check_expr)) => {
+                        Expr::statement_expression(
+                            vec![
+                                ptr_alignment_check_expr,
+                                ptr_validity_check_expr,
+                                place_ref.as_stmt(loc),
+                            ],
+                            place_ref_type,
+                            loc,
+                        )
+                    }
                     None => place_ref,
                 }
             }
@@ -916,10 +927,10 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn codegen_discriminant_field(&self, place: Expr, ty: Ty) -> Expr {
         let layout = self.layout_of_stable(ty);
         assert!(
-            matches!(
-                &layout.variants,
-                Variants::Multiple { tag_encoding: TagEncoding::Direct, .. }
-            ),
+            matches!(&layout.variants, Variants::Multiple {
+                tag_encoding: TagEncoding::Direct,
+                ..
+            }),
             "discriminant field (`case`) only exists for multiple variants and direct encoding"
         );
         let expr = if ty.kind().is_coroutine() {

@@ -26,6 +26,7 @@ fn main() {
         take(x);
     };
 
-    // FIXME: size of coroutines does not work reliably (https://github.com/model-checking/kani/issues/1395)
-    assert_eq!(size_of_val(&gen1), size_of_val(&Some(gen1)));
+    // FIXME(https://github.com/rust-lang/rust/issues/63818#issuecomment-2264915918):
+    // niches in coroutines are disabled. Should be `assert_eq`.
+    assert_ne!(size_of_val(&gen1), size_of_val(&Some(gen1)));
 }
