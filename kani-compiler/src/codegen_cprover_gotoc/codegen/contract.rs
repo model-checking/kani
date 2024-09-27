@@ -1,6 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-use crate::codegen_cprover_gotoc::{codegen::ty_stable::pointee_type_stable, GotocCtx};
+use crate::codegen_cprover_gotoc::{GotocCtx, codegen::ty_stable::pointee_type_stable};
 use crate::kani_middle::attributes::KaniAttributes;
 use crate::kani_middle::find_closure_in_body;
 use cbmc::goto_program::FunctionContract;
@@ -8,10 +8,10 @@ use cbmc::goto_program::{Expr, Lambda, Location, Type};
 use kani_metadata::AssignsContract;
 use rustc_hir::def_id::DefId as InternalDefId;
 use rustc_smir::rustc_internal;
-use stable_mir::mir::mono::{Instance, MonoItem};
-use stable_mir::mir::Local;
-use stable_mir::ty::{RigidTy, TyKind};
 use stable_mir::CrateDef;
+use stable_mir::mir::mono::{Instance, MonoItem};
+use stable_mir::mir::{Local, VarDebugInfoContents};
+use stable_mir::ty::{FnDef, RigidTy, TyKind};
 
 impl<'tcx> GotocCtx<'tcx> {
     /// Given the `proof_for_contract` target `function_under_contract` and the reachable `items`,

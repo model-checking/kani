@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use std::alloc::{dealloc, Layout};
+use std::alloc::{Layout, dealloc};
 
 // This test checks that Kani flags the deallocation of a stack-allocated
 // variable

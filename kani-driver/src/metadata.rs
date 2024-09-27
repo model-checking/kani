@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use std::path::Path;
 use tracing::{debug, trace};
 

@@ -9,9 +9,9 @@ use std::mem;
 use syn::Stmt;
 
 use super::{
+    ClosureType, ContractConditionsData, ContractConditionsHandler, INTERNAL_RESULT_IDENT,
     helpers::*,
     shared::{build_ensures, try_as_result_assign},
-    ClosureType, ContractConditionsData, ContractConditionsHandler, INTERNAL_RESULT_IDENT,
 };
 
 impl<'a> ContractConditionsHandler<'a> {

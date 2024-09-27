@@ -22,7 +22,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::{env, fs};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 
 /// Effectively the entry point (i.e. `main` function) for both our proxy binaries.
 /// `bin` should be either `kani` or `cargo-kani`

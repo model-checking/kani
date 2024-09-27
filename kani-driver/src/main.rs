@@ -5,9 +5,9 @@ use std::ffi::OsString;
 use std::process::ExitCode;
 
 use anyhow::Result;
-use time::{format_description, OffsetDateTime};
+use time::{OffsetDateTime, format_description};
 
-use args::{check_is_valid, CargoKaniSubcommand};
+use args::{CargoKaniSubcommand, check_is_valid};
 use args_toml::join_args;
 
 use crate::args::StandaloneSubcommand;

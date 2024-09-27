@@ -8,7 +8,7 @@ use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 use syn::{Expr, ItemFn, Stmt};
 
-use super::{helpers::*, ContractConditionsHandler, INTERNAL_RESULT_IDENT};
+use super::{ContractConditionsHandler, INTERNAL_RESULT_IDENT, helpers::*};
 
 impl<'a> ContractConditionsHandler<'a> {
     /// Generate initial contract.

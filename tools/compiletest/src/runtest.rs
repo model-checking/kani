@@ -6,11 +6,11 @@
 // ignore-tidy-filelength
 
 use crate::common::KaniFailStep;
-use crate::common::{output_base_dir, output_base_name};
 use crate::common::{
-    CargoKani, CargoKaniTest, CoverageBased, Exec, Expected, Kani, KaniFixme, Stub,
+    CargoCoverage, CargoKani, CargoKaniTest, CoverageBased, Exec, Expected, Kani, KaniFixme, Stub,
 };
 use crate::common::{Config, TestPaths};
+use crate::common::{output_base_dir, output_base_name};
 use crate::header::TestProps;
 use crate::read2::read2;
 use crate::util::logv;
@@ -74,6 +74,7 @@ impl<'test> TestCx<'test> {
         match self.config.mode {
             Kani => self.run_kani_test(),
             KaniFixme => self.run_kani_test(),
+            CargoCoverage => self.run_cargo_coverage_test(),
             CargoKani => self.run_cargo_kani_test(false),
             CargoKaniTest => self.run_cargo_kani_test(true),
             CoverageBased => self.run_expected_coverage_test(),
@@ -313,7 +314,7 @@ impl<'test> TestCx<'test> {
         self.compose_and_run(kani)
     }
 
-    /// Run coverage based output for kani on a single file
+    /// Run Kani with coverage enabled on a single source file
     fn run_kani_with_coverage(&self) -> ProcRes {
         let mut kani = Command::new("kani");
         if !self.props.compile_flags.is_empty() {
@@ -327,6 +328,34 @@ impl<'test> TestCx<'test> {
         }
 
         self.compose_and_run(kani)
+    }
+
+    /// Run Kani with coverage enabled on a cargo package
+    fn run_cargo_coverage_test(&self) {
+        // We create our own command for the same reasons listed in `run_kani_test` method.
+        let mut cargo = Command::new("cargo");
+        // We run `cargo` on the directory where we found the `*.expected` file
+        let parent_dir = self.testpaths.file.parent().unwrap();
+        // The name of the function to test is the same as the stem of `*.expected` file
+        let function_name = self.testpaths.file.file_stem().unwrap().to_str().unwrap();
+        cargo
+            .arg("kani")
+            .arg("--coverage")
+            .arg("-Zsource-coverage")
+            .arg("--target-dir")
+            .arg(self.output_base_dir().join("target"))
+            .current_dir(parent_dir);
+
+        if "expected" != self.testpaths.file.file_name().unwrap() {
+            cargo.args(["--harness", function_name]);
+        }
+        cargo.args(&self.config.extra_args);
+
+        let proc_res = self.compose_and_run(cargo);
+        self.verify_output(&proc_res, &self.testpaths.file);
+
+        // TODO: We should probably be checking the exit status somehow
+        // See https://github.com/model-checking/kani/issues/1895
     }
 
     /// Runs an executable file and:

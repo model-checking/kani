@@ -5,8 +5,8 @@
 
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::kani_middle::is_interior_mut;
-use stable_mir::mir::mono::{Instance, StaticDef};
 use stable_mir::CrateDef;
+use stable_mir::mir::mono::{Instance, StaticDef};
 use tracing::debug;
 
 impl<'tcx> GotocCtx<'tcx> {

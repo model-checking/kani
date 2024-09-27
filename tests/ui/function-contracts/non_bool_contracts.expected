@@ -1,0 +1,11 @@
+|
+| #[kani::requires(a + b)]
+| -----------------^^^^^--
+| |                |
+| |                expected `bool`, found `u64`
+| arguments to this function are incorrect
+|
+
+|
+| #[kani::ensures(|result| a % *result && b % *result == 0 && *result != 0)]
+|                          ^^^^^^^^^^^ expected `bool`, found `u64`

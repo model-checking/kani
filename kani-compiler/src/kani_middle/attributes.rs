@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 use kani_metadata::{CbmcSolver, HarnessAttributes, HarnessKind, Stub};
 use quote::ToTokens;
 use rustc_ast::{
-    attr, AttrArgs, AttrArgsEq, AttrKind, Attribute, ExprKind, LitKind, MetaItem, MetaItemKind,
+    AttrArgs, AttrArgsEq, AttrKind, Attribute, ExprKind, LitKind, MetaItem, MetaItemKind, attr,
 };
 use rustc_errors::ErrorGuaranteed;
 use rustc_hir::{def::DefKind, def_id::DefId};
@@ -25,7 +25,7 @@ use syn::{PathSegment, TypePath};
 
 use tracing::{debug, trace};
 
-use super::resolve::{resolve_fn, resolve_fn_path, FnResolution, ResolveError};
+use super::resolve::{FnResolution, ResolveError, resolve_fn, resolve_fn_path};
 
 #[derive(Debug, Clone, Copy, AsRefStr, EnumString, PartialEq, Eq, PartialOrd, Ord)]
 #[strum(serialize_all = "snake_case")]
@@ -358,7 +358,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                         );
                     }
                     expect_single(self.tcx, kind, &attrs);
-                    attrs.iter().for_each(|attr| self.check_proof_attribute(attr))
+                    attrs.iter().for_each(|attr| self.check_proof_attribute(kind, attr))
                 }
                 KaniAttributeKind::Unstable => attrs.iter().for_each(|attr| {
                     let _ = UnstableAttribute::try_from(*attr).map_err(|err| err.report(self.tcx));
@@ -370,6 +370,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                         );
                     }
                     expect_single(self.tcx, kind, &attrs);
+                    attrs.iter().for_each(|attr| self.check_proof_attribute(kind, attr))
                 }
                 KaniAttributeKind::StubVerified => {
                     expect_single(self.tcx, kind, &attrs);
@@ -583,15 +584,29 @@ impl<'tcx> KaniAttributes<'tcx> {
     }
 
     /// Check that if this item is tagged with a proof_attribute, it is a valid harness.
-    fn check_proof_attribute(&self, proof_attribute: &Attribute) {
+    fn check_proof_attribute(&self, kind: KaniAttributeKind, proof_attribute: &Attribute) {
         let span = proof_attribute.span;
         let tcx = self.tcx;
-        expect_no_args(tcx, KaniAttributeKind::Proof, proof_attribute);
+        if let KaniAttributeKind::Proof = kind {
+            expect_no_args(tcx, kind, proof_attribute);
+        }
+
         if tcx.def_kind(self.item) != DefKind::Fn {
-            tcx.dcx().span_err(span, "the `proof` attribute can only be applied to functions");
+            tcx.dcx().span_err(
+                span,
+                format!(
+                    "the '#[kani::{}]' attribute can only be applied to functions",
+                    kind.as_ref()
+                ),
+            );
         } else if tcx.generics_of(self.item).requires_monomorphization(tcx) {
-            tcx.dcx()
-                .span_err(span, "the `proof` attribute cannot be applied to generic functions");
+            tcx.dcx().span_err(
+                span,
+                format!(
+                    "the '#[kani::{}]' attribute cannot be applied to generic functions",
+                    kind.as_ref()
+                ),
+            );
         } else {
             let instance = Instance::mono(tcx, self.item);
             if !super::fn_abi(tcx, instance).args.is_empty() {

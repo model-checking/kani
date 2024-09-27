@@ -20,6 +20,7 @@ use stable_mir::mir::{Body, TerminatorKind};
 use stable_mir::ty::{RigidTy, TyKind};
 use stable_mir::{CrateDef, CrateItems};
 
+/// Create the harness metadata for a proof harness for a given function.
 pub fn gen_proof_metadata(tcx: TyCtxt, instance: Instance, base_name: &Path) -> HarnessMetadata {
     let def = instance.def;
     let kani_attributes = KaniAttributes::for_instance(tcx, instance);

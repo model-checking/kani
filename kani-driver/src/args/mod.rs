@@ -16,7 +16,7 @@ use crate::args::cargo::CargoTargetArgs;
 use crate::util::warning;
 use cargo::CargoCommonArgs;
 use clap::builder::{PossibleValue, TypedValueParser};
-use clap::{error::ContextKind, error::ContextValue, error::Error, error::ErrorKind, ValueEnum};
+use clap::{ValueEnum, error::ContextKind, error::ContextValue, error::Error, error::ErrorKind};
 use kani_metadata::CbmcSolver;
 use std::ffi::OsString;
 use std::path::PathBuf;

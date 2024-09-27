@@ -8,7 +8,7 @@
 
 #![warn(rust_2018_idioms)]
 
-use tokio::time::{sleep_until, Duration, Instant};
+use tokio::time::{Duration, Instant, sleep_until};
 use tokio_test::block_on;
 
 #[cfg(disabled)] // because epoll is missing

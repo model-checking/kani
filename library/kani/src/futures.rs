@@ -163,6 +163,7 @@ pub struct JoinHandle {
     index: usize,
 }
 
+#[allow(static_mut_refs)]
 impl Future for JoinHandle {
     type Output = ();
 
@@ -180,6 +181,7 @@ impl Future for JoinHandle {
 ///
 /// This function can only be called inside a future passed to [`block_on_with_spawn`].
 #[crate::unstable(feature = "async-lib", issue = 2559, reason = "experimental async support")]
+#[allow(static_mut_refs)]
 pub fn spawn<F: Future<Output = ()> + Sync + 'static>(fut: F) -> JoinHandle {
     unsafe {
         if let Some(executor) = GLOBAL_EXECUTOR.as_mut() {
@@ -195,6 +197,7 @@ pub fn spawn<F: Future<Output = ()> + Sync + 'static>(fut: F) -> JoinHandle {
 ///
 /// Contrary to [`block_on`], this allows `spawn`ing other futures
 #[crate::unstable(feature = "async-lib", issue = 2559, reason = "experimental async support")]
+#[allow(static_mut_refs)]
 pub fn block_on_with_spawn<F: Future<Output = ()> + Sync + 'static>(
     fut: F,
     scheduling_plan: impl SchedulingStrategy,

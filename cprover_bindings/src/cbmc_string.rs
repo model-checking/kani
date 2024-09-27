@@ -3,9 +3,9 @@
 
 use lazy_static::lazy_static;
 use std::sync::Mutex;
+use string_interner::StringInterner;
 use string_interner::backend::StringBackend;
 use string_interner::symbol::SymbolU32;
-use string_interner::StringInterner;
 
 /// This class implements an interner for Strings.
 /// CBMC objects to have a large number of strings which refer to names: symbols, files, etc.

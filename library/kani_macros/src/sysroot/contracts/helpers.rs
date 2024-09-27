@@ -9,8 +9,8 @@ use proc_macro2::{Ident, Span};
 use std::borrow::Cow;
 use syn::spanned::Spanned;
 use syn::{
-    parse_quote, Attribute, Expr, ExprBlock, ExprCall, ExprPath, Local, LocalInit, PatIdent, Path,
-    Stmt,
+    Attribute, Expr, ExprBlock, ExprCall, ExprPath, Local, LocalInit, PatIdent, Path, Stmt,
+    parse_quote,
 };
 
 /// If an explicit return type was provided it is returned, otherwise `()`.

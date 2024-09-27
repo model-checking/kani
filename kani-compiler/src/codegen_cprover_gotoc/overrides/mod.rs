@@ -8,4 +8,4 @@
 
 mod hooks;
 
-pub use hooks::{fn_hooks, GotocHooks};
+pub use hooks::{GotocHooks, fn_hooks};
