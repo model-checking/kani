@@ -55,8 +55,6 @@ impl KaniSession {
         kani_args.push(format!("--reachability={}", self.reachability_mode()));
         if self.args.common_args.unstable_features.contains(UnstableFeature::Aeneas) {
             kani_args.push("--backend=aeneas".into());
-        } else {
-            kani_args.push("--backend=cprover".into());
         }
 
         let lib_path = lib_folder().unwrap();
