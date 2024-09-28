@@ -42,6 +42,7 @@ macro_rules! kani_lib {
             pub use kani_core::*;
             kani_core::kani_intrinsics!(core);
             kani_core::generate_arbitrary!(core);
+            kani_core::check_intrinsic!();
 
             pub mod mem {
                 kani_core::kani_mem!(core);
@@ -57,6 +58,11 @@ macro_rules! kani_lib {
         pub use kani_core::*;
         kani_core::kani_intrinsics!(std);
         kani_core::generate_arbitrary!(std);
+
+        kani_core::check_intrinsic! {
+        msg="This API was accidently added as a public function and it will be made private in future releases.",
+        vis=pub
+        }
 
         pub mod mem {
             kani_core::kani_mem!(std);
@@ -135,48 +141,6 @@ macro_rules! kani_intrinsics {
         #[inline(never)]
         #[rustc_diagnostic_item = "KaniAssert"]
         pub const fn assert(cond: bool, msg: &'static str) {
-            assert!(cond, "{}", msg);
-        }
-
-        /// Creates a non-fatal property with the specified condition and message.
-        ///
-        /// This check will not impact the program control flow even when it fails.
-        ///
-        /// # Example:
-        ///
-        /// ```no_run
-        /// let x: bool = kani::any();
-        /// let y = !x;
-        /// kani::check(x || y, "ORing a boolean variable with its negation must be true");
-        /// kani::check(x == y, "A boolean variable is always different than its negation");
-        /// kani::cover!(true, "This should still be reachable");
-        /// ```
-        ///
-        /// # Deprecated
-        ///
-        /// This function was meant to be internal only, and it was added to Kani's public interface
-        /// by mistake. Thus, it will be made private in future releases.
-        /// Instead, we recommend users to either use `assert` or `cover` to create properties they
-        /// would like to verify.
-        #[cfg(not(feature = "concrete_playback"))]
-        #[inline(never)]
-        #[rustc_diagnostic_item = "KaniCheck"]
-        // TODO: Remove the `#![allow(deprecated)]` inside kani's crate once this is made private.
-        #[cfg_attr(not(feature = "no_core"), deprecated(since="0.55.0",
-         note="This API was accidently added as a public function and it will be made private in \
-         future releases."))]
-        pub const fn check(cond: bool, msg: &'static str) {
-            let _ = cond;
-            let _ = msg;
-        }
-
-        #[cfg(feature = "concrete_playback")]
-        #[inline(never)]
-        #[rustc_diagnostic_item = "KaniCheck"]
-        #[deprecated(since="0.55.0",
-         note="This API was accidently added as a public function and it will be made private in \
-         future releases.")]
-        pub const fn check(cond: bool, msg: &'static str) {
             assert!(cond, "{}", msg);
         }
 
@@ -487,6 +451,49 @@ macro_rules! kani_intrinsics {
 
             /// Stub the body with its contract.
             pub const REPLACE: Mode = 3;
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! check_intrinsic {
+    ($(msg=$msg:literal, vis=$vis:vis)?) => {
+        /// Creates a non-fatal property with the specified condition and message.
+        ///
+        /// This check will not impact the program control flow even when it fails.
+        ///
+        /// # Example:
+        ///
+        /// ```no_run
+        /// let x: bool = kani::any();
+        /// let y = !x;
+        /// kani::check(x || y, "ORing a boolean variable with its negation must be true");
+        /// kani::check(x == y, "A boolean variable is always different than its negation");
+        /// kani::cover!(true, "This should still be reachable");
+        /// ```
+        ///
+        /// # Deprecated
+        ///
+        /// This function was meant to be internal only, and it was added to Kani's public interface
+        /// by mistake. Thus, it will be made private in future releases.
+        /// Instead, we recommend users to either use `assert` or `cover` to create properties they
+        /// would like to verify.
+        #[cfg(not(feature = "concrete_playback"))]
+        #[inline(never)]
+        #[rustc_diagnostic_item = "KaniCheck"]
+        // TODO: Remove the `#![allow(deprecated)]` inside kani's crate once this is made private.
+        $(#[deprecated(since="0.55.0", note=$msg)])?
+        $($vis)? const fn check(cond: bool, msg: &'static str) {
+            let _ = cond;
+            let _ = msg;
+        }
+
+        #[cfg(feature = "concrete_playback")]
+        #[inline(never)]
+        #[rustc_diagnostic_item = "KaniCheck"]
+        $(#[deprecated(since="0.55.0", note=$msg)])?
+        $($vis)? const fn check(cond: bool, msg: &'static str) {
+            assert!(cond, "{}", msg);
         }
     };
 }
