@@ -149,22 +149,13 @@ pub fn function_info_from_file(filepath: &PathBuf) -> Vec<FunctionInfo> {
 
     let tree = parser.parse(&source_code, None).expect("Failed to parse file");
 
-    let mut cursor = tree.walk();
-    let first_child_exists = cursor.goto_first_child();
-
-    if !first_child_exists {
-        return vec![];
-    }
-
+    let source_code_bytes = source_code.as_bytes();
     let mut function_info: Vec<FunctionInfo> = Vec::new();
+    let mut cursor = tree.walk();
 
-    if cursor.node().kind() == "function_item" {
-        function_info.push(function_info_from_node(cursor.node(), source_code.as_bytes()))
-    };
-
-    while cursor.goto_next_sibling() {
-        if cursor.node().kind() == "function_item" {
-            function_info.push(function_info_from_node(cursor.node(), source_code.as_bytes()))
+    for node in tree.root_node().children(&mut cursor) {
+        if node.kind() == "function_item" {
+            function_info.push(function_info_from_node(node, source_code_bytes));
         }
     }
 
