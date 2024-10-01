@@ -1389,7 +1389,7 @@ checksum = "20f4cd3642c47a85052a887d86704f4eac272969f61b686bdd3f772122aabaff"
 dependencies = [
  "cc",
  "regex",
- "regex-syntax 0.8.4",
+ "regex-syntax 0.8.5",
  "tree-sitter-language",
 ]
 
