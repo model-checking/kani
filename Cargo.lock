@@ -215,7 +215,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40723b8fb387abc38f4f4a37c09073622e41dd12327033091ef8950659e6dc0c"
 dependencies = [
  "memchr",
- "regex-automata 0.4.7",
+ "regex-automata 0.4.8",
  "serde",
 ]
 
@@ -269,9 +269,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.1.22"
+version = "1.1.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9540e661f81799159abee814118cc139a2004b3a3aa3ea37724a1b66530b90e0"
+checksum = "3bbb537bb4a30b90362caddba8f360c0a56bc13d3a5570028e7197204cb54a17"
 dependencies = [
  "shlex",
 ]
@@ -358,7 +358,7 @@ dependencies = [
  "heck",
  "proc-macro2 1.0.86",
  "quote 1.0.37",
- "syn 2.0.77",
+ "syn 2.0.79",
 ]
 
 [[package]]
@@ -738,8 +738,8 @@ dependencies = [
  "aho-corasick",
  "bstr",
  "log",
- "regex-automata 0.4.7",
- "regex-syntax 0.8.4",
+ "regex-automata 0.4.8",
+ "regex-syntax 0.8.5",
 ]
 
 [[package]]
@@ -775,7 +775,7 @@ dependencies = [
 [[package]]
 name = "hax-adt-into"
 version = "0.1.0-pre.1"
-source = "git+https://github.com/hacspec/hax?branch=main#29d28fcb882e010b641dff97d9883ff88b27a01f"
+source = "git+https://github.com/hacspec/hax?branch=main#39a2f0aa52a605f68caee8f88fc6c479375becf0"
 dependencies = [
  "itertools 0.11.0",
  "proc-macro2 1.0.86",
@@ -786,7 +786,7 @@ dependencies = [
 [[package]]
 name = "hax-frontend-exporter"
 version = "0.1.0-pre.1"
-source = "git+https://github.com/hacspec/hax?branch=main#29d28fcb882e010b641dff97d9883ff88b27a01f"
+source = "git+https://github.com/hacspec/hax?branch=main#39a2f0aa52a605f68caee8f88fc6c479375becf0"
 dependencies = [
  "bincode",
  "extension-traits",
@@ -804,7 +804,7 @@ dependencies = [
 [[package]]
 name = "hax-frontend-exporter-options"
 version = "0.1.0-pre.1"
-source = "git+https://github.com/hacspec/hax?branch=main#29d28fcb882e010b641dff97d9883ff88b27a01f"
+source = "git+https://github.com/hacspec/hax?branch=main#39a2f0aa52a605f68caee8f88fc6c479375becf0"
 dependencies = [
  "bincode",
  "hax-adt-into",
@@ -850,7 +850,7 @@ dependencies = [
  "globset",
  "log",
  "memchr",
- "regex-automata 0.4.7",
+ "regex-automata 0.4.8",
  "same-file",
  "walkdir",
  "winapi-util",
@@ -973,7 +973,7 @@ dependencies = [
  "shell-words",
  "strum",
  "strum_macros",
- "syn 2.0.77",
+ "syn 2.0.79",
  "tracing",
  "tracing-subscriber",
  "tracing-tree 0.4.0",
@@ -1031,7 +1031,7 @@ dependencies = [
  "proc-macro-error2",
  "proc-macro2 1.0.86",
  "quote 1.0.37",
- "syn 2.0.77",
+ "syn 2.0.79",
 ]
 
 [[package]]
@@ -1108,7 +1108,7 @@ dependencies = [
  "assert_tokens_eq",
  "proc-macro2 1.0.86",
  "quote 1.0.37",
- "syn 2.0.77",
+ "syn 2.0.79",
 ]
 
 [[package]]
@@ -1456,7 +1456,7 @@ dependencies = [
  "proc-macro-error-attr2",
  "proc-macro2 1.0.86",
  "quote 1.0.37",
- "syn 2.0.77",
+ "syn 2.0.79",
 ]
 
 [[package]]
@@ -1698,7 +1698,7 @@ dependencies = [
  "proc-macro2 1.0.86",
  "quote 1.0.37",
  "serde_derive_internals",
- "syn 2.0.77",
+ "syn 2.0.79",
 ]
 
 [[package]]
@@ -1742,7 +1742,7 @@ checksum = "243902eda00fad750862fc144cea25caca5e20d615af0a81bee94ca738f1df1f"
 dependencies = [
  "proc-macro2 1.0.86",
  "quote 1.0.37",
- "syn 2.0.77",
+ "syn 2.0.79",
 ]
 
 [[package]]
@@ -1753,7 +1753,7 @@ checksum = "18d26a20a969b9e3fdf2fc2d9f21eda6c40e2de84c9408bb5d3b05d499aae711"
 dependencies = [
  "proc-macro2 1.0.86",
  "quote 1.0.37",
- "syn 2.0.77",
+ "syn 2.0.79",
 ]
 
 [[package]]
@@ -1949,7 +1949,7 @@ dependencies = [
  "proc-macro2 1.0.86",
  "quote 1.0.37",
  "rustversion",
- "syn 2.0.77",
+ "syn 2.0.79",
 ]
 
 [[package]]
@@ -2036,7 +2036,7 @@ checksum = "08904e7672f5eb876eaaf87e0ce17857500934f4981c4a0ab2b4aa98baac7fc3"
 dependencies = [
  "proc-macro2 1.0.86",
  "quote 1.0.37",
- "syn 2.0.77",
+ "syn 2.0.79",
 ]
 
 [[package]]
@@ -2142,7 +2142,7 @@ checksum = "34704c8d6ebcbc939824180af020566b01a7c01f80641264eba0999f6c2b6be7"
 dependencies = [
  "proc-macro2 1.0.86",
  "quote 1.0.37",
- "syn 2.0.77",
+ "syn 2.0.79",
 ]
 
 [[package]]
@@ -2537,5 +2537,5 @@ checksum = "fa4f8080344d4671fb4e831a13ad1e68092748387dfc4f55e356242fae12ce3e"
 dependencies = [
  "proc-macro2 1.0.86",
  "quote 1.0.37",
- "syn 2.0.77",
+ "syn 2.0.79",
 ]

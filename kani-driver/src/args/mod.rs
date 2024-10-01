@@ -278,8 +278,8 @@ pub struct VerificationArgs {
     #[arg(long, hide_short_help = true)]
     pub coverage: bool,
 
-    /// Print final LLBC for Aeneas backend
-    #[arg(long, hide_short_help = true)]
+    /// Print final LLBC for Aeneas backend. This requires the `-Z aeneas` option.
+    #[arg(long, hide = true)]
     pub print_llbc: bool,
 
     /// Arguments to pass down to Cargo
