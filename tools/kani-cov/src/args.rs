@@ -94,9 +94,14 @@ pub struct SummaryArgs {
     pub format: SummaryFormat,
 }
 
+/// The format of the summary.
+/// 
+/// The default format is Markdown, but the CSV and JSON formats would be really
+/// nice to have.
 #[derive(Clone, Debug, PartialEq, Eq, clap::ValueEnum)]
 pub enum SummaryFormat {
     Markdown,
+    // Csv,
     // Json,
 }
 
