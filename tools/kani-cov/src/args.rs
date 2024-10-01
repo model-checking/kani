@@ -129,7 +129,7 @@ pub enum ReportFormat {
 /// arguments.
 pub fn validate_args(args: &Args) -> Result<()> {
     if args.command.is_none() {
-        bail!("subcommand needs to be specified")
+        bail!("subcommand needs to be specified (`merge`, `summary` or `report`)")
     }
 
     match args.command.as_ref().unwrap() {
