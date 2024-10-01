@@ -40,6 +40,7 @@ where
         .unwrap()
 }
 
+#[allow(dead_code)]
 pub fn print_obsolete(verbosity: &CommonArgs, option: &str) {
     if !verbosity.quiet {
         warning(&format!(
