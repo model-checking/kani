@@ -64,8 +64,6 @@ pub enum Subcommand {
     subcommand_precedence_over_arg = true,
     args_conflicts_with_subcommands = true
 )]
-
-/// General arguments
 pub struct Args {
     #[command(subcommand)]
     pub command: Option<Subcommand>,
