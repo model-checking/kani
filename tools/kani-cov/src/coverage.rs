@@ -183,13 +183,13 @@ pub fn function_coverage_results(
     // The filenames in "kaniraw" files are not absolute, so we need to match
     // them with the ones we have in the aggregated results (i.e., the filenames
     // in the "kanimap" files).
-    let filename = file.to_path_buf().into_os_string().into_string().unwrap();
+    let filename = file.to_str()?;
     let right_filename = results.data.keys().find(|p| filename.ends_with(*p)).unwrap();
     // TODO: The filenames in kaniraw files should be absolute, just like in metadata.
     // Otherwise the key for `results` just fails... <https://github.com/model-checking/kani/issues/3542>
     let file_results = results.data.get(right_filename).unwrap();
-    let function = info.name.clone();
-    let fun_results = file_results.iter().find(|(f, _)| *f == function);
+    let function = &info.name;
+    let fun_results = file_results.iter().find(|(f, _)| *f == *function);
     fun_results.cloned()
 }
 
