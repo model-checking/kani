@@ -4,7 +4,7 @@
 //! This module includes the implementation of the `merge` subcommand.
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fs::{File, OpenOptions},
     io::{BufReader, BufWriter},
     path::PathBuf,
@@ -132,19 +132,13 @@ fn save_combined_results(
 
 /// All function names appearing in raw coverage results
 fn function_names_from_results(results: &[CoverageResults]) -> Vec<(String, String)> {
-    let mut file_function_pairs = vec![];
+    let mut file_function_pairs = HashSet::new();
     for result in results {
-        let files = result.data.keys().cloned();
-        for file in files {
-            let checks = result.data.get(&file).unwrap();
+        for (file, checks) in &result.data {
             for check in checks {
-                let function = check.function.clone();
-                let file_function = (file.clone(), function);
-                if !file_function_pairs.contains(&file_function) {
-                    file_function_pairs.push(file_function);
-                }
+                file_function_pairs.insert((file.clone(), check.function.clone()));
             }
         }
     }
-    file_function_pairs
+    file_function_pairs.into_iter().collect()
 }
