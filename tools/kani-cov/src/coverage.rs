@@ -99,7 +99,7 @@ pub struct CoverageRegion {
 
 impl Display for CoverageRegion {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}:{} - {}:{}", self.start.0, self.start.1, self.end.0, self.end.1)
+        write!(f, "{}:{}:{} - {}:{}", self.file, self.start.0, self.start.1, self.end.0, self.end.1)
     }
 }
 
