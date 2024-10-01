@@ -636,16 +636,15 @@ impl ValidateArgs for VerificationArgs {
             ));
         }
 
-        if self.common_args.unstable_features.contains(UnstableFeature::Aeneas) {
-            if !self.cbmc_args.is_empty() {
-                return Err(Error::raw(
-                    ErrorKind::ArgumentConflict,
-                    "The `--cbmc-args` argument cannot be used with -Z aeneas.",
-                ));
-            }
-            // TODO: error out for other CBMC-backend-specific arguments
+        // TODO: error out for other CBMC-backend-specific arguments
+        if self.common_args.unstable_features.contains(UnstableFeature::Aeneas)
+            && !self.cbmc_args.is_empty()
+        {
+            return Err(Error::raw(
+                ErrorKind::ArgumentConflict,
+                "The `--cbmc-args` argument cannot be used with -Z aeneas.",
+            ));
         }
-
         Ok(())
     }
 }
