@@ -7,7 +7,7 @@
 use console::style;
 use serde_derive::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
-use std::{collections::BTreeMap, fmt::Display};
+use std::{collections::HashMap, fmt::Display};
 use std::{fmt, fs};
 use tree_sitter::{Node, Parser};
 
@@ -66,13 +66,13 @@ impl std::fmt::Display for CheckStatus {
 /// <https://github.com/model-checking/kani/issues/3541>
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CoverageResults {
-    pub data: BTreeMap<String, Vec<CoverageCheck>>,
+    pub data: HashMap<String, Vec<CoverageCheck>>,
 }
 
 /// Aggregated coverage results.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CombinedCoverageResults {
-    pub data: BTreeMap<String, Vec<(String, Vec<CovResult>)>>,
+    pub data: HashMap<String, Vec<(String, Vec<CovResult>)>>,
 }
 
 /// The coverage result associated to a particular coverage region.

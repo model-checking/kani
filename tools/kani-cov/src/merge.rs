@@ -4,7 +4,7 @@
 //! This module includes the implementation of the `merge` subcommand.
 
 use std::{
-    collections::BTreeMap,
+    collections::HashMap,
     fs::{File, OpenOptions},
     io::{BufReader, BufWriter},
     path::PathBuf,
@@ -56,7 +56,7 @@ fn parse_raw_results(paths: &Vec<PathBuf>) -> Result<Vec<CoverageResults>> {
 fn combine_raw_results(results: &Vec<CoverageResults>) -> CombinedCoverageResults {
     let all_file_function_names = function_names_from_results(results);
 
-    let mut new_data: BTreeMap<String, Vec<(String, Vec<CovResult>)>> = BTreeMap::new();
+    let mut new_data: HashMap<String, Vec<(String, Vec<CovResult>)>> = HashMap::new();
 
     for (file_name, fun_name) in all_file_function_names {
         let mut this_fun_checks: Vec<&CoverageCheck> = Vec::new();
