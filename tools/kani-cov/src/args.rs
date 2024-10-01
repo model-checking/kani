@@ -18,7 +18,7 @@ use crate::{merge, report, summary};
 ///  * `merge` for merging raw Kani coverage results (AKA "kaniraw" files)
 ///  * `summary` for producing a summary containing coverage metrics
 ///  * `report` for generating human-readable coverage reports
-/// 
+///
 /// As an example, let's assume we execute Kani with coverage enabled
 /// ```sh
 /// kani main.rs --coverage -Zsource-coverage
@@ -27,19 +27,19 @@ use crate::{merge, report, summary};
 /// ```sh
 /// [info] Coverage results saved to /absolute/path/to/results/kanicov_2024-09-23_23-49
 /// ```
-/// 
+///
 /// We can aggregate those results with the `merge` subcommand
 /// ```sh
 /// kani-cov merge kanicov_2024-09-23_23-49/*kaniraw.json
 /// ```
 /// which by default produces a `default_kanicov.json` file.
-/// 
+///
 /// Once we have both the "kanicov" file and the "kanimap" file, we are ready to
 /// produce coverage metrics with the `summary` subcommand:
 /// ```sh
 /// kani-cov summary kanicov_2024-09-23_23-49/kanicov_2024-09-23_23-49_kanimap.json --profile default_kanicov.json
 /// ```
-/// 
+///
 /// We can also produce coverage reports with the `report` subcommand:
 /// ```sh
 /// kani-cov report kanicov_2024-09-23_23-49/kanicov_2024-09-23_23-49_kanimap.json --profile default_kanicov.json
@@ -95,7 +95,7 @@ pub struct SummaryArgs {
 }
 
 /// The format of the summary.
-/// 
+///
 /// The default format is Markdown, but the CSV and JSON formats would be really
 /// nice to have.
 #[derive(Clone, Debug, PartialEq, Eq, clap::ValueEnum)]

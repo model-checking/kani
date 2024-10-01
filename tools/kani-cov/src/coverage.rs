@@ -87,7 +87,7 @@ pub struct CovResult {
 
 /// A coverage region.
 /// `start` and `end` are tuples containing the line and column numbers.
-/// 
+///
 /// Note: This data structure should not be duplicated in Kani -
 /// <https://github.com/model-checking/kani/issues/3541>
 #[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Ord, Serialize, Deserialize)]

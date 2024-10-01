@@ -593,12 +593,12 @@ impl<'test> TestCx<'test> {
     }
 
     /// Find the path to the folder where the coverage results have been saved.
-    /// 
+    ///
     /// The path is displayed in the output of a coverage-enabled Kani run like
     /// this:
     /// ```sh
     /// Verification Time: XX.XXXXXXXs
-    /// 
+    ///
     /// [info] Coverage results saved to /path/to/cov/results/kanicov_<date>_<time>
     /// Summary:
     /// ```
