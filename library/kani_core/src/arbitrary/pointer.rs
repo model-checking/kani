@@ -14,8 +14,8 @@ macro_rules! ptr_generator {
         /// Pointer generator that can be used to generate arbitrary pointers.
         ///
         /// This generator allows users to build pointers with different safety properties.
-        /// It contains an internal buffer that it uses to generate `InBounds` and `OutOfBounds` pointers.
-        /// In those cases, the pointers will have the same provenance as the generator, and the same lifetime.
+        /// It contains an internal buffer of a constant generic size, `BYTES`, that it uses to generate `InBounds` and `OutOfBounds` pointers.
+        /// Generated pointers will have the same provenance as the generator, and the same lifetime.
         ///
         /// For example:
         /// ```ignore
@@ -25,12 +25,12 @@ macro_rules! ptr_generator {
         ///     let generator = PointerGenerator<10>::new();
         ///     let arbitrary = generator.any_alloc_status::<char>();
         ///     kani::assume(arbitrary.status == AllocationStatus::InBounds);
-        ///     // Pointer may be unaligned but it should be in-bounds.
+        ///     // Pointer may be unaligned but it should be in-bounds, so it is safe to write to
         ///     unsafe { arbitrary.ptr.write_unaligned(kani::any()) }
         /// # }
         /// ```
         ///
-        /// The generator is parameterized on the number of bytes of its internal buffer.
+        /// The generator is parameterized by the number of bytes of its internal buffer.
         /// See [pointer_generator] function if you would like to create a generator that fits
         /// a minimum number of objects of a given type. Example:
         ///
@@ -48,7 +48,7 @@ macro_rules! ptr_generator {
         ///
         /// The internal buffer is used to generate pointers, and its size determines the maximum
         /// number of pointers it can generate without overlapping.
-        /// Larger values will also impact on the maximum distance between each generated pointer.
+        /// Larger values will impact the maximum distance between generated pointers.
         ///
         /// We recommend that you pick a size that is at least big enough to
         /// cover the cases where all pointers produced are non-overlapping.
@@ -57,7 +57,7 @@ macro_rules! ptr_generator {
         /// For example, generating two `*mut u8` and one `*mut u32` requires a buffer
         /// of at least 6 bytes.
         /// This guarantees that your harness covers cases where all generated pointers
-        /// points to allocated positions that do not overlap.
+        /// point to allocated positions that do not overlap.
         ///
         /// ```ignore
         /// # use kani::*;
@@ -93,9 +93,9 @@ macro_rules! ptr_generator {
         /// between the generated pointers matters.
         ///
         /// The only caveats of using very large numbers are:
-        ///  1. The value cannot exceed the solver maximum object size, neither Rust's
+        ///  1. The value cannot exceed the solver maximum object size (currently 2^48 by default), neither Rust's
         ///     maximum object size (`isize::MAX`).
-        ///  2. Larger sizes could impact performance.
+        ///  2. Larger sizes could impact performance as they can lead to an exponential increase in the number of possibilities of pointer placement within the buffer.
         ///
         /// # Pointer provenance
         ///
@@ -160,11 +160,11 @@ macro_rules! ptr_generator {
         /// Kani cannot reason about a pointer allocation status (except for asserting its validity).
         /// Thus, the generator was introduced to help writing harnesses that need to impose
         /// constraints to the arbitrary pointer allocation status.
-        /// It also allow us to restrict the pointer provenance, excluding for example address of
+        /// It also allow us to restrict the pointer provenance, excluding for example the address of
         /// variables that are not available in the current context.
         /// As a limitation, it will not cover the entire address space that a pointer can take.
         ///
-        /// If your harness do not need to reason about pointer allocation, for example, verifying
+        /// If your harness does not need to reason about pointer allocation, for example, verifying
         /// pointer wrapping arithmetic, using a pointer with any address will allow you to cover
         /// all possible scenarios.
         #[derive(Debug)]
@@ -184,7 +184,7 @@ macro_rules! ptr_generator {
             Null,
             /// In bounds pointer (it may be unaligned)
             InBounds,
-            /// The pointer cannot be read / writtent to for the given type since one or more bytes
+            /// The pointer cannot be read / written to for the given type since one or more bytes
             /// would be out of bounds of the current allocation.
             OutOfBounds,
         }
