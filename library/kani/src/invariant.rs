@@ -70,7 +70,7 @@
 /// # fn days_in_month(_: i64, _: u8) -> u8 { todo!() }
 /// # fn increase_date(_: &mut MyDate, _: u8) { todo!() }
 /// #
-/// # impl kani::Invariant for MyDate {
+/// # impl Invariant for MyDate {
 /// #   fn is_safe(&self) -> bool {
 /// #     self.month > 0
 /// #       && self.month <= 12

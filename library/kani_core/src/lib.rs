@@ -60,8 +60,7 @@ macro_rules! kani_lib {
         kani_core::generate_arbitrary!(std);
 
         kani_core::check_intrinsic! {
-        msg="This API was accidently added as a public function and it will be made private in future releases.",
-        vis=pub
+            msg="This API will be made private in future releases.", vis=pub
         }
 
         pub mod mem {
@@ -478,6 +477,8 @@ macro_rules! check_intrinsic {
         /// by mistake. Thus, it will be made private in future releases.
         /// Instead, we recommend users to either use `assert` or `cover` to create properties they
         /// would like to verify.
+        ///
+        /// See <https://github.com/model-checking/kani/issues/3561> for more details.
         #[cfg(not(feature = "concrete_playback"))]
         #[inline(never)]
         #[rustc_diagnostic_item = "KaniCheck"]

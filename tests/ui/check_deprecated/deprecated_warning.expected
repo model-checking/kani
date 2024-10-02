@@ -1,1 +1,1 @@
-warning: use of deprecated function `kani::check`: This API was accidently added as a public function and it will be made private in future releases.
+warning: use of deprecated function `kani::check`: This API will be made private in future releases.
