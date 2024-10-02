@@ -16,15 +16,18 @@ use crate::{
 use anyhow::Result;
 use kani_metadata::{ContractedFunction, HarnessKind, KaniMetadata};
 
+/// Process the KaniMetadata output from kani-compiler and output the list subcommand results
 fn process_metadata(metadata: Vec<KaniMetadata>, format: Format) -> Result<()> {
-    // Map each file to a vector of its harnesses
+    // We use ordered maps and sets so that the output is in lexographic order (and consistent across invocations).
+
+    // Map each file to a vector of its harnesses.
     let mut standard_harnesses: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     let mut contract_harnesses: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+
     let mut contracted_functions: BTreeSet<ContractedFunction> = BTreeSet::new();
 
     let mut total_standard_harnesses = 0;
     let mut total_contract_harnesses = 0;
-    let mut total_contracts = 0;
 
     for kani_meta in metadata {
         for harness_meta in kani_meta.proof_harnesses {
@@ -57,10 +60,6 @@ fn process_metadata(metadata: Vec<KaniMetadata>, format: Format) -> Result<()> {
             }
         }
 
-        for cf in &kani_meta.contracted_functions {
-            total_contracts += cf.total_contracts;
-        }
-
         contracted_functions.extend(kani_meta.contracted_functions.into_iter());
     }
 
@@ -68,7 +67,6 @@ fn process_metadata(metadata: Vec<KaniMetadata>, format: Format) -> Result<()> {
         standard_harnesses: total_standard_harnesses,
         contract_harnesses: total_contract_harnesses,
         contracted_functions: contracted_functions.len(),
-        contracts: total_contracts,
     };
 
     match format {

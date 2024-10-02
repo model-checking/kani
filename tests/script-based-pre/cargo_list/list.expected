@@ -19,7 +19,6 @@
     {
         "function": "example::implementation::bar",
         "file": "src/lib.rs",
-        "total_contracts": 4,
         "harnesses": [
         "example::verify::check_bar"
         ]
@@ -27,7 +26,6 @@
     {
         "function": "example::implementation::foo",
         "file": "src/lib.rs",
-        "total_contracts": 2,
         "harnesses": [
         "example::verify::check_foo_u32",
         "example::verify::check_foo_u64"
@@ -36,7 +34,6 @@
     {
         "function": "example::implementation::func",
         "file": "src/lib.rs",
-        "total_contracts": 1,
         "harnesses": [
         "example::verify::check_func"
         ]
@@ -44,14 +41,12 @@
     {
         "function": "example::prep::parse",
         "file": "src/lib.rs",
-        "total_contracts": 1,
         "harnesses": []
     }
     ],
     "totals": {
     "standard-harnesses": 2,
     "contract-harnesses": 4,
-    "functions-under-contract": 4,
-    "contracts": 8
+    "functions-under-contract": 4
     }
 }

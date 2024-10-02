@@ -6,18 +6,13 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use crate::kani_middle::attributes::test_harness_name;
-use crate::kani_middle::attributes::{
-    ContractAttributes, KaniAttributes, matches_diagnostic as matches_function,
-};
-use crate::kani_middle::{InternalDefId, SourceLocation, find_closure_in_body};
+use crate::kani_middle::attributes::{KaniAttributes, test_harness_name};
+use crate::kani_middle::{InternalDefId, SourceLocation};
 use kani_metadata::ContractedFunction;
 use kani_metadata::{ArtifactType, HarnessAttributes, HarnessKind, HarnessMetadata};
 use rustc_middle::ty::TyCtxt;
 use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::Instance;
-use stable_mir::mir::{Body, TerminatorKind};
-use stable_mir::ty::{RigidTy, TyKind};
 use stable_mir::{CrateDef, CrateItems};
 
 /// Create the harness metadata for a proof harness for a given function.
@@ -47,81 +42,45 @@ pub fn gen_proof_metadata(tcx: TyCtxt, instance: Instance, base_name: &Path) -> 
     }
 }
 
-/// Map each function under contract to its contract harnesses
-fn fns_to_contract_harnesses(tcx: TyCtxt) -> HashMap<InternalDefId, Vec<String>> {
-    // We work with stable_mir::CrateItem instead of stable_mir::Instance to include generic items
-    let crate_items: CrateItems = stable_mir::all_local_items();
-
-    let mut fns_to_harnesses: HashMap<InternalDefId, Vec<String>> = HashMap::new();
-
-    for item in crate_items {
-        let def_id = rustc_internal::internal(tcx, item.def_id());
-        let fn_name = tcx.def_path_str(def_id);
-        let attributes = KaniAttributes::for_item(tcx, def_id);
-
-        if attributes.has_contract() {
-            fns_to_harnesses.insert(def_id, vec![]);
-        } else if let Some((_, target_def_id, _)) = attributes.interpret_for_contract_attribute() {
-            if let Some(harnesses) = fns_to_harnesses.get_mut(&target_def_id) {
-                harnesses.push(fn_name);
-            } else {
-                fns_to_harnesses.insert(target_def_id, vec![fn_name]);
-            }
-        }
-    }
-
-    fns_to_harnesses
-}
-
-/// Count the number of contracts in `check_body`, where `check_body` is the body of the
-/// kanitool::checked_with closure (c.f. kani_macros::sysroot::contracts).
-/// In this closure, preconditions are denoted by kani::assume() calls and postconditions by kani::assert() calls.
-/// The number of contracts is the number of times these functions are called inside the closure
-fn count_contracts(tcx: TyCtxt, check_body: &Body) -> usize {
-    let mut count = 0;
-
-    for bb in &check_body.blocks {
-        if let TerminatorKind::Call { ref func, .. } = bb.terminator.kind {
-            let fn_ty = func.ty(check_body.locals()).unwrap();
-            if let TyKind::RigidTy(RigidTy::FnDef(fn_def, args)) = fn_ty.kind() {
-                if let Ok(instance) = Instance::resolve(fn_def, &args) {
-                    // For each precondition or postcondition, increment the count
-                    if matches_function(tcx, instance.def, "KaniAssume")
-                        || matches_function(tcx, instance.def, "KaniAssert")
-                    {
-                        count += 1;
-                    }
-                }
-            }
-        }
-    }
-    count
-}
-
 /// Collects contract and contract harness metadata.
 ///
 /// For each function with contracts (or that is a target of a contract harness),
 /// construct a ContractedFunction object for it.
 pub fn gen_contracts_metadata(tcx: TyCtxt) -> Vec<ContractedFunction> {
-    let mut contracted_fns = vec![];
-    for (fn_def_id, harnesses) in fns_to_contract_harnesses(tcx) {
-        let attrs: ContractAttributes =
-            KaniAttributes::for_item(tcx, fn_def_id).contract_attributes().unwrap();
-        let body: Body = rustc_internal::stable(tcx.optimized_mir(fn_def_id));
-        let check_body: Body =
-            find_closure_in_body(&body, attrs.checked_with.as_str()).unwrap().body().unwrap();
+    // We work with stable_mir::CrateItem instead of stable_mir::Instance to include generic items
+    let crate_items: CrateItems = stable_mir::all_local_items();
 
-        let total_contracts = count_contracts(tcx, &check_body);
+    let mut fn_to_data: HashMap<InternalDefId, ContractedFunction> = HashMap::new();
 
-        contracted_fns.push(ContractedFunction {
-            function: tcx.def_path_str(fn_def_id),
-            file: SourceLocation::new(rustc_internal::stable(tcx.def_span(fn_def_id))).filename,
-            harnesses,
-            total_contracts,
-        });
+    for item in crate_items {
+        let internal_def_id = rustc_internal::internal(tcx, item.def_id());
+
+        let function = item.name();
+        let file = SourceLocation::new(item.span()).filename;
+        let attributes = KaniAttributes::for_def_id(tcx, item.def_id());
+
+        if attributes.has_contract() {
+            fn_to_data.insert(internal_def_id, ContractedFunction {
+                function,
+                file,
+                harnesses: vec![],
+            });
+        } else if let Some((target_name, target_def_id, _)) =
+            attributes.interpret_for_contract_attribute()
+        {
+            if let Some(cf) = fn_to_data.get_mut(&target_def_id) {
+                cf.harnesses.push(function);
+            } else {
+                fn_to_data.insert(target_def_id, ContractedFunction {
+                    function: target_name.to_string(),
+                    file,
+                    harnesses: vec![function],
+                });
+            }
+        }
     }
 
-    contracted_fns
+    fn_to_data.into_values().collect()
 }
 
 /// Create the harness metadata for a test description.

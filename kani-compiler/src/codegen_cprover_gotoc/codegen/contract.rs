@@ -2,16 +2,15 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use crate::codegen_cprover_gotoc::{GotocCtx, codegen::ty_stable::pointee_type_stable};
 use crate::kani_middle::attributes::KaniAttributes;
-use crate::kani_middle::find_closure_in_body;
 use cbmc::goto_program::FunctionContract;
 use cbmc::goto_program::{Expr, Lambda, Location, Type};
 use kani_metadata::AssignsContract;
 use rustc_hir::def_id::DefId as InternalDefId;
 use rustc_smir::rustc_internal;
 use stable_mir::CrateDef;
-use stable_mir::mir::Local;
 use stable_mir::mir::mono::{Instance, MonoItem};
-use stable_mir::ty::{RigidTy, TyKind};
+use stable_mir::mir::{Local, VarDebugInfoContents};
+use stable_mir::ty::{FnDef, RigidTy, TyKind};
 
 impl<'tcx> GotocCtx<'tcx> {
     /// Given the `proof_for_contract` target `function_under_contract` and the reachable `items`,
@@ -88,24 +87,33 @@ impl<'tcx> GotocCtx<'tcx> {
         recursion_tracker
     }
 
-    fn find_closure(&mut self, inside: Instance, name: &str) -> Option<Instance> {
-        let body = self.transformer.body(self.tcx, inside);
-        find_closure_in_body(&body, name)
-    }
-
     /// Find the modifies recursively since we may have a recursion wrapper.
     /// I.e.: [recursion_wrapper ->]? check -> modifies.
     fn find_modifies(&mut self, instance: Instance) -> Option<Instance> {
         let contract_attrs =
             KaniAttributes::for_instance(self.tcx, instance).contract_attributes()?;
-        let check_instance = if contract_attrs.has_recursion {
-            let recursion_check =
-                self.find_closure(instance, contract_attrs.recursion_check.as_str())?;
-            self.find_closure(recursion_check, contract_attrs.checked_with.as_str())?
-        } else {
-            self.find_closure(instance, contract_attrs.checked_with.as_str())?
+        let mut find_closure = |inside: Instance, name: &str| {
+            let body = self.transformer.body(self.tcx, inside);
+            body.var_debug_info.iter().find_map(|var_info| {
+                if var_info.name.as_str() == name {
+                    let ty = match &var_info.value {
+                        VarDebugInfoContents::Place(place) => place.ty(body.locals()).unwrap(),
+                        VarDebugInfoContents::Const(const_op) => const_op.ty(),
+                    };
+                    if let TyKind::RigidTy(RigidTy::Closure(def, args)) = ty.kind() {
+                        return Some(Instance::resolve(FnDef(def.def_id()), &args).unwrap());
+                    }
+                }
+                None
+            })
         };
-        self.find_closure(check_instance, contract_attrs.modifies_wrapper.as_str())
+        let check_instance = if contract_attrs.has_recursion {
+            let recursion_check = find_closure(instance, contract_attrs.recursion_check.as_str())?;
+            find_closure(recursion_check, contract_attrs.checked_with.as_str())?
+        } else {
+            find_closure(instance, contract_attrs.checked_with.as_str())?
+        };
+        find_closure(check_instance, contract_attrs.modifies_wrapper.as_str())
     }
 
     /// Convert the Kani level contract into a CBMC level contract by creating a

@@ -41,8 +41,6 @@ pub struct ContractedFunction {
     pub function: String,
     /// The (currently full-) path to the file this function was declared within.
     pub file: String,
-    /// The number of contracts applied to this function
-    pub total_contracts: usize,
     /// The pretty names of the proof harnesses (`#[kani::proof_for_contract]`) for this function
     pub harnesses: Vec<String>,
 }
