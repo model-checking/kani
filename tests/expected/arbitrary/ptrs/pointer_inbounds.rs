@@ -43,10 +43,14 @@ fn check_alignment() {
 #[kani::proof]
 fn check_overlap() {
     let mut generator = kani::pointer_generator::<u16, 5>();
-    let ptr_1 = generator.any_in_bounds::<u16>().ptr as usize;
-    let ptr_2 = generator.any_in_bounds::<u16>().ptr as usize;
+    let ptr_1 = generator.any_in_bounds::<u16>().ptr;
+    let ptr_2 = generator.any_in_bounds::<u16>().ptr;
     kani::cover!(ptr_1 == ptr_2, "Same");
-    kani::cover!(ptr_1 == ptr_2 + 1, "Overlap");
-    kani::cover!(ptr_1 > ptr_2 + 4, "Greater");
-    kani::cover!(ptr_2 > ptr_1 + 4, "Smaller");
+    kani::cover!(ptr_1 == unsafe { ptr_2.byte_add(1) }, "Overlap");
+
+    let distance = unsafe { ptr_1.offset_from(ptr_2) };
+    kani::cover!(distance > 0, "Greater");
+    kani::cover!(distance < 0, "Smaller");
+
+    assert!(distance >= -4 && distance <= 4, "Expected a maximum distance of 4 elements");
 }
