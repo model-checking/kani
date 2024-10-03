@@ -7,13 +7,12 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use crate::kani_middle::attributes::{KaniAttributes, test_harness_name};
-use crate::kani_middle::{InternalDefId, SourceLocation};
+use crate::kani_middle::{SourceLocation, stable_fn_def};
 use kani_metadata::ContractedFunction;
 use kani_metadata::{ArtifactType, HarnessAttributes, HarnessKind, HarnessMetadata};
 use rustc_middle::ty::TyCtxt;
-use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::Instance;
-use stable_mir::{CrateDef, CrateItems};
+use stable_mir::{CrateDef, CrateItems, DefId};
 
 /// Create the harness metadata for a proof harness for a given function.
 pub fn gen_proof_metadata(tcx: TyCtxt, instance: Instance, base_name: &Path) -> HarnessMetadata {
@@ -50,24 +49,23 @@ pub fn gen_contracts_metadata(tcx: TyCtxt) -> Vec<ContractedFunction> {
     // We work with stable_mir::CrateItem instead of stable_mir::Instance to include generic items
     let crate_items: CrateItems = stable_mir::all_local_items();
 
-    let mut fn_to_data: HashMap<InternalDefId, ContractedFunction> = HashMap::new();
+    let mut fn_to_data: HashMap<DefId, ContractedFunction> = HashMap::new();
 
     for item in crate_items {
-        let internal_def_id = rustc_internal::internal(tcx, item.def_id());
-
         let function = item.name();
         let file = SourceLocation::new(item.span()).filename;
         let attributes = KaniAttributes::for_def_id(tcx, item.def_id());
 
         if attributes.has_contract() {
-            fn_to_data.insert(internal_def_id, ContractedFunction {
+            fn_to_data.insert(item.def_id(), ContractedFunction {
                 function,
                 file,
                 harnesses: vec![],
             });
-        } else if let Some((target_name, target_def_id, _)) =
+        } else if let Some((target_name, internal_def_id, _)) =
             attributes.interpret_for_contract_attribute()
         {
+            let target_def_id = stable_fn_def(tcx, internal_def_id).unwrap().def_id();
             if let Some(cf) = fn_to_data.get_mut(&target_def_id) {
                 cf.harnesses.push(function);
             } else {
