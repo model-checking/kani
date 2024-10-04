@@ -44,9 +44,9 @@ pub fn gen_proof_metadata(tcx: TyCtxt, instance: Instance, base_name: &Path) -> 
 /// Collects contract and contract harness metadata.
 ///
 /// For each function with contracts (or that is a target of a contract harness),
-/// construct a ContractedFunction object for it.
+/// construct a `ContractedFunction` object for it.
 pub fn gen_contracts_metadata(tcx: TyCtxt) -> Vec<ContractedFunction> {
-    // We work with stable_mir::CrateItem instead of stable_mir::Instance to include generic items
+    // We work with `stable_mir::CrateItem` instead of `stable_mir::Instance` to include generic items
     let crate_items: CrateItems = stable_mir::all_local_items();
 
     let mut fn_to_data: HashMap<DefId, ContractedFunction> = HashMap::new();
