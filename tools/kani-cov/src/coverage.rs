@@ -11,7 +11,11 @@ use std::{collections::HashMap, fmt::Display};
 use std::{fmt, fs};
 use tree_sitter::{Node, Parser};
 
-pub type LineResults = Vec<(usize, Option<(u32, MarkerInfo)>)>;
+type Function = String;
+type Filename = String;
+type LineNumber = usize;
+
+pub type LineResults = Vec<(LineNumber, Option<(u32, MarkerInfo)>)>;
 
 /// The possible outcomes for a Kani check.
 ///
@@ -66,13 +70,13 @@ impl std::fmt::Display for CheckStatus {
 /// <https://github.com/model-checking/kani/issues/3541>
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CoverageResults {
-    pub data: HashMap<String, Vec<CoverageCheck>>,
+    pub data: HashMap<Function, Vec<CoverageCheck>>,
 }
 
 /// Aggregated coverage results.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CombinedCoverageResults {
-    pub data: HashMap<String, Vec<(String, Vec<CovResult>)>>,
+    pub data: HashMap<Filename, Vec<(Function, Vec<CovResult>)>>,
 }
 
 /// The coverage result associated to a particular coverage region.
@@ -115,7 +119,7 @@ pub enum CoverageTerm {
 
 /// The coverage information to produce for a particular file.
 pub struct FileCoverageInfo {
-    pub filename: String,
+    pub filename: Filename,
     pub function: CoverageMetric,
     pub line: CoverageMetric,
     pub region: CoverageMetric,
@@ -136,7 +140,7 @@ impl CoverageMetric {
 /// Function information obtained through a tree-sitter
 #[derive(Debug)]
 pub struct FunctionInfo {
-    pub name: String,
+    pub name: Function,
     pub start: (usize, usize),
     pub end: (usize, usize),
 }
