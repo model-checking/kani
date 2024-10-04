@@ -182,9 +182,7 @@ pub fn line_coverage_info(
     let covered_lines = line_status
         .iter()
         .filter(|s| s.is_some() && s.as_ref().unwrap().0 > 0)
-        .count()
-        .try_into()
-        .unwrap();
+        .count();
     (covered_lines, total_lines)
 }
 

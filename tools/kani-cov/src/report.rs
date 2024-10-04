@@ -141,9 +141,9 @@ pub fn output_coverage_results(
                     let results: Vec<&CovResult> = results
                         .iter()
                         .filter(|m| {
-                            if m.region.start.0 as usize == idx && m.region.end.0 as usize == idx {
+                            if m.region.start.0 == idx && m.region.end.0 == idx {
                                 (m.region.end.1 - m.region.start.1 != 1)
-                                    && (m.region.end.1 as usize) < line.len()
+                                    && (m.region.end.1) < line.len()
                             } else {
                                 true
                             }
@@ -154,13 +154,13 @@ pub fn output_coverage_results(
                         .iter()
                         .filter(|m| {
                             m.times_covered == 0
-                                && m.region.start.0 as usize == idx
-                                && m.region.end.0 as usize == idx
+                                && m.region.start.0 == idx
+                                && m.region.end.0 == idx
                         })
                         .flat_map(|m| {
                             vec![
-                                ((m.region.start.1 - 1) as usize, true),
-                                ((m.region.end.1 - 1) as usize, false),
+                                ((m.region.start.1 - 1), true),
+                                ((m.region.end.1 - 1), false),
                             ]
                         })
                         .collect();
@@ -169,20 +169,20 @@ pub fn output_coverage_results(
                         .iter()
                         .filter(|m| {
                             m.times_covered == 0
-                                && m.region.start.0 as usize == idx
-                                && m.region.end.0 as usize != idx
+                                && m.region.start.0 == idx
+                                && m.region.end.0 != idx
                         })
-                        .flat_map(|m| vec![((m.region.start.1 - 1) as usize, true)])
+                        .flat_map(|m| vec![((m.region.start.1 - 1), true)])
                         .collect();
                     // Escapes for the regions which only finish in this line
                     let mut closing_escapes: Vec<(usize, bool)> = results
                         .iter()
                         .filter(|m| {
                             m.times_covered == 0
-                                && m.region.start.0 as usize != idx
-                                && m.region.end.0 as usize == idx
+                                && m.region.start.0 != idx
+                                && m.region.end.0 == idx
                         })
-                        .flat_map(|m| vec![((m.region.end.1 - 1) as usize, false)])
+                        .flat_map(|m| vec![((m.region.end.1 - 1), false)])
                         .collect();
 
                     // Emit an opening escape if there was a closing one and we
