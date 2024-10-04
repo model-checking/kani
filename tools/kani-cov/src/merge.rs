@@ -77,17 +77,17 @@ fn combine_raw_results(results: &Vec<CoverageResults>) -> CombinedCoverageResult
         let mut new_results = Vec::new();
 
         while !this_fun_checks.is_empty() {
+            // Take the first check, and split `this_fun_checks` into checks
+            // covering the same region as that check, and checks which do not.
             let this_region_check = this_fun_checks[0];
-            // should do this with a partition...
-            let mut same_region_checks: Vec<&CoverageCheck> = this_fun_checks
-                .iter()
-                .cloned()
-                .filter(|check| check.region == this_region_check.region)
-                .collect();
-            this_fun_checks.retain(|check| check.region != this_region_check.region);
-            same_region_checks.push(this_region_check);
-            let total_times = same_region_checks.len();
+            let (same_region_checks, other_region_checks) = this_fun_checks
+                .into_iter()
+                .partition(|check| check.region == this_region_check.region);
+            // Update `this_fun_checks` with checks that aren't being processed yet
+            this_fun_checks = other_region_checks;
 
+            // Calculate `total_times` and `times_covered` for this region
+            let total_times = same_region_checks.len();
             let times_covered = same_region_checks
                 .iter()
                 .filter(|check| check.status == CheckStatus::Covered)
