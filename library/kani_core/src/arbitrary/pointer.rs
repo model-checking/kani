@@ -261,10 +261,10 @@ macro_rules! ptr_generator {
                     "Cannot generate in-bounds object of the requested type. Buffer is not big enough."
                 );
 
-                // Offset is used to potentially generate unaligned pointer.
                 let status = kani::any();
                 let ptr = match status {
                     AllocationStatus::Dangling => {
+                        // Generate potentially unaligned pointer.
                         let offset = kani::any_where(|b: &usize| *b < size_of::<T>());
                         crate::ptr::NonNull::<T>::dangling().as_ptr().wrapping_add(offset)
                     }
@@ -277,6 +277,7 @@ macro_rules! ptr_generator {
                         return self.create_in_bounds_ptr();
                     }
                     AllocationStatus::OutOfBounds => {
+                        // Generate potentially unaligned pointer.
                         let buf_ptr = addr_of_mut!(self.buf) as *mut u8;
                         let offset = kani::any_where(|b: &usize| *b < size_of::<T>());
                         unsafe { buf_ptr.add(Self::BUF_LEN - offset) as *mut T }
@@ -322,6 +323,8 @@ macro_rules! ptr_generator {
             }
 
             /// This is the inner logic to create an arbitrary pointer that is inbounds.
+            ///
+            /// Note that pointer may be unaligned.
             fn create_in_bounds_ptr<'a, T>(&'a mut self) -> ArbitraryPointer<'a, T>
             where T: kani::Arbitrary {
                 assert!(core::mem::size_of::<T>() <= Self::BUF_LEN,
