@@ -65,7 +65,9 @@ pub fn gen_contracts_metadata(tcx: TyCtxt) -> Vec<ContractedFunction> {
         } else if let Some((target_name, internal_def_id, _)) =
             attributes.interpret_for_contract_attribute()
         {
-            let target_def_id = stable_fn_def(tcx, internal_def_id).unwrap().def_id();
+            let target_def_id = stable_fn_def(tcx, internal_def_id)
+                .expect("The target of a proof for contract should be a function definition")
+                .def_id();
             if let Some(cf) = fn_to_data.get_mut(&target_def_id) {
                 cf.harnesses.push(function);
             } else {

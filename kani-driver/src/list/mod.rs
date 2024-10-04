@@ -5,6 +5,8 @@
 pub mod collect_metadata;
 mod output;
 
+/// Stores the total count of standard harnesses, contract harnesses,
+/// and functions under contract across all `KaniMetadata` objects.
 struct Totals {
     standard_harnesses: usize,
     contract_harnesses: usize,
