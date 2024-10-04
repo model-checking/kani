@@ -15,7 +15,7 @@ type Function = String;
 type Filename = String;
 type LineNumber = usize;
 
-pub type LineResults = Vec<(LineNumber, Option<(u32, MarkerInfo)>)>;
+pub type LineResults = Vec<(LineNumber, Option<(usize, MarkerInfo)>)>;
 
 /// The possible outcomes for a Kani check.
 ///
@@ -85,8 +85,8 @@ pub struct CombinedCoverageResults {
 pub struct CovResult {
     pub function: String,
     pub region: CoverageRegion,
-    pub times_covered: u32,
-    pub total_times: u32,
+    pub times_covered: usize,
+    pub total_times: usize,
 }
 
 /// A coverage region.
@@ -97,8 +97,8 @@ pub struct CovResult {
 #[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct CoverageRegion {
     pub file: String,
-    pub start: (u32, u32),
-    pub end: (u32, u32),
+    pub start: (usize, usize),
+    pub end: (usize, usize),
 }
 
 impl Display for CoverageRegion {
@@ -127,12 +127,12 @@ pub struct FileCoverageInfo {
 
 /// A coverage metric.
 pub struct CoverageMetric {
-    pub covered: u32,
-    pub total: u32,
+    pub covered: usize,
+    pub total: usize,
 }
 
 impl CoverageMetric {
-    pub fn new(covered: u32, total: u32) -> Self {
+    pub fn new(covered: usize, total: usize) -> Self {
         CoverageMetric { covered, total }
     }
 }

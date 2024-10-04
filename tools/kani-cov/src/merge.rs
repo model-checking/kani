@@ -86,14 +86,12 @@ fn combine_raw_results(results: &Vec<CoverageResults>) -> CombinedCoverageResult
                 .collect();
             this_fun_checks.retain(|check| check.region != this_region_check.region);
             same_region_checks.push(this_region_check);
-            let total_times = same_region_checks.len().try_into().unwrap();
+            let total_times = same_region_checks.len();
 
             let times_covered = same_region_checks
                 .iter()
                 .filter(|check| check.status == CheckStatus::Covered)
-                .count()
-                .try_into()
-                .unwrap();
+                .count();
 
             let new_result = CovResult {
                 function: fun_name.clone(),

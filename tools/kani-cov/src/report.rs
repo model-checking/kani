@@ -41,7 +41,7 @@ pub fn report_main(args: &ReportArgs) -> Result<()> {
         for info in fun_info {
             let cov_results = function_coverage_results(&info, &file, &results);
             let line_coverage = line_coverage_results(&info, &cov_results);
-            let line_coverage_matched: Vec<(usize, Option<(u32, MarkerInfo)>)> =
+            let line_coverage_matched: Vec<(usize, Option<(usize, MarkerInfo)>)> =
                 (info.start.0..=info.end.0).zip(line_coverage.clone()).collect();
             file_cov_info.push(line_coverage_matched);
         }
@@ -113,7 +113,7 @@ pub fn output_coverage_results(
     filepath: PathBuf,
     results: Vec<LineResults>,
 ) -> Result<()> {
-    let flattened_results: Vec<(usize, Option<(u32, MarkerInfo)>)> =
+    let flattened_results: Vec<(usize, Option<(usize, MarkerInfo)>)> =
         results.into_iter().flatten().collect();
     println!("{}", filepath.to_string_lossy());
 

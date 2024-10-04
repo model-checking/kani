@@ -67,9 +67,8 @@ pub fn summary_main(args: &SummaryArgs) -> Result<()> {
 
 /// Calculate the coverage information (metrics) for a file
 fn calculate_cov_info(file: &Path, file_cov_info: &[FunctionCoverageResults]) -> FileCoverageInfo {
-    let total_functions = file_cov_info.len().try_into().unwrap();
-    let covered_functions =
-        file_cov_info.iter().filter(|f| f.is_covered).count().try_into().unwrap();
+    let total_functions = file_cov_info.len();
+    let covered_functions = file_cov_info.iter().filter(|f| f.is_covered).count();
     let fun_cov_info = CoverageMetric::new(covered_functions, total_functions);
 
     let covered_lines = file_cov_info.iter().map(|c| c.covered_lines).sum();
@@ -95,10 +94,10 @@ fn function_coverage_info(cov_results: &Option<(String, Vec<CovResult>)>) -> boo
 /// Function coverage results
 struct FunctionCoverageResults {
     is_covered: bool,
-    covered_lines: u32,
-    total_lines: u32,
-    covered_regions: u32,
-    total_regions: u32,
+    covered_lines: usize,
+    total_lines: usize,
+    covered_regions: usize,
+    total_regions: usize,
 }
 
 /// Validate arguments to the `summary` subcommand in addition to clap's
@@ -126,12 +125,12 @@ pub fn validate_summary_args(_args: &SummaryArgs) -> Result<()> {
 pub fn line_coverage_results(
     info: &FunctionInfo,
     fun_results: &Option<(String, Vec<CovResult>)>,
-) -> Vec<Option<(u32, MarkerInfo)>> {
-    let start_line: u32 = info.start.0.try_into().unwrap();
-    let end_line: u32 = info.end.0.try_into().unwrap();
+) -> Vec<Option<(usize, MarkerInfo)>> {
+    let start_line: usize = info.start.0;
+    let end_line: usize = info.end.0;
 
-    let mut line_status: Vec<Option<(u32, MarkerInfo)>> =
-        Vec::with_capacity((end_line - start_line + 1).try_into().unwrap());
+    let mut line_status: Vec<Option<(usize, MarkerInfo)>> =
+        Vec::with_capacity(end_line - start_line + 1);
 
     if let Some(res) = fun_results {
         let mut cur_results = res.1.clone();
@@ -141,7 +140,7 @@ pub fn line_coverage_results(
         /// Checks if a line is relevant to a region.
         /// Here, we define "relevant" as the line appearing after/at the start
         /// of a region and before/at the end of a region.
-        fn line_relevant_to_region(line: u32, region: &CoverageRegion) -> bool {
+        fn line_relevant_to_region(line: usize, region: &CoverageRegion) -> bool {
             region.start.0 <= line && region.end.0 >= line
         }
 
@@ -166,7 +165,7 @@ pub fn line_coverage_results(
         }
     } else {
         line_status = std::iter::repeat(Some((0, MarkerInfo::FullLine)))
-            .take((end_line - start_line + 1).try_into().unwrap())
+            .take(end_line - start_line + 1)
             .collect();
     }
     line_status
@@ -177,9 +176,9 @@ pub fn line_coverage_results(
 pub fn line_coverage_info(
     info: &FunctionInfo,
     fun_results: &Option<(String, Vec<crate::coverage::CovResult>)>,
-) -> (u32, u32) {
+) -> (usize, usize) {
     let line_status = line_coverage_results(info, fun_results);
-    let total_lines = line_status.iter().filter(|s| s.is_some()).count().try_into().unwrap();
+    let total_lines = line_status.iter().filter(|s| s.is_some()).count();
     let covered_lines = line_status
         .iter()
         .filter(|s| s.is_some() && s.as_ref().unwrap().0 > 0)
@@ -193,11 +192,10 @@ pub fn line_coverage_info(
 /// coverage results for a given function.
 fn region_coverage_info(
     fun_results: &Option<(String, Vec<crate::coverage::CovResult>)>,
-) -> (u32, u32) {
+) -> (usize, usize) {
     if let Some(res) = fun_results {
-        let total_regions = res.1.len().try_into().unwrap();
-        let covered_regions =
-            res.1.iter().filter(|c| c.times_covered > 0).count().try_into().unwrap();
+        let total_regions = res.1.len();
+        let covered_regions = res.1.iter().filter(|c| c.times_covered > 0).count();
         (covered_regions, total_regions)
     } else {
         (0, 0)
@@ -214,7 +212,7 @@ fn print_coverage_info(info: &Vec<FileCoverageInfo>, format: &SummaryFormat) {
 
 /// Output coverage information for a set of files in the markdown format
 fn print_coverage_markdown_info(info: &Vec<FileCoverageInfo>) {
-    fn safe_div(num: u32, denom: u32) -> Option<f32> {
+    fn safe_div(num: usize, denom: usize) -> Option<f32> {
         if denom == 0 { None } else { Some(num as f32 / denom as f32) }
     }
 
