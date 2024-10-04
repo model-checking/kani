@@ -179,10 +179,8 @@ pub fn line_coverage_info(
 ) -> (usize, usize) {
     let line_status = line_coverage_results(info, fun_results);
     let total_lines = line_status.iter().filter(|s| s.is_some()).count();
-    let covered_lines = line_status
-        .iter()
-        .filter(|s| s.is_some() && s.as_ref().unwrap().0 > 0)
-        .count();
+    let covered_lines =
+        line_status.iter().filter(|s| s.is_some() && s.as_ref().unwrap().0 > 0).count();
     (covered_lines, total_lines)
 }
 

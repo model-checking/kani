@@ -153,24 +153,17 @@ pub fn output_coverage_results(
                     let complete_escapes: Vec<(usize, bool)> = results
                         .iter()
                         .filter(|m| {
-                            m.times_covered == 0
-                                && m.region.start.0 == idx
-                                && m.region.end.0 == idx
+                            m.times_covered == 0 && m.region.start.0 == idx && m.region.end.0 == idx
                         })
                         .flat_map(|m| {
-                            vec![
-                                ((m.region.start.1 - 1), true),
-                                ((m.region.end.1 - 1), false),
-                            ]
+                            vec![((m.region.start.1 - 1), true), ((m.region.end.1 - 1), false)]
                         })
                         .collect();
                     // Escapes for the regions which only start in this line
                     let mut opening_escapes: Vec<(usize, bool)> = results
                         .iter()
                         .filter(|m| {
-                            m.times_covered == 0
-                                && m.region.start.0 == idx
-                                && m.region.end.0 != idx
+                            m.times_covered == 0 && m.region.start.0 == idx && m.region.end.0 != idx
                         })
                         .flat_map(|m| vec![((m.region.start.1 - 1), true)])
                         .collect();
@@ -178,9 +171,7 @@ pub fn output_coverage_results(
                     let mut closing_escapes: Vec<(usize, bool)> = results
                         .iter()
                         .filter(|m| {
-                            m.times_covered == 0
-                                && m.region.start.0 != idx
-                                && m.region.end.0 == idx
+                            m.times_covered == 0 && m.region.start.0 != idx && m.region.end.0 == idx
                         })
                         .flat_map(|m| vec![((m.region.end.1 - 1), false)])
                         .collect();
