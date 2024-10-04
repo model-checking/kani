@@ -80,7 +80,11 @@ pub struct CombinedCoverageResults {
 }
 
 /// The coverage result associated to a particular coverage region.
-/// Basically, this aggregates the information of one or more `CoverageCheck`.
+/// 
+/// Basically, this aggregates the information of one or more `CoverageCheck`
+/// for a particular region. Thus, `total_times` represents the total number of
+/// such checks, while `times_covered` keeps track of how many of those checks
+/// had the `COVERED` status.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CovResult {
     pub function: String,
