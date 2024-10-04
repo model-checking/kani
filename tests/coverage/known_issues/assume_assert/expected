@@ -8,8 +8,8 @@
    8|     | //! <https://github.com/model-checking/kani/issues/3441>.\
    9|     | \
   10|     | #[kani::proof]\
-  11|    2| fn check_assume_assert() {\
-  12|    2|     let a: u8 = kani::any();\
-  13|    2|     kani::assume(false);\
-  14|    2|     assert!(a < 5);\
+  11|    1| fn check_assume_assert() {\
+  12|    1|     let a: u8 = kani::any();\
+  13|    1|     kani::assume(false);\
+  14|    1|     assert!(a < 5);\
   15|     | }\

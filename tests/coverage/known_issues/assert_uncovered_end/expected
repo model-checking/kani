@@ -6,9 +6,9 @@
    6|     | //! statement: <https://github.com/model-checking/kani/issues/3455>\
    7|     | \
    8|     | #[kani::proof]\
-   9|    2| fn check_assert() {\
-  10|    2|     let x: u32 = kani::any_where(|val| *val == 5);\
-  11|    2|     if x > 3 {\
-  12|    2|         assert!(x > 4);\
-  13|    2|     }\
+   9|    1| fn check_assert() {\
+  10|    1|     let x: u32 = kani::any_where(|val| *val == 5);\
+  11|    1|     if x > 3 {\
+  12|    1|         assert!(x > 4);\
+  13|    1|     }\
   14|     | }\

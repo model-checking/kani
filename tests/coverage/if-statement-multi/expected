@@ -13,14 +13,14 @@
   13|    0| ```    println!("Hello, world!");'''\
   14|    0| ```}'''\
   15|     | \
-  16|    2| fn test_cov(val: u32) -> bool {\
-  17|    2|     if val < 3 || ```val == 42''' { true } else { ```false''' }\
+  16|    1| fn test_cov(val: u32) -> bool {\
+  17|    1|     if val < 3 || ```val == 42''' { true } else { ```false''' }\
   18|     | }\
   19|     | \
   20|     | #[cfg_attr(kani, kani::proof)]\
-  21|    2| fn main() {\
-  22|    2|     let test1 = test_cov(1);\
-  23|    2|     let test2 = test_cov(2);\
-  24|    2|     assert!(test1);\
-  25|    2|     assert!(test2);\
+  21|    1| fn main() {\
+  22|    1|     let test1 = test_cov(1);\
+  23|    1|     let test2 = test_cov(2);\
+  24|    1|     assert!(test1);\
+  25|    1|     assert!(test2);\
   26|     | }\

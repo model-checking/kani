@@ -2,13 +2,13 @@
    2|     | // SPDX-License-Identifier: Apache-2.0 OR MIT\
    3|     | \
    4|     | #[kani::proof]\
-   5|    2| fn main() {\
-   6|    2|     let x: u32 = kani::any();\
-   7|    2|     if x > 0 {\
-   8|    2|         let y = x / 2;\
-   9|    2|         // y is strictly less than x\
-  10|    2|         if y == x ```{'''\
+   5|    1| fn main() {\
+   6|    1|     let x: u32 = kani::any();\
+   7|    1|     if x > 0 {\
+   8|    1|         let y = x / 2;\
+   9|    1|         // y is strictly less than x\
+  10|    1|         if y == x ```{'''\
   11|    0| ```            assert_ne!(y, 1);'''\
-  12|    2| ```        }'''\
-  13|    2|     }\
+  12|    1| ```        }'''\
+  13|    1|     }\
   14|     | }\

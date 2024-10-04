@@ -7,8 +7,8 @@
    7|     | //! calls span two regions each.\
    8|     | \
    9|     | #[kani::proof]\
-  10|    2| fn main() {\
-  11|    2|     for i in 0..4 {\
+  10|    1| fn main() {\
+  11|    1|     for i in 0..4 {\
   12|    0|         debug_assert!(i > 0, ```"This should fail and stop the execution"''');\
   13|    0|         ```assert!(i == 0''', ```"This should be unreachable"''');\
   14|     |     }\

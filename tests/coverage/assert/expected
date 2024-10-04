@@ -2,17 +2,17 @@
    2|     | // SPDX-License-Identifier: Apache-2.0 OR MIT\
    3|     | \
    4|     | #[kani::proof]\
-   5|    2| fn foo() {\
-   6|    2|     let x: i32 = kani::any();\
-   7|    2|     if x > 5 {\
+   5|    1| fn foo() {\
+   6|    1|     let x: i32 = kani::any();\
+   7|    1|     if x > 5 {\
    8|     |         // fails\
-   9|    2|         assert!(x < 4);\
-  10|    2|         if x < 3 ```{'''\
+   9|    1|         assert!(x < 4);\
+  10|    1|         if x < 3 ```{'''\
   11|    0| ```            // unreachable'''\
   12|    0| ```            assert!(x == 2);'''\
   13|    0| ```        }'''\
-  14|    2|     } else {\
-  15|    2|         // passes\
-  16|    2|         assert!(x <= 5);\
-  17|    2|     }\
+  14|    1|     } else {\
+  15|    1|         // passes\
+  16|    1|         assert!(x <= 5);\
+  17|    1|     }\
   18|     | }\

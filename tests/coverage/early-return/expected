@@ -1,19 +1,19 @@
    1|     | // Copyright Kani Contributors\
    2|     | // SPDX-License-Identifier: Apache-2.0 OR MIT\
    3|     | \
-   4|    2| fn find_index(nums: &[i32], target: i32) -> Option<usize> {\
-   5|    2|     for (index, &num) in nums.iter().enumerate() {\
+   4|    1| fn find_index(nums: &[i32], target: i32) -> Option<usize> {\
+   5|    1|     for (index, &num) in nums.iter().enumerate() {\
    6|     |         if num == target {\
-   7|    2|             return Some(index);\
-   8|    2|         }\
+   7|    1|             return Some(index);\
+   8|    1|         }\
    9|     |     }\
   10|    0|     None\
   11|     | }\
   12|     | \
   13|     | #[kani::proof]\
-  14|    2| fn main() {\
-  15|    2|     let numbers = [10, 20, 30, 40, 50];\
-  16|    2|     let target = 30;\
-  17|    2|     let result = find_index(&numbers, target);\
-  18|    2|     assert_eq!(result, Some(2));\
+  14|    1| fn main() {\
+  15|    1|     let numbers = [10, 20, 30, 40, 50];\
+  16|    1|     let target = 30;\
+  17|    1|     let result = find_index(&numbers, target);\
+  18|    1|     assert_eq!(result, Some(2));\
   19|     | }\
