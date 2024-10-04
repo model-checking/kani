@@ -37,7 +37,7 @@ fn generator_large_enough() {
     // This cover is satisfied.
     cover!(
         (ptr1 as usize) >= (ptr2 as usize) + size_of::<u8>()
-            && (ptr2 as usize) >= (ptr3 as usize) + size_of::<u8>()
+            && (ptr2 as usize) >= (ptr3 as usize) + size_of::<u32>()
     );
     // As well as having overlapping pointers.
     cover!((ptr1 as usize) == (ptr3 as usize));

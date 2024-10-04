@@ -85,7 +85,7 @@ macro_rules! ptr_generator {
         ///     let ptr3: *mut u32 = generator.any_in_bounds().ptr;
         ///     // This cover is satisfied.
         ///     cover!((ptr1 as usize) >= (ptr2 as usize) + size_of::<u8>()
-        ///            && (ptr2 as usize) >= (ptr3 as usize) + size_of::<u8>());
+        ///            && (ptr2 as usize) >= (ptr3 as usize) + size_of::<u32>());
         ///     // As well as having overlapping pointers.
         ///     cover!((ptr1 as usize) == (ptr3 as usize));
         /// # }
@@ -261,10 +261,8 @@ macro_rules! ptr_generator {
                     "Cannot generate in-bounds object of the requested type. Buffer is not big enough."
                 );
 
-                let status = kani::any();
-                let mut is_initialized = false;
-
                 // Offset is used to potentially generate unaligned pointer.
+                let status = kani::any();
                 let ptr = match status {
                     AllocationStatus::Dangling => {
                         let offset = kani::any_where(|b: &usize| *b < size_of::<T>());
@@ -285,10 +283,9 @@ macro_rules! ptr_generator {
                     }
                 };
 
-                // Create an arbitrary pointer, but leave `ptr` as null.
                 ArbitraryPointer {
                     ptr,
-                    is_initialized,
+                    is_initialized: false,
                     status,
                     phantom: PhantomData,
                 }
