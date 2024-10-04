@@ -41,8 +41,8 @@ cargo test -p cprover_bindings
 cargo test -p kani-compiler
 cargo test -p kani-driver
 cargo test -p kani_metadata
-# skip doc tests and enable assertions to fail
-cargo test -p kani --lib --features concrete_playback
+# Use concrete playback to enable assertions failure
+cargo test -p kani --features concrete_playback
 # Test the actual macros, skipping doc tests and enabling extra traits for "syn"
 # so we can debug print AST
 RUSTFLAGS=--cfg=kani_sysroot cargo test -p kani_macros --features syn/extra-traits --lib

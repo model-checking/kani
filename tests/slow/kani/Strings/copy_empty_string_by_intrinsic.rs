@@ -1,7 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// kani-flags: --enable-unstable --mir-linker
 //! Make sure we can handle explicit copy_nonoverlapping on empty string
 //! This used to trigger an issue: https://github.com/model-checking/kani/issues/241
 
