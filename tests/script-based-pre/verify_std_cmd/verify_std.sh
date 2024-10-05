@@ -52,10 +52,15 @@ cat ${TMP_DIR}/std_lib.rs >> ${TMP_DIR}/library/std/src/lib.rs
 
 echo "[TEST] Run kani verify-std"
 export RUST_BACKTRACE=1
-kani verify-std -Z unstable-options "${TMP_DIR}/library" --target-dir "${TMP_DIR}/target" -Z function-contracts -Z stubbing -Z mem-predicates
+kani verify-std -Z unstable-options "${TMP_DIR}/library" \
+    --target-dir "${TMP_DIR}/target" -Z function-contracts -Z stubbing \
+    -Z mem-predicates
 
 echo "[TEST] Run kani verify-std -Z uninit-checks"
-RUSTFLAGS="--cfg=uninit_checks" kani verify-std -Z unstable-options "${TMP_DIR}/library" --target-dir "${TMP_DIR}/target" -Z function-contracts -Z stubbing -Z mem-predicates -Z uninit-checks
+export RUSTFLAGS="--cfg=uninit_checks"
+kani verify-std -Z unstable-options "${TMP_DIR}/library" \
+    --target-dir "${TMP_DIR}/target" -Z function-contracts -Z stubbing \
+    -Z mem-predicates -Z uninit-checks
 
 # Cleanup
 rm -r ${TMP_DIR}
