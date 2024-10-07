@@ -5,10 +5,10 @@
    5|    1|     for &num in nums {\
    6|     |         if num > 0 {\
    7|    1|             return Some(num);\
-   8|    1|         }\
+   8|    1|         } \
    9|     |     }\
   10|     |     // `None` is unreachable because there is at least one positive number.\
-  11|    0|     None\
+  11|    0|     ```None'''\
   12|     | }\
   13|     | \
   14|     | #[kani::proof]\

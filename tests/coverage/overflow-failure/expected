@@ -5,7 +5,7 @@
    5|     | //! arithmetic overflow failure (caused by the second call to `cond_reduce`).\
    6|     | \
    7|    1| fn cond_reduce(thresh: u32, x: u32) -> u32 {\
-   8|    1|     if x > thresh { x - 50 } else { x }\
+   8|    1|     if x > thresh { x - 50 } else { ```x''' }\
    9|     | }\
   10|     | \
   11|     | #[kani::proof]\

@@ -16,12 +16,12 @@
   16|    1| fn print_direction(dir: Direction) {\
   17|     |     // For some reason, `dir`'s span is reported as `UNCOVERED` too\
   18|    0|     match ```dir''' {\
-  19|    0|         Direction::Up => println!("Going up!"),\
-  20|    0|         Direction::Down => println!("Going down!"),\
+  19|    0|         Direction::Up => ```println!("Going up!")''',\
+  20|    0|         Direction::Down => ```println!("Going down!")''',\
   21|    1|         Direction::Left => println!("Going left!"),\
-  22|    0|         Direction::Right if 1 == 1 => println!("Going right!"),\
+  22|    0|         Direction::Right if 1 == ```1 => println!("Going right!")''',\
   23|     |         // This part is unreachable since we cover all variants in the match.\
-  24|    0|         _ => println!("Not going anywhere!"),\
+  24|    0|         _ => ```println!("Not going anywhere!")''',\
   25|     |     }\
   26|     | }\
   27|     | \

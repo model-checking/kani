@@ -3,7 +3,7 @@
    3|     | \
    4|    1| fn compare(x: u16, y: u16) -> u16 {\
    5|    1|     // The case where `x < y` isn't possible so its region is `UNCOVERED`\
-   6|    1|     if x >= y { 1 } else { 0 }\
+   6|    1|     if x >= y { 1 } else { ```0''' }\
    7|     | }\
    8|     | \
    9|     | #[kani::proof]\
@@ -12,5 +12,5 @@
   12|    1|     let y: u16 = kani::any();\
   13|    1|     if x >= y {\
   14|    1|         compare(x, y);\
-  15|    1|     }\
+  15|    1|     } \
   16|     | }\

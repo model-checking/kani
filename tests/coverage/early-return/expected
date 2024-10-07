@@ -5,9 +5,9 @@
    5|    1|     for (index, &num) in nums.iter().enumerate() {\
    6|     |         if num == target {\
    7|    1|             return Some(index);\
-   8|    1|         }\
+   8|    1|         } \
    9|     |     }\
-  10|    0|     None\
+  10|    0|     ```None'''\
   11|     | }\
   12|     | \
   13|     | #[kani::proof]\

@@ -14,8 +14,8 @@
   14|    1|         }\
   15|    1|         if i == 2 {\
   16|     |             // This should never happen.\
-  17|    0|             process::exit(1);\
-  18|    1|         }\
+  17|    0|             ```process::exit(1)''';\
+  18|    1|         } \
   19|     |     }\
   20|    0|     ```assert!'''(false, ```"This is unreachable"''');\
   21|     | }\
