@@ -222,8 +222,8 @@ pub fn output_coverage_results(
 /// coverage instrumentation inserts a single-column code span after the end of
 /// a line. More details in <https://github.com/model-checking/kani/issues/3543>
 fn results_with_nonexisting_regions_in_line(
-    results: &Vec<CovResult>,
-    line: &String,
+    results: &[CovResult],
+    line: &str,
     idx: LineNumber,
 ) -> bool {
     let results_with_oob_regions = results.iter().filter(|m| {
