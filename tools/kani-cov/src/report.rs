@@ -221,7 +221,11 @@ pub fn output_coverage_results(
 /// This is helpful to detect cases in which, for an unknown reason, the Rust
 /// coverage instrumentation inserts a single-column code span after the end of
 /// a line. More details in <https://github.com/model-checking/kani/issues/3543>
-fn results_with_nonexisting_regions_in_line(results: &Vec<CovResult>, line: &String, idx: usize) -> bool {
+fn results_with_nonexisting_regions_in_line(
+    results: &Vec<CovResult>,
+    line: &String,
+    idx: usize,
+) -> bool {
     let results_with_oob_regions = results.iter().filter(|m| {
         m.region.start.0 == idx
             && m.region.end.0 == idx
