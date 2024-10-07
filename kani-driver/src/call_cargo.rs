@@ -73,6 +73,11 @@ impl KaniSession {
             cargo_args.push("-v".into());
         }
 
+        // We need this suffix push because of https://github.com/rust-lang/cargo/pull/14370
+        // which removes the library suffix from the build-std command
+        let mut full_path = std_path.to_path_buf();
+        full_path.push("library");
+
         // Since we are verifying the standard library, we set the reachability to all crates.
         let mut cmd = setup_cargo_command()?;
         cmd.args(&cargo_args)
@@ -82,7 +87,7 @@ impl KaniSession {
             // https://doc.rust-lang.org/cargo/reference/environment-variables.html
             .env("CARGO_ENCODED_RUSTFLAGS", rustc_args.join(OsStr::new("\x1f")))
             .env("CARGO_TERM_PROGRESS_WHEN", "never")
-            .env("__CARGO_TESTS_ONLY_SRC_ROOT", std_path.as_os_str());
+            .env("__CARGO_TESTS_ONLY_SRC_ROOT", full_path.as_os_str());
 
         Ok(self
             .run_build(cmd)?
@@ -206,7 +211,7 @@ impl KaniSession {
         })
     }
 
-    fn cargo_metadata(&self, build_target: &str) -> Result<Metadata> {
+    pub fn cargo_metadata(&self, build_target: &str) -> Result<Metadata> {
         let mut cmd = MetadataCommand::new();
 
         // restrict metadata command to host platform. References:

@@ -8,14 +8,14 @@ use std::intrinsics::simd::{simd_add, simd_mul, simd_sub};
 #[repr(simd)]
 #[allow(non_camel_case_types)]
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct i8x2(i8, i8);
+pub struct i8x2([i8; 2]);
 
 #[kani::proof]
 fn main() {
     let a = kani::any();
     let b = kani::any();
-    let simd_a = i8x2(a, a);
-    let simd_b = i8x2(b, b);
+    let simd_a = i8x2([a, a]);
+    let simd_b = i8x2([b, b]);
 
     unsafe {
         let _ = simd_add(simd_a, simd_b);

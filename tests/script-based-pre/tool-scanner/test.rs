@@ -33,7 +33,34 @@ pub fn with_iterator(input: &[usize]) -> usize {
         .iter()
         .copied()
         .find(|e| *e == 0)
-        .unwrap_or_else(|| input.iter().fold(0, |acc, i| acc + 1))
+        .unwrap_or_else(|| input.iter().fold(0, |acc, _| acc + 1))
+}
+
+pub fn with_for_loop(input: &[usize]) -> usize {
+    let mut res = 0;
+    for _ in input {
+        res += 1;
+    }
+    res
+}
+
+pub fn with_while_loop(input: &[usize]) -> usize {
+    let mut res = 0;
+    while res < input.len() {
+        res += 1;
+    }
+    return res;
+}
+
+pub fn with_loop_loop(input: &[usize]) -> usize {
+    let mut res = 0;
+    loop {
+        if res == input.len() {
+            break;
+        }
+        res += 1;
+    }
+    res
 }
 
 static mut COUNTER: Option<usize> = Some(0);

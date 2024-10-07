@@ -1,4 +1,4 @@
-## Coverage
+# Coverage
 
 Recall our `estimate_size` example from [First steps](../../tutorial-first-steps.md),
 where we wrote a proof harness constraining the range of inputs to integers less than 4096:

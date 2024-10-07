@@ -1,0 +1,36 @@
+error: failed to resolve `<[char ; 10]>::foo`: unable to find `foo` inside `[char; 10]`
+resolution_errors.rs
+|
+| #[kani::stub(<[char; 10]>::foo, stub_foo)]
+| ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: failed to resolve `str::foo`: unable to find `foo` inside `str`
+resolution_errors.rs
+|
+| #[kani::stub(str::foo, stub_foo)]
+| ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: failed to resolve `<[u32]>::foo`: unable to find `foo` inside `[u32]`
+resolution_errors.rs
+|
+| #[kani::stub(<[u32]>::foo, stub_foo)]
+| ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: failed to resolve `<(i32 , i32)>::foo`: unable to find `foo` inside `(i32, i32)`
+resolution_errors.rs
+|
+| #[kani::stub(<(i32, i32)>::foo, stub_foo)]
+| ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: failed to resolve `u8::foo`: unable to find `foo` inside `u8`
+resolution_errors.rs
+|
+| #[kani::stub(u8::foo, stub_foo)]
+| ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: failed to resolve `<Bar>::foo`: unable to find `foo` inside struct `Bar`
+resolution_errors.rs
+|
+| #[kani::stub(<Bar>::foo, stub_foo)]
+| ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+

@@ -5,9 +5,9 @@
 use std::collections::BTreeMap;
 
 use kani_metadata::{CbmcSolver, HarnessAttributes, HarnessKind, Stub};
+use quote::ToTokens;
 use rustc_ast::{
     attr, AttrArgs, AttrArgsEq, AttrKind, Attribute, ExprKind, LitKind, MetaItem, MetaItemKind,
-    NestedMetaItem,
 };
 use rustc_errors::ErrorGuaranteed;
 use rustc_hir::{def::DefKind, def_id::DefId};
@@ -19,10 +19,13 @@ use stable_mir::mir::mono::Instance as InstanceStable;
 use stable_mir::{CrateDef, DefId as StableDefId};
 use std::str::FromStr;
 use strum_macros::{AsRefStr, EnumString};
+use syn::parse::Parser;
+use syn::punctuated::Punctuated;
+use syn::{PathSegment, TypePath};
 
 use tracing::{debug, trace};
 
-use super::resolve::{self, resolve_fn, ResolveError};
+use super::resolve::{resolve_fn, resolve_fn_path, FnResolution, ResolveError};
 
 #[derive(Debug, Clone, Copy, AsRefStr, EnumString, PartialEq, Eq, PartialOrd, Ord)]
 #[strum(serialize_all = "snake_case")]
@@ -355,7 +358,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                         );
                     }
                     expect_single(self.tcx, kind, &attrs);
-                    attrs.iter().for_each(|attr| self.check_proof_attribute(attr))
+                    attrs.iter().for_each(|attr| self.check_proof_attribute(kind, attr))
                 }
                 KaniAttributeKind::Unstable => attrs.iter().for_each(|attr| {
                     let _ = UnstableAttribute::try_from(*attr).map_err(|err| err.report(self.tcx));
@@ -367,6 +370,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                         );
                     }
                     expect_single(self.tcx, kind, &attrs);
+                    attrs.iter().for_each(|attr| self.check_proof_attribute(kind, attr))
                 }
                 KaniAttributeKind::StubVerified => {
                     expect_single(self.tcx, kind, &attrs);
@@ -555,19 +559,19 @@ impl<'tcx> KaniAttributes<'tcx> {
         for (name, def_id, span) in self.interpret_stub_verified_attribute() {
             if KaniAttributes::for_item(self.tcx, def_id).contract_attributes().is_none() {
                 dcx.struct_span_err(
-                        span,
+                    span,
+                    format!(
+                        "Failed to generate verified stub: Function `{}` has no contract.",
+                        self.item_name(),
+                    ),
+                )
+                    .with_span_note(
+                        self.tcx.def_span(def_id),
                         format!(
-                            "Failed to generate verified stub: Function `{}` has no contract.",
-                            self.item_name(),
+                            "Try adding a contract to this function or use the unsound `{}` attribute instead.",
+                            KaniAttributeKind::Stub.as_ref(),
                         ),
                     )
-                        .with_span_note(
-                            self.tcx.def_span(def_id),
-                            format!(
-                                "Try adding a contract to this function or use the unsound `{}` attribute instead.",
-                                KaniAttributeKind::Stub.as_ref(),
-                            ),
-                        )
                     .emit();
                 return;
             }
@@ -580,15 +584,29 @@ impl<'tcx> KaniAttributes<'tcx> {
     }
 
     /// Check that if this item is tagged with a proof_attribute, it is a valid harness.
-    fn check_proof_attribute(&self, proof_attribute: &Attribute) {
+    fn check_proof_attribute(&self, kind: KaniAttributeKind, proof_attribute: &Attribute) {
         let span = proof_attribute.span;
         let tcx = self.tcx;
-        expect_no_args(tcx, KaniAttributeKind::Proof, proof_attribute);
+        if let KaniAttributeKind::Proof = kind {
+            expect_no_args(tcx, kind, proof_attribute);
+        }
+
         if tcx.def_kind(self.item) != DefKind::Fn {
-            tcx.dcx().span_err(span, "the `proof` attribute can only be applied to functions");
+            tcx.dcx().span_err(
+                span,
+                format!(
+                    "the '#[kani::{}]' attribute can only be applied to functions",
+                    kind.as_ref()
+                ),
+            );
         } else if tcx.generics_of(self.item).requires_monomorphization(tcx) {
-            tcx.dcx()
-                .span_err(span, "the `proof` attribute cannot be applied to generic functions");
+            tcx.dcx().span_err(
+                span,
+                format!(
+                    "the '#[kani::{}]' attribute cannot be applied to generic functions",
+                    kind.as_ref()
+                ),
+            );
         } else {
             let instance = Instance::mono(tcx, self.item);
             if !super::fn_abi(tcx, instance).args.is_empty() {
@@ -787,20 +805,48 @@ fn parse_unwind(tcx: TyCtxt, attr: &Attribute) -> Option<u32> {
 
 fn parse_stubs(tcx: TyCtxt, harness: DefId, attributes: &[&Attribute]) -> Vec<Stub> {
     let current_module = tcx.parent_module_from_def_id(harness.expect_local());
-    let check_resolve = |attr: &Attribute, name: &str| {
-        let result = resolve::resolve_fn(tcx, current_module.to_local_def_id(), name);
-        if let Err(err) = result {
-            tcx.dcx().span_err(attr.span, format!("failed to resolve `{name}`: {err}"));
+    let check_resolve = |attr: &Attribute, path: &TypePath| {
+        let result = resolve_fn_path(tcx, current_module.to_local_def_id(), path);
+        match result {
+            Ok(FnResolution::Fn(_)) => { /* no-op */ }
+            Ok(FnResolution::FnImpl { .. }) => {
+                tcx.dcx().span_err(
+                    attr.span,
+                    "Kani currently does not support stubbing trait implementations.",
+                );
+            }
+            Err(err) => {
+                tcx.dcx().span_err(
+                    attr.span,
+                    format!("failed to resolve `{}`: {err}", pretty_type_path(path)),
+                );
+            }
         }
     };
     attributes
         .iter()
-        .filter_map(|attr| match parse_paths(attr) {
-            Ok(paths) => match paths.as_slice() {
+        .filter_map(|attr| {
+            let paths = parse_paths(attr).unwrap_or_else(|_| {
+                tcx.dcx().span_err(
+                    attr.span,
+                    format!(
+                    "attribute `kani::{}` takes two path arguments; found argument that is not a path",
+                    KaniAttributeKind::Stub.as_ref())
+                );
+                vec![]
+            });
+            match paths.as_slice() {
                 [orig, replace] => {
                     check_resolve(attr, orig);
                     check_resolve(attr, replace);
-                    Some(Stub { original: orig.clone(), replacement: replace.clone() })
+                    Some(Stub {
+                        original: orig.to_token_stream().to_string(),
+                        replacement: replace.to_token_stream().to_string(),
+                    })
+                }
+                [] => {
+                    /* Error was already emitted */
+                    None
                 }
                 _ => {
                     tcx.dcx().span_err(
@@ -812,13 +858,6 @@ fn parse_stubs(tcx: TyCtxt, harness: DefId, attributes: &[&Attribute]) -> Vec<St
                     );
                     None
                 }
-            },
-            Err(error_span) => {
-                tcx.dcx().span_err(
-                    error_span,
-                    "attribute `kani::stub` takes two path arguments; found argument that is not a path",
-                );
-                None
             }
         })
         .collect()
@@ -896,35 +935,13 @@ fn parse_integer(attr: &Attribute) -> Option<u128> {
 }
 
 /// Extracts a vector with the path arguments of an attribute.
-/// Emits an error if it couldn't convert any of the arguments.
-fn parse_paths(attr: &Attribute) -> Result<Vec<String>, Span> {
-    let attr_args = attr.meta_item_list();
-    attr_args
-        .unwrap_or_default()
-        .iter()
-        .map(|arg| match arg {
-            NestedMetaItem::Lit(item) => Err(item.span),
-            NestedMetaItem::MetaItem(item) => parse_path(item).ok_or(item.span),
-        })
-        .collect()
-}
-
-/// Extracts a path from an attribute item, returning `None` if the item is not
-/// syntactically a path.
-fn parse_path(meta_item: &MetaItem) -> Option<String> {
-    if meta_item.is_word() {
-        Some(
-            meta_item
-                .path
-                .segments
-                .iter()
-                .map(|seg| seg.ident.as_str())
-                .collect::<Vec<&str>>()
-                .join("::"),
-        )
-    } else {
-        None
-    }
+///
+/// Emits an error if it couldn't convert any of the arguments and return an empty vector.
+fn parse_paths(attr: &Attribute) -> Result<Vec<TypePath>, syn::Error> {
+    let syn_attr = syn_attr(attr);
+    let parser = Punctuated::<TypePath, syn::Token![,]>::parse_terminated;
+    let paths = syn_attr.parse_args_with(parser)?;
+    Ok(paths.into_iter().collect())
 }
 
 /// Parse the arguments of the attribute into a (key, value) map.
@@ -988,4 +1005,55 @@ pub fn matches_diagnostic<T: CrateDef>(tcx: TyCtxt, def: T, attr_name: &str) -> 
         }
     }
     false
+}
+
+/// Parse an attribute using `syn`.
+///
+/// This provides a user-friendly interface to manipulate than the internal compiler AST.
+fn syn_attr(attr: &Attribute) -> syn::Attribute {
+    let attr_str = rustc_ast_pretty::pprust::attribute_to_string(attr);
+    let parser = syn::Attribute::parse_outer;
+    parser.parse_str(&attr_str).unwrap().pop().unwrap()
+}
+
+/// Return a more user-friendly string for path by trying to remove unneeded whitespace.
+///
+/// `quote!()` and `TokenString::to_string()` introduce unnecessary space around separators.
+/// This happens because these methods end up using TokenStream display, which has no
+/// guarantees on the format printed.
+/// <https://doc.rust-lang.org/proc_macro/struct.TokenStream.html#impl-Display-for-TokenStream>
+///
+/// E.g.: The path `<[char; 10]>::foo` printed with token stream becomes `< [ char ; 10 ] > :: foo`.
+/// while this function turns this into `<[char ; 10]>::foo`.
+///
+/// Thus, this can still be improved to handle the `qself.ty`.
+///
+/// We also don't handle path segments, but users shouldn't pass generic arguments to our
+/// attributes.
+fn pretty_type_path(path: &TypePath) -> String {
+    fn segments_str<'a, I>(segments: I) -> String
+    where
+        I: IntoIterator<Item = &'a PathSegment>,
+    {
+        // We don't bother with path arguments for now since users shouldn't provide them.
+        segments
+            .into_iter()
+            .map(|segment| segment.to_token_stream().to_string())
+            .intersperse("::".to_string())
+            .collect()
+    }
+    let leading = if path.path.leading_colon.is_some() { "::" } else { "" };
+    if let Some(qself) = &path.qself {
+        let pos = qself.position;
+        let qself_str = qself.ty.to_token_stream().to_string();
+        if pos == 0 {
+            format!("<{qself_str}>::{}", segments_str(&path.path.segments))
+        } else {
+            let before = segments_str(path.path.segments.iter().take(pos));
+            let after = segments_str(path.path.segments.iter().skip(pos));
+            format!("<{qself_str} as {before}>::{after}")
+        }
+    } else {
+        format!("{leading}{}", segments_str(&path.path.segments))
+    }
 }

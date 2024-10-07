@@ -1,0 +1,14 @@
+Source-based code coverage results:
+
+main.rs (main)\
+ * 29:1 - 32:2 COVERED
+
+main.rs (print_direction)\
+ * 16:1 - 16:36 COVERED\
+ * 18:11 - 18:14 UNCOVERED\
+ * 19:26 - 19:47 UNCOVERED\
+ * 20:28 - 20:51 UNCOVERED\
+ * 21:28 - 21:51 COVERED\
+ * 22:34 - 22:63 UNCOVERED\
+ * 24:14 - 24:45 UNCOVERED\
+ * 26:1 - 26:2 COVERED

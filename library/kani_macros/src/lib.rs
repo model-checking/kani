@@ -8,12 +8,11 @@
 // So we have to enable this on the commandline (see kani-rustc) with:
 //   RUSTFLAGS="-Zcrate-attr=feature(register_tool) -Zcrate-attr=register_tool(kanitool)"
 #![feature(proc_macro_diagnostic)]
-
 mod derive;
 
 // proc_macro::quote is nightly-only, so we'll cobble things together instead
 use proc_macro::TokenStream;
-use proc_macro_error::proc_macro_error;
+use proc_macro_error2::proc_macro_error;
 
 #[cfg(kani_sysroot)]
 use sysroot as attr_impl;
@@ -65,6 +64,7 @@ pub fn recursion(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// Set Loop unwind limit for proof harnesses
 /// The attribute `#[kani::unwind(arg)]` can only be called alongside `#[kani::proof]`.
 /// arg - Takes in a integer value (u32) that represents the unwind value for the harness.
+#[allow(clippy::too_long_first_doc_paragraph)]
 #[proc_macro_attribute]
 pub fn unwind(attr: TokenStream, item: TokenStream) -> TokenStream {
     attr_impl::unwind(attr, item)
@@ -398,7 +398,7 @@ pub fn modifies(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// This code should only be activated when pre-building Kani's sysroot.
 #[cfg(kani_sysroot)]
 mod sysroot {
-    use proc_macro_error::{abort, abort_call_site};
+    use proc_macro_error2::{abort, abort_call_site};
 
     mod contracts;
 

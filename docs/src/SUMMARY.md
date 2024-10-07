@@ -7,6 +7,8 @@
   - [Using Kani](./usage.md)
   - [Verification results](./verification-results.md)
 
+- [Crates Documentation](./crates/index.md)
+
 - [Tutorial](./kani-tutorial.md)
   - [First steps](./tutorial-first-steps.md)
   - [Failures that Kani can spot](./tutorial-kinds-of-failure.md)
@@ -18,6 +20,7 @@
   - [Experimental features](./reference/experimental/experimental-features.md)
     - [Coverage](./reference/experimental/coverage.md)
     - [Stubbing](./reference/experimental/stubbing.md)
+    - [Contracts](./reference/experimental/contracts.md)
     - [Concrete Playback](./reference/experimental/concrete-playback.md)
 - [Application](./application.md)
   - [Comparison with other tools](./tool-comparison.md)
@@ -44,8 +47,6 @@
     - [Intrinsics](./rust-feature-support/intrinsics.md)
     - [Unstable features](./rust-feature-support/unstable.md)
   - [Overrides](./overrides.md)
-
-- [Crates Documentation](./crates/index.md)
 
 ---
 

@@ -5,6 +5,12 @@ use anyhow::{bail, Result};
 use kani_metadata::{ArtifactType, HarnessMetadata};
 use rayon::prelude::*;
 use std::path::Path;
+use std::thread;
+use std::sync::mpsc;
+use std::sync::Arc;
+use std::time::Instant;
+use std::fs::File;
+use std::io::Write;
 
 use crate::args::OutputFormat;
 use crate::call_cbmc::{VerificationResult, VerificationStatus};
@@ -28,6 +34,7 @@ pub(crate) struct HarnessRunner<'sess, 'pr> {
     pub project: &'pr Project,
 }
 
+
 /// The result of checking a single harness. This both hangs on to the harness metadata
 /// (as a means to identify which harness), and provides that harness's verification result.
 pub(crate) struct HarnessResult<'pr> {
@@ -45,14 +52,18 @@ impl<'sess, 'pr> HarnessRunner<'sess, 'pr> {
         self.check_stubbing(harnesses)?;
 
         let sorted_harnesses = crate::metadata::sort_harnesses_by_loc(harnesses);
-
+        let max_threads = 8; 
         let pool = {
             let mut builder = rayon::ThreadPoolBuilder::new();
-            if let Some(x) = self.sess.args.jobs() {
-                builder = builder.num_threads(x);
+            let mut threads = sorted_harnesses.len();
+            if threads > max_threads {
+                threads = max_threads;
             }
+            builder = builder.num_threads(threads);
             builder.build()?
         };
+        
+        let before = Instant::now();
 
         let results = pool.install(|| -> Result<Vec<HarnessResult<'pr>>> {
             sorted_harnesses
@@ -62,18 +73,20 @@ impl<'sess, 'pr> HarnessRunner<'sess, 'pr> {
                     let report_dir = self.project.outdir.join(format!("report-{harness_filename}"));
                     let goto_file =
                         self.project.get_harness_artifact(&harness, ArtifactType::Goto).unwrap();
-
+                
                     self.sess.instrument_model(goto_file, goto_file, &self.project, &harness)?;
 
                     if self.sess.args.synthesize_loop_contracts {
                         self.sess.synthesize_loop_contracts(goto_file, &goto_file, &harness)?;
                     }
-
+                    
                     let result = self.sess.check_harness(goto_file, &report_dir, harness)?;
                     Ok(HarnessResult { harness, result })
                 })
                 .collect::<Result<Vec<_>>>()
         })?;
+
+        println!("Elapsed Time: {:.2?}\n", before.elapsed());
 
         Ok(results)
     }
@@ -105,6 +118,7 @@ impl<'sess, 'pr> HarnessRunner<'sess, 'pr> {
         Ok(())
     }
 }
+
 
 impl KaniSession {
     fn process_output(&self, result: &VerificationResult, harness: &HarnessMetadata) {
@@ -234,12 +248,23 @@ impl KaniSession {
             }
         }
 
+        if self.args.coverage {
+            self.show_coverage_summary()?;
+        }
+
         if failing > 0 {
             // Failure exit code without additional error message
             drop(self);
             std::process::exit(1);
         }
 
+        Ok(())
+    }
+
+    /// Show a coverage summary.
+    ///
+    /// This is just a placeholder for now.
+    fn show_coverage_summary(&self) -> Result<()> {
         Ok(())
     }
 }

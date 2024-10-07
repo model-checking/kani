@@ -1,0 +1,4 @@
+cargo:rerun-if-changed=build.rs
+cargo:rustc-check-cfg=cfg(limb_width_32)
+cargo:rustc-check-cfg=cfg(limb_width_64)
+cargo:rustc-cfg=limb_width_64

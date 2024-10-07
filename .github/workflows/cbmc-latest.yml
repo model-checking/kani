@@ -87,7 +87,7 @@ jobs:
       - name: Build CBMC
         working-directory: ./cbmc
         run: |
-          cmake -S . -Bbuild -DWITH_JBMC=OFF
+          cmake -S . -Bbuild -DWITH_JBMC=OFF -Dsat_impl="minisat2;cadical"
           cmake --build build -- -j 4
           # Prepend the bin directory to $PATH
           echo "${GITHUB_WORKSPACE}/cbmc/build/bin" >> $GITHUB_PATH

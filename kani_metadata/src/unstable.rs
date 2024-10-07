@@ -78,8 +78,9 @@ pub enum UnstableFeature {
     ConcretePlayback,
     /// Enable Kani's unstable async library.
     AsyncLib,
-    /// Enable line coverage instrumentation/reports.
-    LineCoverage,
+    /// Enable source-based code coverage workflow.
+    /// See [RFC-0011](https://model-checking.github.io/kani/rfc/rfcs/0011-source-coverage.html)
+    SourceCoverage,
     /// Enable function contracts [RFC 9](https://model-checking.github.io/kani/rfc/rfcs/0009-function-contracts.html)
     FunctionContracts,
     /// Memory predicate APIs.

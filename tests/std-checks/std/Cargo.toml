@@ -1,0 +1,13 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+[package]
+name = "verify-std"
+version = "0.1.0"
+edition = "2021"
+description = "This crate contains contracts and harnesses for std library"
+
+[package.metadata.kani]
+unstable = { function-contracts = true, mem-predicates = true, uninit-checks = true }
+
+[package.metadata.kani.flags]
+output-format = "terse"

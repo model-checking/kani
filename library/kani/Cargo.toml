@@ -3,7 +3,7 @@
 
 [package]
 name = "kani"
-version = "0.54.0"
+version = "0.55.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 publish = false
@@ -15,3 +15,6 @@ kani_core = { path = "../kani_core" }
 [features]
 concrete_playback = []
 no_core=["kani_macros/no_core"]
+
+[lints]
+workspace = true
