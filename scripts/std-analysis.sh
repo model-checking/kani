@@ -76,6 +76,7 @@ export RUSTC_LOG=error
 RUST_FLAGS=(
     "-Cpanic=abort"
     "-Zalways-encode-mir"
+    "--emit=mir"
 )
 export RUSTFLAGS="${RUST_FLAGS[@]}"
 export RUSTC="$KANI_DIR/target/debug/scan"
@@ -104,7 +105,7 @@ for f in $results/*overall.csv; do
     fname=$(basename $f)
     crate=${fname%_scan_overall.csv}
     echo -n "$crate," >> $summary
-    tr -d [:alpha:]_,; < $f | tr -s '\n' ',' \
+    tr -d "[:alpha:]_,;" < $f | tr -s '\n' ',' \
         >> $summary
     echo "" >> $summary
 done

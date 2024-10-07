@@ -14,6 +14,11 @@ pub fn generic<T: Default>() -> T {
     T::default()
 }
 
+pub fn blah() {
+    ok();
+    assert_eq!(u8::default(), 0);
+}
+
 pub struct RecursiveType {
     pub inner: Option<*const RecursiveType>,
 }
@@ -101,4 +106,12 @@ pub fn start_recursion() {
 
 pub fn not_recursive() {
     let _ = ok();
+}
+
+extern "C" {
+    fn external_function();
+}
+
+pub fn call_external() {
+    unsafe { external_function() };
 }
