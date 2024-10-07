@@ -18,7 +18,7 @@ use kani_metadata::{ContractedFunction, HarnessKind, KaniMetadata};
 
 /// Process the KaniMetadata output from kani-compiler and output the list subcommand results
 fn process_metadata(metadata: Vec<KaniMetadata>, format: Format) -> Result<()> {
-    // We use ordered maps and sets so that the output is in lexographic order (and consistent across invocations).
+    // We use ordered maps and sets so that the output is in lexicographic order (and consistent across invocations).
 
     // Map each file to a vector of its harnesses.
     let mut standard_harnesses: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
