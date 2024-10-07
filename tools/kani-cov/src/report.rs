@@ -134,21 +134,6 @@ pub fn output_coverage_results(
                     (Some(max), insert_escapes(&line, vec![(0, true), (line.len(), false)], format))
                 }
                 MarkerInfo::Markers(results) => {
-                    // Filter out cases where the region represents a
-                    // single-column span and the regions ends after the line.
-                    // TODO: Avoid filtering out these coverage results.
-                    // <https://github.com/model-checking/kani/issues/3543>
-                    let results: Vec<&CovResult> = results
-                        .iter()
-                        .filter(|m| {
-                            if m.region.start.0 == idx && m.region.end.0 == idx {
-                                (m.region.end.1 - m.region.start.1 != 1)
-                                    && (m.region.end.1) < line.len()
-                            } else {
-                                true
-                            }
-                        })
-                        .collect();
                     // Escapes for the regions which start and finish in this line
                     let complete_escapes: Vec<(usize, bool)> = results
                         .iter()
@@ -198,6 +183,15 @@ pub fn output_coverage_results(
                         closing_escapes.push((line.len(), false));
                     }
 
+                    // If any result points to an out-of-bounds region after the
+                    // end of the line (due to a known issue), we extend the
+                    // line with a space to avoid crashing when drawing it.
+                    let line = if results_with_nonexisting_regions_in_line(results, &line, idx) {
+                        format!("{line} ")
+                    } else {
+                        line
+                    };
+
                     (Some(max), insert_escapes(&line, closing_escapes, format))
                 }
             }
@@ -219,6 +213,22 @@ pub fn output_coverage_results(
     }
 
     Ok(())
+}
+
+/// Returns whether any of the coverage results for a line point to out-of-bound
+/// regions.
+///
+/// This is helpful to detect cases in which, for an unknown reason, the Rust
+/// coverage instrumentation inserts a single-column code span after the end of
+/// a line. More details in <https://github.com/model-checking/kani/issues/3543>
+fn results_with_nonexisting_regions_in_line(results: &Vec<CovResult>, line: &String, idx: usize) -> bool {
+    let results_with_oob_regions = results.iter().filter(|m| {
+        m.region.start.0 == idx
+            && m.region.end.0 == idx
+            && (m.region.end.1 - m.region.start.1 == 1)
+            && (m.region.end.1) > line.len()
+    });
+    results_with_oob_regions.count() > 0
 }
 
 /// Inserts opening/closing escape strings into `str` given a set of `markers`.
