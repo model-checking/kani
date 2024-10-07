@@ -51,7 +51,7 @@ impl KaniSession {
     /// crate manually. =( See <https://github.com/rust-lang/cargo/issues/8365>.
     ///
     /// Without setting up a new workspace, cargo init will modify the workspace where this is
-    /// running.
+    /// running. See <https://github.com/model-checking/kani/issues/3574> for details.
     pub fn cargo_init_lib(&self, path: &Path) -> Result<()> {
         let toml_path = path.join("Cargo.toml");
         if toml_path.exists() {
