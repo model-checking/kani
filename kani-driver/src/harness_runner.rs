@@ -4,21 +4,18 @@
 use anyhow::{bail, Result};
 use kani_metadata::{ArtifactType, HarnessMetadata};
 use rayon::prelude::*;
-use std::path::Path;
-use std::thread;
-use std::sync::mpsc;
-use std::sync::Arc;
-use std::time::Instant;
 use std::fs::File;
 use std::io::Write;
+use std::path::Path;
+use std::sync::mpsc;
+use std::sync::Arc;
+use std::thread;
+use std::time::Instant;
 
 use crate::args::OutputFormat;
 use crate::call_cbmc::{VerificationResult, VerificationStatus};
 use crate::project::Project;
 use crate::session::KaniSession;
-
-use std::fs::File;
-use std::io::Write;
 
 use std::env::current_dir;
 use std::path::PathBuf;
@@ -33,7 +30,6 @@ pub(crate) struct HarnessRunner<'sess, 'pr> {
     /// The project under verification.
     pub project: &'pr Project,
 }
-
 
 /// The result of checking a single harness. This both hangs on to the harness metadata
 /// (as a means to identify which harness), and provides that harness's verification result.
@@ -52,7 +48,7 @@ impl<'sess, 'pr> HarnessRunner<'sess, 'pr> {
         self.check_stubbing(harnesses)?;
 
         let sorted_harnesses = crate::metadata::sort_harnesses_by_loc(harnesses);
-        let max_threads = 8; 
+        let max_threads = 8;
         let pool = {
             let mut builder = rayon::ThreadPoolBuilder::new();
             let mut threads = sorted_harnesses.len();
@@ -62,7 +58,7 @@ impl<'sess, 'pr> HarnessRunner<'sess, 'pr> {
             builder = builder.num_threads(threads);
             builder.build()?
         };
-        
+
         let before = Instant::now();
 
         let results = pool.install(|| -> Result<Vec<HarnessResult<'pr>>> {
@@ -73,13 +69,13 @@ impl<'sess, 'pr> HarnessRunner<'sess, 'pr> {
                     let report_dir = self.project.outdir.join(format!("report-{harness_filename}"));
                     let goto_file =
                         self.project.get_harness_artifact(&harness, ArtifactType::Goto).unwrap();
-                
+
                     self.sess.instrument_model(goto_file, goto_file, &self.project, &harness)?;
 
                     if self.sess.args.synthesize_loop_contracts {
                         self.sess.synthesize_loop_contracts(goto_file, &goto_file, &harness)?;
                     }
-                    
+
                     let result = self.sess.check_harness(goto_file, &report_dir, harness)?;
                     Ok(HarnessResult { harness, result })
                 })
@@ -119,7 +115,6 @@ impl<'sess, 'pr> HarnessRunner<'sess, 'pr> {
     }
 }
 
-
 impl KaniSession {
     fn process_output(&self, result: &VerificationResult, harness: &HarnessMetadata) {
         if self.should_print_output() {
@@ -127,11 +122,7 @@ impl KaniSession {
                 self.write_output_to_file(result, harness);
             }
 
-            let output = result.render(
-                &self.args.output_format,
-                harness.attributes.should_panic,
-                self.args.coverage,
-            );
+            let output = result.render(&self.args.output_format, harness.attributes.should_panic);
             println!("{}", output);
         }
     }
@@ -148,11 +139,7 @@ impl KaniSession {
 
         std::fs::create_dir_all(prefix).unwrap();
         let mut file = File::create(&file_name).unwrap();
-        let file_output = result.render(
-            &OutputFormat::Regular,
-            harness.attributes.should_panic,
-            self.args.coverage,
-        );
+        let file_output = result.render(&OutputFormat::Regular, harness.attributes.should_panic);
 
         if let Err(e) = writeln!(file, "{}", file_output) {
             eprintln!(
