@@ -11,9 +11,10 @@ use std::{collections::HashMap, fmt::Display};
 use std::{fmt, fs};
 use tree_sitter::{Node, Parser};
 
-type Function = String;
-type Filename = String;
-type LineNumber = usize;
+pub type Function = String;
+pub type Filename = String;
+pub type LineNumber = usize;
+pub type ColumnNumber = usize;
 
 pub type LineResults = Vec<(LineNumber, Option<(usize, MarkerInfo)>)>;
 
@@ -40,7 +41,7 @@ pub enum CheckStatus {
 /// <https://github.com/model-checking/kani/issues/3541>
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CoverageCheck {
-    pub function: String,
+    pub function: Filename,
     term: CoverageTerm,
     pub region: CoverageRegion,
     pub status: CheckStatus,
@@ -87,7 +88,7 @@ pub struct CombinedCoverageResults {
 /// had the `COVERED` status.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CovResult {
-    pub function: String,
+    pub function: Filename,
     pub region: CoverageRegion,
     pub times_covered: usize,
     pub total_times: usize,
@@ -100,9 +101,9 @@ pub struct CovResult {
 /// <https://github.com/model-checking/kani/issues/3541>
 #[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct CoverageRegion {
-    pub file: String,
-    pub start: (usize, usize),
-    pub end: (usize, usize),
+    pub file: Filename,
+    pub start: (LineNumber, ColumnNumber),
+    pub end: (LineNumber, ColumnNumber),
 }
 
 impl Display for CoverageRegion {
@@ -145,8 +146,8 @@ impl CoverageMetric {
 #[derive(Debug)]
 pub struct FunctionInfo {
     pub name: Function,
-    pub start: (usize, usize),
-    pub end: (usize, usize),
+    pub start: (LineNumber, ColumnNumber),
+    pub end: (LineNumber, ColumnNumber),
 }
 
 /// Extract function information from a file using a tree-sitter
@@ -187,7 +188,7 @@ pub fn function_coverage_results(
     info: &FunctionInfo,
     file: &Path,
     results: &CombinedCoverageResults,
-) -> Option<(String, Vec<CovResult>)> {
+) -> Option<(Function, Vec<CovResult>)> {
     // The filenames in "kaniraw" files are not absolute, so we need to match
     // them with the ones we have in the aggregated results (i.e., the filenames
     // in the "kanimap" files).

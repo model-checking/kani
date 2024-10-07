@@ -10,7 +10,8 @@ use anyhow::Result;
 
 use crate::args::ReportFormat;
 use crate::coverage::{
-    CovResult, LineResults, MarkerInfo, function_coverage_results, function_info_from_file,
+    ColumnNumber, CovResult, LineNumber, LineResults, MarkerInfo, function_coverage_results,
+    function_info_from_file,
 };
 use crate::summary::line_coverage_results;
 use crate::{args::ReportArgs, coverage::CombinedCoverageResults};
@@ -41,7 +42,7 @@ pub fn report_main(args: &ReportArgs) -> Result<()> {
         for info in fun_info {
             let cov_results = function_coverage_results(&info, &file, &results);
             let line_coverage = line_coverage_results(&info, &cov_results);
-            let line_coverage_matched: Vec<(usize, Option<(usize, MarkerInfo)>)> =
+            let line_coverage_matched: LineResults =
                 (info.start.0..=info.end.0).zip(line_coverage.clone()).collect();
             file_cov_info.push(line_coverage_matched);
         }
@@ -113,8 +114,7 @@ pub fn output_coverage_results(
     filepath: PathBuf,
     results: Vec<LineResults>,
 ) -> Result<()> {
-    let flattened_results: Vec<(usize, Option<(usize, MarkerInfo)>)> =
-        results.into_iter().flatten().collect();
+    let flattened_results: LineResults = results.into_iter().flatten().collect();
     println!("{}", filepath.to_string_lossy());
 
     let file = File::open(filepath)?;
@@ -135,7 +135,7 @@ pub fn output_coverage_results(
                 }
                 MarkerInfo::Markers(results) => {
                     // Escapes for the regions which start and finish in this line
-                    let complete_escapes: Vec<(usize, bool)> = results
+                    let complete_escapes: Vec<(ColumnNumber, bool)> = results
                         .iter()
                         .filter(|m| {
                             m.times_covered == 0 && m.region.start.0 == idx && m.region.end.0 == idx
@@ -145,7 +145,7 @@ pub fn output_coverage_results(
                         })
                         .collect();
                     // Escapes for the regions which only start in this line
-                    let mut opening_escapes: Vec<(usize, bool)> = results
+                    let mut opening_escapes: Vec<(ColumnNumber, bool)> = results
                         .iter()
                         .filter(|m| {
                             m.times_covered == 0 && m.region.start.0 == idx && m.region.end.0 != idx
@@ -153,7 +153,7 @@ pub fn output_coverage_results(
                         .flat_map(|m| vec![((m.region.start.1 - 1), true)])
                         .collect();
                     // Escapes for the regions which only finish in this line
-                    let mut closing_escapes: Vec<(usize, bool)> = results
+                    let mut closing_escapes: Vec<(ColumnNumber, bool)> = results
                         .iter()
                         .filter(|m| {
                             m.times_covered == 0 && m.region.start.0 != idx && m.region.end.0 == idx
@@ -164,7 +164,7 @@ pub fn output_coverage_results(
                     // Emit an opening escape if there was a closing one and we
                     // had to continue the highlight
                     if must_highlight && !closing_escapes.is_empty() {
-                        closing_escapes.push((0_usize, true));
+                        closing_escapes.push((0, true));
                         must_highlight = false;
                     }
                     // Continue the highlight in the next lines if we had an
@@ -224,7 +224,7 @@ pub fn output_coverage_results(
 fn results_with_nonexisting_regions_in_line(
     results: &Vec<CovResult>,
     line: &String,
-    idx: usize,
+    idx: LineNumber,
 ) -> bool {
     let results_with_oob_regions = results.iter().filter(|m| {
         m.region.start.0 == idx
@@ -242,14 +242,14 @@ fn results_with_nonexisting_regions_in_line(
 ///    escape.
 ///
 /// The specific escape to be used are determined by the report format.
-fn insert_escapes(str: &str, markers: Vec<(usize, bool)>, format: &ReportFormat) -> String {
+fn insert_escapes(str: &str, markers: Vec<(ColumnNumber, bool)>, format: &ReportFormat) -> String {
     // Determine the escape strings based on the format
     let (open_escape, close_escape) = match format {
         ReportFormat::Terminal => ("\x1b[41m", "\x1b[0m"),
         ReportFormat::Escapes => ("```", "'''"),
     };
 
-    let mut escape_markers: Vec<(&usize, &str)> =
+    let mut escape_markers: Vec<(&ColumnNumber, &str)> =
         markers.iter().map(|(i, b)| (i, if *b { open_escape } else { close_escape })).collect();
     escape_markers.sort();
 

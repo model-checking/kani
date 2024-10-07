@@ -14,7 +14,10 @@ use anyhow::Result;
 
 use crate::{
     args::MergeArgs,
-    coverage::{CheckStatus, CombinedCoverageResults, CovResult, CoverageCheck, CoverageResults},
+    coverage::{
+        CheckStatus, CombinedCoverageResults, CovResult, CoverageCheck, CoverageResults, Filename,
+        Function,
+    },
 };
 
 /// Executes the `merge` subcommand.
@@ -56,7 +59,7 @@ fn parse_raw_results(paths: &Vec<PathBuf>) -> Result<Vec<CoverageResults>> {
 fn combine_raw_results(results: &Vec<CoverageResults>) -> CombinedCoverageResults {
     let all_file_function_names = function_names_from_results(results);
 
-    let mut new_data: HashMap<String, Vec<(String, Vec<CovResult>)>> = HashMap::new();
+    let mut new_data: HashMap<Filename, Vec<(Function, Vec<CovResult>)>> = HashMap::new();
 
     for (file_name, fun_name) in all_file_function_names {
         let mut this_fun_checks: Vec<&CoverageCheck> = Vec::new();
@@ -129,7 +132,7 @@ fn save_combined_results(
 }
 
 /// All function names appearing in raw coverage results
-fn function_names_from_results(results: &[CoverageResults]) -> Vec<(String, String)> {
+fn function_names_from_results(results: &[CoverageResults]) -> Vec<(Filename, Function)> {
     let mut file_function_pairs = HashSet::new();
     for result in results {
         for (file, checks) in &result.data {

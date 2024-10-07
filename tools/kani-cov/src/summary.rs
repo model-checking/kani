@@ -16,7 +16,8 @@ use crate::{
     args::{SummaryArgs, SummaryFormat},
     coverage::{
         CombinedCoverageResults, CovResult, CoverageMetric, CoverageRegion, FileCoverageInfo,
-        FunctionInfo, MarkerInfo, function_coverage_results, function_info_from_file,
+        Function, FunctionInfo, LineNumber, MarkerInfo, function_coverage_results,
+        function_info_from_file,
     },
 };
 
@@ -87,7 +88,7 @@ fn calculate_cov_info(file: &Path, file_cov_info: &[FunctionCoverageResults]) ->
     }
 }
 
-fn function_coverage_info(cov_results: &Option<(String, Vec<CovResult>)>) -> bool {
+fn function_coverage_info(cov_results: &Option<(Function, Vec<CovResult>)>) -> bool {
     if let Some(res) = cov_results { res.1.iter().any(|c| c.times_covered > 0) } else { false }
 }
 
@@ -109,8 +110,8 @@ pub fn validate_summary_args(_args: &SummaryArgs) -> Result<()> {
 
 /// Computes coverage results from a line-based perspective.
 ///
-/// Basically, for each line we produce an `<Option<(u32, MarkerInfo)>>` result
-/// where:
+/// Basically, for each line we produce an `<Option<(usize, MarkerInfo)>>`
+/// result where:
 ///  * `None` means there were no coverage results associated with this line.
 ///    This may happen in lines that only contain a closing `}`, for example.
 ///  * `Some(max, markers)` means there were coverage results associated with
@@ -124,10 +125,10 @@ pub fn validate_summary_args(_args: &SummaryArgs) -> Result<()> {
 /// for the generation of coverage reports.
 pub fn line_coverage_results(
     info: &FunctionInfo,
-    fun_results: &Option<(String, Vec<CovResult>)>,
+    fun_results: &Option<(Function, Vec<CovResult>)>,
 ) -> Vec<Option<(usize, MarkerInfo)>> {
-    let start_line: usize = info.start.0;
-    let end_line: usize = info.end.0;
+    let start_line = info.start.0;
+    let end_line = info.end.0;
 
     let mut line_status: Vec<Option<(usize, MarkerInfo)>> =
         Vec::with_capacity(end_line - start_line + 1);
@@ -140,7 +141,7 @@ pub fn line_coverage_results(
         /// Checks if a line is relevant to a region.
         /// Here, we define "relevant" as the line appearing after/at the start
         /// of a region and before/at the end of a region.
-        fn line_relevant_to_region(line: usize, region: &CoverageRegion) -> bool {
+        fn line_relevant_to_region(line: LineNumber, region: &CoverageRegion) -> bool {
             region.start.0 <= line && region.end.0 >= line
         }
 
@@ -175,7 +176,7 @@ pub fn line_coverage_results(
 /// coverage results for a given function.
 pub fn line_coverage_info(
     info: &FunctionInfo,
-    fun_results: &Option<(String, Vec<crate::coverage::CovResult>)>,
+    fun_results: &Option<(Function, Vec<CovResult>)>,
 ) -> (usize, usize) {
     let line_status = line_coverage_results(info, fun_results);
     let total_lines = line_status.iter().filter(|s| s.is_some()).count();
@@ -186,9 +187,7 @@ pub fn line_coverage_info(
 
 /// Compute the number of covered regions and number of total regions given the
 /// coverage results for a given function.
-fn region_coverage_info(
-    fun_results: &Option<(String, Vec<crate::coverage::CovResult>)>,
-) -> (usize, usize) {
+fn region_coverage_info(fun_results: &Option<(Function, Vec<CovResult>)>) -> (usize, usize) {
     if let Some(res) = fun_results {
         let total_regions = res.1.len();
         let covered_regions = res.1.iter().filter(|c| c.times_covered > 0).count();
