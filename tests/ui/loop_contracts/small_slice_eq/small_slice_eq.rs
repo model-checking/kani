@@ -1,4 +1,4 @@
-// Copyright Kani Contributors
+// Modifications Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 // kani-flags: -Z loop-contracts --enable-unstable --cbmc-args --arrays-uf-always --no-standard-checks
