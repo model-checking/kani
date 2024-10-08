@@ -1,12 +1,15 @@
-// Modifications Copyright Kani Contributors
+// Copyright rustc Contributors
+// Adapted from rust std: https://github.com/rust-lang/rust/blob/master/library/core/src/str/pattern.rs#L1885
+//
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Modifications Copyright Kani Contributors
+// See GitHub history for details.
 
 // kani-flags: -Z loop-contracts --enable-unstable --cbmc-args --arrays-uf-always --no-standard-checks
 
 //! Check if loop contracts are correctly applied. The flag --no-standard-checks should be
 //! removed once same_object predicate is supported in loop contracts.
-//! This function is originally the std function
-//! https://github.com/rust-lang/rust/blob/master/library/core/src/str/pattern.rs#L1885
 
 #![feature(stmt_expr_attributes)]
 #![feature(proc_macro_hygiene)]
