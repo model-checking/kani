@@ -10,8 +10,8 @@
 
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::codegen_cprover_gotoc::codegen::{PropertyClass, bb_label};
-use crate::kani_middle::attributes::matches_diagnostic as matches_function;
 use crate::kani_middle::attributes::KaniAttributes;
+use crate::kani_middle::attributes::matches_diagnostic as matches_function;
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
 use cbmc::goto_program::CIntType;
 use cbmc::goto_program::{BuiltinFn, Expr, Stmt, Type};

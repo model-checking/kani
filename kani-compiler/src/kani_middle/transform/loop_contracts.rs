@@ -4,21 +4,21 @@
 //! This module contains code related to the MIR-to-MIR pass to enable loop contracts.
 //!
 
+use crate::kani_middle::KaniAttributes;
 use crate::kani_middle::find_fn_def;
 use crate::kani_middle::transform::body::{InsertPosition, MutableBody, SourceInstruction};
 use crate::kani_middle::transform::{BodyTransformation, CallGraph, TransformationResult};
-use crate::kani_middle::KaniAttributes;
 use crate::kani_queries::QueryDb;
 use crate::stable_mir::CrateDef;
 use rustc_middle::ty::TyCtxt;
 use rustc_span::Symbol;
+use stable_mir::DefId;
 use stable_mir::mir::mono::{Instance, MonoItem};
 use stable_mir::mir::{
     BasicBlock, BasicBlockIdx, Body, ConstOperand, Operand, Rvalue, Statement, StatementKind,
     Terminator, TerminatorKind,
 };
 use stable_mir::ty::{FnDef, MirConst, RigidTy};
-use stable_mir::DefId;
 use std::collections::VecDeque;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
@@ -165,7 +165,7 @@ impl LoopContractPass {
                         InsertPosition::Before,
                     );
                     new_body.replace_terminator(
-                        &mut SourceInstruction::Terminator { bb: 0 },
+                        &SourceInstruction::Terminator { bb: 0 },
                         Terminator {
                             kind: TerminatorKind::Goto { target: new_body.blocks().len() - 2 },
                             span: new_body.blocks()[0].terminator.span,
@@ -259,8 +259,7 @@ impl LoopContractPass {
                                 //          goto -> terminator_target
                                 // }
                                 // ```
-                                let mut new_loop_head_block_stmts: Vec<Statement> = Vec::new();
-                                new_loop_head_block_stmts.push(Statement {
+                                let new_loop_head_block_stmts: Vec<Statement> = vec![Statement {
                                     kind: StatementKind::Assign(
                                         terminator_destination.clone(),
                                         Rvalue::Use(Operand::Constant(ConstOperand {
@@ -270,7 +269,7 @@ impl LoopContractPass {
                                         })),
                                     ),
                                     span: terminator.span,
-                                });
+                                }];
 
                                 self.registered_stmts.insert(
                                     fn_def.def_id(),
@@ -305,7 +304,7 @@ impl LoopContractPass {
                                             args: terminator_args.clone(),
                                             destination: terminator_destination.clone(),
                                             target: *terminator_target,
-                                            unwind: terminator_unwind.clone(),
+                                            unwind: *terminator_unwind,
                                         },
                                         span: terminator.span,
                                     },
