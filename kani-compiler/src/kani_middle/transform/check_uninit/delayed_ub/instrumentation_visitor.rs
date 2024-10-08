@@ -9,16 +9,16 @@ use crate::kani_middle::{
     transform::{
         body::{InsertPosition, MutableBody, SourceInstruction},
         check_uninit::{
-            relevant_instruction::{InitRelevantInstruction, MemoryInitOp},
             TargetFinder,
+            relevant_instruction::{InitRelevantInstruction, MemoryInitOp},
         },
     },
 };
 use rustc_middle::ty::TyCtxt;
 use stable_mir::mir::{
+    MirVisitor, Operand, Place, Rvalue, Statement, Terminator,
     mono::Instance,
     visit::{Location, PlaceContext},
-    MirVisitor, Operand, Place, Rvalue, Statement, Terminator,
 };
 use std::collections::HashSet;
 

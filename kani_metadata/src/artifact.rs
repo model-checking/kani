@@ -94,7 +94,7 @@ impl Deref for ArtifactType {
 
 #[cfg(test)]
 mod test {
-    use super::{convert_type, ArtifactType::*};
+    use super::{ArtifactType::*, convert_type};
     use std::path::PathBuf;
 
     #[test]

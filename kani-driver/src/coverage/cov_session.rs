@@ -5,10 +5,10 @@ use std::fs;
 use std::fs::File;
 use std::io::Write;
 
+use crate::KaniSession;
 use crate::harness_runner::HarnessResult;
 use crate::project::Project;
-use crate::KaniSession;
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 
 impl KaniSession {
     /// Saves metadata required for coverage-related features.
@@ -18,7 +18,7 @@ impl KaniSession {
     /// Note: Currently, coverage mappings are not included due to technical
     /// limitations. But this is where we should save them.
     pub fn save_coverage_metadata(&self, project: &Project, stamp: &String) -> Result<()> {
-        if self.args.target_dir.is_some() {
+        if project.input.is_none() {
             self.save_coverage_metadata_cargo(project, stamp)
         } else {
             self.save_coverage_metadata_standalone(project, stamp)
@@ -97,7 +97,7 @@ impl KaniSession {
         results: &Vec<HarnessResult>,
         stamp: &String,
     ) -> Result<()> {
-        if self.args.target_dir.is_some() {
+        if project.input.is_none() {
             self.save_coverage_results_cargo(results, stamp)
         } else {
             self.save_coverage_results_standalone(project, results, stamp)

@@ -12,12 +12,12 @@ use rustc_hir::def_id::DefId as InternalDefId;
 use rustc_middle::ty::TyCtxt;
 use rustc_smir::rustc_internal;
 use rustc_span::Symbol;
+use stable_mir::CrateDef;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{
     Body, ConstOperand, Operand, Rvalue, Terminator, TerminatorKind, VarDebugInfoContents,
 };
 use stable_mir::ty::{ClosureDef, FnDef, MirConst, RigidTy, TyKind, TypeAndMut, UintTy};
-use stable_mir::CrateDef;
 use std::collections::HashSet;
 use std::fmt::Debug;
 use tracing::{debug, trace};
@@ -420,10 +420,10 @@ impl FunctionWithContractPass {
             &mut mode_call,
             InsertPosition::Before,
         );
-        new_body.replace_terminator(
-            &mode_call,
-            Terminator { kind: TerminatorKind::Goto { target }, span },
-        );
+        new_body.replace_terminator(&mode_call, Terminator {
+            kind: TerminatorKind::Goto { target },
+            span,
+        });
 
         new_body.into()
     }

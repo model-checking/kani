@@ -7,7 +7,7 @@ use crate::info;
 use csv::WriterBuilder;
 use graph_cycles::Cycles;
 use petgraph::graph::Graph;
-use serde::{ser::SerializeStruct, Serialize, Serializer};
+use serde::{Serialize, Serializer, ser::SerializeStruct};
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::visit::{Location, PlaceContext, PlaceRef};
 use stable_mir::mir::{

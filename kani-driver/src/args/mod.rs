@@ -15,7 +15,7 @@ use crate::args::cargo::CargoTargetArgs;
 use crate::util::warning;
 use cargo::CargoCommonArgs;
 use clap::builder::{PossibleValue, TypedValueParser};
-use clap::{error::ContextKind, error::ContextValue, error::Error, error::ErrorKind, ValueEnum};
+use clap::{ValueEnum, error::ContextKind, error::ContextValue, error::Error, error::ErrorKind};
 use kani_metadata::CbmcSolver;
 use std::ffi::OsString;
 use std::path::PathBuf;
@@ -40,6 +40,7 @@ where
         .unwrap()
 }
 
+#[allow(dead_code)]
 pub fn print_obsolete(verbosity: &CommonArgs, option: &str) {
     if !verbosity.quiet {
         warning(&format!(
@@ -188,14 +189,6 @@ pub struct VerificationArgs {
     /// Kani will only compile the crate. No verification will be performed
     #[arg(long, hide_short_help = true)]
     pub only_codegen: bool,
-
-    /// Deprecated flag. This is a no-op since we no longer support the legacy linker and
-    /// it will be removed in a future Kani release.
-    #[arg(long, hide = true, conflicts_with("mir_linker"))]
-    pub legacy_linker: bool,
-    /// Deprecated flag. This is a no-op since we no longer support any other linker.
-    #[arg(long, hide = true)]
-    pub mir_linker: bool,
 
     /// Specify the value used for loop unwinding in CBMC
     #[arg(long)]
@@ -526,14 +519,6 @@ impl ValidateArgs for VerificationArgs {
             } else {
                 print_deprecated(&self.common_args, "--visualize", "--concrete-playback");
             }
-        }
-
-        if self.mir_linker {
-            print_obsolete(&self.common_args, "--mir-linker");
-        }
-
-        if self.legacy_linker {
-            print_obsolete(&self.common_args, "--legacy-linker");
         }
 
         // TODO: these conflicting flags reflect what's necessary to pass current tests unmodified.

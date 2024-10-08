@@ -11,7 +11,7 @@ mod parser;
 mod sysroot;
 
 use crate::sysroot::{build_bin, build_lib, kani_no_core_lib, kani_playback_lib, kani_sysroot_lib};
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use clap::Parser;
 use std::{ffi::OsString, path::Path, process::Command};
 

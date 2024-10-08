@@ -19,6 +19,8 @@
 #![feature(ptr_metadata)]
 #![feature(f16)]
 #![feature(f128)]
+// Need to add this since we are deprecating `kani::check`. Remove this when we remove that API.
+#![allow(deprecated)]
 
 // Allow us to use `kani::` to access crate features.
 extern crate self as kani;
@@ -44,7 +46,7 @@ pub fn concrete_playback_run<F: Fn()>(_: Vec<Vec<u8>>, _: F) {
     unreachable!("Concrete playback does not work during verification")
 }
 
-pub use futures::{block_on, block_on_with_spawn, spawn, yield_now, RoundRobin};
+pub use futures::{RoundRobin, block_on, block_on_with_spawn, spawn, yield_now};
 
 // Kani proc macros must be in a separate crate
 pub use kani_macros::*;

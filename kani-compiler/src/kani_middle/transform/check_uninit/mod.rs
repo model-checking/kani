@@ -12,12 +12,12 @@ use relevant_instruction::{InitRelevantInstruction, MemoryInitOp};
 use rustc_middle::ty::TyCtxt;
 use rustc_smir::rustc_internal;
 use stable_mir::{
+    CrateDef,
     mir::{
-        mono::Instance, AggregateKind, BasicBlock, Body, ConstOperand, Mutability, Operand, Place,
-        Rvalue, Statement, StatementKind, Terminator, TerminatorKind, UnwindAction,
+        AggregateKind, BasicBlock, Body, ConstOperand, Mutability, Operand, Place, Rvalue,
+        Statement, StatementKind, Terminator, TerminatorKind, UnwindAction, mono::Instance,
     },
     ty::{FnDef, GenericArgKind, GenericArgs, MirConst, RigidTy, Ty, TyConst, TyKind, UintTy},
-    CrateDef,
 };
 use std::collections::HashMap;
 
