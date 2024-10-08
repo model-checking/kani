@@ -271,6 +271,10 @@ pub struct VerificationArgs {
     #[arg(long, hide_short_help = true)]
     pub coverage: bool,
 
+    /// Print final LLBC for Aeneas backend. This requires the `-Z aeneas` option.
+    #[arg(long, hide = true)]
+    pub print_llbc: bool,
+
     /// Arguments to pass down to Cargo
     #[command(flatten)]
     pub cargo: CargoCommonArgs,
@@ -609,6 +613,23 @@ impl ValidateArgs for VerificationArgs {
             ));
         }
 
+        if self.print_llbc && !self.common_args.unstable_features.contains(UnstableFeature::Aeneas)
+        {
+            return Err(Error::raw(
+                ErrorKind::MissingRequiredArgument,
+                "The `--print-llbc` argument is unstable and requires `-Z aeneas` to be used.",
+            ));
+        }
+
+        // TODO: error out for other CBMC-backend-specific arguments
+        if self.common_args.unstable_features.contains(UnstableFeature::Aeneas)
+            && !self.cbmc_args.is_empty()
+        {
+            return Err(Error::raw(
+                ErrorKind::ArgumentConflict,
+                "The `--cbmc-args` argument cannot be used with -Z aeneas.",
+            ));
+        }
         Ok(())
     }
 }
@@ -898,5 +919,13 @@ mod tests {
         check_invalid_args("kani input.rs --workspace".split_whitespace());
         check_invalid_args("kani input.rs --package foo".split_whitespace());
         check_invalid_args("kani input.rs --exclude bar --workspace".split_whitespace());
+    }
+
+    #[test]
+    fn check_cbmc_args_aeneas_backend() {
+        let args = "kani input.rs -Z aeneas --enable-unstable --cbmc-args --object-bits 10"
+            .split_whitespace();
+        let err = StandaloneArgs::try_parse_from(args).unwrap().validate().unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::ArgumentConflict);
     }
 }

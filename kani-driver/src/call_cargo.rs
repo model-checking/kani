@@ -193,6 +193,9 @@ crate-type = ["lib"]
         // Arguments that will only be passed to the target package.
         let mut pkg_args: Vec<String> = vec![];
         pkg_args.extend(["--".to_string(), self.reachability_arg()]);
+        if let Some(backend_arg) = self.backend_arg() {
+            pkg_args.push(backend_arg);
+        }
 
         let mut found_target = false;
         let packages = packages_to_verify(&self.args, &metadata)?;

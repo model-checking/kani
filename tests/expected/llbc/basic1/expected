@@ -1,0 +1,15 @@
+fn test::select(@1: bool, @2: i32, @3: i32) -> i32
+{
+    let @0: i32; // return
+    let @1: bool; // arg #1
+    let @2: i32; // arg #2
+    let @3: i32; // arg #3
+
+    if copy (@1) {
+        @0 := copy (@2)
+    }
+    else {
+        @0 := copy (@3)
+    }
+    return
+}
