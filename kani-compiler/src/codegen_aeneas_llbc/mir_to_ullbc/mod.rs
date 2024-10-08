@@ -446,7 +446,10 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 };
                 CharonTy::Adt(TypeId::Tuple, generic_args)
             }
-            RigidTy::FnDef(def_id, _args) => {
+            RigidTy::FnDef(def_id, args) => {
+                if !args.0.is_empty() {
+                    unimplemented!("generic args are not yet handled");
+                }
                 let sig = def_id.fn_sig().value;
                 let inputs = sig.inputs().iter().map(|ty| self.translate_ty(*ty)).collect();
                 let output = self.translate_ty(sig.output());
