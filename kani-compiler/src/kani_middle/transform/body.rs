@@ -428,6 +428,15 @@ impl MutableBody {
         self.blocks.push(BasicBlock { statements: Vec::default(), terminator })
     }
 
+    /// Replace statements from the given basic block
+    pub fn replace_statements(
+        &mut self,
+        source_instruction: &SourceInstruction,
+        new_stmts: Vec<Statement>,
+    ) {
+        self.blocks.get_mut(source_instruction.bb()).unwrap().statements = new_stmts;
+    }
+
     /// Replace a terminator from the given basic block
     pub fn replace_terminator(
         &mut self,

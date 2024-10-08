@@ -4,71 +4,83 @@
 //! This module contains code related to the MIR-to-MIR pass to enable loop contracts.
 //!
 
-use crate::kani_middle::codegen_units::CodegenUnit;
 use crate::kani_middle::find_fn_def;
-use crate::kani_middle::transform::body::{MutableBody, SourceInstruction};
-use crate::kani_middle::transform::{TransformPass, TransformationType};
+use crate::kani_middle::transform::body::{InsertPosition, MutableBody, SourceInstruction};
+use crate::kani_middle::transform::{BodyTransformation, CallGraph, TransformationResult};
 use crate::kani_middle::KaniAttributes;
 use crate::kani_queries::QueryDb;
 use crate::stable_mir::CrateDef;
 use rustc_middle::ty::TyCtxt;
 use rustc_span::Symbol;
-use stable_mir::mir::mono::Instance;
-use stable_mir::mir::{BasicBlockIdx, Body, Operand, Terminator, TerminatorKind};
-use stable_mir::ty::{FnDef, RigidTy};
+use stable_mir::mir::mono::{Instance, MonoItem};
+use stable_mir::mir::{
+    BasicBlock, BasicBlockIdx, Body, ConstOperand, Operand, Rvalue, Statement, StatementKind,
+    Terminator, TerminatorKind,
+};
+use stable_mir::ty::{FnDef, MirConst, RigidTy};
 use stable_mir::DefId;
 use std::collections::VecDeque;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
-use tracing::trace;
+
+use super::GlobalPass;
 
 /// This pass will perform the following operations:
 /// 1. Replace the body of `kani_register_loop_contract` by `kani::internal::run_contract_fn`
 ///    to invoke the closure.
 ///
-/// 2. Replace the dummy call to the register function with the actual call, i.e., transform
+/// 2. Transform loops with contracts from
+///    ```ignore
+///    bb_idx: {
+///         loop_head_stmts
+///         _v = kani_register_loop_contract(move args) -> [return: terminator_target];
+///    }
 ///
-/// ```ignore
-/// let kani_loop_invariant = || -> bool {inv};
-/// kani_register_loop_contract(kani_loop_invariant)
-/// while guard {
-///     loop_body;
-///     kani_register_loop_contract(||->bool{true});
-/// }
-/// ```
+///    ...
+///    loop_body_blocks
+///    ...
 ///
-///    to
+///    loop_latch_block: {
+///         loop_latch_stmts
+///         goto -> bb_idx;
+///    }
+///    ```
+///    to blocks
+///    ```ignore
+///    bb_idx: {
+///         _v = true
+///         goto -> terminator_target
+///    }
 ///
-/// ```ignore
-/// let kani_loop_invariant = || -> bool {inv};
-/// while guard {
-///     loop_body;
-///     kani_register_loop_contract(kani_loop_invariant);
-/// }
+///    ...
+///    loop_body_blocks
+///    ...
 ///
-/// ```
+///    loop_latch_block: {
+///         loop_latch_stmts
+///         goto -> bb_new_loop_latch;
+///    }
 ///
-/// 3. Move the call to the register function to the loop latch terminator
-///    to make sure that they will be correctly codegened as a backward goto
-///    with loop contracts annotated.
+///    bb_new_loop_latch: {
+///         loop_head_body
+///         _v = kani_register_loop_contract(move args) -> [return: bb_idx];
+///    }
+///    ```
+///
+/// 3. Move the statements `loop_head_stmts` of loop head  with contracts to the body of register
+///    functions for later codegen them as statement_expression in CBMC loop contracts.
 #[derive(Debug, Default)]
-pub struct FunctionWithLoopContractPass {
+pub struct LoopContractPass {
     /// Cache KaniRunContract function used to implement contracts.
     run_contract_fn: Option<FnDef>,
-    /// Function and Arguments of register functions.
-    registered_args: HashMap<DefId, (Operand, Vec<Operand>)>,
-    /// The terminator we are moving to the loop latch.
-    loop_terminator: Option<Terminator>,
+    /// The bb_idx of the new loop latch block.
+    /// Keys are the original loop head.
+    new_loop_latches: HashMap<usize, usize>,
+    /// Statements of loop head with loop contracts.
+    registered_stmts: HashMap<DefId, Vec<Statement>>,
 }
 
-impl TransformPass for FunctionWithLoopContractPass {
-    fn transformation_type() -> TransformationType
-    where
-        Self: Sized,
-    {
-        TransformationType::Stubbing
-    }
-
+impl GlobalPass for LoopContractPass {
     fn is_enabled(&self, query_db: &QueryDb) -> bool
     where
         Self: Sized,
@@ -76,38 +88,146 @@ impl TransformPass for FunctionWithLoopContractPass {
         query_db.args().unstable_features.contains(&"loop-contracts".to_string())
     }
 
-    /// Transform the function body by replacing it with the stub body.
-    fn transform(&mut self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
-        trace!(function=?instance.name(), "FunctionWithLoopContractPass::transform");
+    /// Run a transformation pass on the whole codegen unit.
+    fn transform(
+        &mut self,
+        tcx: TyCtxt,
+        _call_graph: &CallGraph,
+        _starting_items: &[MonoItem],
+        instances: Vec<Instance>,
+        transformer: &mut BodyTransformation,
+    ) {
+        // First transform functions with loop contracts.
+        for instance in &instances {
+            let body = instance.body().unwrap();
+            let (modified, new_body) = self.transform_main_body(tcx, body, *instance);
+            if modified {
+                transformer.cache.entry(*instance).and_modify(|transformation_result| {
+                    *transformation_result = TransformationResult::Modified(new_body);
+                });
+            }
+        }
+
+        // Move loop head statements with loop contracts to the corresponding register functions.
+        for instance in &instances {
+            let body = instance.body().unwrap();
+            let (modified, new_body) = self.transform_register_body(tcx, body, *instance);
+            if modified {
+                transformer.cache.entry(*instance).and_modify(|transformation_result| {
+                    *transformation_result = TransformationResult::Modified(new_body);
+                });
+            }
+        }
+    }
+}
+
+impl LoopContractPass {
+    pub fn new(tcx: TyCtxt) -> LoopContractPass {
+        let run_contract_fn = find_fn_def(tcx, "KaniRunContract");
+        assert!(run_contract_fn.is_some(), "Failed to find Kani run contract function");
+        LoopContractPass {
+            run_contract_fn,
+            new_loop_latches: HashMap::new(),
+            registered_stmts: HashMap::new(),
+        }
+    }
+
+    /// Transform bodies of loop contract register functions.
+    /// 1. Replace the body of the register function with `run_contract_fn`'s.
+    /// 2. Move statements `loop_head_stmts` of loop head  with contracts to the body of register functions
+    ///    and make them unreachable. We will later codegen them when when codegen the calls to register functions.
+    fn transform_register_body(
+        &mut self,
+        tcx: TyCtxt,
+        body: Body,
+        instance: Instance,
+    ) -> (bool, Body) {
         match instance.ty().kind().rigid().unwrap() {
             RigidTy::FnDef(_func, args) => {
                 if KaniAttributes::for_instance(tcx, instance).fn_marker()
                     == Some(Symbol::intern("kani_register_loop_contract"))
+                    && self.registered_stmts.contains_key(&instance.def.def_id())
                 {
                     // Replace the body of the register function with `run_contract_fn`'s.
                     let run = Instance::resolve(self.run_contract_fn.unwrap(), args).unwrap();
-                    (true, run.body().unwrap())
+
+                    // Move the stmts `loop_head_stmts` of loop head  with contracts to the corresponding register functions.
+                    let mut new_body = MutableBody::from(run.body().unwrap());
+                    new_body.insert_bb(
+                        BasicBlock {
+                            statements: self.registered_stmts[&instance.def.def_id()].clone(),
+                            terminator: Terminator {
+                                kind: TerminatorKind::Goto { target: new_body.blocks().len() },
+                                span: new_body.blocks()[0].terminator.span,
+                            },
+                        },
+                        &mut SourceInstruction::Terminator { bb: 0 },
+                        InsertPosition::Before,
+                    );
+                    new_body.replace_terminator(
+                        &mut SourceInstruction::Terminator { bb: 0 },
+                        Terminator {
+                            kind: TerminatorKind::Goto { target: new_body.blocks().len() - 2 },
+                            span: new_body.blocks()[0].terminator.span,
+                        },
+                    );
+                    (true, new_body.into())
                 } else {
-                    // Replace the dummy register call with the actual register call.
+                    (false, body)
+                }
+            }
+            _ => {
+                /* static variables case */
+                (false, body)
+            }
+        }
+    }
+
+    /// Transform main function bodies with loop contracts.
+    fn transform_main_body(&mut self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
+        match instance.ty().kind().rigid().unwrap() {
+            RigidTy::FnDef(_func, _args) => {
+                if KaniAttributes::for_instance(tcx, instance).fn_marker()
+                    == Some(Symbol::intern("kani_register_loop_contract"))
+                {
+                    // Register functions will be handled by `transform_register_body`.
+                    (false, body)
+                } else {
                     let mut new_body = MutableBody::from(body);
                     let mut contain_loop_contracts: bool = false;
 
-                    // Visit basic blocks in control flow order.
+                    // Visit basic blocks in control flow order (BFS).
                     let mut visited: HashSet<BasicBlockIdx> = HashSet::new();
                     let mut queue: VecDeque<BasicBlockIdx> = VecDeque::new();
                     queue.push_back(0);
 
-                    while let Some(bbidx) = queue.pop_front() {
-                        visited.insert(bbidx);
-                        // We only need to transform basic block with terminators as calls
-                        // to the register functions, no matter dummy or actual calls.
-                        let terminator = new_body.blocks()[bbidx].terminator.clone();
+                    while let Some(bb_idx) = queue.pop_front() {
+                        visited.insert(bb_idx);
+
+                        let terminator = new_body.blocks()[bb_idx].terminator.clone();
+
+                        // Redirect loop latches to the new latches.
+                        if let TerminatorKind::Goto { target: terminator_target } = &terminator.kind
+                        {
+                            if self.new_loop_latches.contains_key(terminator_target) {
+                                new_body.replace_terminator(
+                                    &SourceInstruction::Terminator { bb: bb_idx },
+                                    Terminator {
+                                        kind: TerminatorKind::Goto {
+                                            target: self.new_loop_latches[terminator_target],
+                                        },
+                                        span: terminator.span,
+                                    },
+                                );
+                            }
+                        }
+
                         if let TerminatorKind::Call {
                             func: terminator_func,
                             args: terminator_args,
-                            destination,
-                            target,
-                            unwind,
+                            destination: terminator_destination,
+                            target: terminator_target,
+                            unwind: terminator_unwind,
                         } = &terminator.kind
                         {
                             // Get the function signature of the terminator call.
@@ -119,55 +239,78 @@ impl TransformPass for FunctionWithLoopContractPass {
                                 continue;
                             };
 
+                            // The basic blocks end with register functions are loop head blocks.
                             if KaniAttributes::for_def_id(tcx, fn_def.def_id()).fn_marker()
                                 == Some(Symbol::intern("kani_register_loop_contract"))
                             {
                                 contain_loop_contracts = true;
 
-                                if let std::collections::hash_map::Entry::Occupied(entry) =
-                                    self.registered_args.entry(fn_def.def_id())
-                                {
-                                    // This call is a dummy call as it is not the first call
-                                    // to the register function.
-                                    // Replace it with `self.loop_terminator`.
-                                    self.loop_terminator = Some(Terminator {
+                                // Replace the original loop head block
+                                // ```ignore
+                                // bb_idx: {
+                                //          loop_head_stmts
+                                //          _v = kani_register_loop_contract(move args) -> [return: terminator_target];
+                                // }
+                                // ```
+                                // with
+                                // ```ignore
+                                // bb_idx: {
+                                //          _v = true;
+                                //          goto -> terminator_target
+                                // }
+                                // ```
+                                let mut new_loop_head_block_stmts: Vec<Statement> = Vec::new();
+                                new_loop_head_block_stmts.push(Statement {
+                                    kind: StatementKind::Assign(
+                                        terminator_destination.clone(),
+                                        Rvalue::Use(Operand::Constant(ConstOperand {
+                                            span: terminator.span,
+                                            user_ty: None,
+                                            const_: MirConst::from_bool(true),
+                                        })),
+                                    ),
+                                    span: terminator.span,
+                                });
+
+                                self.registered_stmts.insert(
+                                    fn_def.def_id(),
+                                    new_body.blocks()[bb_idx].statements.clone(),
+                                );
+
+                                new_body.replace_statements(
+                                    &SourceInstruction::Terminator { bb: bb_idx },
+                                    new_loop_head_block_stmts,
+                                );
+
+                                new_body.replace_terminator(
+                                    &SourceInstruction::Terminator { bb: bb_idx },
+                                    Terminator {
+                                        kind: TerminatorKind::Goto { target: bb_idx },
+                                        span: terminator.span,
+                                    },
+                                );
+
+                                // Insert a new basic block as the loop latch block, and later redirect
+                                // all latches to the new loop latch block.
+                                // -----
+                                // bb_new_loop_latch: {
+                                //    _v = kani_register_loop_contract(move args) -> [return: bb_idx];
+                                // }
+                                new_body.insert_terminator(
+                                    &mut SourceInstruction::Terminator { bb: bb_idx },
+                                    InsertPosition::After,
+                                    Terminator {
                                         kind: TerminatorKind::Call {
-                                            func: entry.get().0.clone(),
-                                            args: entry.get().1.to_vec(),
-                                            destination: destination.clone(),
-                                            target: *target,
-                                            unwind: *unwind,
+                                            func: terminator_func.clone(),
+                                            args: terminator_args.clone(),
+                                            destination: terminator_destination.clone(),
+                                            target: *terminator_target,
+                                            unwind: terminator_unwind.clone(),
                                         },
                                         span: terminator.span,
-                                    });
-                                    new_body.replace_terminator(
-                                        &SourceInstruction::Terminator { bb: bbidx },
-                                        Terminator {
-                                            kind: TerminatorKind::Goto { target: target.unwrap() },
-                                            span: terminator.span,
-                                        },
-                                    );
-                                    // Then move the loop terminator to the loop latch.
-                                    self.move_loop_terminator_to_loop_latch(
-                                        bbidx,
-                                        &mut new_body,
-                                        &mut visited,
-                                    );
-                                } else {
-                                    // This call is an actual call as it is the first call
-                                    // to the register function.
-                                    self.registered_args.insert(
-                                        fn_def.def_id(),
-                                        (terminator_func.clone(), terminator_args.clone()),
-                                    );
-                                    new_body.replace_terminator(
-                                        &SourceInstruction::Terminator { bb: bbidx },
-                                        Terminator {
-                                            kind: TerminatorKind::Goto { target: target.unwrap() },
-                                            span: terminator.span,
-                                        },
-                                    );
-                                }
+                                    },
+                                );
+                                self.new_loop_latches.insert(bb_idx, new_body.blocks().len() - 1);
                             }
                         }
 
@@ -186,80 +329,6 @@ impl TransformPass for FunctionWithLoopContractPass {
             _ => {
                 /* static variables case */
                 (false, body)
-            }
-        }
-    }
-}
-
-impl FunctionWithLoopContractPass {
-    pub fn new(tcx: TyCtxt, unit: &CodegenUnit) -> FunctionWithLoopContractPass {
-        if let Some(_harness) = unit.harnesses.first() {
-            let run_contract_fn = find_fn_def(tcx, "KaniRunContract");
-            assert!(run_contract_fn.is_some(), "Failed to find Kani run contract function");
-            FunctionWithLoopContractPass {
-                run_contract_fn,
-                registered_args: HashMap::new(),
-                loop_terminator: None,
-            }
-        } else {
-            // If reachability mode is PubFns or Tests, we just remove any loop contract logic.
-            // Note that in this path there is no proof harness.
-            FunctionWithLoopContractPass::default()
-        }
-    }
-
-    //  Replace the next loop latch---a terminator that targets some basic block in `visited`---
-    //  with `self.loop_terminator`.
-    //  We assume that there is no branching terminator with more than one targets between the
-    //  current basic block `bbidx` and the next loop latch.
-    fn move_loop_terminator_to_loop_latch(
-        &mut self,
-        bbidx: BasicBlockIdx,
-        new_body: &mut MutableBody,
-        visited: &mut HashSet<BasicBlockIdx>,
-    ) {
-        let mut current_bbidx = bbidx;
-        while self.loop_terminator.is_some() {
-            if new_body.blocks()[current_bbidx].terminator.successors().len() != 1 {
-                // Assume that there is no branching between the register function cal
-                // and the loop latch.
-                unreachable!()
-            }
-            let target = new_body.blocks()[current_bbidx].terminator.successors()[0];
-
-            if visited.contains(&target) {
-                // Current basic block is the loop latch.
-                let Some(Terminator {
-                    kind:
-                        TerminatorKind::Call {
-                            func: ref loop_terminator_func,
-                            args: ref loop_terminator_args,
-                            destination: ref loop_terminator_destination,
-                            target: _loop_terminator_target,
-                            unwind: ref loop_terminator_unwind,
-                        },
-                    span: loop_terminator_span,
-                }) = self.loop_terminator
-                else {
-                    unreachable!()
-                };
-                new_body.replace_terminator(
-                    &SourceInstruction::Terminator { bb: current_bbidx },
-                    Terminator {
-                        kind: TerminatorKind::Call {
-                            func: loop_terminator_func.clone(),
-                            args: loop_terminator_args.clone(),
-                            destination: loop_terminator_destination.clone(),
-                            target: Some(target),
-                            unwind: *loop_terminator_unwind,
-                        },
-                        span: loop_terminator_span,
-                    },
-                );
-                self.loop_terminator = None;
-            } else {
-                visited.insert(target);
-                current_bbidx = target;
             }
         }
     }

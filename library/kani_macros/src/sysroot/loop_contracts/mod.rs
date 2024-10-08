@@ -8,7 +8,8 @@ use proc_macro::TokenStream;
 use proc_macro_error2::abort_call_site;
 use quote::{format_ident, quote};
 use syn::spanned::Spanned;
-use syn::{Expr, Stmt};
+use syn::token::AndAnd;
+use syn::{BinOp, Expr, ExprBinary, Stmt};
 
 /// Expand loop contracts macros.
 ///
@@ -25,14 +26,8 @@ use syn::{Expr, Stmt};
 /// const fn kani_register_loop_contract_id<T, F: FnOnce() -> T>(f: F) -> T {
 ///     unreachable!()
 /// }
-/// let __kani_loop_invariant_id = || -> bool {inv};
-/// // The register function call with the actual invariant.
-/// kani_register_loop_contract_id(__kani_loop_invariant_id);
-///  while guard {
+///  while kani_register_loop_contract_id(|| -> bool {inv};) && guard {
 ///      body
-///      // Call to the register function with a dummy argument
-///      // for the sake of bypassing borrow checks.
-///      kani_register_loop_contract_id(||->bool{true});
 ///  }
 /// ```
 pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -44,7 +39,6 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut inv_name: String = "__kani_loop_invariant".to_owned();
     let loop_id = generate_unique_id_from_span(&loop_stmt);
     inv_name.push_str(&loop_id);
-    let inv_ident = format_ident!("{}", inv_name);
 
     // expr of the loop invariant
     let inv_expr: Expr = syn::parse(attr).unwrap();
@@ -57,14 +51,18 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
     match loop_stmt {
         Stmt::Expr(ref mut e, _) => match e {
             Expr::While(ref mut ew) => {
-                //      kani_register_loop_contract(#inv_ident);
-                let inv_end_stmt: Stmt = syn::parse(
+                let new_cond: Expr = syn::parse(
                     quote!(
-                        #register_ident(||->bool{true});)
+                        #register_ident(||->bool{#inv_expr}))
                     .into(),
                 )
                 .unwrap();
-                ew.body.stmts.push(inv_end_stmt);
+                *(ew.cond) = Expr::Binary(ExprBinary {
+                    attrs: Vec::new(),
+                    left: Box::new(new_cond),
+                    op: BinOp::And(AndAnd::default()),
+                    right: ew.cond.clone(),
+                });
             }
             _ => {
                 abort_call_site!("`#[kani::loop_invariant]` is now only supported for while-loops.";
@@ -86,8 +84,6 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
         const fn #register_ident<T, F: FnOnce() -> T>(f: F) -> T {
             unreachable!()
         }
-        let mut #inv_ident = || -> bool {#inv_expr};
-        #register_ident(#inv_ident);
         #loop_stmt})
     .into()
 }
