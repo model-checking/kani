@@ -8,11 +8,11 @@ use rustc_middle::{
     mir::{Location, Place, ProjectionElem},
     ty::{Instance, List, TyCtxt},
 };
-use rustc_mir_dataflow::{fmt::DebugWithContext, JoinSemiLattice};
+use rustc_mir_dataflow::{JoinSemiLattice, fmt::DebugWithContext};
 use rustc_smir::rustc_internal;
 use stable_mir::mir::{
-    mono::{Instance as StableInstance, StaticDef},
     Place as StablePlace,
+    mono::{Instance as StableInstance, StaticDef},
 };
 use std::collections::{HashMap, HashSet, VecDeque};
 

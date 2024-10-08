@@ -7,7 +7,7 @@
 // origin: tokio-stream/tests/ at commit b2ada60e701d5c9e6644cf8fc42a100774f8e23f
 
 use crate::tokio_stream::support::mpsc;
-use tokio_stream::{self as stream, pending, Stream, StreamExt, StreamMap};
+use tokio_stream::{self as stream, Stream, StreamExt, StreamMap, pending};
 use tokio_test::{assert_ok, assert_pending, assert_ready, task};
 
 use std::pin::Pin;

@@ -15,7 +15,7 @@ use crate::args::cargo::CargoTargetArgs;
 use crate::util::warning;
 use cargo::CargoCommonArgs;
 use clap::builder::{PossibleValue, TypedValueParser};
-use clap::{error::ContextKind, error::ContextValue, error::Error, error::ErrorKind, ValueEnum};
+use clap::{ValueEnum, error::ContextKind, error::ContextValue, error::Error, error::ErrorKind};
 use kani_metadata::CbmcSolver;
 use std::ffi::OsString;
 use std::path::PathBuf;
@@ -40,6 +40,7 @@ where
         .unwrap()
 }
 
+#[allow(dead_code)]
 pub fn print_obsolete(verbosity: &CommonArgs, option: &str) {
     if !verbosity.quiet {
         warning(&format!(
@@ -189,14 +190,6 @@ pub struct VerificationArgs {
     #[arg(long, hide_short_help = true)]
     pub only_codegen: bool,
 
-    /// Deprecated flag. This is a no-op since we no longer support the legacy linker and
-    /// it will be removed in a future Kani release.
-    #[arg(long, hide = true, conflicts_with("mir_linker"))]
-    pub legacy_linker: bool,
-    /// Deprecated flag. This is a no-op since we no longer support any other linker.
-    #[arg(long, hide = true)]
-    pub mir_linker: bool,
-
     /// Specify the value used for loop unwinding in CBMC
     #[arg(long)]
     pub default_unwind: Option<u32>,
@@ -277,6 +270,10 @@ pub struct VerificationArgs {
     /// Enable Kani coverage output alongside verification result
     #[arg(long, hide_short_help = true)]
     pub coverage: bool,
+
+    /// Print final LLBC for Aeneas backend. This requires the `-Z aeneas` option.
+    #[arg(long, hide = true)]
+    pub print_llbc: bool,
 
     /// Arguments to pass down to Cargo
     #[command(flatten)]
@@ -524,14 +521,6 @@ impl ValidateArgs for VerificationArgs {
             }
         }
 
-        if self.mir_linker {
-            print_obsolete(&self.common_args, "--mir-linker");
-        }
-
-        if self.legacy_linker {
-            print_obsolete(&self.common_args, "--legacy-linker");
-        }
-
         // TODO: these conflicting flags reflect what's necessary to pass current tests unmodified.
         // We should consider improving the error messages slightly in a later pull request.
         if natives_unwind && extra_unwind {
@@ -624,6 +613,23 @@ impl ValidateArgs for VerificationArgs {
             ));
         }
 
+        if self.print_llbc && !self.common_args.unstable_features.contains(UnstableFeature::Aeneas)
+        {
+            return Err(Error::raw(
+                ErrorKind::MissingRequiredArgument,
+                "The `--print-llbc` argument is unstable and requires `-Z aeneas` to be used.",
+            ));
+        }
+
+        // TODO: error out for other CBMC-backend-specific arguments
+        if self.common_args.unstable_features.contains(UnstableFeature::Aeneas)
+            && !self.cbmc_args.is_empty()
+        {
+            return Err(Error::raw(
+                ErrorKind::ArgumentConflict,
+                "The `--cbmc-args` argument cannot be used with -Z aeneas.",
+            ));
+        }
         Ok(())
     }
 }
@@ -913,5 +919,13 @@ mod tests {
         check_invalid_args("kani input.rs --workspace".split_whitespace());
         check_invalid_args("kani input.rs --package foo".split_whitespace());
         check_invalid_args("kani input.rs --exclude bar --workspace".split_whitespace());
+    }
+
+    #[test]
+    fn check_cbmc_args_aeneas_backend() {
+        let args = "kani input.rs -Z aeneas --enable-unstable --cbmc-args --object-bits 10"
+            .split_whitespace();
+        let err = StandaloneArgs::try_parse_from(args).unwrap().validate().unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::ArgumentConflict);
     }
 }

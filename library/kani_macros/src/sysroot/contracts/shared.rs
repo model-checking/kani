@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use proc_macro2::{Ident, Span, TokenStream as TokenStream2};
 use quote::quote;
 use std::hash::{DefaultHasher, Hash, Hasher};
-use syn::{spanned::Spanned, visit_mut::VisitMut, Expr, ExprCall, ExprClosure, ExprPath, Path};
+use syn::{Expr, ExprCall, ExprClosure, ExprPath, Path, spanned::Spanned, visit_mut::VisitMut};
 
 use super::INTERNAL_RESULT_IDENT;
 

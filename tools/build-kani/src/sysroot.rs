@@ -11,8 +11,8 @@
 //!
 //! Note: We don't cross-compile. Target is the same as the host.
 
-use crate::{cp, AutoRun};
-use anyhow::{bail, format_err, Result};
+use crate::{AutoRun, cp};
+use anyhow::{Result, bail, format_err};
 use cargo_metadata::{Artifact, Message};
 use std::ffi::OsStr;
 use std::fs;

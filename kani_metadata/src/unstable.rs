@@ -90,6 +90,8 @@ pub enum UnstableFeature {
     /// Automatically check that no invalid value is produced which is considered UB in Rust.
     /// Note that this does not include checking uninitialized value.
     ValidValueChecks,
+    /// Aeneas/LLBC
+    Aeneas,
     /// Ghost state and shadow memory APIs.
     GhostState,
     /// Automatically check that uninitialized memory is not used.

@@ -3,7 +3,7 @@
 use super::super::codegen::TypeExt;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::{Expr, ExprValue, Location, SymbolTable, Type};
-use cbmc::{btree_string_map, InternedString};
+use cbmc::{InternedString, btree_string_map};
 use rustc_middle::ty::TyCtxt;
 use rustc_smir::rustc_internal;
 use stable_mir::ty::Span;

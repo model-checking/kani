@@ -15,5 +15,3 @@ members = [
 [workspace.metadata.kani.flags]
 workspace = true
 tests = true
-enable-unstable=true
-mir-linker=true

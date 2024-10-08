@@ -8,8 +8,8 @@
 //! It would be too nasty if we spread around these sort of undocumented hooks in place, so
 //! this module addresses this issue.
 
-use crate::codegen_cprover_gotoc::codegen::{bb_label, PropertyClass};
 use crate::codegen_cprover_gotoc::GotocCtx;
+use crate::codegen_cprover_gotoc::codegen::{PropertyClass, bb_label};
 use crate::kani_middle::attributes::matches_diagnostic as matches_function;
 use crate::kani_middle::attributes::KaniAttributes;
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
@@ -20,7 +20,7 @@ use rustc_smir::rustc_internal;
 use rustc_span::Symbol;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{BasicBlockIdx, Place};
-use stable_mir::{ty::Span, CrateDef};
+use stable_mir::{CrateDef, ty::Span};
 use std::rc::Rc;
 use tracing::debug;
 

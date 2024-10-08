@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! This module contains code used for resolve type / trait names
 
-use crate::kani_middle::resolve::{resolve_path, validate_kind, ResolveError};
+use crate::kani_middle::resolve::{ResolveError, resolve_path, validate_kind};
 use quote::ToTokens;
 use rustc_hir::def::DefKind;
 use rustc_middle::ty::TyCtxt;

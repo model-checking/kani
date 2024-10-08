@@ -6,10 +6,10 @@ use cbmc::utils::aggr_tag;
 use cbmc::{InternString, InternedString};
 use rustc_ast::ast::Mutability;
 use rustc_index::IndexVec;
-use rustc_middle::ty::layout::LayoutOf;
-use rustc_middle::ty::print::with_no_trimmed_paths;
-use rustc_middle::ty::print::FmtPrinter;
 use rustc_middle::ty::GenericArgsRef;
+use rustc_middle::ty::layout::LayoutOf;
+use rustc_middle::ty::print::FmtPrinter;
+use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::{
     self, AdtDef, Const, CoroutineArgs, CoroutineArgsExt, FloatTy, Instance, IntTy, PolyFnSig, Ty,
     TyCtxt, TyKind, UintTy, VariantDef, VtblEntry,
@@ -22,8 +22,8 @@ use rustc_target::abi::{
     TyAndLayout, VariantIdx, Variants,
 };
 use stable_mir::abi::{ArgAbi, FnAbi, PassMode};
-use stable_mir::mir::mono::Instance as InstanceStable;
 use stable_mir::mir::Body;
+use stable_mir::mir::mono::Instance as InstanceStable;
 use tracing::{debug, trace, warn};
 
 /// Map the unit type to an empty struct

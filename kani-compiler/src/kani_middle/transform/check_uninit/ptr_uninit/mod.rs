@@ -6,17 +6,17 @@
 
 use crate::args::ExtraChecks;
 use crate::kani_middle::transform::{
-    body::{CheckType, InsertPosition, MutableBody, SourceInstruction},
-    check_uninit::{get_mem_init_fn_def, UninitInstrumenter},
     TransformPass, TransformationType,
+    body::{CheckType, InsertPosition, MutableBody, SourceInstruction},
+    check_uninit::{UninitInstrumenter, get_mem_init_fn_def},
 };
 use crate::kani_queries::QueryDb;
 use rustc_middle::ty::TyCtxt;
 use rustc_smir::rustc_internal;
 use stable_mir::{
-    mir::{mono::Instance, Body, Mutability, Place},
-    ty::{FnDef, GenericArgs, Ty},
     CrateDef,
+    mir::{Body, Mutability, Place, mono::Instance},
+    ty::{FnDef, GenericArgs, Ty},
 };
 use std::collections::HashMap;
 use std::fmt::Debug;

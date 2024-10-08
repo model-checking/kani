@@ -16,9 +16,9 @@
 //! this structure as input.
 use super::current_fn::CurrentFnCtx;
 use super::vtable_ctx::VtableCtx;
-use crate::codegen_cprover_gotoc::overrides::{fn_hooks, GotocHooks};
-use crate::codegen_cprover_gotoc::utils::full_crate_name;
 use crate::codegen_cprover_gotoc::UnsupportedConstructs;
+use crate::codegen_cprover_gotoc::overrides::{GotocHooks, fn_hooks};
+use crate::codegen_cprover_gotoc::utils::full_crate_name;
 use crate::kani_middle::transform::BodyTransformation;
 use crate::kani_queries::QueryDb;
 use cbmc::goto_program::{
@@ -33,12 +33,12 @@ use rustc_middle::ty::layout::{
     TyAndLayout,
 };
 use rustc_middle::ty::{self, Ty, TyCtxt};
-use rustc_span::source_map::respan;
 use rustc_span::Span;
+use rustc_span::source_map::respan;
 use rustc_target::abi::call::FnAbi;
 use rustc_target::abi::{HasDataLayout, TargetDataLayout};
-use stable_mir::mir::mono::Instance;
 use stable_mir::mir::Body;
+use stable_mir::mir::mono::Instance;
 use stable_mir::ty::Allocation;
 use std::fmt::Debug;
 
@@ -249,7 +249,6 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Ensures that a struct with name `struct_name` appears in the symbol table.
     /// If it doesn't, inserts it using `f`.
     /// Returns: a struct-tag referencing the inserted struct.
-
     pub fn ensure_struct<
         T: Into<InternedString>,
         U: Into<InternedString>,
