@@ -1,3 +1,7 @@
+[TEST] Only codegen inside library folder
+No kani crate inside Cargo.toml as expected
+
+
 [TEST] Run kani verify-std
 
 Checking harness verify::dummy_proof...
