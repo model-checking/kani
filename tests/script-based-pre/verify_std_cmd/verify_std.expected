@@ -15,10 +15,13 @@ VERIFICATION:- SUCCESSFUL
 Checking harness verify::check_swap_tuple...
 VERIFICATION:- SUCCESSFUL
 
+Checking harness verify::check_any_ptr...
+VERIFICATION:- SUCCESSFUL
+
 Checking harness num::verify::check_non_zero...
 VERIFICATION:- SUCCESSFUL
 
-Complete - 6 successfully verified harnesses, 0 failures, 6 total.
+Complete - 7 successfully verified harnesses, 0 failures, 7 total.
 
 [TEST] Run kani verify-std -Z uninit-checks
 

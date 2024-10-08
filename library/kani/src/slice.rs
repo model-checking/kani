@@ -9,7 +9,8 @@ use crate::{any, assume};
 ///
 /// # Example:
 ///
-/// ```rust
+/// ```no_run
+/// # fn foo(_: &[i32]) {}
 /// let arr = [1, 2, 3];
 /// let slice = kani::slice::any_slice_of_array(&arr);
 /// foo(slice); // where foo is a function that takes a slice and verifies a property about it
