@@ -199,7 +199,7 @@ impl KaniSession {
             "--loop-contracts-no-unwind".into(),
             // Because loop contracts now are wrapped in a closure which will be a side-effect expression in CBMC even they
             // may not contain side-effect. So we disable the side-effect check for now and will implement a better check
-            // instead of simply rejecting function calls and statement expressions. 
+            // instead of simply rejecting function calls and statement expressions.
             // See issue: diffblue/cbmc#8393
             "--disable-loop-contracts-side-effect-check".into(),
             file.into(),
