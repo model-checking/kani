@@ -410,7 +410,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 // Check that computing `offset` in bytes would not overflow
                 let (offset_bytes, bytes_overflow_check) = self.count_in_bytes(
                     ce2.clone().cast_to(Type::ssize_t()),
-                    ty,
+                    pointee_type_stable(ty).unwrap(),
                     Type::ssize_t(),
                     "offset",
                     loc,
