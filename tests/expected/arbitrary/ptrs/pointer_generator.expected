@@ -1,0 +1,21 @@
+Checking harness check_arbitrary_ptr...
+
+Status: SUCCESS\
+Description: ""OutOfBounds""
+
+Status: SUCCESS\
+Description: ""InBounds""
+
+Status: SUCCESS\
+Description: ""NullPtr""
+
+Status: FAILURE\
+Description: ""DeadObject""
+
+Status: SATISFIED\
+Description: "Dangling"
+
+Status: UNREACHABLE\
+Description: ""Dangling write""
+
+Verification failed for - check_arbitrary_ptr
