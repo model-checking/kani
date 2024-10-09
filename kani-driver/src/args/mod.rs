@@ -5,6 +5,7 @@
 pub mod assess_args;
 pub mod cargo;
 pub mod common;
+pub mod list_args;
 pub mod playback_args;
 pub mod std_args;
 
@@ -94,6 +95,8 @@ pub enum StandaloneSubcommand {
     Playback(Box<playback_args::KaniPlaybackArgs>),
     /// Verify the rust standard library.
     VerifyStd(Box<std_args::VerifyStdArgs>),
+    /// Execute the list subcommand
+    List(Box<list_args::StandaloneListArgs>),
 }
 
 #[derive(Debug, clap::Parser)]
@@ -119,6 +122,9 @@ pub enum CargoKaniSubcommand {
 
     /// Execute concrete playback testcases of a local package.
     Playback(Box<playback_args::CargoPlaybackArgs>),
+
+    /// List metadata relevant to verification, e.g., harnesses.
+    List(Box<list_args::CargoListArgs>),
 }
 
 // Common arguments for invoking Kani for verification purpose. This gets put into KaniContext,
@@ -421,6 +427,7 @@ impl ValidateArgs for StandaloneArgs {
 
         match &self.command {
             Some(StandaloneSubcommand::VerifyStd(args)) => args.validate()?,
+            Some(StandaloneSubcommand::List(args)) => args.validate()?,
             // TODO: Invoke PlaybackArgs::validate()
             None | Some(StandaloneSubcommand::Playback(..)) => {}
         };
@@ -467,6 +474,7 @@ impl ValidateArgs for CargoKaniSubcommand {
             // Assess doesn't implement validation yet.
             CargoKaniSubcommand::Assess(_) => Ok(()),
             CargoKaniSubcommand::Playback(playback) => playback.validate(),
+            CargoKaniSubcommand::List(list) => list.validate(),
         }
     }
 }
