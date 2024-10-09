@@ -6,9 +6,10 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 
 ## [0.56.0]
 
-### Breaking Changes
+### Major/Breaking Changes
 
 * Remove obsolete linker options (`--mir-linker` and `--legacy-linker`) by @zhassan-aws in https://github.com/model-checking/kani/pull/3559
+* List Subcommand by @carolynzech in https://github.com/model-checking/kani/pull/3523
 * Deprecate `kani::check` by @celinval in https://github.com/model-checking/kani/pull/3557
 
 ### What's Changed
@@ -20,6 +21,7 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 * Add experimental API to generate arbitrary pointers by @celinval in https://github.com/model-checking/kani/pull/3538
 * Running `verify-std` no longer changes Cargo files by @celinval in https://github.com/model-checking/kani/pull/3577
 * Add an LLBC backend by @zhassan-aws in https://github.com/model-checking/kani/pull/3514
+* Fix the computation of the number of bytes of a pointer offset by @zhassan-aws in https://github.com/model-checking/kani/pull/3584
 * Rust toolchain upgraded to nightly-2024-10-03 by @qinheping @tautschnig @celinval
 * CBMC upgraded to 6.3.1 by @tautschnig in https://github.com/model-checking/kani/pull/3537
 
