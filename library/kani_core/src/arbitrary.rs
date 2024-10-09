@@ -7,11 +7,16 @@
 //! by an unconstrained symbolic value of their size (e.g., `u8`, `u16`, `u32`, etc.).
 //!
 //! TODO: Use this inside kani library so that we dont have to maintain two copies of the same proc macro for arbitrary.
+
+mod pointer;
+
 #[macro_export]
 #[allow(clippy::crate_in_macro_def)]
 macro_rules! generate_arbitrary {
     ($core:path) => {
         use core_path::marker::{PhantomData, PhantomPinned};
+        use core_path::mem::MaybeUninit;
+        use core_path::ptr::{self, addr_of_mut};
         use $core as core_path;
 
         pub trait Arbitrary
@@ -157,6 +162,15 @@ macro_rules! generate_arbitrary {
             }
         }
 
+        impl<T> Arbitrary for MaybeUninit<T>
+        where
+            T: Arbitrary,
+        {
+            fn any() -> Self {
+                if crate::kani::any() { MaybeUninit::new(T::any()) } else { MaybeUninit::uninit() }
+            }
+        }
+
         arbitrary_tuple!(A);
         arbitrary_tuple!(A, B);
         arbitrary_tuple!(A, B, C);
@@ -169,6 +183,11 @@ macro_rules! generate_arbitrary {
         arbitrary_tuple!(A, B, C, D, E, F, G, H, I, J);
         arbitrary_tuple!(A, B, C, D, E, F, G, H, I, J, K);
         arbitrary_tuple!(A, B, C, D, E, F, G, H, I, J, K, L);
+
+        pub use self::arbitrary_ptr::*;
+        mod arbitrary_ptr {
+            kani_core::ptr_generator!();
+        }
     };
 }
 

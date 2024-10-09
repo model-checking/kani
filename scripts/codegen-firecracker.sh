@@ -42,7 +42,7 @@ RUST_FLAGS=(
     "--kani-compiler"
     "-Cpanic=abort"
     "-Zalways-encode-mir"
-    "-Cllvm-args=--goto-c"
+    "-Cllvm-args=--backend=cprover"
     "-Cllvm-args=--ignore-global-asm"
     "-Cllvm-args=--reachability=pub_fns"
     "--sysroot=${KANI_DIR}/target/kani"

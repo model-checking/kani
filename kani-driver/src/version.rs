@@ -7,7 +7,7 @@ const KANI_RUST_VERIFIER: &str = "Kani Rust Verifier";
 /// We assume this is the same as the `kani-verifier` version, but we should
 /// make sure it's enforced through CI:
 /// <https://github.com/model-checking/kani/issues/2626>
-const KANI_VERSION: &str = env!("CARGO_PKG_VERSION");
+pub(crate) const KANI_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Print Kani version. At present, this is only release version information.
 pub(crate) fn print_kani_version(invocation_type: InvocationType) {

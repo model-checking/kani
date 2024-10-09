@@ -20,9 +20,8 @@ use cbmc::RoundingMode;
 use cbmc::goto_program::Location;
 use cbmc::irep::goto_binary_serde::write_goto_binary_file;
 use cbmc::{InternedString, MachineModel};
-use kani_metadata::UnsupportedFeature;
 use kani_metadata::artifact::convert_type;
-use kani_metadata::{ArtifactType, HarnessMetadata, KaniMetadata};
+use kani_metadata::{ArtifactType, HarnessMetadata, KaniMetadata, UnsupportedFeature};
 use kani_metadata::{AssignsContract, CompilerArtifactStub};
 use rustc_codegen_ssa::back::archive::{
     ArArchiveBuilder, ArchiveBuilder, ArchiveBuilderBuilder, DEFAULT_OBJECT_READER,
@@ -403,13 +402,7 @@ impl CodegenBackend for GotocCodegenBackend {
     /// We need to emit `rlib` files normally if requested. Cargo expects these in some
     /// circumstances and sends them to subsequent builds with `-L`.
     ///
-    /// We CAN NOT invoke the native linker, because that will fail. We don't have real objects.
-    /// What determines whether the native linker is invoked or not is the set of `crate_types`.
-    /// Types such as `bin`, `cdylib`, `dylib` will trigger the native linker.
-    ///
-    /// Thus, we manually build the rlib file including only the `rmeta` file.
-    ///
-    /// For cases where no metadata file was requested, we stub the file requested by writing the
+    /// For other crate types, we stub the file requested by writing the
     /// path of the `kani-metadata.json` file so `kani-driver` can safely find the latest metadata.
     /// See <https://github.com/model-checking/kani/issues/2234> for more details.
     fn link(
@@ -419,6 +412,14 @@ impl CodegenBackend for GotocCodegenBackend {
         outputs: &OutputFilenames,
     ) -> Result<(), ErrorGuaranteed> {
         let requested_crate_types = &codegen_results.crate_info.crate_types;
+        // Create the rlib if one was requested.
+        if requested_crate_types.iter().any(|crate_type| *crate_type == CrateType::Rlib) {
+            link_binary(sess, &ArArchiveBuilderBuilder, &codegen_results, outputs)?;
+        }
+
+        // But override all the other outputs.
+        // Note: Do this after `link_binary` call, since it may write to the object files
+        // and override the json we are creating.
         for crate_type in requested_crate_types {
             let out_fname = out_filename(
                 sess,
@@ -428,10 +429,7 @@ impl CodegenBackend for GotocCodegenBackend {
             );
             let out_path = out_fname.as_path();
             debug!(?crate_type, ?out_path, "link");
-            if *crate_type == CrateType::Rlib {
-                // Emit the `rlib` that contains just one file: `<crate>.rmeta`
-                link_binary(sess, &ArArchiveBuilderBuilder, &codegen_results, outputs)?
-            } else {
+            if *crate_type != CrateType::Rlib {
                 // Write the location of the kani metadata file in the requested compiler output file.
                 let base_filepath = outputs.path(OutputType::Object);
                 let base_filename = base_filepath.as_path();
@@ -644,6 +642,10 @@ impl GotoCodegenResults {
             proof_harnesses: proofs,
             unsupported_features,
             test_harnesses: tests,
+            // We don't collect the contracts metadata because the FunctionWithContractPass
+            // removes any contracts logic for ReachabilityType::Test or ReachabilityType::PubFns,
+            // which are the two ReachabilityTypes under which the compiler calls this function.
+            contracted_functions: vec![],
         }
     }
 

@@ -9,7 +9,7 @@
 
 use crate::args::ReachabilityType;
 use crate::kani_middle::attributes::is_proof_harness;
-use crate::kani_middle::metadata::gen_proof_metadata;
+use crate::kani_middle::metadata::{gen_contracts_metadata, gen_proof_metadata};
 use crate::kani_middle::reachability::filter_crate_items;
 use crate::kani_middle::resolve::expect_resolve_fn;
 use crate::kani_middle::stubbing::{check_compatibility, harness_stub_map};
@@ -93,7 +93,7 @@ impl CodegenUnits {
 
     /// Write compilation metadata into a file.
     pub fn write_metadata(&self, queries: &QueryDb, tcx: TyCtxt) {
-        let metadata = self.generate_metadata();
+        let metadata = self.generate_metadata(tcx);
         let outpath = metadata_output_path(tcx);
         store_metadata(queries, &metadata, &outpath);
     }
@@ -103,7 +103,7 @@ impl CodegenUnits {
     }
 
     /// Generate [KaniMetadata] for the target crate.
-    fn generate_metadata(&self) -> KaniMetadata {
+    fn generate_metadata(&self, tcx: TyCtxt) -> KaniMetadata {
         let (proof_harnesses, test_harnesses) =
             self.harness_info.values().cloned().partition(|md| md.attributes.is_proof_harness());
         KaniMetadata {
@@ -111,6 +111,7 @@ impl CodegenUnits {
             proof_harnesses,
             unsupported_features: vec![],
             test_harnesses,
+            contracted_functions: gen_contracts_metadata(tcx),
         }
     }
 }

@@ -15,4 +15,5 @@ ignore = [
     # For some reason, this is not working without the directory wildcard.
     "**/firecracker",
     "**/tests/perf/s2n-quic/",
+    "**/charon/charon/",
 ]
