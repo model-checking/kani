@@ -1,2 +1,2 @@
 FAILURE\
-attempt to compute offset which would overflow
+attempt to compute number in bytes which would overflow
