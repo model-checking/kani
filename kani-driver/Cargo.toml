@@ -3,7 +3,7 @@
 
 [package]
 name = "kani-driver"
-version = "0.55.0"
+version = "0.56.0"
 edition = "2021"
 description = "Build a project with Kani and run all proof harnesses"
 license = "MIT OR Apache-2.0"
@@ -18,8 +18,9 @@ anyhow = "1"
 console = "0.15.1"
 once_cell = "1.19.0"
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde_json = { version = "1", features = ["preserve_order"] }
 clap = { version = "4.4.11", features = ["derive"] }
+colour = "2.1.0"
 glob = "0.3"
 toml = "0.8"
 regex = "1.6"
