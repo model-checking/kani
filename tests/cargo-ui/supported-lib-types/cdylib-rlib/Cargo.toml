@@ -1,0 +1,13 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+[package]
+name = "supported-lib"
+version = "0.1.0"
+edition = "2021"
+description = "Test that Kani correctly handle supported crate types"
+
+[lib]
+name = "lib"
+crate-type = ["cdylib", "rlib"]
+path = "../src/lib.rs"
+

@@ -8,10 +8,13 @@ use std::intrinsics::offset;
 
 #[kani::proof]
 fn test_offset_overflow() {
-    let s: &str = "123";
-    let ptr: *const u8 = s.as_ptr();
+    let a: [i32; 3] = [1, 2, 3];
+    let ptr: *const i32 = a.as_ptr();
 
+    // a value that when multiplied by the size of i32 (i.e. 4 bytes)
+    // would overflow `isize`
+    let count: isize = isize::MAX / 4 + 1;
     unsafe {
-        let _d = offset(ptr, isize::MAX / 8);
+        let _d = offset(ptr, count);
     }
 }

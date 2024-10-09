@@ -50,17 +50,44 @@ cp ${TMP_DIR}/library/std/src/lib.rs ${TMP_DIR}/std_lib.rs
 echo '#![cfg_attr(kani, feature(kani))]' > ${TMP_DIR}/library/std/src/lib.rs
 cat ${TMP_DIR}/std_lib.rs >> ${TMP_DIR}/library/std/src/lib.rs
 
+# Test that the command works inside the library folder and does not change
+# the existing workspace
+# See https://github.com/model-checking/kani/issues/3574
+echo "[TEST] Only codegen inside library folder"
+pushd "${TMP_DIR}/library" >& /dev/null
+RUSTFLAGS="--cfg=uninit_checks" kani verify-std \
+    -Z unstable-options \
+    . \
+    -Z function-contracts \
+    -Z stubbing \
+    -Z mem-predicates \
+    --only-codegen
+popd
+# Grep should not find anything and exit status is 1.
+grep -c kani ${TMP_DIR}/library/Cargo.toml \
+    && echo "Unexpected kani crate inside Cargo.toml" \
+    || echo "No kani crate inside Cargo.toml as expected"
+
 echo "[TEST] Run kani verify-std"
 export RUST_BACKTRACE=1
-kani verify-std -Z unstable-options "${TMP_DIR}/library" \
-    --target-dir "${TMP_DIR}/target" -Z function-contracts -Z stubbing \
+kani verify-std \
+    -Z unstable-options \
+    "${TMP_DIR}/library" \
+    --target-dir "${TMP_DIR}/target" \
+    -Z function-contracts \
+    -Z stubbing \
     -Z mem-predicates
 
+# Test that uninit-checks basic setup works on a no-core library
 echo "[TEST] Run kani verify-std -Z uninit-checks"
-export RUSTFLAGS="--cfg=uninit_checks"
-kani verify-std -Z unstable-options "${TMP_DIR}/library" \
-    --target-dir "${TMP_DIR}/target" -Z function-contracts -Z stubbing \
-    -Z mem-predicates -Z uninit-checks
+RUSTFLAGS="--cfg=uninit_checks" kani verify-std \
+    -Z unstable-options \
+    "${TMP_DIR}/library" \
+    --target-dir "${TMP_DIR}/target" \
+    -Z function-contracts \
+    -Z stubbing \
+    -Z mem-predicates \
+    -Z uninit-checks
 
 # Cleanup
 rm -r ${TMP_DIR}

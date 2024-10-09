@@ -46,10 +46,39 @@ pub struct CargoOutputs {
 
 impl KaniSession {
     /// Create a new cargo library in the given path.
+    ///
+    /// Since we cannot create a new workspace with `cargo init --lib`, we create the dummy
+    /// crate manually. =( See <https://github.com/rust-lang/cargo/issues/8365>.
+    ///
+    /// Without setting up a new workspace, cargo init will modify the workspace where this is
+    /// running. See <https://github.com/model-checking/kani/issues/3574> for details.
     pub fn cargo_init_lib(&self, path: &Path) -> Result<()> {
-        let mut cmd = setup_cargo_command()?;
-        cmd.args(["init", "--lib", path.to_string_lossy().as_ref()]);
-        self.run_terminal(cmd)
+        let toml_path = path.join("Cargo.toml");
+        if toml_path.exists() {
+            bail!("Cargo.toml already exists in {}", path.display());
+        }
+
+        // Create folder for library
+        fs::create_dir_all(path.join("src"))?;
+
+        // Create dummy crate and write dummy body
+        let lib_path = path.join("src/lib.rs");
+        fs::write(&lib_path, "pub fn dummy() {}")?;
+
+        // Create Cargo.toml
+        fs::write(
+            &toml_path,
+            r#"[package]
+name = "dummy"
+version = "0.1.0"
+
+[lib]
+crate-type = ["lib"]
+
+[workspace]
+"#,
+        )?;
+        Ok(())
     }
 
     pub fn cargo_build_std(&self, std_path: &Path, krate_path: &Path) -> Result<Vec<Artifact>> {
@@ -164,6 +193,9 @@ impl KaniSession {
         // Arguments that will only be passed to the target package.
         let mut pkg_args: Vec<String> = vec![];
         pkg_args.extend(["--".to_string(), self.reachability_arg()]);
+        if let Some(backend_arg) = self.backend_arg() {
+            pkg_args.push(backend_arg);
+        }
 
         let mut found_target = false;
         let packages = packages_to_verify(&self.args, &metadata)?;

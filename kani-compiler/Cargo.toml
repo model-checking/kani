@@ -3,13 +3,14 @@
 
 [package]
 name = "kani-compiler"
-version = "0.55.0"
+version = "0.56.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 publish = false
 
 [dependencies]
 cbmc = { path = "../cprover_bindings", package = "cprover_bindings", optional = true }
+charon = { path = "../charon/charon", optional = true, default-features = false } 
 clap = { version = "4.4.11", features = ["derive", "cargo"] }
 home = "0.5"
 itertools = "0.13"
@@ -30,7 +31,8 @@ tracing-tree = "0.4.0"
 
 # Future proofing: enable backend dependencies using feature.
 [features]
-default = ['cprover']
+default = ['aeneas', 'cprover']
+aeneas = ['charon']
 cprover = ['cbmc', 'num', 'serde']
 write_json_symtab = []
 
