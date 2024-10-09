@@ -16,7 +16,7 @@ use charon_lib::ast::Rvalue as CharonRvalue;
 use charon_lib::ast::Span as CharonSpan;
 use charon_lib::ast::meta::{AttrInfo, Loc, RawSpan};
 use charon_lib::ast::types::Ty as CharonTy;
-use charon_lib::ast::{AbortKind, Body as CharonBody, Var, VarId, make_locals_generator};
+use charon_lib::ast::{AbortKind, Body as CharonBody, Var, VarId};
 use charon_lib::ast::{
     AnyTransId, Assert, BodyId, BuiltinTy, Disambiguator, FileName, FunDecl, FunSig, GenericArgs,
     GenericParams, IntegerTy, ItemKind, ItemMeta, ItemOpacity, Literal, LiteralTy, Name, Opaque,
@@ -39,14 +39,16 @@ use charon_lib::ullbc_ast::{
     Terminator as CharonTerminator,
 };
 use charon_lib::{error_assert, error_or_panic};
+use rustc_data_structures::fx::FxHashMap;
 use rustc_errors::MultiSpan;
 use rustc_middle::ty::TyCtxt;
 use rustc_smir::rustc_internal;
 use rustc_span::def_id::DefId as InternalDefId;
 use stable_mir::abi::PassMode;
+use stable_mir::mir::VarDebugInfoContents;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{
-    BasicBlock, BinOp, Body, BorrowKind, CastKind, ConstOperand, Mutability, Operand, Place,
+    BasicBlock, BinOp, Body, BorrowKind, CastKind, ConstOperand, Local, Mutability, Operand, Place,
     ProjectionElem, Rvalue, Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind,
 };
 use stable_mir::ty::{
@@ -64,6 +66,7 @@ pub struct Context<'a, 'tcx> {
     instance: Instance,
     translated: &'a mut TranslatedCrate,
     errors: &'a mut ErrorCtx<'tcx>,
+    local_names: FxHashMap<Local, String>,
 }
 
 impl<'a, 'tcx> Context<'a, 'tcx> {
@@ -75,7 +78,17 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         translated: &'a mut TranslatedCrate,
         errors: &'a mut ErrorCtx<'tcx>,
     ) -> Self {
-        Self { tcx, instance, translated, errors }
+        let mut local_names = FxHashMap::default();
+        // populate names of locals
+        for info in instance.body().unwrap().var_debug_info {
+            if let VarDebugInfoContents::Place(p) = info.value {
+                if p.projection.is_empty() {
+                    local_names.insert(p.local, info.name);
+                }
+            }
+        }
+
+        Self { tcx, instance, translated, errors, local_names }
     }
 
     fn tcx(&self) -> TyCtxt<'tcx> {
@@ -466,12 +479,11 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         // - the input arguments
         // - the remaining locals, used for the intermediate computations
         let mut locals = Vector::new();
-        {
-            let mut add_variable = make_locals_generator(&mut locals);
-            mir_body.local_decls().for_each(|(_, local)| {
-                add_variable(self.translate_ty(local.ty));
-            });
-        }
+        mir_body.local_decls().for_each(|(local, local_decl)| {
+            let ty = self.translate_ty(local_decl.ty);
+            let name = self.local_names.get(&local);
+            locals.push_with(|index| Var { index, name: name.cloned(), ty });
+        });
         locals
     }
 
