@@ -84,7 +84,7 @@ impl<'tcx> CurrentFnCtx<'tcx> {
 }
 
 /// Setters
-impl<'tcx> CurrentFnCtx<'tcx> {
+impl CurrentFnCtx<'_> {
     /// Returns the current block, replacing it with an empty vector.
     pub fn extract_block(&mut self) -> Vec<Stmt> {
         std::mem::take(&mut self.block)

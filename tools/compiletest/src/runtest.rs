@@ -68,7 +68,7 @@ struct TestCx<'test> {
     testpaths: &'test TestPaths,
 }
 
-impl<'test> TestCx<'test> {
+impl TestCx<'_> {
     /// Code executed
     fn run(&self) {
         match self.config.mode {

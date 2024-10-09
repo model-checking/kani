@@ -29,7 +29,7 @@ use stable_mir::ty::{ClosureKind, IntTy, RigidTy, Size, Ty, TyConst, TyKind, Uin
 use std::collections::BTreeMap;
 use tracing::{debug, trace, warn};
 
-impl<'tcx> GotocCtx<'tcx> {
+impl GotocCtx<'_> {
     fn codegen_comparison(&mut self, op: &BinOp, e1: &Operand, e2: &Operand) -> Expr {
         let left_op = self.codegen_operand_stable(e1);
         let right_op = self.codegen_operand_stable(e2);

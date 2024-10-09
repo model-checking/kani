@@ -183,7 +183,7 @@ impl<'tcx> StubConstChecker<'tcx> {
     }
 }
 
-impl<'tcx> MirVisitor for StubConstChecker<'tcx> {
+impl MirVisitor for StubConstChecker<'_> {
     /// Collect constants that are represented as static variables.
     fn visit_const_operand(&mut self, constant: &ConstOperand, location: Location) {
         let const_ = self.monomorphize(rustc_internal::internal(self.tcx, &constant.const_));

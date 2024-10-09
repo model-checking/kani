@@ -12,7 +12,7 @@ use stable_mir::mir::mono::{Instance, MonoItem};
 use stable_mir::mir::{Local, VarDebugInfoContents};
 use stable_mir::ty::{FnDef, RigidTy, TyKind};
 
-impl<'tcx> GotocCtx<'tcx> {
+impl GotocCtx<'_> {
     /// Given the `proof_for_contract` target `function_under_contract` and the reachable `items`,
     /// find or create the `AssignsContract` that needs to be enforced and attach it to the symbol
     /// for which it needs to be enforced.

@@ -35,7 +35,7 @@ pub struct InstrumentationVisitor<'a, 'tcx> {
     tcx: TyCtxt<'tcx>,
 }
 
-impl<'a, 'tcx> TargetFinder for InstrumentationVisitor<'a, 'tcx> {
+impl TargetFinder for InstrumentationVisitor<'_, '_> {
     fn find_all(mut self, body: &MutableBody) -> Vec<InitRelevantInstruction> {
         for (bb_idx, bb) in body.blocks().iter().enumerate() {
             self.current_target = InitRelevantInstruction {
@@ -75,7 +75,7 @@ impl<'a, 'tcx> InstrumentationVisitor<'a, 'tcx> {
     }
 }
 
-impl<'a, 'tcx> MirVisitor for InstrumentationVisitor<'a, 'tcx> {
+impl MirVisitor for InstrumentationVisitor<'_, '_> {
     fn visit_statement(&mut self, stmt: &Statement, location: Location) {
         self.super_statement(stmt, location);
         // Switch to the next statement.

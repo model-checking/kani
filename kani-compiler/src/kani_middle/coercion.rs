@@ -189,7 +189,7 @@ impl<'tcx> CoerceUnsizedIterator<'tcx> {
 ///   dst_ty: Ty, // *const &dyn Debug
 /// }
 /// ```
-impl<'tcx> Iterator for CoerceUnsizedIterator<'tcx> {
+impl Iterator for CoerceUnsizedIterator<'_> {
     type Item = CoerceUnsizedInfo;
 
     fn next(&mut self) -> Option<Self::Item> {
