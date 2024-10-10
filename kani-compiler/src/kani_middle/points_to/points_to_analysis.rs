@@ -114,7 +114,7 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
     }
 }
 
-impl<'a, 'tcx> AnalysisDomain<'tcx> for PointsToAnalysis<'a, 'tcx> {
+impl<'tcx> AnalysisDomain<'tcx> for PointsToAnalysis<'_, 'tcx> {
     /// Dataflow state at each instruction.
     type Domain = PointsToGraph<'tcx>;
 
@@ -135,7 +135,7 @@ impl<'a, 'tcx> AnalysisDomain<'tcx> for PointsToAnalysis<'a, 'tcx> {
     }
 }
 
-impl<'a, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'tcx> {
+impl<'tcx> Analysis<'tcx> for PointsToAnalysis<'_, 'tcx> {
     /// Update current dataflow state based on the information we can infer from the given
     /// statement.
     fn apply_statement_effect(
@@ -366,7 +366,7 @@ fn try_resolve_instance<'tcx>(
     }
 }
 
-impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
+impl<'tcx> PointsToAnalysis<'_, 'tcx> {
     /// Update the analysis state according to the operation, which is semantically equivalent to `*to = *from`.
     fn apply_copy_effect(
         &self,

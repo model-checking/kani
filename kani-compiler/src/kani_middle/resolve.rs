@@ -184,13 +184,13 @@ pub enum ResolveError<'tcx> {
     UnsupportedPath { kind: &'static str },
 }
 
-impl<'tcx> fmt::Debug for ResolveError<'tcx> {
+impl fmt::Debug for ResolveError<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         std::fmt::Display::fmt(self, f)
     }
 }
 
-impl<'tcx> fmt::Display for ResolveError<'tcx> {
+impl fmt::Display for ResolveError<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ResolveError::ExtraSuper => {

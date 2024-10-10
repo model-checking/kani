@@ -140,7 +140,7 @@ pub struct ContractAttributes {
     pub modifies_wrapper: Symbol,
 }
 
-impl<'tcx> std::fmt::Debug for KaniAttributes<'tcx> {
+impl std::fmt::Debug for KaniAttributes<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("KaniAttributes")
             .field("item", &self.tcx.def_path_debug_str(self.item))
@@ -726,7 +726,7 @@ struct UnstableAttrParseError<'a> {
     attr: &'a Attribute,
 }
 
-impl<'a> UnstableAttrParseError<'a> {
+impl UnstableAttrParseError<'_> {
     /// Report the error in a friendly format.
     fn report(&self, tcx: TyCtxt) -> ErrorGuaranteed {
         tcx.dcx()

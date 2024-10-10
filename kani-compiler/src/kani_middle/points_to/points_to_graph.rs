@@ -70,7 +70,7 @@ struct NodeData<'tcx> {
     ancestors: HashSet<MemLoc<'tcx>>,
 }
 
-impl<'tcx> NodeData<'tcx> {
+impl NodeData<'_> {
     /// Merge two instances of NodeData together, return true if the original one was updated and
     /// false otherwise.
     fn merge(&mut self, other: Self) -> bool {
@@ -232,7 +232,7 @@ impl<'tcx> PointsToGraph<'tcx> {
 /// join operation. In our case, this is a simple union of two graphs. This "lattice" is finite,
 /// because in the worst case all places will alias to all places, in which case the join will be a
 /// no-op.
-impl<'tcx> JoinSemiLattice for PointsToGraph<'tcx> {
+impl JoinSemiLattice for PointsToGraph<'_> {
     fn join(&mut self, other: &Self) -> bool {
         let mut updated = false;
         // Check every node in the other graph.
@@ -247,4 +247,4 @@ impl<'tcx> JoinSemiLattice for PointsToGraph<'tcx> {
 
 /// This is a requirement for the fixpoint solver, and there is no derive macro for this, so
 /// implement it manually.
-impl<'tcx, C> DebugWithContext<C> for PointsToGraph<'tcx> {}
+impl<C> DebugWithContext<C> for PointsToGraph<'_> {}

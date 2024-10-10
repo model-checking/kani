@@ -28,7 +28,7 @@ enum VTableInfo {
     Align,
 }
 
-impl<'tcx> GotocCtx<'tcx> {
+impl GotocCtx<'_> {
     fn binop<F: FnOnce(Expr, Expr) -> Expr>(
         &mut self,
         place: &Place,

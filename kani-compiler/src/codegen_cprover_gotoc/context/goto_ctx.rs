@@ -119,7 +119,7 @@ impl<'tcx> GotocCtx<'tcx> {
 }
 
 /// Generate variables
-impl<'tcx> GotocCtx<'tcx> {
+impl GotocCtx<'_> {
     /// Declare a local variable.
     /// Handles the bookkeeping of:
     /// - creating the symbol
@@ -302,7 +302,7 @@ impl<'tcx> GotocCtx<'tcx> {
 }
 
 /// Mutators
-impl<'tcx> GotocCtx<'tcx> {
+impl GotocCtx<'_> {
     pub fn set_current_fn(&mut self, instance: Instance, body: &Body) {
         self.current_fn = Some(CurrentFnCtx::new(instance, self, body));
     }
@@ -346,7 +346,7 @@ impl<'tcx> HasTyCtxt<'tcx> for GotocCtx<'tcx> {
     }
 }
 
-impl<'tcx> HasDataLayout for GotocCtx<'tcx> {
+impl HasDataLayout for GotocCtx<'_> {
     fn data_layout(&self) -> &TargetDataLayout {
         self.tcx.data_layout()
     }

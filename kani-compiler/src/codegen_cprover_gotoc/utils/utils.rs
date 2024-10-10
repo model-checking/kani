@@ -19,7 +19,7 @@ pub fn dynamic_fat_ptr(typ: Type, data: Expr, vtable: Expr, symbol_table: &Symbo
     Expr::struct_expr(typ, btree_string_map![("data", data), ("vtable", vtable)], symbol_table)
 }
 
-impl<'tcx> GotocCtx<'tcx> {
+impl GotocCtx<'_> {
     pub fn unsupported_msg(item: &str, url: Option<&str>) -> String {
         let mut s = format!("{item} is not currently supported by Kani");
         if let Some(url) = url {
@@ -71,7 +71,7 @@ impl<'tcx> GotocCtx<'tcx> {
 /// Members traverse path to get to the raw pointer of a box (b.0.pointer.pointer).
 const RAW_PTR_FROM_BOX: [&str; 3] = ["0", "pointer", "pointer"];
 
-impl<'tcx> GotocCtx<'tcx> {
+impl GotocCtx<'_> {
     /// Dereference a boxed type `std::boxed::Box<T>` to get a `*T`.
     ///
     /// WARNING: This is based on a manual inspection of how boxed types are currently
