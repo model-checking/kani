@@ -8,6 +8,7 @@
 // So we have to enable this on the commandline (see kani-rustc) with:
 //   RUSTFLAGS="-Zcrate-attr=feature(register_tool) -Zcrate-attr=register_tool(kanitool)"
 #![feature(proc_macro_diagnostic)]
+#![feature(proc_macro_span)]
 mod derive;
 
 // proc_macro::quote is nightly-only, so we'll cobble things together instead
@@ -394,6 +395,18 @@ pub fn modifies(attr: TokenStream, item: TokenStream) -> TokenStream {
     attr_impl::modifies(attr, item)
 }
 
+/// Add a loop invariant to this loop.
+///
+/// The contents of the attribute is a condition that should be satisfied at the
+/// beginning of every iteration of the loop.
+/// All Rust syntax is supported, even calling other functions, but
+/// the computations must be side effect free, e.g. it cannot perform I/O or use
+/// mutable memory.
+#[proc_macro_attribute]
+pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
+    attr_impl::loop_invariant(attr, item)
+}
+
 /// This module implements Kani attributes in a way that only Kani's compiler can understand.
 /// This code should only be activated when pre-building Kani's sysroot.
 #[cfg(kani_sysroot)]
@@ -401,8 +414,10 @@ mod sysroot {
     use proc_macro_error2::{abort, abort_call_site};
 
     mod contracts;
+    mod loop_contracts;
 
     pub use contracts::{ensures, modifies, proof_for_contract, requires, stub_verified};
+    pub use loop_contracts::loop_invariant;
 
     use super::*;
 
@@ -580,4 +595,5 @@ mod regular {
     no_op!(modifies);
     no_op!(proof_for_contract);
     no_op!(stub_verified);
+    no_op!(loop_invariant);
 }
