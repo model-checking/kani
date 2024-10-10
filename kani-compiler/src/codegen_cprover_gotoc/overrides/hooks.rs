@@ -573,23 +573,9 @@ impl GotocHook for LoopInvariantRegister {
     ) -> Stmt {
         let loc = gcx.codegen_span_stable(span);
         let func_exp = gcx.codegen_func_expr(instance, loc);
-        // The last basic block in the register function are statements used to update the closure.
-        // We first codegen for them.
-        let body = gcx.transformer.body(gcx.tcx, instance);
-        let loop_head_block = &body.blocks[body.blocks.len() - 1].statements;
-        let mut loop_inv_stmts: Vec<Stmt> = Vec::new();
-        for stmt in loop_head_block {
-            loop_inv_stmts.push(gcx.codegen_statement(&stmt));
-        }
 
-        loop_inv_stmts
-            .push(func_exp.call(fargs).cast_to(Type::CInteger(CIntType::Bool)).as_stmt(loc));
-
-        Stmt::goto(bb_label(target.unwrap()), loc).with_loop_contracts(Expr::statement_expression(
-            std::mem::take(&mut loop_inv_stmts),
-            Type::CInteger(CIntType::Bool),
-            loc,
-        ))
+        Stmt::goto(bb_label(target.unwrap()), loc)
+            .with_loop_contracts(func_exp.call(fargs).cast_to(Type::CInteger(CIntType::Bool)))
     }
 }
 
