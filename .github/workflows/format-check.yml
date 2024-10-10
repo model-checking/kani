@@ -47,7 +47,7 @@ jobs:
 
       - name: 'Run Clippy'
         run: |
-          cargo clippy --workspace --exclude charon --exclude macros --no-deps -- -D warnings
+          cargo clippy --workspace -- -D warnings
 
       - name: 'Print Clippy Statistics'
         run: |
