@@ -1,9 +1,17 @@
-Source-based code coverage results:
-
-test.rs (main)\
- * 12:1 - 17:2 COVERED
-
-test.rs (reduce)\
- * 7:1 - 8:16 COVERED\
- * 8:19 - 8:27 COVERED\
- * 8:37 - 8:38 COVERED
+   1|     | // Copyright Kani Contributors\
+   2|     | // SPDX-License-Identifier: Apache-2.0 OR MIT\
+   3|     | \
+   4|     | //! Checks that Kani reports all regions as `COVERED` as expected in this case\
+   5|     | //! where arithmetic overflow failures are prevented.\
+   6|     | \
+   7|    1| fn reduce(x: u32) -> u32 {\
+   8|    1|     if x > 1000 { x - 1000 } else { x }\
+   9|     | }\
+  10|     | \
+  11|     | #[kani::proof]\
+  12|    1| fn main() {\
+  13|    1|     reduce(7);\
+  14|    1|     reduce(33);\
+  15|    1|     reduce(728);\
+  16|    1|     reduce(1079);\
+  17|     | }\
