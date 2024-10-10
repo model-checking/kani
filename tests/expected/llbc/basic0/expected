@@ -1,8 +1,8 @@
 fn test::is_zero(@1: i32) -> bool\
 {\
     let @0: bool; // return\
-    let @1: i32; // arg #1\
+    let i@1: i32; // arg #1\
 
-    @0 := copy (@1) == const (0 : i32)\
+    @0 := copy (i@1) == const (0 : i32)\
     return\
 }
