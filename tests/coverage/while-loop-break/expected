@@ -1,13 +1,23 @@
-Source-based code coverage results:
-
-main.rs (find_first_negative)\
- * 7:1 - 8:22 COVERED\
- * 9:11 - 9:29 COVERED\
- * 10:12 - 10:27 COVERED\
- * 11:20 - 11:37 COVERED\
- * 12:10 - 13:19 COVERED\
- * 15:5 - 15:9 UNCOVERED\
- * 16:1 - 16:2 COVERED
-
-main.rs (main)\
- * 19:1 - 23:2 COVERED
+   1|     | // Copyright Kani Contributors\
+   2|     | // SPDX-License-Identifier: Apache-2.0 OR MIT\
+   3|     | \
+   4|     | //! Checks coverage results in an example with a `while` loop that returns before\
+   5|     | //! running the last iteration.\
+   6|     | \
+   7|    1| fn find_first_negative(nums: &[i32]) -> Option<i32> {\
+   8|    1|     let mut index = 0;\
+   9|    1|     while index < nums.len() {\
+  10|    1|         if nums[index] < 0 {\
+  11|    1|             return Some(nums[index]);\
+  12|    1|         }\
+  13|    1|         index += 1;\
+  14|     |     }\
+  15|    0|     ```None'''\
+  16|     | }\
+  17|     | \
+  18|     | #[kani::proof]\
+  19|    1| fn main() {\
+  20|    1|     let numbers = [1, 2, -3, 4, -5];\
+  21|    1|     let result = find_first_negative(&numbers);\
+  22|    1|     assert_eq!(result, Some(-3));\
+  23|     | }\

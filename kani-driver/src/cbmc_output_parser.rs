@@ -483,7 +483,7 @@ impl<'a, 'b> Parser<'a, 'b> {
 
 /// The iterator implementation for `Parser` reads the buffer line by line,
 /// and determines if it must return an item based on processing each line.
-impl<'a, 'b> Iterator for Parser<'a, 'b> {
+impl Iterator for Parser<'_, '_> {
     type Item = ParserItem;
     fn next(&mut self) -> Option<Self::Item> {
         loop {

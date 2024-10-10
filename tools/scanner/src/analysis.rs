@@ -313,7 +313,7 @@ struct TypeVisitor<'a> {
     visited: HashSet<Ty>,
 }
 
-impl<'a> TypeVisitor<'a> {
+impl TypeVisitor<'_> {
     pub fn visit_variants(&mut self, def: AdtDef, _args: &GenericArgs) -> ControlFlow<()> {
         for variant in def.variants_iter() {
             for field in variant.fields() {
@@ -324,7 +324,7 @@ impl<'a> TypeVisitor<'a> {
     }
 }
 
-impl<'a> Visitor for TypeVisitor<'a> {
+impl Visitor for TypeVisitor<'_> {
     type Break = ();
 
     fn visit_ty(&mut self, ty: &Ty) -> ControlFlow<Self::Break> {
@@ -413,7 +413,7 @@ struct BodyVisitor<'a> {
     body: &'a Body,
 }
 
-impl<'a> MirVisitor for BodyVisitor<'a> {
+impl MirVisitor for BodyVisitor<'_> {
     fn visit_terminator(&mut self, term: &Terminator, location: Location) {
         match &term.kind {
             TerminatorKind::Call { func, .. } => {
@@ -501,7 +501,7 @@ struct IteratorVisitor<'a> {
     current_bbidx: u32,
 }
 
-impl<'a> MirVisitor for IteratorVisitor<'a> {
+impl MirVisitor for IteratorVisitor<'_> {
     fn visit_body(&mut self, body: &Body) {
         // First visit the body to build the control flow graph
         self.super_body(body);
@@ -677,7 +677,7 @@ struct FnCallVisitor<'a> {
     fns: Vec<FnDef>,
 }
 
-impl<'a> MirVisitor for FnCallVisitor<'a> {
+impl MirVisitor for FnCallVisitor<'_> {
     fn visit_terminator(&mut self, term: &Terminator, location: Location) {
         if let TerminatorKind::Call { func, .. } = &term.kind {
             let kind = func.ty(self.body.locals()).unwrap().kind();

@@ -77,7 +77,7 @@ struct FindUnsafeCell<'tcx> {
     tcx: TyCtxt<'tcx>,
 }
 
-impl<'tcx> TyVisitor for FindUnsafeCell<'tcx> {
+impl TyVisitor for FindUnsafeCell<'_> {
     type Break = ();
     fn visit_ty(&mut self, ty: &Ty) -> ControlFlow<Self::Break> {
         match ty.kind() {
@@ -171,7 +171,7 @@ impl<'tcx> HasTyCtxt<'tcx> for CompilerHelpers<'tcx> {
     }
 }
 
-impl<'tcx> HasDataLayout for CompilerHelpers<'tcx> {
+impl HasDataLayout for CompilerHelpers<'_> {
     fn data_layout(&self) -> &TargetDataLayout {
         self.tcx.data_layout()
     }

@@ -325,7 +325,7 @@ impl<'a, 'b> CheckValueVisitor<'a, 'b> {
     }
 }
 
-impl<'a, 'b> MirVisitor for CheckValueVisitor<'a, 'b> {
+impl MirVisitor for CheckValueVisitor<'_, '_> {
     fn visit_statement(&mut self, stmt: &Statement, location: Location) {
         if self.skip_next {
             self.skip_next = false;

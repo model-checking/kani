@@ -20,7 +20,7 @@ use stable_mir::mir::{
 use stable_mir::ty::{Abi, RigidTy, Span, Ty, TyKind, VariantIdx};
 use tracing::{debug, debug_span, trace};
 
-impl<'tcx> GotocCtx<'tcx> {
+impl GotocCtx<'_> {
     /// Generate Goto-C for MIR [Statement]s.
     /// This does not cover all possible "statements" because MIR distinguishes between ordinary
     /// statements and [Terminator]s, which can exclusively appear at the end of a basic block.

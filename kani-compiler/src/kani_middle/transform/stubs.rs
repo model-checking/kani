@@ -139,7 +139,7 @@ struct FnStubValidator<'a, 'tcx> {
     is_valid: bool,
 }
 
-impl<'a, 'tcx> FnStubValidator<'a, 'tcx> {
+impl FnStubValidator<'_, '_> {
     fn validate(tcx: TyCtxt, stub: (FnDef, FnDef), new_instance: Instance) -> Option<Body> {
         if validate_stub_const(tcx, new_instance) {
             let body = new_instance.body().unwrap();
@@ -153,7 +153,7 @@ impl<'a, 'tcx> FnStubValidator<'a, 'tcx> {
     }
 }
 
-impl<'a, 'tcx> MirVisitor for FnStubValidator<'a, 'tcx> {
+impl MirVisitor for FnStubValidator<'_, '_> {
     fn visit_operand(&mut self, op: &Operand, loc: Location) {
         let op_ty = op.ty(self.locals).unwrap();
         if let TyKind::RigidTy(RigidTy::FnDef(def, args)) = op_ty.kind() {
@@ -188,7 +188,7 @@ struct ExternFnStubVisitor<'a> {
     stubs: &'a Stubs,
 }
 
-impl<'a> MutMirVisitor for ExternFnStubVisitor<'a> {
+impl MutMirVisitor for ExternFnStubVisitor<'_> {
     fn visit_terminator(&mut self, term: &mut Terminator) {
         // Replace direct calls
         if let TerminatorKind::Call { func, .. } = &mut term.kind {

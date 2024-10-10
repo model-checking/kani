@@ -29,7 +29,7 @@ use stable_mir::ty::{ClosureKind, IntTy, RigidTy, Size, Ty, TyConst, TyKind, Uin
 use std::collections::BTreeMap;
 use tracing::{debug, trace, warn};
 
-impl<'tcx> GotocCtx<'tcx> {
+impl GotocCtx<'_> {
     fn codegen_comparison(&mut self, op: &BinOp, e1: &Operand, e2: &Operand) -> Expr {
         let left_op = self.codegen_operand_stable(e1);
         let right_op = self.codegen_operand_stable(e2);
@@ -420,6 +420,13 @@ impl<'tcx> GotocCtx<'tcx> {
                 // https://doc.rust-lang.org/std/primitive.pointer.html#method.offset
                 // These checks may allow a wrapping-around behavior in CBMC:
                 // https://github.com/model-checking/kani/issues/1150
+                // Note(std): We don't check that the starting or resulting pointer stay
+                // within bounds of the object they point to. Doing so causes spurious
+                // failures due to the usage of these intrinsics in the standard library.
+                // See <https://github.com/model-checking/kani/issues/1233> for more details.
+                // Note that this is one of the safety conditions for `offset`:
+                // <https://doc.rust-lang.org/std/primitive.pointer.html#safety-2>
+
                 let overflow_res = ce1.clone().cast_to(Type::ssize_t()).add_overflow(offset_bytes);
                 let overflow_check = self.codegen_assert_assume(
                     overflow_res.overflowed.not(),

@@ -15,7 +15,7 @@ use std::collections::BTreeMap;
 use tracing::{debug, debug_span};
 
 /// Codegen MIR functions into gotoc
-impl<'tcx> GotocCtx<'tcx> {
+impl GotocCtx<'_> {
     /// Declare variables according to their index.
     /// - Index 0 represents the return value.
     /// - Indices [1, N] represent the function parameters where N is the number of parameters.
