@@ -401,6 +401,7 @@ mod bootstrap;
 mod check;
 #[macro_use]
 mod helpers;
+pub mod generate_harness;
 mod initialize;
 mod replace;
 mod shared;

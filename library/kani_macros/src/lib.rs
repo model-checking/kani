@@ -355,6 +355,60 @@ pub fn proof_for_contract(attr: TokenStream, item: TokenStream) -> TokenStream {
     attr_impl::proof_for_contract(attr, item)
 }
 
+/// Generates a proof for contract of the given function.
+/// This is a shorthand for `#[kani::proof_for_contract]`.
+///
+/// This macro takes the following arguments:
+/// 1. The name of the harness that will be generated.
+/// 2. The relative path (e.g. `foo` or `super::some_mod::foo` or `crate::SomeStruct::foo`)
+/// to the function, the contract of which should be checked.
+/// 3. The number of arguments this function accepts.
+///
+/// Here is an example where this can be used:
+/// ```no_run
+/// extern crate kani;
+/// use kani::{Arbitrary, Invariant};
+///
+/// #[derive(Arbitrary, Invariant)]
+/// struct Stars {
+///     #[safety_constraint(*value <= 5)]
+///     value: u8,
+/// }
+///
+/// impl Stars {
+///     #[kani::requires(stars <= 5)]
+///     #[kani::ensures(|res| res.is_safe())]
+///     fn new(stars: u8) -> Stars {
+///     Stars::try_new(stars).unwrap()
+///     }
+///
+///     #[kani::ensures(|ret| kani::implies!(stars <= 5 => ret.is_ok()))]
+///     #[kani::ensures(|ret| kani::implies!(stars > 5 => ret.is_err()))]
+///     fn try_new(stars: u8) -> Result<Stars, ()> {
+///         if stars > 5 {
+///             Err(())
+///         } else {
+///             Ok(Stars { value: stars })
+///         }
+///     }
+/// }
+///
+/// #[cfg(kani)]
+/// mod verify {
+///     use super::*;
+///     kani::gen_proof_for_contract!(check_new_contract, Stars::new, 1);
+///     kani::gen_proof_for_contract!(check_try_new_contract, Stars::try_new, 1);
+/// }
+///
+/// ```
+///
+/// This is part of the function contract API, for more general information see
+/// the [module-level documentation](../kani/contracts/index.html).
+#[proc_macro]
+pub fn gen_proof_for_contract(item: TokenStream) -> TokenStream {
+    attr_impl::gen_proof_for_contract(item)
+}
+
 /// `stub_verified(TARGET)` is a harness attribute (to be used on
 /// [`proof`][macro@proof] or [`proof_for_contract`][macro@proof_for_contract]
 /// function) that replaces all occurrences of `TARGET` reachable from this
@@ -398,6 +452,7 @@ pub fn modifies(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// This code should only be activated when pre-building Kani's sysroot.
 #[cfg(kani_sysroot)]
 mod sysroot {
+    pub use contracts::generate_harness::gen_proof_for_contract;
     use proc_macro_error2::{abort, abort_call_site};
 
     mod contracts;
@@ -551,6 +606,7 @@ mod sysroot {
 #[cfg(not(kani_sysroot))]
 mod regular {
     use super::*;
+    use proc_macro_error2::abort;
 
     /// Encode a noop proc macro which ignores the given attribute.
     macro_rules! no_op {
@@ -580,4 +636,8 @@ mod regular {
     no_op!(modifies);
     no_op!(proof_for_contract);
     no_op!(stub_verified);
+
+    pub fn gen_proof_for_contract(item: TokenStream) -> TokenStream {
+        abort!(Span::call_site(), "Kani harnesses should always be guarded by `#[cfg(kani)]`");
+    }
 }
