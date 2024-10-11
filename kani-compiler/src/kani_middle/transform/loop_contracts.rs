@@ -15,10 +15,10 @@ use rustc_middle::ty::TyCtxt;
 use rustc_span::Symbol;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{
-    AggregateKind, BasicBlockIdx, Body, ConstOperand, Operand, Place, Rvalue, StatementKind,
-    Terminator, TerminatorKind, VarDebugInfoContents,
+    AggregateKind, BasicBlock, BasicBlockIdx, Body, ConstOperand, Operand, Place, Rvalue,
+    Statement, StatementKind, Terminator, TerminatorKind, VarDebugInfoContents,
 };
-use stable_mir::ty::{FnDef, MirConst, RigidTy};
+use stable_mir::ty::{FnDef, MirConst, RigidTy, UintTy};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt::Debug;
 
@@ -47,6 +47,7 @@ use super::TransformPass;
 ///    to blocks
 ///    ```ignore
 ///    bb_idx: {
+///         loop_head_stmts
 ///         _v = true
 ///         goto -> terminator_target
 ///    }
@@ -142,8 +143,8 @@ impl TransformPass for LoopContractPass {
 
 impl LoopContractPass {
     pub fn new(tcx: TyCtxt, unit: &CodegenUnit) -> LoopContractPass {
-        if unit.harnesses.first().is_some() {
-            let run_contract_fn = find_fn_def(tcx, "KaniRunContract");
+        if !unit.harnesses.is_empty() {
+            let run_contract_fn = find_fn_def(tcx, "KaniRunLoopContract");
             assert!(run_contract_fn.is_some(), "Failed to find Kani run contract function");
             LoopContractPass { run_contract_fn, new_loop_latches: HashMap::new() }
         } else {
@@ -151,6 +152,20 @@ impl LoopContractPass {
             // Note that in this path there is no proof harness.
             LoopContractPass::default()
         }
+    }
+
+    /// Generate the body of loop head block by dropping all statements
+    /// except for `StorageLive` and `StorageDead`.
+    fn get_loop_head_block(&self, block: &BasicBlock) -> BasicBlock {
+        let new_stmts: Vec<Statement> = block
+            .statements
+            .iter()
+            .filter(|stmt| {
+                matches!(stmt.kind, StatementKind::StorageLive(_) | StatementKind::StorageDead(_))
+            })
+            .map(|stmt| stmt.clone())
+            .collect();
+        return BasicBlock { statements: new_stmts, terminator: block.terminator.clone() };
     }
 
     fn is_supported_argument_of_closure(&self, rv: &Rvalue, body: &MutableBody) -> bool {
@@ -201,6 +216,7 @@ impl LoopContractPass {
             // The basic blocks end with register functions are loop head blocks.
             if KaniAttributes::for_def_id(tcx, fn_def.def_id()).fn_marker()
                 == Some(Symbol::intern("kani_register_loop_contract"))
+                && matches!(&terminator_args[1], Operand::Constant(op) if op.const_.eval_target_usize().unwrap() == 0)
             {
                 contain_loop_contracts = true;
 
@@ -248,17 +264,11 @@ impl LoopContractPass {
                 // with
                 // ```ignore
                 // bb_idx: {
+                //          loop_head_stmts
                 //          _v = true;
                 //          goto -> terminator_target
                 // }
                 // ```
-                new_body.replace_terminator(
-                    &SourceInstruction::Terminator { bb: bb_idx },
-                    Terminator {
-                        kind: TerminatorKind::Goto { target: bb_idx },
-                        span: terminator.span,
-                    },
-                );
                 new_body.assign_to(
                     terminator_destination.clone(),
                     Rvalue::Use(Operand::Constant(ConstOperand {
@@ -269,6 +279,7 @@ impl LoopContractPass {
                     &mut SourceInstruction::Terminator { bb: bb_idx },
                     InsertPosition::Before,
                 );
+                let new_latch_block = self.get_loop_head_block(&new_body.blocks()[bb_idx]);
 
                 // Insert a new basic block as the loop latch block, and later redirect
                 // all latches to the new loop latch block.
@@ -276,13 +287,26 @@ impl LoopContractPass {
                 // bb_new_loop_latch: {
                 //    _v = kani_register_loop_contract(move args) -> [return: terminator_target];
                 // }
-                new_body.insert_terminator(
+                new_body.insert_bb(
+                    new_latch_block,
                     &mut SourceInstruction::Terminator { bb: bb_idx },
                     InsertPosition::After,
+                );
+                // Update the argument `transformed` to 1 to avoid double transformation.
+                let new_args = vec![
+                    terminator_args[0].clone(),
+                    Operand::Constant(ConstOperand {
+                        span: terminator.span,
+                        user_ty: None,
+                        const_: MirConst::try_from_uint(1, UintTy::Usize).unwrap(),
+                    }),
+                ];
+                new_body.replace_terminator(
+                    &SourceInstruction::Terminator { bb: new_body.blocks().len() - 1 },
                     Terminator {
                         kind: TerminatorKind::Call {
                             func: terminator_func.clone(),
-                            args: terminator_args.clone(),
+                            args: new_args,
                             destination: terminator_destination.clone(),
                             target: *terminator_target,
                             unwind: *terminator_unwind,
@@ -291,19 +315,12 @@ impl LoopContractPass {
                     },
                 );
                 new_body.replace_terminator(
-                    &SourceInstruction::Terminator { bb: new_body.blocks().len() - 1 },
+                    &SourceInstruction::Terminator { bb: bb_idx },
                     Terminator {
-                        kind: TerminatorKind::Call {
-                            func: terminator_func.clone(),
-                            args: terminator_args.clone(),
-                            destination: terminator_destination.clone(),
-                            target: *terminator_target,
-                            unwind: *terminator_unwind,
-                        },
+                        kind: TerminatorKind::Goto { target: terminator_target.unwrap() },
                         span: terminator.span,
                     },
                 );
-
                 // Cache the new loop latch.
                 self.new_loop_latches.insert(bb_idx, new_body.blocks().len() - 1);
             }

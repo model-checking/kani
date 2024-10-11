@@ -53,7 +53,7 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
             Expr::While(ref mut ew) => {
                 let new_cond: Expr = syn::parse(
                     quote!(
-                        #register_ident(||->bool{#inv_expr}))
+                        #register_ident(&||->bool{#inv_expr}, 0))
                     .into(),
                 )
                 .unwrap();
@@ -81,8 +81,8 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
         // This function gets replaced by `kani::internal::call_closure`.
         #[inline(never)]
         #[kanitool::fn_marker = "kani_register_loop_contract"]
-        const fn #register_ident<T, F: FnOnce() -> T>(f: F) -> T {
-            unreachable!()
+        const fn #register_ident<F: Fn() -> bool>(_f: &F, _transformed: usize) -> bool {
+            true
         }
         #loop_stmt})
     .into()

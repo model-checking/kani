@@ -435,6 +435,18 @@ macro_rules! kani_intrinsics {
                 func()
             }
 
+            /// Function that calls a closure used to implement loop contracts.
+            ///
+            /// In contracts, we cannot invoke the generated closures directly, instead, we call register
+            /// contract. This function is a no-op. However, in the reality, we do want to call the closure,
+            /// so we swap the register body by this function body.
+            #[doc(hidden)]
+            #[allow(dead_code)]
+            #[rustc_diagnostic_item = "KaniRunLoopContract"]
+            fn run_loop_contract_fn<F: Fn() -> bool>(func: &F, _transformed: usize) -> bool {
+                func()
+            }
+
             /// This is used by contracts to select which version of the contract to use during codegen.
             #[doc(hidden)]
             pub type Mode = u8;
