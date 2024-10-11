@@ -19,7 +19,7 @@ use std::fs::{self, File};
 use std::io::IsTerminal;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Command;
 use tracing::{debug, trace};
 
 //---- Crate types identifier used by cargo.
@@ -167,7 +167,7 @@ impl KaniSession {
         pkg_args.extend(["--".to_string(), self.reachability_arg()]);
 
         let mut found_target = false;
-        let packages = packages_to_verify(&self.args, &metadata)?;
+        let packages = self.packages_to_verify(&self.args, &metadata)?;
         let mut artifacts = vec![];
         let mut failed_targets = vec![];
         for package in packages {
@@ -337,6 +337,93 @@ impl KaniSession {
             if same_target(&artifact.target, target) { map_kani_artifact(artifact) } else { None }
         }))
     }
+
+    /// Check that all package names are present in the workspace, otherwise return which aren't.
+    fn to_package_ids<'a>(
+        &self,
+        package_names: &'a [String],
+    ) -> Result<HashMap<PackageId, &'a str>> {
+        package_names
+            .iter()
+            .map(|pkg| {
+                let mut cmd = setup_cargo_command()?;
+                cmd.arg("pkgid");
+                cmd.arg(pkg);
+                // For some reason clippy cannot see that we are invoking wait() in the next line.
+                #[allow(clippy::zombie_processes)]
+                let mut process = self.run_piped(cmd)?.unwrap();
+                let result = process.wait()?;
+                if !result.success() {
+                    bail!("Failed to retrieve information for `{pkg}`");
+                }
+
+                let mut reader = BufReader::new(process.stdout.take().unwrap());
+                let mut line = String::new();
+                reader.read_line(&mut line)?;
+                trace!(package_id=?line, "package_ids");
+                Ok((PackageId { repr: line.trim().to_string() }, pkg.as_str()))
+            })
+            .collect()
+    }
+
+    /// Extract the packages that should be verified.
+    ///
+    /// The result is build following these rules:
+    /// - If `--package <pkg>` is given, return the list of packages selected.
+    /// - If `--exclude <pkg>` is given, return the list of packages not excluded.
+    /// - If `--workspace` is given, return the list of workspace members.
+    /// - If no argument provided, return the root package if there's one or all members.
+    ///   - I.e.: Do whatever cargo does when there's no `default_members`.
+    ///   - This is because `default_members` is not available in cargo metadata.
+    ///     See <https://github.com/rust-lang/cargo/issues/8033>.
+    ///
+    /// In addition, if either `--package <pkg>` or `--exclude <pkg>` is given,
+    /// validate that `<pkg>` is a package name in the workspace, or return an error
+    /// otherwise.
+    fn packages_to_verify<'b>(
+        &self,
+        args: &VerificationArgs,
+        metadata: &'b Metadata,
+    ) -> Result<Vec<&'b Package>> {
+        debug!(package_selection=?args.cargo.package, package_exclusion=?args.cargo.exclude, workspace=args.cargo.workspace, "packages_to_verify args");
+        let packages = if !args.cargo.package.is_empty() {
+            let pkg_ids = self.to_package_ids(&args.cargo.package)?;
+            let filtered: Vec<_> = metadata
+                .workspace_packages()
+                .into_iter()
+                .filter(|pkg| pkg_ids.contains_key(&pkg.id))
+                .collect();
+            if filtered.len() < args.cargo.package.len() {
+                // Some packages specified in `--package` were not found in the workspace.
+                let outer: Vec<_> = metadata
+                    .packages
+                    .iter()
+                    .filter_map(|pkg| pkg_ids.get(&pkg.id).copied())
+                    .collect();
+                bail!(
+                    "The following packages specified do not belong to this workspace: `{}`",
+                    outer.join("`,")
+                );
+            }
+            filtered
+        } else if !args.cargo.exclude.is_empty() {
+            // should be ensured by argument validation
+            assert!(args.cargo.workspace);
+            let pkg_ids = self.to_package_ids(&args.cargo.exclude)?;
+            metadata
+                .workspace_packages()
+                .into_iter()
+                .filter(|pkg| !pkg_ids.contains_key(&pkg.id))
+                .collect()
+        } else {
+            match (args.cargo.workspace, metadata.root_package()) {
+                (true, _) | (_, None) => metadata.workspace_packages(),
+                (_, Some(root_pkg)) => vec![root_pkg],
+            }
+        };
+        trace!(?packages, "packages_to_verify result");
+        Ok(packages)
+    }
 }
 
 pub fn cargo_config_args() -> Vec<OsString> {
@@ -360,87 +447,6 @@ fn print_msg(diagnostic: &Diagnostic, use_rendered: bool) -> Result<()> {
         print!("{}", console::strip_ansi_codes(diagnostic.rendered.as_ref().unwrap()));
     }
     Ok(())
-}
-
-/// Check that all package names are present in the workspace, otherwise return which aren't.
-fn to_package_ids(package_names: &[String]) -> Result<HashMap<PackageId, &str>> {
-    package_names
-        .iter()
-        .map(|pkg| {
-            let mut cmd = setup_cargo_command()?;
-            cmd.arg("pkgid");
-            cmd.arg(pkg);
-            // TODO: Use run_piped
-            let mut process = cmd
-                .stdout(Stdio::piped())
-                .spawn()
-                .context(format!("Failed to invoke {}", cmd.get_program().to_string_lossy()))?;
-            if !process.wait().unwrap().success() {
-                bail!("Failed to retrieve information for `{pkg}`");
-            }
-
-            let mut reader = BufReader::new(process.stdout.take().unwrap());
-            let mut line = String::new();
-            reader.read_line(&mut line)?;
-            debug!(package_id=?line, "package_ids");
-            Ok((PackageId { repr: line.trim().to_string() }, pkg.as_str()))
-        })
-        .collect()
-}
-
-/// Extract the packages that should be verified.
-///
-/// The result is build following these rules:
-/// - If `--package <pkg>` is given, return the list of packages selected.
-/// - If `--exclude <pkg>` is given, return the list of packages not excluded.
-/// - If `--workspace` is given, return the list of workspace members.
-/// - If no argument provided, return the root package if there's one or all members.
-///   - I.e.: Do whatever cargo does when there's no `default_members`.
-///   - This is because `default_members` is not available in cargo metadata.
-///     See <https://github.com/rust-lang/cargo/issues/8033>.
-///
-/// In addition, if either `--package <pkg>` or `--exclude <pkg>` is given,
-/// validate that `<pkg>` is a package name in the workspace, or return an error
-/// otherwise.
-fn packages_to_verify<'b>(
-    args: &VerificationArgs,
-    metadata: &'b Metadata,
-) -> Result<Vec<&'b Package>> {
-    debug!(package_selection=?args.cargo.package, package_exclusion=?args.cargo.exclude, workspace=args.cargo.workspace, "packages_to_verify args");
-    let packages = if !args.cargo.package.is_empty() {
-        let pkg_ids = to_package_ids(&args.cargo.package)?;
-        let filtered: Vec<_> = metadata
-            .workspace_packages()
-            .into_iter()
-            .filter(|pkg| pkg_ids.contains_key(&pkg.id))
-            .collect();
-        if filtered.len() < args.cargo.package.len() {
-            // Some packages specified in `--package` were not found in the workspace.
-            let outer: Vec<_> =
-                metadata.packages.iter().filter_map(|pkg| pkg_ids.get(&pkg.id).copied()).collect();
-            bail!(
-                "The following packages specified do not belong to this workspace: `{}`",
-                outer.join("`,")
-            );
-        }
-        filtered
-    } else if !args.cargo.exclude.is_empty() {
-        // should be ensured by argument validation
-        assert!(args.cargo.workspace);
-        let pkg_ids = to_package_ids(&args.cargo.exclude)?;
-        metadata
-            .workspace_packages()
-            .into_iter()
-            .filter(|pkg| !pkg_ids.contains_key(&pkg.id))
-            .collect()
-    } else {
-        match (args.cargo.workspace, metadata.root_package()) {
-            (true, _) | (_, None) => metadata.workspace_packages(),
-            (_, Some(root_pkg)) => vec![root_pkg],
-        }
-    };
-    trace!(?packages, "packages_to_verify result");
-    Ok(packages)
 }
 
 /// Extract Kani artifact that might've been generated from a given rustc artifact.
