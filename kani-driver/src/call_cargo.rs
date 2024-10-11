@@ -9,16 +9,17 @@ use crate::util;
 use anyhow::{Context, Result, bail};
 use cargo_metadata::diagnostic::{Diagnostic, DiagnosticLevel};
 use cargo_metadata::{
-    Artifact as RustcArtifact, Message, Metadata, MetadataCommand, Package, Target,
+    Artifact as RustcArtifact, Message, Metadata, MetadataCommand, Package, PackageId, Target,
 };
 use kani_metadata::{ArtifactType, CompilerArtifactStub};
+use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
 use std::fmt::{self, Display};
 use std::fs::{self, File};
-use std::io::BufReader;
 use std::io::IsTerminal;
+use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 use tracing::{debug, trace};
 
 //---- Crate types identifier used by cargo.
@@ -173,7 +174,7 @@ impl KaniSession {
             for verification_target in package_targets(&self.args, package) {
                 let mut cmd = setup_cargo_command()?;
                 cmd.args(&cargo_args)
-                    .args(vec!["-p", &package.name])
+                    .args(vec!["-p", &package.id.to_string()])
                     .args(verification_target.to_args())
                     .args(&pkg_args)
                     .env("RUSTC", &self.kani_compiler)
@@ -362,23 +363,29 @@ fn print_msg(diagnostic: &Diagnostic, use_rendered: bool) -> Result<()> {
 }
 
 /// Check that all package names are present in the workspace, otherwise return which aren't.
-fn validate_package_names(package_names: &[String], packages: &[Package]) -> Result<()> {
-    let package_list: Vec<String> = packages.iter().map(|pkg| pkg.name.clone()).collect();
-    let unknown_packages: Vec<&String> =
-        package_names.iter().filter(|pkg_name| !package_list.contains(pkg_name)).collect();
+fn to_package_ids(package_names: &[String]) -> Result<HashMap<PackageId, &str>> {
+    package_names
+        .iter()
+        .map(|pkg| {
+            let mut cmd = setup_cargo_command()?;
+            cmd.arg("pkgid");
+            cmd.arg(pkg);
+            // TODO: Use run_piped
+            let mut process = cmd
+                .stdout(Stdio::piped())
+                .spawn()
+                .context(format!("Failed to invoke {}", cmd.get_program().to_string_lossy()))?;
+            if !process.wait().unwrap().success() {
+                bail!("Failed to retrieve information for `{pkg}`");
+            }
 
-    // Some packages aren't in the workspace. Return an error which includes their names.
-    if !unknown_packages.is_empty() {
-        let fmt_packages: Vec<String> =
-            unknown_packages.iter().map(|pkg| format!("`{pkg}`")).collect();
-        let error_msg = if unknown_packages.len() == 1 {
-            format!("couldn't find package {}", fmt_packages[0])
-        } else {
-            format!("couldn't find packages {}", fmt_packages.join(", "))
-        };
-        bail!(error_msg);
-    };
-    Ok(())
+            let mut reader = BufReader::new(process.stdout.take().unwrap());
+            let mut line = String::new();
+            reader.read_line(&mut line)?;
+            debug!(package_id=?line, "package_ids");
+            Ok((PackageId { repr: line.trim().to_string() }, pkg.as_str()))
+        })
+        .collect()
 }
 
 /// Extract the packages that should be verified.
@@ -401,20 +408,30 @@ fn packages_to_verify<'b>(
 ) -> Result<Vec<&'b Package>> {
     debug!(package_selection=?args.cargo.package, package_exclusion=?args.cargo.exclude, workspace=args.cargo.workspace, "packages_to_verify args");
     let packages = if !args.cargo.package.is_empty() {
-        validate_package_names(&args.cargo.package, &metadata.packages)?;
-        args.cargo
-            .package
-            .iter()
-            .map(|pkg_name| metadata.packages.iter().find(|pkg| pkg.name == *pkg_name).unwrap())
-            .collect()
+        let pkg_ids = to_package_ids(&args.cargo.package)?;
+        let filtered: Vec<_> = metadata
+            .workspace_packages()
+            .into_iter()
+            .filter(|pkg| pkg_ids.contains_key(&pkg.id))
+            .collect();
+        if filtered.len() < args.cargo.package.len() {
+            // Some packages specified in `--package` were not found in the workspace.
+            let outer: Vec<_> =
+                metadata.packages.iter().filter_map(|pkg| pkg_ids.get(&pkg.id).copied()).collect();
+            bail!(
+                "The following packages specified do not belong to this workspace: `{}`",
+                outer.join("`,")
+            );
+        }
+        filtered
     } else if !args.cargo.exclude.is_empty() {
         // should be ensured by argument validation
         assert!(args.cargo.workspace);
-        validate_package_names(&args.cargo.exclude, &metadata.packages)?;
+        let pkg_ids = to_package_ids(&args.cargo.exclude)?;
         metadata
             .workspace_packages()
             .into_iter()
-            .filter(|pkg| !args.cargo.exclude.contains(&pkg.name))
+            .filter(|pkg| !pkg_ids.contains_key(&pkg.id))
             .collect()
     } else {
         match (args.cargo.workspace, metadata.root_package()) {

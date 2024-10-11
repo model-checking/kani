@@ -33,7 +33,7 @@ pub struct CargoCommonArgs {
     #[arg(long)]
     pub workspace: bool,
 
-    /// Run Kani on the specified packages.
+    /// Run Kani on the specified packages  (see `cargo help pkgid` for accepted format)
     #[arg(long, short, conflicts_with("workspace"), num_args(1..))]
     pub package: Vec<String>,
 
