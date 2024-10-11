@@ -38,7 +38,7 @@ unsafe fn small_slice_eq(x: &[u8], y: &[u8]) -> bool {
 }
 
 #[kani::proof]
-fn main() {
+fn small_slice_eq_harness() {
     let mut a = [1; 2000];
     let mut b = [1; 2000];
     unsafe {

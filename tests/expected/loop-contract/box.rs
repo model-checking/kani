@@ -8,14 +8,17 @@
 #![feature(stmt_expr_attributes)]
 #![feature(proc_macro_hygiene)]
 
+type Data = u8;
+
 #[kani::proof]
-fn simple_while_loop_harness() {
-    let mut x: u8 = kani::any_where(|i| *i >= 2);
+fn box_harness() {
+    let mut i: u8 = 0;
 
-    #[kani::loop_invariant(x >= 2)]
-    while x > 2 {
-        x = x - 1;
+    let mut data: Box<Data> = Box::new(0);
+
+    #[kani::loop_invariant(*data == i)]
+    while i < 10 {
+        i += 1;
+        data = Box::new(i);
     }
-
-    assert!(x == 2);
 }

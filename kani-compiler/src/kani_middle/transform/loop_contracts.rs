@@ -15,8 +15,8 @@ use rustc_middle::ty::TyCtxt;
 use rustc_span::Symbol;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{
-    BasicBlockIdx, Body, ConstOperand, Operand, Place, Rvalue, StatementKind, Terminator,
-    TerminatorKind, VarDebugInfoContents,
+    AggregateKind, BasicBlockIdx, Body, ConstOperand, Operand, Place, Rvalue, StatementKind,
+    Terminator, TerminatorKind, VarDebugInfoContents,
 };
 use stable_mir::ty::{FnDef, MirConst, RigidTy};
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -122,13 +122,10 @@ impl TransformPass for LoopContractPass {
                         // Add successors of the current basic blocks to
                         // the visiting queue.
                         for to_visit in terminator.successors() {
-                            if visited.contains(&to_visit) {
-                                continue;
-                            }
-                            if is_loop_head {
-                                loop_queue.push_back(to_visit);
-                            } else {
-                                queue.push_back(to_visit);
+                            if !visited.contains(&to_visit) {
+                                let target_queue =
+                                    if is_loop_head { &mut loop_queue } else { &mut queue };
+                                target_queue.push_back(to_visit);
                             }
                         }
                     }
@@ -145,7 +142,7 @@ impl TransformPass for LoopContractPass {
 
 impl LoopContractPass {
     pub fn new(tcx: TyCtxt, unit: &CodegenUnit) -> LoopContractPass {
-        if let Some(_) = unit.harnesses.first() {
+        if unit.harnesses.first().is_some() {
             let run_contract_fn = find_fn_def(tcx, "KaniRunContract");
             assert!(run_contract_fn.is_some(), "Failed to find Kani run contract function");
             LoopContractPass { run_contract_fn, new_loop_latches: HashMap::new() }
@@ -211,43 +208,36 @@ impl LoopContractPass {
                 // And check if all arguments of the closure is supported.
                 let mut supported_vars: Vec<Place> = Vec::new();
                 // All user variables are support
-                supported_vars.extend(new_body.var_debug_info().into_iter().filter_map(|info| {
+                supported_vars.extend(new_body.var_debug_info().iter().filter_map(|info| {
                     match &info.value {
                         VarDebugInfoContents::Place(debug_place) => Some(debug_place.clone()),
                         _ => None,
                     }
                 }));
-                if let Operand::Copy(closure_place) | Operand::Move(closure_place) =
-                    &terminator_args[0]
-                {
-                    for stmt in &new_body.blocks()[bb_idx].statements {
-                        if let StatementKind::Assign(place, rvalue) = &stmt.kind {
-                            if place == closure_place {
-                                if let Rvalue::Aggregate(_, closure_args) = rvalue {
-                                    if closure_args.iter().any(|arg| !matches!(arg, Operand::Copy(arg_place) | Operand::Move(arg_place) if
-                                    supported_vars.contains(arg_place))){
+
+                // For each assignment in the loop head block,
+                // if it assigns to the closure place, we check if all arguments are supported;
+                // if it assigns to other places, we cache if the assigned places are supported.
+                for stmt in &new_body.blocks()[bb_idx].statements {
+                    if let StatementKind::Assign(place, rvalue) = &stmt.kind {
+                        match rvalue {
+                            Rvalue::Aggregate(AggregateKind::Closure(..), closure_args) => {
+                                if closure_args.iter().any(|arg| !matches!(arg, Operand::Copy(arg_place) | Operand::Move(arg_place) if supported_vars.contains(arg_place))) {
                                     unreachable!(
-                                        "The loop invariant contains unsupported variables.
-                                        Please report https://github.com/model-checking/kani/issues/new?template=bug_report.md"
-                                    )
-                                    }
-                                } else {
-                                    unreachable!(
-                                        "The argument of loop contracts register function must be a closure."
-                                    )
+                                            "The loop invariant contains unsupported variables. \
+                                            Please report github.com/model-checking/kani/issues/new?template=bug_report.md"
+                                        );
                                 }
-                            } else {
+                            }
+                            _ => {
                                 if self.is_supported_argument_of_closure(rvalue, new_body) {
-                                    supported_vars.push(place.clone())
-                                };
+                                    supported_vars.push(place.clone());
+                                }
                             }
                         }
                     }
-                } else {
-                    unreachable!(
-                        "The argument of loop contracts register function must be a closure."
-                    )
                 }
+
                 // Replace the original loop head block
                 // ```ignore
                 // bb_idx: {
@@ -301,7 +291,7 @@ impl LoopContractPass {
                     },
                 );
                 new_body.replace_terminator(
-                    &mut SourceInstruction::Terminator { bb: new_body.blocks().len() - 1 },
+                    &SourceInstruction::Terminator { bb: new_body.blocks().len() - 1 },
                     Terminator {
                         kind: TerminatorKind::Call {
                             func: terminator_func.clone(),
