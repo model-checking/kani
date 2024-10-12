@@ -368,7 +368,7 @@ impl KaniSession {
 
     /// Extract the packages that should be verified.
     ///
-    /// The result is build following these rules:
+    /// The result is built following these rules:
     /// - If `--package <pkg>` is given, return the list of packages selected.
     /// - If `--exclude <pkg>` is given, return the list of packages not excluded.
     /// - If `--workspace` is given, return the list of workspace members.
@@ -401,7 +401,7 @@ impl KaniSession {
                     .filter_map(|pkg| pkg_ids.get(&pkg.id).copied())
                     .collect();
                 bail!(
-                    "The following packages specified do not belong to this workspace: `{}`",
+                    "The following specified packages were not found in this workspace: `{}`",
                     outer.join("`,")
                 );
             }
