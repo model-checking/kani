@@ -11,5 +11,5 @@ Please re-run this command with one of the following specifications:
 error: Failed to retrieve information for `zerocopy`
 Found expected ambiguous crate error
 
-error: The following packages specified do not belong to this workspace: `zerocopy@0.8.4`
+error: The following specified packages were not found in this workspace: `zerocopy@0.8.4`
 Found expected out of workspace error
