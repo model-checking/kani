@@ -13,4 +13,4 @@ crate_with_global_asm = { path = "crate_with_global_asm" }
 
 [package.metadata.kani]
 # Issue with MIR Linker on static constant.
-flags = { enable-unstable = true, ignore-global-asm = true, mir-linker = true }
+flags = { enable-unstable = true, ignore-global-asm = true }

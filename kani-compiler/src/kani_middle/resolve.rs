@@ -14,13 +14,13 @@ use crate::kani_middle::stable_fn_def;
 use quote::ToTokens;
 use rustc_errors::ErrorGuaranteed;
 use rustc_hir::def::{DefKind, Res};
-use rustc_hir::def_id::{DefId, LocalDefId, LocalModDefId, CRATE_DEF_INDEX, LOCAL_CRATE};
+use rustc_hir::def_id::{CRATE_DEF_INDEX, DefId, LOCAL_CRATE, LocalDefId, LocalModDefId};
 use rustc_hir::{ItemKind, UseKind};
-use rustc_middle::ty::fast_reject::{self, TreatParams};
 use rustc_middle::ty::TyCtxt;
+use rustc_middle::ty::fast_reject::{self, TreatParams};
 use rustc_smir::rustc_internal;
-use stable_mir::ty::{FnDef, RigidTy, Ty, TyKind};
 use stable_mir::CrateDef;
+use stable_mir::ty::{FnDef, RigidTy, Ty, TyKind};
 use std::collections::HashSet;
 use std::fmt;
 use std::iter::Peekable;
@@ -544,7 +544,6 @@ fn resolve_in_type_def<'tcx>(
         || ResolveError::MissingItem { tcx, base: type_id, unresolved: name.to_string() };
     // Try the inherent `impl` blocks (i.e., non-trait `impl`s).
     tcx.inherent_impls(type_id)
-        .map_err(|_| missing_item_err())?
         .iter()
         .flat_map(|impl_id| tcx.associated_item_def_ids(impl_id))
         .cloned()
@@ -588,7 +587,7 @@ where
         let simple_ty =
             fast_reject::simplify_type(tcx, internal_ty, TreatParams::InstantiateWithInfer)
                 .unwrap();
-        let impls = tcx.incoherent_impls(simple_ty).unwrap();
+        let impls = tcx.incoherent_impls(simple_ty);
         // Find the primitive impl.
         let item = impls
             .iter()

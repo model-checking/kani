@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-verify-fail
 
-use std::io::{sink, Write};
+use std::io::{Write, sink};
 
 #[kani::proof]
 fn main() {

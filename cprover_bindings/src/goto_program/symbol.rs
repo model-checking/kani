@@ -20,8 +20,6 @@ pub struct Symbol {
     /// Contracts to be enforced (only supported for functions)
     pub contract: Option<Box<FunctionContract>>,
 
-    /// Optional debugging information
-
     /// Local name `x`
     pub base_name: Option<InternedString>,
     /// Fully qualifier name `foo::bar::x`

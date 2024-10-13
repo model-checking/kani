@@ -1,0 +1,9 @@
+error[E0080]: evaluation of `kani::PointerGenerator::<0>::VALID` failed\
+
+the evaluated program panicked at 'PointerGenerator requires at least one byte.'
+
+note: the above error was encountered while instantiating `fn kani::PointerGenerator::<0>::new`\
+pointer_generator_error.rs\
+|\
+|     let _generator = PointerGenerator::<0>::new();\
+|                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
