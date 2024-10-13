@@ -7,9 +7,6 @@ use rayon::prelude::*;
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
-use std::sync::mpsc;
-use std::sync::Arc;
-use std::thread;
 use std::time::Instant;
 
 use crate::args::OutputFormat;
