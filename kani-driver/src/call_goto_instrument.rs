@@ -45,7 +45,7 @@ impl KaniSession {
             .unstable_features
             .contains(kani_metadata::UnstableFeature::LoopContracts)
         {
-            self.instrument_loop_contracts(output)?;
+            self.instrument_loop_contracts(harness, output)?;
         }
 
         if self.args.checks.undefined_function_on() {
@@ -193,10 +193,13 @@ impl KaniSession {
     }
 
     /// Apply annotated loop contracts.
-    pub fn instrument_loop_contracts(&self, file: &Path) -> Result<()> {
+    pub fn instrument_loop_contracts(&self, harness: &HarnessMetadata, file: &Path) -> Result<()> {
         let args: Vec<OsString> = vec![
+            "--dfcc".into(),
+            (&harness.mangled_name).into(),
             "--apply-loop-contracts".into(),
             "--loop-contracts-no-unwind".into(),
+            "--no-malloc-may-fail".into(),
             // Because loop contracts now are wrapped in a closure which will be a side-effect expression in CBMC even they
             // may not contain side-effect. So we disable the side-effect check for now and will implement a better check
             // instead of simply rejecting function calls and statement expressions.

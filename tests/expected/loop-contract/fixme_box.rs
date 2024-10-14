@@ -3,7 +3,8 @@
 
 // kani-flags: -Z loop-contracts
 
-//! Check if loop contracts is correctly applied.
+//! Loop contracts in CBMC backend doesn't support malloc or free in loop bodies.
+//! Tracked in: https://github.com/model-checking/kani/issues/3587
 
 #![feature(stmt_expr_attributes)]
 #![feature(proc_macro_hygiene)]

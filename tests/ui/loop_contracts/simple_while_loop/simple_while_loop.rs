@@ -9,7 +9,12 @@
 #![feature(proc_macro_hygiene)]
 
 #[kani::proof]
+#[kani::solver(kissat)]
 fn simple_while_loop_harness() {
+    // Needed to avoid having `free` be removed as unused function. This is
+    // because DFCC contract enforcement assumes that a definition for `free`
+    // exists.
+    let _ = Box::new(10);
     let mut x: u8 = kani::any_where(|i| *i >= 2);
 
     #[kani::loop_invariant(x >= 2)]

@@ -24,48 +24,6 @@ use std::fmt::Debug;
 
 use super::TransformPass;
 
-/// This pass will perform the following operations:
-/// 1. Replace the body of `kani_register_loop_contract` by `kani::internal::run_contract_fn`
-///    to invoke the closure.
-///
-/// 2. Transform loops with contracts from
-///    ```ignore
-///    bb_idx: {
-///         loop_head_stmts
-///         _v = kani_register_loop_contract(move args) -> [return: terminator_target];
-///    }
-///
-///    ...
-///    loop_body_blocks
-///    ...
-///
-///    loop_latch_block: {
-///         loop_latch_stmts
-///         goto -> bb_idx;
-///    }
-///    ```
-///    to blocks
-///    ```ignore
-///    bb_idx: {
-///         loop_head_stmts
-///         _v = true
-///         goto -> terminator_target
-///    }
-///
-///    ...
-///    loop_body_blocks
-///    ...
-///
-///    loop_latch_block: {
-///         loop_latch_stmts
-///         goto -> bb_new_loop_latch;
-///    }
-///
-///    bb_new_loop_latch: {
-///         loop_head_body
-///         _v = kani_register_loop_contract(move args) -> [return: terminator_target];
-///    }
-///    ```
 #[derive(Debug, Default)]
 pub struct LoopContractPass {
     /// Cache KaniRunContract function used to implement contracts.
@@ -92,7 +50,51 @@ impl TransformPass for LoopContractPass {
     }
 
     /// Run a transformation pass on the whole codegen unit.
+    ///
+    /// This pass will perform the following operations:
+    /// 1. Replace the body of `kani_register_loop_contract` by `kani::internal::run_contract_fn`
+    ///    to invoke the closure.
+    ///
+    /// 2. Transform loops with contracts from
+    ///    ```ignore
+    ///    bb_idx: {
+    ///         loop_head_stmts
+    ///         _v = kani_register_loop_contract(move args) -> [return: terminator_target];
+    ///    }
+    ///
+    ///    ...
+    ///    loop_body_blocks
+    ///    ...
+    ///
+    ///    loop_latch_block: {
+    ///         loop_latch_stmts
+    ///         goto -> bb_idx;
+    ///    }
+    ///    ```
+    ///    to blocks
+    ///    ```ignore
+    ///    bb_idx: {
+    ///         loop_head_stmts
+    ///         _v = true
+    ///         goto -> terminator_target
+    ///    }
+    ///
+    ///    ...
+    ///    loop_body_blocks
+    ///    ...
+    ///
+    ///    loop_latch_block: {
+    ///         loop_latch_stmts
+    ///         goto -> bb_new_loop_latch;
+    ///    }
+    ///
+    ///    bb_new_loop_latch: {
+    ///         loop_head_body
+    ///         _v = kani_register_loop_contract(move args) -> [return: terminator_target];
+    ///    }
+    ///    ```
     fn transform(&mut self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
+        self.new_loop_latches = HashMap::new();
         match instance.ty().kind().rigid().unwrap() {
             RigidTy::FnDef(_func, args) => {
                 if KaniAttributes::for_instance(tcx, instance).fn_marker()
@@ -163,11 +165,25 @@ impl LoopContractPass {
             .filter(|stmt| {
                 matches!(stmt.kind, StatementKind::StorageLive(_) | StatementKind::StorageDead(_))
             })
-            .map(|stmt| stmt.clone())
+            .cloned()
             .collect();
-        return BasicBlock { statements: new_stmts, terminator: block.terminator.clone() };
+        BasicBlock { statements: new_stmts, terminator: block.terminator.clone() }
     }
 
+    /// Remove `StorageDead closure_var` to avoid invariant closure becoming dead.
+    fn make_invariant_closure_alive(&self, body: &mut MutableBody, bb_idx: usize) {
+        let mut stmts = body.blocks()[bb_idx].statements.clone();
+        if stmts.len() == 0 || !matches!(stmts[0].kind, StatementKind::StorageDead(_)) {
+            unreachable!(
+                "The assumptions for loop-contracts transformation are violated. \
+            Please report github.com/model-checking/kani/issues/new?template=bug_report.md"
+            );
+        }
+        stmts.remove(0);
+        body.replace_statements(&SourceInstruction::Terminator { bb: bb_idx }, stmts);
+    }
+
+    /// We only support closure arguments that are either `copy`` or `move`` of reference of user variables.
     fn is_supported_argument_of_closure(&self, rv: &Rvalue, body: &MutableBody) -> bool {
         let var_debug_info = &body.var_debug_info();
         matches!(rv, Rvalue::Ref(_, _, place) if
@@ -176,6 +192,44 @@ impl LoopContractPass {
         ))
     }
 
+    /// Transform loops with contracts from
+    ///    ```ignore
+    ///    bb_idx: {
+    ///         loop_head_stmts
+    ///         _v = kani_register_loop_contract(move args) -> [return: terminator_target];
+    ///    }
+    ///
+    ///    ...
+    ///    loop_body_blocks
+    ///    ...
+    ///
+    ///    loop_latch_block: {
+    ///         loop_latch_stmts
+    ///         goto -> bb_idx;
+    ///    }
+    ///    ```
+    ///    to blocks
+    ///    ```ignore
+    ///    bb_idx: {
+    ///         loop_head_stmts
+    ///         _v = true
+    ///         goto -> terminator_target
+    ///    }
+    ///
+    ///    ...
+    ///    loop_body_blocks
+    ///    ...
+    ///
+    ///    loop_latch_block: {
+    ///         loop_latch_stmts
+    ///         goto -> bb_new_loop_latch;
+    ///    }
+    ///
+    ///    bb_new_loop_latch: {
+    ///         loop_head_body
+    ///         _v = kani_register_loop_contract(move args) -> [return: terminator_target];
+    ///    }
+    ///    ```
     fn transform_bb(&mut self, tcx: TyCtxt, new_body: &mut MutableBody, bb_idx: usize) -> bool {
         let terminator = new_body.blocks()[bb_idx].terminator.clone();
         let mut contain_loop_contracts = false;
@@ -218,6 +272,23 @@ impl LoopContractPass {
                 == Some(Symbol::intern("kani_register_loop_contract"))
                 && matches!(&terminator_args[1], Operand::Constant(op) if op.const_.eval_target_usize().unwrap() == 0)
             {
+                // Check if the MIR satisfy the assumptions of this transformation.
+                if new_body.blocks()[terminator_target.unwrap()].statements.len() != 0
+                    || !matches!(
+                        new_body.blocks()[terminator_target.unwrap()].terminator.kind,
+                        TerminatorKind::SwitchInt { .. }
+                    )
+                {
+                    unreachable!(
+                        "The assumptions for loop-contracts transformation are violated. \
+                    Please report github.com/model-checking/kani/issues/new?template=bug_report.md"
+                    );
+                }
+
+                let ori_condition_bb_idx =
+                    new_body.blocks()[terminator_target.unwrap()].terminator.successors()[1];
+                self.make_invariant_closure_alive(new_body, ori_condition_bb_idx);
+
                 contain_loop_contracts = true;
 
                 // Collect supported vars assigned in the block.

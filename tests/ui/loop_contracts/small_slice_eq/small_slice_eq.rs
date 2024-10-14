@@ -6,7 +6,7 @@
 // Modifications Copyright Kani Contributors
 // See GitHub history for details.
 
-// kani-flags: -Z loop-contracts --enable-unstable --cbmc-args --arrays-uf-always --no-standard-checks
+// kani-flags: -Z loop-contracts --enable-unstable --cbmc-args --arrays-uf-always --no-standard-checks --object-bits 8
 
 //! Check if loop contracts are correctly applied. The flag --no-standard-checks should be
 //! removed once same_object predicate is supported in loop contracts.
@@ -39,6 +39,10 @@ unsafe fn small_slice_eq(x: &[u8], y: &[u8]) -> bool {
 
 #[kani::proof]
 fn small_slice_eq_harness() {
+    // Needed to avoid having `free` be removed as unused function. This is
+    // because DFCC contract enforcement assumes that a definition for `free`
+    // exists.
+    let _ = Box::new(10);
     let mut a = [1; 2000];
     let mut b = [1; 2000];
     unsafe {
