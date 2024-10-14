@@ -173,9 +173,9 @@ impl LoopContractPass {
     /// Remove `StorageDead closure_var` to avoid invariant closure becoming dead.
     fn make_invariant_closure_alive(&self, body: &mut MutableBody, bb_idx: usize) {
         let mut stmts = body.blocks()[bb_idx].statements.clone();
-        if stmts.len() == 0 || !matches!(stmts[0].kind, StatementKind::StorageDead(_)) {
+        if stmts.is_empty() || !matches!(stmts[0].kind, StatementKind::StorageDead(_)) {
             unreachable!(
-                "The assumptions for loop-contracts transformation are violated. \
+                "The assumptions for loop-contracts transformation are violated by some other transformation. \
             Please report github.com/model-checking/kani/issues/new?template=bug_report.md"
             );
         }
@@ -273,14 +273,14 @@ impl LoopContractPass {
                 && matches!(&terminator_args[1], Operand::Constant(op) if op.const_.eval_target_usize().unwrap() == 0)
             {
                 // Check if the MIR satisfy the assumptions of this transformation.
-                if new_body.blocks()[terminator_target.unwrap()].statements.len() != 0
+                if !new_body.blocks()[terminator_target.unwrap()].statements.is_empty()
                     || !matches!(
                         new_body.blocks()[terminator_target.unwrap()].terminator.kind,
                         TerminatorKind::SwitchInt { .. }
                     )
                 {
                     unreachable!(
-                        "The assumptions for loop-contracts transformation are violated. \
+                        "The assumptions for loop-contracts transformation are violated by some other transformation. \
                     Please report github.com/model-checking/kani/issues/new?template=bug_report.md"
                     );
                 }
@@ -311,7 +311,7 @@ impl LoopContractPass {
                             Rvalue::Aggregate(AggregateKind::Closure(..), closure_args) => {
                                 if closure_args.iter().any(|arg| !matches!(arg, Operand::Copy(arg_place) | Operand::Move(arg_place) if supported_vars.contains(arg_place))) {
                                     unreachable!(
-                                            "The loop invariant contains unsupported variables. \
+                                            "The loop invariant support only reference of user variables. The provided invariants contain unsupported dereference. \
                                             Please report github.com/model-checking/kani/issues/new?template=bug_report.md"
                                         );
                                 }
