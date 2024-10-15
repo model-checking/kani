@@ -7,7 +7,6 @@ use rayon::prelude::*;
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
-use std::time::Instant;
 
 use crate::args::OutputFormat;
 use crate::call_cbmc::{VerificationResult, VerificationStatus};
@@ -46,7 +45,7 @@ impl<'sess, 'pr> HarnessRunner<'sess, 'pr> {
 
         let sorted_harnesses = crate::metadata::sort_harnesses_by_loc(harnesses);
         let pool = {
-            let mut builder = rayon::ThreadPoolBuilder::new();
+            let builder = rayon::ThreadPoolBuilder::new();
             builder.build()?
         };
 
