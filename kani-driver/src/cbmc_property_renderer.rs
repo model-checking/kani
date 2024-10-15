@@ -735,7 +735,7 @@ fn annotate_properties_with_reach_results(
     mut properties: Vec<Property>,
     reach_checks: Vec<Property>,
 ) -> Vec<Property> {
-    let mut reach_map: HashMap<String, CheckStatus> = HashMap::new();
+    let mut reach_map: HashMap<String, Vec<CheckStatus>> = HashMap::new();
     let reach_desc_pat = Regex::new("KANI_CHECK_ID_.*_([0-9])*").unwrap();
     // Collect data (ID, status) from reachability checks
     for reach_check in reach_checks {
@@ -746,8 +746,7 @@ fn annotate_properties_with_reach_results(
         let check_id_str = format!("[{check_id}]");
         // Get the status and insert into `reach_map`
         let status = reach_check.status;
-        let res_ins = reach_map.insert(check_id_str, status);
-        assert!(res_ins.is_none());
+        reach_map.entry(check_id_str).or_default().push(status);
     }
 
     for prop in properties.iter_mut() {
@@ -761,7 +760,15 @@ fn annotate_properties_with_reach_results(
             let reach_status_opt = reach_map.get(prop_match_id);
             // Update the reachability status of the property
             if let Some(reach_status) = reach_status_opt {
-                prop.reach = Some(*reach_status);
+                for status in reach_status {
+                    // Report if any copy of `prop` is not success.
+                    if prop.reach.is_none()
+                        || prop.reach.unwrap() == CheckStatus::Satisfied
+                        || prop.reach.unwrap() == CheckStatus::Success
+                    {
+                        prop.reach = Some(*status);
+                    }
+                }
             }
         }
     }

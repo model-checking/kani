@@ -39,6 +39,15 @@ impl KaniSession {
 
         self.instrument_contracts(harness, output)?;
 
+        if self
+            .args
+            .common_args
+            .unstable_features
+            .contains(kani_metadata::UnstableFeature::LoopContracts)
+        {
+            self.instrument_loop_contracts(harness, output)?;
+        }
+
         if self.args.checks.undefined_function_on() {
             self.add_library(output)?;
             self.undefined_functions(output)?;
@@ -180,6 +189,25 @@ impl KaniSession {
             args.push("--nondet-static-exclude".into());
             args.push(tracker.as_str().into());
         }
+        self.call_goto_instrument(&args)
+    }
+
+    /// Apply annotated loop contracts.
+    pub fn instrument_loop_contracts(&self, harness: &HarnessMetadata, file: &Path) -> Result<()> {
+        let args: Vec<OsString> = vec![
+            "--dfcc".into(),
+            (&harness.mangled_name).into(),
+            "--apply-loop-contracts".into(),
+            "--loop-contracts-no-unwind".into(),
+            "--no-malloc-may-fail".into(),
+            // Because loop contracts now are wrapped in a closure which will be a side-effect expression in CBMC even they
+            // may not contain side-effect. So we disable the side-effect check for now and will implement a better check
+            // instead of simply rejecting function calls and statement expressions.
+            // See issue: diffblue/cbmc#8393
+            "--disable-loop-contracts-side-effect-check".into(),
+            file.into(),
+            file.into(),
+        ];
         self.call_goto_instrument(&args)
     }
 
