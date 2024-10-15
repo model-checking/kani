@@ -45,18 +45,10 @@ impl<'sess, 'pr> HarnessRunner<'sess, 'pr> {
         self.check_stubbing(harnesses)?;
 
         let sorted_harnesses = crate::metadata::sort_harnesses_by_loc(harnesses);
-        let max_threads = 8;
         let pool = {
             let mut builder = rayon::ThreadPoolBuilder::new();
-            let mut threads = sorted_harnesses.len();
-            if threads > max_threads {
-                threads = max_threads;
-            }
-            builder = builder.num_threads(threads);
             builder.build()?
         };
-
-        let before = Instant::now();
 
         let results = pool.install(|| -> Result<Vec<HarnessResult<'pr>>> {
             sorted_harnesses
@@ -78,8 +70,6 @@ impl<'sess, 'pr> HarnessRunner<'sess, 'pr> {
                 })
                 .collect::<Result<Vec<_>>>()
         })?;
-
-        println!("Elapsed Time: {:.2?}\n", before.elapsed());
 
         Ok(results)
     }
