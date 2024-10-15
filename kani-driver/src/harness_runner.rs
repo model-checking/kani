@@ -149,7 +149,7 @@ impl KaniSession {
 
     fn result_output_dir(&self) -> Result<PathBuf> {
         let target_dir = self.args.target_dir.clone().map_or_else(current_dir, Ok)?;
-        Ok(target_dir.join("kani_results"))
+        Ok(target_dir.join("result_output_dir"))
     }
 
     /// Run the verification process for a single harness
