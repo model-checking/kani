@@ -384,6 +384,7 @@ impl<'a, 'b> MirVisitor for CheckValueVisitor<'a, 'b> {
                 TerminatorKind::Call { func, args, .. } => {
                     // Note: For transmute, both Src and Dst must be valid type.
                     // In this case, we need to save the Dst, and invoke super_terminator.
+                    self.super_terminator(term, location);
                     match intrinsic_name(self.locals, func).as_deref() {
                         Some("write_bytes") => {
                             // The write bytes intrinsic may trigger UB in safe code.
