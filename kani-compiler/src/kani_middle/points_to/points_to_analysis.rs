@@ -40,7 +40,7 @@ use rustc_middle::{
     },
     ty::{Instance, InstanceKind, List, ParamEnv, TyCtxt, TyKind},
 };
-use rustc_mir_dataflow::{Analysis, AnalysisDomain, Forward, JoinSemiLattice};
+use rustc_mir_dataflow::{Analysis, Forward, JoinSemiLattice};
 use rustc_smir::rustc_internal;
 use rustc_span::{DUMMY_SP, source_map::Spanned};
 use stable_mir::mir::{Body as StableBody, mono::Instance as StableInstance};
@@ -114,7 +114,7 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
     }
 }
 
-impl<'tcx> AnalysisDomain<'tcx> for PointsToAnalysis<'_, 'tcx> {
+impl<'tcx> Analysis<'tcx> for PointsToAnalysis<'_, 'tcx> {
     /// Dataflow state at each instruction.
     type Domain = PointsToGraph<'tcx>;
 
@@ -133,9 +133,7 @@ impl<'tcx> AnalysisDomain<'tcx> for PointsToAnalysis<'_, 'tcx> {
     fn initialize_start_block(&self, _body: &Body<'tcx>, state: &mut Self::Domain) {
         state.join(&self.initial_graph.clone());
     }
-}
 
-impl<'tcx> Analysis<'tcx> for PointsToAnalysis<'_, 'tcx> {
     /// Update current dataflow state based on the information we can infer from the given
     /// statement.
     fn apply_statement_effect(
