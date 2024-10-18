@@ -1,0 +1,6 @@
+error: The function specified in the `proof_for_contract` attribute, `foo`, was not found.\
+Make sure the function is reachable from the harness.
+test.rs:\
+|\
+| #[kani::proof_for_contract(foo)]\
+| ^^^^^^^^^^^^^^
