@@ -52,19 +52,27 @@ Note that pretty printing for the Rust nightly toolchain (which Kani uses) is no
 For example, a vector may be displayed as `vec![{...}, {...}]` on nightly Rust, when it would be displayed as `vec![Some(0), None]` on stable Rust.
 Hopefully, this will be fixed soon.
 
-### CLion / IntelliJ
+### RustRover / CLion
 This is not a great solution, but it works for now (see <https://github.com/intellij-rust/intellij-rust/issues/1618>
 for more details).
-Edit the `Cargo.toml` of the package that you're working on and add artificial dependencies on the `rustc` packages that you would like to explore.
+
+Open the `Cargo.toml` of your crate (e.g.: `kani-compiler`), and do the following:
+
+1. Add optional dependencies on the `rustc` crates you are using.
+2. Add a feature that enable those dependencies.
+3. Toggle that feature using the IDE GUI.
+
+Here is an example:
 
 ```toml
-# This configuration doesn't exist so it shouldn't affect your build.
-[target.'cfg(KANI_DEV)'.dependencies]
+# ** At the bottom of the dependencies section: **
 # Adjust the path here to point to a local copy of the rust compiler.
-# The best way is to use the rustup path. Replace <toolchain> with the
-# proper name to your toolchain.
-rustc_driver = { path = "~/.rustup/toolchains/<toolchain>/lib/rustlib/rustc-src/rust/compiler/rustc_driver" }
-rustc_interface = { path = "~/.rustup/toolchains/<toolchain>/lib/rustlib/rustc-src/rust/compiler/rustc_interface" }
+# E.g.: ~/.rustup/toolchains/<toolchain>/lib/rustlib/rustc-src/rust/compiler
+rustc_smir = { path = "<path_to_rustc>/rustc_smir", optional = true }
+stable_mir = { path = "<path_to_rustc>/stable_mir", optional = true }
+
+[features]
+clion = ['rustc_smir', 'stable_mir']
 ```
 
 **Don't forget to rollback the changes before you create your PR.**
