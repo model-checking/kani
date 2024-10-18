@@ -488,8 +488,6 @@ impl<'tcx> KaniAttributes<'tcx> {
         }
     }
 
-    /// Check that the `proof` attribute is valid.
-
     /// Extract harness attributes for a given `def_id`.
     ///
     /// We only extract attributes for harnesses that are local to the current crate.

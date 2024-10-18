@@ -21,7 +21,7 @@ use rustc_target::abi::{HasDataLayout, TargetDataLayout};
 use stable_mir::mir::mono::MonoItem;
 use stable_mir::ty::{FnDef, RigidTy, Span as SpanStable, Ty, TyKind};
 use stable_mir::visitor::{Visitable, Visitor as TyVisitor};
-use stable_mir::{CrateDef, DefId};
+use stable_mir::CrateDef;
 use std::ops::ControlFlow;
 
 use self::attributes::KaniAttributes;
