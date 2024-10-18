@@ -327,7 +327,7 @@ macro_rules! kani_mem {
 
         /// A helper to assert `is_initialized` to use it as a part of other predicates.
         fn assert_is_initialized<T: ?Sized>(ptr: *const T) -> bool {
-            super::check(
+            super::internal::check(
                 is_initialized(ptr),
                 "Undefined Behavior: Reading from an uninitialized pointer",
             );
