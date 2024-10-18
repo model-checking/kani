@@ -474,9 +474,11 @@ impl<'tcx> KaniAttributes<'tcx> {
             || self.map.contains_key(&KaniAttributeKind::ProofForContract)
     }
 
-    pub fn check_proof_for_contract(&self, functions: &HashSet<DefId>) {
-        if let Some((symbol, id, span)) = self.interpret_for_contract_attribute() {
-            if !functions.contains(&id) {
+    /// Check that the function specified in the `proof_for_contract` attribute
+    /// is reachable and emit an error if it isn't
+    pub fn check_proof_for_contract(&self, reachable_functions: &HashSet<DefId>) {
+        if let Some((symbol, function, span)) = self.interpret_for_contract_attribute() {
+            if !reachable_functions.contains(&function) {
                 let err_msg = format!(
                     "The function specified in the `proof_for_contract` attribute, `{symbol}`, was not found.\
                     \nMake sure the function is reachable from the harness."

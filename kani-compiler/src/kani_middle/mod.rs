@@ -18,10 +18,10 @@ use rustc_span::Span;
 use rustc_span::source_map::respan;
 use rustc_target::abi::call::FnAbi;
 use rustc_target::abi::{HasDataLayout, TargetDataLayout};
-use stable_mir::{CrateDef, DefId};
-use stable_mir::mir::mono::{Instance, MonoItem};
+use stable_mir::mir::mono::MonoItem;
 use stable_mir::ty::{FnDef, RigidTy, Span as SpanStable, Ty, TyKind};
 use stable_mir::visitor::{Visitable, Visitor as TyVisitor};
+use stable_mir::{CrateDef, DefId};
 use std::ops::ControlFlow;
 
 use self::attributes::KaniAttributes;
@@ -101,10 +101,13 @@ impl TyVisitor for FindUnsafeCell<'_> {
 pub fn check_reachable_items(tcx: TyCtxt, queries: &QueryDb, items: &[MonoItem]) {
     // Avoid printing the same error multiple times for different instantiations of the same item.
     let mut def_ids = HashSet::new();
-    let functions: HashSet<InternalDefId> = items.iter().filter_map(|i| match i {
-        MonoItem::Fn(instance) => Some(rustc_internal::internal(tcx, instance.def.def_id())),
-        _ => None,
-    }).collect();
+    let reachable_functions: HashSet<InternalDefId> = items
+        .iter()
+        .filter_map(|i| match i {
+            MonoItem::Fn(instance) => Some(rustc_internal::internal(tcx, instance.def.def_id())),
+            _ => None,
+        })
+        .collect();
     for item in items.iter().filter(|i| matches!(i, MonoItem::Fn(..) | MonoItem::Static(..))) {
         let def_id = match item {
             MonoItem::Fn(instance) => instance.def.def_id(),
@@ -118,7 +121,7 @@ pub fn check_reachable_items(tcx: TyCtxt, queries: &QueryDb, items: &[MonoItem])
             // Check if any unstable attribute was reached.
             attributes.check_unstable_features(&queries.args().unstable_features);
             // Check whether all `proof_for_contract` functions are reachable
-            attributes.check_proof_for_contract(&functions);
+            attributes.check_proof_for_contract(&reachable_functions);
             def_ids.insert(def_id);
         }
     }
