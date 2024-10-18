@@ -18,10 +18,10 @@ use rustc_span::Span;
 use rustc_span::source_map::respan;
 use rustc_target::abi::call::FnAbi;
 use rustc_target::abi::{HasDataLayout, TargetDataLayout};
+use stable_mir::CrateDef;
 use stable_mir::mir::mono::MonoItem;
 use stable_mir::ty::{FnDef, RigidTy, Span as SpanStable, Ty, TyKind};
 use stable_mir::visitor::{Visitable, Visitor as TyVisitor};
-use stable_mir::CrateDef;
 use std::ops::ControlFlow;
 
 use self::attributes::KaniAttributes;
