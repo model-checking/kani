@@ -215,17 +215,6 @@ impl GotocCtx<'_> {
             }};
         }
 
-        macro_rules! codegen_size_align {
-            ($which: ident) => {{
-                let args = instance_args(&instance);
-                // The type `T` that we'll compute the size or alignment.
-                let target_ty = args.0[0].expect_ty();
-                let arg = fargs.remove(0);
-                let size_align = self.size_and_align_of_dst(*target_ty, arg);
-                self.codegen_expr_to_place_stable(place, size_align.$which, loc)
-            }};
-        }
-
         // Most atomic intrinsics do:
         //   1. Perform an operation on a primary argument (e.g., addition)
         //   2. Return the previous value of the primary argument
@@ -414,7 +403,6 @@ impl GotocCtx<'_> {
             Intrinsic::MaxNumF32 => codegen_simple_intrinsic!(Fmaxf),
             Intrinsic::MaxNumF64 => codegen_simple_intrinsic!(Fmax),
             Intrinsic::MinAlignOf => codegen_intrinsic_const!(),
-            Intrinsic::MinAlignOfVal => codegen_size_align!(align),
             Intrinsic::MinNumF32 => codegen_simple_intrinsic!(Fminf),
             Intrinsic::MinNumF64 => codegen_simple_intrinsic!(Fmin),
             Intrinsic::MulWithOverflow => {
@@ -508,7 +496,6 @@ impl GotocCtx<'_> {
                 loc,
             ),
             Intrinsic::SimdXor => codegen_intrinsic_binop!(bitxor),
-            Intrinsic::SizeOfVal => codegen_size_align!(size),
             Intrinsic::SqrtF32 => codegen_simple_intrinsic!(Sqrtf),
             Intrinsic::SqrtF64 => codegen_simple_intrinsic!(Sqrt),
             Intrinsic::SubWithOverflow => self.codegen_op_with_overflow(
@@ -550,6 +537,9 @@ impl GotocCtx<'_> {
             Intrinsic::WriteBytes => {
                 assert!(self.place_ty_stable(place).kind().is_unit());
                 self.codegen_write_bytes(fargs, farg_types, loc)
+            }
+            Intrinsic::SizeOfVal | Intrinsic::MinAlignOfVal => {
+                unreachable!("Intrinsic `{}` is handled before codegen", intrinsic_str)
             }
             // Unimplemented
             Intrinsic::Unimplemented { name, issue_link } => {

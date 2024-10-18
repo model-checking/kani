@@ -23,6 +23,7 @@
 mod arbitrary;
 mod mem;
 mod mem_init;
+mod models;
 
 pub use kani_macros::*;
 
@@ -42,6 +43,7 @@ macro_rules! kani_lib {
             pub use kani_core::*;
             kani_core::kani_intrinsics!(core);
             kani_core::generate_arbitrary!(core);
+            kani_core::generate_models!();
             kani_core::check_intrinsic!();
 
             pub mod mem {
@@ -58,7 +60,7 @@ macro_rules! kani_lib {
         pub use kani_core::*;
         kani_core::kani_intrinsics!(std);
         kani_core::generate_arbitrary!(std);
-
+        kani_core::generate_models!();
         kani_core::check_intrinsic! {
             msg="This API will be made private in future releases.", vis=pub
         }
@@ -287,6 +289,57 @@ macro_rules! kani_intrinsics {
         #[doc(hidden)]
         pub const fn panic(message: &'static str) -> ! {
             panic!("{}", message)
+        }
+
+        /// Retrieve the size of the sized part of the value pointed by `ptr`.
+        ///
+        /// If `T` is sized, return `size_of::<T>()`.
+        /// For an unsized type, this function will return the size of the sized portion including
+        /// any padding bytes that lead to the unsized field.
+        /// I.e.: the size of the type, excluding the trailing unsized portion.
+        ///
+        /// For example, this function will return 2 as the sized portion of `*const (u8,  [u16])`:
+        #[allow(dead_code)]
+        #[kanitool::fn_marker = "SizeOfSizedIntrinsic"]
+        #[inline(never)]
+        pub(crate) fn size_of_sized_portion<T: ?Sized>() -> usize {
+            kani_intrinsic()
+        }
+
+        /// Retrieve the size of the unsized part of the value pointed by `ptr`.
+        ///
+        /// If `T` is unsized, return the size of the unsized portion, if that can be safely
+        /// computed. Foreign types and slices that overflow will return `None`.
+        ///
+        /// For sized types, this function will return Some(0).
+        #[allow(dead_code)]
+        #[kanitool::fn_marker = "SizeOfUnsizedIntrinsic"]
+        #[inline(never)]
+        pub(crate) fn size_of_unsized_portion<T: ?Sized>(_ptr: *const T) -> Option<usize> {
+            kani_intrinsic()
+        }
+
+        /// Retrieve the alignment of raw pointer if it can be computed.
+        ///
+        /// This will return `None` if the type is foreign or contain a foreign element.
+        /// Note that alignment value may be incorrect.
+        #[allow(dead_code)]
+        #[kanitool::fn_marker = "AlignOfRawIntrinsic"]
+        #[inline(never)]
+        pub(crate) fn align_of_raw<T: ?Sized>(_ptr: *const T) -> Option<usize> {
+            kani_intrinsic()
+        }
+
+        #[doc(hidden)]
+        #[allow(dead_code)]
+        #[kanitool::fn_marker = "SafetyCheckIntrinsic"]
+        #[inline(never)]
+        pub(crate) fn safety_check(cond: bool, msg: &'static str) {
+            #[cfg(not(feature = "concrete_playback"))]
+            return kani_intrinsic();
+
+            #[cfg(feature = "concrete_playback")]
+            assert!(cond, "Safety check failed: {msg}");
         }
 
         /// An empty body that can be used to define Kani intrinsic functions.

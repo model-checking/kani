@@ -26,11 +26,13 @@ use std::ops::ControlFlow;
 
 use self::attributes::KaniAttributes;
 
+pub mod abi;
 pub mod analysis;
 pub mod attributes;
 pub mod codegen_units;
 pub mod coercion;
 mod intrinsics;
+pub mod kani_functions;
 pub mod metadata;
 pub mod points_to;
 pub mod provide;
@@ -118,6 +120,11 @@ pub fn check_reachable_items(tcx: TyCtxt, queries: &QueryDb, items: &[MonoItem])
     }
     tcx.dcx().abort_if_errors();
 }
+
+/// Check that Kani library is configured correctly.
+///
+/// We cache the results for function definitions since it scans all functions defined in the
+/// `kani` or `core` library.
 
 /// Structure that represents the source location of a definition.
 /// TODO: Use `InternedString` once we move it out of the cprover_bindings.

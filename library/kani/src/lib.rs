@@ -16,6 +16,7 @@
 // Required for `rustc_diagnostic_item` and `core_intrinsics`
 #![allow(internal_features)]
 // Required for implementing memory predicates.
+#![feature(layout_for_ptr)]
 #![feature(ptr_metadata)]
 #![feature(f16)]
 #![feature(f128)]
