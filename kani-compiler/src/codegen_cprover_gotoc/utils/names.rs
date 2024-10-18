@@ -10,7 +10,7 @@ use rustc_middle::mir::mono::CodegenUnitNameBuilder;
 use rustc_middle::ty::TyCtxt;
 use stable_mir::mir::Local;
 
-impl<'tcx> GotocCtx<'tcx> {
+impl GotocCtx<'_> {
     /// The full crate name including versioning info
     pub fn full_crate_name(&self) -> &str {
         &self.full_crate_name

@@ -31,7 +31,7 @@ lazy_static! {
          ("pointer-primitive", "disable:pointer-primitive-check")].iter().copied().collect();
 }
 
-impl<'tcx> GotocCtx<'tcx> {
+impl GotocCtx<'_> {
     pub fn codegen_span(&self, sp: &Span) -> Location {
         self.codegen_span_stable(rustc_internal::stable(sp))
     }

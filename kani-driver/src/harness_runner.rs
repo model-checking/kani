@@ -29,7 +29,7 @@ pub(crate) struct HarnessResult<'pr> {
     pub result: VerificationResult,
 }
 
-impl<'sess, 'pr> HarnessRunner<'sess, 'pr> {
+impl<'pr> HarnessRunner<'_, 'pr> {
     /// Given a [`HarnessRunner`] (to abstract over how these harnesses were generated), this runs
     /// the proof-checking process for each harness in `harnesses`.
     pub(crate) fn check_all_harnesses(

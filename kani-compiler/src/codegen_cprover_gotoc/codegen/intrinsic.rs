@@ -28,7 +28,7 @@ enum VTableInfo {
     Align,
 }
 
-impl<'tcx> GotocCtx<'tcx> {
+impl GotocCtx<'_> {
     fn binop<F: FnOnce(Expr, Expr) -> Expr>(
         &mut self,
         place: &Place,
@@ -296,9 +296,7 @@ impl<'tcx> GotocCtx<'tcx> {
             Intrinsic::AddWithOverflow => {
                 self.codegen_op_with_overflow(BinaryOperator::OverflowResultPlus, fargs, place, loc)
             }
-            Intrinsic::ArithOffset => {
-                self.codegen_offset(intrinsic_str, instance, fargs, place, loc)
-            }
+            Intrinsic::ArithOffset => self.codegen_arith_offset(fargs, place, loc),
             Intrinsic::AssertInhabited => {
                 self.codegen_assert_intrinsic(instance, intrinsic_str, span)
             }
@@ -1017,51 +1015,16 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// Computes the offset from a pointer.
     ///
-    /// Note that this function handles code generation for:
-    ///  1. The `offset` intrinsic.
-    ///     <https://doc.rust-lang.org/std/intrinsics/fn.offset.html>
-    ///  2. The `arith_offset` intrinsic.
+    /// This function handles code generation for the `arith_offset` intrinsic.
     ///     <https://doc.rust-lang.org/std/intrinsics/fn.arith_offset.html>
-    ///
-    /// Note(std): We don't check that the starting or resulting pointer stay
-    /// within bounds of the object they point to. Doing so causes spurious
-    /// failures due to the usage of these intrinsics in the standard library.
-    /// See <https://github.com/model-checking/kani/issues/1233> for more details.
-    /// Also, note that this isn't a requirement for `arith_offset`, but it's
-    /// one of the safety conditions specified for `offset`:
-    /// <https://doc.rust-lang.org/std/primitive.pointer.html#safety-2>
-    fn codegen_offset(
-        &mut self,
-        intrinsic: &str,
-        instance: Instance,
-        mut fargs: Vec<Expr>,
-        p: &Place,
-        loc: Location,
-    ) -> Stmt {
+    /// According to the documenation, the operation is always safe.
+    fn codegen_arith_offset(&mut self, mut fargs: Vec<Expr>, p: &Place, loc: Location) -> Stmt {
         let src_ptr = fargs.remove(0);
         let offset = fargs.remove(0);
 
-        // Check that computing `offset` in bytes would not overflow
-        let args = instance_args(&instance);
-        let ty = args.0[0].expect_ty();
-        let (offset_bytes, bytes_overflow_check) =
-            self.count_in_bytes(offset.clone(), *ty, Type::ssize_t(), intrinsic, loc);
-
-        // Check that the computation would not overflow an `isize`
-        // These checks may allow a wrapping-around behavior in CBMC:
-        // https://github.com/model-checking/kani/issues/1150
-        let dst_ptr_of = src_ptr.clone().cast_to(Type::ssize_t()).add_overflow(offset_bytes);
-        let overflow_check = self.codegen_assert_assume(
-            dst_ptr_of.overflowed.not(),
-            PropertyClass::ArithmeticOverflow,
-            "attempt to compute offset which would overflow",
-            loc,
-        );
-
-        // Re-compute `dst_ptr` with standard addition to avoid conversion
+        // Compute `dst_ptr` with standard addition to avoid conversion
         let dst_ptr = src_ptr.plus(offset);
-        let expr_place = self.codegen_expr_to_place_stable(p, dst_ptr, loc);
-        Stmt::block(vec![bytes_overflow_check, overflow_check, expr_place], loc)
+        self.codegen_expr_to_place_stable(p, dst_ptr, loc)
     }
 
     /// ptr_offset_from returns the offset between two pointers

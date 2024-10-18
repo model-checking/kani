@@ -23,6 +23,7 @@ use crate::kani_middle::transform::check_uninit::{DelayedUbPass, UninitPass};
 use crate::kani_middle::transform::check_values::ValidValuePass;
 use crate::kani_middle::transform::contracts::{AnyModifiesPass, FunctionWithContractPass};
 use crate::kani_middle::transform::kani_intrinsics::IntrinsicGeneratorPass;
+use crate::kani_middle::transform::loop_contracts::LoopContractPass;
 use crate::kani_middle::transform::stubs::{ExternFnStubPass, FnStubPass};
 use crate::kani_queries::QueryDb;
 use dump_mir_pass::DumpMirPass;
@@ -41,6 +42,7 @@ mod contracts;
 mod dump_mir_pass;
 mod internal_mir;
 mod kani_intrinsics;
+mod loop_contracts;
 mod stubs;
 
 /// Object used to retrieve a transformed instance body.
@@ -89,6 +91,7 @@ impl BodyTransformation {
             mem_init_fn_cache: HashMap::new(),
             arguments: queries.args().clone(),
         });
+        transformer.add_pass(queries, LoopContractPass::new(tcx, &unit));
         transformer
     }
 

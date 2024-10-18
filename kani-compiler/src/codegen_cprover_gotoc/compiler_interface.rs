@@ -20,9 +20,8 @@ use cbmc::RoundingMode;
 use cbmc::goto_program::Location;
 use cbmc::irep::goto_binary_serde::write_goto_binary_file;
 use cbmc::{InternedString, MachineModel};
-use kani_metadata::UnsupportedFeature;
 use kani_metadata::artifact::convert_type;
-use kani_metadata::{ArtifactType, HarnessMetadata, KaniMetadata};
+use kani_metadata::{ArtifactType, HarnessMetadata, KaniMetadata, UnsupportedFeature};
 use kani_metadata::{AssignsContract, CompilerArtifactStub};
 use rustc_codegen_ssa::back::archive::{
     ArArchiveBuilder, ArchiveBuilder, ArchiveBuilderBuilder, DEFAULT_OBJECT_READER,
@@ -643,6 +642,10 @@ impl GotoCodegenResults {
             proof_harnesses: proofs,
             unsupported_features,
             test_harnesses: tests,
+            // We don't collect the contracts metadata because the FunctionWithContractPass
+            // removes any contracts logic for ReachabilityType::Test or ReachabilityType::PubFns,
+            // which are the two ReachabilityTypes under which the compiler calls this function.
+            contracted_functions: vec![],
         }
     }
 

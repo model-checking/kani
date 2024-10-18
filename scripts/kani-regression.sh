@@ -70,6 +70,9 @@ echo "--- Compiletest configuration"
 cargo run -p compiletest --quiet -- --suite kani --mode cargo-kani --dry-run --verbose
 echo "-----------------------------"
 
+# Build `kani-cov`
+cargo build -p kani-cov
+
 # Extract testing suite information and run compiletest
 for testp in "${TESTS[@]}"; do
   testl=($testp)

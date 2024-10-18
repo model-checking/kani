@@ -91,7 +91,7 @@ impl TypeExt for Type {
 }
 
 /// Function signatures
-impl<'tcx> GotocCtx<'tcx> {
+impl GotocCtx<'_> {
     /// This method prints the details of a GotoC type, for debugging purposes.
     #[allow(unused)]
     pub(crate) fn debug_print_type_recursively(&self, ty: &Type) -> String {
@@ -1615,7 +1615,7 @@ impl<'tcx> GotocCtx<'tcx> {
             pub ctx: &'a GotocCtx<'tcx>,
         }
 
-        impl<'tcx, 'a> Iterator for ReceiverIter<'tcx, 'a> {
+        impl<'tcx> Iterator for ReceiverIter<'tcx, '_> {
             type Item = (String, Ty<'tcx>);
 
             fn next(&mut self) -> Option<Self::Item> {

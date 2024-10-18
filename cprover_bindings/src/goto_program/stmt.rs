@@ -82,7 +82,12 @@ pub enum StmtBody {
         arguments: Vec<Expr>,
     },
     /// `goto dest;`
-    Goto(InternedString),
+    Goto {
+        dest: InternedString,
+        // The loop invariants annotated to the goto, which can be
+        // applied as loop contracts in CBMC if it is a backward goto.
+        loop_invariants: Option<Expr>,
+    },
     /// `if (i) { t } else { e }`
     Ifthenelse {
         i: Expr,
@@ -179,7 +184,7 @@ impl Stmt {
         stmt!(Assign { lhs, rhs }, loc)
     }
 
-    /// `assert(cond, property_class, commment);`
+    /// `assert(cond, property_class, comment);`
     pub fn assert(cond: Expr, property_name: &str, message: &str, loc: Location) -> Self {
         assert!(cond.typ().is_bool());
         assert!(!property_name.is_empty() && !message.is_empty());
@@ -188,7 +193,7 @@ impl Stmt {
         let loc_with_property =
             Location::create_location_with_property(message, property_name, loc);
 
-        // Chose InternedString to seperate out codegen from the cprover_bindings logic
+        // Chose InternedString to separate out codegen from the cprover_bindings logic
         let property_class = property_name.intern();
         let msg = message.into();
 
@@ -283,7 +288,7 @@ impl Stmt {
     pub fn goto<T: Into<InternedString>>(dest: T, loc: Location) -> Self {
         let dest = dest.into();
         assert!(!dest.is_empty());
-        stmt!(Goto(dest), loc)
+        stmt!(Goto { dest, loop_invariants: None }, loc)
     }
 
     /// `if (i) { t } else { e }` or `if (i) { t }`
@@ -324,6 +329,16 @@ impl Stmt {
         let label = label.into();
         assert!(!label.is_empty());
         stmt!(Label { label, body: self }, *self.location())
+    }
+
+    /// `goto dest;` with loop invariant
+    pub fn with_loop_contracts(self, inv: Expr) -> Self {
+        if let Goto { dest, loop_invariants } = self.body() {
+            assert!(loop_invariants.is_none());
+            stmt!(Goto { dest: *dest, loop_invariants: Some(inv) }, *self.location())
+        } else {
+            unreachable!("Loop contracts should be annotated only to goto stmt")
+        }
     }
 }
 
