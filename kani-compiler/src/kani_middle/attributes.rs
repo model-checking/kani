@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! This module contains code for processing Rust attributes (like `kani::proof`).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 use kani_metadata::{CbmcSolver, HarnessAttributes, HarnessKind, Stub};
 use quote::ToTokens;
@@ -473,6 +473,20 @@ impl<'tcx> KaniAttributes<'tcx> {
         self.map.contains_key(&KaniAttributeKind::Proof)
             || self.map.contains_key(&KaniAttributeKind::ProofForContract)
     }
+
+    pub fn check_proof_for_contract(&self, functions: &HashSet<DefId>) {
+        if let Some((symbol, id, span)) = self.interpret_for_contract_attribute() {
+            if !functions.contains(&id) {
+                let err_msg = format!(
+                    "The function specified in the `proof_for_contract` attribute, `{symbol}`, was not found.\
+                    \nMake sure the function is reachable from the harness."
+                );
+                self.tcx.dcx().span_err(span, err_msg);
+            }
+        }
+    }
+
+    /// Check that the `proof` attribute is valid.
 
     /// Extract harness attributes for a given `def_id`.
     ///

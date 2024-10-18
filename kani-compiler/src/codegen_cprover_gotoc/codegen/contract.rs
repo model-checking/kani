@@ -7,7 +7,6 @@ use cbmc::goto_program::{Expr, Lambda, Location, Type};
 use kani_metadata::AssignsContract;
 use rustc_hir::def_id::DefId as InternalDefId;
 use rustc_smir::rustc_internal;
-use rustc_span::Span;
 use stable_mir::CrateDef;
 use stable_mir::mir::mono::{Instance, MonoItem};
 use stable_mir::mir::{Local, VarDebugInfoContents};
@@ -19,8 +18,7 @@ impl GotocCtx<'_> {
     /// for which it needs to be enforced.
     ///
     /// 1. Gets the `#[kanitool::modifies_wrapper = "..."]` target, then resolves exactly one
-    ///    instance of it. Returns `None` if the target was not found. Panics if there are more
-    ///    than one instance.
+    ///    instance of it. Panics if there are more or less than one instance.
     /// 2. The additional arguments for the inner checks are locations that may be modified.
     ///    Add them to the list of CBMC's assigns.
     /// 3. Returns the mangled name of the symbol it attached the contract to.
@@ -31,35 +29,24 @@ impl GotocCtx<'_> {
     pub fn handle_check_contract(
         &mut self,
         function_under_contract: InternalDefId,
-        span: Span,
         items: &[MonoItem],
-    ) -> Option<AssignsContract> {
+    ) -> AssignsContract {
         let tcx = self.tcx;
-        let modify = items.iter().find_map(|item| {
-            // Find the instance under contract
-            let MonoItem::Fn(instance) = *item else { return None };
-            if rustc_internal::internal(tcx, instance.def.def_id()) == function_under_contract {
-                self.find_modifies(instance)
-            } else {
-                None
-            }
-        });
-        if let Some(modify) = modify {
-            self.attach_modifies_contract(modify);
-            let recursion_tracker = self.find_recursion_tracker(items);
-            Some(AssignsContract {
-                recursion_tracker,
-                contracted_function_name: modify.mangled_name(),
+        let modify = items
+            .iter()
+            .find_map(|item| {
+                // Find the instance under contract
+                let MonoItem::Fn(instance) = *item else { return None };
+                if rustc_internal::internal(tcx, instance.def.def_id()) == function_under_contract {
+                    self.find_modifies(instance)
+                } else {
+                    None
+                }
             })
-        } else {
-            let name = tcx.def_path_str(function_under_contract);
-            let err_msg = format!(
-                "The function specified in the `proof_for_contract` attribute, `{name}`, was not found.\
-                \nMake sure the function is reachable from the harness."
-            );
-            tcx.dcx().span_err(span, err_msg);
-            None
-        }
+            .unwrap();
+        self.attach_modifies_contract(modify);
+        let recursion_tracker = self.find_recursion_tracker(items);
+        AssignsContract { recursion_tracker, contracted_function_name: modify.mangled_name() }
     }
 
     /// The name and location for the recursion tracker should match the exact information added

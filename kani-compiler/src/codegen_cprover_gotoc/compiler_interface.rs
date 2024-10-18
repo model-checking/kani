@@ -40,7 +40,6 @@ use rustc_session::Session;
 use rustc_session::config::{CrateType, OutputFilenames, OutputType};
 use rustc_session::output::out_filename;
 use rustc_smir::rustc_internal;
-use rustc_span::Span;
 use rustc_target::abi::Endian;
 use rustc_target::spec::PanicStrategy;
 use stable_mir::mir::mono::{Instance, MonoItem};
@@ -82,7 +81,7 @@ impl GotocCodegenBackend {
         starting_items: &[MonoItem],
         symtab_goto: &Path,
         machine_model: &MachineModel,
-        check_contract: Option<(InternalDefId, Span)>,
+        check_contract: Option<InternalDefId>,
         mut transformer: BodyTransformation,
     ) -> (GotocCtx<'tcx>, Vec<MonoItem>, Option<AssignsContract>) {
         // This runs reachability analysis before global passes are applied.
@@ -181,8 +180,7 @@ impl GotocCodegenBackend {
                     }
                 }
 
-                check_contract
-                    .and_then(|(check_id, span)| gcx.handle_check_contract(check_id, span, &items))
+                check_contract.map(|check_id| gcx.handle_check_contract(check_id, &items))
             },
             "codegen",
         );
@@ -454,9 +452,9 @@ impl ArchiveBuilderBuilder for ArArchiveBuilderBuilder {
     }
 }
 
-fn contract_metadata_for_harness(tcx: TyCtxt, def_id: DefId) -> Option<(InternalDefId, Span)> {
+fn contract_metadata_for_harness(tcx: TyCtxt, def_id: DefId) -> Option<InternalDefId> {
     let attrs = KaniAttributes::for_def_id(tcx, def_id);
-    attrs.interpret_for_contract_attribute().map(|(_, id, span)| (id, span))
+    attrs.interpret_for_contract_attribute().map(|(_, id, _)| id)
 }
 
 fn check_target(session: &Session) {
