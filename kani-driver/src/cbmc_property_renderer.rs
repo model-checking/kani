@@ -647,6 +647,11 @@ fn update_results_of_code_covererage_checks(mut properties: Vec<Property>) -> Ve
 /// Note that if the cover property was unreachable, its status at this point
 /// will be `CheckStatus::Unreachable` and not `CheckStatus::Success` since
 /// `update_properties_with_reach_status` is called beforehand
+///
+/// We encode assume_unless_vacuous(cond) as assume(cond); assert(false).
+/// `is_assume_unless_vacuous_property` corresponds to the assert(false).
+/// If this assertion fails as expected, the assume did not empty the search space,
+/// so succeed; otherwise, fail.
 fn update_results_of_cover_checks(mut properties: Vec<Property>) -> Vec<Property> {
     for prop in properties.iter_mut() {
         if prop.is_cover_property() {
@@ -654,6 +659,12 @@ fn update_results_of_cover_checks(mut properties: Vec<Property>) -> Vec<Property
                 prop.status = CheckStatus::Unsatisfiable;
             } else if prop.status == CheckStatus::Failure {
                 prop.status = CheckStatus::Satisfied;
+            }
+        } else if prop.is_assume_unless_vacuous_property() {
+            if prop.status == CheckStatus::Unreachable || prop.status == CheckStatus::Success {
+                prop.status = CheckStatus::Failure;
+            } else if prop.status == CheckStatus::Failure {
+                prop.status = CheckStatus::Success;
             }
         }
     }

@@ -199,7 +199,7 @@ macro_rules! kani_intrinsics {
         #[inline(never)]
         #[doc(hidden)]
         pub fn any_modifies<T>() -> T {
-            // This function should not be reacheable.
+            // This function should not be reachable.
             // Users must include `#[kani::recursion]` in any function contracts for recursive functions;
             // otherwise, this might not be properly instantiate. We mark this as unreachable to make
             // sure Kani doesn't report any false positives.
@@ -291,7 +291,7 @@ macro_rules! kani_intrinsics {
         /// function, both cause Kani to produce a warning since we don't support caller location.
         /// (see https://github.com/model-checking/kani/issues/2010).
         ///
-        /// This function is dead, since its caller is always  handled via a hook anyway,
+        /// This function is dead, since its caller is always handled via a hook anyway,
         /// so we just need to put a body that rustc does not complain about.
         /// An infinite loop works out nicely.
         fn kani_intrinsic<T>() -> T {
@@ -346,6 +346,26 @@ macro_rules! kani_intrinsics {
                 }
             }
 
+            /// This function is only used for function contract instrumentation.
+            /// It is the same as assume(), but it adds an extra assert(false) afterward.
+            /// The CBMC output parser uses this assertion as a reachability check;
+            /// if the assertion is unreachable or succeeds, then we know that the assumption emptied the search space.
+            #[inline(never)]
+            #[rustc_diagnostic_item = "KaniAssumeUnlessVacuous"]
+            #[cfg(not(feature = "concrete_playback"))]
+            #[doc(hidden)]
+            pub fn assume_unless_vacuous(cond: bool, msg: &'static str) {
+                let _ = cond;
+            }
+
+            #[inline(never)]
+            #[rustc_diagnostic_item = "KaniAssumeUnlessVacuous"]
+            #[cfg(feature = "concrete_playback")]
+            #[doc(hidden)]
+            pub fn assume_unless_vacuous(cond: bool, msg: &'static str) {
+                assert!(cond, "{}", msg);
+            }
+
             /// A way to break the ownerhip rules. Only used by contracts where we can
             /// guarantee it is done safely.
             #[inline(never)]
@@ -383,7 +403,7 @@ macro_rules! kani_intrinsics {
             #[inline(never)]
             #[doc(hidden)]
             pub unsafe fn write_any<T: ?Sized>(_pointer: *mut T) {
-                // This function should not be reacheable.
+                // This function should not be reachable.
                 // Users must include `#[kani::recursion]` in any function contracts for recursive functions;
                 // otherwise, this might not be properly instantiate. We mark this as unreachable to make
                 // sure Kani doesn't report any false positives.
