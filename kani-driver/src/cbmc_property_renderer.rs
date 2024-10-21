@@ -661,7 +661,7 @@ fn update_results_of_cover_checks(mut properties: Vec<Property>) -> Vec<Property
                 prop.status = CheckStatus::Satisfied;
             }
         } else if prop.is_assume_unless_vacuous_property() {
-            if prop.status == CheckStatus::Unreachable || prop.status == CheckStatus::Success {
+            if prop.status == CheckStatus::Success {
                 prop.status = CheckStatus::Failure;
             } else if prop.status == CheckStatus::Failure {
                 prop.status = CheckStatus::Success;
