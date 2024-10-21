@@ -760,9 +760,9 @@ fn annotate_properties_with_reach_results(
         reach_map.entry(check_id_str).or_default().push(status);
     }
 
+    let check_marker_pat = Regex::new(r"\[KANI_CHECK_ID_([^\]]*)\]").unwrap();
     for prop in properties.iter_mut() {
         let description = &prop.description;
-        let check_marker_pat = Regex::new(r"\[KANI_CHECK_ID_([^\]]*)\]").unwrap();
         if check_marker_pat.is_match(description) {
             // Capture the ID in the property
             let prop_match_id =
