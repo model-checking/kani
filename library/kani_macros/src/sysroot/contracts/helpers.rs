@@ -201,17 +201,20 @@ pub fn split_for_remembers(stmts: &[Stmt], closure_type: ClosureType) -> (&[Stmt
     let mut pos = 0;
 
     let check_str = match closure_type {
-        ClosureType::Check => "assume",
-        ClosureType::Replace => "assert",
+        ClosureType::Check => "kani::internal::assume_unless_vacuous",
+        ClosureType::Replace => "kani::assert",
     };
 
     for stmt in stmts {
         if let Stmt::Expr(Expr::Call(ExprCall { func, .. }), _) = stmt {
             if let Expr::Path(ExprPath { path: Path { segments, .. }, .. }) = func.as_ref() {
-                let first_two_idents =
-                    segments.iter().take(2).map(|sgmt| sgmt.ident.to_string()).collect::<Vec<_>>();
-
-                if first_two_idents == vec!["kani", check_str] {
+                let first_three_idents = segments
+                    .iter()
+                    .take(3)
+                    .map(|sgmt| sgmt.ident.to_string())
+                    .collect::<Vec<_>>()
+                    .join("::");
+                if first_three_idents.contains(check_str) {
                     pos += 1;
                 }
             }
