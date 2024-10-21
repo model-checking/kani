@@ -106,6 +106,39 @@ impl GotocHook for Assume {
     }
 }
 
+struct AssumeUnlessVacuous;
+impl GotocHook for AssumeUnlessVacuous {
+    fn hook_applies(&self, tcx: TyCtxt, instance: Instance) -> bool {
+        matches_function(tcx, instance.def, "KaniAssumeUnlessVacuous")
+    }
+
+    fn handle(
+        &self,
+        gcx: &mut GotocCtx,
+        _instance: Instance,
+        mut fargs: Vec<Expr>,
+        _assign_to: &Place,
+        target: Option<BasicBlockIdx>,
+        span: Span,
+    ) -> Stmt {
+        assert_eq!(fargs.len(), 2);
+        let cond = fargs.remove(0).cast_to(Type::bool());
+        let msg = fargs.remove(0);
+        let msg = gcx.extract_const_message(&msg).unwrap();
+        let target = target.unwrap();
+        let loc = gcx.codegen_span_stable(span);
+
+        Stmt::block(
+            vec![
+                gcx.codegen_assume(cond, loc),
+                Stmt::assert_false(PropertyClass::AssumeUnlessVacuous.as_str(), &msg, loc),
+                Stmt::goto(bb_label(target), loc),
+            ],
+            loc,
+        )
+    }
+}
+
 struct Assert;
 impl GotocHook for Assert {
     fn hook_applies(&self, tcx: TyCtxt, instance: Instance) -> bool {
@@ -584,6 +617,7 @@ pub fn fn_hooks() -> GotocHooks {
         hooks: vec![
             Rc::new(Panic),
             Rc::new(Assume),
+            Rc::new(AssumeUnlessVacuous),
             Rc::new(Assert),
             Rc::new(Check),
             Rc::new(Cover),

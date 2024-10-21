@@ -168,7 +168,7 @@
 //!                                let mut __kani_check_div =
 //!                                    || -> u32
 //!                                        {
-//!                                            kani::assume(divisor != 0);
+//!                                            kani::internal::assume_unless_vacuous(divisor != 0);
 //!                                            let _wrapper_arg = ();
 //!                                            #[kanitool::is_contract_generated(wrapper)]
 //!                                            #[allow(dead_code, unused_variables, unused_mut)]
@@ -210,7 +210,7 @@
 //!             let mut __kani_check_div =
 //!                 || -> u32
 //!                     {
-//!                         kani::assume(divisor != 0);
+//!                         kani::internal::assume_unless_vacuous(divisor != 0);
 //!                         let _wrapper_arg = ();
 //!                         #[kanitool::is_contract_generated(wrapper)]
 //!                         #[allow(dead_code, unused_variables, unused_mut)]
@@ -310,7 +310,7 @@
 //!                                let mut __kani_check_modify =
 //!                                    ||
 //!                                        {
-//!                                            kani::assume(*ptr < 100);
+//!                                            kani::internal::assume_unless_vacuous(divisor != 0);
 //!                                            let remember_kani_internal_92cc419d8aca576c = *ptr + 1;
 //!                                            let remember_kani_internal_92cc419d8aca576c = *ptr + 1;
 //!                                            let _wrapper_arg = (ptr as *const _,);
@@ -366,7 +366,6 @@
 //!             let mut __kani_check_modify =
 //!                 ||
 //!                     {
-//!                         kani::assume(*ptr < 100);
 //!                         let remember_kani_internal_92cc419d8aca576c = *ptr + 1;
 //!                         let remember_kani_internal_92cc419d8aca576c = *ptr + 1;
 //!                         let _wrapper_arg = (ptr as *const _,);
