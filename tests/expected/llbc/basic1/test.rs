@@ -1,6 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-flags: -Zaeneas --print-llbc
+// kani-flags: -Zlean --print-llbc
 
 //! This test checks that Kani's LLBC backend handles basic expressions, in this
 //! case an if condition
