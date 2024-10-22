@@ -124,7 +124,7 @@ impl KaniSession {
     }
 
     /// Call [run_piped] with the verbosity configured by the user.
-    pub fn run_piped(&self, cmd: Command) -> Result<Option<Child>> {
+    pub fn run_piped(&self, cmd: Command) -> Result<Child> {
         run_piped(&self.args.common_args, cmd)
     }
 
@@ -227,7 +227,7 @@ pub fn run_redirect(
 ///
 /// NOTE: Unlike other `run_` functions, this function does not attempt to indicate
 /// the process exit code, you need to remember to check this yourself.
-pub fn run_piped(verbosity: &impl Verbosity, mut cmd: Command) -> Result<Option<Child>> {
+pub fn run_piped(verbosity: &impl Verbosity, mut cmd: Command) -> Result<Child> {
     if verbosity.verbose() {
         println!("[Kani] Running: `{}`", render_command(&cmd).to_string_lossy());
     }
@@ -237,7 +237,7 @@ pub fn run_piped(verbosity: &impl Verbosity, mut cmd: Command) -> Result<Option<
         .spawn()
         .context(format!("Failed to invoke {}", cmd.get_program().to_string_lossy()))?;
 
-    Ok(Some(process))
+    Ok(process)
 }
 
 /// Execute the provided function and measure the clock time it took for its execution.
