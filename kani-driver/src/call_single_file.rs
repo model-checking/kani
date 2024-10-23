@@ -53,8 +53,8 @@ impl KaniSession {
     ) -> Result<()> {
         let mut kani_args = self.kani_compiler_flags();
         kani_args.push(format!("--reachability={}", self.reachability_mode()));
-        if self.args.common_args.unstable_features.contains(UnstableFeature::Aeneas) {
-            kani_args.push("--backend=aeneas".into());
+        if self.args.common_args.unstable_features.contains(UnstableFeature::Lean) {
+            kani_args.push("--backend=llbc".into());
         }
 
         let lib_path = lib_folder().unwrap();
@@ -99,8 +99,8 @@ impl KaniSession {
     }
 
     pub fn backend_arg(&self) -> Option<String> {
-        if self.args.common_args.unstable_features.contains(UnstableFeature::Aeneas) {
-            Some(to_rustc_arg(vec!["--backend=aeneas".into()]))
+        if self.args.common_args.unstable_features.contains(UnstableFeature::Lean) {
+            Some(to_rustc_arg(vec!["--backend=llbc".into()]))
         } else {
             None
         }
