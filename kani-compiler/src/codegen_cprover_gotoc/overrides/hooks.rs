@@ -573,9 +573,19 @@ impl GotocHook for LoopInvariantRegister {
     ) -> Stmt {
         let loc = gcx.codegen_span_stable(span);
         let func_exp = gcx.codegen_func_expr(instance, loc);
-
-        Stmt::goto(bb_label(target.unwrap()), loc)
-            .with_loop_contracts(func_exp.call(fargs).cast_to(Type::CInteger(CIntType::Bool)))
+        // Add `free(0)` to make sure the body of `free` won't be dropped to
+        // satisfy the requirement of DFCC.
+        Stmt::block(
+            vec![
+                BuiltinFn::Free
+                    .call(vec![Expr::pointer_constant(0, Type::void_pointer())], loc)
+                    .as_stmt(loc),
+                Stmt::goto(bb_label(target.unwrap()), loc).with_loop_contracts(
+                    func_exp.call(fargs).cast_to(Type::CInteger(CIntType::Bool)),
+                ),
+            ],
+            loc,
+        )
     }
 }
 

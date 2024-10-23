@@ -44,10 +44,6 @@ unsafe fn small_slice_eq(x: &[u8], y: &[u8]) -> bool {
 
 #[kani::proof]
 fn small_slice_eq_harness() {
-    // Needed to avoid having `free` be removed as unused function. This is
-    // because DFCC contract enforcement assumes that a definition for `free`
-    // exists.
-    let _ = Box::new(10);
     const ARR_SIZE: usize = 2000;
     let x: [u8; ARR_SIZE] = kani::any();
     let y: [u8; ARR_SIZE] = kani::any();
