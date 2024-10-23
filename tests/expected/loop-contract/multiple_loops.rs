@@ -44,10 +44,6 @@ fn simple_while_loops() {
 
 #[kani::proof]
 fn multiple_loops_harness() {
-    // Needed to avoid having `free` be removed as unused function. This is
-    // because DFCC contract enforcement assumes that a definition for `free`
-    // exists.
-    let _ = Box::new(10);
     multiple_loops();
     simple_while_loops();
 }
