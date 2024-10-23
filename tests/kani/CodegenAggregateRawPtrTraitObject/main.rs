@@ -1,5 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+// Test that Kani can verify code that produces a aggregate raw pointer to trait objects
+// c.f. https://github.com/model-checking/kani/issues/3631
 
 #![feature(ptr_metadata)]
 
@@ -21,7 +23,7 @@ impl SampleTrait for SampleStruct {
 
 #[cfg(kani)]
 #[kani::proof]
-fn main() {
+fn check_nonnull_dyn_from_raw_parts() {
     // Create a SampleTrait object from SampleStruct
     let sample_struct = SampleStruct { value: kani::any() };
     let trait_object: &dyn SampleTrait = &sample_struct;
