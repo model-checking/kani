@@ -278,3 +278,18 @@ pub fn build_bin<T: AsRef<OsStr>>(extra_args: &[T]) -> Result<PathBuf> {
         .or(Err(format_err!("Failed to build binaries.")))?;
     Ok(out_dir)
 }
+
+/// Build tool binaries with the extra arguments provided and return the path to
+/// the binaries folder. At present, the only tool we build for the bundle is
+/// `kani-cov`, but this could include other tools in the future.
+pub fn build_tools<T: AsRef<OsStr>>(extra_args: &[T]) -> Result<PathBuf> {
+    let out_dir = kani_sysroot_bin();
+    let args = ["-p", "kani-cov", "--target-dir", out_dir.to_str().unwrap()];
+    Command::new("cargo")
+        .arg("build")
+        .args(extra_args)
+        .args(args)
+        .run()
+        .or(Err(format_err!("Failed to build tool binaries.")))?;
+    Ok(out_dir)
+}
