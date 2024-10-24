@@ -45,7 +45,10 @@ impl<'sess, 'pr> HarnessRunner<'sess, 'pr> {
 
         let sorted_harnesses = crate::metadata::sort_harnesses_by_loc(harnesses);
         let pool = {
-            let builder = rayon::ThreadPoolBuilder::new();
+            let mut builder = rayon::ThreadPoolBuilder::new();
+            if let Some(x) = self.sess.args.jobs() {
+                builder = builder.num_threads(x);
+            }
             builder.build()?
         };
 
