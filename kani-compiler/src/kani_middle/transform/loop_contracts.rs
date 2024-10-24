@@ -114,7 +114,7 @@ impl TransformPass for LoopContractPass {
                     let mut loop_queue: VecDeque<BasicBlockIdx> = VecDeque::new();
                     queue.push_back(0);
 
-                    while let Some(bb_idx) = queue.pop_front().or(loop_queue.pop_front()) {
+                    while let Some(bb_idx) = queue.pop_front().or_else(|| loop_queue.pop_front()) {
                         visited.insert(bb_idx);
 
                         let terminator = new_body.blocks()[bb_idx].terminator.clone();
@@ -126,9 +126,11 @@ impl TransformPass for LoopContractPass {
                         // the visiting queue.
                         for to_visit in terminator.successors() {
                             if !visited.contains(&to_visit) {
-                                let target_queue =
-                                    if is_loop_head { &mut loop_queue } else { &mut queue };
-                                target_queue.push_back(to_visit);
+                                if is_loop_head {
+                                    loop_queue.push_back(to_visit);
+                                } else {
+                                    queue.push_back(to_visit)
+                                };
                             }
                         }
                     }
