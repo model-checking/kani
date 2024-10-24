@@ -37,15 +37,15 @@ impl KaniSession {
             self.goto_sanity_check(output)?;
         }
 
-        self.instrument_contracts(harness, output)?;
-
         if self
             .args
             .common_args
             .unstable_features
             .contains(kani_metadata::UnstableFeature::LoopContracts)
         {
-            self.instrument_loop_contracts(harness, output)?;
+            self.instrument_contracts_with_loop_contracts(harness, output)?;
+        } else {
+            self.instrument_contracts(harness, output)?;
         }
 
         if self.args.checks.undefined_function_on() {
@@ -193,8 +193,12 @@ impl KaniSession {
     }
 
     /// Apply annotated loop contracts.
-    pub fn instrument_loop_contracts(&self, harness: &HarnessMetadata, file: &Path) -> Result<()> {
-        let args: Vec<OsString> = vec![
+    pub fn instrument_contracts_with_loop_contracts(
+        &self,
+        harness: &HarnessMetadata,
+        file: &Path,
+    ) -> Result<()> {
+        let mut args: Vec<OsString> = vec![
             "--dfcc".into(),
             (&harness.mangled_name).into(),
             "--apply-loop-contracts".into(),
@@ -205,9 +209,21 @@ impl KaniSession {
             // instead of simply rejecting function calls and statement expressions.
             // See issue: diffblue/cbmc#8393
             "--disable-loop-contracts-side-effect-check".into(),
-            file.into(),
-            file.into(),
         ];
+
+        if let Some(assigns) = harness.contract.as_ref() {
+            args.push("--enforce-contract".into());
+            args.push(assigns.contracted_function_name.as_str().into());
+
+            if let Some(tracker) = &assigns.recursion_tracker {
+                args.push("--nondet-static-exclude".into());
+                args.push(tracker.as_str().into());
+            }
+        }
+
+        args.push(file.into());
+        args.push(file.into());
+
         self.call_goto_instrument(&args)
     }
 
