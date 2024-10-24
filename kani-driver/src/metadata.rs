@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use std::path::Path;
 use tracing::{debug, trace};
 
@@ -96,6 +96,7 @@ pub fn merge_kani_metadata(files: Vec<KaniMetadata>) -> KaniMetadata {
         proof_harnesses: vec![],
         unsupported_features: vec![],
         test_harnesses: vec![],
+        contracted_functions: vec![],
     };
     for md in files {
         // Note that we're taking ownership of the original vec, and so we can move the data into the new data structure.
@@ -104,6 +105,7 @@ pub fn merge_kani_metadata(files: Vec<KaniMetadata>) -> KaniMetadata {
         // https://github.com/model-checking/kani/issues/1758
         result.unsupported_features.extend(md.unsupported_features);
         result.test_harnesses.extend(md.test_harnesses);
+        result.contracted_functions.extend(md.contracted_functions);
     }
     result
 }

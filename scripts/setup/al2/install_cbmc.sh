@@ -21,10 +21,10 @@ git clone \
 
 pushd "${WORK_DIR}"
 
-mkdir build
-git submodule update --init
-
-cmake3 -S . -Bbuild -DWITH_JBMC=OFF -Dsat_impl="minisat2;cadical"
+cmake3 -S . -Bbuild -DWITH_JBMC=OFF -Dsat_impl="minisat2;cadical" \
+  -DCMAKE_C_COMPILER=gcc10-cc -DCMAKE_CXX_COMPILER=gcc10-c++ \
+  -DCMAKE_CXX_STANDARD_LIBRARIES=-lstdc++fs \
+  -DCMAKE_CXX_FLAGS=-Wno-error=register
 cmake3 --build build -- -j$(nproc)
 sudo make -C build install
 

@@ -1,22 +1,21 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use crate::args::ExtraChecks;
+use crate::codegen_cprover_gotoc::codegen::PropertyClass;
 use crate::codegen_cprover_gotoc::codegen::place::ProjectedPlace;
 use crate::codegen_cprover_gotoc::codegen::ty_stable::pointee_type_stable;
-use crate::codegen_cprover_gotoc::codegen::PropertyClass;
 use crate::codegen_cprover_gotoc::utils::{dynamic_fat_ptr, slice_fat_ptr};
 use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
 use crate::kani_middle::coercion::{
-    extract_unsize_casting_stable, CoerceUnsizedInfo, CoerceUnsizedIterator, CoercionBaseStable,
+    CoerceUnsizedInfo, CoerceUnsizedIterator, CoercionBaseStable, extract_unsize_casting_stable,
 };
 use crate::unwrap_or_return_codegen_unimplemented;
-use cbmc::goto_program::{
-    arithmetic_overflow_result_type, BinaryOperator, Expr, Location, Stmt, Type,
-    ARITH_OVERFLOW_OVERFLOWED_FIELD, ARITH_OVERFLOW_RESULT_FIELD,
-};
 use cbmc::MachineModel;
-use cbmc::{btree_string_map, InternString, InternedString};
+use cbmc::goto_program::{
+    ARITH_OVERFLOW_OVERFLOWED_FIELD, ARITH_OVERFLOW_RESULT_FIELD, BinaryOperator, Expr, Location,
+    Stmt, Type, arithmetic_overflow_result_type,
+};
+use cbmc::{InternString, InternedString, btree_string_map};
 use num::bigint::BigInt;
 use rustc_middle::ty::{ParamEnv, TyCtxt, VtblEntry};
 use rustc_smir::rustc_internal;
@@ -30,7 +29,7 @@ use stable_mir::ty::{ClosureKind, IntTy, RigidTy, Size, Ty, TyConst, TyKind, Uin
 use std::collections::BTreeMap;
 use tracing::{debug, trace, warn};
 
-impl<'tcx> GotocCtx<'tcx> {
+impl GotocCtx<'_> {
     fn codegen_comparison(&mut self, op: &BinOp, e1: &Operand, e2: &Operand) -> Expr {
         let left_op = self.codegen_operand_stable(e1);
         let right_op = self.codegen_operand_stable(e2);
@@ -411,7 +410,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 // Check that computing `offset` in bytes would not overflow
                 let (offset_bytes, bytes_overflow_check) = self.count_in_bytes(
                     ce2.clone().cast_to(Type::ssize_t()),
-                    ty,
+                    pointee_type_stable(ty).unwrap(),
                     Type::ssize_t(),
                     "offset",
                     loc,
@@ -421,6 +420,13 @@ impl<'tcx> GotocCtx<'tcx> {
                 // https://doc.rust-lang.org/std/primitive.pointer.html#method.offset
                 // These checks may allow a wrapping-around behavior in CBMC:
                 // https://github.com/model-checking/kani/issues/1150
+                // Note(std): We don't check that the starting or resulting pointer stay
+                // within bounds of the object they point to. Doing so causes spurious
+                // failures due to the usage of these intrinsics in the standard library.
+                // See <https://github.com/model-checking/kani/issues/1233> for more details.
+                // Note that this is one of the safety conditions for `offset`:
+                // <https://doc.rust-lang.org/std/primitive.pointer.html#safety-2>
+
                 let overflow_res = ce1.clone().cast_to(Type::ssize_t()).add_overflow(offset_bytes);
                 let overflow_check = self.codegen_assert_assume(
                     overflow_res.overflowed.not(),
@@ -695,6 +701,14 @@ impl<'tcx> GotocCtx<'tcx> {
                         let meta = self.codegen_operand_stable(&operands[1]);
                         slice_fat_ptr(typ, data_cast, meta, &self.symbol_table)
                     }
+                    TyKind::RigidTy(RigidTy::Str) => {
+                        let pointee_goto_typ = Type::unsigned_int(8);
+                        // cast data to pointer with specified type
+                        let data_cast =
+                            data.cast_to(Type::Pointer { typ: Box::new(pointee_goto_typ) });
+                        let meta = self.codegen_operand_stable(&operands[1]);
+                        slice_fat_ptr(typ, data_cast, meta, &self.symbol_table)
+                    }
                     TyKind::RigidTy(RigidTy::Adt(..)) => {
                         let pointee_goto_typ = self.codegen_ty_stable(pointee_ty);
                         let data_cast =
@@ -711,6 +725,17 @@ impl<'tcx> GotocCtx<'tcx> {
                                 );
                             dynamic_fat_ptr(typ, data_cast, vtable_expr, &self.symbol_table)
                         }
+                    }
+                    TyKind::RigidTy(RigidTy::Dynamic(..)) => {
+                        let pointee_goto_typ = self.codegen_ty_stable(pointee_ty);
+                        let data_cast =
+                            data.cast_to(Type::Pointer { typ: Box::new(pointee_goto_typ) });
+                        let meta = self.codegen_operand_stable(&operands[1]);
+                        let vtable_expr = meta
+                            .member("_vtable_ptr", &self.symbol_table)
+                            .member("pointer", &self.symbol_table)
+                            .cast_to(typ.lookup_field_type("vtable", &self.symbol_table).unwrap());
+                        dynamic_fat_ptr(typ, data_cast, vtable_expr, &self.symbol_table)
                     }
                     _ => {
                         let pointee_goto_typ = self.codegen_ty_stable(pointee_ty);
@@ -730,18 +755,25 @@ impl<'tcx> GotocCtx<'tcx> {
             Rvalue::Repeat(op, sz) => self.codegen_rvalue_repeat(op, sz, loc),
             Rvalue::Ref(_, _, p) | Rvalue::AddressOf(_, p) => {
                 let place_ref = self.codegen_place_ref_stable(&p, loc);
-                if self.queries.args().ub_check.contains(&ExtraChecks::PtrToRefCast) {
-                    let place_ref_type = place_ref.typ().clone();
-                    match self.codegen_raw_ptr_deref_validity_check(&p, &loc) {
-                        Some(ptr_validity_check_expr) => Expr::statement_expression(
-                            vec![ptr_validity_check_expr, place_ref.as_stmt(loc)],
+                let place_ref_type = place_ref.typ().clone();
+                match self.codegen_raw_ptr_deref_validity_check(
+                    &p,
+                    place_ref.clone(),
+                    self.place_ty_stable(p),
+                    &loc,
+                ) {
+                    Some((ptr_alignment_check_expr, ptr_validity_check_expr)) => {
+                        Expr::statement_expression(
+                            vec![
+                                ptr_alignment_check_expr,
+                                ptr_validity_check_expr,
+                                place_ref.as_stmt(loc),
+                            ],
                             place_ref_type,
                             loc,
-                        ),
-                        None => place_ref,
+                        )
                     }
-                } else {
-                    place_ref
+                    None => place_ref,
                 }
             }
             Rvalue::Len(p) => self.codegen_rvalue_len(p, loc),
@@ -913,10 +945,10 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn codegen_discriminant_field(&self, place: Expr, ty: Ty) -> Expr {
         let layout = self.layout_of_stable(ty);
         assert!(
-            matches!(
-                &layout.variants,
-                Variants::Multiple { tag_encoding: TagEncoding::Direct, .. }
-            ),
+            matches!(&layout.variants, Variants::Multiple {
+                tag_encoding: TagEncoding::Direct,
+                ..
+            }),
             "discriminant field (`case`) only exists for multiple variants and direct encoding"
         );
         let expr = if ty.kind().is_coroutine() {

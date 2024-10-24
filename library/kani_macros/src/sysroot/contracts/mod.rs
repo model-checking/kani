@@ -395,7 +395,7 @@
 use proc_macro::TokenStream;
 use proc_macro2::{Ident, TokenStream as TokenStream2};
 use quote::quote;
-use syn::{parse_macro_input, parse_quote, Expr, ExprClosure, ItemFn};
+use syn::{Expr, ExprClosure, ItemFn, parse_macro_input, parse_quote};
 
 mod bootstrap;
 mod check;
@@ -512,6 +512,13 @@ enum ContractConditionsData {
     Modifies {
         attr: Vec<Expr>,
     },
+}
+
+/// Which function are we currently generating?
+#[derive(Copy, Clone, Eq, PartialEq)]
+enum ClosureType {
+    Check,
+    Replace,
 }
 
 impl<'a> ContractConditionsHandler<'a> {

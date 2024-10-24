@@ -3,10 +3,13 @@
 //
 //! Utility functions that help calculate type layout.
 
-use stable_mir::abi::{FieldsShape, Scalar, TagEncoding, ValueAbi, VariantsShape};
-use stable_mir::target::{MachineInfo, MachineSize};
-use stable_mir::ty::{AdtKind, IndexedVal, RigidTy, Ty, TyKind, UintTy};
-use stable_mir::CrateDef;
+use std::fmt::Display;
+
+use stable_mir::{
+    abi::{FieldsShape, Scalar, TagEncoding, ValueAbi, VariantsShape},
+    target::{MachineInfo, MachineSize},
+    ty::{AdtKind, IndexedVal, RigidTy, Ty, TyKind, UintTy, VariantIdx},
+};
 
 /// Represents a chunk of data bytes in a data structure.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
@@ -41,8 +44,24 @@ pub enum PointeeLayout {
     Sized { layout: Layout },
     /// Layout of slices, *const/mut str is included in this case and treated as *const/mut [u8].
     Slice { element_layout: Layout },
+    /// Layout of unions, which are shared storage for multiple fields of potentially different layouts.
+    Union { field_layouts: Vec<Layout> },
     /// Trait objects have an arbitrary layout.
     TraitObject,
+}
+
+impl PointeeLayout {
+    /// Returns the size of the layout, if available.
+    pub fn maybe_size(&self) -> Option<usize> {
+        match self {
+            PointeeLayout::Sized { layout } => Some(layout.len()),
+            PointeeLayout::Slice { element_layout } => Some(element_layout.len()),
+            PointeeLayout::Union { field_layouts } => {
+                Some(field_layouts.iter().map(|field_layout| field_layout.len()).max().unwrap())
+            }
+            PointeeLayout::TraitObject => None,
+        }
+    }
 }
 
 pub struct PointeeInfo {
@@ -50,10 +69,62 @@ pub struct PointeeInfo {
     layout: PointeeLayout,
 }
 
+/// Different layout computation errors that could arise from the currently unsupported constructs.
+pub enum LayoutComputationError {
+    UnknownUnsizedLayout(Ty),
+    EnumWithNicheEncoding(Ty),
+    EnumWithMultiplePaddingVariants(Ty),
+    UnsupportedType(Ty),
+    UnionAsField(Ty),
+}
+
+impl Display for LayoutComputationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LayoutComputationError::UnknownUnsizedLayout(ty) => {
+                write!(f, "Cannot determine layout for an unsized type {ty}")
+            }
+            LayoutComputationError::EnumWithNicheEncoding(ty) => {
+                write!(f, "Cannot determine layout for an Enum with niche encoding of type {ty}")
+            }
+            LayoutComputationError::EnumWithMultiplePaddingVariants(ty) => write!(
+                f,
+                "Cannot determine layout for an Enum of type {ty}, as it has multiple variants that have different padding."
+            ),
+            LayoutComputationError::UnsupportedType(ty) => {
+                write!(f, "Cannot determine layout for an unsupported type {ty}.")
+            }
+            LayoutComputationError::UnionAsField(ty) => write!(
+                f,
+                "Cannot determine layout for a type that contains union of type {ty} as a field."
+            ),
+        }
+    }
+}
+
 impl PointeeInfo {
-    pub fn from_ty(ty: Ty) -> Result<Self, String> {
+    pub fn from_ty(ty: Ty) -> Result<Self, LayoutComputationError> {
         match ty.kind() {
             TyKind::RigidTy(rigid_ty) => match rigid_ty {
+                RigidTy::Adt(adt_def, args) if adt_def.kind() == AdtKind::Union => {
+                    assert!(adt_def.variants().len() == 1);
+                    let fields: Result<_, _> = adt_def
+                        .variant(VariantIdx::to_val(0))
+                        .unwrap()
+                        .fields()
+                        .into_iter()
+                        .map(|field_def| {
+                            let ty = field_def.ty_with_args(&args);
+                            let size_in_bytes = ty.layout().unwrap().shape().size.bytes();
+                            data_bytes_for_ty(&MachineInfo::target(), ty, 0)
+                                .map(|data_chunks| generate_byte_mask(size_in_bytes, data_chunks))
+                        })
+                        .collect();
+                    Ok(PointeeInfo {
+                        pointee_ty: ty,
+                        layout: PointeeLayout::Union { field_layouts: fields? },
+                    })
+                }
                 RigidTy::Str => {
                     let slicee_ty = Ty::unsigned_ty(UintTy::U8);
                     let size_in_bytes = slicee_ty.layout().unwrap().shape().size.bytes();
@@ -83,7 +154,7 @@ impl PointeeInfo {
                         };
                         Ok(PointeeInfo { pointee_ty: ty, layout })
                     } else {
-                        Err(format!("Cannot determine type layout for type `{ty}`"))
+                        Err(LayoutComputationError::UnknownUnsizedLayout(ty))
                     }
                 }
             },
@@ -107,7 +178,7 @@ fn data_bytes_for_ty(
     machine_info: &MachineInfo,
     ty: Ty,
     current_offset: usize,
-) -> Result<Vec<DataBytes>, String> {
+) -> Result<Vec<DataBytes>, LayoutComputationError> {
     let layout = ty.layout().unwrap().shape();
 
     match layout.fields {
@@ -164,9 +235,7 @@ fn data_bytes_for_ty(
                                 VariantsShape::Multiple {
                                     tag_encoding: TagEncoding::Niche { .. },
                                     ..
-                                } => {
-                                    Err(format!("Unsupported Enum `{}` check", def.trimmed_name()))?
-                                }
+                                } => Err(LayoutComputationError::EnumWithNicheEncoding(ty)),
                                 VariantsShape::Multiple { variants, tag, .. } => {
                                     // Retrieve data bytes for the tag.
                                     let tag_size = match tag {
@@ -236,10 +305,11 @@ fn data_bytes_for_ty(
                                     } else {
                                         // Struct has multiple padding variants, Kani cannot
                                         // differentiate between them.
-                                        Err(format!(
-                                            "Unsupported Enum `{}` check",
-                                            def.trimmed_name()
-                                        ))
+                                        Err(
+                                            LayoutComputationError::EnumWithMultiplePaddingVariants(
+                                                ty,
+                                            ),
+                                        )
                                     }
                                 }
                             }
@@ -325,10 +395,55 @@ fn data_bytes_for_ty(
                 | RigidTy::Coroutine(_, _, _)
                 | RigidTy::CoroutineWitness(_, _)
                 | RigidTy::Foreign(_)
-                | RigidTy::Dynamic(_, _, _) => Err(format!("Unsupported {ty:?}")),
+                | RigidTy::Dynamic(_, _, _) => Err(LayoutComputationError::UnsupportedType(ty)),
             }
         }
-        FieldsShape::Union(_) => Err(format!("Unsupported {ty:?}")),
+        FieldsShape::Union(_) => Err(LayoutComputationError::UnionAsField(ty)),
         FieldsShape::Array { .. } => Ok(vec![]),
     }
+}
+
+/// Returns true if `to_ty` has a smaller or equal size and padding bytes in `from_ty` are padding
+/// bytes in `to_ty`.
+pub fn tys_layout_compatible_to_size(from_ty: &Ty, to_ty: &Ty) -> bool {
+    tys_layout_cmp_to_size(from_ty, to_ty, |from_byte, to_byte| from_byte || !to_byte)
+}
+
+/// Returns true if `to_ty` has a smaller or equal size and padding bytes in `from_ty` are padding
+/// bytes in `to_ty`.
+pub fn tys_layout_equal_to_size(from_ty: &Ty, to_ty: &Ty) -> bool {
+    tys_layout_cmp_to_size(from_ty, to_ty, |from_byte, to_byte| from_byte == to_byte)
+}
+
+/// Returns true if `to_ty` has a smaller or equal size and comparator function returns true for all
+/// byte initialization value pairs up to size.
+fn tys_layout_cmp_to_size(from_ty: &Ty, to_ty: &Ty, cmp: impl Fn(bool, bool) -> bool) -> bool {
+    // Retrieve layouts to assess compatibility.
+    let from_ty_info = PointeeInfo::from_ty(*from_ty);
+    let to_ty_info = PointeeInfo::from_ty(*to_ty);
+    if let (Ok(from_ty_info), Ok(to_ty_info)) = (from_ty_info, to_ty_info) {
+        let from_ty_layout = match from_ty_info.layout() {
+            PointeeLayout::Sized { layout } => layout,
+            PointeeLayout::Slice { element_layout } => element_layout,
+            PointeeLayout::TraitObject | PointeeLayout::Union { .. } => return false,
+        };
+        let to_ty_layout = match to_ty_info.layout() {
+            PointeeLayout::Sized { layout } => layout,
+            PointeeLayout::Slice { element_layout } => element_layout,
+            PointeeLayout::TraitObject | PointeeLayout::Union { .. } => return false,
+        };
+        // Ensure `to_ty_layout` does not have a larger size.
+        if to_ty_layout.len() <= from_ty_layout.len() {
+            // Check data and padding bytes pair-wise.
+            if from_ty_layout.iter().zip(to_ty_layout.iter()).all(
+                |(from_ty_layout_byte, to_ty_layout_byte)| {
+                    // Run comparator on each pair.
+                    cmp(*from_ty_layout_byte, *to_ty_layout_byte)
+                },
+            ) {
+                return true;
+            }
+        }
+    };
+    false
 }

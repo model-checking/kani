@@ -1,0 +1,21 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+
+[package]
+name = "kani-cov"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "A tool to process coverage information from Kani"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.81"
+clap = { version = "4.4.11", features = ["derive"] }
+console = "0.15.8"
+serde = "1.0.197"
+serde_derive = "1.0.197"
+serde_json = "1.0.115"
+tree-sitter = "0.23.0"
+tree-sitter-rust = "0.21.2"

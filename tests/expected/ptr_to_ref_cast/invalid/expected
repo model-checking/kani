@@ -1,0 +1,8 @@
+MyStr::new.safety_check\
+Status: FAILURE\
+Description: "dereference failure: pointer invalid"\
+in function MyStr::new
+
+Verification failed for - check_size_of_val
+Verification failed for - check_slice_my_str
+Complete - 1 successfully verified harnesses, 2 failures, 3 total.

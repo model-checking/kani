@@ -7,8 +7,8 @@
 //! This file tests the executor and spawn infrastructure from the Kani library.
 
 use std::sync::{
-    atomic::{AtomicI64, Ordering},
     Arc,
+    atomic::{AtomicI64, Ordering},
 };
 
 #[kani::proof(schedule = kani::RoundRobin::default())]

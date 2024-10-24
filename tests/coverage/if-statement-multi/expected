@@ -1,0 +1,26 @@
+   1|     | // Copyright Kani Contributors\
+   2|     | // SPDX-License-Identifier: Apache-2.0 OR MIT\
+   3|     | // kani-flags: --coverage -Zsource-coverage\
+   4|     | \
+   5|     | //! Checks that we are covering all regions except\
+   6|     | //!  * the `val == 42` condition\
+   7|     | //!  * the `false` branch\
+   8|     | //!\
+   9|     | //! No coverage information is shown for `_other_function` because it's sliced\
+  10|     | //! off: <https://github.com/model-checking/kani/issues/3445>\
+  11|     | \
+  12|    0| ```fn _other_function() {'''\
+  13|    0| ```    println!("Hello, world!");'''\
+  14|    0| ```}'''\
+  15|     | \
+  16|    1| fn test_cov(val: u32) -> bool {\
+  17|    1|     if val < 3 || ```val == 42''' { true } else { ```false''' }\
+  18|     | }\
+  19|     | \
+  20|     | #[cfg_attr(kani, kani::proof)]\
+  21|    1| fn main() {\
+  22|    1|     let test1 = test_cov(1);\
+  23|    1|     let test2 = test_cov(2);\
+  24|    1|     assert!(test1);\
+  25|    1|     assert!(test2);\
+  26|     | }\

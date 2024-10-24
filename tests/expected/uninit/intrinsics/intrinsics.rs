@@ -5,7 +5,7 @@
 
 #![feature(core_intrinsics)]
 
-use std::alloc::{alloc, alloc_zeroed, Layout};
+use std::alloc::{Layout, alloc, alloc_zeroed};
 use std::intrinsics::*;
 
 #[kani::proof]
@@ -14,7 +14,20 @@ fn check_copy_nonoverlapping() {
         let layout = Layout::from_size_align(16, 8).unwrap();
         let src: *mut u8 = alloc(layout);
         let dst: *mut u8 = alloc(layout);
-        copy_nonoverlapping(src as *const u8, dst, 2); // ~ERROR: Accessing `src` here, which is uninitialized.
+        // This does not fail, since `copy_nonoverlapping` is untyped.
+        copy_nonoverlapping(src as *const u8, dst, 2);
+    }
+}
+
+#[kani::proof]
+fn check_copy_nonoverlapping_read() {
+    unsafe {
+        let layout = Layout::from_size_align(16, 8).unwrap();
+        let src: *mut u8 = alloc(layout);
+        let dst: *mut u8 = alloc_zeroed(layout);
+        copy_nonoverlapping(src as *const u8, dst, 2);
+        // ~ERROR: Accessing `dst` here, which became uninitialized after copy.
+        let uninit = std::ptr::read(dst);
     }
 }
 
@@ -35,7 +48,20 @@ fn check_copy() {
         let layout = Layout::from_size_align(16, 8).unwrap();
         let src: *mut u8 = alloc(layout);
         let dst: *mut u8 = alloc(layout);
-        copy(src as *const u8, dst, 2); // ~ERROR: Accessing `src` here, which is uninitialized.
+        // This does not fail, since `copy` is untyped.
+        copy(src as *const u8, dst, 2);
+    }
+}
+
+#[kani::proof]
+fn check_copy_read() {
+    unsafe {
+        let layout = Layout::from_size_align(16, 8).unwrap();
+        let src: *mut u8 = alloc(layout);
+        let dst: *mut u8 = alloc_zeroed(layout);
+        copy(src as *const u8, dst, 2);
+        // ~ERROR: Accessing `dst` here, which became uninitialized after copy.
+        let uninit = std::ptr::read(dst);
     }
 }
 

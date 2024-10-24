@@ -22,8 +22,9 @@ use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
 use rustc_middle::ty::{Const, TyCtxt};
 use rustc_smir::rustc_internal;
+use stable_mir::CrateDef;
 use stable_mir::abi::{FieldsShape, Scalar, TagEncoding, ValueAbi, VariantsShape, WrappingRange};
-use stable_mir::mir::mono::{Instance, InstanceKind};
+use stable_mir::mir::mono::Instance;
 use stable_mir::mir::visit::{Location, PlaceContext, PlaceRef};
 use stable_mir::mir::{
     AggregateKind, BasicBlockIdx, BinOp, Body, CastKind, ConstOperand, FieldIdx, Local, LocalDecl,
@@ -32,7 +33,6 @@ use stable_mir::mir::{
 };
 use stable_mir::target::{MachineInfo, MachineSize};
 use stable_mir::ty::{AdtKind, IndexedVal, MirConst, RigidTy, Ty, TyKind, UintTy};
-use stable_mir::CrateDef;
 use std::fmt::Debug;
 use strum_macros::AsRefStr;
 use tracing::{debug, trace};
@@ -325,7 +325,7 @@ impl<'a, 'b> CheckValueVisitor<'a, 'b> {
     }
 }
 
-impl<'a, 'b> MirVisitor for CheckValueVisitor<'a, 'b> {
+impl MirVisitor for CheckValueVisitor<'_, '_> {
     fn visit_statement(&mut self, stmt: &Statement, location: Location) {
         if self.skip_next {
             self.skip_next = false;
@@ -385,50 +385,47 @@ impl<'a, 'b> MirVisitor for CheckValueVisitor<'a, 'b> {
                     // Note: For transmute, both Src and Dst must be valid type.
                     // In this case, we need to save the Dst, and invoke super_terminator.
                     self.super_terminator(term, location);
-                    let instance = expect_instance(self.locals, func);
-                    if instance.kind == InstanceKind::Intrinsic {
-                        match instance.intrinsic_name().unwrap().as_str() {
-                            "write_bytes" => {
-                                // The write bytes intrinsic may trigger UB in safe code.
-                                // pub unsafe fn write_bytes<T>(dst: *mut T, val: u8, count: usize)
-                                // <https://doc.rust-lang.org/stable/core/intrinsics/fn.write_bytes.html>
-                                // This is an over-approximation since writing an invalid value is
-                                // not UB, only reading it will be.
-                                assert_eq!(
-                                    args.len(),
-                                    3,
-                                    "Unexpected number of arguments for `write_bytes`"
-                                );
-                                let TyKind::RigidTy(RigidTy::RawPtr(target_ty, Mutability::Mut)) =
-                                    args[0].ty(self.locals).unwrap().kind()
-                                else {
-                                    unreachable!()
-                                };
-                                let validity = ty_validity_per_offset(&self.machine, target_ty, 0);
-                                match validity {
-                                    Ok(ranges) if ranges.is_empty() => {}
-                                    Ok(ranges) => {
-                                        let sz = rustc_internal::stable(Const::from_target_usize(
-                                            self.tcx,
-                                            target_ty.layout().unwrap().shape().size.bytes() as u64,
-                                        ));
-                                        self.push_target(SourceOp::BytesValidity {
-                                            target_ty,
-                                            rvalue: Rvalue::Repeat(args[1].clone(), sz),
-                                            ranges,
-                                        })
-                                    }
-                                    _ => self.push_target(SourceOp::UnsupportedCheck {
-                                        check: "write_bytes".to_string(),
-                                        ty: target_ty,
-                                    }),
+                    match intrinsic_name(self.locals, func).as_deref() {
+                        Some("write_bytes") => {
+                            // The write bytes intrinsic may trigger UB in safe code.
+                            // pub unsafe fn write_bytes<T>(dst: *mut T, val: u8, count: usize)
+                            // <https://doc.rust-lang.org/stable/core/intrinsics/fn.write_bytes.html>
+                            // This is an over-approximation since writing an invalid value is
+                            // not UB, only reading it will be.
+                            assert_eq!(
+                                args.len(),
+                                3,
+                                "Unexpected number of arguments for `write_bytes`"
+                            );
+                            let TyKind::RigidTy(RigidTy::RawPtr(target_ty, Mutability::Mut)) =
+                                args[0].ty(self.locals).unwrap().kind()
+                            else {
+                                unreachable!()
+                            };
+                            let validity = ty_validity_per_offset(&self.machine, target_ty, 0);
+                            match validity {
+                                Ok(ranges) if ranges.is_empty() => {}
+                                Ok(ranges) => {
+                                    let sz = rustc_internal::stable(Const::from_target_usize(
+                                        self.tcx,
+                                        target_ty.layout().unwrap().shape().size.bytes() as u64,
+                                    ));
+                                    self.push_target(SourceOp::BytesValidity {
+                                        target_ty,
+                                        rvalue: Rvalue::Repeat(args[1].clone(), sz),
+                                        ranges,
+                                    })
                                 }
+                                _ => self.push_target(SourceOp::UnsupportedCheck {
+                                    check: "write_bytes".to_string(),
+                                    ty: target_ty,
+                                }),
                             }
-                            "transmute" | "transmute_copy" => {
-                                unreachable!("Should've been lowered")
-                            }
-                            _ => {}
                         }
+                        Some("transmute") | Some("transmute_copy") => {
+                            unreachable!("Should've been lowered")
+                        }
+                        _ => {}
                     }
                 }
                 TerminatorKind::Goto { .. }
@@ -741,16 +738,13 @@ fn assignment_check_points(
     invalid_ranges
 }
 
-/// Retrieve instance for the given function operand.
+/// Retrieve the name of the intrinsic if this operand is an intrinsic.
 ///
-/// This will panic if the operand is not a function or if it cannot be resolved.
-fn expect_instance(locals: &[LocalDecl], func: &Operand) -> Instance {
+/// Intrinsics can only be invoked directly, so we can safely ignore other operand types.
+fn intrinsic_name(locals: &[LocalDecl], func: &Operand) -> Option<String> {
     let ty = func.ty(locals).unwrap();
-    match ty.kind() {
-        TyKind::RigidTy(RigidTy::FnDef(def, args)) => Instance::resolve(def, &args).unwrap(),
-        TyKind::RigidTy(RigidTy::FnPtr(sig)) => todo!("Add support to FnPtr: {sig:?}"),
-        _ => unreachable!("Found: {func:?}"),
-    }
+    let TyKind::RigidTy(RigidTy::FnDef(def, args)) = ty.kind() else { return None };
+    Instance::resolve(def, &args).unwrap().intrinsic_name()
 }
 
 /// Instrument MIR to check the value pointed by `rvalue_ptr` satisfies requirement `req`.

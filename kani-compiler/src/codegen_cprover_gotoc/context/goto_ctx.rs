@@ -16,9 +16,9 @@
 //! this structure as input.
 use super::current_fn::CurrentFnCtx;
 use super::vtable_ctx::VtableCtx;
-use crate::codegen_cprover_gotoc::overrides::{fn_hooks, GotocHooks};
-use crate::codegen_cprover_gotoc::utils::full_crate_name;
 use crate::codegen_cprover_gotoc::UnsupportedConstructs;
+use crate::codegen_cprover_gotoc::overrides::{GotocHooks, fn_hooks};
+use crate::codegen_cprover_gotoc::utils::full_crate_name;
 use crate::kani_middle::transform::BodyTransformation;
 use crate::kani_queries::QueryDb;
 use cbmc::goto_program::{
@@ -33,12 +33,12 @@ use rustc_middle::ty::layout::{
     TyAndLayout,
 };
 use rustc_middle::ty::{self, Ty, TyCtxt};
-use rustc_span::source_map::respan;
 use rustc_span::Span;
+use rustc_span::source_map::respan;
 use rustc_target::abi::call::FnAbi;
 use rustc_target::abi::{HasDataLayout, TargetDataLayout};
-use stable_mir::mir::mono::Instance;
 use stable_mir::mir::Body;
+use stable_mir::mir::mono::Instance;
 use stable_mir::ty::Allocation;
 use std::fmt::Debug;
 
@@ -119,7 +119,7 @@ impl<'tcx> GotocCtx<'tcx> {
 }
 
 /// Generate variables
-impl<'tcx> GotocCtx<'tcx> {
+impl GotocCtx<'_> {
     /// Declare a local variable.
     /// Handles the bookkeeping of:
     /// - creating the symbol
@@ -137,17 +137,6 @@ impl<'tcx> GotocCtx<'tcx> {
         self.symbol_table.insert(sym.clone());
         self.current_fn_mut().push_onto_block(Stmt::decl(sym.to_expr(), value, l));
         sym
-    }
-
-    // Generate a Symbol Expression representing a function variable from the MIR
-    pub fn gen_function_local_variable(
-        &mut self,
-        c: u64,
-        fname: &str,
-        t: Type,
-        loc: Location,
-    ) -> Symbol {
-        self.gen_stack_variable(c, fname, "var", t, loc)
     }
 
     /// Given a counter `c` a function name `fname, and a prefix `prefix`, generates a new function local variable
@@ -260,7 +249,6 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Ensures that a struct with name `struct_name` appears in the symbol table.
     /// If it doesn't, inserts it using `f`.
     /// Returns: a struct-tag referencing the inserted struct.
-
     pub fn ensure_struct<
         T: Into<InternedString>,
         U: Into<InternedString>,
@@ -314,7 +302,7 @@ impl<'tcx> GotocCtx<'tcx> {
 }
 
 /// Mutators
-impl<'tcx> GotocCtx<'tcx> {
+impl GotocCtx<'_> {
     pub fn set_current_fn(&mut self, instance: Instance, body: &Body) {
         self.current_fn = Some(CurrentFnCtx::new(instance, self, body));
     }
@@ -358,7 +346,7 @@ impl<'tcx> HasTyCtxt<'tcx> for GotocCtx<'tcx> {
     }
 }
 
-impl<'tcx> HasDataLayout for GotocCtx<'tcx> {
+impl HasDataLayout for GotocCtx<'_> {
     fn data_layout(&self) -> &TargetDataLayout {
         self.tcx.data_layout()
     }

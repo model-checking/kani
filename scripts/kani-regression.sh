@@ -41,8 +41,8 @@ cargo test -p cprover_bindings
 cargo test -p kani-compiler
 cargo test -p kani-driver
 cargo test -p kani_metadata
-# skip doc tests and enable assertions to fail
-cargo test -p kani --lib --features concrete_playback
+# Use concrete playback to enable assertions failure
+cargo test -p kani --features concrete_playback
 # Test the actual macros, skipping doc tests and enabling extra traits for "syn"
 # so we can debug print AST
 RUSTFLAGS=--cfg=kani_sysroot cargo test -p kani_macros --features syn/extra-traits --lib
@@ -60,6 +60,7 @@ TESTS=(
     "cargo-ui cargo-kani"
     "script-based-pre exec"
     "coverage coverage-based"
+    "cargo-coverage cargo-coverage"
     "kani-docs cargo-kani"
     "kani-fixme kani-fixme"
 )
@@ -68,6 +69,9 @@ TESTS=(
 echo "--- Compiletest configuration"
 cargo run -p compiletest --quiet -- --suite kani --mode cargo-kani --dry-run --verbose
 echo "-----------------------------"
+
+# Build `kani-cov`
+cargo build -p kani-cov
 
 # Extract testing suite information and run compiletest
 for testp in "${TESTS[@]}"; do

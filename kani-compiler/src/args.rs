@@ -1,8 +1,22 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use strum_macros::{AsRefStr, EnumString, VariantNames};
+use strum_macros::{AsRefStr, Display, EnumString, VariantNames};
 use tracing_subscriber::filter::Directive;
+
+#[derive(Debug, Default, Display, Clone, Copy, AsRefStr, EnumString, VariantNames, PartialEq, Eq)]
+#[strum(serialize_all = "snake_case")]
+pub enum BackendOption {
+    /// CProver (Goto) backend
+    #[cfg(feature = "cprover")]
+    #[strum(serialize = "cprover")]
+    #[default]
+    CProver,
+
+    /// LLBC backend (Aeneas's IR)
+    #[cfg(feature = "llbc")]
+    Llbc,
+}
 
 #[derive(Debug, Default, Clone, Copy, AsRefStr, EnumString, VariantNames, PartialEq, Eq)]
 #[strum(serialize_all = "snake_case")]
@@ -69,11 +83,13 @@ pub struct Arguments {
     /// Pass the kani version to the compiler to ensure cache coherence.
     check_version: Option<String>,
     #[clap(long)]
-    /// A legacy flag that is now ignored.
-    goto_c: bool,
-    /// Enable specific checks.
-    #[clap(long)]
     pub ub_check: Vec<ExtraChecks>,
+    /// Option name used to select which backend to use.
+    #[clap(long = "backend", default_value_t = BackendOption::CProver)]
+    pub backend: BackendOption,
+    /// Print the final LLBC file to stdout.
+    #[clap(long)]
+    pub print_llbc: bool,
 }
 
 #[derive(Debug, Clone, Copy, AsRefStr, EnumString, VariantNames, PartialEq, Eq)]
@@ -82,9 +98,6 @@ pub enum ExtraChecks {
     /// Check that produced values are valid except for uninitialized values.
     /// See https://github.com/model-checking/kani/issues/920.
     Validity,
-    /// Check pointer validity when casting pointers to references.
-    /// See https://github.com/model-checking/kani/issues/2975.
-    PtrToRefCast,
     /// Check for using uninitialized memory.
     Uninit,
 }

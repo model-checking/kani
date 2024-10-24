@@ -159,8 +159,8 @@ fdiv_fast | Partial | [#809](https://github.com/model-checking/kani/issues/809) 
 float_to_int_unchecked | No | |
 floorf32 | Yes | |
 floorf64 | Yes | |
-fmaf32 | No | |
-fmaf64 | No | |
+fmaf32 | Partial | Results are overapproximated |
+fmaf64 | Partial | Results are overapproximated |
 fmul_fast | Partial | [#809](https://github.com/model-checking/kani/issues/809) |
 forget | Yes | |
 frem_fast | No | |
@@ -211,8 +211,8 @@ sinf32 | Partial | Results are overapproximated; [this test](https://github.com/
 sinf64 | Partial | Results are overapproximated; [this test](https://github.com/model-checking/kani/blob/main/tests/kani/Intrinsics/Math/Trigonometry/sinf64.rs) explains how |
 size_of | Yes | |
 size_of_val | Yes | |
-sqrtf32 | No | |
-sqrtf64 | No | |
+sqrtf32 | Partial | Results are overapproximated |
+sqrtf64 | Partial | Results are overapproximated |
 sub_with_overflow | Yes | |
 transmute | Partial | Doesn't check [all UB conditions](https://doc.rust-lang.org/nomicon/transmutes.html) |
 truncf32 | Yes | |

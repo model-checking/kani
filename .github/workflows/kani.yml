@@ -3,6 +3,7 @@
 name: Kani CI
 on:
   pull_request:
+  merge_group:
   push:
     # Not just any push, as that includes tags.
     # We don't want to re-trigger this workflow when tagging an existing commit.
@@ -97,6 +98,8 @@ jobs:
     steps:
       - name: Checkout Kani
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Install book dependencies
         run: ./scripts/setup/ubuntu/install_doc_deps.sh

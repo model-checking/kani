@@ -1,18 +1,18 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-use crate::codegen_cprover_gotoc::GotocCtx;
+use crate::codegen_cprover_gotoc::{GotocCtx, codegen::ty_stable::pointee_type_stable};
 use crate::kani_middle::attributes::KaniAttributes;
 use cbmc::goto_program::FunctionContract;
 use cbmc::goto_program::{Expr, Lambda, Location, Type};
 use kani_metadata::AssignsContract;
 use rustc_hir::def_id::DefId as InternalDefId;
 use rustc_smir::rustc_internal;
+use stable_mir::CrateDef;
 use stable_mir::mir::mono::{Instance, MonoItem};
 use stable_mir::mir::{Local, VarDebugInfoContents};
 use stable_mir::ty::{FnDef, RigidTy, TyKind};
-use stable_mir::CrateDef;
 
-impl<'tcx> GotocCtx<'tcx> {
+impl GotocCtx<'_> {
     /// Given the `proof_for_contract` target `function_under_contract` and the reachable `items`,
     /// find or create the `AssignsContract` that needs to be enforced and attach it to the symbol
     /// for which it needs to be enforced.
@@ -160,11 +160,17 @@ impl<'tcx> GotocCtx<'tcx> {
         let TyKind::RigidTy(RigidTy::Tuple(modifies_tys)) = modifies_ty.kind() else {
             unreachable!("found {:?}", modifies_ty.kind())
         };
+
+        for ty in &modifies_tys {
+            assert!(ty.kind().is_any_ptr(), "Expected pointer, but found {}", ty);
+        }
+
         let assigns: Vec<_> = modifies_tys
             .into_iter()
+            // do not attempt to dereference (and assign) a ZST
+            .filter(|ty| !self.is_zst_stable(pointee_type_stable(*ty).unwrap()))
             .enumerate()
             .map(|(idx, ty)| {
-                assert!(ty.kind().is_any_ptr(), "Expected pointer, but found {}", ty);
                 let ptr = modifies_args.clone().member(idx.to_string(), &self.symbol_table);
                 if self.is_fat_pointer_stable(ty) {
                     let unref = match ty.kind() {

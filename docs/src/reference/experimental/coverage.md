@@ -1,4 +1,4 @@
-## Coverage
+# Coverage
 
 Recall our `estimate_size` example from [First steps](../../tutorial-first-steps.md),
 where we wrote a proof harness constraining the range of inputs to integers less than 4096:
@@ -14,7 +14,7 @@ Fortunately, Kani is able to report a coverage metric for each proof harness.
 In the `first-steps-v2` directory, try running:
 
 ```
-cargo kani --coverage -Z line-coverage --harness verify_success
+cargo kani --coverage -Z source-coverage --harness verify_success
 ```
 
 which verifies the harness, then prints coverage information for each line.

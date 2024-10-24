@@ -54,8 +54,14 @@ impl MutableBody {
         &self.locals
     }
 
+    #[allow(dead_code)]
     pub fn arg_count(&self) -> usize {
         self.arg_count
+    }
+
+    #[allow(dead_code)]
+    pub fn var_debug_info(&self) -> &Vec<VarDebugInfo> {
+        &self.var_debug_info
     }
 
     /// Create a mutable body from the original MIR body.
@@ -309,16 +315,16 @@ impl MutableBody {
                 // Update the source to point at the terminator.
                 *source = SourceInstruction::Terminator { bb: orig_bb };
             }
-            // Make the terminator at `source` point at the new block,
-            // the terminator of which is a simple Goto instruction.
+            // Make the terminator at `source` point at the new block, the terminator of which is
+            // provided by the caller.
             SourceInstruction::Terminator { bb } => {
                 let current_term = &mut self.blocks.get_mut(*bb).unwrap().terminator;
                 let target_bb = get_mut_target_ref(current_term);
                 let new_target_bb = get_mut_target_ref(&mut new_term);
-                // Set the new terminator to point where previous terminator pointed.
-                *new_target_bb = *target_bb;
-                // Point the current terminator to the new terminator's basic block.
-                *target_bb = new_bb_idx;
+                // Swap the targets of the newly inserted terminator and the original one. This is
+                // an easy way to make the original terminator point to the new basic block with the
+                // new terminator.
+                std::mem::swap(new_target_bb, target_bb);
                 // Update the source to point at the terminator.
                 *bb = new_bb_idx;
                 self.blocks.push(BasicBlock { statements: vec![], terminator: new_term });
@@ -330,6 +336,7 @@ impl MutableBody {
     /// `InsertPosition` is `InsertPosition::Before`, `source` will point to the same instruction as
     /// before. If `InsertPosition` is `InsertPosition::After`, `source` will point to the
     /// terminator of the newly inserted basic block.
+    #[allow(dead_code)]
     pub fn insert_bb(
         &mut self,
         mut bb: BasicBlock,
@@ -426,6 +433,15 @@ impl MutableBody {
         self.blocks.push(BasicBlock { statements: Vec::default(), terminator })
     }
 
+    /// Replace statements from the given basic block
+    pub fn replace_statements(
+        &mut self,
+        source_instruction: &SourceInstruction,
+        new_stmts: Vec<Statement>,
+    ) {
+        self.blocks.get_mut(source_instruction.bb()).unwrap().statements = new_stmts;
+    }
+
     /// Replace a terminator from the given basic block
     pub fn replace_terminator(
         &mut self,
@@ -482,7 +498,7 @@ impl CheckType {
 }
 
 /// We store the index of an instruction to avoid borrow checker issues and unnecessary copies.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum SourceInstruction {
     Statement { idx: usize, bb: BasicBlockIdx },
     Terminator { bb: BasicBlockIdx },
@@ -557,7 +573,7 @@ pub trait MutMirVisitor {
             StatementKind::Assign(_, rvalue) => {
                 self.visit_rvalue(rvalue);
             }
-            StatementKind::Intrinsic(intrisic) => match intrisic {
+            StatementKind::Intrinsic(intrinsic) => match intrinsic {
                 NonDivergingIntrinsic::Assume(operand) => {
                     self.visit_operand(operand);
                 }

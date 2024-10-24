@@ -1,8 +1,9 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-use super::typ::TypeExt;
 use super::typ::FN_RETURN_VOID_VAR_NAME;
-use super::{bb_label, PropertyClass};
+use super::typ::TypeExt;
+use super::{PropertyClass, bb_label};
+use crate::codegen_cprover_gotoc::codegen::function::rustc_smir::region_from_coverage_opaque;
 use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
 use cbmc::goto_program::{Expr, Location, Stmt, Type};
@@ -14,12 +15,12 @@ use stable_mir::abi::{ArgAbi, FnAbi, PassMode};
 use stable_mir::mir::mono::{Instance, InstanceKind};
 use stable_mir::mir::{
     AssertMessage, BasicBlockIdx, CopyNonOverlapping, NonDivergingIntrinsic, Operand, Place,
-    Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind, RETURN_LOCAL,
+    RETURN_LOCAL, Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind,
 };
 use stable_mir::ty::{Abi, RigidTy, Span, Ty, TyKind, VariantIdx};
 use tracing::{debug, debug_span, trace};
 
-impl<'tcx> GotocCtx<'tcx> {
+impl GotocCtx<'_> {
     /// Generate Goto-C for MIR [Statement]s.
     /// This does not cover all possible "statements" because MIR distinguishes between ordinary
     /// statements and [Terminator]s, which can exclusively appear at the end of a basic block.
@@ -158,12 +159,28 @@ impl<'tcx> GotocCtx<'tcx> {
                     location,
                 )
             }
+            StatementKind::Coverage(coverage_opaque) => {
+                let function_name = self.current_fn().readable_name();
+                let instance = self.current_fn().instance_stable();
+                let counter_data = format!("{coverage_opaque:?} ${function_name}$");
+                let maybe_source_region =
+                    region_from_coverage_opaque(self.tcx, &coverage_opaque, instance);
+                if let Some(source_region) = maybe_source_region {
+                    let coverage_stmt =
+                        self.codegen_coverage(&counter_data, stmt.span, source_region);
+                    // TODO: Avoid single-statement blocks when conversion of
+                    // standalone statements to the irep format is fixed.
+                    // More details in <https://github.com/model-checking/kani/issues/3012>
+                    Stmt::block(vec![coverage_stmt], location)
+                } else {
+                    Stmt::skip(location)
+                }
+            }
             StatementKind::PlaceMention(_) => todo!(),
             StatementKind::FakeRead(..)
             | StatementKind::Retag(_, _)
             | StatementKind::AscribeUserType { .. }
             | StatementKind::Nop
-            | StatementKind::Coverage { .. }
             | StatementKind::ConstEvalCounter => Stmt::skip(location),
         }
         .with_location(location)

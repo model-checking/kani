@@ -1,70 +1,44 @@
-Checking harness check_typed_swap_safe...
+std::ptr::write::<std::mem::MaybeUninit<u8>>.assertion.1\
+	 - Status: FAILURE\
+	 - Description: "Interaction between raw pointers and unions is not yet supported."
 
-Failed Checks: Kani does not support reasoning about memory initialization in presence of mutable raw pointer casts that could cause delayed UB.
+std::ptr::write::<std::mem::MaybeUninit<u8>>.assertion.1\
+	 - Status: FAILURE\
+	 - Description: "Interaction between raw pointers and unions is not yet supported."\
 
-VERIFICATION:- FAILED
+check_typed_swap.assertion.1\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `*mut u8`"
 
-Checking harness check_typed_swap...
+check_typed_swap.assertion.2\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `*mut u8`"
 
-Failed Checks: Kani does not support reasoning about memory initialization in presence of mutable raw pointer casts that could cause delayed UB.
+check_volatile_load.assertion.1\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `*const u8`"
 
-Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `*mut u8`
+check_compare_bytes.assertion.1\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `*const u8`"
 
-Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `*mut u8`
+check_compare_bytes.assertion.2\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `*const u8`"
 
-VERIFICATION:- FAILED
+std::ptr::read::<u8>.assertion.1\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `*const u8`"
 
-Checking harness check_volatile_store_and_load_safe...
-
-VERIFICATION:- SUCCESSFUL
-
-Checking harness check_volatile_load...
-
-Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `*const u8`
-
-VERIFICATION:- FAILED
-
-Checking harness check_write_bytes_safe...
-
-VERIFICATION:- SUCCESSFUL
-
-Checking harness check_compare_bytes_safe...
-
-VERIFICATION:- SUCCESSFUL
-
-Checking harness check_compare_bytes...
-
-Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `*const u8`
-
-Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `*const u8`
-
-VERIFICATION:- FAILED
-
-Checking harness check_copy_safe...
-
-VERIFICATION:- SUCCESSFUL
-
-Checking harness check_copy...
-
-Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `*const u8`
-
-VERIFICATION:- FAILED
-
-Checking harness check_copy_nonoverlapping_safe...
-
-VERIFICATION:- SUCCESSFUL
-
-Checking harness check_copy_nonoverlapping...
-
-Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `*const u8`
-
-VERIFICATION:- FAILED
+std::ptr::read::<u8>.assertion.2\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u8`"
 
 Summary:
 Verification failed for - check_typed_swap_safe
 Verification failed for - check_typed_swap
 Verification failed for - check_volatile_load
 Verification failed for - check_compare_bytes
-Verification failed for - check_copy
-Verification failed for - check_copy_nonoverlapping
-Complete - 5 successfully verified harnesses, 6 failures, 11 total.
+Verification failed for - check_copy_read
+Verification failed for - check_copy_nonoverlapping_read
+Complete - 7 successfully verified harnesses, 6 failures, 13 total.

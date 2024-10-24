@@ -15,6 +15,7 @@
 #![feature(let_chains)]
 #![feature(f128)]
 #![feature(f16)]
+#![feature(non_exhaustive_omitted_patterns_lint)]
 extern crate rustc_abi;
 extern crate rustc_ast;
 extern crate rustc_ast_pretty;
@@ -27,6 +28,7 @@ extern crate rustc_index;
 extern crate rustc_interface;
 extern crate rustc_metadata;
 extern crate rustc_middle;
+extern crate rustc_mir_dataflow;
 extern crate rustc_session;
 extern crate rustc_smir;
 extern crate rustc_span;
@@ -36,8 +38,11 @@ extern crate stable_mir;
 extern crate tempfile;
 
 mod args;
+#[cfg(feature = "llbc")]
+mod codegen_aeneas_llbc;
 #[cfg(feature = "cprover")]
 mod codegen_cprover_gotoc;
+mod intrinsics;
 mod kani_compiler;
 mod kani_middle;
 mod kani_queries;

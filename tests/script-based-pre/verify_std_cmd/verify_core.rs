@@ -29,6 +29,7 @@ pub mod verify {
     }
 
     #[kani::proof_for_contract(dummy_read)]
+    #[cfg(not(uninit_checks))]
     fn check_dummy_read() {
         let val: char = kani::any();
         assert_eq!(unsafe { dummy_read(&val) }, val);
@@ -37,16 +38,19 @@ pub mod verify {
     /// Ensure we can verify constant functions.
     #[kani::requires(kani::mem::can_dereference(ptr))]
     #[rustc_diagnostic_item = "dummy_read"]
+    #[cfg(not(uninit_checks))]
     const unsafe fn dummy_read<T: Copy>(ptr: *const T) -> T {
         *ptr
     }
 
+    #[cfg(not(uninit_checks))]
     #[kani::proof_for_contract(swap_tuple)]
     fn check_swap_tuple() {
         let initial: (char, NonZeroU8) = kani::any();
         let _swapped = swap_tuple(initial);
     }
 
+    #[cfg(not(uninit_checks))]
     #[kani::ensures(| result | result.0 == second && result.1 == first)]
     fn swap_tuple((first, second): (char, NonZeroU8)) -> (NonZeroU8, char) {
         (second, first)
@@ -71,5 +75,16 @@ pub mod verify {
     })]
     unsafe fn add_one(inout: *mut [u32]) {
         inout.as_mut_unchecked().iter_mut().for_each(|e| *e += 1)
+    }
+
+    /// Test that arbitrary pointer works as expected.
+    /// Disable it for uninit checks, since these checks do not support `MaybeUninit` which is used
+    /// by the pointer generator.
+    #[kani::proof]
+    #[cfg(not(uninit_checks))]
+    fn check_any_ptr() {
+        let mut generator = kani::PointerGenerator::<8>::new();
+        let ptr = generator.any_in_bounds::<i32>().ptr;
+        assert!(kani::mem::can_write_unaligned(ptr));
     }
 }

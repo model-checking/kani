@@ -6,11 +6,11 @@
 // ignore-tidy-filelength
 
 use crate::common::KaniFailStep;
-use crate::common::{output_base_dir, output_base_name};
 use crate::common::{
-    CargoKani, CargoKaniTest, CoverageBased, Exec, Expected, Kani, KaniFixme, Stub,
+    CargoCoverage, CargoKani, CargoKaniTest, CoverageBased, Exec, Expected, Kani, KaniFixme, Stub,
 };
 use crate::common::{Config, TestPaths};
+use crate::common::{output_base_dir, output_base_name};
 use crate::header::TestProps;
 use crate::read2::read2;
 use crate::util::logv;
@@ -68,12 +68,13 @@ struct TestCx<'test> {
     testpaths: &'test TestPaths,
 }
 
-impl<'test> TestCx<'test> {
+impl TestCx<'_> {
     /// Code executed
     fn run(&self) {
         match self.config.mode {
             Kani => self.run_kani_test(),
             KaniFixme => self.run_kani_test(),
+            CargoCoverage => self.run_cargo_coverage_test(),
             CargoKani => self.run_cargo_kani_test(false),
             CargoKaniTest => self.run_cargo_kani_test(true),
             CoverageBased => self.run_expected_coverage_test(),
@@ -313,20 +314,48 @@ impl<'test> TestCx<'test> {
         self.compose_and_run(kani)
     }
 
-    /// Run coverage based output for kani on a single file
+    /// Run Kani with coverage enabled on a single source file
     fn run_kani_with_coverage(&self) -> ProcRes {
         let mut kani = Command::new("kani");
         if !self.props.compile_flags.is_empty() {
             kani.env("RUSTFLAGS", self.props.compile_flags.join(" "));
         }
         kani.arg(&self.testpaths.file).args(&self.props.kani_flags);
-        kani.arg("--coverage").args(["-Z", "line-coverage"]);
+        kani.arg("--coverage").args(["-Z", "source-coverage"]);
 
         if !self.props.cbmc_flags.is_empty() {
             kani.arg("--cbmc-args").args(&self.props.cbmc_flags);
         }
 
         self.compose_and_run(kani)
+    }
+
+    /// Run Kani with coverage enabled on a cargo package
+    fn run_cargo_coverage_test(&self) {
+        // We create our own command for the same reasons listed in `run_kani_test` method.
+        let mut cargo = Command::new("cargo");
+        // We run `cargo` on the directory where we found the `*.expected` file
+        let parent_dir = self.testpaths.file.parent().unwrap();
+        // The name of the function to test is the same as the stem of `*.expected` file
+        let function_name = self.testpaths.file.file_stem().unwrap().to_str().unwrap();
+        cargo
+            .arg("kani")
+            .arg("--coverage")
+            .arg("-Zsource-coverage")
+            .arg("--target-dir")
+            .arg(self.output_base_dir().join("target"))
+            .current_dir(parent_dir);
+
+        if "expected" != self.testpaths.file.file_name().unwrap() {
+            cargo.args(["--harness", function_name]);
+        }
+        cargo.args(&self.config.extra_args);
+
+        let proc_res = self.compose_and_run(cargo);
+        self.verify_output(&proc_res, &self.testpaths.file);
+
+        // TODO: We should probably be checking the exit status somehow
+        // See https://github.com/model-checking/kani/issues/1895
     }
 
     /// Runs an executable file and:
@@ -412,8 +441,11 @@ impl<'test> TestCx<'test> {
     /// Runs Kani in coverage mode on the test file specified by `self.testpaths.file`.
     fn run_expected_coverage_test(&self) {
         let proc_res = self.run_kani_with_coverage();
+        let cov_results_path = self.extract_cov_results_path(&proc_res);
+        let (kanimap, kaniraws, kanicov) = self.find_cov_files(&cov_results_path);
+        let kanicov_proc = self.run_kanicov_report(&kanimap, &kaniraws, &kanicov);
         let expected_path = self.testpaths.file.parent().unwrap().join("expected");
-        self.verify_output(&proc_res, &expected_path);
+        self.verify_output(&kanicov_proc, &expected_path);
     }
 
     /// Runs Kani with stub implementations of various data structures.
@@ -507,11 +539,88 @@ impl<'test> TestCx<'test> {
         let stamp = crate::stamp(self.config, self.testpaths);
         fs::write(stamp, "we only support one configuration").unwrap();
     }
+
+    /// Run `kani-cov merge` and `kani-cov report` to generate a text-based
+    /// report and return the `ProcRes` associated to the `kani-cov report`
+    /// command.
+    fn run_kanicov_report(
+        &self,
+        kanimap: &PathBuf,
+        kaniraws: &[PathBuf],
+        kanicov: &PathBuf,
+    ) -> ProcRes {
+        let mut kanicov_merge = Command::new("kani-cov");
+        kanicov_merge.arg("merge");
+        kanicov_merge.args(kaniraws);
+        kanicov_merge.arg("--output");
+        kanicov_merge.arg(kanicov);
+        let merge_cmd = self.compose_and_run(kanicov_merge);
+
+        if !merge_cmd.status.success() {
+            self.fatal_proc_rec("test failed: could not run `kani-cov merge` command", &merge_cmd);
+        }
+
+        let mut kanicov_report = Command::new("kani-cov");
+        kanicov_report.arg("report").arg(kanimap).arg("--profile").arg(kanicov);
+        let report_cmd = self.compose_and_run(kanicov_report);
+
+        if !report_cmd.status.success() {
+            self.fatal_proc_rec(
+                "test failed: could not run `kani-cov report` command",
+                &report_cmd,
+            );
+        }
+        report_cmd
+    }
+
+    /// Return the paths to the files to be used for the `kani-cov` commands.
+    /// Note that `kanimap` and `kaniraws` result from any coverage-enabled Kani
+    /// run. `kanicov` is the name we will use for the output of the `kani-cov
+    /// merge` command.
+    fn find_cov_files(&self, folder_path: &Path) -> (PathBuf, Vec<PathBuf>, PathBuf) {
+        let folder_name = folder_path.file_name().unwrap();
+
+        let kanimap = folder_path.join(format!("{}_kanimap.json", folder_name.to_string_lossy()));
+        let kanicov = folder_path.join(format!("{}_kanicov.json", folder_name.to_string_lossy()));
+
+        let kaniraw_glob = format!("{}/*_kaniraw.json", folder_path.display());
+        let kaniraws: Vec<PathBuf> = glob::glob(&kaniraw_glob)
+            .expect("Failed to read glob pattern")
+            .filter_map(|entry| entry.ok())
+            .collect();
+
+        (kanimap, kaniraws, kanicov)
+    }
+
+    /// Find the path to the folder where the coverage results have been saved.
+    ///
+    /// The path is displayed in the output of a coverage-enabled Kani run like
+    /// this:
+    /// ```sh
+    /// Verification Time: XX.XXXXXXXs
+    ///
+    /// [info] Coverage results saved to /path/to/cov/results/kanicov_<date>_<time>
+    /// Summary:
+    /// ```
+    fn extract_cov_results_path(&self, proc_res: &ProcRes) -> PathBuf {
+        let output_lines = proc_res.stdout.split('\n').collect::<Vec<&str>>();
+        let coverage_info = output_lines.iter().find(|l| l.contains("Coverage results saved to"));
+        if coverage_info.is_none() {
+            self.fatal_proc_rec("failed to find the path to the coverage results", proc_res);
+        }
+        let coverage_path = coverage_info
+            .unwrap()
+            .split(' ')
+            .last()
+            .expect("couldn't retrieve path to the coverage results");
+        PathBuf::from(coverage_path)
+    }
 }
 
+/// Represents the result of executing the process `cmdline`
 pub struct ProcRes {
     status: ExitStatus,
-    stdout: String,
+    pub stdout: String,
     stderr: String,
     cmdline: String,
 }

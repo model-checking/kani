@@ -19,25 +19,30 @@
 use crate::kani_middle::codegen_units::CodegenUnit;
 use crate::kani_middle::reachability::CallGraph;
 use crate::kani_middle::transform::body::CheckType;
-use crate::kani_middle::transform::check_uninit::UninitPass;
+use crate::kani_middle::transform::check_uninit::{DelayedUbPass, UninitPass};
 use crate::kani_middle::transform::check_values::ValidValuePass;
 use crate::kani_middle::transform::contracts::{AnyModifiesPass, FunctionWithContractPass};
 use crate::kani_middle::transform::kani_intrinsics::IntrinsicGeneratorPass;
+use crate::kani_middle::transform::loop_contracts::LoopContractPass;
 use crate::kani_middle::transform::stubs::{ExternFnStubPass, FnStubPass};
 use crate::kani_queries::QueryDb;
 use dump_mir_pass::DumpMirPass;
 use rustc_middle::ty::TyCtxt;
-use stable_mir::mir::mono::{Instance, MonoItem};
 use stable_mir::mir::Body;
+use stable_mir::mir::mono::{Instance, MonoItem};
 use std::collections::HashMap;
 use std::fmt::Debug;
+
+pub use internal_mir::RustcInternalMir;
 
 pub(crate) mod body;
 mod check_uninit;
 mod check_values;
 mod contracts;
 mod dump_mir_pass;
+mod internal_mir;
 mod kani_intrinsics;
+mod loop_contracts;
 mod stubs;
 
 /// Object used to retrieve a transformed instance body.
@@ -76,22 +81,17 @@ impl BodyTransformation {
         // would also make sense to check that the values are initialized before checking their
         // validity. In the future, it would be nice to have a mechanism to skip automatically
         // generated code for future instrumentation passes.
-        transformer.add_pass(
-            queries,
-            UninitPass {
-                // Since this uses demonic non-determinism under the hood, should not assume the assertion.
-                check_type: CheckType::new_assert(tcx),
-                mem_init_fn_cache: HashMap::new(),
-            },
-        );
-        transformer.add_pass(
-            queries,
-            IntrinsicGeneratorPass {
-                check_type,
-                mem_init_fn_cache: HashMap::new(),
-                arguments: queries.args().clone(),
-            },
-        );
+        transformer.add_pass(queries, UninitPass {
+            // Since this uses demonic non-determinism under the hood, should not assume the assertion.
+            check_type: CheckType::new_assert(tcx),
+            mem_init_fn_cache: HashMap::new(),
+        });
+        transformer.add_pass(queries, IntrinsicGeneratorPass {
+            check_type,
+            mem_init_fn_cache: HashMap::new(),
+            arguments: queries.args().clone(),
+        });
+        transformer.add_pass(queries, LoopContractPass::new(tcx, &unit));
         transformer
     }
 
@@ -192,6 +192,7 @@ pub struct GlobalPasses {
 impl GlobalPasses {
     pub fn new(queries: &QueryDb, tcx: TyCtxt) -> Self {
         let mut global_passes = GlobalPasses { global_passes: vec![] };
+        global_passes.add_global_pass(queries, DelayedUbPass::new(CheckType::new_assert(tcx)));
         global_passes.add_global_pass(queries, DumpMirPass::new(tcx));
         global_passes
     }

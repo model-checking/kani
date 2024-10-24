@@ -3,7 +3,7 @@
 
 [package]
 name = "kani-verifier"
-version = "0.53.0"
+version = "0.56.0"
 edition = "2021"
 description = "A bit-precise model checker for Rust."
 readme = "README.md"
@@ -40,6 +40,7 @@ members = [
   "library/std",
   "tools/compiletest",
   "tools/build-kani",
+  "tools/kani-cov",
   "tools/scanner",
   "kani-driver",
   "kani-compiler",
@@ -56,6 +57,7 @@ default-members = [
 
 exclude = [
   "build",
+  "charon",
   "target",
   # dependency tests have their own workspace
   "tests/kani-dependency-test/dependency3",
@@ -71,3 +73,6 @@ exclude = [
   "tests/script-based-pre/build-cache-dirty/target/new_dep",
   "tests/script-based-pre/verify_std_cmd/tmp_dir/target/kani_verify_std",
 ]
+
+[workspace.lints.clippy]
+too_long_first_doc_paragraph = "allow"

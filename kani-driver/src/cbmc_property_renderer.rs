@@ -4,12 +4,12 @@
 use crate::args::OutputFormat;
 use crate::call_cbmc::{FailedProperties, VerificationStatus};
 use crate::cbmc_output_parser::{CheckStatus, ParserItem, Property, TraceItem};
+use crate::coverage::cov_results::CoverageResults;
 use console::style;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use rustc_demangle::demangle;
-use std::collections::{BTreeMap, HashMap};
-use strum_macros::{AsRefStr, Display};
+use std::collections::HashMap;
 
 type CbmcAltDescriptions = HashMap<&'static str, Vec<(&'static str, Option<&'static str>)>>;
 
@@ -22,142 +22,103 @@ static CBMC_ALT_DESCRIPTIONS: Lazy<CbmcAltDescriptions> = Lazy::new(|| {
     map.insert("error_label", vec![]);
     map.insert("division-by-zero", vec![("division by zero", None)]);
     map.insert("enum-range-check", vec![("enum range check", None)]);
-    map.insert(
-        "undefined-shift",
-        vec![
-            ("shift distance is negative", None),
-            ("shift distance too large", None),
-            ("shift operand is negative", None),
-            ("shift of non-integer type", None),
-        ],
-    );
-    map.insert(
-        "overflow",
-        vec![
-            ("result of signed mod is not representable", None),
-            ("arithmetic overflow on signed type conversion", None),
-            ("arithmetic overflow on signed division", None),
-            ("arithmetic overflow on signed unary minus", None),
-            ("arithmetic overflow on signed shl", None),
-            ("arithmetic overflow on unsigned unary minus", None),
-            ("arithmetic overflow on signed +", Some("arithmetic overflow on signed addition")),
-            ("arithmetic overflow on signed -", Some("arithmetic overflow on signed subtraction")),
-            (
-                "arithmetic overflow on signed *",
-                Some("arithmetic overflow on signed multiplication"),
-            ),
-            ("arithmetic overflow on unsigned +", Some("arithmetic overflow on unsigned addition")),
-            (
-                "arithmetic overflow on unsigned -",
-                Some("arithmetic overflow on unsigned subtraction"),
-            ),
-            (
-                "arithmetic overflow on unsigned *",
-                Some("arithmetic overflow on unsigned multiplication"),
-            ),
-            ("arithmetic overflow on floating-point typecast", None),
-            ("arithmetic overflow on floating-point division", None),
-            ("arithmetic overflow on floating-point addition", None),
-            ("arithmetic overflow on floating-point subtraction", None),
-            ("arithmetic overflow on floating-point multiplication", None),
-            ("arithmetic overflow on unsigned to signed type conversion", None),
-            ("arithmetic overflow on float to signed integer type conversion", None),
-            ("arithmetic overflow on signed to unsigned type conversion", None),
-            ("arithmetic overflow on unsigned to unsigned type conversion", None),
-            ("arithmetic overflow on float to unsigned integer type conversion", None),
-        ],
-    );
-    map.insert(
-        "NaN",
-        vec![
-            ("NaN on +", Some("NaN on addition")),
-            ("NaN on -", Some("NaN on subtraction")),
-            ("NaN on /", Some("NaN on division")),
-            ("NaN on *", Some("NaN on multiplication")),
-        ],
-    );
+    map.insert("undefined-shift", vec![
+        ("shift distance is negative", None),
+        ("shift distance too large", None),
+        ("shift operand is negative", None),
+        ("shift of non-integer type", None),
+    ]);
+    map.insert("overflow", vec![
+        ("result of signed mod is not representable", None),
+        ("arithmetic overflow on signed type conversion", None),
+        ("arithmetic overflow on signed division", None),
+        ("arithmetic overflow on signed unary minus", None),
+        ("arithmetic overflow on signed shl", None),
+        ("arithmetic overflow on unsigned unary minus", None),
+        ("arithmetic overflow on signed +", Some("arithmetic overflow on signed addition")),
+        ("arithmetic overflow on signed -", Some("arithmetic overflow on signed subtraction")),
+        ("arithmetic overflow on signed *", Some("arithmetic overflow on signed multiplication")),
+        ("arithmetic overflow on unsigned +", Some("arithmetic overflow on unsigned addition")),
+        ("arithmetic overflow on unsigned -", Some("arithmetic overflow on unsigned subtraction")),
+        (
+            "arithmetic overflow on unsigned *",
+            Some("arithmetic overflow on unsigned multiplication"),
+        ),
+        ("arithmetic overflow on floating-point typecast", None),
+        ("arithmetic overflow on floating-point division", None),
+        ("arithmetic overflow on floating-point addition", None),
+        ("arithmetic overflow on floating-point subtraction", None),
+        ("arithmetic overflow on floating-point multiplication", None),
+        ("arithmetic overflow on unsigned to signed type conversion", None),
+        ("arithmetic overflow on float to signed integer type conversion", None),
+        ("arithmetic overflow on signed to unsigned type conversion", None),
+        ("arithmetic overflow on unsigned to unsigned type conversion", None),
+        ("arithmetic overflow on float to unsigned integer type conversion", None),
+    ]);
+    map.insert("NaN", vec![
+        ("NaN on +", Some("NaN on addition")),
+        ("NaN on -", Some("NaN on subtraction")),
+        ("NaN on /", Some("NaN on division")),
+        ("NaN on *", Some("NaN on multiplication")),
+    ]);
     map.insert("pointer", vec![("same object violation", None)]);
-    map.insert(
-        "pointer_arithmetic",
-        vec![
-            ("pointer relation: deallocated dynamic object", None),
-            ("pointer relation: dead object", None),
-            ("pointer relation: pointer NULL", None),
-            ("pointer relation: pointer invalid", None),
-            ("pointer relation: pointer outside dynamic object bounds", None),
-            ("pointer relation: pointer outside object bounds", None),
-            ("pointer relation: invalid integer address", None),
-            ("pointer arithmetic: deallocated dynamic object", None),
-            ("pointer arithmetic: dead object", None),
-            ("pointer arithmetic: pointer NULL", None),
-            ("pointer arithmetic: pointer invalid", None),
-            ("pointer arithmetic: pointer outside dynamic object bounds", None),
-            ("pointer arithmetic: pointer outside object bounds", None),
-            ("pointer arithmetic: invalid integer address", None),
-        ],
-    );
-    map.insert(
-        "pointer_dereference",
-        vec![
-            (
-                "dereferenced function pointer must be",
-                Some("dereference failure: invalid function pointer"),
-            ),
-            ("dereference failure: pointer NULL", None),
-            ("dereference failure: pointer invalid", None),
-            ("dereference failure: deallocated dynamic object", None),
-            ("dereference failure: dead object", None),
-            ("dereference failure: pointer outside dynamic object bounds", None),
-            ("dereference failure: pointer outside object bounds", None),
-            ("dereference failure: invalid integer address", None),
-        ],
-    );
+    map.insert("pointer_arithmetic", vec![
+        ("pointer relation: deallocated dynamic object", None),
+        ("pointer relation: dead object", None),
+        ("pointer relation: pointer NULL", None),
+        ("pointer relation: pointer invalid", None),
+        ("pointer relation: pointer outside dynamic object bounds", None),
+        ("pointer relation: pointer outside object bounds", None),
+        ("pointer relation: invalid integer address", None),
+        ("pointer arithmetic: deallocated dynamic object", None),
+        ("pointer arithmetic: dead object", None),
+        ("pointer arithmetic: pointer NULL", None),
+        ("pointer arithmetic: pointer invalid", None),
+        ("pointer arithmetic: pointer outside dynamic object bounds", None),
+        ("pointer arithmetic: pointer outside object bounds", None),
+        ("pointer arithmetic: invalid integer address", None),
+    ]);
+    map.insert("pointer_dereference", vec![
+        (
+            "dereferenced function pointer must be",
+            Some("dereference failure: invalid function pointer"),
+        ),
+        ("dereference failure: pointer NULL", None),
+        ("dereference failure: pointer invalid", None),
+        ("dereference failure: deallocated dynamic object", None),
+        ("dereference failure: dead object", None),
+        ("dereference failure: pointer outside dynamic object bounds", None),
+        ("dereference failure: pointer outside object bounds", None),
+        ("dereference failure: invalid integer address", None),
+    ]);
     // These are very hard to understand without more context.
-    map.insert(
-        "pointer_primitives",
-        vec![
-            ("pointer invalid", None),
-            ("deallocated dynamic object", Some("pointer to deallocated dynamic object")),
-            ("dead object", Some("pointer to dead object")),
-            ("pointer outside dynamic object bounds", None),
-            ("pointer outside object bounds", None),
-            ("invalid integer address", None),
-        ],
-    );
-    map.insert(
-        "array_bounds",
-        vec![
-            ("lower bound", Some("index out of bounds")),
-            // This one is redundant:
-            // ("dynamic object upper bound", Some("access out of bounds")),
-            (
-                "upper bound",
-                Some("index out of bounds: the length is less than or equal to the given index"),
-            ),
-        ],
-    );
-    map.insert(
-        "bit_count",
-        vec![
-            ("count trailing zeros is undefined for value zero", None),
-            ("count leading zeros is undefined for value zero", None),
-        ],
-    );
+    map.insert("pointer_primitives", vec![
+        ("pointer invalid", None),
+        ("deallocated dynamic object", Some("pointer to deallocated dynamic object")),
+        ("dead object", Some("pointer to dead object")),
+        ("pointer outside dynamic object bounds", None),
+        ("pointer outside object bounds", None),
+        ("invalid integer address", None),
+    ]);
+    map.insert("array_bounds", vec![
+        ("lower bound", Some("index out of bounds")),
+        // This one is redundant:
+        // ("dynamic object upper bound", Some("access out of bounds")),
+        (
+            "upper bound",
+            Some("index out of bounds: the length is less than or equal to the given index"),
+        ),
+    ]);
+    map.insert("bit_count", vec![
+        ("count trailing zeros is undefined for value zero", None),
+        ("count leading zeros is undefined for value zero", None),
+    ]);
     map.insert("memory-leak", vec![("dynamically allocated memory never freed", None)]);
     // These pre-conditions should not print temporary variables since they are embedded in the libc implementation.
     // They are added via `__CPROVER_precondition`.
     // map.insert("precondition_instance": vec![]);
     map
 });
-
-#[derive(PartialEq, Eq, AsRefStr, Clone, Copy, Display)]
-#[strum(serialize_all = "UPPERCASE")]
-// The status of coverage reported by Kani
-enum CoverageStatus {
-    Full,
-    Partial,
-    None,
-}
 
 const UNSUPPORTED_CONSTRUCT_DESC: &str = "is not currently supported by Kani";
 const UNWINDING_ASSERT_DESC: &str = "unwinding assertion loop";
@@ -431,70 +392,29 @@ pub fn format_result(
     result_str
 }
 
-/// Separate checks into coverage and non-coverage based on property class and format them separately for --coverage. We report both verification and processed coverage
-/// results
+/// Separate checks into coverage and non-coverage based on property class and
+/// format them separately for `--coverage`. Then we report both verification
+/// and processed coverage results.
+///
+/// Note: The reporting of coverage results should be removed once `kani-cov` is
+/// introduced.
 pub fn format_coverage(
     properties: &[Property],
+    cov_results: &CoverageResults,
     status: VerificationStatus,
     should_panic: bool,
     failed_properties: FailedProperties,
     show_checks: bool,
 ) -> String {
-    let (coverage_checks, non_coverage_checks): (Vec<Property>, Vec<Property>) =
+    let (_coverage_checks, non_coverage_checks): (Vec<Property>, Vec<Property>) =
         properties.iter().cloned().partition(|x| x.property_class() == "code_coverage");
 
     let verification_output =
         format_result(&non_coverage_checks, status, should_panic, failed_properties, show_checks);
-    let coverage_output = format_result_coverage(&coverage_checks);
-    let result = format!("{}\n{}", verification_output, coverage_output);
+    let cov_results_intro = "Source-based code coverage results:";
+    let result = format!("{}\n{}\n\n{}", verification_output, cov_results_intro, cov_results);
 
     result
-}
-
-/// Generate coverage result from all coverage properties (i.e., checks with `code_coverage` property class).
-/// Loops through each of the checks with the `code_coverage` property class on a line and gives:
-///  - A status `FULL` if all checks pertaining to a line number are `COVERED`
-///  - A status `NONE` if all checks related to a line are `UNCOVERED`
-///  - Otherwise (i.e., if the line contains both) it reports `PARTIAL`.
-///
-/// Used when the user requests coverage information with `--coverage`.
-/// Output is tested through the `coverage-based` testing suite, not the regular
-/// `expected` suite.
-fn format_result_coverage(properties: &[Property]) -> String {
-    let mut formatted_output = String::new();
-    formatted_output.push_str("\nCoverage Results:\n");
-
-    let mut coverage_results: BTreeMap<String, BTreeMap<usize, CoverageStatus>> =
-        BTreeMap::default();
-    for prop in properties {
-        let src = prop.source_location.clone();
-        let file_entries = coverage_results.entry(src.file.unwrap()).or_default();
-        let check_status = if prop.status == CheckStatus::Covered {
-            CoverageStatus::Full
-        } else {
-            CoverageStatus::None
-        };
-
-        // Create Map<file, Map<line, status>>
-        file_entries
-            .entry(src.line.unwrap().parse().unwrap())
-            .and_modify(|line_status| {
-                if *line_status != check_status {
-                    *line_status = CoverageStatus::Partial
-                }
-            })
-            .or_insert(check_status);
-    }
-
-    // Create formatted string that is returned to the user as output
-    for (file, checks) in coverage_results.iter() {
-        for (line_number, coverage_status) in checks {
-            formatted_output.push_str(&format!("{}, {}, {}\n", file, line_number, coverage_status));
-        }
-        formatted_output.push('\n');
-    }
-
-    formatted_output
 }
 
 /// Attempts to build a message for a failed property with as much detailed
@@ -815,7 +735,7 @@ fn annotate_properties_with_reach_results(
     mut properties: Vec<Property>,
     reach_checks: Vec<Property>,
 ) -> Vec<Property> {
-    let mut reach_map: HashMap<String, CheckStatus> = HashMap::new();
+    let mut reach_map: HashMap<String, Vec<CheckStatus>> = HashMap::new();
     let reach_desc_pat = Regex::new("KANI_CHECK_ID_.*_([0-9])*").unwrap();
     // Collect data (ID, status) from reachability checks
     for reach_check in reach_checks {
@@ -826,13 +746,12 @@ fn annotate_properties_with_reach_results(
         let check_id_str = format!("[{check_id}]");
         // Get the status and insert into `reach_map`
         let status = reach_check.status;
-        let res_ins = reach_map.insert(check_id_str, status);
-        assert!(res_ins.is_none());
+        reach_map.entry(check_id_str).or_default().push(status);
     }
 
+    let check_marker_pat = Regex::new(r"\[KANI_CHECK_ID_([^\]]*)\]").unwrap();
     for prop in properties.iter_mut() {
         let description = &prop.description;
-        let check_marker_pat = Regex::new(r"\[KANI_CHECK_ID_([^\]]*)\]").unwrap();
         if check_marker_pat.is_match(description) {
             // Capture the ID in the property
             let prop_match_id =
@@ -841,7 +760,15 @@ fn annotate_properties_with_reach_results(
             let reach_status_opt = reach_map.get(prop_match_id);
             // Update the reachability status of the property
             if let Some(reach_status) = reach_status_opt {
-                prop.reach = Some(*reach_status);
+                for status in reach_status {
+                    // Report if any copy of `prop` is not success.
+                    if prop.reach.is_none()
+                        || prop.reach.unwrap() == CheckStatus::Satisfied
+                        || prop.reach.unwrap() == CheckStatus::Success
+                    {
+                        prop.reach = Some(*status);
+                    }
+                }
             }
         }
     }

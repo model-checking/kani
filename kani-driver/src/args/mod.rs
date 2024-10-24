@@ -5,6 +5,7 @@
 pub mod assess_args;
 pub mod cargo;
 pub mod common;
+pub mod list_args;
 pub mod playback_args;
 pub mod std_args;
 
@@ -15,7 +16,7 @@ use crate::args::cargo::CargoTargetArgs;
 use crate::util::warning;
 use cargo::CargoCommonArgs;
 use clap::builder::{PossibleValue, TypedValueParser};
-use clap::{error::ContextKind, error::ContextValue, error::Error, error::ErrorKind, ValueEnum};
+use clap::{ValueEnum, error::ContextKind, error::ContextValue, error::Error, error::ErrorKind};
 use kani_metadata::CbmcSolver;
 use std::ffi::OsString;
 use std::path::PathBuf;
@@ -40,6 +41,7 @@ where
         .unwrap()
 }
 
+#[allow(dead_code)]
 pub fn print_obsolete(verbosity: &CommonArgs, option: &str) {
     if !verbosity.quiet {
         warning(&format!(
@@ -93,6 +95,8 @@ pub enum StandaloneSubcommand {
     Playback(Box<playback_args::KaniPlaybackArgs>),
     /// Verify the rust standard library.
     VerifyStd(Box<std_args::VerifyStdArgs>),
+    /// Execute the list subcommand
+    List(Box<list_args::StandaloneListArgs>),
 }
 
 #[derive(Debug, clap::Parser)]
@@ -118,6 +122,9 @@ pub enum CargoKaniSubcommand {
 
     /// Execute concrete playback testcases of a local package.
     Playback(Box<playback_args::CargoPlaybackArgs>),
+
+    /// List metadata relevant to verification, e.g., harnesses.
+    List(Box<list_args::CargoListArgs>),
 }
 
 // Common arguments for invoking Kani for verification purpose. This gets put into KaniContext,
@@ -188,14 +195,6 @@ pub struct VerificationArgs {
     /// Kani will only compile the crate. No verification will be performed
     #[arg(long, hide_short_help = true)]
     pub only_codegen: bool,
-
-    /// Deprecated flag. This is a no-op since we no longer support the legacy linker and
-    /// it will be removed in a future Kani release.
-    #[arg(long, hide = true, conflicts_with("mir_linker"))]
-    pub legacy_linker: bool,
-    /// Deprecated flag. This is a no-op since we no longer support any other linker.
-    #[arg(long, hide = true)]
-    pub mir_linker: bool,
 
     /// Specify the value used for loop unwinding in CBMC
     #[arg(long)]
@@ -277,6 +276,10 @@ pub struct VerificationArgs {
     /// Enable Kani coverage output alongside verification result
     #[arg(long, hide_short_help = true)]
     pub coverage: bool,
+
+    /// Print final LLBC for Lean backend. This requires the `-Z lean` option.
+    #[arg(long, hide = true)]
+    pub print_llbc: bool,
 
     /// Arguments to pass down to Cargo
     #[command(flatten)]
@@ -424,6 +427,7 @@ impl ValidateArgs for StandaloneArgs {
 
         match &self.command {
             Some(StandaloneSubcommand::VerifyStd(args)) => args.validate()?,
+            Some(StandaloneSubcommand::List(args)) => args.validate()?,
             // TODO: Invoke PlaybackArgs::validate()
             None | Some(StandaloneSubcommand::Playback(..)) => {}
         };
@@ -470,6 +474,7 @@ impl ValidateArgs for CargoKaniSubcommand {
             // Assess doesn't implement validation yet.
             CargoKaniSubcommand::Assess(_) => Ok(()),
             CargoKaniSubcommand::Playback(playback) => playback.validate(),
+            CargoKaniSubcommand::List(list) => list.validate(),
         }
     }
 }
@@ -522,14 +527,6 @@ impl ValidateArgs for VerificationArgs {
             } else {
                 print_deprecated(&self.common_args, "--visualize", "--concrete-playback");
             }
-        }
-
-        if self.mir_linker {
-            print_obsolete(&self.common_args, "--mir-linker");
-        }
-
-        if self.legacy_linker {
-            print_obsolete(&self.common_args, "--legacy-linker");
         }
 
         // TODO: these conflicting flags reflect what's necessary to pass current tests unmodified.
@@ -615,15 +612,31 @@ impl ValidateArgs for VerificationArgs {
         }
 
         if self.coverage
-            && !self.common_args.unstable_features.contains(UnstableFeature::LineCoverage)
+            && !self.common_args.unstable_features.contains(UnstableFeature::SourceCoverage)
         {
             return Err(Error::raw(
                 ErrorKind::MissingRequiredArgument,
                 "The `--coverage` argument is unstable and requires `-Z \
-            line-coverage` to be used.",
+            source-coverage` to be used.",
             ));
         }
 
+        if self.print_llbc && !self.common_args.unstable_features.contains(UnstableFeature::Lean) {
+            return Err(Error::raw(
+                ErrorKind::MissingRequiredArgument,
+                "The `--print-llbc` argument is unstable and requires `-Z lean` to be used.",
+            ));
+        }
+
+        // TODO: error out for other CBMC-backend-specific arguments
+        if self.common_args.unstable_features.contains(UnstableFeature::Lean)
+            && !self.cbmc_args.is_empty()
+        {
+            return Err(Error::raw(
+                ErrorKind::ArgumentConflict,
+                "The `--cbmc-args` argument cannot be used with -Z lean.",
+            ));
+        }
         Ok(())
     }
 }
@@ -913,5 +926,13 @@ mod tests {
         check_invalid_args("kani input.rs --workspace".split_whitespace());
         check_invalid_args("kani input.rs --package foo".split_whitespace());
         check_invalid_args("kani input.rs --exclude bar --workspace".split_whitespace());
+    }
+
+    #[test]
+    fn check_cbmc_args_lean_backend() {
+        let args = "kani input.rs -Z lean --enable-unstable --cbmc-args --object-bits 10"
+            .split_whitespace();
+        let err = StandaloneArgs::try_parse_from(args).unwrap().validate().unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::ArgumentConflict);
     }
 }

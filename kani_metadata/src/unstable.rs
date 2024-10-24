@@ -78,23 +78,28 @@ pub enum UnstableFeature {
     ConcretePlayback,
     /// Enable Kani's unstable async library.
     AsyncLib,
-    /// Enable line coverage instrumentation/reports.
-    LineCoverage,
+    /// Enable source-based code coverage workflow.
+    /// See [RFC-0011](https://model-checking.github.io/kani/rfc/rfcs/0011-source-coverage.html)
+    SourceCoverage,
     /// Enable function contracts [RFC 9](https://model-checking.github.io/kani/rfc/rfcs/0009-function-contracts.html)
     FunctionContracts,
+    /// Enable loop contracts [RFC 12](https://model-checking.github.io/kani/rfc/rfcs/0012-loop-contracts.html)
+    LoopContracts,
     /// Memory predicate APIs.
     MemPredicates,
     /// Automatically check that no invalid value is produced which is considered UB in Rust.
     /// Note that this does not include checking uninitialized value.
     ValidValueChecks,
+    /// Enabled Lean backend (Aeneas/LLBC)
+    Lean,
     /// Ghost state and shadow memory APIs.
     GhostState,
-    /// Automatically check that pointers are valid when casting them to references.
-    PtrToRefCastChecks,
     /// Automatically check that uninitialized memory is not used.
     UninitChecks,
     /// Enable an unstable option or subcommand.
     UnstableOptions,
+    /// The list subcommand [RFC 13](https://model-checking.github.io/kani/rfc/rfcs/0013-list.html)
+    List,
 }
 
 impl UnstableFeature {

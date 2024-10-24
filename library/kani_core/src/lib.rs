@@ -22,6 +22,7 @@
 
 mod arbitrary;
 mod mem;
+mod mem_init;
 
 pub use kani_macros::*;
 
@@ -45,6 +46,10 @@ macro_rules! kani_lib {
             pub mod mem {
                 kani_core::kani_mem!(core);
             }
+
+            mod mem_init {
+                kani_core::kani_mem_init!(core);
+            }
         }
     };
 
@@ -52,6 +57,14 @@ macro_rules! kani_lib {
         pub use kani_core::*;
         kani_core::kani_intrinsics!(std);
         kani_core::generate_arbitrary!(std);
+
+        pub mod mem {
+            kani_core::kani_mem!(std);
+        }
+
+        mod mem_init {
+            kani_core::kani_mem_init!(std);
+        }
     };
 }
 
@@ -72,7 +85,7 @@ macro_rules! kani_intrinsics {
         ///
         /// The code snippet below should never panic.
         ///
-        /// ```rust
+        /// ```no_run
         /// let i : i32 = kani::any();
         /// kani::assume(i > 10);
         /// if i < 0 {
@@ -82,7 +95,7 @@ macro_rules! kani_intrinsics {
         ///
         /// The following code may panic though:
         ///
-        /// ```rust
+        /// ```no_run
         /// let i : i32 = kani::any();
         /// assert!(i < 0, "This may panic and verification should fail.");
         /// kani::assume(i > 10);
@@ -105,7 +118,7 @@ macro_rules! kani_intrinsics {
         ///
         /// # Example:
         ///
-        /// ```rust
+        /// ```no_run
         /// let x: bool = kani::any();
         /// let y = !x;
         /// kani::assert(x || y, "ORing a boolean variable with its negation must be true")
@@ -125,35 +138,15 @@ macro_rules! kani_intrinsics {
             assert!(cond, "{}", msg);
         }
 
-        /// Creates an assertion of the specified condition and message, but does not assume it afterwards.
-        ///
-        /// # Example:
-        ///
-        /// ```rust
-        /// let x: bool = kani::any();
-        /// let y = !x;
-        /// kani::check(x || y, "ORing a boolean variable with its negation must be true")
-        /// ```
-        #[cfg(not(feature = "concrete_playback"))]
-        #[inline(never)]
-        #[rustc_diagnostic_item = "KaniCheck"]
-        pub const fn check(cond: bool, msg: &'static str) {
-            let _ = cond;
-            let _ = msg;
-        }
-
-        #[cfg(feature = "concrete_playback")]
-        #[inline(never)]
-        #[rustc_diagnostic_item = "KaniCheck"]
-        pub const fn check(cond: bool, msg: &'static str) {
-            assert!(cond, "{}", msg);
-        }
-
         /// Creates a cover property with the specified condition and message.
         ///
         /// # Example:
         ///
-        /// ```rust
+        /// ```no_run
+        /// # use crate::kani;
+        /// #
+        /// # let array: [u8; 10]  = kani::any();
+        /// # let slice = kani::slice::any_slice_of_array(&array);
         /// kani::cover(slice.len() == 0, "The slice may have a length of 0");
         /// ```
         ///
@@ -180,7 +173,11 @@ macro_rules! kani_intrinsics {
         /// In the snippet below, we are verifying the behavior of the function `fn_under_verification`
         /// under all possible `NonZeroU8` input values, i.e., all possible `u8` values except zero.
         ///
-        /// ```rust
+        /// ```no_run
+        /// # use std::num::NonZeroU8;
+        /// # use crate::kani;
+        /// #
+        /// # fn fn_under_verification(_: NonZeroU8) {}
         /// let inputA = kani::any::<core::num::NonZeroU8>();
         /// fn_under_verification(inputA);
         /// ```
@@ -218,7 +215,11 @@ macro_rules! kani_intrinsics {
         /// In the snippet below, we are verifying the behavior of the function `fn_under_verification`
         /// under all possible `u8` input values between 0 and 12.
         ///
-        /// ```rust
+        /// ```no_run
+        /// # use std::num::NonZeroU8;
+        /// # use crate::kani;
+        /// #
+        /// # fn fn_under_verification(_: u8) {}
         /// let inputA: u8 = kani::any_where(|x| *x < 12);
         /// fn_under_verification(inputA);
         /// ```
@@ -298,6 +299,7 @@ macro_rules! kani_intrinsics {
             loop {}
         }
 
+        #[doc(hidden)]
         pub mod internal {
             use crate::kani::Arbitrary;
             use core::ptr;
@@ -428,6 +430,18 @@ macro_rules! kani_intrinsics {
                 func()
             }
 
+            /// Function that calls a closure used to implement loop contracts.
+            ///
+            /// In contracts, we cannot invoke the generated closures directly, instead, we call register
+            /// contract. This function is a no-op. However, in the reality, we do want to call the closure,
+            /// so we swap the register body by this function body.
+            #[doc(hidden)]
+            #[allow(dead_code)]
+            #[rustc_diagnostic_item = "KaniRunLoopContract"]
+            fn run_loop_contract_fn<F: Fn() -> bool>(func: &F, _transformed: usize) -> bool {
+                func()
+            }
+
             /// This is used by contracts to select which version of the contract to use during codegen.
             #[doc(hidden)]
             pub type Mode = u8;
@@ -443,6 +457,35 @@ macro_rules! kani_intrinsics {
 
             /// Stub the body with its contract.
             pub const REPLACE: Mode = 3;
+
+            /// Creates a non-fatal property with the specified condition and message.
+            ///
+            /// This check will not impact the program control flow even when it fails.
+            ///
+            /// # Example:
+            ///
+            /// ```no_run
+            /// let x: bool = kani::any();
+            /// let y = !x;
+            /// kani::check(x || y, "ORing a boolean variable with its negation must be true");
+            /// kani::check(x == y, "A boolean variable is always different than its negation");
+            /// kani::cover!(true, "This should still be reachable");
+            /// ```
+            ///
+            #[cfg(not(feature = "concrete_playback"))]
+            #[inline(never)]
+            #[rustc_diagnostic_item = "KaniCheck"]
+            pub(crate) const fn check(cond: bool, msg: &'static str) {
+                let _ = cond;
+                let _ = msg;
+            }
+
+            #[cfg(feature = "concrete_playback")]
+            #[inline(never)]
+            #[rustc_diagnostic_item = "KaniCheck"]
+            pub(crate) const fn check(cond: bool, msg: &'static str) {
+                assert!(cond, "{}", msg);
+            }
         }
     };
 }

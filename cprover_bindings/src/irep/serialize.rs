@@ -1,10 +1,10 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! This crate implements irep serialization using serde Serializer.
-use crate::irep::{Irep, IrepId, Symbol, SymbolTable};
 use crate::InternedString;
-use serde::ser::{SerializeMap, Serializer};
+use crate::irep::{Irep, IrepId, Symbol, SymbolTable};
 use serde::Serialize;
+use serde::ser::{SerializeMap, Serializer};
 
 impl Serialize for Irep {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -57,7 +57,7 @@ impl Serialize for crate::goto_program::SymbolTable {
     }
 }
 struct StreamingSymbols<'a>(&'a crate::goto_program::SymbolTable);
-impl<'a> Serialize for StreamingSymbols<'a> {
+impl Serialize for StreamingSymbols<'_> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -92,7 +92,7 @@ impl<'de> serde::Deserialize<'de> for InternedString {
     }
 }
 
-impl<'de> serde::de::Visitor<'de> for InternedStringVisitor {
+impl serde::de::Visitor<'_> for InternedStringVisitor {
     type Value = InternedString;
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -145,14 +145,16 @@ impl Serialize for Symbol {
 #[cfg(test)]
 mod test {
     use super::*;
-    use serde_test::{assert_ser_tokens, Token};
+    use serde_test::{Token, assert_ser_tokens};
     #[test]
     fn serialize_irep() {
         let irep = Irep::empty();
-        assert_ser_tokens(
-            &irep,
-            &[Token::Map { len: None }, Token::String("id"), Token::String("empty"), Token::MapEnd],
-        );
+        assert_ser_tokens(&irep, &[
+            Token::Map { len: None },
+            Token::String("id"),
+            Token::String("empty"),
+            Token::MapEnd,
+        ]);
     }
 
     #[test]
@@ -187,80 +189,77 @@ mod test {
             is_weak: false,
         };
         sym_table.insert(symbol);
-        assert_ser_tokens(
-            &sym_table,
-            &[
-                Token::Map { len: None },
-                Token::String("symbolTable"),
-                Token::Map { len: Some(1) },
-                Token::String("my_name"),
-                // symbol start
-                Token::Map { len: None },
-                // type irep
-                Token::String("type"),
-                Token::Map { len: None },
-                Token::String("id"),
-                Token::String("empty"),
-                Token::MapEnd,
-                // value irep
-                Token::String("value"),
-                Token::Map { len: None },
-                Token::String("id"),
-                Token::String("empty"),
-                Token::MapEnd,
-                // value locaton
-                Token::String("location"),
-                Token::Map { len: None },
-                Token::String("id"),
-                Token::String("empty"),
-                Token::MapEnd,
-                Token::String("name"),
-                Token::String("my_name"),
-                Token::String("module"),
-                Token::String(""),
-                Token::String("baseName"),
-                Token::String(""),
-                Token::String("prettyName"),
-                Token::String(""),
-                Token::String("mode"),
-                Token::String(""),
-                Token::String("isType"),
-                Token::Bool(false),
-                Token::String("isMacro"),
-                Token::Bool(false),
-                Token::String("isExported"),
-                Token::Bool(false),
-                Token::String("isInput"),
-                Token::Bool(false),
-                Token::String("isOutput"),
-                Token::Bool(false),
-                Token::String("isStateVar"),
-                Token::Bool(false),
-                Token::String("isProperty"),
-                Token::Bool(false),
-                Token::String("isStaticLifetime"),
-                Token::Bool(false),
-                Token::String("isThreadLocal"),
-                Token::Bool(false),
-                Token::String("isLvalue"),
-                Token::Bool(false),
-                Token::String("isFileLocal"),
-                Token::Bool(false),
-                Token::String("isExtern"),
-                Token::Bool(false),
-                Token::String("isVolatile"),
-                Token::Bool(false),
-                Token::String("isParameter"),
-                Token::Bool(false),
-                Token::String("isAuxiliary"),
-                Token::Bool(false),
-                Token::String("isWeak"),
-                Token::Bool(false),
-                Token::MapEnd,
-                Token::MapEnd,
-                Token::MapEnd,
-            ],
-        );
+        assert_ser_tokens(&sym_table, &[
+            Token::Map { len: None },
+            Token::String("symbolTable"),
+            Token::Map { len: Some(1) },
+            Token::String("my_name"),
+            // symbol start
+            Token::Map { len: None },
+            // type irep
+            Token::String("type"),
+            Token::Map { len: None },
+            Token::String("id"),
+            Token::String("empty"),
+            Token::MapEnd,
+            // value irep
+            Token::String("value"),
+            Token::Map { len: None },
+            Token::String("id"),
+            Token::String("empty"),
+            Token::MapEnd,
+            // value locaton
+            Token::String("location"),
+            Token::Map { len: None },
+            Token::String("id"),
+            Token::String("empty"),
+            Token::MapEnd,
+            Token::String("name"),
+            Token::String("my_name"),
+            Token::String("module"),
+            Token::String(""),
+            Token::String("baseName"),
+            Token::String(""),
+            Token::String("prettyName"),
+            Token::String(""),
+            Token::String("mode"),
+            Token::String(""),
+            Token::String("isType"),
+            Token::Bool(false),
+            Token::String("isMacro"),
+            Token::Bool(false),
+            Token::String("isExported"),
+            Token::Bool(false),
+            Token::String("isInput"),
+            Token::Bool(false),
+            Token::String("isOutput"),
+            Token::Bool(false),
+            Token::String("isStateVar"),
+            Token::Bool(false),
+            Token::String("isProperty"),
+            Token::Bool(false),
+            Token::String("isStaticLifetime"),
+            Token::Bool(false),
+            Token::String("isThreadLocal"),
+            Token::Bool(false),
+            Token::String("isLvalue"),
+            Token::Bool(false),
+            Token::String("isFileLocal"),
+            Token::Bool(false),
+            Token::String("isExtern"),
+            Token::Bool(false),
+            Token::String("isVolatile"),
+            Token::Bool(false),
+            Token::String("isParameter"),
+            Token::Bool(false),
+            Token::String("isAuxiliary"),
+            Token::Bool(false),
+            Token::String("isWeak"),
+            Token::Bool(false),
+            Token::MapEnd,
+            Token::MapEnd,
+            Token::MapEnd,
+        ]);
     }
 
     #[test]
@@ -269,41 +268,38 @@ mod test {
         let one_irep = Irep::one();
         let sub_irep = Irep::just_sub(vec![empty_irep.clone(), one_irep]);
         let top_irep = Irep::just_sub(vec![sub_irep, empty_irep]);
-        assert_ser_tokens(
-            &top_irep,
-            &[
-                // top_irep
-                Token::Map { len: None },
-                Token::String("id"),
-                Token::String(""),
-                Token::String("sub"),
-                Token::Seq { len: Some(2) },
-                // sub_irep
-                Token::Map { len: None },
-                Token::String("id"),
-                Token::String(""),
-                Token::String("sub"),
-                Token::Seq { len: Some(2) },
-                // empty_irep
-                Token::Map { len: None },
-                Token::String("id"),
-                Token::String("empty"),
-                Token::MapEnd,
-                // one_irep
-                Token::Map { len: None },
-                Token::String("id"),
-                Token::String("1"),
-                Token::MapEnd,
-                Token::SeqEnd,
-                Token::MapEnd,
-                // empty_irep
-                Token::Map { len: None },
-                Token::String("id"),
-                Token::String("empty"),
-                Token::MapEnd,
-                Token::SeqEnd,
-                Token::MapEnd,
-            ],
-        );
+        assert_ser_tokens(&top_irep, &[
+            // top_irep
+            Token::Map { len: None },
+            Token::String("id"),
+            Token::String(""),
+            Token::String("sub"),
+            Token::Seq { len: Some(2) },
+            // sub_irep
+            Token::Map { len: None },
+            Token::String("id"),
+            Token::String(""),
+            Token::String("sub"),
+            Token::Seq { len: Some(2) },
+            // empty_irep
+            Token::Map { len: None },
+            Token::String("id"),
+            Token::String("empty"),
+            Token::MapEnd,
+            // one_irep
+            Token::Map { len: None },
+            Token::String("id"),
+            Token::String("1"),
+            Token::MapEnd,
+            Token::SeqEnd,
+            Token::MapEnd,
+            // empty_irep
+            Token::Map { len: None },
+            Token::String("id"),
+            Token::String("empty"),
+            Token::MapEnd,
+            Token::SeqEnd,
+            Token::MapEnd,
+        ]);
     }
 }

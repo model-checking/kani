@@ -13,14 +13,17 @@ use crate::kani_middle::transform::body::{
     CheckType, InsertPosition, MutableBody, SourceInstruction,
 };
 use crate::kani_middle::transform::check_uninit::PointeeInfo;
+use crate::kani_middle::transform::check_uninit::{
+    PointeeLayout, get_mem_init_fn_def, mk_layout_operand, resolve_mem_init_fn,
+};
 use crate::kani_middle::transform::check_values::{build_limits, ty_validity_per_offset};
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
 use rustc_middle::ty::TyCtxt;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{
-    BinOp, Body, ConstOperand, Operand, Place, Rvalue, Statement, StatementKind, TerminatorKind,
-    RETURN_LOCAL,
+    BasicBlock, BinOp, Body, ConstOperand, Mutability, Operand, Place, RETURN_LOCAL, Rvalue,
+    Statement, StatementKind, Terminator, TerminatorKind, UnwindAction,
 };
 use stable_mir::target::MachineInfo;
 use stable_mir::ty::{FnDef, MirConst, RigidTy, Ty, TyKind, UintTy};
@@ -28,10 +31,6 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use strum_macros::AsRefStr;
 use tracing::trace;
-
-use super::check_uninit::{
-    get_mem_init_fn_def, mk_layout_operand, resolve_mem_init_fn, PointeeLayout,
-};
 
 /// Generate the body for a few Kani intrinsics.
 #[derive(Debug)]
@@ -165,37 +164,61 @@ impl IntrinsicGeneratorPass {
     fn is_initialized_body(&mut self, tcx: TyCtxt, body: Body) -> Body {
         let mut new_body = MutableBody::from(body);
         new_body.clear_body(TerminatorKind::Return);
-
-        // Initialize return variable with True.
         let ret_var = RETURN_LOCAL;
-        let mut terminator = SourceInstruction::Terminator { bb: 0 };
-        let span = new_body.locals()[ret_var].span;
-        let assign = StatementKind::Assign(
-            Place::from(ret_var),
-            Rvalue::Use(Operand::Constant(ConstOperand {
-                span,
-                user_ty: None,
-                const_: MirConst::from_bool(true),
-            })),
-        );
-        let stmt = Statement { kind: assign, span };
-        new_body.insert_stmt(stmt, &mut terminator, InsertPosition::Before);
+        let mut source = SourceInstruction::Terminator { bb: 0 };
 
+        // Short-circut if uninitialized memory checks are not enabled.
         if !self.arguments.ub_check.contains(&ExtraChecks::Uninit) {
-            // Short-circut if uninitialized memory checks are not enabled.
+            // Initialize return variable with True.
+            let span = new_body.locals()[ret_var].span;
+            let assign = StatementKind::Assign(
+                Place::from(ret_var),
+                Rvalue::Use(Operand::Constant(ConstOperand {
+                    span,
+                    user_ty: None,
+                    const_: MirConst::from_bool(true),
+                })),
+            );
+            new_body.insert_stmt(
+                Statement { kind: assign, span },
+                &mut source,
+                InsertPosition::Before,
+            );
             return new_body.into();
         }
 
+        // Instead of injecting the instrumentation immediately, collect it into a list of
+        // statements and a terminator to construct a basic block and inject it at the end.
+        let mut statements = vec![];
+
         // The first argument type.
         let arg_ty = new_body.locals()[1].ty;
-        let TyKind::RigidTy(RigidTy::RawPtr(target_ty, _)) = arg_ty.kind() else { unreachable!() };
-        let pointee_info = PointeeInfo::from_ty(target_ty);
+        // Sanity check: since CBMC memory object primitives only accept pointers, need to
+        // ensure the correct type.
+        let TyKind::RigidTy(RigidTy::RawPtr(pointee_ty, _)) = arg_ty.kind() else { unreachable!() };
+        // Calculate pointee layout for byte-by-byte memory initialization checks.
+        let pointee_info = PointeeInfo::from_ty(pointee_ty);
         match pointee_info {
             Ok(pointee_info) => {
                 match pointee_info.layout() {
                     PointeeLayout::Sized { layout } => {
                         if layout.is_empty() {
                             // Encountered a ZST, so we can short-circut here.
+                            // Initialize return variable with True.
+                            let span = new_body.locals()[ret_var].span;
+                            let assign = StatementKind::Assign(
+                                Place::from(ret_var),
+                                Rvalue::Use(Operand::Constant(ConstOperand {
+                                    span,
+                                    user_ty: None,
+                                    const_: MirConst::from_bool(true),
+                                })),
+                            );
+                            new_body.insert_stmt(
+                                Statement { kind: assign, span },
+                                &mut source,
+                                InsertPosition::Before,
+                            );
                             return new_body.into();
                         }
                         let is_ptr_initialized_instance = resolve_mem_init_fn(
@@ -207,18 +230,28 @@ impl IntrinsicGeneratorPass {
                             layout.len(),
                             *pointee_info.ty(),
                         );
-                        let layout_operand = mk_layout_operand(
-                            &mut new_body,
-                            &mut terminator,
+                        let layout_operand =
+                            mk_layout_operand(&mut new_body, &mut statements, &mut source, &layout);
+
+                        let terminator = Terminator {
+                            kind: TerminatorKind::Call {
+                                func: Operand::Copy(Place::from(new_body.new_local(
+                                    is_ptr_initialized_instance.ty(),
+                                    source.span(new_body.blocks()),
+                                    Mutability::Not,
+                                ))),
+                                args: vec![Operand::Copy(Place::from(1)), layout_operand],
+                                destination: Place::from(ret_var),
+                                target: Some(0), // The current value does not matter, since it will be overwritten in add_bb.
+                                unwind: UnwindAction::Terminate,
+                            },
+                            span: source.span(new_body.blocks()),
+                        };
+                        // Construct the basic block and insert it into the body.
+                        new_body.insert_bb(
+                            BasicBlock { statements, terminator },
+                            &mut source,
                             InsertPosition::Before,
-                            &layout,
-                        );
-                        new_body.insert_call(
-                            &is_ptr_initialized_instance,
-                            &mut terminator,
-                            InsertPosition::Before,
-                            vec![Operand::Copy(Place::from(1)), layout_operand],
-                            Place::from(ret_var),
                         );
                     }
                     PointeeLayout::Slice { element_layout } => {
@@ -239,35 +272,65 @@ impl IntrinsicGeneratorPass {
                         );
                         let layout_operand = mk_layout_operand(
                             &mut new_body,
-                            &mut terminator,
-                            InsertPosition::Before,
+                            &mut statements,
+                            &mut source,
                             &element_layout,
                         );
-                        new_body.insert_call(
-                            &is_ptr_initialized_instance,
-                            &mut terminator,
+                        let terminator = Terminator {
+                            kind: TerminatorKind::Call {
+                                func: Operand::Copy(Place::from(new_body.new_local(
+                                    is_ptr_initialized_instance.ty(),
+                                    source.span(new_body.blocks()),
+                                    Mutability::Not,
+                                ))),
+                                args: vec![Operand::Copy(Place::from(1)), layout_operand],
+                                destination: Place::from(ret_var),
+                                target: Some(0), // The current value does not matter, since it will be overwritten in add_bb.
+                                unwind: UnwindAction::Terminate,
+                            },
+                            span: source.span(new_body.blocks()),
+                        };
+                        // Construct the basic block and insert it into the body.
+                        new_body.insert_bb(
+                            BasicBlock { statements, terminator },
+                            &mut source,
                             InsertPosition::Before,
-                            vec![Operand::Copy(Place::from(1)), layout_operand],
-                            Place::from(ret_var),
                         );
                     }
                     PointeeLayout::TraitObject => {
                         let rvalue = Rvalue::Use(Operand::Constant(ConstOperand {
                             const_: MirConst::from_bool(false),
-                            span,
+                            span: source.span(new_body.blocks()),
                             user_ty: None,
                         }));
-                        let result = new_body.insert_assignment(
-                            rvalue,
-                            &mut terminator,
-                            InsertPosition::Before,
-                        );
+                        let result =
+                            new_body.insert_assignment(rvalue, &mut source, InsertPosition::Before);
                         let reason: &str = "Kani does not support reasoning about memory initialization of pointers to trait objects.";
 
                         new_body.insert_check(
                             tcx,
                             &self.check_type,
-                            &mut terminator,
+                            &mut source,
+                            InsertPosition::Before,
+                            result,
+                            &reason,
+                        );
+                    }
+                    PointeeLayout::Union { .. } => {
+                        let rvalue = Rvalue::Use(Operand::Constant(ConstOperand {
+                            const_: MirConst::from_bool(false),
+                            span: source.span(new_body.blocks()),
+                            user_ty: None,
+                        }));
+                        let result =
+                            new_body.insert_assignment(rvalue, &mut source, InsertPosition::Before);
+                        let reason: &str =
+                            "Kani does not yet support using initialization predicates on unions.";
+
+                        new_body.insert_check(
+                            tcx,
+                            &self.check_type,
+                            &mut source,
                             InsertPosition::Before,
                             result,
                             &reason,
@@ -275,22 +338,22 @@ impl IntrinsicGeneratorPass {
                     }
                 };
             }
-            Err(msg) => {
+            Err(reason) => {
                 // We failed to retrieve the type layout.
                 let rvalue = Rvalue::Use(Operand::Constant(ConstOperand {
                     const_: MirConst::from_bool(false),
-                    span,
+                    span: source.span(new_body.blocks()),
                     user_ty: None,
                 }));
                 let result =
-                    new_body.insert_assignment(rvalue, &mut terminator, InsertPosition::Before);
+                    new_body.insert_assignment(rvalue, &mut source, InsertPosition::Before);
                 let reason = format!(
-                    "Kani currently doesn't support checking memory initialization of `{target_ty}`. {msg}"
+                    "Kani currently doesn't support checking memory initialization for pointers to `{pointee_ty}. {reason}",
                 );
                 new_body.insert_check(
                     tcx,
                     &self.check_type,
-                    &mut terminator,
+                    &mut source,
                     InsertPosition::Before,
                     result,
                     &reason,

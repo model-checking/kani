@@ -7,7 +7,7 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::session::{lib_folder, KaniSession};
+use crate::session::{KaniSession, lib_folder};
 
 pub struct LibConfig {
     args: Vec<OsString>,
@@ -53,6 +53,9 @@ impl KaniSession {
     ) -> Result<()> {
         let mut kani_args = self.kani_compiler_flags();
         kani_args.push(format!("--reachability={}", self.reachability_mode()));
+        if self.args.common_args.unstable_features.contains(UnstableFeature::Lean) {
+            kani_args.push("--backend=llbc".into());
+        }
 
         let lib_path = lib_folder().unwrap();
         let mut rustc_args = self.kani_rustc_flags(LibConfig::new(lib_path));
@@ -95,6 +98,14 @@ impl KaniSession {
         to_rustc_arg(vec![format!("--reachability={}", self.reachability_mode())])
     }
 
+    pub fn backend_arg(&self) -> Option<String> {
+        if self.args.common_args.unstable_features.contains(UnstableFeature::Lean) {
+            Some(to_rustc_arg(vec!["--backend=llbc".into()]))
+        } else {
+            None
+        }
+    }
+
     /// These arguments are arguments passed to kani-compiler that are `kani` compiler specific.
     pub fn kani_compiler_flags(&self) -> Vec<String> {
         let mut flags = vec![check_version()];
@@ -135,10 +146,6 @@ impl KaniSession {
             flags.push("--ub-check=validity".into())
         }
 
-        if self.args.common_args.unstable_features.contains(UnstableFeature::PtrToRefCastChecks) {
-            flags.push("--ub-check=ptr_to_ref_cast".into())
-        }
-
         if self.args.common_args.unstable_features.contains(UnstableFeature::UninitChecks) {
             // Automatically enable shadow memory, since the version of uninitialized memory checks
             // without non-determinism depends on it.
@@ -146,11 +153,11 @@ impl KaniSession {
             flags.push("--ub-check=uninit".into());
         }
 
-        flags.extend(self.args.common_args.unstable_features.as_arguments().map(str::to_string));
+        if self.args.print_llbc {
+            flags.push("--print-llbc".into());
+        }
 
-        // This argument will select the Kani flavour of the compiler. It will be removed before
-        // rustc driver is invoked.
-        flags.push("--goto-c".into());
+        flags.extend(self.args.common_args.unstable_features.as_arguments().map(str::to_string));
 
         flags
     }
@@ -159,6 +166,11 @@ impl KaniSession {
     pub fn kani_rustc_flags(&self, lib_config: LibConfig) -> Vec<OsString> {
         let mut flags: Vec<_> = base_rustc_flags(lib_config);
         // We only use panic abort strategy for verification since we cannot handle unwind logic.
+        if self.args.coverage {
+            flags.extend_from_slice(
+                &["-C", "instrument-coverage", "-Z", "no-profiler-runtime"].map(OsString::from),
+            );
+        }
         flags.extend_from_slice(
             &[
                 "-C",

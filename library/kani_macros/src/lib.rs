@@ -8,12 +8,12 @@
 // So we have to enable this on the commandline (see kani-rustc) with:
 //   RUSTFLAGS="-Zcrate-attr=feature(register_tool) -Zcrate-attr=register_tool(kanitool)"
 #![feature(proc_macro_diagnostic)]
-
+#![feature(proc_macro_span)]
 mod derive;
 
 // proc_macro::quote is nightly-only, so we'll cobble things together instead
 use proc_macro::TokenStream;
-use proc_macro_error::proc_macro_error;
+use proc_macro_error2::proc_macro_error;
 
 #[cfg(kani_sysroot)]
 use sysroot as attr_impl;
@@ -65,6 +65,7 @@ pub fn recursion(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// Set Loop unwind limit for proof harnesses
 /// The attribute `#[kani::unwind(arg)]` can only be called alongside `#[kani::proof]`.
 /// arg - Takes in a integer value (u32) that represents the unwind value for the harness.
+#[allow(clippy::too_long_first_doc_paragraph)]
 #[proc_macro_attribute]
 pub fn unwind(attr: TokenStream, item: TokenStream) -> TokenStream {
     attr_impl::unwind(attr, item)
@@ -103,16 +104,19 @@ pub fn unstable_feature(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// Allow users to auto generate `Arbitrary` implementations by using
 /// `#[derive(Arbitrary)]` macro.
 ///
-/// When using `#[derive(Arbitrary)]` on a struct, the `#[safety_constraint(<cond>)]`
-/// attribute can be added to its fields to indicate a type safety invariant
-/// condition `<cond>`. Since `kani::any()` is always expected to produce
-/// type-safe values, **adding `#[safety_constraint(...)]` to any fields will further
-/// constrain the objects generated with `kani::any()`**.
+/// ## Type safety specification with the `#[safety_constraint(...)]` attribute
+///
+/// When using `#[derive(Arbitrary)]` on a struct, the
+/// `#[safety_constraint(<cond>)]` attribute can be added to either the struct
+/// or its fields (but not both) to indicate a type safety invariant condition
+/// `<cond>`. Since `kani::any()` is always expected to produce type-safe
+/// values, **adding `#[safety_constraint(...)]` to the struct or any of its
+/// fields will further constrain the objects generated with `kani::any()`**.
 ///
 /// For example, the `check_positive` harness in this code is expected to
 /// pass:
 ///
-/// ```rs
+/// ```rust
 /// #[derive(kani::Arbitrary)]
 /// struct AlwaysPositive {
 ///     #[safety_constraint(*inner >= 0)]
@@ -126,11 +130,11 @@ pub fn unstable_feature(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// }
 /// ```
 ///
-/// Therefore, using the `#[safety_constraint(...)]` attribute can lead to vacuous
+/// But using the `#[safety_constraint(...)]` attribute can lead to vacuous
 /// results when the values are over-constrained. For example, in this code
 /// the `check_positive` harness will pass too:
 ///
-/// ```rs
+/// ```rust
 /// #[derive(kani::Arbitrary)]
 /// struct AlwaysPositive {
 ///     #[safety_constraint(*inner >= 0 && *inner < i32::MIN)]
@@ -158,6 +162,45 @@ pub fn unstable_feature(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// As usual, we recommend users to defend against these behaviors by using
 /// `kani::cover!(...)` checks and watching out for unreachable assertions in
 /// their project's code.
+///
+/// ### Adding `#[safety_constraint(...)]` to the struct as opposed to its fields
+///
+/// As mentioned earlier, the `#[safety_constraint(...)]` attribute can be added
+/// to either the struct or its fields, but not to both. Adding the
+/// `#[safety_constraint(...)]` attribute to both the struct and its fields will
+/// result in an error.
+///
+/// In practice, only one type of specification is need. If the condition for
+/// the type safety invariant involves a relation between two or more struct
+/// fields, the struct-level attribute should be used. Otherwise, using the
+/// `#[safety_constraint(...)]` on field(s) is recommended since it helps with readability.
+///
+/// For example, if we were defining a custom vector `MyVector` and wanted to
+/// specify that the inner vector's length is always less than or equal to its
+/// capacity, we should do it as follows:
+///
+/// ```rust
+/// #[derive(Arbitrary)]
+/// #[safety_constraint(vector.len() <= *capacity)]
+/// struct MyVector<T> {
+///     vector: Vec<T>,
+///     capacity: usize,
+/// }
+/// ```
+///
+/// However, if we were defining a struct whose fields are not related in any
+/// way, we would prefer using the `#[safety_constraint(...)]` attribute on its
+/// fields:
+///
+/// ```rust
+/// #[derive(Arbitrary)]
+/// struct PositivePoint {
+///     #[safety_constraint(*x >= 0)]
+///     x: i32,
+///     #[safety_constraint(*y >= 0)]
+///     y: i32,
+/// }
+/// ```
 #[proc_macro_error]
 #[proc_macro_derive(Arbitrary, attributes(safety_constraint))]
 pub fn derive_arbitrary(item: TokenStream) -> TokenStream {
@@ -167,15 +210,19 @@ pub fn derive_arbitrary(item: TokenStream) -> TokenStream {
 /// Allow users to auto generate `Invariant` implementations by using
 /// `#[derive(Invariant)]` macro.
 ///
-/// When using `#[derive(Invariant)]` on a struct, the `#[safety_constraint(<cond>)]`
-/// attribute can be added to its fields to indicate a type safety invariant
-/// condition `<cond>`. This will ensure that the gets additionally checked when
-/// using the `is_safe()` method generated by the `#[derive(Invariant)]` macro.
+/// ## Type safety specification with the `#[safety_constraint(...)]` attribute
+///
+/// When using `#[derive(Invariant)]` on a struct, the
+/// `#[safety_constraint(<cond>)]` attribute can be added to either the struct
+/// or its fields (but not both) to indicate a type safety invariant condition
+/// `<cond>`. This will ensure that the type-safety condition gets additionally
+/// checked when using the `is_safe()` method automatically generated by the
+/// `#[derive(Invariant)]` macro.
 ///
 /// For example, the `check_positive` harness in this code is expected to
 /// fail:
 ///
-/// ```rs
+/// ```rust
 /// #[derive(kani::Invariant)]
 /// struct AlwaysPositive {
 ///     #[safety_constraint(*inner >= 0)]
@@ -200,7 +247,7 @@ pub fn derive_arbitrary(item: TokenStream) -> TokenStream {
 /// For example, for the `AlwaysPositive` struct from above, we will generate
 /// the following implementation:
 ///
-/// ```rs
+/// ```rust
 /// impl kani::Invariant for AlwaysPositive {
 ///     fn is_safe(&self) -> bool {
 ///         let obj = self;
@@ -212,6 +259,45 @@ pub fn derive_arbitrary(item: TokenStream) -> TokenStream {
 ///
 /// Note: the assignments to `obj` and `inner` are made so that we can treat the
 /// fields as if they were references.
+///
+/// ### Adding `#[safety_constraint(...)]` to the struct as opposed to its fields
+///
+/// As mentioned earlier, the `#[safety_constraint(...)]` attribute can be added
+/// to either the struct or its fields, but not to both. Adding the
+/// `#[safety_constraint(...)]` attribute to both the struct and its fields will
+/// result in an error.
+///
+/// In practice, only one type of specification is need. If the condition for
+/// the type safety invariant involves a relation between two or more struct
+/// fields, the struct-level attribute should be used. Otherwise, using the
+/// `#[safety_constraint(...)]` is recommended since it helps with readability.
+///
+/// For example, if we were defining a custom vector `MyVector` and wanted to
+/// specify that the inner vector's length is always less than or equal to its
+/// capacity, we should do it as follows:
+///
+/// ```rust
+/// #[derive(Invariant)]
+/// #[safety_constraint(vector.len() <= *capacity)]
+/// struct MyVector<T> {
+///     vector: Vec<T>,
+///     capacity: usize,
+/// }
+/// ```
+///
+/// However, if we were defining a struct whose fields are not related in any
+/// way, we would prefer using the `#[safety_constraint(...)]` attribute on its
+/// fields:
+///
+/// ```rust
+/// #[derive(Invariant)]
+/// struct PositivePoint {
+///     #[safety_constraint(*x >= 0)]
+///     x: i32,
+///     #[safety_constraint(*y >= 0)]
+///     y: i32,
+/// }
+/// ```
 #[proc_macro_error]
 #[proc_macro_derive(Invariant, attributes(safety_constraint))]
 pub fn derive_invariant(item: TokenStream) -> TokenStream {
@@ -309,22 +395,36 @@ pub fn modifies(attr: TokenStream, item: TokenStream) -> TokenStream {
     attr_impl::modifies(attr, item)
 }
 
+/// Add a loop invariant to this loop.
+///
+/// The contents of the attribute is a condition that should be satisfied at the
+/// beginning of every iteration of the loop.
+/// All Rust syntax is supported, even calling other functions, but
+/// the computations must be side effect free, e.g. it cannot perform I/O or use
+/// mutable memory.
+#[proc_macro_attribute]
+pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
+    attr_impl::loop_invariant(attr, item)
+}
+
 /// This module implements Kani attributes in a way that only Kani's compiler can understand.
 /// This code should only be activated when pre-building Kani's sysroot.
 #[cfg(kani_sysroot)]
 mod sysroot {
-    use proc_macro_error::{abort, abort_call_site};
+    use proc_macro_error2::{abort, abort_call_site};
 
     mod contracts;
+    mod loop_contracts;
 
     pub use contracts::{ensures, modifies, proof_for_contract, requires, stub_verified};
+    pub use loop_contracts::loop_invariant;
 
     use super::*;
 
     use {
         quote::{format_ident, quote},
         syn::parse::{Parse, ParseStream},
-        syn::{parse_macro_input, ItemFn},
+        syn::{ItemFn, parse_macro_input},
     };
 
     /// Annotate the harness with a #[kanitool::<name>] with optional arguments.
@@ -495,4 +595,5 @@ mod regular {
     no_op!(modifies);
     no_op!(proof_for_contract);
     no_op!(stub_verified);
+    no_op!(loop_invariant);
 }

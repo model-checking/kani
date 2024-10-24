@@ -24,14 +24,14 @@ use rustc_data_structures::stable_hasher::{HashStable, StableHasher};
 use rustc_middle::ty::{TyCtxt, VtblEntry};
 use rustc_session::config::OutputType;
 use rustc_smir::rustc_internal;
+use stable_mir::CrateItem;
 use stable_mir::mir::alloc::{AllocId, GlobalAlloc};
 use stable_mir::mir::mono::{Instance, InstanceKind, MonoItem, StaticDef};
 use stable_mir::mir::{
-    visit::Location, Body, CastKind, ConstOperand, MirVisitor, PointerCoercion, Rvalue, Terminator,
-    TerminatorKind,
+    Body, CastKind, ConstOperand, MirVisitor, PointerCoercion, Rvalue, Terminator, TerminatorKind,
+    visit::Location,
 };
 use stable_mir::ty::{Allocation, ClosureKind, ConstantKind, RigidTy, Ty, TyKind};
-use stable_mir::CrateItem;
 use stable_mir::{CrateDef, ItemKind};
 use std::fmt::{Display, Formatter};
 use std::{
@@ -60,7 +60,7 @@ pub fn collect_reachable_items(
     #[cfg(debug_assertions)]
     collector
         .call_graph
-        .dump_dot(tcx)
+        .dump_dot(tcx, starting_points.first().cloned())
         .unwrap_or_else(|e| tracing::error!("Failed to dump call graph: {e}"));
 
     tcx.dcx().abort_if_errors();
@@ -245,7 +245,7 @@ struct MonoItemsFnCollector<'a, 'tcx> {
     body: &'a Body,
 }
 
-impl<'a, 'tcx> MonoItemsFnCollector<'a, 'tcx> {
+impl MonoItemsFnCollector<'_, '_> {
     /// Collect the implementation of all trait methods and its supertrait methods for the given
     /// concrete type.
     fn collect_vtable_methods(&mut self, concrete_ty: Ty, trait_ty: Ty) {
@@ -350,7 +350,7 @@ impl<'a, 'tcx> MonoItemsFnCollector<'a, 'tcx> {
 /// 6. Static Initialization
 ///
 /// Remark: This code has been mostly taken from `rustc_monomorphize::collector::MirNeighborCollector`.
-impl<'a, 'tcx> MirVisitor for MonoItemsFnCollector<'a, 'tcx> {
+impl MirVisitor for MonoItemsFnCollector<'_, '_> {
     /// Collect the following:
     /// - Trait implementations when casting from concrete to dyn Trait.
     /// - Functions / Closures that have their address taken.
@@ -579,12 +579,18 @@ impl CallGraph {
 
     /// Print the graph in DOT format to a file.
     /// See <https://graphviz.org/doc/info/lang.html> for more information.
-    fn dump_dot(&self, tcx: TyCtxt) -> std::io::Result<()> {
+    fn dump_dot(&self, tcx: TyCtxt, initial: Option<MonoItem>) -> std::io::Result<()> {
         if let Ok(target) = std::env::var("KANI_REACH_DEBUG") {
             debug!(?target, "dump_dot");
+            let name = initial.map(|item| Node(item).to_string()).unwrap_or_default();
             let outputs = tcx.output_filenames(());
             let base_path = outputs.path(OutputType::Metadata);
-            let path = base_path.as_path().with_extension("dot");
+            let file_stem = format!(
+                "{}_{}.dot",
+                base_path.as_path().file_stem().unwrap().to_string_lossy(),
+                name
+            );
+            let path = base_path.as_path().parent().unwrap().join(file_stem);
             let out_file = File::create(path)?;
             let mut writer = BufWriter::new(out_file);
             writeln!(writer, "digraph ReachabilityGraph {{")?;

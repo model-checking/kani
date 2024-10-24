@@ -6,7 +6,7 @@
 use std::collections::HashSet;
 
 use crate::kani_queries::QueryDb;
-use rustc_hir::{def::DefKind, def_id::LOCAL_CRATE};
+use rustc_hir::{def::DefKind, def_id::DefId as InternalDefId, def_id::LOCAL_CRATE};
 use rustc_middle::span_bug;
 use rustc_middle::ty::layout::{
     FnAbiError, FnAbiOf, FnAbiOfHelpers, FnAbiRequest, HasParamEnv, HasTyCtxt, LayoutError,
@@ -14,14 +14,14 @@ use rustc_middle::ty::layout::{
 };
 use rustc_middle::ty::{self, Instance as InstanceInternal, Ty as TyInternal, TyCtxt};
 use rustc_smir::rustc_internal;
-use rustc_span::source_map::respan;
 use rustc_span::Span;
+use rustc_span::source_map::respan;
 use rustc_target::abi::call::FnAbi;
 use rustc_target::abi::{HasDataLayout, TargetDataLayout};
+use stable_mir::CrateDef;
 use stable_mir::mir::mono::MonoItem;
 use stable_mir::ty::{FnDef, RigidTy, Span as SpanStable, Ty, TyKind};
 use stable_mir::visitor::{Visitable, Visitor as TyVisitor};
-use stable_mir::CrateDef;
 use std::ops::ControlFlow;
 
 use self::attributes::KaniAttributes;
@@ -32,6 +32,7 @@ pub mod codegen_units;
 pub mod coercion;
 mod intrinsics;
 pub mod metadata;
+pub mod points_to;
 pub mod provide;
 pub mod reachability;
 pub mod resolve;
@@ -76,7 +77,7 @@ struct FindUnsafeCell<'tcx> {
     tcx: TyCtxt<'tcx>,
 }
 
-impl<'tcx> TyVisitor for FindUnsafeCell<'tcx> {
+impl TyVisitor for FindUnsafeCell<'_> {
     type Break = ();
     fn visit_ty(&mut self, ty: &Ty) -> ControlFlow<Self::Break> {
         match ty.kind() {
@@ -100,6 +101,13 @@ impl<'tcx> TyVisitor for FindUnsafeCell<'tcx> {
 pub fn check_reachable_items(tcx: TyCtxt, queries: &QueryDb, items: &[MonoItem]) {
     // Avoid printing the same error multiple times for different instantiations of the same item.
     let mut def_ids = HashSet::new();
+    let reachable_functions: HashSet<InternalDefId> = items
+        .iter()
+        .filter_map(|i| match i {
+            MonoItem::Fn(instance) => Some(rustc_internal::internal(tcx, instance.def.def_id())),
+            _ => None,
+        })
+        .collect();
     for item in items.iter().filter(|i| matches!(i, MonoItem::Fn(..) | MonoItem::Static(..))) {
         let def_id = match item {
             MonoItem::Fn(instance) => instance.def.def_id(),
@@ -109,9 +117,11 @@ pub fn check_reachable_items(tcx: TyCtxt, queries: &QueryDb, items: &[MonoItem])
             }
         };
         if !def_ids.contains(&def_id) {
+            let attributes = KaniAttributes::for_def_id(tcx, def_id);
             // Check if any unstable attribute was reached.
-            KaniAttributes::for_def_id(tcx, def_id)
-                .check_unstable_features(&queries.args().unstable_features);
+            attributes.check_unstable_features(&queries.args().unstable_features);
+            // Check whether all `proof_for_contract` functions are reachable
+            attributes.check_proof_for_contract(&reachable_functions);
             def_ids.insert(def_id);
         }
     }
@@ -170,7 +180,7 @@ impl<'tcx> HasTyCtxt<'tcx> for CompilerHelpers<'tcx> {
     }
 }
 
-impl<'tcx> HasDataLayout for CompilerHelpers<'tcx> {
+impl HasDataLayout for CompilerHelpers<'_> {
     fn data_layout(&self) -> &TargetDataLayout {
         self.tcx.data_layout()
     }
@@ -224,10 +234,16 @@ fn find_fn_def(tcx: TyCtxt, diagnostic: &str) -> Option<FnDef> {
         .all_diagnostic_items(())
         .name_to_id
         .get(&rustc_span::symbol::Symbol::intern(diagnostic))?;
-    let TyKind::RigidTy(RigidTy::FnDef(def, _)) =
-        rustc_internal::stable(tcx.type_of(attr_id)).value.kind()
-    else {
-        return None;
-    };
-    Some(def)
+    stable_fn_def(tcx, *attr_id)
+}
+
+/// Try to convert an internal `DefId` to a `FnDef`.
+pub fn stable_fn_def(tcx: TyCtxt, def_id: InternalDefId) -> Option<FnDef> {
+    if let TyKind::RigidTy(RigidTy::FnDef(def, _)) =
+        rustc_internal::stable(tcx.type_of(def_id)).value.kind()
+    {
+        Some(def)
+    } else {
+        None
+    }
 }

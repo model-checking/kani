@@ -14,6 +14,7 @@
 //! together with the name of the analysis.
 //!
 //! Look at each analysis documentation to see which files an analysis produces.
+#![feature(rustc_private)]
 
 use scanner::run_all;
 use std::process::ExitCode;

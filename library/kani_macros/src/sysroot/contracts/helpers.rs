@@ -4,10 +4,14 @@
 //! Functions that operate third party data structures with no logic that is
 //! specific to Kani and contracts.
 
+use crate::attr_impl::contracts::ClosureType;
 use proc_macro2::{Ident, Span};
 use std::borrow::Cow;
 use syn::spanned::Spanned;
-use syn::{parse_quote, Attribute, Expr, ExprBlock, Local, LocalInit, PatIdent, Stmt};
+use syn::{
+    Attribute, Expr, ExprBlock, ExprCall, ExprPath, Local, LocalInit, PatIdent, Path, Stmt,
+    parse_quote,
+};
 
 /// If an explicit return type was provided it is returned, otherwise `()`.
 pub fn return_type_to_type(return_type: &syn::ReturnType) -> Cow<syn::Type> {
@@ -167,6 +171,53 @@ pub fn chunks_by<'a, T, C: Default + Extend<T>>(
         }
         (!empty).then_some(new)
     })
+}
+
+/// Splits `stmts` into (preconditions, rest).
+/// For example, ClosureType::Check assumes preconditions, so given this sequence of statements:
+/// ```ignore
+/// kani::assume(.. precondition_1);
+/// kani::assume(.. precondition_2);
+/// let _wrapper_arg = (ptr as * const _,);
+/// ...
+/// ```
+/// This function would return the two kani::assume statements in the former slice
+/// and the remaining statements in the latter.
+/// The flow for ClosureType::Replace is the same, except preconditions are asserted rather than assumed.
+///
+/// The caller can use the returned tuple to insert remembers statements after `preconditions` and before `rest`.
+/// Inserting the remembers statements after `preconditions` ensures that they are bound by the preconditions.
+/// To understand why this is important, take the following example:
+/// ```ignore
+/// #[kani::requires(x < u32::MAX)]
+/// #[kani::ensures(|result| old(x + 1) == *result)]
+/// fn add_one(x: u32) -> u32 {...}
+/// ```
+/// If the `old(x + 1)` statement didn't respect the precondition's upper bound on `x`, Kani would encounter an integer overflow.
+///
+/// Inserting the remembers statements before `rest` ensures that they are declared before the original function executes,
+/// so that they will store historical, pre-computation values as intended.
+pub fn split_for_remembers(stmts: &[Stmt], closure_type: ClosureType) -> (&[Stmt], &[Stmt]) {
+    let mut pos = 0;
+
+    let check_str = match closure_type {
+        ClosureType::Check => "assume",
+        ClosureType::Replace => "assert",
+    };
+
+    for stmt in stmts {
+        if let Stmt::Expr(Expr::Call(ExprCall { func, .. }), _) = stmt {
+            if let Expr::Path(ExprPath { path: Path { segments, .. }, .. }) = func.as_ref() {
+                let first_two_idents =
+                    segments.iter().take(2).map(|sgmt| sgmt.ident.to_string()).collect::<Vec<_>>();
+
+                if first_two_idents == vec!["kani", check_str] {
+                    pos += 1;
+                }
+            }
+        }
+    }
+    stmts.split_at(pos)
 }
 
 macro_rules! assert_spanned_err {

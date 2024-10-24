@@ -5,3 +5,6 @@
 	path = tests/perf/s2n-quic
 	url = https://github.com/aws/s2n-quic
 	branch = main
+[submodule "charon"]
+	path = charon
+	url = https://github.com/AeneasVerif/charon

@@ -15,12 +15,12 @@
 
 use rustc_hir::lang_items::LangItem;
 use rustc_middle::traits::{ImplSource, ImplSourceUserDefinedData};
-use rustc_middle::ty::adjustment::CustomCoerceUnsized;
 use rustc_middle::ty::TraitRef;
+use rustc_middle::ty::adjustment::CustomCoerceUnsized;
 use rustc_middle::ty::{ParamEnv, Ty, TyCtxt};
 use rustc_smir::rustc_internal;
-use stable_mir::ty::{RigidTy, Ty as TyStable, TyKind};
 use stable_mir::Symbol;
+use stable_mir::ty::{RigidTy, Ty as TyStable, TyKind};
 use tracing::trace;
 
 /// Given an unsized coercion (e.g. from `&u8` to `&dyn Debug`), extract the pair of
@@ -99,7 +99,7 @@ pub fn extract_unsize_casting<'tcx>(
         coerce_info.dst_ty
     ));
     // Find the tail of the coercion that determines the type of metadata to be stored.
-    let (src_base_ty, dst_base_ty) = tcx.struct_lockstep_tails_erasing_lifetimes(
+    let (src_base_ty, dst_base_ty) = tcx.struct_lockstep_tails_for_codegen(
         src_pointee_ty,
         dst_pointee_ty,
         ParamEnv::reveal_all(),
@@ -189,7 +189,7 @@ impl<'tcx> CoerceUnsizedIterator<'tcx> {
 ///   dst_ty: Ty, // *const &dyn Debug
 /// }
 /// ```
-impl<'tcx> Iterator for CoerceUnsizedIterator<'tcx> {
+impl Iterator for CoerceUnsizedIterator<'_> {
     type Item = CoerceUnsizedInfo;
 
     fn next(&mut self) -> Option<Self::Item> {

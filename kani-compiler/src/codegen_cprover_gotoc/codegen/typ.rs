@@ -6,10 +6,10 @@ use cbmc::utils::aggr_tag;
 use cbmc::{InternString, InternedString};
 use rustc_ast::ast::Mutability;
 use rustc_index::IndexVec;
-use rustc_middle::ty::layout::LayoutOf;
-use rustc_middle::ty::print::with_no_trimmed_paths;
-use rustc_middle::ty::print::FmtPrinter;
 use rustc_middle::ty::GenericArgsRef;
+use rustc_middle::ty::layout::LayoutOf;
+use rustc_middle::ty::print::FmtPrinter;
+use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::{
     self, AdtDef, Const, CoroutineArgs, CoroutineArgsExt, FloatTy, Instance, IntTy, PolyFnSig, Ty,
     TyCtxt, TyKind, UintTy, VariantDef, VtblEntry,
@@ -22,8 +22,8 @@ use rustc_target::abi::{
     TyAndLayout, VariantIdx, Variants,
 };
 use stable_mir::abi::{ArgAbi, FnAbi, PassMode};
-use stable_mir::mir::mono::Instance as InstanceStable;
 use stable_mir::mir::Body;
+use stable_mir::mir::mono::Instance as InstanceStable;
 use tracing::{debug, trace, warn};
 
 /// Map the unit type to an empty struct
@@ -91,7 +91,7 @@ impl TypeExt for Type {
 }
 
 /// Function signatures
-impl<'tcx> GotocCtx<'tcx> {
+impl GotocCtx<'_> {
     /// This method prints the details of a GotoC type, for debugging purposes.
     #[allow(unused)]
     pub(crate) fn debug_print_type_recursively(&self, ty: &Type) -> String {
@@ -579,7 +579,10 @@ impl<'tcx> GotocCtx<'tcx> {
                         .unwrap();
                 self.codegen_fndef_type(instance)
             }
-            ty::FnPtr(sig) => self.codegen_function_sig(*sig).to_pointer(),
+            ty::FnPtr(sig_tys, hdr) => {
+                let sig = sig_tys.with(*hdr);
+                self.codegen_function_sig(sig).to_pointer()
+            }
             ty::Closure(_, subst) => self.codegen_ty_closure(ty, subst),
             ty::Coroutine(..) => self.codegen_ty_coroutine(ty),
             ty::Never => self.ensure_struct(NEVER_TYPE_EMPTY_STRUCT_NAME, "!", |_, _| vec![]),
@@ -1014,7 +1017,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
             // These types were blocking stdlib. Doing the default thing to unblock.
             // https://github.com/model-checking/kani/issues/214
-            ty::FnPtr(_) => self.codegen_ty(pointee_type).to_pointer(),
+            ty::FnPtr(_, _) => self.codegen_ty(pointee_type).to_pointer(),
 
             // These types have no regression tests for them.
             // For soundness, hold off on generating them till we have test-cases.
@@ -1612,7 +1615,7 @@ impl<'tcx> GotocCtx<'tcx> {
             pub ctx: &'a GotocCtx<'tcx>,
         }
 
-        impl<'tcx, 'a> Iterator for ReceiverIter<'tcx, 'a> {
+        impl<'tcx> Iterator for ReceiverIter<'tcx, '_> {
             type Item = (String, Ty<'tcx>);
 
             fn next(&mut self) -> Option<Self::Item> {

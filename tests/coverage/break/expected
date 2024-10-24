@@ -1,0 +1,19 @@
+   1|     | // Copyright Kani Contributors\
+   2|     | // SPDX-License-Identifier: Apache-2.0 OR MIT\
+   3|     | \
+   4|    1| fn find_positive(nums: &[i32]) -> Option<i32> {\
+   5|    1|     for &num in nums {\
+   6|     |         if num > 0 {\
+   7|    1|             return Some(num);\
+   8|    1|         } \
+   9|     |     }\
+  10|     |     // `None` is unreachable because there is at least one positive number.\
+  11|    0|     ```None'''\
+  12|     | }\
+  13|     | \
+  14|     | #[kani::proof]\
+  15|    1| fn main() {\
+  16|    1|     let numbers = [-3, -1, 0, 2, 4];\
+  17|    1|     let result = find_positive(&numbers);\
+  18|    1|     assert_eq!(result, Some(2));\
+  19|     | }\

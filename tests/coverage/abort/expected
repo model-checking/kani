@@ -1,0 +1,21 @@
+   1|     | // Copyright Kani Contributors\
+   2|     | // SPDX-License-Identifier: Apache-2.0 OR MIT\
+   3|     | \
+   4|     | //! Test that the abort() function is respected and nothing beyond it will execute.\
+   5|     | \
+   6|     | use std::process;\
+   7|     | \
+   8|     | #[kani::proof]\
+   9|    1| fn main() {\
+  10|    1|     for i in 0..4 {\
+  11|     |         if i == 1 {\
+  12|     |             // This comes first and it should be reachable.\
+  13|    1|             process::abort();\
+  14|    1|         }\
+  15|    1|         if i == 2 {\
+  16|     |             // This should never happen.\
+  17|    0|             ```process::exit(1)''';\
+  18|    1|         } \
+  19|     |     }\
+  20|    0|     ```assert!'''(false, ```"This is unreachable"''');\
+  21|     | }\

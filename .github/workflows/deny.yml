@@ -1,0 +1,26 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+
+# 1. Checks licenses for allowed license.
+# 2. Checks Rust-Sec registry for security advisories.
+
+name: Cargo Deny
+on:
+  pull_request:
+  merge_group:
+  push:
+    # Run on changes to branches but not tags.
+    branches:
+      - '**'
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          arguments: --all-features --workspace
+          command-arguments: -s
