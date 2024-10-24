@@ -24,7 +24,7 @@ impl<'a> ContractConditionsHandler<'a> {
         match &self.condition_type {
             ContractConditionsData::Requires { attr } => {
                 quote!({
-                    kani::assume(#attr);
+                    kani::internal::assume_unless_vacuous(#attr, "The contract's precondition (i.e., the conjunction of the #[requires(...)] clauses' bodies) is satisfiable.");
                     #(#body_stmts)*
                 })
             }

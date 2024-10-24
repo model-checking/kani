@@ -1,0 +1,5 @@
+Failed Checks: The contract's precondition (i.e., the conjunction of the #[requires(...)] clauses' bodies) is satisfiable.
+
+VERIFICATION:- FAILED
+
+Verification failed for - prove_buggy

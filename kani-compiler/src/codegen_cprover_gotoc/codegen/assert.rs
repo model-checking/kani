@@ -44,6 +44,11 @@ pub enum PropertyClass {
     ///
     /// SPECIAL BEHAVIOR: None? Possibly confusing to customers that a Rust assume is a Kani assert.
     Assume,
+    /// Same as `Assume`, but fails if the assumption would empty the search space.
+    /// E.g, imagine a previous assertion (x > 0) already exists. An assume(x < 0) would empty the search space
+    /// because there is no value of `x` for which both assertions are satisfiable.
+    /// We use this internally for contract instrumentation to ensure that preconditions do not empty the search space.
+    AssumeUnlessVacuous,
     /// See [GotocCtx::codegen_cover] below. Generally just an `assert(false)` that's not an error.
     ///
     /// SPECIAL BEHAVIOR: "Errors" for this type of assertion just mean "reachable" not failure.
