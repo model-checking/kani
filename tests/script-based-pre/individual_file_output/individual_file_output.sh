@@ -14,9 +14,9 @@ cp -r sample_crate ${OUT_DIR}
 pushd $OUT_DIR
 
 echo "Run verification..."
-../../../../scripts/cargo-kani -Z unstable-options --output-into-files
+cargo kani -Z unstable-options --output-into-files
 
-OUTPUT_DIR="kani_results" 
+OUTPUT_DIR="result_output_dir" 
 
 # Check if the output directory exists
 if [ ! -d "$OUTPUT_DIR" ]; then
