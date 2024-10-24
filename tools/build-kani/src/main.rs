@@ -10,7 +10,9 @@
 mod parser;
 mod sysroot;
 
-use crate::sysroot::{build_bin, build_lib, kani_no_core_lib, kani_playback_lib, kani_sysroot_lib};
+use crate::sysroot::{
+    build_bin, build_lib, build_tools, kani_no_core_lib, kani_playback_lib, kani_sysroot_lib,
+};
 use anyhow::{Result, bail};
 use clap::Parser;
 use std::{ffi::OsString, path::Path, process::Command};
@@ -72,6 +74,8 @@ fn prebundle(dir: &Path) -> Result<()> {
         bail!("Couldn't find the 'cbmc' binary to include in the release bundle.");
     }
 
+    build_tools(&["--release"])?;
+
     // Before we begin, ensure Kani is built successfully in release mode.
     // And that libraries have been built too.
     build_lib(&build_bin(&["--release"])?)
@@ -86,6 +90,7 @@ fn bundle_kani(dir: &Path) -> Result<()> {
     let release = Path::new("./target/release");
     cp(&release.join("kani-driver"), &bin)?;
     cp(&release.join("kani-compiler"), &bin)?;
+    cp(&release.join("kani-cov"), &bin)?;
 
     // 2. Kani scripts
     let scripts = dir.join("scripts");
