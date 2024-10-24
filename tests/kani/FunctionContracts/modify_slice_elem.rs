@@ -1,6 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-//! Check that Kani correctly verify the contract that modifies slices.
+//! Check that Kani correctly verifies the contract that modifies slices.
 //!
 //! Note that this test used to crash while parsing the annotations.
 // kani-flags: -Zfunction-contracts

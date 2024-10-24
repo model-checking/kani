@@ -101,7 +101,6 @@ mod verify {
     #[kani::proof_for_contract(CharASCII::set_mut_ref)]
     fn check_mut_ref() {
         let mut obj = CharASCII::any();
-        let original = obj.0;
         let new_val: u8 = kani::any();
         unsafe { obj.set_mut_ref(new_val) };
     }
