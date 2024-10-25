@@ -12,9 +12,7 @@ use tracing::{debug, trace};
 use kani_metadata::HarnessMetadata;
 use rustc_hir::def_id::DefId;
 use rustc_middle::mir::Const;
-use rustc_middle::ty::{
-    self, ClauseKind, EarlyBinder, GenericPredicates, ParamEnv, TyCtxt, TypeFoldable,
-};
+use rustc_middle::ty::{self, EarlyBinder, ParamEnv, TyCtxt, TypeFoldable};
 use rustc_smir::rustc_internal;
 use stable_mir::mir::ConstOperand;
 use stable_mir::mir::mono::Instance;
@@ -37,40 +35,6 @@ pub fn harness_stub_map(
         update_stub_mapping(tcx, def_id.expect_local(), stubs, &mut stub_pairs);
     }
     stub_pairs
-}
-
-/// Retrieve the index of the host parameter if old definition has one, but not the new definition.
-///
-/// This is to allow constant functions to be stubbed by non-constant functions when the
-/// `effect` feature is on.
-///
-/// Note that the opposite is not supported today, but users should be able to change their stubs.
-///
-/// Note that this has no effect at runtime.
-pub fn contract_host_param(tcx: TyCtxt, old_def: FnDef, new_def: FnDef) -> Option<usize> {
-    let find_host_effect_arg = |generic_predicates: GenericPredicates| {
-        generic_predicates.predicates.iter().enumerate().find_map(|(idx, (clause, _))| {
-            if let ClauseKind::HostEffect(..) = clause.kind().skip_binder() {
-                Some(idx)
-            } else {
-                None
-            }
-        })
-    };
-
-    let old_generics_predicates =
-        tcx.predicates_of(rustc_internal::internal(tcx, old_def.def_id()));
-    let new_generics_predicates =
-        tcx.predicates_of(rustc_internal::internal(tcx, new_def.def_id()));
-
-    let old_generics_host_effect_index = find_host_effect_arg(old_generics_predicates);
-    let new_generics_host_effect_index = find_host_effect_arg(new_generics_predicates);
-
-    if old_generics_host_effect_index.is_some() && new_generics_host_effect_index.is_none() {
-        old_generics_host_effect_index
-    } else {
-        None
-    }
 }
 
 /// Checks whether the stub is compatible with the original function/method: do
@@ -99,15 +63,12 @@ pub fn check_compatibility(tcx: TyCtxt, old_def: FnDef, new_def: FnDef) -> Resul
     let new_def_id = rustc_internal::internal(tcx, new_def.def_id());
     let old_ty = rustc_internal::stable(tcx.type_of(old_def_id)).value;
     let new_ty = rustc_internal::stable(tcx.type_of(new_def_id)).value;
-    let TyKind::RigidTy(RigidTy::FnDef(_, mut old_args)) = old_ty.kind() else {
+    let TyKind::RigidTy(RigidTy::FnDef(_, old_args)) = old_ty.kind() else {
         unreachable!("Expected function, but found {old_ty}")
     };
     let TyKind::RigidTy(RigidTy::FnDef(_, new_args)) = new_ty.kind() else {
         unreachable!("Expected function, but found {new_ty}")
     };
-    if let Some(idx) = contract_host_param(tcx, old_def, new_def) {
-        old_args.0.remove(idx);
-    }
 
     // TODO: We should check for the parameter type too or replacement will fail.
     if old_args.0.len() != new_args.0.len() {
