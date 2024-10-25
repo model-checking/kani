@@ -37,16 +37,12 @@ impl KaniSession {
             self.goto_sanity_check(output)?;
         }
 
-        if self
+        let is_loop_contracts_enabled = self
             .args
             .common_args
             .unstable_features
-            .contains(kani_metadata::UnstableFeature::LoopContracts)
-        {
-            self.instrument_contracts_with_loop_contracts(harness, output)?;
-        } else {
-            self.instrument_contracts(harness, output)?;
-        }
+            .contains(kani_metadata::UnstableFeature::LoopContracts);
+        self.instrument_contracts(harness, is_loop_contracts_enabled, output)?;
 
         if self.args.checks.undefined_function_on() {
             self.add_library(output)?;
@@ -172,44 +168,32 @@ impl KaniSession {
         self.call_goto_instrument(args)
     }
 
-    /// Make CBMC enforce a function contract.
-    pub fn instrument_contracts(&self, harness: &HarnessMetadata, file: &Path) -> Result<()> {
-        let Some(assigns) = harness.contract.as_ref() else { return Ok(()) };
-
-        let mut args: Vec<OsString> = vec![
-            "--dfcc".into(),
-            (&harness.mangled_name).into(),
-            "--enforce-contract".into(),
-            assigns.contracted_function_name.as_str().into(),
-            "--no-malloc-may-fail".into(),
-            file.into(),
-            file.into(),
-        ];
-        if let Some(tracker) = &assigns.recursion_tracker {
-            args.push("--nondet-static-exclude".into());
-            args.push(tracker.as_str().into());
-        }
-        self.call_goto_instrument(&args)
-    }
-
-    /// Apply annotated loop contracts.
-    pub fn instrument_contracts_with_loop_contracts(
+    /// Apply annotated function contracts and loop contracts with goto-instrument.
+    pub fn instrument_contracts(
         &self,
         harness: &HarnessMetadata,
+        is_loop_contracts_enabled: bool,
         file: &Path,
     ) -> Result<()> {
-        let mut args: Vec<OsString> = vec![
-            "--dfcc".into(),
-            (&harness.mangled_name).into(),
-            "--apply-loop-contracts".into(),
-            "--loop-contracts-no-unwind".into(),
-            "--no-malloc-may-fail".into(),
-            // Because loop contracts now are wrapped in a closure which will be a side-effect expression in CBMC even they
-            // may not contain side-effect. So we disable the side-effect check for now and will implement a better check
-            // instead of simply rejecting function calls and statement expressions.
-            // See issue: diffblue/cbmc#8393
-            "--disable-loop-contracts-side-effect-check".into(),
-        ];
+        // Do nothing if neither loop contracts nor function contracts is enabled.
+        if !is_loop_contracts_enabled && harness.contract.is_none() {
+            return Ok(());
+        }
+
+        let mut args: Vec<OsString> = vec!["--dfcc".into(), (&harness.mangled_name).into()];
+
+        if is_loop_contracts_enabled {
+            args.append(&mut vec![
+                "--apply-loop-contracts".into(),
+                "--loop-contracts-no-unwind".into(),
+                "--no-malloc-may-fail".into(),
+                // Because loop contracts now are wrapped in a closure which will be a side-effect expression in CBMC even they
+                // may not contain side-effect. So we disable the side-effect check for now and will implement a better check
+                // instead of simply rejecting function calls and statement expressions.
+                // See issue: diffblue/cbmc#8393
+                "--disable-loop-contracts-side-effect-check".into(),
+            ]);
+        }
 
         if let Some(assigns) = harness.contract.as_ref() {
             args.push("--enforce-contract".into());
