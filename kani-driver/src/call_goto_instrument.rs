@@ -180,13 +180,13 @@ impl KaniSession {
             return Ok(());
         }
 
-        let mut args: Vec<OsString> = vec!["--dfcc".into(), (&harness.mangled_name).into()];
+        let mut args: Vec<OsString> =
+            vec!["--dfcc".into(), (&harness.mangled_name).into(), "--no-malloc-may-fail".into()];
 
         if is_loop_contracts_enabled {
             args.append(&mut vec![
                 "--apply-loop-contracts".into(),
                 "--loop-contracts-no-unwind".into(),
-                "--no-malloc-may-fail".into(),
                 // Because loop contracts now are wrapped in a closure which will be a side-effect expression in CBMC even they
                 // may not contain side-effect. So we disable the side-effect check for now and will implement a better check
                 // instead of simply rejecting function calls and statement expressions.
