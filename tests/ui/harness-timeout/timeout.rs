@@ -1,8 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-flags: --cbmc-timeout 5
+// kani-flags: --harness-timeout 5
 //
-// Check that Kani respects the specified `--cbmc-timeout` option
+// Check that Kani respects the specified `--harness-timeout` option
 
 #[kani::proof]
 fn check_cbmc_timeout() {

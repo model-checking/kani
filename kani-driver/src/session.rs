@@ -121,7 +121,7 @@ impl KaniSession {
     /// Call [run_terminal_timeout] with the verbosity configured by the user.
     /// The `bool` value indicates whether the command timed out
     pub fn run_terminal_timeout(&self, cmd: TokioCommand) -> Result<bool> {
-        run_terminal_timeout(&self.args.common_args, cmd, &self.runtime, self.args.cbmc_timeout)
+        run_terminal_timeout(&self.args.common_args, cmd, &self.runtime, self.args.harness_timeout)
     }
 
     /// Call [run_suppress] with the verbosity configured by the user.

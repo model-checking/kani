@@ -50,7 +50,7 @@ pub enum FailedProperties {
 
 /// The possible CBMC exit statuses
 #[derive(Clone, Copy, Debug)]
-pub enum CbmcExitStatus {
+pub enum ExitStatus {
     Timeout,
     OutOfMemory,
     /// the integer is the process exit status
@@ -68,7 +68,7 @@ pub struct VerificationResult {
     /// Note: CBMC process exit status is only potentially useful if `status` is `Failure`.
     /// Kani will see CBMC report "failure" that's actually success (interpreting "failed"
     /// checks like coverage as expected and desirable.)
-    pub results: Result<Vec<Property>, CbmcExitStatus>,
+    pub results: Result<Vec<Property>, ExitStatus>,
     /// The runtime duration of this CBMC invocation.
     pub runtime: Duration,
     /// Whether concrete playback generated a test
@@ -119,7 +119,7 @@ impl KaniSession {
 
         let start_time = Instant::now();
 
-        let res = if let Some(timeout) = self.args.cbmc_timeout {
+        let res = if let Some(timeout) = self.args.harness_timeout {
             tokio::time::timeout(
                 std::time::Duration::from_secs(timeout.into()),
                 process_cbmc_output(cbmc_process, |i| {
@@ -149,7 +149,7 @@ impl KaniSession {
             VerificationResult {
                 status: VerificationStatus::Failure,
                 failed_properties: FailedProperties::None,
-                results: Err(CbmcExitStatus::Timeout),
+                results: Err(ExitStatus::Timeout),
                 runtime: start_time.elapsed(),
                 generated_concrete_test: false,
                 coverage_results: None,
@@ -352,9 +352,9 @@ impl VerificationResult {
         } else {
             // We never got results from CBMC - something went wrong (e.g. crash) so it's failure
             let exit_status = if output.process_status == 137 {
-                CbmcExitStatus::OutOfMemory
+                ExitStatus::OutOfMemory
             } else {
-                CbmcExitStatus::Other(output.process_status)
+                ExitStatus::Other(output.process_status)
             };
             VerificationResult {
                 status: VerificationStatus::Failure,
@@ -385,7 +385,7 @@ impl VerificationResult {
             // on failure, exit codes in theory might be used,
             // but `mock_failure` should never be used in a context where they will,
             // so again use something weird:
-            results: Err(CbmcExitStatus::Other(42)),
+            results: Err(ExitStatus::Other(42)),
             runtime: Duration::from_secs(0),
             generated_concrete_test: false,
             coverage_results: None,
@@ -417,18 +417,18 @@ impl VerificationResult {
             Err(exit_status) => {
                 let verification_result = console::style("FAILED").red();
                 let (header, explanation) = match exit_status {
-                    CbmcExitStatus::OutOfMemory => (
+                    ExitStatus::OutOfMemory => (
                         String::from("CBMC failed"),
                         "CBMC appears to have run out of memory. You may want to rerun your proof in \
                     an environment with additional memory or use stubbing to reduce the size of the \
                     code the verifier reasons about.\n",
                     ),
-                    CbmcExitStatus::Timeout => (
+                    ExitStatus::Timeout => (
                         String::from("CBMC failed"),
                         "CBMC timed out. You may want to rerun your proof with a larger timeout \
                     or use stubbing to reduce the size of the code the verifier reasons about.\n",
                     ),
-                    CbmcExitStatus::Other(exit_status) => {
+                    ExitStatus::Other(exit_status) => {
                         (format!("CBMC failed with status {exit_status}"), "")
                     }
                 };

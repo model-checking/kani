@@ -281,9 +281,9 @@ pub struct VerificationArgs {
     #[arg(long, hide = true)]
     pub print_llbc: bool,
 
-    /// Timeout for CBMC command in seconds
+    /// Timeout for each harness in seconds. This option is experimental and requires `-Z unstable-options` to be used.
     #[arg(long)]
-    pub cbmc_timeout: Option<u32>,
+    pub harness_timeout: Option<u32>,
 
     /// Arguments to pass down to Cargo
     #[command(flatten)]
@@ -639,6 +639,18 @@ impl ValidateArgs for VerificationArgs {
             return Err(Error::raw(
                 ErrorKind::ArgumentConflict,
                 "The `--cbmc-args` argument cannot be used with -Z lean.",
+            ));
+        }
+
+        if self.harness_timeout.is_some()
+            && !self.common_args.unstable_features.contains(UnstableFeature::UnstableOptions)
+        {
+            return Err(Error::raw(
+                ErrorKind::MissingRequiredArgument,
+                format!(
+                    "The `--harness-timeout` argument is unstable and requires `-Z {}` to be used.",
+                    UnstableFeature::UnstableOptions
+                ),
             ));
         }
         Ok(())
