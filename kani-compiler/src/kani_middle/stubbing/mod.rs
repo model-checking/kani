@@ -12,7 +12,9 @@ use tracing::{debug, trace};
 use kani_metadata::HarnessMetadata;
 use rustc_hir::def_id::DefId;
 use rustc_middle::mir::Const;
-use rustc_middle::ty::{self, EarlyBinder, ParamEnv, TyCtxt, TypeFoldable};
+use rustc_middle::ty::{
+    self, ClauseKind, EarlyBinder, GenericPredicates, ParamEnv, TyCtxt, TypeFoldable,
+};
 use rustc_smir::rustc_internal;
 use stable_mir::mir::ConstOperand;
 use stable_mir::mir::mono::Instance;
@@ -46,10 +48,26 @@ pub fn harness_stub_map(
 ///
 /// Note that this has no effect at runtime.
 pub fn contract_host_param(tcx: TyCtxt, old_def: FnDef, new_def: FnDef) -> Option<usize> {
-    let old_generics = tcx.generics_of(rustc_internal::internal(tcx, old_def.def_id()));
-    let new_generics = tcx.generics_of(rustc_internal::internal(tcx, new_def.def_id()));
-    if old_generics.host_effect_index.is_some() && new_generics.host_effect_index.is_none() {
-        old_generics.host_effect_index
+    let find_host_effect_arg = |generic_predicates: GenericPredicates| {
+        generic_predicates.predicates.iter().enumerate().find_map(|(idx, (clause, _))| {
+            if let ClauseKind::HostEffect(..) = clause.kind().skip_binder() {
+                Some(idx)
+            } else {
+                None
+            }
+        })
+    };
+
+    let old_generics_predicates =
+        tcx.predicates_of(rustc_internal::internal(tcx, old_def.def_id()));
+    let new_generics_predicates =
+        tcx.predicates_of(rustc_internal::internal(tcx, new_def.def_id()));
+
+    let old_generics_host_effect_index = find_host_effect_arg(old_generics_predicates);
+    let new_generics_host_effect_index = find_host_effect_arg(new_generics_predicates);
+
+    if old_generics_host_effect_index.is_some() && new_generics_host_effect_index.is_none() {
+        old_generics_host_effect_index
     } else {
         None
     }
