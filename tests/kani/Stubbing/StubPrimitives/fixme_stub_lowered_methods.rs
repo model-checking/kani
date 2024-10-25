@@ -20,7 +20,7 @@ pub mod slices_check {
     #[kani::stub(<[MyStruct]>::len, stub_len_is_10)]
     pub fn check_stub_len_is_10() {
         let input: [MyStruct; 5] = kani::any();
-        let slice = kani::slice::any_slice_of_array(&input);
+        let slice = kani::any_slice_of_array(&input);
         assert_eq!(slice.len(), 10);
     }
 }

@@ -146,7 +146,7 @@ macro_rules! kani_intrinsics {
         /// # use crate::kani;
         /// #
         /// # let array: [u8; 10]  = kani::any();
-        /// # let slice = kani::slice::any_slice_of_array(&array);
+        /// # let slice = kani::any_slice_of_array(&array);
         /// kani::cover(slice.len() == 0, "The slice may have a length of 0");
         /// ```
         ///

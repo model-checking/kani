@@ -9,6 +9,7 @@
 //! TODO: Use this inside kani library so that we dont have to maintain two copies of the same proc macro for arbitrary.
 
 mod pointer;
+mod slice;
 
 #[macro_export]
 #[allow(clippy::crate_in_macro_def)]
@@ -187,6 +188,11 @@ macro_rules! generate_arbitrary {
         pub use self::arbitrary_ptr::*;
         mod arbitrary_ptr {
             kani_core::ptr_generator!();
+        }
+
+        pub use self::arbitrary_slice::*;
+        mod arbitrary_slice {
+            kani_core::slice_generator!();
         }
     };
 }

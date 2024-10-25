@@ -11,6 +11,6 @@ fn check(s: &[u8]) {
 fn main() {
     let arr: [u8; 5] = kani::any();
     // returns a slice of length between 0 and 5
-    let slice = kani::slice::any_slice_of_array(&arr);
+    let slice = kani::any_slice_of_array(&arr);
     check(&slice);
 }
