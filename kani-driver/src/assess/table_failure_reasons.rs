@@ -6,7 +6,7 @@ use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
 
-use crate::harness_runner::HarnessResult;
+use crate::{call_cbmc::CbmcExitStatus, harness_runner::HarnessResult};
 
 use super::table_builder::{ColumnType, RenderableTableRow, TableBuilder, TableRow};
 
@@ -35,8 +35,12 @@ pub(crate) fn build(results: &[HarnessResult]) -> TableBuilder<FailureReasonsTab
     let mut builder = TableBuilder::new();
 
     for r in results {
-        let classification = if let Err(exit_code) = r.result.results {
-            format!("CBMC failed with status {exit_code}")
+        let classification = if let Err(exit_status) = r.result.results {
+            match exit_status {
+                CbmcExitStatus::Timeout => format!("CBMC timed out"),
+                CbmcExitStatus::OutOfMemory => format!("CBMC ran out of memory"),
+                CbmcExitStatus::Other(exit_code) => format!("CBMC failed with status {exit_code}"),
+            }
         } else {
             let failures = r.result.failed_properties();
             if failures.is_empty() {

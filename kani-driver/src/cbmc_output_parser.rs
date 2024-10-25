@@ -30,10 +30,10 @@ use rustc_demangle::demangle;
 use serde::{Deserialize, Deserializer, Serialize};
 
 use std::env;
-use std::io::{BufRead, BufReader};
 use std::os::unix::process::ExitStatusExt;
 use std::path::PathBuf;
-use std::process::{Child, ChildStdout};
+use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::process::{Child, ChildStdout};
 
 const RESULT_ITEM_PREFIX: &str = "  {\n    \"result\":";
 
@@ -360,9 +360,8 @@ enum Action {
     ProcessItem,
 }
 
-/// A parser for CBMC output, whose state is determined by:
-///  1. The input accumulator, required to process items on the fly.
-///  2. The buffer, which is accessed to retrieve more lines.
+/// A parser for CBMC output, whose state is determined by
+/// the input accumulator, required to process items on the fly.
 ///
 /// CBMC's JSON output is defined as a JSON array which contains:
 ///  1. One program at the beginning (i.e., a message with CBMC's version).
@@ -377,14 +376,13 @@ enum Action {
 /// There is a feature request for serde_json which would obsolete this if
 /// it ever lands: <https://github.com/serde-rs/json/issues/404>
 /// (Would provide a streaming iterator over a json array.)
-struct Parser<'a, 'b> {
+struct Parser {
     pub input_so_far: String,
-    pub buffer: &'a mut BufReader<&'b mut ChildStdout>,
 }
 
-impl<'a, 'b> Parser<'a, 'b> {
-    fn new(buffer: &'a mut BufReader<&'b mut ChildStdout>) -> Self {
-        Parser { input_so_far: String::new(), buffer }
+impl Parser {
+    fn new() -> Self {
+        Parser { input_so_far: String::new() }
     }
 
     /// Triggers an action based on the input:
@@ -479,16 +477,16 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
         None
     }
-}
 
-/// The iterator implementation for `Parser` reads the buffer line by line,
-/// and determines if it must return an item based on processing each line.
-impl Iterator for Parser<'_, '_> {
-    type Item = ParserItem;
-    fn next(&mut self) -> Option<Self::Item> {
+    /// Read the process output and return when an item is found in the output
+    /// or the EOF is reached
+    async fn read_output<'a, 'b>(
+        &mut self,
+        buffer: &'a mut BufReader<&'b mut ChildStdout>,
+    ) -> Option<ParserItem> {
         loop {
             let mut input = String::new();
-            match self.buffer.read_line(&mut input) {
+            match buffer.read_line(&mut input).await {
                 Ok(len) => {
                     if len == 0 {
                         return None;
@@ -522,17 +520,24 @@ pub struct VerificationOutput {
 /// then formatted (according to the output format) and print.
 ///
 /// The cbmc process status is returned, along with the (post-filter) items.
-pub fn process_cbmc_output(
+pub async fn process_cbmc_output(
     mut process: Child,
-    eager_filter: impl FnMut(ParserItem) -> Option<ParserItem>,
+    mut eager_filter: impl FnMut(ParserItem) -> Option<ParserItem>,
 ) -> Result<VerificationOutput> {
     let stdout = process.stdout.as_mut().unwrap();
     let mut stdout_reader = BufReader::new(stdout);
-    let parser = Parser::new(&mut stdout_reader);
-    // This should run until stdout is closed (which should mean the process exited)
-    let processed_items: Vec<_> = parser.filter_map(eager_filter).collect();
+    let mut parser = Parser::new();
+    // This should run until stdout is closed (which should mean the process
+    // exited) or the specified timeout is reached
+    let mut processed_items = Vec::new();
+    while let Some(item) = parser.read_output(&mut stdout_reader).await {
+        if let Some(item) = eager_filter(item) {
+            processed_items.push(item);
+        }
+    }
+
     // This will get us the process's exit code
-    let status = process.wait()?;
+    let status = process.wait().await?;
 
     let process_status = match (status.code(), status.signal()) {
         // normal unix exit codes (cbmc uses currently 0-10)

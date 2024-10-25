@@ -36,6 +36,7 @@ tracing-subscriber = {version = "0.3.8", features = ["env-filter", "json", "fmt"
 rand = "0.8"
 which = "6"
 time = {version = "0.3.36", features = ["formatting"]}
+tokio = { version = "1.40.0", features = ["io-util", "process", "rt", "time"] }
 
 # A good set of suggested dependencies can be found in rustup:
 # https://github.com/rust-lang/rustup/blob/master/Cargo.toml

@@ -281,6 +281,10 @@ pub struct VerificationArgs {
     #[arg(long, hide = true)]
     pub print_llbc: bool,
 
+    /// Timeout for CBMC command in seconds
+    #[arg(long)]
+    pub cbmc_timeout: Option<u32>,
+
     /// Arguments to pass down to Cargo
     #[command(flatten)]
     pub cargo: CargoCommonArgs,
