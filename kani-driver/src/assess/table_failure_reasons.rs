@@ -37,8 +37,8 @@ pub(crate) fn build(results: &[HarnessResult]) -> TableBuilder<FailureReasonsTab
     for r in results {
         let classification = if let Err(exit_status) = r.result.results {
             match exit_status {
-                CbmcExitStatus::Timeout => format!("CBMC timed out"),
-                CbmcExitStatus::OutOfMemory => format!("CBMC ran out of memory"),
+                CbmcExitStatus::Timeout => String::from("CBMC timed out"),
+                CbmcExitStatus::OutOfMemory => String::from("CBMC ran out of memory"),
                 CbmcExitStatus::Other(exit_code) => format!("CBMC failed with status {exit_code}"),
             }
         } else {
