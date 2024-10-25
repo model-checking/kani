@@ -726,6 +726,17 @@ impl GotocCtx<'_> {
                             dynamic_fat_ptr(typ, data_cast, vtable_expr, &self.symbol_table)
                         }
                     }
+                    TyKind::RigidTy(RigidTy::Dynamic(..)) => {
+                        let pointee_goto_typ = self.codegen_ty_stable(pointee_ty);
+                        let data_cast =
+                            data.cast_to(Type::Pointer { typ: Box::new(pointee_goto_typ) });
+                        let meta = self.codegen_operand_stable(&operands[1]);
+                        let vtable_expr = meta
+                            .member("_vtable_ptr", &self.symbol_table)
+                            .member("pointer", &self.symbol_table)
+                            .cast_to(typ.lookup_field_type("vtable", &self.symbol_table).unwrap());
+                        dynamic_fat_ptr(typ, data_cast, vtable_expr, &self.symbol_table)
+                    }
                     _ => {
                         let pointee_goto_typ = self.codegen_ty_stable(pointee_ty);
                         data.cast_to(Type::Pointer { typ: Box::new(pointee_goto_typ) })
