@@ -121,7 +121,11 @@ impl KaniSession {
     /// Call [run_terminal_timeout] with the verbosity configured by the user.
     /// The `bool` value indicates whether the command timed out
     pub fn run_terminal_timeout(&self, cmd: TokioCommand) -> Result<bool> {
-        run_terminal_timeout(&self.args.common_args, cmd, &self.runtime, self.args.harness_timeout)
+        self.runtime.block_on(run_terminal_timeout(
+            &self.args.common_args,
+            cmd,
+            self.args.harness_timeout,
+        ))
     }
 
     /// Call [run_suppress] with the verbosity configured by the user.
@@ -186,10 +190,9 @@ pub fn run_terminal(verbosity: &impl Verbosity, mut cmd: Command) -> Result<()> 
 }
 
 /// The `bool` value indicates whether the command timed out
-fn run_terminal_timeout(
+async fn run_terminal_timeout(
     verbosity: &impl Verbosity,
     mut cmd: TokioCommand,
-    runtime: &tokio::runtime::Runtime,
     timeout: Option<u32>,
 ) -> Result<bool> {
     if verbosity.quiet() {
@@ -202,21 +205,26 @@ fn run_terminal_timeout(
     let program = cmd.as_std().get_program().to_string_lossy().to_string();
     let result = with_timer(
         verbosity,
-        || {
-            runtime.block_on(async {
-                if let Some(timeout) = timeout {
-                    tokio::time::timeout(
-                        std::time::Duration::from_secs(timeout as u64),
-                        cmd.status(),
-                    )
-                    .await
-                } else {
-                    Ok(cmd.status().await)
+        || async {
+            if let Some(timeout) = timeout {
+                let mut child = cmd.spawn().unwrap();
+                let res = tokio::time::timeout(
+                    std::time::Duration::from_secs(timeout as u64),
+                    child.wait(),
+                )
+                .await;
+                if res.is_err() {
+                    // Kill the process
+                    child.kill().await.unwrap();
                 }
-            })
+                res
+            } else {
+                Ok(cmd.status().await)
+            }
         },
         &program,
-    );
+    )
+    .await;
     // outer result indicates whether the command timed out
     if result.is_err() {
         return Ok(true);

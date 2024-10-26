@@ -521,7 +521,7 @@ pub struct VerificationOutput {
 ///
 /// The cbmc process status is returned, along with the (post-filter) items.
 pub async fn process_cbmc_output(
-    mut process: Child,
+    process: &mut Child,
     mut eager_filter: impl FnMut(ParserItem) -> Option<ParserItem>,
 ) -> Result<VerificationOutput> {
     let stdout = process.stdout.as_mut().unwrap();

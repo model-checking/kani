@@ -1,6 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-flags: --harness-timeout 10
+// kani-flags: --harness-timeout 10 -Zunstable-options
 //
 // This test covers the case where a timeout is specified via `--harness-timeout`, but
 // CBMC completes before the timeout is reached

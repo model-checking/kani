@@ -1,6 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-flags: --harness-timeout 5
+// kani-flags: --harness-timeout 5 -Zunstable-options
 //
 // Check that Kani respects the specified `--harness-timeout` option
 

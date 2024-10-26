@@ -112,7 +112,7 @@ impl KaniSession {
             println!("[Kani] Running: `{}`", render_command(cmd.as_std()).to_string_lossy());
         }
         // Spawn the CBMC process and process its output below
-        let cbmc_process = cmd
+        let mut cbmc_process = cmd
             .stdout(std::process::Stdio::piped())
             .spawn()
             .map_err(|_| anyhow::Error::msg("Failed to run cbmc"))?;
@@ -122,7 +122,7 @@ impl KaniSession {
         let res = if let Some(timeout) = self.args.harness_timeout {
             tokio::time::timeout(
                 std::time::Duration::from_secs(timeout.into()),
-                process_cbmc_output(cbmc_process, |i| {
+                process_cbmc_output(&mut cbmc_process, |i| {
                     kani_cbmc_output_filter(
                         i,
                         self.args.extra_pointer_checks,
@@ -133,7 +133,7 @@ impl KaniSession {
             )
             .await
         } else {
-            Ok(process_cbmc_output(cbmc_process, |i| {
+            Ok(process_cbmc_output(&mut cbmc_process, |i| {
                 kani_cbmc_output_filter(
                     i,
                     self.args.extra_pointer_checks,
@@ -146,6 +146,10 @@ impl KaniSession {
 
         let verification_results = if res.is_err() {
             // An error occurs if the timeout was reached
+
+            // Kill the process
+            cbmc_process.kill().await?;
+
             VerificationResult {
                 status: VerificationStatus::Failure,
                 failed_properties: FailedProperties::None,
