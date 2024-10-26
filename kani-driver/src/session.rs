@@ -1,6 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+use crate::args::Timeout;
 use crate::args::VerificationArgs;
 use crate::args::common::Verbosity;
 use crate::util::render_command;
@@ -193,7 +194,7 @@ pub fn run_terminal(verbosity: &impl Verbosity, mut cmd: Command) -> Result<()> 
 async fn run_terminal_timeout(
     verbosity: &impl Verbosity,
     mut cmd: TokioCommand,
-    timeout: Option<u32>,
+    timeout: Option<Timeout>,
 ) -> Result<bool> {
     if verbosity.quiet() {
         cmd.stdout(std::process::Stdio::null());
@@ -208,11 +209,7 @@ async fn run_terminal_timeout(
         || async {
             if let Some(timeout) = timeout {
                 let mut child = cmd.spawn().unwrap();
-                let res = tokio::time::timeout(
-                    std::time::Duration::from_secs(timeout as u64),
-                    child.wait(),
-                )
-                .await;
+                let res = tokio::time::timeout(timeout.into(), child.wait()).await;
                 if res.is_err() {
                     // Kill the process
                     child.kill().await.unwrap();

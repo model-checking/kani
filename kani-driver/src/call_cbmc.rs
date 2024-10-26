@@ -121,7 +121,7 @@ impl KaniSession {
 
         let res = if let Some(timeout) = self.args.harness_timeout {
             tokio::time::timeout(
-                std::time::Duration::from_secs(timeout.into()),
+                timeout.into(),
                 process_cbmc_output(&mut cbmc_process, |i| {
                     kani_cbmc_output_filter(
                         i,

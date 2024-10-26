@@ -21,6 +21,7 @@ use kani_metadata::CbmcSolver;
 use std::ffi::OsString;
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::time::Duration;
 use strum::VariantNames;
 
 /// Trait used to perform extra validation after parsing.
@@ -61,6 +62,58 @@ pub fn print_deprecated(verbosity: &CommonArgs, option: &str, alternative: &str)
 
 // By default we configure CBMC to use 16 bits to represent the object bits in pointers.
 const DEFAULT_OBJECT_BITS: u32 = 16;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TimeUnit {
+    Seconds,
+    Minutes,
+    Hours,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Timeout {
+    value: u32,
+    unit: TimeUnit,
+}
+
+impl FromStr for Timeout {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let last_char = s.chars().last().unwrap();
+        let (value_str, unit_str) = if last_char.is_ascii_digit() {
+            // no suffix
+            (s, "s")
+        } else {
+            s.split_at(s.len() - 1)
+        };
+        let value = value_str.parse::<u32>().map_err(|_| "Invalid timeout value")?;
+
+        let unit = match unit_str.to_lowercase().as_str() {
+            "s" => TimeUnit::Seconds,
+            "m" => TimeUnit::Minutes,
+            "h" => TimeUnit::Hours,
+            _ => {
+                return Err(
+                    "Invalid time unit. Use 's' for seconds, 'm' for minutes, or 'h' for hours"
+                        .to_string(),
+                );
+            }
+        };
+
+        Ok(Timeout { value, unit })
+    }
+}
+
+impl From<Timeout> for Duration {
+    fn from(timeout: Timeout) -> Self {
+        match timeout.unit {
+            TimeUnit::Seconds => Duration::from_secs(timeout.value as u64),
+            TimeUnit::Minutes => Duration::from_secs(timeout.value as u64 * 60),
+            TimeUnit::Hours => Duration::from_secs(timeout.value as u64 * 3600),
+        }
+    }
+}
 
 #[derive(Debug, clap::Parser)]
 #[command(
@@ -281,9 +334,9 @@ pub struct VerificationArgs {
     #[arg(long, hide = true)]
     pub print_llbc: bool,
 
-    /// Timeout for each harness in seconds. This option is experimental and requires `-Z unstable-options` to be used.
+    /// Timeout for each harness with optional suffix ('s': seconds, 'm': minutes, 'h': hours). Default is seconds. This option is experimental and requires `-Z unstable-options` to be used.
     #[arg(long)]
-    pub harness_timeout: Option<u32>,
+    pub harness_timeout: Option<Timeout>,
 
     /// Arguments to pass down to Cargo
     #[command(flatten)]

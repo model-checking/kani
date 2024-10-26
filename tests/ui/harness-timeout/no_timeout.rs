@@ -6,7 +6,7 @@
 // CBMC completes before the timeout is reached
 
 #[kani::proof]
-fn check_cbmc_no_timeout() {
+fn check_harness_no_timeout() {
     let x: u8 = kani::any();
     let y: u8 = kani::any();
     kani::assume(y == 0);

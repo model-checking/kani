@@ -5,7 +5,7 @@
 // Check that Kani respects the specified `--harness-timeout` option
 
 #[kani::proof]
-fn check_cbmc_timeout() {
+fn check_harness_timeout() {
     // construct a problem that requires a long time to solve
     let (a1, b1, c1): (u64, u64, u64) = kani::any();
     let (a2, b2, c2): (u64, u64, u64) = kani::any();
