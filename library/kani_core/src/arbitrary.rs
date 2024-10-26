@@ -190,8 +190,7 @@ macro_rules! generate_arbitrary {
             kani_core::ptr_generator!();
         }
 
-        pub use self::arbitrary_slice::*;
-        mod arbitrary_slice {
+        pub mod slice {
             kani_core::slice_generator!();
         }
     };

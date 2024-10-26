@@ -18,7 +18,7 @@ macro_rules! slice_generator {
         /// ```no_run
         /// # fn foo(_: &[i32]) {}
         /// let arr = [1, 2, 3];
-        /// let slice = kani::any_slice_of_array(&arr);
+        /// let slice = kani::slice::any_slice_of_array(&arr);
         /// foo(slice); // where foo is a function that takes a slice and verifies a property about it
         /// ```
         pub fn any_slice_of_array<T, const LENGTH: usize>(arr: &[T; LENGTH]) -> &[T] {
