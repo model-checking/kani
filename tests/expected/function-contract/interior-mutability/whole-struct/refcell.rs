@@ -1,6 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-flags: -Zfunction-contracts
+// Temporarily reduce the number of object bits till
+// https://github.com/model-checking/kani/issues/3611 is fixed
+// kani-flags: -Zfunction-contracts --enable-unstable --cbmc-args --object-bits 12
 
 /// The objective of this test is to check the modification of a RefCell used as interior mutability in an immutable struct
 use std::cell::RefCell;
