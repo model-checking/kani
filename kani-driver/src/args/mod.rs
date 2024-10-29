@@ -63,10 +63,13 @@ pub fn print_deprecated(verbosity: &CommonArgs, option: &str, alternative: &str)
 // By default we configure CBMC to use 16 bits to represent the object bits in pointers.
 const DEFAULT_OBJECT_BITS: u32 = 16;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, strum_macros::EnumString)]
 enum TimeUnit {
+    #[strum(serialize = "s")]
     Seconds,
+    #[strum(serialize = "m")]
     Minutes,
+    #[strum(serialize = "h")]
     Hours,
 }
 
@@ -89,17 +92,9 @@ impl FromStr for Timeout {
         };
         let value = value_str.parse::<u32>().map_err(|_| "Invalid timeout value")?;
 
-        let unit = match unit_str.to_lowercase().as_str() {
-            "s" => TimeUnit::Seconds,
-            "m" => TimeUnit::Minutes,
-            "h" => TimeUnit::Hours,
-            _ => {
-                return Err(
-                    "Invalid time unit. Use 's' for seconds, 'm' for minutes, or 'h' for hours"
-                        .to_string(),
-                );
-            }
-        };
+        let unit = TimeUnit::from_str(unit_str).map_err(
+            |_| "Invalid time unit. Use 's' for seconds, 'm' for minutes, or 'h' for hours",
+        )?;
 
         Ok(Timeout { value, unit })
     }
