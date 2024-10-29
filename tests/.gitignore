@@ -6,7 +6,7 @@ target/
 
 # Binary artifacts
 *.goto
-*out
+*.out
 smoke
 check_tests
 function
