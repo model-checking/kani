@@ -7,15 +7,15 @@ use tracing_subscriber::filter::Directive;
 #[derive(Debug, Default, Display, Clone, Copy, AsRefStr, EnumString, VariantNames, PartialEq, Eq)]
 #[strum(serialize_all = "snake_case")]
 pub enum BackendOption {
-    /// Aeneas (LLBC) backend
-    #[cfg(feature = "aeneas")]
-    Aeneas,
-
     /// CProver (Goto) backend
     #[cfg(feature = "cprover")]
     #[strum(serialize = "cprover")]
     #[default]
     CProver,
+
+    /// LLBC backend (Aeneas's IR)
+    #[cfg(feature = "llbc")]
+    Llbc,
 }
 
 #[derive(Debug, Default, Clone, Copy, AsRefStr, EnumString, VariantNames, PartialEq, Eq)]
@@ -87,7 +87,7 @@ pub struct Arguments {
     /// Option name used to select which backend to use.
     #[clap(long = "backend", default_value_t = BackendOption::CProver)]
     pub backend: BackendOption,
-    /// Print the final LLBC file to stdout. This requires `-Zaeneas`.
+    /// Print the final LLBC file to stdout.
     #[clap(long)]
     pub print_llbc: bool,
 }

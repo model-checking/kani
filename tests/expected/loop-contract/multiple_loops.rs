@@ -11,12 +11,14 @@
 fn multiple_loops() {
     let mut x: u8 = kani::any_where(|i| *i >= 10);
 
-    #[kani::loop_invariant(x >= 5)]
-    while x > 5 {
-        x = x - 1;
+    if x != 20 {
+        #[kani::loop_invariant(x >= 5)]
+        while x > 5 {
+            x = x - 1;
+        }
     }
 
-    assert!(x == 5);
+    assert!(x == 5 || x == 20);
 
     #[kani::loop_invariant(x >= 2)]
     while x > 2 {
@@ -44,10 +46,6 @@ fn simple_while_loops() {
 
 #[kani::proof]
 fn multiple_loops_harness() {
-    // Needed to avoid having `free` be removed as unused function. This is
-    // because DFCC contract enforcement assumes that a definition for `free`
-    // exists.
-    let _ = Box::new(10);
     multiple_loops();
     simple_while_loops();
 }

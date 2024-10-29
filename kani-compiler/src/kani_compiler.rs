@@ -16,7 +16,7 @@
 //! `-C llvm-args`.
 
 use crate::args::{Arguments, BackendOption};
-#[cfg(feature = "aeneas")]
+#[cfg(feature = "llbc")]
 use crate::codegen_aeneas_llbc::LlbcCodegenBackend;
 #[cfg(feature = "cprover")]
 use crate::codegen_cprover_gotoc::GotocCodegenBackend;
@@ -44,11 +44,11 @@ pub fn run(args: Vec<String>) -> ExitCode {
     }
 }
 
-/// Configure the Aeneas backend that generates LLBC.
-fn aeneas_backend(_queries: Arc<Mutex<QueryDb>>) -> Box<dyn CodegenBackend> {
-    #[cfg(feature = "aeneas")]
+/// Configure the LLBC backend (Aeneas's IR).
+fn llbc_backend(_queries: Arc<Mutex<QueryDb>>) -> Box<dyn CodegenBackend> {
+    #[cfg(feature = "llbc")]
     return Box::new(LlbcCodegenBackend::new(_queries));
-    #[cfg(not(feature = "aeneas"))]
+    #[cfg(not(feature = "llbc"))]
     unreachable!()
 }
 
@@ -60,21 +60,21 @@ fn cprover_backend(_queries: Arc<Mutex<QueryDb>>) -> Box<dyn CodegenBackend> {
     unreachable!()
 }
 
-#[cfg(any(feature = "aeneas", feature = "cprover"))]
+#[cfg(any(feature = "cprover", feature = "llbc"))]
 fn backend(queries: Arc<Mutex<QueryDb>>) -> Box<dyn CodegenBackend> {
     let backend = queries.lock().unwrap().args().backend;
     match backend {
-        #[cfg(feature = "aeneas")]
-        BackendOption::Aeneas => aeneas_backend(queries),
         #[cfg(feature = "cprover")]
         BackendOption::CProver => cprover_backend(queries),
+        #[cfg(feature = "llbc")]
+        BackendOption::Llbc => llbc_backend(queries),
     }
 }
 
 /// Fallback backend. It will trigger an error if no backend has been enabled.
-#[cfg(not(any(feature = "aeneas", feature = "cprover")))]
+#[cfg(not(any(feature = "cprover", feature = "llbc")))]
 fn backend(queries: Arc<Mutex<QueryDb>>) -> Box<CodegenBackend> {
-    compile_error!("No backend is available. Use `aeneas` or `cprover`.");
+    compile_error!("No backend is available. Use `cprover` or `llbc`.");
 }
 
 /// This object controls the compiler behavior.

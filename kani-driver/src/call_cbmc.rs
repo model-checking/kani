@@ -88,8 +88,8 @@ impl KaniSession {
             cmd.arg("--json-ui");
 
             // Spawn the CBMC process and process its output below
-            let cbmc_process_opt = self.run_piped(cmd)?;
-            let cbmc_process = cbmc_process_opt.ok_or(anyhow::Error::msg("Failed to run cbmc"))?;
+            let cbmc_process =
+                self.run_piped(cmd).map_err(|_| anyhow::Error::msg("Failed to run cbmc"))?;
             let output = process_cbmc_output(cbmc_process, |i| {
                 kani_cbmc_output_filter(
                     i,

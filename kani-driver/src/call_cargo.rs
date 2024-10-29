@@ -277,62 +277,59 @@ crate-type = ["lib"]
     fn run_build(&self, cargo_cmd: Command) -> Result<Vec<RustcArtifact>> {
         let support_color = std::io::stdout().is_terminal();
         let mut artifacts = vec![];
-        if let Some(mut cargo_process) = self.run_piped(cargo_cmd)? {
-            let reader = BufReader::new(cargo_process.stdout.take().unwrap());
-            let mut error_count = 0;
-            for message in Message::parse_stream(reader) {
-                let message = message.unwrap();
-                match message {
-                    Message::CompilerMessage(msg) => match msg.message.level {
-                        DiagnosticLevel::FailureNote => {
-                            print_msg(&msg.message, support_color)?;
-                        }
-                        DiagnosticLevel::Error => {
-                            error_count += 1;
-                            print_msg(&msg.message, support_color)?;
-                        }
-                        DiagnosticLevel::Ice => {
-                            print_msg(&msg.message, support_color)?;
-                            let _ = cargo_process.wait();
-                            return Err(anyhow::Error::msg(msg.message).context(format!(
-                                "Failed to compile `{}` due to an internal compiler error.",
-                                msg.target.name
-                            )));
-                        }
-                        _ => {
-                            if !self.args.common_args.quiet {
-                                print_msg(&msg.message, support_color)?;
-                            }
-                        }
-                    },
-                    Message::CompilerArtifact(rustc_artifact) => {
-                        // Compares two targets, and falls back to a weaker
-                        // comparison where we avoid dashes in their names.
-                        artifacts.push(rustc_artifact)
+        let mut cargo_process = self.run_piped(cargo_cmd)?;
+        let reader = BufReader::new(cargo_process.stdout.take().unwrap());
+        let mut error_count = 0;
+        for message in Message::parse_stream(reader) {
+            let message = message.unwrap();
+            match message {
+                Message::CompilerMessage(msg) => match msg.message.level {
+                    DiagnosticLevel::FailureNote => {
+                        print_msg(&msg.message, support_color)?;
                     }
-                    Message::BuildScriptExecuted(_) | Message::BuildFinished(_) => {
-                        // do nothing
+                    DiagnosticLevel::Error => {
+                        error_count += 1;
+                        print_msg(&msg.message, support_color)?;
                     }
-                    Message::TextLine(msg) => {
-                        if !self.args.common_args.quiet {
-                            println!("{msg}");
-                        }
+                    DiagnosticLevel::Ice => {
+                        print_msg(&msg.message, support_color)?;
+                        let _ = cargo_process.wait();
+                        return Err(anyhow::Error::msg(msg.message).context(format!(
+                            "Failed to compile `{}` due to an internal compiler error.",
+                            msg.target.name
+                        )));
                     }
-
-                    // Non-exhaustive enum.
                     _ => {
                         if !self.args.common_args.quiet {
-                            println!("{message:?}");
+                            print_msg(&msg.message, support_color)?;
                         }
+                    }
+                },
+                Message::CompilerArtifact(rustc_artifact) => {
+                    // Compares two targets, and falls back to a weaker
+                    // comparison where we avoid dashes in their names.
+                    artifacts.push(rustc_artifact)
+                }
+                Message::BuildScriptExecuted(_) | Message::BuildFinished(_) => {
+                    // do nothing
+                }
+                Message::TextLine(msg) => {
+                    if !self.args.common_args.quiet {
+                        println!("{msg}");
+                    }
+                }
+
+                // Non-exhaustive enum.
+                _ => {
+                    if !self.args.common_args.quiet {
+                        println!("{message:?}");
                     }
                 }
             }
-            let status = cargo_process.wait()?;
-            if !status.success() {
-                bail!(
-                    "Failed to execute cargo ({status}). Found {error_count} compilation errors."
-                );
-            }
+        }
+        let status = cargo_process.wait()?;
+        if !status.success() {
+            bail!("Failed to execute cargo ({status}). Found {error_count} compilation errors.");
         }
         Ok(artifacts)
     }
@@ -383,7 +380,7 @@ crate-type = ["lib"]
                 cmd.arg(pkg);
                 // For some reason clippy cannot see that we are invoking wait() in the next line.
                 #[allow(clippy::zombie_processes)]
-                let mut process = self.run_piped(cmd)?.unwrap();
+                let mut process = self.run_piped(cmd)?;
                 let result = process.wait()?;
                 if !result.success() {
                     bail!("Failed to retrieve information for `{pkg}`");

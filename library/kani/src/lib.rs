@@ -29,7 +29,6 @@ mod concrete_playback;
 pub mod futures;
 pub mod invariant;
 pub mod shadow;
-pub mod slice;
 pub mod vec;
 
 mod models;

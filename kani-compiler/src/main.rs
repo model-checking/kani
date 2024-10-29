@@ -38,7 +38,7 @@ extern crate stable_mir;
 extern crate tempfile;
 
 mod args;
-#[cfg(feature = "aeneas")]
+#[cfg(feature = "llbc")]
 mod codegen_aeneas_llbc;
 #[cfg(feature = "cprover")]
 mod codegen_cprover_gotoc;
