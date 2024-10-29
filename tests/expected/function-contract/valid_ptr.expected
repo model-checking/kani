@@ -1,6 +1,7 @@
 Checking harness pre_condition::harness_invalid_ptr...
-assume_unless_vacuous\
-	 - Status: FAILURE
+contract_cover.1\
+	 - Status: FAILURE\
+	 - Description: "The contract's precondition is satisfiable."
 VERIFICATION:- FAILED (encountered failures other than panics, which were unexpected)
 
 Checking harness pre_condition::harness_stack_ptr...
@@ -10,8 +11,7 @@ Checking harness pre_condition::harness_head_ptr...
 VERIFICATION:- SUCCESSFUL
 
 Checking harness post_condition::harness...
-assume_unless_vacuous\
-	 - Status: FAILURE
-VERIFICATION:- FAILED (encountered failures other than panics, which were unexpected)
-
-Complete - 2 successfully verified harnesses, 2 failures, 4 total
+assertion.1\
+	 - Status: FAILURE\
+	 - Description: "|result| kani::mem::can_dereference((*result).0)"
+VERIFICATION:- FAILED

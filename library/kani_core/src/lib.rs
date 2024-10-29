@@ -347,24 +347,12 @@ macro_rules! kani_intrinsics {
             }
 
             /// This function is only used for function contract instrumentation.
-            /// It is the same as assume(), but it adds an extra assert(false) afterward.
-            /// The CBMC output parser uses this assertion as a reachability check;
-            /// if the assertion is unreachable or succeeds, then we know that the assumption emptied the search space.
+            /// It is the same as cover(), but if the cover statement is unreachable, it fails the contract harness.
+            /// See the contracts module in kani_macros for details.
             #[inline(never)]
-            #[rustc_diagnostic_item = "KaniAssumeUnlessVacuous"]
-            #[cfg(not(feature = "concrete_playback"))]
+            #[rustc_diagnostic_item = "KaniContractCover"]
             #[doc(hidden)]
-            pub fn assume_unless_vacuous(cond: bool, msg: &'static str) {
-                let _ = cond;
-            }
-
-            #[inline(never)]
-            #[rustc_diagnostic_item = "KaniAssumeUnlessVacuous"]
-            #[cfg(feature = "concrete_playback")]
-            #[doc(hidden)]
-            pub fn assume_unless_vacuous(cond: bool, msg: &'static str) {
-                assert!(cond, "{}", msg);
-            }
+            pub const fn contract_cover(_cond: bool, _msg: &'static str) {}
 
             /// A way to break the ownerhip rules. Only used by contracts where we can
             /// guarantee it is done safely.

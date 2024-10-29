@@ -58,6 +58,10 @@
 //! added before the body and postconditions after as well as injected before
 //! every `return` (see [`PostconditionInjector`]). All arguments are captured
 //! by the closure.
+//! We also inject contract_cover checks after the precondition and before the postcondition.
+//! The precondition cover checks ensure that the precondition is satisfiable; i.e.,
+//! that the precondition does not empty the search space and produce a vacuous proof.
+//! The postcondition cover checks ensure that the postcondition is reachable.
 //!
 //! ## Replace Function
 //!
@@ -168,7 +172,8 @@
 //!                                let mut __kani_check_div =
 //!                                    || -> u32
 //!                                        {
-//!                                            kani::internal::assume_unless_vacuous(divisor != 0);
+//!                                            kani::assume(divisor != 0);
+//!                                            kani::internal::contract_cover(divisor != 0, "The contract's precondition is satisfiable.");
 //!                                            let _wrapper_arg = ();
 //!                                            #[kanitool::is_contract_generated(wrapper)]
 //!                                            #[allow(dead_code, unused_variables, unused_mut)]
@@ -176,6 +181,11 @@
 //!                                                |_wrapper_arg| -> u32 { dividend / divisor };
 //!                                            let result_kani_internal: u32 =
 //!                                                __kani_modifies_div(_wrapper_arg);
+//!                                            kani::internal::contract_cover(
+//!                                                 kani::internal::apply_closure(|result: &u32|
+//!                                                     *result <= dividend,
+//!                                                     &result_kani_internal),
+//!                                                 "The contract's postcondition is reachable.");
 //!                                            kani::assert(kani::internal::apply_closure(|result: &u32|
 //!                                                        *result <= dividend, &result_kani_internal),
 //!                                                "|result : &u32| *result <= dividend");
@@ -210,7 +220,8 @@
 //!             let mut __kani_check_div =
 //!                 || -> u32
 //!                     {
-//!                         kani::internal::assume_unless_vacuous(divisor != 0);
+//!                         kani::assume(divisor != 0);
+//!                         kani::internal::contract_cover(divisor != 0, "The contract's precondition is satisfiable.");
 //!                         let _wrapper_arg = ();
 //!                         #[kanitool::is_contract_generated(wrapper)]
 //!                         #[allow(dead_code, unused_variables, unused_mut)]
@@ -218,6 +229,11 @@
 //!                             |_wrapper_arg| -> u32 { dividend / divisor };
 //!                         let result_kani_internal: u32 =
 //!                             __kani_modifies_div(_wrapper_arg);
+//!                         kani::internal::contract_cover(
+//!                             kani::internal::apply_closure(|result: &u32|
+//!                                 *result <= dividend,
+//!                                 &result_kani_internal),
+//!                             "The contract's postcondition is reachable.");
 //!                         kani::assert(kani::internal::apply_closure(|result: &u32|
 //!                                     *result <= dividend, &result_kani_internal),
 //!                             "|result : &u32| *result <= dividend");
@@ -310,7 +326,8 @@
 //!                                let mut __kani_check_modify =
 //!                                    ||
 //!                                        {
-//!                                            kani::internal::assume_unless_vacuous(divisor != 0);
+//!                                            kani::assume(divisor != 0);
+//!                                            kani::internal::contract_cover(*ptr < 100, "The contract's precondition is satisfiable.");
 //!                                            let remember_kani_internal_92cc419d8aca576c = *ptr + 1;
 //!                                            let remember_kani_internal_92cc419d8aca576c = *ptr + 1;
 //!                                            let _wrapper_arg = (ptr as *const _,);
@@ -320,9 +337,21 @@
 //!                                                |_wrapper_arg| { *ptr += 1; };
 //!                                            let result_kani_internal: () =
 //!                                                __kani_modifies_modify(_wrapper_arg);
+//!                                            kani::internal::contract_cover(
+//!                                                kani::internal::apply_closure(|result|
+//!                                                    (remember_kani_internal_2e780b148d45b5c8) == * ptr,
+//!                                                    &result_kani_internal
+//!                                                ),
+//!                                            "The contract's postcondition is reachable.");
 //!                                            kani::assert(kani::internal::apply_closure(|result|
 //!                                                        (remember_kani_internal_92cc419d8aca576c) == *ptr,
 //!                                                    &result_kani_internal), "|result| old(*ptr + 1) == *ptr");
+//!                                            kani::internal::contract_cover(
+//!                                                kani::internal::apply_closure(|result|
+//!                                                    (remember_kani_internal_2e780b148d45b5c8) == * ptr,
+//!                                                    &result_kani_internal
+//!                                                ),
+//!                                            "The contract's postcondition is reachable.");
 //!                                            kani::assert(kani::internal::apply_closure(|result|
 //!                                                        (remember_kani_internal_92cc419d8aca576c) == *ptr,
 //!                                                    &result_kani_internal), "|result| old(*ptr + 1) == *ptr");
@@ -375,9 +404,19 @@
 //!                             |_wrapper_arg| { *ptr += 1; };
 //!                         let result_kani_internal: () =
 //!                             __kani_modifies_modify(_wrapper_arg);
+//!                         kani::internal::contract_cover(
+//!                            kani::internal::apply_closure(|result|
+//!                              (remember_kani_internal_2e780b148d45b5c8) == * ptr,
+//!                              &result_kani_internal
+//!                         ),
 //!                         kani::assert(kani::internal::apply_closure(|result|
 //!                                     (remember_kani_internal_92cc419d8aca576c) == *ptr,
 //!                                 &result_kani_internal), "|result| old(*ptr + 1) == *ptr");
+//!                         kani::internal::contract_cover(
+//!                            kani::internal::apply_closure(|result|
+//!                              (remember_kani_internal_2e780b148d45b5c8) == * ptr,
+//!                              &result_kani_internal
+//!                         ),
 //!                         kani::assert(kani::internal::apply_closure(|result|
 //!                                     (remember_kani_internal_92cc419d8aca576c) == *ptr,
 //!                                 &result_kani_internal), "|result| old(*ptr + 1) == *ptr");
@@ -549,5 +588,7 @@ fn contract_main(
         Err(e) => return e.into_compile_error().into(),
     };
 
-    handler.dispatch_on(function_state).into()
+    let res = handler.dispatch_on(function_state).into();
+    println!("{}", &res);
+    res
 }

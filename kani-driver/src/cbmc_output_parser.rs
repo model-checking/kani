@@ -95,7 +95,7 @@ pub struct PropertyId {
 }
 
 impl Property {
-    const ASSUME_UNLESS_VACUOUS_PROPERTY_CLASS: &'static str = "assume_unless_vacuous";
+    const CONTRACT_COVER_PROPERTY_CLASS: &'static str = "contract_cover";
     const COVER_PROPERTY_CLASS: &'static str = "cover";
     const COVERAGE_PROPERTY_CLASS: &'static str = "code_coverage";
 
@@ -103,9 +103,9 @@ impl Property {
         self.property_id.class.clone()
     }
 
-    /// Returns true if this is an assume_unless_vacuous property
-    pub fn is_assume_unless_vacuous_property(&self) -> bool {
-        self.property_id.class == Self::ASSUME_UNLESS_VACUOUS_PROPERTY_CLASS
+    /// Returns true if this is an contract_cover property
+    pub fn is_contract_cover_property(&self) -> bool {
+        self.property_id.class == Self::CONTRACT_COVER_PROPERTY_CLASS
     }
 
     // Returns true if this is a code_coverage check

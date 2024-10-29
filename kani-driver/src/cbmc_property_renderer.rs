@@ -512,7 +512,7 @@ pub fn postprocess_result(properties: Vec<Property>, extra_ptr_checks: bool) -> 
 
     let updated_properties =
         update_properties_with_reach_status(properties_filtered, has_fundamental_failures);
-    let results_after_code_coverage = update_results_of_code_covererage_checks(updated_properties);
+    let results_after_code_coverage = update_results_of_code_coverage_checks(updated_properties);
     update_results_of_cover_checks(results_after_code_coverage)
 }
 
@@ -623,7 +623,7 @@ fn update_properties_with_reach_status(
 /// Note that these statuses are intermediate statuses that aren't reported to
 /// users but rather internally consumed and reported finally as `PARTIAL`, `FULL`
 /// or `NONE` based on aggregated line coverage results.
-fn update_results_of_code_covererage_checks(mut properties: Vec<Property>) -> Vec<Property> {
+fn update_results_of_code_coverage_checks(mut properties: Vec<Property>) -> Vec<Property> {
     for prop in properties.iter_mut() {
         if prop.is_code_coverage_property() {
             prop.status = match prop.status {
@@ -648,10 +648,8 @@ fn update_results_of_code_covererage_checks(mut properties: Vec<Property>) -> Ve
 /// will be `CheckStatus::Unreachable` and not `CheckStatus::Success` since
 /// `update_properties_with_reach_status` is called beforehand
 ///
-/// We encode assume_unless_vacuous(cond) as assume(cond); assert(false).
-/// `is_assume_unless_vacuous_property` corresponds to the assert(false).
-/// If this assertion fails as expected, the assume did not empty the search space,
-/// so succeed; otherwise, fail.
+/// Although regular cover properties do not fail verification, contract cover properties do.
+/// If the assert(!cond) fails as expected, succeed; otherwise, fail.
 fn update_results_of_cover_checks(mut properties: Vec<Property>) -> Vec<Property> {
     for prop in properties.iter_mut() {
         if prop.is_cover_property() {
@@ -660,8 +658,11 @@ fn update_results_of_cover_checks(mut properties: Vec<Property>) -> Vec<Property
             } else if prop.status == CheckStatus::Failure {
                 prop.status = CheckStatus::Satisfied;
             }
-        } else if prop.is_assume_unless_vacuous_property() {
-            if prop.status == CheckStatus::Success {
+        } else if prop.is_contract_cover_property() {
+            if prop.status == CheckStatus::Unreachable
+                || prop.status == CheckStatus::Success
+                || prop.status == CheckStatus::Undetermined
+            {
                 prop.status = CheckStatus::Failure;
             } else if prop.status == CheckStatus::Failure {
                 prop.status = CheckStatus::Success;

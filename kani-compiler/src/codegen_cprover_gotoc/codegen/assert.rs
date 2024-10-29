@@ -44,15 +44,13 @@ pub enum PropertyClass {
     ///
     /// SPECIAL BEHAVIOR: None? Possibly confusing to customers that a Rust assume is a Kani assert.
     Assume,
-    /// Same as `Assume`, but fails if the assumption would empty the search space.
-    /// E.g, imagine a previous assertion (x > 0) already exists. An assume(x < 0) would empty the search space
-    /// because there is no value of `x` for which both assertions are satisfiable.
-    /// We use this internally for contract instrumentation to ensure that preconditions do not empty the search space.
-    AssumeUnlessVacuous,
     /// See [GotocCtx::codegen_cover] below. Generally just an `assert(false)` that's not an error.
     ///
     /// SPECIAL BEHAVIOR: "Errors" for this type of assertion just mean "reachable" not failure.
     Cover,
+    /// Same codegen as `Cover`, but failure will cause verification failure.
+    /// Used internally for contract instrumentation; see the contracts module in kani_macros for details.
+    ContractCover,
     /// The class of checks used for code coverage instrumentation. Only needed
     /// when working on coverage-related features.
     ///
@@ -153,6 +151,12 @@ impl GotocCtx<'_> {
         // https://github.com/diffblue/cbmc/issues/6613). So for now use
         // assert(!cond).
         self.codegen_assert(cond.not(), PropertyClass::Cover, msg, loc)
+    }
+
+    /// Generate a cover statement for a contract at the current location
+    pub fn codegen_contract_cover(&self, cond: Expr, msg: &str, span: SpanStable) -> Stmt {
+        let loc = self.codegen_caller_span_stable(span);
+        self.codegen_assert(cond.not(), PropertyClass::ContractCover, msg, loc)
     }
 
     /// Generate a cover statement for code coverage reports.
