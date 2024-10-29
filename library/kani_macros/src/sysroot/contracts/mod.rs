@@ -588,7 +588,5 @@ fn contract_main(
         Err(e) => return e.into_compile_error().into(),
     };
 
-    let res = handler.dispatch_on(function_state).into();
-    println!("{}", &res);
-    res
+    handler.dispatch_on(function_state).into()
 }
