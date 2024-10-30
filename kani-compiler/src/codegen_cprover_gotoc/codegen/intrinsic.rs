@@ -7,6 +7,7 @@ use crate::codegen_cprover_gotoc::codegen::ty_stable::pointee_type_stable;
 use crate::codegen_cprover_gotoc::{GotocCtx, utils};
 use crate::intrinsics::Intrinsic;
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
+use cbmc::MachineModel;
 use cbmc::goto_program::{
     ArithmeticOverflowResult, BinaryOperator, BuiltinFn, Expr, Location, Stmt, Type,
 };
@@ -15,7 +16,7 @@ use rustc_middle::ty::layout::ValidityRequirement;
 use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{BasicBlockIdx, Operand, Place};
-use stable_mir::ty::{GenericArgs, RigidTy, Span, Ty, TyKind, UintTy};
+use stable_mir::ty::{FloatTy, GenericArgs, IntTy, RigidTy, Span, Ty, TyKind, UintTy};
 use tracing::debug;
 
 pub struct SizeAlign {
@@ -384,6 +385,14 @@ impl GotocCtx<'_> {
                 let binop_stmt = codegen_intrinsic_binop!(div);
                 self.add_finite_args_checks(intrinsic_str, fargs_clone, binop_stmt, span)
             }
+            Intrinsic::FloatToIntUnchecked => self.codegen_float_to_int_unchecked(
+                intrinsic_str,
+                fargs.remove(0),
+                farg_types[0],
+                place,
+                ret_ty,
+                loc,
+            ),
             Intrinsic::FloorF32 => codegen_simple_intrinsic!(Floorf),
             Intrinsic::FloorF64 => codegen_simple_intrinsic!(Floor),
             Intrinsic::FmafF32 => codegen_simple_intrinsic!(Fmaf),
@@ -1917,6 +1926,61 @@ impl GotocCtx<'_> {
             Stmt::block(vec![non_overlapping_stmt, assign_to_t, assign_to_y, assign_to_x], loc)
         }
     }
+
+    /// Checks that the floating-point value is:
+    ///     1. Finite (i.e. neither infinite nor NaN)
+    ///     2. Is in range of the target integer
+    /// then performs the cast to the target type
+    pub fn codegen_float_to_int_unchecked(
+        &mut self,
+        intrinsic: &str,
+        expr: Expr,
+        ty: Ty,
+        place: &Place,
+        res_ty: Ty,
+        loc: Location,
+    ) -> Stmt {
+        let finite_check = self.codegen_assert_assume(
+            expr.clone().is_finite(),
+            PropertyClass::ArithmeticOverflow,
+            format!("{intrinsic}: attempt to convert a non-finite value to an integer").as_str(),
+            loc,
+        );
+
+        assert!(res_ty.kind().is_integral());
+        assert!(ty.kind().is_float());
+        let TyKind::RigidTy(integral_ty) = res_ty.kind() else {
+            panic!(
+                "Expected intrinsic `{}` type to be `RigidTy`, but found: `{:?}`",
+                intrinsic, res_ty
+            );
+        };
+        let TyKind::RigidTy(RigidTy::Float(float_type)) = ty.kind() else {
+            panic!("Expected intrinsic `{}` type to be `Float`, but found: `{:?}`", intrinsic, ty);
+        };
+        let mm = self.symbol_table.machine_model();
+        let (min, max) = match integral_ty {
+            RigidTy::Uint(uint_ty) => get_lower_upper_uint_expr(float_type, uint_ty, mm),
+            RigidTy::Int(int_ty) => get_lower_upper_int_expr(float_type, int_ty, mm),
+            _ => unreachable!(),
+        };
+
+        let int_type = self.codegen_ty_stable(res_ty);
+        let range_check = self.codegen_assert_assume(
+            expr.clone().gt(min).and(expr.clone().lt(max)),
+            PropertyClass::ArithmeticOverflow,
+            format!("{intrinsic}: attempt to convert a value out of range of the target integer")
+                .as_str(),
+            loc,
+        );
+
+        let cast = expr.cast_to(int_type);
+
+        Stmt::block(
+            vec![finite_check, range_check, self.codegen_expr_to_place_stable(place, cast, loc)],
+            loc,
+        )
+    }
 }
 
 fn instance_args(instance: &Instance) -> GenericArgs {
@@ -1928,4 +1992,151 @@ fn instance_args(instance: &Instance) -> GenericArgs {
         )
     };
     args
+}
+
+fn get_lower_upper_uint_expr(
+    float_ty: FloatTy,
+    uint_ty: UintTy,
+    mm: &MachineModel,
+) -> (Expr, Expr) {
+    match float_ty {
+        FloatTy::F32 => {
+            let (lower, upper) = get_lower_upper_f32_uint(uint_ty, mm);
+            (Expr::float_constant(lower), Expr::float_constant(upper))
+        }
+        FloatTy::F64 => {
+            let (lower, upper) = get_lower_upper_f64_uint(uint_ty, mm);
+            (Expr::double_constant(lower), Expr::double_constant(upper))
+        }
+        _ => unimplemented!(),
+    }
+}
+
+fn get_lower_upper_int_expr(float_ty: FloatTy, int_ty: IntTy, mm: &MachineModel) -> (Expr, Expr) {
+    match float_ty {
+        FloatTy::F32 => {
+            let (lower, upper) = get_lower_upper_f32_int(int_ty, mm);
+            (Expr::float_constant(lower), Expr::float_constant(upper))
+        }
+        FloatTy::F64 => {
+            let (lower, upper) = get_lower_upper_f64_int(int_ty, mm);
+            (Expr::double_constant(lower), Expr::double_constant(upper))
+        }
+        _ => unimplemented!(),
+    }
+}
+
+/// upper is the smallest `f32` that after truncation is strictly larger than u<N>::MAX
+/// lower is the largest `f32` that after truncation is strictly smaller than u<N>::MIN
+///
+/// For example, for N = 8, upper is 256.0 because the previous f32 (i.e.
+/// `256_f32.next_down()` which is 255.9999847412109375) when truncated is 255.0,
+/// which is not strictly larger than `u8::MAX`
+///
+/// For all bit-widths, lower is -1.0 because the next higher number, when
+/// truncated is -0.0 (or 0.0) which is not strictly smaller than `u<N>::MIN`
+fn get_lower_upper_f32_uint(uint_ty: UintTy, mm: &MachineModel) -> (f32, f32) {
+    let lower: f32 = -1.0;
+    let upper: f32 = match uint_ty {
+        UintTy::U8 => (1u128 << 8) as f32,   // 256.0
+        UintTy::U16 => (1u128 << 16) as f32, // 65536.0
+        UintTy::U32 => (1u128 << 32) as f32, // 4294967296.0
+        UintTy::U64 => (1u128 << 64) as f32, // 18446744073709551616.0
+        UintTy::U128 => f32::INFINITY,       // all f32's fit in u128!
+        UintTy::Usize => match mm.pointer_width {
+            32 => (1u128 << 32) as f32,
+            64 => (1u128 << 64) as f32,
+            _ => unreachable!(),
+        },
+    };
+    (lower, upper)
+}
+
+fn get_lower_upper_f64_uint(uint_ty: UintTy, mm: &MachineModel) -> (f64, f64) {
+    let lower = -1.0;
+    let upper = match uint_ty {
+        UintTy::U8 => (1u128 << 8) as f64,
+        UintTy::U16 => (1u128 << 16) as f64,
+        UintTy::U32 => (1u128 << 32) as f64,
+        UintTy::U64 => (1u128 << 64) as f64,
+        UintTy::U128 => unimplemented!(),
+        UintTy::Usize => match mm.pointer_width {
+            32 => (1u128 << 32) as f64,
+            64 => (1u128 << 64) as f64,
+            _ => unreachable!(),
+        },
+    };
+    (lower, upper)
+}
+
+/// upper is the smallest `f32` that after truncation is strictly larger than i<N>::MAX
+/// lower is the largest `f32` that after truncation is strictly smaller than i<N>::MIN
+///
+/// For example, for N = 16, upper is 32768.0 because the previous f32 (i.e.
+/// `32768_f32.next_down()`) when truncated is 32767,
+/// which is not strictly larger than `i16::MAX`
+///
+/// Note that all upper bound values are computed using bit-shifts because all
+/// those values can be precisely represented in f32 (verified using
+/// https://www.h-schmidt.net/FloatConverter/IEEE754.html)
+/// However, for lower bound values, which should be -2^(w-1)-1 (i.e.
+/// i<N>::MIN-1), not all of them can be represented in f32.
+/// For instance, for w = 32, -2^(31)-1 = -2,147,483,649, but this number does
+/// **not** have an f32 representation, and the next **smaller** number is
+/// -2,147,483,904. Note that CBMC for example uses the formula above which
+/// leads to bugs, e.g.: https://github.com/diffblue/cbmc/issues/8488
+fn get_lower_upper_f32_int(int_ty: IntTy, mm: &MachineModel) -> (f32, f32) {
+    let lower = match int_ty {
+        IntTy::I8 => -129.0,
+        IntTy::I16 => -32769.0,
+        IntTy::I32 => -2147483904.0,
+        IntTy::I64 => -9223373136366403584.0,
+        IntTy::I128 => -170141203742878835383357727663135391744.0,
+        IntTy::Isize => match mm.pointer_width {
+            32 => -2147483904.0,
+            64 => -9223373136366403584.0,
+            _ => unreachable!(),
+        },
+    };
+    let upper = match int_ty {
+        IntTy::I8 => (1u128 << 7) as f32,   // 128.0
+        IntTy::I16 => (1u128 << 15) as f32, // 32768.0
+        IntTy::I32 => (1u128 << 31) as f32, // 2147483648.0
+        IntTy::I64 => (1u128 << 63) as f32, // 9223372036854775808.0
+        IntTy::I128 => (1u128 << 127) as f32,
+        IntTy::Isize => match mm.pointer_width {
+            32 => (1u128 << 31) as f32,
+            64 => (1u128 << 63) as f32,
+            _ => unreachable!(),
+        },
+    };
+    (lower, upper)
+}
+
+fn get_lower_upper_f64_int(int_ty: IntTy, mm: &MachineModel) -> (f64, f64) {
+    let lower = match int_ty {
+        IntTy::I8 => -129.0,
+        IntTy::I16 => -32769.0,
+        IntTy::I32 => -2147483649.0,
+        IntTy::I64 => -9223372036854777856.0,
+        IntTy::I128 => unimplemented!(),
+        IntTy::Isize => match mm.pointer_width {
+            32 => -2147483649.0,
+            64 => -9223372036854777856.0,
+            _ => unreachable!(),
+        },
+    };
+    let upper = match int_ty {
+        IntTy::I8 => (1u128 << 7) as f64,
+        IntTy::I16 => (1u128 << 15) as f64,
+        IntTy::I32 => (1u128 << 31) as f64,
+        IntTy::I64 => (1u128 << 63) as f64,
+        IntTy::I128 => (1u128 << 127) as f64,
+        IntTy::Isize => match mm.pointer_width {
+            32 => (1u128 << 31) as f64,
+            64 => (1u128 << 63) as f64,
+            _ => unreachable!(),
+        },
+    };
+    (lower, upper)
 }
