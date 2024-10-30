@@ -410,7 +410,8 @@
 //!                            kani::internal::apply_closure(|result|
 //!                              (remember_kani_internal_2e780b148d45b5c8) == * ptr,
 //!                              &result_kani_internal
-//!                         ),
+//!                             ),
+//!                         "The contract's postcondition is reachable.");
 //!                         kani::assert(kani::internal::apply_closure(|result|
 //!                                     (remember_kani_internal_92cc419d8aca576c) == *ptr,
 //!                                 &result_kani_internal), "|result| old(*ptr + 1) == *ptr");
@@ -418,7 +419,8 @@
 //!                            kani::internal::apply_closure(|result|
 //!                              (remember_kani_internal_2e780b148d45b5c8) == * ptr,
 //!                              &result_kani_internal
-//!                         ),
+//!                             ),
+//!                         "The contract's postcondition is reachable.");
 //!                         kani::assert(kani::internal::apply_closure(|result|
 //!                                     (remember_kani_internal_92cc419d8aca576c) == *ptr,
 //!                                 &result_kani_internal), "|result| old(*ptr + 1) == *ptr");
