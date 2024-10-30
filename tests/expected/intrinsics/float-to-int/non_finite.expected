@@ -1,0 +1,5 @@
+Failed Checks: float_to_int_unchecked: attempt to convert a non-finite value to an integer
+Verification failed for - check_neg_inf
+Verification failed for - check_inf
+Verification failed for - check_nan
+Complete - 0 successfully verified harnesses, 3 failures, 3 total.
