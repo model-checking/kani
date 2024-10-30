@@ -2,11 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Zfunction-contracts
 
-// Test `conver_contract` functionality, which fails verification for a vacuous precondition
+// Test `cover_contract` functionality, which fails verification for an unsatisfiable precondition
 // or unreachable postcondition.
 // See https://github.com/model-checking/kani/issues/2793
 
-// Vacuous precondition; separate requires clauses
+// Test that verification fails for unsatisfiable preconditions.
+
+// Unsatisfiable precondition; separate requires clauses.
+// The postcondition is unreachable because of the unsatisfiable precondition.
 #[kani::requires(a > 5)]
 #[kani::requires(a < 4)]
 #[kani::ensures(|result: &u32| *result == a)]
@@ -20,7 +23,8 @@ fn prove_separate_requires() {
     separate_requires(x);
 }
 
-// Vacuous precondition; single requires clause
+// Unsatisfiable precondition; single requires clause
+// The postcondition is unreachable because of the unsatisfiable precondition.
 #[kani::requires(a > 5 && a < 4)]
 #[kani::ensures(|result: &u32| *result == a)]
 fn conjoined_requires(a: u32) -> u32 {

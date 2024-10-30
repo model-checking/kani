@@ -513,7 +513,7 @@ pub fn postprocess_result(properties: Vec<Property>, extra_ptr_checks: bool) -> 
     let updated_properties =
         update_properties_with_reach_status(properties_filtered, has_fundamental_failures);
     let results_after_code_coverage = update_results_of_code_coverage_checks(updated_properties);
-    update_results_of_cover_checks(results_after_code_coverage)
+    update_results_of_cover_checks(results_after_code_coverage, has_failed_unwinding_asserts)
 }
 
 /// Determines if there is property with status `FAILURE` and the given description
@@ -649,8 +649,15 @@ fn update_results_of_code_coverage_checks(mut properties: Vec<Property>) -> Vec<
 /// `update_properties_with_reach_status` is called beforehand
 ///
 /// Although regular cover properties do not fail verification, contract cover properties do.
-/// If the assert(!cond) fails as expected, succeed; otherwise, fail.
-fn update_results_of_cover_checks(mut properties: Vec<Property>) -> Vec<Property> {
+/// If the assert(!cond) is unreachable or successful, then fail.
+/// Also fail if the status is undetermined and there are failed unwinding asserts; if we didn't unwind enough,
+/// we know that the postcondition is unreachable.
+/// If the status is undetermined for another reason (e.g., unsupported constructs), leave the result as undetermined.
+/// If the status is failure (as expected), succeed.
+fn update_results_of_cover_checks(
+    mut properties: Vec<Property>,
+    has_failed_unwinding_asserts: bool,
+) -> Vec<Property> {
     for prop in properties.iter_mut() {
         if prop.is_cover_property() {
             if prop.status == CheckStatus::Success {
@@ -661,7 +668,7 @@ fn update_results_of_cover_checks(mut properties: Vec<Property>) -> Vec<Property
         } else if prop.is_contract_cover_property() {
             if prop.status == CheckStatus::Unreachable
                 || prop.status == CheckStatus::Success
-                || prop.status == CheckStatus::Undetermined
+                || (prop.status == CheckStatus::Undetermined && has_failed_unwinding_asserts)
             {
                 prop.status = CheckStatus::Failure;
             } else if prop.status == CheckStatus::Failure {

@@ -326,7 +326,7 @@
 //!                                let mut __kani_check_modify =
 //!                                    ||
 //!                                        {
-//!                                            kani::assume(divisor != 0);
+//!                                            kani::assume(*ptr < 100);
 //!                                            kani::internal::contract_cover(*ptr < 100, "The contract's precondition is satisfiable.");
 //!                                            let remember_kani_internal_92cc419d8aca576c = *ptr + 1;
 //!                                            let remember_kani_internal_92cc419d8aca576c = *ptr + 1;
@@ -395,6 +395,8 @@
 //!             let mut __kani_check_modify =
 //!                 ||
 //!                     {
+//!                         kani::assume(*ptr < 100);
+//!                         kani::internal::contract_cover(*ptr < 100, "The contract's precondition is satisfiable.");
 //!                         let remember_kani_internal_92cc419d8aca576c = *ptr + 1;
 //!                         let remember_kani_internal_92cc419d8aca576c = *ptr + 1;
 //!                         let _wrapper_arg = (ptr as *const _,);
