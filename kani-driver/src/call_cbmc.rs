@@ -13,7 +13,9 @@ use std::path::Path;
 use std::process::Command;
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
+use tokio::process::Command as TokioCommand;
 
+use crate::args::common::Verbosity;
 use crate::args::{OutputFormat, VerificationArgs};
 use crate::cbmc_output_parser::{
     CheckStatus, Property, VerificationOutput, extract_results, process_cbmc_output,
@@ -22,6 +24,7 @@ use crate::cbmc_property_renderer::{format_coverage, format_result, kani_cbmc_ou
 use crate::coverage::cov_results::{CoverageCheck, CoverageResults};
 use crate::coverage::cov_results::{CoverageRegion, CoverageTerm};
 use crate::session::KaniSession;
+use crate::util::render_command;
 
 /// We will use Cadical by default since it performed better than MiniSAT in our analysis.
 /// Note: Kissat was marginally better, but it is an external solver which could be more unstable.
@@ -45,6 +48,15 @@ pub enum FailedProperties {
     Other,
 }
 
+/// The possible CBMC exit statuses
+#[derive(Clone, Copy, Debug)]
+pub enum ExitStatus {
+    Timeout,
+    OutOfMemory,
+    /// the integer is the process exit status
+    Other(i32),
+}
+
 /// Our (kani-driver) notions of CBMC results.
 #[derive(Debug)]
 pub struct VerificationResult {
@@ -56,7 +68,7 @@ pub struct VerificationResult {
     /// Note: CBMC process exit status is only potentially useful if `status` is `Failure`.
     /// Kani will see CBMC report "failure" that's actually success (interpreting "failed"
     /// checks like coverage as expected and desirable.)
-    pub results: Result<Vec<Property>, i32>,
+    pub results: Result<Vec<Property>, ExitStatus>,
     /// The runtime duration of this CBMC invocation.
     pub runtime: Duration,
     /// Whether concrete playback generated a test
@@ -71,13 +83,11 @@ impl KaniSession {
         let args: Vec<OsString> = self.cbmc_flags(file, harness)?;
 
         // TODO get cbmc path from self
-        let mut cmd = Command::new("cbmc");
+        let mut cmd = TokioCommand::new("cbmc");
         cmd.args(args);
 
-        let start_time = Instant::now();
-
         let verification_results = if self.args.output_format == crate::args::OutputFormat::Old {
-            if self.run_terminal(cmd).is_err() {
+            if self.run_terminal_timeout(cmd).is_err() {
                 VerificationResult::mock_failure()
             } else {
                 VerificationResult::mock_success()
@@ -87,18 +97,70 @@ impl KaniSession {
             // Done here because `--visualize` uses the XML format instead.
             cmd.arg("--json-ui");
 
-            // Spawn the CBMC process and process its output below
-            let cbmc_process =
-                self.run_piped(cmd).map_err(|_| anyhow::Error::msg("Failed to run cbmc"))?;
-            let output = process_cbmc_output(cbmc_process, |i| {
+            self.runtime.block_on(self.run_cbmc_piped(cmd, harness))?
+        };
+
+        Ok(verification_results)
+    }
+
+    async fn run_cbmc_piped(
+        &self,
+        mut cmd: TokioCommand,
+        harness: &HarnessMetadata,
+    ) -> Result<VerificationResult> {
+        if self.args.common_args.verbose() {
+            println!("[Kani] Running: `{}`", render_command(cmd.as_std()).to_string_lossy());
+        }
+        // Spawn the CBMC process and process its output below
+        let mut cbmc_process = cmd
+            .stdout(std::process::Stdio::piped())
+            .spawn()
+            .map_err(|_| anyhow::Error::msg("Failed to run cbmc"))?;
+
+        let start_time = Instant::now();
+
+        let res = if let Some(timeout) = self.args.harness_timeout {
+            tokio::time::timeout(
+                timeout.into(),
+                process_cbmc_output(&mut cbmc_process, |i| {
+                    kani_cbmc_output_filter(
+                        i,
+                        self.args.extra_pointer_checks,
+                        self.args.common_args.quiet,
+                        &self.args.output_format,
+                    )
+                }),
+            )
+            .await
+        } else {
+            Ok(process_cbmc_output(&mut cbmc_process, |i| {
                 kani_cbmc_output_filter(
                     i,
                     self.args.extra_pointer_checks,
                     self.args.common_args.quiet,
                     &self.args.output_format,
                 )
-            })?;
+            })
+            .await)
+        };
 
+        let verification_results = if res.is_err() {
+            // An error occurs if the timeout was reached
+
+            // Kill the process
+            cbmc_process.kill().await?;
+
+            VerificationResult {
+                status: VerificationStatus::Failure,
+                failed_properties: FailedProperties::None,
+                results: Err(ExitStatus::Timeout),
+                runtime: start_time.elapsed(),
+                generated_concrete_test: false,
+                coverage_results: None,
+            }
+        } else {
+            // The timeout wasn't reached
+            let output = res.unwrap()?;
             VerificationResult::from(output, harness.attributes.should_panic, start_time)
         };
 
@@ -293,10 +355,15 @@ impl VerificationResult {
             }
         } else {
             // We never got results from CBMC - something went wrong (e.g. crash) so it's failure
+            let exit_status = if output.process_status == 137 {
+                ExitStatus::OutOfMemory
+            } else {
+                ExitStatus::Other(output.process_status)
+            };
             VerificationResult {
                 status: VerificationStatus::Failure,
                 failed_properties: FailedProperties::Other,
-                results: Err(output.process_status),
+                results: Err(exit_status),
                 runtime,
                 generated_concrete_test: false,
                 coverage_results: None,
@@ -322,7 +389,7 @@ impl VerificationResult {
             // on failure, exit codes in theory might be used,
             // but `mock_failure` should never be used in a context where they will,
             // so again use something weird:
-            results: Err(42),
+            results: Err(ExitStatus::Other(42)),
             runtime: Duration::from_secs(0),
             generated_concrete_test: false,
             coverage_results: None,
@@ -353,15 +420,24 @@ impl VerificationResult {
             }
             Err(exit_status) => {
                 let verification_result = console::style("FAILED").red();
-                let explanation = if *exit_status == 137 {
-                    "CBMC appears to have run out of memory. You may want to rerun your proof in \
+                let (header, explanation) = match exit_status {
+                    ExitStatus::OutOfMemory => (
+                        String::from("CBMC failed"),
+                        "CBMC appears to have run out of memory. You may want to rerun your proof in \
                     an environment with additional memory or use stubbing to reduce the size of the \
-                    code the verifier reasons about.\n"
-                } else {
-                    ""
+                    code the verifier reasons about.\n",
+                    ),
+                    ExitStatus::Timeout => (
+                        String::from("CBMC failed"),
+                        "CBMC timed out. You may want to rerun your proof with a larger timeout \
+                    or use stubbing to reduce the size of the code the verifier reasons about.\n",
+                    ),
+                    ExitStatus::Other(exit_status) => {
+                        (format!("CBMC failed with status {exit_status}"), "")
+                    }
                 };
                 format!(
-                    "\nCBMC failed with status {exit_status}\n\
+                    "\n{header}\n\
                     VERIFICATION:- {verification_result}\n\
                     {explanation}",
                 )

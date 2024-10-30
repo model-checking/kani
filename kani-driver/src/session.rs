@@ -1,6 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+use crate::args::Timeout;
 use crate::args::VerificationArgs;
 use crate::args::common::Verbosity;
 use crate::util::render_command;
@@ -12,6 +13,7 @@ use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::Mutex;
 use std::time::Instant;
 use strum_macros::Display;
+use tokio::process::Command as TokioCommand;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::{EnvFilter, Registry, layer::SubscriberExt};
 
@@ -38,6 +40,9 @@ pub struct KaniSession {
 
     /// The temporary files we littered that need to be cleaned up at the end of execution
     pub temporaries: Mutex<Vec<PathBuf>>,
+
+    /// The tokio runtime
+    pub runtime: tokio::runtime::Runtime,
 }
 
 /// Represents where we detected Kani, with helper methods for using that information to find critical paths
@@ -61,6 +66,7 @@ impl KaniSession {
             kani_compiler: install.kani_compiler()?,
             kani_lib_c: install.kani_lib_c()?,
             temporaries: Mutex::new(vec![]),
+            runtime: tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap(),
         })
     }
 
@@ -111,6 +117,16 @@ impl KaniSession {
     /// Call [run_terminal] with the verbosity configured by the user.
     pub fn run_terminal(&self, cmd: Command) -> Result<()> {
         run_terminal(&self.args.common_args, cmd)
+    }
+
+    /// Call [run_terminal_timeout] with the verbosity configured by the user.
+    /// The `bool` value indicates whether the command timed out
+    pub fn run_terminal_timeout(&self, cmd: TokioCommand) -> Result<bool> {
+        self.runtime.block_on(run_terminal_timeout(
+            &self.args.common_args,
+            cmd,
+            self.args.harness_timeout,
+        ))
     }
 
     /// Call [run_suppress] with the verbosity configured by the user.
@@ -172,6 +188,49 @@ pub fn run_terminal(verbosity: &impl Verbosity, mut cmd: Command) -> Result<()> 
         bail!("{} exited with status {}", cmd.get_program().to_string_lossy(), result);
     }
     Ok(())
+}
+
+/// The `bool` value indicates whether the command timed out
+async fn run_terminal_timeout(
+    verbosity: &impl Verbosity,
+    mut cmd: TokioCommand,
+    timeout: Option<Timeout>,
+) -> Result<bool> {
+    if verbosity.quiet() {
+        cmd.stdout(std::process::Stdio::null());
+        cmd.stderr(std::process::Stdio::null());
+    }
+    if verbosity.verbose() {
+        println!("[Kani] Running: `{}`", render_command(&cmd.as_std()).to_string_lossy());
+    }
+    let program = cmd.as_std().get_program().to_string_lossy().to_string();
+    let result = with_timer(
+        verbosity,
+        || async {
+            if let Some(timeout) = timeout {
+                let mut child = cmd.spawn().unwrap();
+                let res = tokio::time::timeout(timeout.into(), child.wait()).await;
+                if res.is_err() {
+                    // Kill the process
+                    child.kill().await.unwrap();
+                }
+                res
+            } else {
+                Ok(cmd.status().await)
+            }
+        },
+        &program,
+    )
+    .await;
+    // outer result indicates whether the command timed out
+    if result.is_err() {
+        return Ok(true);
+    }
+    let result = result.unwrap().context(format!("Failed to invoke {program}"))?;
+    if !result.success() {
+        bail!("{} exited with status {}", cmd.as_std().get_program().to_string_lossy(), result);
+    }
+    Ok(false)
 }
 
 /// Run a job, but only output (unless --quiet) if it fails, and fail if there's a problem.
