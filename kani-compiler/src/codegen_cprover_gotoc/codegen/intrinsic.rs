@@ -2027,6 +2027,7 @@ const F32_U8_UPPER: [u8; 4] = [0x00, 0x00, 0x80, 0x43]; // 256.0
 const F32_U16_UPPER: [u8; 4] = [0x00, 0x00, 0x80, 0x47]; // 65536.0
 const F32_U32_UPPER: [u8; 4] = [0x00, 0x00, 0x80, 0x4F]; // 4294967296.0
 const F32_U64_UPPER: [u8; 4] = [0x00, 0x00, 0x80, 0x5F]; // 18446744073709551616.0
+// The largest f32 value fits in a u128, so there is no upper bound
 const F32_U128_UPPER: [u8; 4] = [0x00, 0x00, 0x80, 0x7F]; // inf
 
 const F32_I8_LOWER: [u8; 4] = [0x00, 0x00, 0x01, 0xC3]; // -129.0
@@ -2209,6 +2210,8 @@ mod tests {
         check_upper_f32!(F32_U32_UPPER, u32::MAX);
         check_upper_f32!(F32_U64_UPPER, u64::MAX);
         // 128 is not needed because the upper bounds is infinity
+        // Instead, check that `u128::MAX` is larger than the largest f32 value
+        assert!(f32::MAX < u128::MAX as f32);
 
         check_lower_f32!(F32_I8_LOWER, i8::MIN);
         check_lower_f32!(F32_I16_LOWER, i16::MIN);
