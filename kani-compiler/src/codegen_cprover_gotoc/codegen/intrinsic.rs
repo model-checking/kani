@@ -1929,7 +1929,7 @@ impl GotocCtx<'_> {
 
     /// Checks that the floating-point value is:
     ///     1. Finite (i.e. neither infinite nor NaN)
-    ///     2. Is in range of the target integer
+    ///     2. Its truncated value is in range of the target integer
     /// then performs the cast to the target type
     pub fn codegen_float_to_int_unchecked(
         &mut self,
