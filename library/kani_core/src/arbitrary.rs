@@ -193,6 +193,87 @@ macro_rules! generate_arbitrary {
         pub mod slice {
             kani_core::slice_generator!();
         }
+
+        mod range_structures {
+            use super::{
+                Arbitrary,
+                core_path::{
+                    mem,
+                    ops::{Bound, Range, RangeFrom, RangeInclusive, RangeTo, RangeToInclusive},
+                },
+            };
+
+            impl<T> Arbitrary for Bound<T>
+            where
+                T: Arbitrary,
+            {
+                fn any() -> Self {
+                    match u8::any() % 3 {
+                        0 => Bound::Included(T::any()),
+                        1 => Bound::Excluded(T::any()),
+                        _ => Bound::Unbounded,
+                    }
+                }
+            }
+
+            impl<T> Arbitrary for Range<T>
+            where
+                T: Arbitrary + PartialOrd,
+            {
+                fn any() -> Self {
+                    let (mut first, mut second) = (T::any(), T::any());
+                    adjust(&mut first, &mut second);
+                    first..second
+                }
+            }
+
+            impl<T> Arbitrary for RangeFrom<T>
+            where
+                T: Arbitrary,
+            {
+                fn any() -> Self {
+                    T::any()..
+                }
+            }
+
+            impl<T> Arbitrary for RangeInclusive<T>
+            where
+                T: Arbitrary + PartialOrd,
+            {
+                fn any() -> Self {
+                    let (mut first, mut second) = (T::any(), T::any());
+                    adjust(&mut first, &mut second);
+                    first..=second
+                }
+            }
+
+            impl<T> Arbitrary for RangeTo<T>
+            where
+                T: Arbitrary,
+            {
+                fn any() -> Self {
+                    ..T::any()
+                }
+            }
+
+            impl<T> Arbitrary for RangeToInclusive<T>
+            where
+                T: Arbitrary,
+            {
+                fn any() -> Self {
+                    ..=T::any()
+                }
+            }
+
+            fn adjust<T>(first: &mut T, second: &mut T)
+            where
+                T: PartialOrd,
+            {
+                if first > second {
+                    mem::swap(first, second);
+                }
+            }
+        }
     };
 }
 
