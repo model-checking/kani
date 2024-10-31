@@ -1959,21 +1959,21 @@ impl GotocCtx<'_> {
             panic!("Expected intrinsic `{}` type to be `Float`, but found: `{:?}`", intrinsic, ty);
         };
         let mm = self.symbol_table.machine_model();
-        let (min, max) = match integral_ty {
+        let (lower, upper) = match integral_ty {
             RigidTy::Uint(uint_ty) => get_bounds_uint_expr(float_type, uint_ty, mm),
             RigidTy::Int(int_ty) => get_bounds_int_expr(float_type, int_ty, mm),
             _ => unreachable!(),
         };
 
-        let int_type = self.codegen_ty_stable(res_ty);
         let range_check = self.codegen_assert_assume(
-            expr.clone().gt(min).and(expr.clone().lt(max)),
+            expr.clone().gt(lower).and(expr.clone().lt(upper)),
             PropertyClass::ArithmeticOverflow,
             format!("{intrinsic}: attempt to convert a value out of range of the target integer")
                 .as_str(),
             loc,
         );
 
+        let int_type = self.codegen_ty_stable(res_ty);
         let cast = expr.cast_to(int_type);
 
         Stmt::block(
@@ -2022,6 +2022,42 @@ fn get_bounds_int_expr(float_ty: FloatTy, int_ty: IntTy, mm: &MachineModel) -> (
     }
 }
 
+const F32_U_LOWER: [u8; 4] = [0x00, 0x00, 0x80, 0xBF]; // -1.0
+const F32_U8_UPPER: [u8; 4] = [0x00, 0x00, 0x80, 0x43]; // 256.0
+const F32_U16_UPPER: [u8; 4] = [0x00, 0x00, 0x80, 0x47]; // 65536.0
+const F32_U32_UPPER: [u8; 4] = [0x00, 0x00, 0x80, 0x4F]; // 4294967296.0
+const F32_U64_UPPER: [u8; 4] = [0x00, 0x00, 0x80, 0x5F]; // 18446744073709551616.0
+const F32_U128_UPPER: [u8; 4] = [0x00, 0x00, 0x80, 0x7F]; // inf
+
+const F32_I8_LOWER: [u8; 4] = [0x00, 0x00, 0x01, 0xC3]; // -129.0
+const F32_I16_LOWER: [u8; 4] = [0x00, 0x01, 0x00, 0xC7]; // -32769.0
+const F32_I32_LOWER: [u8; 4] = [0x01, 0x00, 0x00, 0xCF]; // -2147483904.0
+const F32_I64_LOWER: [u8; 4] = [0x01, 0x00, 0x00, 0xDF]; // -9223373136366403584.0
+const F32_I128_LOWER: [u8; 4] = [0x01, 0x00, 0x00, 0xFF]; // -170141203742878835383357727663135391744.0
+const F32_I8_UPPER: [u8; 4] = [0x00, 0x00, 0x00, 0x43]; // 128.0
+const F32_I16_UPPER: [u8; 4] = [0x00, 0x00, 0x00, 0x47]; // 32768.0
+const F32_I32_UPPER: [u8; 4] = [0x00, 0x00, 0x00, 0x4F]; // 2147483648.0
+const F32_I64_UPPER: [u8; 4] = [0x00, 0x00, 0x00, 0x5F]; // 9223372036854775808.0
+const F32_I128_UPPER: [u8; 4] = [0x00, 0x00, 0x00, 0x7F]; // 170141183460469231731687303715884105728.0
+
+const F64_U_LOWER: [u8; 8] = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF0, 0xBF]; // -1.0
+const F64_U8_UPPER: [u8; 8] = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x70, 0x40]; // 256.0
+const F64_U16_UPPER: [u8; 8] = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF0, 0x40]; // 65536.0
+const F64_U32_UPPER: [u8; 8] = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF0, 0x41]; // 4294967296.0
+const F64_U64_UPPER: [u8; 8] = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF0, 0x43]; // 18446744073709551616.0
+const F64_U128_UPPER: [u8; 8] = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF0, 0x47]; // 340282366920938463463374607431768211456.0
+
+const F64_I8_LOWER: [u8; 8] = [0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0x60, 0xC0]; // -129.0
+const F64_I16_LOWER: [u8; 8] = [0x00, 0x00, 0x00, 0x00, 0x20, 0x00, 0xE0, 0xC0]; // -32769.0
+const F64_I32_LOWER: [u8; 8] = [0x00, 0x00, 0x20, 0x00, 0x00, 0x00, 0xE0, 0xC1]; // -2147483649.0
+const F64_I64_LOWER: [u8; 8] = [0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0xE0, 0xC3]; // -9223372036854777856.0
+const F64_I128_LOWER: [u8; 8] = [0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0xE0, 0xC7]; // -170141183460469269510619166673045815296.0
+const F64_I8_UPPER: [u8; 8] = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x60, 0x40]; // 128.0
+const F64_I16_UPPER: [u8; 8] = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xE0, 0x40]; // 32768.0
+const F64_I32_UPPER: [u8; 8] = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xE0, 0x41]; // 2147483648.0
+const F64_I64_UPPER: [u8; 8] = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xE0, 0x43]; // 9223372036854775808.0
+const F64_I128_UPPER: [u8; 8] = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xE0, 0x47]; // 170141183460469231731687303715884105728.0
+
 /// upper is the smallest `f32` that after truncation is strictly larger than u<N>::MAX
 /// lower is the largest `f32` that after truncation is strictly smaller than u<N>::MIN
 ///
@@ -2032,16 +2068,16 @@ fn get_bounds_int_expr(float_ty: FloatTy, int_ty: IntTy, mm: &MachineModel) -> (
 /// For all bit-widths, lower is -1.0 because the next higher number, when
 /// truncated is -0.0 (or 0.0) which is not strictly smaller than `u<N>::MIN`
 fn get_bounds_f32_uint(uint_ty: UintTy, mm: &MachineModel) -> (f32, f32) {
-    let lower: f32 = -1.0;
+    let lower: f32 = f32::from_le_bytes(F32_U_LOWER);
     let upper: f32 = match uint_ty {
-        UintTy::U8 => (1u128 << 8) as f32,   // 256.0
-        UintTy::U16 => (1u128 << 16) as f32, // 65536.0
-        UintTy::U32 => (1u128 << 32) as f32, // 4294967296.0
-        UintTy::U64 => (1u128 << 64) as f32, // 18446744073709551616.0
-        UintTy::U128 => f32::INFINITY,       // all f32's fit in u128!
+        UintTy::U8 => f32::from_le_bytes(F32_U8_UPPER),
+        UintTy::U16 => f32::from_le_bytes(F32_U16_UPPER),
+        UintTy::U32 => f32::from_le_bytes(F32_U32_UPPER),
+        UintTy::U64 => f32::from_le_bytes(F32_U64_UPPER),
+        UintTy::U128 => f32::from_le_bytes(F32_U128_UPPER),
         UintTy::Usize => match mm.pointer_width {
-            32 => (1u128 << 32) as f32,
-            64 => (1u128 << 64) as f32,
+            32 => f32::from_le_bytes(F32_U32_UPPER),
+            64 => f32::from_le_bytes(F32_U64_UPPER),
             _ => unreachable!(),
         },
     };
@@ -2049,16 +2085,16 @@ fn get_bounds_f32_uint(uint_ty: UintTy, mm: &MachineModel) -> (f32, f32) {
 }
 
 fn get_bounds_f64_uint(uint_ty: UintTy, mm: &MachineModel) -> (f64, f64) {
-    let lower = -1.0;
+    let lower = f64::from_le_bytes(F64_U_LOWER);
     let upper = match uint_ty {
-        UintTy::U8 => (1u128 << 8) as f64,
-        UintTy::U16 => (1u128 << 16) as f64,
-        UintTy::U32 => (1u128 << 32) as f64,
-        UintTy::U64 => (1u128 << 64) as f64,
-        UintTy::U128 => 340282366920938463463374607431768211456.0,
+        UintTy::U8 => f64::from_le_bytes(F64_U8_UPPER),
+        UintTy::U16 => f64::from_le_bytes(F64_U16_UPPER),
+        UintTy::U32 => f64::from_le_bytes(F64_U32_UPPER),
+        UintTy::U64 => f64::from_le_bytes(F64_U64_UPPER),
+        UintTy::U128 => f64::from_le_bytes(F64_U128_UPPER),
         UintTy::Usize => match mm.pointer_width {
-            32 => (1u128 << 32) as f64,
-            64 => (1u128 << 64) as f64,
+            32 => f64::from_le_bytes(F64_U32_UPPER),
+            64 => f64::from_le_bytes(F64_U64_UPPER),
             _ => unreachable!(),
         },
     };
@@ -2072,8 +2108,8 @@ fn get_bounds_f64_uint(uint_ty: UintTy, mm: &MachineModel) -> (f64, f64) {
 /// `32768_f32.next_down()`) when truncated is 32767,
 /// which is not strictly larger than `i16::MAX`
 ///
-/// Note that all upper bound values are computed using bit-shifts because all
-/// those values can be precisely represented in f32 (verified using
+/// Note that all upper bound values are 2^(w-1) which can be precisely
+/// represented in f32 (verified using
 /// https://www.h-schmidt.net/FloatConverter/IEEE754.html)
 /// However, for lower bound values, which should be -2^(w-1)-1 (i.e.
 /// i<N>::MIN-1), not all of them can be represented in f32.
@@ -2083,26 +2119,27 @@ fn get_bounds_f64_uint(uint_ty: UintTy, mm: &MachineModel) -> (f64, f64) {
 /// leads to bugs, e.g.: https://github.com/diffblue/cbmc/issues/8488
 fn get_bounds_f32_int(int_ty: IntTy, mm: &MachineModel) -> (f32, f32) {
     let lower = match int_ty {
-        IntTy::I8 => -129.0,
-        IntTy::I16 => -32769.0,
-        IntTy::I32 => -2147483904.0,
-        IntTy::I64 => -9223373136366403584.0,
-        IntTy::I128 => -170141203742878835383357727663135391744.0,
+        IntTy::I8 => f32::from_le_bytes(F32_I8_LOWER),
+        IntTy::I16 => f32::from_le_bytes(F32_I16_LOWER),
+        IntTy::I32 => f32::from_le_bytes(F32_I32_LOWER),
+        IntTy::I64 => f32::from_le_bytes(F32_I64_LOWER),
+        IntTy::I128 => f32::from_le_bytes(F32_I128_LOWER),
         IntTy::Isize => match mm.pointer_width {
-            32 => -2147483904.0,
-            64 => -9223373136366403584.0,
+            32 => f32::from_le_bytes(F32_I32_LOWER),
+            64 => f32::from_le_bytes(F32_I64_LOWER),
             _ => unreachable!(),
         },
     };
+
     let upper = match int_ty {
-        IntTy::I8 => (1u128 << 7) as f32,     // 128.0
-        IntTy::I16 => (1u128 << 15) as f32,   // 32768.0
-        IntTy::I32 => (1u128 << 31) as f32,   // 2147483648.0
-        IntTy::I64 => (1u128 << 63) as f32,   // 9223372036854775808.0
-        IntTy::I128 => (1u128 << 127) as f32, // 170141183460469231731687303715884105728.0
+        IntTy::I8 => f32::from_le_bytes(F32_I8_UPPER),
+        IntTy::I16 => f32::from_le_bytes(F32_I16_UPPER),
+        IntTy::I32 => f32::from_le_bytes(F32_I32_UPPER),
+        IntTy::I64 => f32::from_le_bytes(F32_I64_UPPER),
+        IntTy::I128 => f32::from_le_bytes(F32_I128_UPPER),
         IntTy::Isize => match mm.pointer_width {
-            32 => (1u128 << 31) as f32,
-            64 => (1u128 << 63) as f32,
+            32 => f32::from_le_bytes(F32_I32_UPPER),
+            64 => f32::from_le_bytes(F32_I64_UPPER),
             _ => unreachable!(),
         },
     };
@@ -2111,26 +2148,26 @@ fn get_bounds_f32_int(int_ty: IntTy, mm: &MachineModel) -> (f32, f32) {
 
 fn get_bounds_f64_int(int_ty: IntTy, mm: &MachineModel) -> (f64, f64) {
     let lower = match int_ty {
-        IntTy::I8 => -129.0,
-        IntTy::I16 => -32769.0,
-        IntTy::I32 => -2147483649.0,
-        IntTy::I64 => -9223372036854777856.0,
-        IntTy::I128 => -170141183460469269510619166673045815296.0,
+        IntTy::I8 => f64::from_le_bytes(F64_I8_LOWER),
+        IntTy::I16 => f64::from_le_bytes(F64_I16_LOWER),
+        IntTy::I32 => f64::from_le_bytes(F64_I32_LOWER),
+        IntTy::I64 => f64::from_le_bytes(F64_I64_LOWER),
+        IntTy::I128 => f64::from_le_bytes(F64_I128_LOWER),
         IntTy::Isize => match mm.pointer_width {
-            32 => -2147483649.0,
-            64 => -9223372036854777856.0,
+            32 => f64::from_le_bytes(F64_I32_LOWER),
+            64 => f64::from_le_bytes(F64_I64_LOWER),
             _ => unreachable!(),
         },
     };
     let upper = match int_ty {
-        IntTy::I8 => (1u128 << 7) as f64,
-        IntTy::I16 => (1u128 << 15) as f64,
-        IntTy::I32 => (1u128 << 31) as f64,
-        IntTy::I64 => (1u128 << 63) as f64,
-        IntTy::I128 => (1u128 << 127) as f64,
+        IntTy::I8 => f64::from_le_bytes(F64_I8_UPPER),
+        IntTy::I16 => f64::from_le_bytes(F64_I16_UPPER),
+        IntTy::I32 => f64::from_le_bytes(F64_I32_UPPER),
+        IntTy::I64 => f64::from_le_bytes(F64_I64_UPPER),
+        IntTy::I128 => f64::from_le_bytes(F64_I128_UPPER),
         IntTy::Isize => match mm.pointer_width {
-            32 => (1u128 << 31) as f64,
-            64 => (1u128 << 63) as f64,
+            32 => f64::from_le_bytes(F64_I32_UPPER),
+            64 => f64::from_le_bytes(F64_I64_UPPER),
             _ => unreachable!(),
         },
     };
@@ -2139,140 +2176,93 @@ fn get_bounds_f64_int(int_ty: IntTy, mm: &MachineModel) -> (f64, f64) {
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
+    use super::*;
+    use num::BigInt;
+    use num::FromPrimitive;
 
-    /// Checks that the given decimal string value has a f32 representation
-    /// (i.e. it can be converted to a f32 without loss of precision)
-    fn has_f32_representation(value: &str) -> bool {
-        // only works for values containing a decimal point
-        assert!(value.contains('.'));
-        // convert to a f32
-        println!("{value}");
-        let f32_value = f32::from_str(value).unwrap();
-        // convert the f32 to a string with full precision
-        let f32_string = format!("{f32_value:.32}");
-        assert!(f32_string.contains('.'));
-        // trim zeros from both strings
-        let f32_string = f32_string.trim_end_matches('0');
-        let value = value.trim_end_matches('0');
-        // compare the strings
-        f32_string == value
+    macro_rules! check_lower_f32 {
+        ($val:ident, $min:expr) => {
+            let f = f32::from_le_bytes($val);
+            assert!(BigInt::from_f32(f.trunc()).unwrap() < BigInt::from($min));
+            assert!(BigInt::from_f32(f.next_up().trunc()).unwrap() >= BigInt::from($min));
+        };
+    }
+
+    macro_rules! check_upper_f32 {
+        ($val:ident, $max:expr) => {
+            let f = f32::from_le_bytes($val);
+            assert!(BigInt::from_f32(f.trunc()).unwrap() > BigInt::from($max));
+            assert!(BigInt::from_f32(f.next_down().trunc()).unwrap() <= BigInt::from($max));
+        };
     }
 
     #[test]
-    fn check_value_has_f32_representation() {
-        // sanity check the function
-        assert!(has_f32_representation("1.0"));
-        // the closest f32 is 4294967296.0
-        assert!(!has_f32_representation("4294967295.0"));
-    }
-
-    #[test]
-    fn check_f32_uint_bounds_representation() {
-        // check that all lower and upper bounds for the unsigned types are
-        // exactly representable in f32
-        assert!(has_f32_representation("-1.0"));
-        assert!(has_f32_representation("256.0"));
-        assert!(has_f32_representation("65536.0"));
-        assert!(has_f32_representation("4294967296.0"));
-        assert!(has_f32_representation("18446744073709551616.0"));
-    }
-
-    #[test]
-    fn check_f32_int_bounds_representation() {
-        // check that all lower and upper bounds for the signed types are
-        // exactly representable in f32
-        assert!(has_f32_representation("-129.0"));
-        assert!(has_f32_representation("-32769.0"));
-        assert!(has_f32_representation("-2147483904.0"));
-        assert!(has_f32_representation("-9223373136366403584.0"));
-        assert!(has_f32_representation("-170141203742878835383357727663135391744.0"));
-        assert!(has_f32_representation("128.0"));
-        assert!(has_f32_representation("32768.0"));
-        assert!(has_f32_representation("2147483648.0"));
-        assert!(has_f32_representation("9223372036854775808.0"));
-        assert!(has_f32_representation("170141183460469231731687303715884105728.0"));
-    }
-
-    /// Checks that the given decimal string value has a f64 representation
-    /// (i.e. it can be converted to a f64 without loss of precision)
-    fn has_f64_representation(value: &str) -> bool {
-        // only works for values containing a decimal point
-        assert!(value.contains('.'));
-        // convert to a f64
-        println!("{value}");
-        let f64_value = f64::from_str(value).unwrap();
-        // convert the f64 to a string with full precision
-        let f64_string = format!("{f64_value:.64}");
-        assert!(f64_string.contains('.'));
-        // trim zeros from both strings
-        let f64_string = f64_string.trim_end_matches('0');
-        let value = value.trim_end_matches('0');
-        // compare the strings
-        f64_string == value
-    }
-
-    #[test]
-    fn check_value_has_f64_representation() {
-        // sanity check the function
-        assert!(has_f64_representation("1.0"));
-        assert!(has_f64_representation("4294967295.0"));
-    }
-
-    #[test]
-    fn check_f64_uint_bounds_representation() {
-        // check that all lower and upper bounds for the unsigned types are
-        // exactly representable in f64
-        assert!(has_f64_representation("-1.0"));
-        assert!(has_f64_representation("256.0"));
-        assert!(has_f64_representation("65536.0"));
-        assert!(has_f64_representation("4294967296.0"));
-        assert!(has_f64_representation("18446744073709551616.0"));
-        assert!(has_f64_representation("340282366920938463463374607431768211456.0"));
-    }
-
-    #[test]
-    fn check_f64_int_bounds_representation() {
-        // check that all lower and upper bounds for the signed types are
-        // exactly representable in f64
-        assert!(has_f64_representation("-129.0"));
-        assert!(has_f64_representation("-32769.0"));
-        assert!(has_f64_representation("-2147483649.0"));
-        assert!(has_f64_representation("-9223372036854777856.0"));
-        assert!(has_f64_representation("-170141183460469269510619166673045815296.0"));
-        assert!(has_f64_representation("128.0"));
-        assert!(has_f64_representation("32768.0"));
-        assert!(has_f64_representation("2147483648.0"));
-        assert!(has_f64_representation("9223372036854775808.0"));
-        assert!(has_f64_representation("170141183460469231731687303715884105728.0"));
-    }
-
-    #[test]
-    fn check_f32_uint_bounds() {
+    fn check_f32_bounds() {
         // check that the bounds are correct, i.e. that for lower (upper) bounds:
-        //   1. the value when truncated is strictly smaller (larger) than u<N>::MIN (u<N>::MAX)
-        //   2. the next higher (lower) value when truncated is greater (smaller) than or equal to u<N>::MIN (u<N>::MAX)
+        //   1. the value when truncated is strictly smaller (larger) than {i, u}<N>::MIN ({i, u}<N>::MAX)
+        //   2. the next higher (lower) value when truncated is greater (smaller) than or equal to {i, u}<N>::MIN ({i, u}<N>::MAX)
 
-        let uint_lower: f32 = -1.0;
-        assert!((uint_lower.trunc() as i128) < 0);
-        assert!((uint_lower.next_up().trunc() as i128) >= 0);
+        check_lower_f32!(F32_U_LOWER, u8::MIN);
 
-        let u8_upper: f32 = 256.0;
-        assert!((u8_upper.trunc() as u128) > u8::MAX as u128);
-        assert!((u8_upper.next_down().trunc() as u128) <= u8::MAX as u128);
+        check_upper_f32!(F32_U8_UPPER, u8::MAX);
+        check_upper_f32!(F32_U16_UPPER, u16::MAX);
+        check_upper_f32!(F32_U32_UPPER, u32::MAX);
+        check_upper_f32!(F32_U64_UPPER, u64::MAX);
+        // 128 is not needed because the upper bounds is infinity
 
-        let u16_upper: f32 = 65536.0;
-        assert!((u16_upper.trunc() as u128) > u16::MAX as u128);
-        assert!((u16_upper.next_down().trunc() as u128) <= u16::MAX as u128);
+        check_lower_f32!(F32_I8_LOWER, i8::MIN);
+        check_lower_f32!(F32_I16_LOWER, i16::MIN);
+        check_lower_f32!(F32_I32_LOWER, i32::MIN);
+        check_lower_f32!(F32_I64_LOWER, i64::MIN);
+        check_lower_f32!(F32_I128_LOWER, i128::MIN);
 
-        let u32_upper: f32 = 4294967296.0;
-        assert!((u32_upper.trunc() as u128) > u32::MAX as u128);
-        assert!((u32_upper.next_down().trunc() as u128) <= u32::MAX as u128);
+        check_upper_f32!(F32_I8_UPPER, i8::MAX);
+        check_upper_f32!(F32_I16_UPPER, i16::MAX);
+        check_upper_f32!(F32_I32_UPPER, i32::MAX);
+        check_upper_f32!(F32_I64_UPPER, i64::MAX);
+        check_upper_f32!(F32_I128_UPPER, i128::MAX);
+    }
 
-        let u64_upper: f32 = 18446744073709551616.0;
-        assert!((u64_upper.trunc() as u128) > u64::MAX as u128);
-        assert!((u64_upper.next_down().trunc() as u128) <= u64::MAX as u128);
+    macro_rules! check_lower_f64 {
+        ($val:ident, $min:expr) => {
+            let f = f64::from_le_bytes($val);
+            assert!(BigInt::from_f64(f.trunc()).unwrap() < BigInt::from($min));
+            assert!(BigInt::from_f64(f.next_up().trunc()).unwrap() >= BigInt::from($min));
+        };
+    }
 
-        // TODO: use BigInt for u128 or perhaps for all values
+    macro_rules! check_upper_f64 {
+        ($val:ident, $max:expr) => {
+            let f = f64::from_le_bytes($val);
+            assert!(BigInt::from_f64(f.trunc()).unwrap() > BigInt::from($max));
+            assert!(BigInt::from_f64(f.next_down().trunc()).unwrap() <= BigInt::from($max));
+        };
+    }
+
+    #[test]
+    fn check_f64_bounds() {
+        // check that the bounds are correct, i.e. that for lower (upper) bounds:
+        //   1. the value when truncated is strictly smaller (larger) than {i, u}<N>::MIN ({i, u}<N>::MAX)
+        //   2. the next higher (lower) value when truncated is greater (smaller) than or equal to {i, u}<N>::MIN ({i, u}<N>::MAX)
+
+        check_lower_f64!(F64_U_LOWER, u8::MIN);
+
+        check_upper_f64!(F64_U8_UPPER, u8::MAX);
+        check_upper_f64!(F64_U16_UPPER, u16::MAX);
+        check_upper_f64!(F64_U32_UPPER, u32::MAX);
+        check_upper_f64!(F64_U64_UPPER, u64::MAX);
+        check_upper_f64!(F64_U128_UPPER, u128::MAX);
+
+        check_lower_f64!(F64_I8_LOWER, i8::MIN);
+        check_lower_f64!(F64_I16_LOWER, i16::MIN);
+        check_lower_f64!(F64_I32_LOWER, i32::MIN);
+        check_lower_f64!(F64_I64_LOWER, i64::MIN);
+        check_lower_f64!(F64_I128_LOWER, i128::MIN);
+
+        check_upper_f64!(F64_I8_UPPER, i8::MAX);
+        check_upper_f64!(F64_I16_UPPER, i16::MAX);
+        check_upper_f64!(F64_I32_UPPER, i32::MAX);
+        check_upper_f64!(F64_I64_UPPER, i64::MAX);
+        check_upper_f64!(F64_I128_UPPER, i128::MAX);
     }
 }
