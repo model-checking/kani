@@ -38,12 +38,12 @@ fn check_f64_to_int_unchecked() {
     check_float_to_int_unchecked!(f64, u16);
     check_float_to_int_unchecked!(f64, u32);
     check_float_to_int_unchecked!(f64, u64);
-    //check_float_to_int_unchecked!(f64, u128);
+    check_float_to_int_unchecked!(f64, u128);
     check_float_to_int_unchecked!(f64, usize);
     check_float_to_int_unchecked!(f64, i8);
     check_float_to_int_unchecked!(f64, i16);
     check_float_to_int_unchecked!(f64, i32);
     check_float_to_int_unchecked!(f64, i64);
-    //check_float_to_int_unchecked!(f64, i128);
+    check_float_to_int_unchecked!(f64, i128);
     check_float_to_int_unchecked!(f64, isize);
 }

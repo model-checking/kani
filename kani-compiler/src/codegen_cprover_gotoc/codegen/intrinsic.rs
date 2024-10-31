@@ -1960,8 +1960,8 @@ impl GotocCtx<'_> {
         };
         let mm = self.symbol_table.machine_model();
         let (min, max) = match integral_ty {
-            RigidTy::Uint(uint_ty) => get_lower_upper_uint_expr(float_type, uint_ty, mm),
-            RigidTy::Int(int_ty) => get_lower_upper_int_expr(float_type, int_ty, mm),
+            RigidTy::Uint(uint_ty) => get_bounds_uint_expr(float_type, uint_ty, mm),
+            RigidTy::Int(int_ty) => get_bounds_int_expr(float_type, int_ty, mm),
             _ => unreachable!(),
         };
 
@@ -1994,32 +1994,28 @@ fn instance_args(instance: &Instance) -> GenericArgs {
     args
 }
 
-fn get_lower_upper_uint_expr(
-    float_ty: FloatTy,
-    uint_ty: UintTy,
-    mm: &MachineModel,
-) -> (Expr, Expr) {
+fn get_bounds_uint_expr(float_ty: FloatTy, uint_ty: UintTy, mm: &MachineModel) -> (Expr, Expr) {
     match float_ty {
         FloatTy::F32 => {
-            let (lower, upper) = get_lower_upper_f32_uint(uint_ty, mm);
+            let (lower, upper) = get_bounds_f32_uint(uint_ty, mm);
             (Expr::float_constant(lower), Expr::float_constant(upper))
         }
         FloatTy::F64 => {
-            let (lower, upper) = get_lower_upper_f64_uint(uint_ty, mm);
+            let (lower, upper) = get_bounds_f64_uint(uint_ty, mm);
             (Expr::double_constant(lower), Expr::double_constant(upper))
         }
         _ => unimplemented!(),
     }
 }
 
-fn get_lower_upper_int_expr(float_ty: FloatTy, int_ty: IntTy, mm: &MachineModel) -> (Expr, Expr) {
+fn get_bounds_int_expr(float_ty: FloatTy, int_ty: IntTy, mm: &MachineModel) -> (Expr, Expr) {
     match float_ty {
         FloatTy::F32 => {
-            let (lower, upper) = get_lower_upper_f32_int(int_ty, mm);
+            let (lower, upper) = get_bounds_f32_int(int_ty, mm);
             (Expr::float_constant(lower), Expr::float_constant(upper))
         }
         FloatTy::F64 => {
-            let (lower, upper) = get_lower_upper_f64_int(int_ty, mm);
+            let (lower, upper) = get_bounds_f64_int(int_ty, mm);
             (Expr::double_constant(lower), Expr::double_constant(upper))
         }
         _ => unimplemented!(),
@@ -2035,7 +2031,7 @@ fn get_lower_upper_int_expr(float_ty: FloatTy, int_ty: IntTy, mm: &MachineModel)
 ///
 /// For all bit-widths, lower is -1.0 because the next higher number, when
 /// truncated is -0.0 (or 0.0) which is not strictly smaller than `u<N>::MIN`
-fn get_lower_upper_f32_uint(uint_ty: UintTy, mm: &MachineModel) -> (f32, f32) {
+fn get_bounds_f32_uint(uint_ty: UintTy, mm: &MachineModel) -> (f32, f32) {
     let lower: f32 = -1.0;
     let upper: f32 = match uint_ty {
         UintTy::U8 => (1u128 << 8) as f32,   // 256.0
@@ -2052,14 +2048,14 @@ fn get_lower_upper_f32_uint(uint_ty: UintTy, mm: &MachineModel) -> (f32, f32) {
     (lower, upper)
 }
 
-fn get_lower_upper_f64_uint(uint_ty: UintTy, mm: &MachineModel) -> (f64, f64) {
+fn get_bounds_f64_uint(uint_ty: UintTy, mm: &MachineModel) -> (f64, f64) {
     let lower = -1.0;
     let upper = match uint_ty {
         UintTy::U8 => (1u128 << 8) as f64,
         UintTy::U16 => (1u128 << 16) as f64,
         UintTy::U32 => (1u128 << 32) as f64,
         UintTy::U64 => (1u128 << 64) as f64,
-        UintTy::U128 => unimplemented!(),
+        UintTy::U128 => 340282366920938463463374607431768211456.0,
         UintTy::Usize => match mm.pointer_width {
             32 => (1u128 << 32) as f64,
             64 => (1u128 << 64) as f64,
@@ -2085,7 +2081,7 @@ fn get_lower_upper_f64_uint(uint_ty: UintTy, mm: &MachineModel) -> (f64, f64) {
 /// **not** have an f32 representation, and the next **smaller** number is
 /// -2,147,483,904. Note that CBMC for example uses the formula above which
 /// leads to bugs, e.g.: https://github.com/diffblue/cbmc/issues/8488
-fn get_lower_upper_f32_int(int_ty: IntTy, mm: &MachineModel) -> (f32, f32) {
+fn get_bounds_f32_int(int_ty: IntTy, mm: &MachineModel) -> (f32, f32) {
     let lower = match int_ty {
         IntTy::I8 => -129.0,
         IntTy::I16 => -32769.0,
@@ -2099,11 +2095,11 @@ fn get_lower_upper_f32_int(int_ty: IntTy, mm: &MachineModel) -> (f32, f32) {
         },
     };
     let upper = match int_ty {
-        IntTy::I8 => (1u128 << 7) as f32,   // 128.0
-        IntTy::I16 => (1u128 << 15) as f32, // 32768.0
-        IntTy::I32 => (1u128 << 31) as f32, // 2147483648.0
-        IntTy::I64 => (1u128 << 63) as f32, // 9223372036854775808.0
-        IntTy::I128 => (1u128 << 127) as f32,
+        IntTy::I8 => (1u128 << 7) as f32,     // 128.0
+        IntTy::I16 => (1u128 << 15) as f32,   // 32768.0
+        IntTy::I32 => (1u128 << 31) as f32,   // 2147483648.0
+        IntTy::I64 => (1u128 << 63) as f32,   // 9223372036854775808.0
+        IntTy::I128 => (1u128 << 127) as f32, // 170141183460469231731687303715884105728.0
         IntTy::Isize => match mm.pointer_width {
             32 => (1u128 << 31) as f32,
             64 => (1u128 << 63) as f32,
@@ -2113,13 +2109,13 @@ fn get_lower_upper_f32_int(int_ty: IntTy, mm: &MachineModel) -> (f32, f32) {
     (lower, upper)
 }
 
-fn get_lower_upper_f64_int(int_ty: IntTy, mm: &MachineModel) -> (f64, f64) {
+fn get_bounds_f64_int(int_ty: IntTy, mm: &MachineModel) -> (f64, f64) {
     let lower = match int_ty {
         IntTy::I8 => -129.0,
         IntTy::I16 => -32769.0,
         IntTy::I32 => -2147483649.0,
         IntTy::I64 => -9223372036854777856.0,
-        IntTy::I128 => unimplemented!(),
+        IntTy::I128 => -170141183460469269510619166673045815296.0,
         IntTy::Isize => match mm.pointer_width {
             32 => -2147483649.0,
             64 => -9223372036854777856.0,
@@ -2139,4 +2135,144 @@ fn get_lower_upper_f64_int(int_ty: IntTy, mm: &MachineModel) -> (f64, f64) {
         },
     };
     (lower, upper)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    /// Checks that the given decimal string value has a f32 representation
+    /// (i.e. it can be converted to a f32 without loss of precision)
+    fn has_f32_representation(value: &str) -> bool {
+        // only works for values containing a decimal point
+        assert!(value.contains('.'));
+        // convert to a f32
+        println!("{value}");
+        let f32_value = f32::from_str(value).unwrap();
+        // convert the f32 to a string with full precision
+        let f32_string = format!("{f32_value:.32}");
+        assert!(f32_string.contains('.'));
+        // trim zeros from both strings
+        let f32_string = f32_string.trim_end_matches('0');
+        let value = value.trim_end_matches('0');
+        // compare the strings
+        f32_string == value
+    }
+
+    #[test]
+    fn check_value_has_f32_representation() {
+        // sanity check the function
+        assert!(has_f32_representation("1.0"));
+        // the closest f32 is 4294967296.0
+        assert!(!has_f32_representation("4294967295.0"));
+    }
+
+    #[test]
+    fn check_f32_uint_bounds_representation() {
+        // check that all lower and upper bounds for the unsigned types are
+        // exactly representable in f32
+        assert!(has_f32_representation("-1.0"));
+        assert!(has_f32_representation("256.0"));
+        assert!(has_f32_representation("65536.0"));
+        assert!(has_f32_representation("4294967296.0"));
+        assert!(has_f32_representation("18446744073709551616.0"));
+    }
+
+    #[test]
+    fn check_f32_int_bounds_representation() {
+        // check that all lower and upper bounds for the signed types are
+        // exactly representable in f32
+        assert!(has_f32_representation("-129.0"));
+        assert!(has_f32_representation("-32769.0"));
+        assert!(has_f32_representation("-2147483904.0"));
+        assert!(has_f32_representation("-9223373136366403584.0"));
+        assert!(has_f32_representation("-170141203742878835383357727663135391744.0"));
+        assert!(has_f32_representation("128.0"));
+        assert!(has_f32_representation("32768.0"));
+        assert!(has_f32_representation("2147483648.0"));
+        assert!(has_f32_representation("9223372036854775808.0"));
+        assert!(has_f32_representation("170141183460469231731687303715884105728.0"));
+    }
+
+    /// Checks that the given decimal string value has a f64 representation
+    /// (i.e. it can be converted to a f64 without loss of precision)
+    fn has_f64_representation(value: &str) -> bool {
+        // only works for values containing a decimal point
+        assert!(value.contains('.'));
+        // convert to a f64
+        println!("{value}");
+        let f64_value = f64::from_str(value).unwrap();
+        // convert the f64 to a string with full precision
+        let f64_string = format!("{f64_value:.64}");
+        assert!(f64_string.contains('.'));
+        // trim zeros from both strings
+        let f64_string = f64_string.trim_end_matches('0');
+        let value = value.trim_end_matches('0');
+        // compare the strings
+        f64_string == value
+    }
+
+    #[test]
+    fn check_value_has_f64_representation() {
+        // sanity check the function
+        assert!(has_f64_representation("1.0"));
+        assert!(has_f64_representation("4294967295.0"));
+    }
+
+    #[test]
+    fn check_f64_uint_bounds_representation() {
+        // check that all lower and upper bounds for the unsigned types are
+        // exactly representable in f64
+        assert!(has_f64_representation("-1.0"));
+        assert!(has_f64_representation("256.0"));
+        assert!(has_f64_representation("65536.0"));
+        assert!(has_f64_representation("4294967296.0"));
+        assert!(has_f64_representation("18446744073709551616.0"));
+        assert!(has_f64_representation("340282366920938463463374607431768211456.0"));
+    }
+
+    #[test]
+    fn check_f64_int_bounds_representation() {
+        // check that all lower and upper bounds for the signed types are
+        // exactly representable in f64
+        assert!(has_f64_representation("-129.0"));
+        assert!(has_f64_representation("-32769.0"));
+        assert!(has_f64_representation("-2147483649.0"));
+        assert!(has_f64_representation("-9223372036854777856.0"));
+        assert!(has_f64_representation("-170141183460469269510619166673045815296.0"));
+        assert!(has_f64_representation("128.0"));
+        assert!(has_f64_representation("32768.0"));
+        assert!(has_f64_representation("2147483648.0"));
+        assert!(has_f64_representation("9223372036854775808.0"));
+        assert!(has_f64_representation("170141183460469231731687303715884105728.0"));
+    }
+
+    #[test]
+    fn check_f32_uint_bounds() {
+        // check that the bounds are correct, i.e. that for lower (upper) bounds:
+        //   1. the value when truncated is strictly smaller (larger) than u<N>::MIN (u<N>::MAX)
+        //   2. the next higher (lower) value when truncated is greater (smaller) than or equal to u<N>::MIN (u<N>::MAX)
+
+        let uint_lower: f32 = -1.0;
+        assert!((uint_lower.trunc() as i128) < 0);
+        assert!((uint_lower.next_up().trunc() as i128) >= 0);
+
+        let u8_upper: f32 = 256.0;
+        assert!((u8_upper.trunc() as u128) > u8::MAX as u128);
+        assert!((u8_upper.next_down().trunc() as u128) <= u8::MAX as u128);
+
+        let u16_upper: f32 = 65536.0;
+        assert!((u16_upper.trunc() as u128) > u16::MAX as u128);
+        assert!((u16_upper.next_down().trunc() as u128) <= u16::MAX as u128);
+
+        let u32_upper: f32 = 4294967296.0;
+        assert!((u32_upper.trunc() as u128) > u32::MAX as u128);
+        assert!((u32_upper.next_down().trunc() as u128) <= u32::MAX as u128);
+
+        let u64_upper: f32 = 18446744073709551616.0;
+        assert!((u64_upper.trunc() as u128) > u64::MAX as u128);
+        assert!((u64_upper.next_down().trunc() as u128) <= u64::MAX as u128);
+
+        // TODO: use BigInt for u128 or perhaps for all values
+    }
 }
