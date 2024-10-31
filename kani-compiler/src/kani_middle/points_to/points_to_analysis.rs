@@ -96,7 +96,7 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
         // and solves the dataflow problem, producing the cursor, which contains dataflow state for
         // each instruction in the body.
         let mut cursor =
-            analysis.into_engine(tcx, body).iterate_to_fixpoint().into_results_cursor(body);
+            analysis.iterate_to_fixpoint(tcx, body, Some(Self::NAME)).into_results_cursor(body);
         // We collect dataflow state at each `Return` terminator to determine the full aliasing
         // graph for the function. This is sound since those are the only places where the function
         // finishes, so the dataflow state at those places will be a union of dataflow states
