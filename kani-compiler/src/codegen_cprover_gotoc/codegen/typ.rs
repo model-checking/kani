@@ -18,8 +18,8 @@ use rustc_middle::ty::{List, TypeFoldable};
 use rustc_smir::rustc_internal;
 use rustc_span::def_id::DefId;
 use rustc_target::abi::{
-    Abi::Vector, FieldIdx, FieldsShape, Float, Integer, LayoutData, Primitive, Size, TagEncoding,
-    TyAndLayout, VariantIdx, Variants,
+    BackendRepr::Vector, FieldIdx, FieldsShape, Float, Integer, LayoutData, Primitive, Size,
+    TagEncoding, TyAndLayout, VariantIdx, Variants,
 };
 use stable_mir::abi::{ArgAbi, FnAbi, PassMode};
 use stable_mir::mir::Body;
@@ -1451,7 +1451,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     fn codegen_vector(&mut self, ty: Ty<'tcx>) -> Type {
-        let layout = &self.layout_of(ty).layout.abi();
+        let layout = &self.layout_of(ty).layout.backend_repr();
         debug! {"handling simd with layout {:?}", layout};
 
         let (element, size) = match layout {
