@@ -721,7 +721,7 @@ impl GotocCtx<'_> {
 
         // For all intrinsics we first check `is_uninhabited` to give a more
         // precise error message
-        if layout.abi.is_uninhabited() {
+        if layout.backend_repr.is_uninhabited() {
             return self.codegen_fatal_error(
                 PropertyClass::SafetyCheck,
                 &format!(
