@@ -208,7 +208,7 @@ macro_rules! generate_arbitrary {
                 T: Arbitrary,
             {
                 fn any() -> Self {
-                    match u8::any() % 3 {
+                    match u8::any() {
                         0 => Bound::Included(T::any()),
                         1 => Bound::Excluded(T::any()),
                         _ => Bound::Unbounded,
@@ -218,12 +218,10 @@ macro_rules! generate_arbitrary {
 
             impl<T> Arbitrary for Range<T>
             where
-                T: Arbitrary + PartialOrd,
+                T: Arbitrary,
             {
                 fn any() -> Self {
-                    let (mut first, mut second) = (T::any(), T::any());
-                    adjust(&mut first, &mut second);
-                    first..second
+                    T::any()..T::any()
                 }
             }
 
@@ -238,12 +236,10 @@ macro_rules! generate_arbitrary {
 
             impl<T> Arbitrary for RangeInclusive<T>
             where
-                T: Arbitrary + PartialOrd,
+                T: Arbitrary,
             {
                 fn any() -> Self {
-                    let (mut first, mut second) = (T::any(), T::any());
-                    adjust(&mut first, &mut second);
-                    first..=second
+                    T::any()..=T::any()
                 }
             }
 
@@ -262,15 +258,6 @@ macro_rules! generate_arbitrary {
             {
                 fn any() -> Self {
                     ..=T::any()
-                }
-            }
-
-            fn adjust<T>(first: &mut T, second: &mut T)
-            where
-                T: PartialOrd,
-            {
-                if first > second {
-                    mem::swap(first, second);
                 }
             }
         }
