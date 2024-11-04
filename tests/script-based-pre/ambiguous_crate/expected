@@ -1,0 +1,15 @@
+Complete - 1 successfully verified harnesses, 0 failures, 1 total\
+No package is needed
+
+Complete - 1 successfully verified harnesses, 0 failures, 1 total\
+But passing the correct package works
+
+error: There are multiple `zerocopy` packages in your project, and the specification `zerocopy` is ambiguous.
+Please re-run this command with one of the following specifications:
+  zerocopy@0.0.1
+  zerocopy@0.8.4
+error: Failed to retrieve information for `zerocopy`
+Found expected ambiguous crate error
+
+error: The following specified packages were not found in this workspace: `zerocopy@0.8.4`
+Found expected out of workspace error

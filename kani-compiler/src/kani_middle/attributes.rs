@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! This module contains code for processing Rust attributes (like `kani::proof`).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 use kani_metadata::{CbmcSolver, HarnessAttributes, HarnessKind, Stub};
 use quote::ToTokens;
@@ -140,7 +140,7 @@ pub struct ContractAttributes {
     pub modifies_wrapper: Symbol,
 }
 
-impl<'tcx> std::fmt::Debug for KaniAttributes<'tcx> {
+impl std::fmt::Debug for KaniAttributes<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("KaniAttributes")
             .field("item", &self.tcx.def_path_debug_str(self.item))
@@ -474,6 +474,20 @@ impl<'tcx> KaniAttributes<'tcx> {
             || self.map.contains_key(&KaniAttributeKind::ProofForContract)
     }
 
+    /// Check that the function specified in the `proof_for_contract` attribute
+    /// is reachable and emit an error if it isn't
+    pub fn check_proof_for_contract(&self, reachable_functions: &HashSet<DefId>) {
+        if let Some((symbol, function, span)) = self.interpret_for_contract_attribute() {
+            if !reachable_functions.contains(&function) {
+                let err_msg = format!(
+                    "The function specified in the `proof_for_contract` attribute, `{symbol}`, was not found.\
+                    \nMake sure the function is reachable from the harness."
+                );
+                self.tcx.dcx().span_err(span, err_msg);
+            }
+        }
+    }
+
     /// Extract harness attributes for a given `def_id`.
     ///
     /// We only extract attributes for harnesses that are local to the current crate.
@@ -726,7 +740,7 @@ struct UnstableAttrParseError<'a> {
     attr: &'a Attribute,
 }
 
-impl<'a> UnstableAttrParseError<'a> {
+impl UnstableAttrParseError<'_> {
     /// Report the error in a friendly format.
     fn report(&self, tcx: TyCtxt) -> ErrorGuaranteed {
         tcx.dcx()

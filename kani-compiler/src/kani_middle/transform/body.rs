@@ -59,6 +59,11 @@ impl MutableBody {
         self.arg_count
     }
 
+    #[allow(dead_code)]
+    pub fn var_debug_info(&self) -> &Vec<VarDebugInfo> {
+        &self.var_debug_info
+    }
+
     /// Create a mutable body from the original MIR body.
     pub fn from(body: Body) -> Self {
         MutableBody {
@@ -428,6 +433,15 @@ impl MutableBody {
         self.blocks.push(BasicBlock { statements: Vec::default(), terminator })
     }
 
+    /// Replace statements from the given basic block
+    pub fn replace_statements(
+        &mut self,
+        source_instruction: &SourceInstruction,
+        new_stmts: Vec<Statement>,
+    ) {
+        self.blocks.get_mut(source_instruction.bb()).unwrap().statements = new_stmts;
+    }
+
     /// Replace a terminator from the given basic block
     pub fn replace_terminator(
         &mut self,
@@ -559,7 +573,7 @@ pub trait MutMirVisitor {
             StatementKind::Assign(_, rvalue) => {
                 self.visit_rvalue(rvalue);
             }
-            StatementKind::Intrinsic(intrisic) => match intrisic {
+            StatementKind::Intrinsic(intrinsic) => match intrinsic {
                 NonDivergingIntrinsic::Assume(operand) => {
                     self.visit_operand(operand);
                 }

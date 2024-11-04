@@ -3,15 +3,16 @@
 //! This module handles Kani metadata generation. For example, generating HarnessMetadata for a
 //! given function.
 
+use std::collections::HashMap;
 use std::path::Path;
 
-use crate::kani_middle::attributes::test_harness_name;
+use crate::kani_middle::attributes::{KaniAttributes, test_harness_name};
+use crate::kani_middle::{SourceLocation, stable_fn_def};
+use kani_metadata::ContractedFunction;
 use kani_metadata::{ArtifactType, HarnessAttributes, HarnessKind, HarnessMetadata};
 use rustc_middle::ty::TyCtxt;
-use stable_mir::CrateDef;
 use stable_mir::mir::mono::Instance;
-
-use super::{SourceLocation, attributes::KaniAttributes};
+use stable_mir::{CrateDef, CrateItems, DefId};
 
 /// Create the harness metadata for a proof harness for a given function.
 pub fn gen_proof_metadata(tcx: TyCtxt, instance: Instance, base_name: &Path) -> HarnessMetadata {
@@ -38,6 +39,48 @@ pub fn gen_proof_metadata(tcx: TyCtxt, instance: Instance, base_name: &Path) -> 
         goto_file: Some(model_file),
         contract: Default::default(),
     }
+}
+
+/// Collects contract and contract harness metadata.
+///
+/// For each function with contracts (or that is a target of a contract harness),
+/// construct a `ContractedFunction` object for it.
+pub fn gen_contracts_metadata(tcx: TyCtxt) -> Vec<ContractedFunction> {
+    // We work with `stable_mir::CrateItem` instead of `stable_mir::Instance` to include generic items
+    let crate_items: CrateItems = stable_mir::all_local_items();
+
+    let mut fn_to_data: HashMap<DefId, ContractedFunction> = HashMap::new();
+
+    for item in crate_items {
+        let function = item.name();
+        let file = SourceLocation::new(item.span()).filename;
+        let attributes = KaniAttributes::for_def_id(tcx, item.def_id());
+
+        if attributes.has_contract() {
+            fn_to_data.insert(item.def_id(), ContractedFunction {
+                function,
+                file,
+                harnesses: vec![],
+            });
+        } else if let Some((target_name, internal_def_id, _)) =
+            attributes.interpret_for_contract_attribute()
+        {
+            let target_def_id = stable_fn_def(tcx, internal_def_id)
+                .expect("The target of a proof for contract should be a function definition")
+                .def_id();
+            if let Some(cf) = fn_to_data.get_mut(&target_def_id) {
+                cf.harnesses.push(function);
+            } else {
+                fn_to_data.insert(target_def_id, ContractedFunction {
+                    function: target_name.to_string(),
+                    file,
+                    harnesses: vec![function],
+                });
+            }
+        }
+    }
+
+    fn_to_data.into_values().collect()
 }
 
 /// Create the harness metadata for a test description.

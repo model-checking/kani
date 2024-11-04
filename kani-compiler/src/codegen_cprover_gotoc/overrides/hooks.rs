@@ -10,11 +10,14 @@
 
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::codegen_cprover_gotoc::codegen::{PropertyClass, bb_label};
+use crate::kani_middle::attributes::KaniAttributes;
 use crate::kani_middle::attributes::matches_diagnostic as matches_function;
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
+use cbmc::goto_program::CIntType;
 use cbmc::goto_program::{BuiltinFn, Expr, Stmt, Type};
 use rustc_middle::ty::TyCtxt;
 use rustc_smir::rustc_internal;
+use rustc_span::Symbol;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{BasicBlockIdx, Place};
 use stable_mir::{CrateDef, ty::Span};
@@ -539,6 +542,53 @@ impl GotocHook for InitContracts {
     }
 }
 
+/// A loop contract register function call is assumed to be
+/// 1. of form `kani_register_loop_contract(inv)` where `inv`
+///    is the closure wrapping loop invariants
+/// 2. is the last statement in some loop, so that its `target`` is
+///    the head of the loop
+///
+/// Such call will be translate to
+/// ```c
+/// goto target
+/// ```
+/// with loop invariants (call to the register function) annotated as
+/// a named sub of the `goto`.
+pub struct LoopInvariantRegister;
+
+impl GotocHook for LoopInvariantRegister {
+    fn hook_applies(&self, tcx: TyCtxt, instance: Instance) -> bool {
+        KaniAttributes::for_instance(tcx, instance).fn_marker()
+            == Some(Symbol::intern("kani_register_loop_contract"))
+    }
+
+    fn handle(
+        &self,
+        gcx: &mut GotocCtx,
+        instance: Instance,
+        fargs: Vec<Expr>,
+        _assign_to: &Place,
+        target: Option<BasicBlockIdx>,
+        span: Span,
+    ) -> Stmt {
+        let loc = gcx.codegen_span_stable(span);
+        let func_exp = gcx.codegen_func_expr(instance, loc);
+        // Add `free(0)` to make sure the body of `free` won't be dropped to
+        // satisfy the requirement of DFCC.
+        Stmt::block(
+            vec![
+                BuiltinFn::Free
+                    .call(vec![Expr::pointer_constant(0, Type::void_pointer())], loc)
+                    .as_stmt(loc),
+                Stmt::goto(bb_label(target.unwrap()), loc).with_loop_contracts(
+                    func_exp.call(fargs).cast_to(Type::CInteger(CIntType::Bool)),
+                ),
+            ],
+            loc,
+        )
+    }
+}
+
 pub fn fn_hooks() -> GotocHooks {
     GotocHooks {
         hooks: vec![
@@ -555,6 +605,7 @@ pub fn fn_hooks() -> GotocHooks {
             Rc::new(MemCmp),
             Rc::new(UntrackedDeref),
             Rc::new(InitContracts),
+            Rc::new(LoopInvariantRegister),
         ],
     }
 }

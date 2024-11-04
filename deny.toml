@@ -8,11 +8,6 @@
 db-path = "~/.cargo/advisory-db"
 db-urls = ["https://github.com/rustsec/advisory-db"]
 yanked = "deny"
-# A list of advisory IDs to ignore. Note that ignored advisories will still
-# output a note when they are encountered.
-ignore = [
-    #"RUSTSEC-0000-0000",
-]
 
 # This section is considered when running `cargo deny check licenses`
 # More documentation for the licenses section can be found here:
@@ -21,6 +16,7 @@ ignore = [
 allow = [
     "MIT",
     "Apache-2.0",
+    "MPL-2.0",
 ]
 confidence-threshold = 0.8
 
@@ -46,4 +42,3 @@ wildcards = "allow"
 unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
-allow-git = []

@@ -245,7 +245,7 @@ struct MonoItemsFnCollector<'a, 'tcx> {
     body: &'a Body,
 }
 
-impl<'a, 'tcx> MonoItemsFnCollector<'a, 'tcx> {
+impl MonoItemsFnCollector<'_, '_> {
     /// Collect the implementation of all trait methods and its supertrait methods for the given
     /// concrete type.
     fn collect_vtable_methods(&mut self, concrete_ty: Ty, trait_ty: Ty) {
@@ -350,7 +350,7 @@ impl<'a, 'tcx> MonoItemsFnCollector<'a, 'tcx> {
 /// 6. Static Initialization
 ///
 /// Remark: This code has been mostly taken from `rustc_monomorphize::collector::MirNeighborCollector`.
-impl<'a, 'tcx> MirVisitor for MonoItemsFnCollector<'a, 'tcx> {
+impl MirVisitor for MonoItemsFnCollector<'_, '_> {
     /// Collect the following:
     /// - Trait implementations when casting from concrete to dyn Trait.
     /// - Functions / Closures that have their address taken.

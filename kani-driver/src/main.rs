@@ -12,6 +12,7 @@ use args_toml::join_args;
 
 use crate::args::StandaloneSubcommand;
 use crate::concrete_playback::playback::{playback_cargo, playback_standalone};
+use crate::list::collect_metadata::{list_cargo, list_standalone};
 use crate::project::Project;
 use crate::session::KaniSession;
 use crate::version::print_kani_version;
@@ -33,6 +34,7 @@ mod cbmc_property_renderer;
 mod concrete_playback;
 mod coverage;
 mod harness_runner;
+mod list;
 mod metadata;
 mod project;
 mod session;
@@ -67,6 +69,10 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
     let args = args::CargoKaniArgs::parse_from(&input_args);
     check_is_valid(&args);
 
+    if let Some(CargoKaniSubcommand::List(args)) = args.command {
+        return list_cargo(*args);
+    }
+
     let session = session::KaniSession::new(args.verify_opts)?;
 
     if !session.args.common_args.quiet {
@@ -80,6 +86,7 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
         Some(CargoKaniSubcommand::Playback(args)) => {
             return playback_cargo(*args);
         }
+        Some(CargoKaniSubcommand::List(_)) => unreachable!(),
         None => {}
     }
 
@@ -98,6 +105,7 @@ fn standalone_main() -> Result<()> {
 
     let (session, project) = match args.command {
         Some(StandaloneSubcommand::Playback(args)) => return playback_standalone(*args),
+        Some(StandaloneSubcommand::List(args)) => return list_standalone(*args),
         Some(StandaloneSubcommand::VerifyStd(args)) => {
             let session = KaniSession::new(args.verify_opts)?;
             if !session.args.common_args.quiet {

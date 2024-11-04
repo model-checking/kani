@@ -35,6 +35,9 @@
 //! the address matches `NonNull::<()>::dangling()`.
 //! The way Kani tracks provenance is not enough to check if the address was the result of a cast
 //! from a non-zero integer literal.
+//!
+// TODO: This module is currently tightly coupled with CBMC's memory model, and it needs some
+//       refactoring to be used with other backends.
 
 #[allow(clippy::crate_in_macro_def)]
 #[macro_export]
@@ -154,11 +157,25 @@ macro_rules! kani_mem {
             <T as Pointee>::Metadata: PtrProperties<T>,
         {
             let (thin_ptr, metadata) = ptr.to_raw_parts();
-            // Need to assert `is_initialized` because non-determinism is used under the hood, so it
-            // does not make sense to use it inside assumption context.
+            // Need to assert `is_initialized` because non-determinism is used under the hood, so it
+            // does not make sense to use it inside assumption context.
             is_inbounds(&metadata, thin_ptr)
                 && assert_is_initialized(ptr)
                 && unsafe { has_valid_value(ptr) }
+        }
+
+        /// Check if two pointers points to the same allocated object, and that both pointers
+        /// are in bounds of that object.
+        ///
+        /// A pointer is still considered in-bounds if it points to 1-byte past the allocation.
+        #[crate::kani::unstable_feature(
+            feature = "mem-predicates",
+            issue = 2690,
+            reason = "experimental memory predicate API"
+        )]
+        #[allow(clippy::not_unsafe_ptr_arg_deref)]
+        pub fn same_allocation<T>(ptr1: *const T, ptr2: *const T) -> bool {
+            cbmc::same_allocation(ptr1, ptr2)
         }
 
         /// Checks that `data_ptr` points to an allocation that can hold data of size calculated from `T`.
@@ -310,23 +327,37 @@ macro_rules! kani_mem {
 
         /// A helper to assert `is_initialized` to use it as a part of other predicates.
         fn assert_is_initialized<T: ?Sized>(ptr: *const T) -> bool {
-            super::check(
+            super::internal::check(
                 is_initialized(ptr),
                 "Undefined Behavior: Reading from an uninitialized pointer",
             );
             true
         }
 
+        pub(super) mod cbmc {
+            use super::*;
+            /// CBMC specific implementation of [super::same_allocation].
+            pub fn same_allocation<T>(ptr1: *const T, ptr2: *const T) -> bool {
+                let obj1 = crate::kani::mem::pointer_object(ptr1);
+                (obj1 == crate::kani::mem::pointer_object(ptr2)) && {
+                    crate::kani::assert(
+                        unsafe {
+                            is_allocated(ptr1 as *const (), 0) || is_allocated(ptr2 as *const (), 0)
+                        },
+                        "Kani does not support reasoning about pointer to unallocated memory",
+                    );
+                    unsafe {
+                        is_allocated(ptr1 as *const (), 0) && is_allocated(ptr2 as *const (), 0)
+                    }
+                }
+            }
+        }
+
         /// Get the object ID of the given pointer.
         #[doc(hidden)]
-        #[crate::kani::unstable_feature(
-            feature = "ghost-state",
-            issue = 3184,
-            reason = "experimental ghost state/shadow memory API"
-        )]
         #[rustc_diagnostic_item = "KaniPointerObject"]
         #[inline(never)]
-        pub fn pointer_object<T: ?Sized>(_ptr: *const T) -> usize {
+        pub(crate) fn pointer_object<T: ?Sized>(_ptr: *const T) -> usize {
             kani_intrinsic()
         }
 

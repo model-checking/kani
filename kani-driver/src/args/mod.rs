@@ -5,6 +5,7 @@
 pub mod assess_args;
 pub mod cargo;
 pub mod common;
+pub mod list_args;
 pub mod playback_args;
 pub mod std_args;
 
@@ -20,6 +21,7 @@ use kani_metadata::CbmcSolver;
 use std::ffi::OsString;
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::time::Duration;
 use strum::VariantNames;
 
 /// Trait used to perform extra validation after parsing.
@@ -61,6 +63,53 @@ pub fn print_deprecated(verbosity: &CommonArgs, option: &str, alternative: &str)
 // By default we configure CBMC to use 16 bits to represent the object bits in pointers.
 const DEFAULT_OBJECT_BITS: u32 = 16;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, strum_macros::EnumString)]
+enum TimeUnit {
+    #[strum(serialize = "s")]
+    Seconds,
+    #[strum(serialize = "m")]
+    Minutes,
+    #[strum(serialize = "h")]
+    Hours,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Timeout {
+    value: u32,
+    unit: TimeUnit,
+}
+
+impl FromStr for Timeout {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let last_char = s.chars().last().unwrap();
+        let (value_str, unit_str) = if last_char.is_ascii_digit() {
+            // no suffix
+            (s, "s")
+        } else {
+            s.split_at(s.len() - 1)
+        };
+        let value = value_str.parse::<u32>().map_err(|_| "Invalid timeout value")?;
+
+        let unit = TimeUnit::from_str(unit_str).map_err(
+            |_| "Invalid time unit. Use 's' for seconds, 'm' for minutes, or 'h' for hours",
+        )?;
+
+        Ok(Timeout { value, unit })
+    }
+}
+
+impl From<Timeout> for Duration {
+    fn from(timeout: Timeout) -> Self {
+        match timeout.unit {
+            TimeUnit::Seconds => Duration::from_secs(timeout.value as u64),
+            TimeUnit::Minutes => Duration::from_secs(timeout.value as u64 * 60),
+            TimeUnit::Hours => Duration::from_secs(timeout.value as u64 * 3600),
+        }
+    }
+}
+
 #[derive(Debug, clap::Parser)]
 #[command(
     version,
@@ -94,6 +143,8 @@ pub enum StandaloneSubcommand {
     Playback(Box<playback_args::KaniPlaybackArgs>),
     /// Verify the rust standard library.
     VerifyStd(Box<std_args::VerifyStdArgs>),
+    /// Execute the list subcommand
+    List(Box<list_args::StandaloneListArgs>),
 }
 
 #[derive(Debug, clap::Parser)]
@@ -119,6 +170,9 @@ pub enum CargoKaniSubcommand {
 
     /// Execute concrete playback testcases of a local package.
     Playback(Box<playback_args::CargoPlaybackArgs>),
+
+    /// List metadata relevant to verification, e.g., harnesses.
+    List(Box<list_args::CargoListArgs>),
 }
 
 // Common arguments for invoking Kani for verification purpose. This gets put into KaniContext,
@@ -275,6 +329,14 @@ pub struct VerificationArgs {
     #[arg(long, hide_short_help = true)]
     pub coverage: bool,
 
+    /// Print final LLBC for Lean backend. This requires the `-Z lean` option.
+    #[arg(long, hide = true)]
+    pub print_llbc: bool,
+
+    /// Timeout for each harness with optional suffix ('s': seconds, 'm': minutes, 'h': hours). Default is seconds. This option is experimental and requires `-Z unstable-options` to be used.
+    #[arg(long)]
+    pub harness_timeout: Option<Timeout>,
+
     /// Arguments to pass down to Cargo
     #[command(flatten)]
     pub cargo: CargoCommonArgs,
@@ -421,6 +483,7 @@ impl ValidateArgs for StandaloneArgs {
 
         match &self.command {
             Some(StandaloneSubcommand::VerifyStd(args)) => args.validate()?,
+            Some(StandaloneSubcommand::List(args)) => args.validate()?,
             // TODO: Invoke PlaybackArgs::validate()
             None | Some(StandaloneSubcommand::Playback(..)) => {}
         };
@@ -467,6 +530,7 @@ impl ValidateArgs for CargoKaniSubcommand {
             // Assess doesn't implement validation yet.
             CargoKaniSubcommand::Assess(_) => Ok(()),
             CargoKaniSubcommand::Playback(playback) => playback.validate(),
+            CargoKaniSubcommand::List(list) => list.validate(),
         }
     }
 }
@@ -613,20 +677,45 @@ impl ValidateArgs for VerificationArgs {
             ));
         }
 
+
         if self.output_into_files
             && !self.common_args.unstable_features.contains(UnstableFeature::UnstableOptions)
         {
-            if self.common_args.enable_unstable {
-                print_deprecated(&self.common_args, "`--enable-unstable`", "-Z unstable-options");
-            } else {
-                return Err(Error::raw(
-                    ErrorKind::MissingRequiredArgument,
-                    "The `--output-into-files` argument is unstable and requires `-Z unstable-options` to enable \
-                unstable options support.",
-                ));
-            }
+            return Err(Error::raw(
+                ErrorKind::MissingRequiredArgument,
+                "The `--output-into-files` argument is unstable and requires `-Z unstable-options` to enable \
+            unstable options support.",
+            ));
         }
 
+        if self.print_llbc && !self.common_args.unstable_features.contains(UnstableFeature::Lean) {
+            return Err(Error::raw(
+                ErrorKind::MissingRequiredArgument,
+                "The `--print-llbc` argument is unstable and requires `-Z lean` to be used.",
+            ));
+        }
+
+        // TODO: error out for other CBMC-backend-specific arguments
+        if self.common_args.unstable_features.contains(UnstableFeature::Lean)
+            && !self.cbmc_args.is_empty()
+        {
+            return Err(Error::raw(
+                ErrorKind::ArgumentConflict,
+                "The `--cbmc-args` argument cannot be used with -Z lean.",
+            ));
+        }
+
+        if self.harness_timeout.is_some()
+            && !self.common_args.unstable_features.contains(UnstableFeature::UnstableOptions)
+        {
+            return Err(Error::raw(
+                ErrorKind::MissingRequiredArgument,
+                format!(
+                    "The `--harness-timeout` argument is unstable and requires `-Z {}` to be used.",
+                    UnstableFeature::UnstableOptions
+                ),
+            ));
+        }
         Ok(())
     }
 }
@@ -916,5 +1005,13 @@ mod tests {
         check_invalid_args("kani input.rs --workspace".split_whitespace());
         check_invalid_args("kani input.rs --package foo".split_whitespace());
         check_invalid_args("kani input.rs --exclude bar --workspace".split_whitespace());
+    }
+
+    #[test]
+    fn check_cbmc_args_lean_backend() {
+        let args = "kani input.rs -Z lean --enable-unstable --cbmc-args --object-bits 10"
+            .split_whitespace();
+        let err = StandaloneArgs::try_parse_from(args).unwrap().validate().unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::ArgumentConflict);
     }
 }

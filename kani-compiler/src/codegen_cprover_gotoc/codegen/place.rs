@@ -224,7 +224,7 @@ impl TypeOrVariant {
     }
 }
 
-impl<'tcx> GotocCtx<'tcx> {
+impl GotocCtx<'_> {
     /// Codegen field access for types that allow direct field projection.
     ///
     /// I.e.: Algebraic data types, closures, and coroutines.

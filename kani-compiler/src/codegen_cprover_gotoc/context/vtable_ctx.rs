@@ -104,7 +104,7 @@ impl VtableCtx {
     }
 }
 
-impl<'tcx> GotocCtx<'tcx> {
+impl GotocCtx<'_> {
     /// Create a label to the virtual call site
     pub fn virtual_call_with_restricted_fn_ptr(
         &mut self,

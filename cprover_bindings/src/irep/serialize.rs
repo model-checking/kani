@@ -57,7 +57,7 @@ impl Serialize for crate::goto_program::SymbolTable {
     }
 }
 struct StreamingSymbols<'a>(&'a crate::goto_program::SymbolTable);
-impl<'a> Serialize for StreamingSymbols<'a> {
+impl Serialize for StreamingSymbols<'_> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -92,7 +92,7 @@ impl<'de> serde::Deserialize<'de> for InternedString {
     }
 }
 
-impl<'de> serde::de::Visitor<'de> for InternedStringVisitor {
+impl serde::de::Visitor<'_> for InternedStringVisitor {
     type Value = InternedString;
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

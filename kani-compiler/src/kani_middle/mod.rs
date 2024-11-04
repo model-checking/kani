@@ -77,7 +77,7 @@ struct FindUnsafeCell<'tcx> {
     tcx: TyCtxt<'tcx>,
 }
 
-impl<'tcx> TyVisitor for FindUnsafeCell<'tcx> {
+impl TyVisitor for FindUnsafeCell<'_> {
     type Break = ();
     fn visit_ty(&mut self, ty: &Ty) -> ControlFlow<Self::Break> {
         match ty.kind() {
@@ -101,6 +101,13 @@ impl<'tcx> TyVisitor for FindUnsafeCell<'tcx> {
 pub fn check_reachable_items(tcx: TyCtxt, queries: &QueryDb, items: &[MonoItem]) {
     // Avoid printing the same error multiple times for different instantiations of the same item.
     let mut def_ids = HashSet::new();
+    let reachable_functions: HashSet<InternalDefId> = items
+        .iter()
+        .filter_map(|i| match i {
+            MonoItem::Fn(instance) => Some(rustc_internal::internal(tcx, instance.def.def_id())),
+            _ => None,
+        })
+        .collect();
     for item in items.iter().filter(|i| matches!(i, MonoItem::Fn(..) | MonoItem::Static(..))) {
         let def_id = match item {
             MonoItem::Fn(instance) => instance.def.def_id(),
@@ -110,9 +117,11 @@ pub fn check_reachable_items(tcx: TyCtxt, queries: &QueryDb, items: &[MonoItem])
             }
         };
         if !def_ids.contains(&def_id) {
+            let attributes = KaniAttributes::for_def_id(tcx, def_id);
             // Check if any unstable attribute was reached.
-            KaniAttributes::for_def_id(tcx, def_id)
-                .check_unstable_features(&queries.args().unstable_features);
+            attributes.check_unstable_features(&queries.args().unstable_features);
+            // Check whether all `proof_for_contract` functions are reachable
+            attributes.check_proof_for_contract(&reachable_functions);
             def_ids.insert(def_id);
         }
     }
@@ -171,7 +180,7 @@ impl<'tcx> HasTyCtxt<'tcx> for CompilerHelpers<'tcx> {
     }
 }
 
-impl<'tcx> HasDataLayout for CompilerHelpers<'tcx> {
+impl HasDataLayout for CompilerHelpers<'_> {
     fn data_layout(&self) -> &TargetDataLayout {
         self.tcx.data_layout()
     }

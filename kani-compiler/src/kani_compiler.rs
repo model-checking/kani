@@ -15,7 +15,9 @@
 //! in order to apply the stubs. For the subsequent runs, we add the stub configuration to
 //! `-C llvm-args`.
 
-use crate::args::Arguments;
+use crate::args::{Arguments, BackendOption};
+#[cfg(feature = "llbc")]
+use crate::codegen_aeneas_llbc::LlbcCodegenBackend;
 #[cfg(feature = "cprover")]
 use crate::codegen_cprover_gotoc::GotocCodegenBackend;
 use crate::kani_middle::check_crate_items;
@@ -42,16 +44,37 @@ pub fn run(args: Vec<String>) -> ExitCode {
     }
 }
 
-/// Configure the cprover backend that generate goto-programs.
-#[cfg(feature = "cprover")]
+/// Configure the LLBC backend (Aeneas's IR).
+fn llbc_backend(_queries: Arc<Mutex<QueryDb>>) -> Box<dyn CodegenBackend> {
+    #[cfg(feature = "llbc")]
+    return Box::new(LlbcCodegenBackend::new(_queries));
+    #[cfg(not(feature = "llbc"))]
+    unreachable!()
+}
+
+/// Configure the cprover backend that generates goto-programs.
+fn cprover_backend(_queries: Arc<Mutex<QueryDb>>) -> Box<dyn CodegenBackend> {
+    #[cfg(feature = "cprover")]
+    return Box::new(GotocCodegenBackend::new(_queries));
+    #[cfg(not(feature = "cprover"))]
+    unreachable!()
+}
+
+#[cfg(any(feature = "cprover", feature = "llbc"))]
 fn backend(queries: Arc<Mutex<QueryDb>>) -> Box<dyn CodegenBackend> {
-    Box::new(GotocCodegenBackend::new(queries))
+    let backend = queries.lock().unwrap().args().backend;
+    match backend {
+        #[cfg(feature = "cprover")]
+        BackendOption::CProver => cprover_backend(queries),
+        #[cfg(feature = "llbc")]
+        BackendOption::Llbc => llbc_backend(queries),
+    }
 }
 
 /// Fallback backend. It will trigger an error if no backend has been enabled.
-#[cfg(not(feature = "cprover"))]
+#[cfg(not(any(feature = "cprover", feature = "llbc")))]
 fn backend(queries: Arc<Mutex<QueryDb>>) -> Box<CodegenBackend> {
-    compile_error!("No backend is available. Only supported value today is `cprover`");
+    compile_error!("No backend is available. Use `cprover` or `llbc`.");
 }
 
 /// This object controls the compiler behavior.

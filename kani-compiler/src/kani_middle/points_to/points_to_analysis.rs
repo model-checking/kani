@@ -40,7 +40,7 @@ use rustc_middle::{
     },
     ty::{Instance, InstanceKind, List, ParamEnv, TyCtxt, TyKind},
 };
-use rustc_mir_dataflow::{Analysis, AnalysisDomain, Forward, JoinSemiLattice};
+use rustc_mir_dataflow::{Analysis, Forward, JoinSemiLattice};
 use rustc_smir::rustc_internal;
 use rustc_span::{DUMMY_SP, source_map::Spanned};
 use stable_mir::mir::{Body as StableBody, mono::Instance as StableInstance};
@@ -96,7 +96,7 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
         // and solves the dataflow problem, producing the cursor, which contains dataflow state for
         // each instruction in the body.
         let mut cursor =
-            analysis.into_engine(tcx, body).iterate_to_fixpoint().into_results_cursor(body);
+            analysis.iterate_to_fixpoint(tcx, body, Some(Self::NAME)).into_results_cursor(body);
         // We collect dataflow state at each `Return` terminator to determine the full aliasing
         // graph for the function. This is sound since those are the only places where the function
         // finishes, so the dataflow state at those places will be a union of dataflow states
@@ -114,7 +114,7 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
     }
 }
 
-impl<'a, 'tcx> AnalysisDomain<'tcx> for PointsToAnalysis<'a, 'tcx> {
+impl<'tcx> Analysis<'tcx> for PointsToAnalysis<'_, 'tcx> {
     /// Dataflow state at each instruction.
     type Domain = PointsToGraph<'tcx>;
 
@@ -133,9 +133,7 @@ impl<'a, 'tcx> AnalysisDomain<'tcx> for PointsToAnalysis<'a, 'tcx> {
     fn initialize_start_block(&self, _body: &Body<'tcx>, state: &mut Self::Domain) {
         state.join(&self.initial_graph.clone());
     }
-}
 
-impl<'a, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'tcx> {
     /// Update current dataflow state based on the information we can infer from the given
     /// statement.
     fn apply_statement_effect(
@@ -366,7 +364,7 @@ fn try_resolve_instance<'tcx>(
     }
 }
 
-impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
+impl<'tcx> PointsToAnalysis<'_, 'tcx> {
     /// Update the analysis state according to the operation, which is semantically equivalent to `*to = *from`.
     fn apply_copy_effect(
         &self,

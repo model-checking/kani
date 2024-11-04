@@ -9,14 +9,15 @@ use crate::util;
 use anyhow::{Context, Result, bail};
 use cargo_metadata::diagnostic::{Diagnostic, DiagnosticLevel};
 use cargo_metadata::{
-    Artifact as RustcArtifact, Message, Metadata, MetadataCommand, Package, Target,
+    Artifact as RustcArtifact, Message, Metadata, MetadataCommand, Package, PackageId, Target,
 };
 use kani_metadata::{ArtifactType, CompilerArtifactStub};
+use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
 use std::fmt::{self, Display};
 use std::fs::{self, File};
-use std::io::BufReader;
 use std::io::IsTerminal;
+use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tracing::{debug, trace};
@@ -46,10 +47,39 @@ pub struct CargoOutputs {
 
 impl KaniSession {
     /// Create a new cargo library in the given path.
+    ///
+    /// Since we cannot create a new workspace with `cargo init --lib`, we create the dummy
+    /// crate manually. =( See <https://github.com/rust-lang/cargo/issues/8365>.
+    ///
+    /// Without setting up a new workspace, cargo init will modify the workspace where this is
+    /// running. See <https://github.com/model-checking/kani/issues/3574> for details.
     pub fn cargo_init_lib(&self, path: &Path) -> Result<()> {
-        let mut cmd = setup_cargo_command()?;
-        cmd.args(["init", "--lib", path.to_string_lossy().as_ref()]);
-        self.run_terminal(cmd)
+        let toml_path = path.join("Cargo.toml");
+        if toml_path.exists() {
+            bail!("Cargo.toml already exists in {}", path.display());
+        }
+
+        // Create folder for library
+        fs::create_dir_all(path.join("src"))?;
+
+        // Create dummy crate and write dummy body
+        let lib_path = path.join("src/lib.rs");
+        fs::write(&lib_path, "pub fn dummy() {}")?;
+
+        // Create Cargo.toml
+        fs::write(
+            &toml_path,
+            r#"[package]
+name = "dummy"
+version = "0.1.0"
+
+[lib]
+crate-type = ["lib"]
+
+[workspace]
+"#,
+        )?;
+        Ok(())
     }
 
     pub fn cargo_build_std(&self, std_path: &Path, krate_path: &Path) -> Result<Vec<Artifact>> {
@@ -164,16 +194,19 @@ impl KaniSession {
         // Arguments that will only be passed to the target package.
         let mut pkg_args: Vec<String> = vec![];
         pkg_args.extend(["--".to_string(), self.reachability_arg()]);
+        if let Some(backend_arg) = self.backend_arg() {
+            pkg_args.push(backend_arg);
+        }
 
         let mut found_target = false;
-        let packages = packages_to_verify(&self.args, &metadata)?;
+        let packages = self.packages_to_verify(&self.args, &metadata)?;
         let mut artifacts = vec![];
         let mut failed_targets = vec![];
         for package in packages {
             for verification_target in package_targets(&self.args, package) {
                 let mut cmd = setup_cargo_command()?;
                 cmd.args(&cargo_args)
-                    .args(vec!["-p", &package.name])
+                    .args(vec!["-p", &package.id.to_string()])
                     .args(verification_target.to_args())
                     .args(&pkg_args)
                     .env("RUSTC", &self.kani_compiler)
@@ -244,62 +277,59 @@ impl KaniSession {
     fn run_build(&self, cargo_cmd: Command) -> Result<Vec<RustcArtifact>> {
         let support_color = std::io::stdout().is_terminal();
         let mut artifacts = vec![];
-        if let Some(mut cargo_process) = self.run_piped(cargo_cmd)? {
-            let reader = BufReader::new(cargo_process.stdout.take().unwrap());
-            let mut error_count = 0;
-            for message in Message::parse_stream(reader) {
-                let message = message.unwrap();
-                match message {
-                    Message::CompilerMessage(msg) => match msg.message.level {
-                        DiagnosticLevel::FailureNote => {
-                            print_msg(&msg.message, support_color)?;
-                        }
-                        DiagnosticLevel::Error => {
-                            error_count += 1;
-                            print_msg(&msg.message, support_color)?;
-                        }
-                        DiagnosticLevel::Ice => {
-                            print_msg(&msg.message, support_color)?;
-                            let _ = cargo_process.wait();
-                            return Err(anyhow::Error::msg(msg.message).context(format!(
-                                "Failed to compile `{}` due to an internal compiler error.",
-                                msg.target.name
-                            )));
-                        }
-                        _ => {
-                            if !self.args.common_args.quiet {
-                                print_msg(&msg.message, support_color)?;
-                            }
-                        }
-                    },
-                    Message::CompilerArtifact(rustc_artifact) => {
-                        // Compares two targets, and falls back to a weaker
-                        // comparison where we avoid dashes in their names.
-                        artifacts.push(rustc_artifact)
+        let mut cargo_process = self.run_piped(cargo_cmd)?;
+        let reader = BufReader::new(cargo_process.stdout.take().unwrap());
+        let mut error_count = 0;
+        for message in Message::parse_stream(reader) {
+            let message = message.unwrap();
+            match message {
+                Message::CompilerMessage(msg) => match msg.message.level {
+                    DiagnosticLevel::FailureNote => {
+                        print_msg(&msg.message, support_color)?;
                     }
-                    Message::BuildScriptExecuted(_) | Message::BuildFinished(_) => {
-                        // do nothing
+                    DiagnosticLevel::Error => {
+                        error_count += 1;
+                        print_msg(&msg.message, support_color)?;
                     }
-                    Message::TextLine(msg) => {
-                        if !self.args.common_args.quiet {
-                            println!("{msg}");
-                        }
+                    DiagnosticLevel::Ice => {
+                        print_msg(&msg.message, support_color)?;
+                        let _ = cargo_process.wait();
+                        return Err(anyhow::Error::msg(msg.message).context(format!(
+                            "Failed to compile `{}` due to an internal compiler error.",
+                            msg.target.name
+                        )));
                     }
-
-                    // Non-exhaustive enum.
                     _ => {
                         if !self.args.common_args.quiet {
-                            println!("{message:?}");
+                            print_msg(&msg.message, support_color)?;
                         }
+                    }
+                },
+                Message::CompilerArtifact(rustc_artifact) => {
+                    // Compares two targets, and falls back to a weaker
+                    // comparison where we avoid dashes in their names.
+                    artifacts.push(rustc_artifact)
+                }
+                Message::BuildScriptExecuted(_) | Message::BuildFinished(_) => {
+                    // do nothing
+                }
+                Message::TextLine(msg) => {
+                    if !self.args.common_args.quiet {
+                        println!("{msg}");
+                    }
+                }
+
+                // Non-exhaustive enum.
+                _ => {
+                    if !self.args.common_args.quiet {
+                        println!("{message:?}");
                     }
                 }
             }
-            let status = cargo_process.wait()?;
-            if !status.success() {
-                bail!(
-                    "Failed to execute cargo ({status}). Found {error_count} compilation errors."
-                );
-            }
+        }
+        let status = cargo_process.wait()?;
+        if !status.success() {
+            bail!("Failed to execute cargo ({status}). Found {error_count} compilation errors.");
         }
         Ok(artifacts)
     }
@@ -336,6 +366,93 @@ impl KaniSession {
             if same_target(&artifact.target, target) { map_kani_artifact(artifact) } else { None }
         }))
     }
+
+    /// Check that all package names are present in the workspace, otherwise return which aren't.
+    fn to_package_ids<'a>(
+        &self,
+        package_names: &'a [String],
+    ) -> Result<HashMap<PackageId, &'a str>> {
+        package_names
+            .iter()
+            .map(|pkg| {
+                let mut cmd = setup_cargo_command()?;
+                cmd.arg("pkgid");
+                cmd.arg(pkg);
+                // For some reason clippy cannot see that we are invoking wait() in the next line.
+                #[allow(clippy::zombie_processes)]
+                let mut process = self.run_piped(cmd)?;
+                let result = process.wait()?;
+                if !result.success() {
+                    bail!("Failed to retrieve information for `{pkg}`");
+                }
+
+                let mut reader = BufReader::new(process.stdout.take().unwrap());
+                let mut line = String::new();
+                reader.read_line(&mut line)?;
+                trace!(package_id=?line, "package_ids");
+                Ok((PackageId { repr: line.trim().to_string() }, pkg.as_str()))
+            })
+            .collect()
+    }
+
+    /// Extract the packages that should be verified.
+    ///
+    /// The result is built following these rules:
+    /// - If `--package <pkg>` is given, return the list of packages selected.
+    /// - If `--exclude <pkg>` is given, return the list of packages not excluded.
+    /// - If `--workspace` is given, return the list of workspace members.
+    /// - If no argument provided, return the root package if there's one or all members.
+    ///   - I.e.: Do whatever cargo does when there's no `default_members`.
+    ///   - This is because `default_members` is not available in cargo metadata.
+    ///     See <https://github.com/rust-lang/cargo/issues/8033>.
+    ///
+    /// In addition, if either `--package <pkg>` or `--exclude <pkg>` is given,
+    /// validate that `<pkg>` is a package name in the workspace, or return an error
+    /// otherwise.
+    fn packages_to_verify<'b>(
+        &self,
+        args: &VerificationArgs,
+        metadata: &'b Metadata,
+    ) -> Result<Vec<&'b Package>> {
+        debug!(package_selection=?args.cargo.package, package_exclusion=?args.cargo.exclude, workspace=args.cargo.workspace, "packages_to_verify args");
+        let packages = if !args.cargo.package.is_empty() {
+            let pkg_ids = self.to_package_ids(&args.cargo.package)?;
+            let filtered: Vec<_> = metadata
+                .workspace_packages()
+                .into_iter()
+                .filter(|pkg| pkg_ids.contains_key(&pkg.id))
+                .collect();
+            if filtered.len() < args.cargo.package.len() {
+                // Some packages specified in `--package` were not found in the workspace.
+                let outer: Vec<_> = metadata
+                    .packages
+                    .iter()
+                    .filter_map(|pkg| pkg_ids.get(&pkg.id).copied())
+                    .collect();
+                bail!(
+                    "The following specified packages were not found in this workspace: `{}`",
+                    outer.join("`,")
+                );
+            }
+            filtered
+        } else if !args.cargo.exclude.is_empty() {
+            // should be ensured by argument validation
+            assert!(args.cargo.workspace);
+            let pkg_ids = self.to_package_ids(&args.cargo.exclude)?;
+            metadata
+                .workspace_packages()
+                .into_iter()
+                .filter(|pkg| !pkg_ids.contains_key(&pkg.id))
+                .collect()
+        } else {
+            match (args.cargo.workspace, metadata.root_package()) {
+                (true, _) | (_, None) => metadata.workspace_packages(),
+                (_, Some(root_pkg)) => vec![root_pkg],
+            }
+        };
+        trace!(?packages, "packages_to_verify result");
+        Ok(packages)
+    }
 }
 
 pub fn cargo_config_args() -> Vec<OsString> {
@@ -359,71 +476,6 @@ fn print_msg(diagnostic: &Diagnostic, use_rendered: bool) -> Result<()> {
         print!("{}", console::strip_ansi_codes(diagnostic.rendered.as_ref().unwrap()));
     }
     Ok(())
-}
-
-/// Check that all package names are present in the workspace, otherwise return which aren't.
-fn validate_package_names(package_names: &[String], packages: &[Package]) -> Result<()> {
-    let package_list: Vec<String> = packages.iter().map(|pkg| pkg.name.clone()).collect();
-    let unknown_packages: Vec<&String> =
-        package_names.iter().filter(|pkg_name| !package_list.contains(pkg_name)).collect();
-
-    // Some packages aren't in the workspace. Return an error which includes their names.
-    if !unknown_packages.is_empty() {
-        let fmt_packages: Vec<String> =
-            unknown_packages.iter().map(|pkg| format!("`{pkg}`")).collect();
-        let error_msg = if unknown_packages.len() == 1 {
-            format!("couldn't find package {}", fmt_packages[0])
-        } else {
-            format!("couldn't find packages {}", fmt_packages.join(", "))
-        };
-        bail!(error_msg);
-    };
-    Ok(())
-}
-
-/// Extract the packages that should be verified.
-///
-/// The result is build following these rules:
-/// - If `--package <pkg>` is given, return the list of packages selected.
-/// - If `--exclude <pkg>` is given, return the list of packages not excluded.
-/// - If `--workspace` is given, return the list of workspace members.
-/// - If no argument provided, return the root package if there's one or all members.
-///   - I.e.: Do whatever cargo does when there's no `default_members`.
-///   - This is because `default_members` is not available in cargo metadata.
-///     See <https://github.com/rust-lang/cargo/issues/8033>.
-///
-/// In addition, if either `--package <pkg>` or `--exclude <pkg>` is given,
-/// validate that `<pkg>` is a package name in the workspace, or return an error
-/// otherwise.
-fn packages_to_verify<'b>(
-    args: &VerificationArgs,
-    metadata: &'b Metadata,
-) -> Result<Vec<&'b Package>> {
-    debug!(package_selection=?args.cargo.package, package_exclusion=?args.cargo.exclude, workspace=args.cargo.workspace, "packages_to_verify args");
-    let packages = if !args.cargo.package.is_empty() {
-        validate_package_names(&args.cargo.package, &metadata.packages)?;
-        args.cargo
-            .package
-            .iter()
-            .map(|pkg_name| metadata.packages.iter().find(|pkg| pkg.name == *pkg_name).unwrap())
-            .collect()
-    } else if !args.cargo.exclude.is_empty() {
-        // should be ensured by argument validation
-        assert!(args.cargo.workspace);
-        validate_package_names(&args.cargo.exclude, &metadata.packages)?;
-        metadata
-            .workspace_packages()
-            .into_iter()
-            .filter(|pkg| !args.cargo.exclude.contains(&pkg.name))
-            .collect()
-    } else {
-        match (args.cargo.workspace, metadata.root_package()) {
-            (true, _) | (_, None) => metadata.workspace_packages(),
-            (_, Some(root_pkg)) => vec![root_pkg],
-        }
-    };
-    trace!(?packages, "packages_to_verify result");
-    Ok(packages)
 }
 
 /// Extract Kani artifact that might've been generated from a given rustc artifact.
