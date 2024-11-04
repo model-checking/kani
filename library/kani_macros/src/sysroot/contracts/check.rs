@@ -114,6 +114,20 @@ impl<'a> ContractConditionsHandler<'a> {
         )
     }
 
+    pub fn inline_closure(&self) -> TokenStream2 {
+        let replace_ident = Ident::new(&self.replace_name, Span::call_site());
+        let sig = &self.annotated_fn.sig;
+        let output = &sig.output;
+        let before = self.initial_replace_stmts();
+        let body = self.expand_inline_body(&before, &vec![]);
+
+        quote!(
+            #[kanitool::is_contract_generated(replace)]
+            #[allow(dead_code, unused_variables, unused_mut)]
+            #body;
+        )
+    }
+
     /// Expand the check body.
     ///
     /// First find the modifies body and expand that. Then expand the rest of the body.
@@ -136,6 +150,10 @@ impl<'a> ContractConditionsHandler<'a> {
         let wrapper_ident = Ident::new(WRAPPER_ARG, Span::call_site());
         let modifies_ident = Ident::new(&self.modify_name, Span::call_site());
         let stmts = &body.stmts;
+
+        let res = quote!(#(#stmts)*);
+        println!("\n\nStatement (body of function): {}\n\n", res.to_string());
+
         quote!(
             #[kanitool::is_contract_generated(wrapper)]
             #[allow(dead_code, unused_variables, unused_mut)]

@@ -75,6 +75,7 @@ impl<'a> ContractConditionsHandler<'a> {
         let replace_name = generate_name("replace");
         let recursion_name = generate_name("recursion_check");
         let modifies_name = generate_name("modifies");
+        let inline_name = generate_name("inline");
 
         Ok(Self {
             condition_type,
@@ -85,6 +86,7 @@ impl<'a> ContractConditionsHandler<'a> {
             replace_name,
             recursion_name,
             modify_name: modifies_name,
+            inline_name,
         })
     }
 }

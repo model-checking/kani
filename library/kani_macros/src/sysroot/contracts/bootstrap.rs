@@ -20,15 +20,22 @@ impl<'a> ContractConditionsHandler<'a> {
         let modifies_name = &self.modify_name;
         let recursion_name = &self.recursion_name;
         let check_name = &self.check_name;
+        let inline_name = &self.inline_name;
 
         let replace_closure = self.replace_closure();
         let check_closure = self.check_closure();
+        let inline_closure = self.inline_closure();
+
+        println!("\n\nInline closure\n: {}\n\n", &inline_closure);
+        println!("Replace name: {}", replace_name);
+
         let recursion_closure = self.new_recursion_closure(&replace_closure, &check_closure);
 
         let span = Span::call_site();
         let replace_ident = Ident::new(&self.replace_name, span);
         let check_ident = Ident::new(&self.check_name, span);
         let recursion_ident = Ident::new(&self.recursion_name, span);
+        let inline_ident = Ident::new(&self.inline_name, span);
 
         // The order of `attrs` and `kanitool::{checked_with,
         // is_contract_generated}` is important here, because macros are
@@ -71,6 +78,10 @@ impl<'a> ContractConditionsHandler<'a> {
                     kani::internal::SIMPLE_CHECK => {
                         #check_closure;
                         kani_register_contract(#check_ident)
+                    }
+                    kani::internal::INLINE => {
+                        #inline_closure;
+                        kani_register_contract(#inline_ident)
                     }
                     _ => #block
                 }

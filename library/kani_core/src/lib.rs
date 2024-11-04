@@ -458,6 +458,9 @@ macro_rules! kani_intrinsics {
             /// Stub the body with its contract.
             pub const REPLACE: Mode = 3;
 
+            /// Put the function under a contract inline
+            pub const INLINE: Mode = 4;
+
             /// Creates a non-fatal property with the specified condition and message.
             ///
             /// This check will not impact the program control flow even when it fails.

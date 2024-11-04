@@ -485,6 +485,8 @@ struct ContractConditionsHandler<'a> {
     recursion_name: String,
     /// The name of the modifies closure.
     modify_name: String,
+    /// The name of the inline closure.
+    inline_name: String,
 }
 
 /// Which kind of contract attribute are we dealing with?
@@ -550,5 +552,8 @@ fn contract_main(
         Err(e) => return e.into_compile_error().into(),
     };
 
-    handler.dispatch_on(function_state).into()
+    let res = handler.dispatch_on(function_state).into();
+    // println!("res: {}", &res);
+    // panic!("res panic: {}", &res);
+    res
 }

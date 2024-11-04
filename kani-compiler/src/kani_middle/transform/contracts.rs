@@ -473,6 +473,10 @@ impl FunctionWithContractPass {
                 self.unused_closures.insert(recursion_closure);
                 self.unused_closures.insert(check_closure);
             }
+            ContractMode::Inplace => {
+                self.unused_closures.insert(replace_closure);
+                self.unused_closures.insert(recursion_closure);
+            }
         }
     }
 }
@@ -486,6 +490,7 @@ enum ContractMode {
     RecursiveCheck = 1,
     SimpleCheck = 2,
     Replace = 3,
+    Inplace = 4,
 }
 
 fn find_closure(tcx: TyCtxt, fn_def: FnDef, body: &Body, name: &str) -> ClosureDef {

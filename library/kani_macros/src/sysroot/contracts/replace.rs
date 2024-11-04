@@ -16,7 +16,7 @@ use super::{
 
 impl<'a> ContractConditionsHandler<'a> {
     /// Create initial set of replace statements which is the return havoc.
-    fn initial_replace_stmts(&self) -> Vec<syn::Stmt> {
+    pub fn initial_replace_stmts(&self) -> Vec<syn::Stmt> {
         let return_type = return_type_to_type(&self.annotated_fn.sig.output);
         let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
         vec![syn::parse_quote!(let #result : #return_type = kani::any_modifies();)]
@@ -69,7 +69,55 @@ impl<'a> ContractConditionsHandler<'a> {
     ///
     /// `use_nondet_result` will only be true if this is the first time we are
     /// generating a replace function.
-    fn expand_replace_body(&self, before: &[Stmt], after: &[Stmt]) -> TokenStream {
+    pub fn expand_inline_body(&self, before: &[Stmt], after: &[Stmt]) -> TokenStream {
+        match &self.condition_type {
+            ContractConditionsData::Requires { attr } => {
+                let Self { attr_copy, .. } = self;
+                let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
+
+                let body = &self.annotated_fn.block;
+                let stmts = &body.stmts;
+                quote!({
+                    kani::assert(#attr, stringify!(#attr_copy));
+                    #(#stmts)*
+                })
+            }
+            ContractConditionsData::Ensures { attr } => {
+                let (remembers, ensures_clause) = build_ensures(attr);
+                let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
+
+                let (asserts, rest_of_before) = split_for_remembers(before, ClosureType::Replace);
+
+                quote!({
+                    #(#asserts)*
+                    #remembers
+                    #(#rest_of_before)*
+                    #(#after)*
+                    kani::assume(#ensures_clause);
+                    #result
+                })
+            }
+            ContractConditionsData::Modifies { attr } => {
+                let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
+                quote!({
+                    #(#before)*
+                    #(unsafe{kani::internal::write_any(kani::internal::Pointer::assignable(kani::internal::untracked_deref(&#attr)))};)*
+                    #(#after)*
+                    #result
+                })
+            }
+        }
+    }
+
+    /// Create the body of a stub for this contract.
+    ///
+    /// Wraps the conditions from this attribute around a prior call. If
+    /// `use_nondet_result` is `true` we will use `kani::any()` to create a
+    /// result, otherwise whatever the `body` of our annotated function was.
+    ///
+    /// `use_nondet_result` will only be true if this is the first time we are
+    /// generating a replace function.
+    pub fn expand_replace_body(&self, before: &[Stmt], after: &[Stmt]) -> TokenStream {
         match &self.condition_type {
             ContractConditionsData::Requires { attr } => {
                 let Self { attr_copy, .. } = self;
