@@ -677,7 +677,6 @@ impl ValidateArgs for VerificationArgs {
             ));
         }
 
-
         if self.output_into_files
             && !self.common_args.unstable_features.contains(UnstableFeature::UnstableOptions)
         {
