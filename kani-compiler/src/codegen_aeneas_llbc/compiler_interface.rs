@@ -12,7 +12,7 @@ use crate::kani_middle::provide;
 use crate::kani_middle::reachability::{collect_reachable_items, filter_crate_items};
 use crate::kani_middle::transform::{BodyTransformation, GlobalPasses};
 use crate::kani_queries::QueryDb;
-use charon_lib::ast::TranslatedCrate;
+use charon_lib::ast::{AnyTransId, TranslatedCrate};
 use charon_lib::errors::ErrorCtx;
 use charon_lib::transform::TransformCtx;
 use charon_lib::transform::ctx::TransformOptions;
@@ -24,7 +24,7 @@ use rustc_codegen_ssa::back::archive::{
 use rustc_codegen_ssa::back::link::link_binary;
 use rustc_codegen_ssa::traits::CodegenBackend;
 use rustc_codegen_ssa::{CodegenResults, CrateInfo};
-use rustc_data_structures::fx::FxIndexMap;
+use rustc_data_structures::fx::{FxHashMap, FxIndexMap};
 use rustc_errors::{DEFAULT_LOCALE_RESOURCE, ErrorGuaranteed};
 use rustc_hir::def_id::{DefId as InternalDefId, LOCAL_CRATE};
 use rustc_metadata::EncodedMetadata;
@@ -106,13 +106,19 @@ impl LlbcCodegenBackend {
 
         // Create a Charon transformation context that will be populated with translation results
         let mut ccx = create_charon_transformation_context(tcx);
+        let mut id_map: FxHashMap<DefId, AnyTransId> = FxHashMap::default();
 
         // Translate all the items
         for item in &items {
             match item {
                 MonoItem::Fn(instance) => {
-                    let mut fcx =
-                        Context::new(tcx, *instance, &mut ccx.translated, &mut ccx.errors);
+                    let mut fcx = Context::new(
+                        tcx,
+                        *instance,
+                        &mut ccx.translated,
+                        &mut id_map,
+                        &mut ccx.errors,
+                    );
                     let _ = fcx.translate();
                 }
                 MonoItem::Static(_def) => todo!(),
@@ -140,7 +146,7 @@ impl LlbcCodegenBackend {
 
         // Run the micro-passes that clean up bodies.
         for pass in charon_lib::transform::ULLBC_PASSES.iter() {
-            pass.transform_ctx(&mut ccx)
+            pass.run(&mut ccx)
         }
 
         // # Go from ULLBC to LLBC (Low-Level Borrow Calculus) by reconstructing
@@ -151,7 +157,7 @@ impl LlbcCodegenBackend {
 
         // Run the micro-passes that clean up bodies.
         for pass in charon_lib::transform::LLBC_PASSES.iter() {
-            pass.transform_ctx(&mut ccx)
+            pass.run(&mut ccx)
         }
 
         // Print the LLBC if requested. This is useful for expected tests.
@@ -161,8 +167,10 @@ impl LlbcCodegenBackend {
             debug!("# Final LLBC before serialization:\n\n{}\n", ccx);
         }
 
-        // Display an error report about the external dependencies, if necessary
-        ccx.errors.report_external_deps_errors();
+        // TODO: display an error report about the external dependencies, if necessary
+        if ccx.errors.error_count > 0 {
+            todo!()
+        }
 
         let crate_data: charon_lib::export::CrateData = charon_lib::export::CrateData::new(&ccx);
 
@@ -393,18 +401,20 @@ fn create_charon_transformation_context(tcx: TyCtxt) -> TransformCtx {
     let options = TransformOptions {
         no_code_duplication: false,
         hide_marker_traits: false,
+        no_merge_goto_chains: false,
         item_opacities: Vec::new(),
     };
     let crate_name = tcx.crate_name(LOCAL_CRATE).as_str().into();
     let translated = TranslatedCrate { crate_name, ..TranslatedCrate::default() };
     let errors = ErrorCtx {
         continue_on_failure: true,
-        errors_as_warnings: false,
-        dcx: tcx.dcx(),
-        decls_with_errors: HashSet::new(),
+        error_on_warnings: false,
+        dcx: &(),
+        external_decls_with_errors: HashSet::new(),
         ignored_failed_decls: HashSet::new(),
-        dep_sources: HashMap::new(),
+        external_dep_sources: HashMap::new(),
         def_id: None,
+        def_id_is_local: true,
         error_count: 0,
     };
     TransformCtx { options, translated, errors }
