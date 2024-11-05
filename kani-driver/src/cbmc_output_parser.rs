@@ -480,9 +480,9 @@ impl Parser {
 
     /// Read the process output and return when an item is found in the output
     /// or the EOF is reached
-    async fn read_output<'a, 'b>(
+    async fn read_output(
         &mut self,
-        buffer: &'a mut BufReader<&'b mut ChildStdout>,
+        buffer: &mut BufReader<&mut ChildStdout>,
     ) -> Option<ParserItem> {
         loop {
             let mut input = String::new();

@@ -4,12 +4,17 @@
 use anyhow::{Result, bail};
 use kani_metadata::{ArtifactType, HarnessMetadata};
 use rayon::prelude::*;
+use std::fs::File;
+use std::io::Write;
 use std::path::Path;
 
 use crate::args::OutputFormat;
 use crate::call_cbmc::{VerificationResult, VerificationStatus};
 use crate::project::Project;
 use crate::session::KaniSession;
+
+use std::env::current_dir;
+use std::path::PathBuf;
 
 /// A HarnessRunner is responsible for checking all proof harnesses. The data in this structure represents
 /// "background information" that the controlling driver (e.g. cargo-kani or kani) computed.
@@ -39,7 +44,6 @@ impl<'pr> HarnessRunner<'_, 'pr> {
         self.check_stubbing(harnesses)?;
 
         let sorted_harnesses = crate::metadata::sort_harnesses_by_loc(harnesses);
-
         let pool = {
             let mut builder = rayon::ThreadPoolBuilder::new();
             if let Some(x) = self.sess.args.jobs() {
@@ -101,6 +105,45 @@ impl<'pr> HarnessRunner<'_, 'pr> {
 }
 
 impl KaniSession {
+    fn process_output(&self, result: &VerificationResult, harness: &HarnessMetadata) {
+        if self.should_print_output() {
+            if self.args.output_into_files {
+                self.write_output_to_file(result, harness);
+            }
+
+            let output = result.render(&self.args.output_format, harness.attributes.should_panic);
+            println!("{}", output);
+        }
+    }
+
+    fn should_print_output(&self) -> bool {
+        !self.args.common_args.quiet && self.args.output_format != OutputFormat::Old
+    }
+
+    fn write_output_to_file(&self, result: &VerificationResult, harness: &HarnessMetadata) {
+        let target_dir = self.result_output_dir().unwrap();
+        let file_name = target_dir.join(harness.pretty_name.clone());
+        let path = Path::new(&file_name);
+        let prefix = path.parent().unwrap();
+
+        std::fs::create_dir_all(prefix).unwrap();
+        let mut file = File::create(&file_name).unwrap();
+        let file_output = result.render(&OutputFormat::Regular, harness.attributes.should_panic);
+
+        if let Err(e) = writeln!(file, "{}", file_output) {
+            eprintln!(
+                "Failed to write to file {}: {}",
+                file_name.into_os_string().into_string().unwrap(),
+                e
+            );
+        }
+    }
+
+    fn result_output_dir(&self) -> Result<PathBuf> {
+        let target_dir = self.args.target_dir.clone().map_or_else(current_dir, Ok)?;
+        Ok(target_dir.join("result_output_dir")) //Hardcode output to result_output_dir, may want to make it adjustable?
+    }
+
     /// Run the verification process for a single harness
     pub(crate) fn check_harness(
         &self,
@@ -119,14 +162,7 @@ impl KaniSession {
         } else {
             let mut result = self.with_timer(|| self.run_cbmc(binary, harness), "run_cbmc")?;
 
-            // When quiet, we don't want to print anything at all.
-            // When output is old, we also don't have real results to print.
-            if !self.args.common_args.quiet && self.args.output_format != OutputFormat::Old {
-                println!(
-                    "{}",
-                    result.render(&self.args.output_format, harness.attributes.should_panic)
-                );
-            }
+            self.process_output(&result, harness);
             self.gen_and_add_concrete_playback(harness, &mut result)?;
             Ok(result)
         }
