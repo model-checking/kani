@@ -132,7 +132,7 @@ const F64_U128_UPPER: [u8; 8] = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF0, 0x47]
 /// **not** have an f32 representation, and the next **smaller** number is
 /// -2,147,483,904. Note that CBMC for example uses the formula above which
 /// leads to bugs, e.g.: https://github.com/diffblue/cbmc/issues/8488
-
+///
 /// For all unsigned types, lower is -1.0 because the next higher number, when
 /// truncated is -0.0 (or 0.0) which is not strictly smaller than `u<N>::MIN`
 fn get_bounds_f32(integral_ty: RigidTy, mm: &MachineModel) -> (f32, f32) {
