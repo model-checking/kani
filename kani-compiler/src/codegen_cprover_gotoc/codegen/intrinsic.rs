@@ -384,6 +384,14 @@ impl GotocCtx<'_> {
                 let binop_stmt = codegen_intrinsic_binop!(div);
                 self.add_finite_args_checks(intrinsic_str, fargs_clone, binop_stmt, span)
             }
+            Intrinsic::FloatToIntUnchecked => self.codegen_float_to_int_unchecked(
+                intrinsic_str,
+                fargs.remove(0),
+                farg_types[0],
+                place,
+                ret_ty,
+                loc,
+            ),
             Intrinsic::FloorF32 => codegen_simple_intrinsic!(Floorf),
             Intrinsic::FloorF64 => codegen_simple_intrinsic!(Floor),
             Intrinsic::FmafF32 => codegen_simple_intrinsic!(Fmaf),
@@ -1916,6 +1924,57 @@ impl GotocCtx<'_> {
 
             Stmt::block(vec![non_overlapping_stmt, assign_to_t, assign_to_y, assign_to_x], loc)
         }
+    }
+
+    /// Checks that the floating-point value is:
+    ///     1. Finite (i.e. neither infinite nor NaN)
+    ///     2. Its truncated value is in range of the target integer
+    /// then performs the cast to the target type
+    pub fn codegen_float_to_int_unchecked(
+        &mut self,
+        intrinsic: &str,
+        expr: Expr,
+        ty: Ty,
+        place: &Place,
+        res_ty: Ty,
+        loc: Location,
+    ) -> Stmt {
+        let finite_check = self.codegen_assert_assume(
+            expr.clone().is_finite(),
+            PropertyClass::ArithmeticOverflow,
+            format!("{intrinsic}: attempt to convert a non-finite value to an integer").as_str(),
+            loc,
+        );
+
+        assert!(res_ty.kind().is_integral());
+        assert!(ty.kind().is_float());
+        let TyKind::RigidTy(integral_ty) = res_ty.kind() else {
+            panic!(
+                "Expected intrinsic `{}` type to be `RigidTy`, but found: `{:?}`",
+                intrinsic, res_ty
+            );
+        };
+        let TyKind::RigidTy(RigidTy::Float(float_type)) = ty.kind() else {
+            panic!("Expected intrinsic `{}` type to be `Float`, but found: `{:?}`", intrinsic, ty);
+        };
+        let mm = self.symbol_table.machine_model();
+        let in_range = utils::codegen_in_range_expr(&expr, float_type, integral_ty, mm);
+
+        let range_check = self.codegen_assert_assume(
+            in_range,
+            PropertyClass::ArithmeticOverflow,
+            format!("{intrinsic}: attempt to convert a value out of range of the target integer")
+                .as_str(),
+            loc,
+        );
+
+        let int_type = self.codegen_ty_stable(res_ty);
+        let cast = expr.cast_to(int_type);
+
+        Stmt::block(
+            vec![finite_check, range_check, self.codegen_expr_to_place_stable(place, cast, loc)],
+            loc,
+        )
     }
 }
 

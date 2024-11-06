@@ -16,6 +16,7 @@
 #![feature(f128)]
 #![feature(f16)]
 #![feature(non_exhaustive_omitted_patterns_lint)]
+#![feature(float_next_up_down)]
 extern crate rustc_abi;
 extern crate rustc_ast;
 extern crate rustc_ast_pretty;
