@@ -63,6 +63,7 @@ pub enum Intrinsic {
     FabsF64,
     FaddFast,
     FdivFast,
+    FloatToIntUnchecked,
     FloorF32,
     FloorF64,
     FmafF32,
@@ -282,6 +283,14 @@ impl Intrinsic {
             "fdiv_fast" => {
                 assert_sig_matches!(sig, _, _ => _);
                 Self::FdivFast
+            }
+            "float_to_int_unchecked" => {
+                assert_sig_matches!(sig, RigidTy::Float(_) => _);
+                assert!(matches!(
+                    sig.output().kind(),
+                    TyKind::RigidTy(RigidTy::Int(_)) | TyKind::RigidTy(RigidTy::Uint(_))
+                ));
+                Self::FloatToIntUnchecked
             }
             "fmul_fast" => {
                 assert_sig_matches!(sig, _, _ => _);

@@ -156,7 +156,7 @@ fabsf32 | Yes | |
 fabsf64 | Yes | |
 fadd_fast | Yes | |
 fdiv_fast | Partial | [#809](https://github.com/model-checking/kani/issues/809) |
-float_to_int_unchecked | No | |
+float_to_int_unchecked | Partial | [#3629](https://github.com/model-checking/kani/issues/3629) |
 floorf32 | Yes | |
 floorf64 | Yes | |
 fmaf32 | Partial | Results are overapproximated |
