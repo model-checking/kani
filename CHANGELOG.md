@@ -4,6 +4,43 @@ This file contains notable changes (e.g. breaking changes, major changes, etc.) 
 
 This file was introduced starting Kani 0.23.0, so it only contains changes from version 0.23.0 onwards.
 
+## [0.57.0]
+
+### Major Changes
+* `kani-cov`: A coverage tool for Kani by @adpaco-aws in https://github.com/model-checking/kani/pull/3121 https://github.com/model-checking/kani/pull/3641
+
+### Breaking Changes
+* [Breaking change] Make `kani::check` private by @celinval in https://github.com/model-checking/kani/pull/3614
+
+### What's Changed
+* Remove the overflow checks for wrapping_offset by @zhassan-aws in https://github.com/model-checking/kani/pull/3589
+* Support fully-qualified --package arguments by @celinval in https://github.com/model-checking/kani/pull/3593
+* Loop Contracts Annotation for While-Loop by @qinheping in https://github.com/model-checking/kani/pull/3151
+* Implement proper function pointer handling for validity checks by @celinval in https://github.com/model-checking/kani/pull/3606
+* [aeneas] Preserve variable names by @zhassan-aws in https://github.com/model-checking/kani/pull/3560
+* Emit an error when proof_for_contract function is not found by @zhassan-aws in https://github.com/model-checking/kani/pull/3609
+* Add `free(0)` to codegen of loop contracts by @qinheping in https://github.com/model-checking/kani/pull/3637
+* [Lean] Rename user-facing options from Aeneas to Lean by @zhassan-aws in https://github.com/model-checking/kani/pull/3630
+* Fix ICE due to mishandling of Aggregate rvalue for raw pointers to trait objects by @carolynzech in https://github.com/model-checking/kani/pull/3636
+* Call `goto-instrument` with `DFCC` only once by @qinheping in https://github.com/model-checking/kani/pull/3642
+* Fix loop contracts transformation when loops in branching by @qinheping in https://github.com/model-checking/kani/pull/3640
+* Reduce the number of object bits for refcell test by @zhassan-aws in https://github.com/model-checking/kani/pull/3656
+* Move any_slice_from_array to kani_core by @qinheping in https://github.com/model-checking/kani/pull/3646
+* Add a timeout option by @zhassan-aws in https://github.com/model-checking/kani/pull/3649
+* Implement `Arbitrary` for `Range*` by @c410-f3r in https://github.com/model-checking/kani/pull/3666
+* Automatic toolchain upgrade to nightly-2024-11-03 by @github-actions in https://github.com/model-checking/kani/pull/3674
+* codegen: Ask the layout if it is uninhabited, not its impl detail by @workingjubilee in https://github.com/model-checking/kani/pull/3675
+* Harness output individual files by @Alexander-Aghili in https://github.com/model-checking/kani/pull/3360
+* Update Charon submodule to 2024-11-04 by @zhassan-aws in https://github.com/model-checking/kani/pull/3686
+* Add support for float_to_int_unchecked by @zhassan-aws in https://github.com/model-checking/kani/pull/3660
+
+## New Contributors
+* @c410-f3r made their first contribution in https://github.com/model-checking/kani/pull/3666
+* @workingjubilee made their first contribution in https://github.com/model-checking/kani/pull/3675
+* @Alexander-Aghili made their first contribution in https://github.com/model-checking/kani/pull/3360
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.56.0...kani-0.57.0
+
 ## [0.56.0]
 
 ### Major/Breaking Changes
