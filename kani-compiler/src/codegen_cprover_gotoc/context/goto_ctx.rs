@@ -105,7 +105,7 @@ impl<'tcx> GotocCtx<'tcx> {
             unsupported_constructs: FxHashMap::default(),
             concurrent_constructs: FxHashMap::default(),
             transformer,
-            has_loop_contracts: false
+            has_loop_contracts: false,
         }
     }
 }

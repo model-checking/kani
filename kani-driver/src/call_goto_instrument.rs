@@ -164,11 +164,7 @@ impl KaniSession {
     }
 
     /// Apply annotated function contracts and loop contracts with goto-instrument.
-    pub fn instrument_contracts(
-        &self,
-        harness: &HarnessMetadata,
-        file: &Path,
-    ) -> Result<()> {
+    pub fn instrument_contracts(&self, harness: &HarnessMetadata, file: &Path) -> Result<()> {
         // Do nothing if neither loop contracts nor function contracts is enabled.
         if !harness.has_loop_contracts && harness.contract.is_none() {
             return Ok(());
