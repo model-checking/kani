@@ -74,6 +74,8 @@ pub struct GotocCtx<'tcx> {
     pub concurrent_constructs: UnsupportedConstructs,
     /// The body transformation agent.
     pub transformer: BodyTransformation,
+    /// If there exist some usage of loop contracts int context.
+    pub has_loop_contracts: bool,
 }
 
 /// Constructor
@@ -103,6 +105,7 @@ impl<'tcx> GotocCtx<'tcx> {
             unsupported_constructs: FxHashMap::default(),
             concurrent_constructs: FxHashMap::default(),
             transformer,
+            has_loop_contracts: false
         }
     }
 }

@@ -573,6 +573,9 @@ impl GotocHook for LoopInvariantRegister {
     ) -> Stmt {
         let loc = gcx.codegen_span_stable(span);
         let func_exp = gcx.codegen_func_expr(instance, loc);
+
+        gcx.has_loop_contracts = true;
+
         // Add `free(0)` to make sure the body of `free` won't be dropped to
         // satisfy the requirement of DFCC.
         Stmt::block(

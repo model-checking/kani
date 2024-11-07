@@ -263,6 +263,7 @@ impl CodegenBackend for GotocCodegenBackend {
                 ReachabilityType::Harnesses => {
                     let mut units = CodegenUnits::new(&queries, tcx);
                     let mut modifies_instances = vec![];
+                    let mut loop_contracts_instances = vec![];
                     // Cross-crate collecting of all items that are reachable from the crate harnesses.
                     for unit in units.iter() {
                         // We reset the body cache for now because each codegen unit has different
@@ -280,6 +281,9 @@ impl CodegenBackend for GotocCodegenBackend {
                                 contract_metadata,
                                 transformer,
                             );
+                            if gcx.has_loop_contracts {
+                                loop_contracts_instances.push(*harness);
+                            }
                             results.extend(gcx, items, None);
                             if let Some(assigns_contract) = contract_info {
                                 modifies_instances.push((*harness, assigns_contract));
@@ -287,6 +291,7 @@ impl CodegenBackend for GotocCodegenBackend {
                         }
                     }
                     units.store_modifies(&modifies_instances);
+                    units.store_loop_contracts(&loop_contracts_instances);
                     units.write_metadata(&queries, tcx);
                 }
                 ReachabilityType::Tests => {

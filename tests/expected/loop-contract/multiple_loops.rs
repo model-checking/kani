@@ -44,6 +44,14 @@ fn simple_while_loops() {
     assert!(x == 2);
 }
 
+/// Check that `loop-contracts` works correctly for harness
+/// without loop contracts.
+#[kani::proof]
+fn no_loop_harness(){
+    let x = 2;
+    assert!(x == 2);
+}
+
 #[kani::proof]
 fn multiple_loops_harness() {
     multiple_loops();
