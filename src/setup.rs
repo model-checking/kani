@@ -189,7 +189,7 @@ fn setup_python_deps(kani_dir: &Path) -> Result<()> {
     let pyroot = kani_dir.join("pyroot");
 
     // TODO: this is a repetition of versions from kani/kani-dependencies
-    let pkg_versions = &["cbmc-viewer==3.9"];
+    let pkg_versions = &["cbmc-viewer==3.10"];
 
     Command::new("python3")
         .args(["-m", "pip", "install", "--target"])
