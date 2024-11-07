@@ -567,7 +567,7 @@ impl GotocHook for LoopInvariantRegister {
         gcx: &mut GotocCtx,
         instance: Instance,
         fargs: Vec<Expr>,
-        _assign_to: &Place,
+        assign_to: &Place,
         target: Option<BasicBlockIdx>,
         span: Span,
     ) -> Stmt {
@@ -583,6 +583,12 @@ impl GotocHook for LoopInvariantRegister {
                 BuiltinFn::Free
                     .call(vec![Expr::pointer_constant(0, Type::void_pointer())], loc)
                     .as_stmt(loc),
+                unwrap_or_return_codegen_unimplemented_stmt!(
+                    gcx,
+                    gcx.codegen_place_stable(assign_to, loc)
+                )
+                .goto_expr
+                .assign(Expr::c_true(), loc),
                 Stmt::goto(bb_label(target.unwrap()), loc).with_loop_contracts(
                     func_exp.call(fargs).cast_to(Type::CInteger(CIntType::Bool)),
                 ),
