@@ -41,7 +41,8 @@ impl KaniSession {
             .args
             .common_args
             .unstable_features
-            .contains(kani_metadata::UnstableFeature::LoopContracts);
+            .contains(kani_metadata::UnstableFeature::LoopContracts)
+            && harness.has_loop_contracts;
         self.instrument_contracts(harness, is_loop_contracts_enabled, output)?;
 
         if self.args.checks.undefined_function_on() {

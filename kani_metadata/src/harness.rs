@@ -36,6 +36,8 @@ pub struct HarnessMetadata {
     pub attributes: HarnessAttributes,
     /// A CBMC-level assigns contract that should be enforced when running this harness.
     pub contract: Option<AssignsContract>,
+    /// If the harness contains some usage of loop contracts.
+    pub has_loop_contracts: bool,
 }
 
 /// The attributes added by the user to control how a harness is executed.
