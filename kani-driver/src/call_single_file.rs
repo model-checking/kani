@@ -129,11 +129,6 @@ impl KaniSession {
             flags.push("--ignore-global-asm".into());
         }
 
-        // Users activate it via the command line switch
-        if self.args.write_json_symtab {
-            flags.push("--write-json-symtab".into());
-        }
-
         if self.args.is_stubbing_enabled() {
             flags.push("--enable-stubbing".into());
         }

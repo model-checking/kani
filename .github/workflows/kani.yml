@@ -31,27 +31,6 @@ jobs:
       - name: Execute Kani regression
         run: ./scripts/kani-regression.sh
 
-  write-json-symtab-regression:
-    runs-on: ubuntu-20.04
-    steps:
-      - name: Checkout Kani
-        uses: actions/checkout@v4
-
-      - name: Setup Kani Dependencies
-        uses: ./.github/actions/setup
-        with:
-          os: ubuntu-20.04
-
-      - name: Build Kani
-        run: cargo build-dev -- --features write_json_symtab
-
-      - name: Run tests
-        run: |
-          cargo run -p compiletest --quiet -- --suite kani --mode kani --quiet --no-fail-fast
-          cargo run -p compiletest --quiet -- --suite expected --mode expected --quiet --no-fail-fast
-          cargo run -p compiletest --quiet -- --suite cargo-kani --mode cargo-kani --quiet --no-fail-fast
-
-
   benchcomp-tests:
     runs-on: ubuntu-20.04
     steps:

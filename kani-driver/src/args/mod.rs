@@ -573,6 +573,10 @@ impl ValidateArgs for VerificationArgs {
             );
         }
 
+        if self.write_json_symtab {
+            print_obsolete(&self.common_args, "--write-json-symtab");
+        }
+
         if self.visualize {
             if !self.common_args.enable_unstable {
                 return Err(Error::raw(
