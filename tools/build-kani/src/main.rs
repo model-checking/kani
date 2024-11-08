@@ -43,7 +43,6 @@ fn main() -> Result<()> {
             bundle_kani(dir)?;
             bundle_cbmc(dir)?;
             bundle_kissat(dir)?;
-            // cbmc-viewer isn't bundled, it's pip install'd on first-time setup
 
             create_release_bundle(dir, &bundle_name)?;
 
@@ -140,7 +139,6 @@ fn bundle_cbmc(dir: &Path) -> Result<()> {
     cp(&which::which("goto-instrument")?, &bin)?;
     cp(&which::which("goto-cc")?, &bin)?;
     cp(&which::which("symtab2gb")?, &bin)?;
-    // cbmc-viewer invokes this
     cp(&which::which("goto-analyzer")?, &bin)?;
 
     Ok(())

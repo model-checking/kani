@@ -56,8 +56,6 @@ impl<'pr> HarnessRunner<'_, 'pr> {
             sorted_harnesses
                 .par_iter()
                 .map(|harness| -> Result<HarnessResult<'pr>> {
-                    let harness_filename = harness.pretty_name.replace("::", "-");
-                    let report_dir = self.project.outdir.join(format!("report-{harness_filename}"));
                     let goto_file =
                         self.project.get_harness_artifact(&harness, ArtifactType::Goto).unwrap();
 
@@ -67,7 +65,7 @@ impl<'pr> HarnessRunner<'_, 'pr> {
                         self.sess.synthesize_loop_contracts(goto_file, &goto_file, &harness)?;
                     }
 
-                    let result = self.sess.check_harness(goto_file, &report_dir, harness)?;
+                    let result = self.sess.check_harness(goto_file, harness)?;
                     Ok(HarnessResult { harness, result })
                 })
                 .collect::<Result<Vec<_>>>()
@@ -148,24 +146,17 @@ impl KaniSession {
     pub(crate) fn check_harness(
         &self,
         binary: &Path,
-        report_dir: &Path,
         harness: &HarnessMetadata,
     ) -> Result<VerificationResult> {
         if !self.args.common_args.quiet {
             println!("Checking harness {}...", harness.pretty_name);
         }
 
-        if self.args.visualize {
-            self.run_visualize(binary, report_dir, harness)?;
-            // Strictly speaking, we're faking success here. This is more "no error"
-            Ok(VerificationResult::mock_success())
-        } else {
-            let mut result = self.with_timer(|| self.run_cbmc(binary, harness), "run_cbmc")?;
+        let mut result = self.with_timer(|| self.run_cbmc(binary, harness), "run_cbmc")?;
 
-            self.process_output(&result, harness);
-            self.gen_and_add_concrete_playback(harness, &mut result)?;
-            Ok(result)
-        }
+        self.process_output(&result, harness);
+        self.gen_and_add_concrete_playback(harness, &mut result)?;
+        Ok(result)
     }
 
     /// Concludes a session by printing a summary report and exiting the process with an
@@ -191,7 +182,7 @@ impl KaniSession {
         }
 
         // We currently omit a summary if there was just 1 harness
-        if !self.args.common_args.quiet && !self.args.visualize {
+        if !self.args.common_args.quiet {
             if failing > 0 {
                 println!("Summary:");
             }
