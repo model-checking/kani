@@ -10,7 +10,6 @@ use std::collections::btree_map::Entry;
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::path::Path;
-use std::process::Command;
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 use tokio::process::Command as TokioCommand;
@@ -166,23 +165,6 @@ impl KaniSession {
         };
 
         Ok(verification_results)
-    }
-
-    /// used by call_cbmc_viewer, invokes different variants of CBMC.
-    // TODO: this could use some cleanup and refactoring.
-    pub fn call_cbmc(&self, args: Vec<OsString>, output: &Path) -> Result<()> {
-        // TODO get cbmc path from self
-        let mut cmd = Command::new("cbmc");
-        cmd.args(args);
-
-        let result = self.run_redirect(cmd, output)?;
-
-        if !result.success() {
-            bail!("cbmc exited with status {}", result);
-        }
-        // TODO: We 'bail' above, but then ignore it in 'call_cbmc_viewer' ...
-
-        Ok(())
     }
 
     /// "Internal," but also used by call_cbmc_viewer

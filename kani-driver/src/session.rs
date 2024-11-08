@@ -9,7 +9,7 @@ use anyhow::{Context, Result, bail};
 use std::io::IsTerminal;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, ExitStatus, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use std::time::Instant;
 use strum_macros::Display;
@@ -134,11 +134,6 @@ impl KaniSession {
         run_suppress(&self.args.common_args, cmd)
     }
 
-    /// Call [run_redirect] with the verbosity configured by the user.
-    pub fn run_redirect(&self, cmd: Command, stdout: &Path) -> Result<ExitStatus> {
-        run_redirect(&self.args.common_args, cmd, stdout)
-    }
-
     /// Call [run_piped] with the verbosity configured by the user.
     pub fn run_piped(&self, cmd: Command) -> Result<Child> {
         run_piped(&self.args.common_args, cmd)
@@ -164,7 +159,6 @@ impl KaniSession {
 //               Default  Quiet  Verbose   Default  Quiet  Verbose
 // run_terminal  Y        N      Y         Y        N      Y         (inherits terminal)
 // run_suppress  N        N      Y         Y        N      Y         (buffered text only)
-// run_redirect  (not applicable, always to the file)                (only option where error is acceptable)
 
 /// Run a job, leave it outputting to terminal (unless --quiet), and fail if there's a problem.
 pub fn run_terminal(verbosity: &impl Verbosity, mut cmd: Command) -> Result<()> {
@@ -252,33 +246,6 @@ pub fn run_suppress(verbosity: &impl Verbosity, mut cmd: Command) -> Result<()> 
         bail!("{} exited with status {}", cmd.get_program().to_string_lossy(), result.status);
     }
     Ok(())
-}
-
-/// Run a job, redirect its output to a file, and allow the caller to decide what to do with failure.
-pub fn run_redirect(
-    verbosity: &impl Verbosity,
-    mut cmd: Command,
-    stdout: &Path,
-) -> Result<ExitStatus> {
-    if verbosity.verbose() {
-        println!(
-            "[Kani] Running: `{} > {}`",
-            render_command(&cmd).to_string_lossy(),
-            stdout.display()
-        );
-    }
-    let output_file = std::fs::File::create(stdout)?;
-    cmd.stdout(output_file);
-
-    let program = cmd.get_program().to_string_lossy().to_string();
-    with_timer(
-        verbosity,
-        || {
-            cmd.status()
-                .context(format!("Failed to invoke {}", cmd.get_program().to_string_lossy()))
-        },
-        &program,
-    )
 }
 
 /// Run a job and pipe its output to this process.
