@@ -46,15 +46,13 @@ use stable_mir::mir::mono::{Instance, MonoItem};
 use stable_mir::{CrateDef, DefId};
 use std::any::Any;
 use std::collections::BTreeMap;
-use std::ffi::OsString;
 use std::fmt::Write;
 use std::fs::File;
 use std::io::BufWriter;
-use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
-use tracing::{debug, error, info};
+use tracing::{debug, info};
 
 pub type UnsupportedConstructs = FxHashMap<InternedString, Vec<Location>>;
 
@@ -204,12 +202,7 @@ impl GotocCodegenBackend {
         if !tcx.sess.opts.unstable_opts.no_codegen && tcx.sess.opts.output_types.should_codegen() {
             let pretty = self.queries.lock().unwrap().args().output_pretty_json;
             write_file(&symtab_goto, ArtifactType::PrettyNameMap, &pretty_name_map, pretty);
-            if gcx.queries.args().write_json_symtab {
-                write_file(&symtab_goto, ArtifactType::SymTab, &gcx.symbol_table, pretty);
-                symbol_table_to_gotoc(&tcx, &symtab_goto);
-            } else {
-                write_goto_binary_file(symtab_goto, &gcx.symbol_table);
-            }
+            write_goto_binary_file(symtab_goto, &gcx.symbol_table);
             write_file(&symtab_goto, ArtifactType::TypeMap, &type_map, pretty);
             // If they exist, write out vtable virtual call function pointer restrictions
             if let Some(restrictions) = vtable_restrictions {
@@ -536,40 +529,6 @@ fn codegen_results(
         },
         work_products,
     ))
-}
-
-fn symbol_table_to_gotoc(tcx: &TyCtxt, base_path: &Path) -> PathBuf {
-    let output_filename = base_path.to_path_buf();
-    let input_filename = convert_type(base_path, ArtifactType::SymTabGoto, ArtifactType::SymTab);
-
-    let args = vec![
-        input_filename.clone().into_os_string(),
-        "--out".into(),
-        OsString::from(output_filename.as_os_str()),
-    ];
-    // TODO get symtab2gb path from self
-    let mut cmd = Command::new("symtab2gb");
-    cmd.args(args);
-    info!("[Kani] Running: `{:?} {:?}`", cmd.get_program(), cmd.get_args());
-
-    let result = with_timer(
-        || {
-            cmd.output()
-                .expect(&format!("Failed to generate goto model for {}", input_filename.display()))
-        },
-        "symtab2gb",
-    );
-    if !result.status.success() {
-        error!("Symtab error output:\n{}", String::from_utf8_lossy(&result.stderr));
-        error!("Symtab output:\n{}", String::from_utf8_lossy(&result.stdout));
-        let err_msg = format!(
-            "Failed to generate goto model:\n\tsymtab2gb failed on file {}.",
-            input_filename.display()
-        );
-        tcx.dcx().err(err_msg);
-        tcx.dcx().abort_if_errors();
-    };
-    output_filename
 }
 
 pub fn write_file<T>(base_path: &Path, file_type: ArtifactType, source: &T, pretty: bool)

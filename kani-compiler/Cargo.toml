@@ -34,7 +34,6 @@ tracing-tree = "0.4.0"
 default = ['cprover', 'llbc']
 llbc = ['charon']
 cprover = ['cbmc', 'num', 'serde']
-write_json_symtab = []
 
 [package.metadata.rust-analyzer]
 # This package uses rustc crates.

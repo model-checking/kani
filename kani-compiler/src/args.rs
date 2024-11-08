@@ -51,11 +51,6 @@ pub struct Arguments {
     /// Option used for suppressing global ASM error.
     #[clap(long)]
     pub ignore_global_asm: bool,
-    #[clap(long)]
-    /// Option used to write JSON symbol tables instead of GOTO binaries.
-    ///
-    /// When set, instructs the compiler to produce the symbol table for CBMC in JSON format and use symtab2gb.
-    pub write_json_symtab: bool,
     /// Option name used to select which reachability analysis to perform.
     #[clap(long = "reachability", default_value = "none")]
     pub reachability_analysis: ReachabilityType,
