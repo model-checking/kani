@@ -115,9 +115,6 @@ impl<'a> ContractConditionsHandler<'a> {
     }
 
     pub fn inline_closure(&self) -> TokenStream2 {
-        let replace_ident = Ident::new(&self.replace_name, Span::call_site());
-        let sig = &self.annotated_fn.sig;
-        let output = &sig.output;
         let before = self.initial_replace_stmts();
         let body = self.expand_inline_body(&before, &vec![]);
 

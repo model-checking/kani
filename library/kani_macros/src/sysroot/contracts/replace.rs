@@ -68,7 +68,6 @@ impl<'a> ContractConditionsHandler<'a> {
         match &self.condition_type {
             ContractConditionsData::Requires { attr } => {
                 let Self { attr_copy, .. } = self;
-                let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
 
                 let body = &self.annotated_fn.block;
                 let stmts = &body.stmts;
@@ -104,14 +103,6 @@ impl<'a> ContractConditionsHandler<'a> {
         }
     }
 
-    /// Create the body of a stub for this contract.
-    ///
-    /// Wraps the conditions from this attribute around a prior call. If
-    /// `use_nondet_result` is `true` we will use `kani::any()` to create a
-    /// result, otherwise whatever the `body` of our annotated function was.
-    ///
-    /// `use_nondet_result` will only be true if this is the first time we are
-    /// generating a replace function.
     pub fn expand_replace_body(&self, before: &[Stmt], after: &[Stmt]) -> TokenStream {
         match &self.condition_type {
             ContractConditionsData::Requires { attr } => {

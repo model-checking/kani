@@ -20,7 +20,6 @@ impl<'a> ContractConditionsHandler<'a> {
         let modifies_name = &self.modify_name;
         let recursion_name = &self.recursion_name;
         let check_name = &self.check_name;
-        let inline_name = &self.inline_name;
 
         let replace_closure = self.replace_closure();
         let check_closure = self.check_closure();
