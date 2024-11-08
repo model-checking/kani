@@ -61,14 +61,9 @@ impl<'a> ContractConditionsHandler<'a> {
         (before.to_vec(), after.to_vec())
     }
 
-    /// Create the body of a stub for this contract.
+    /// Expands the body of an inline contract function based on the contract condition type.
     ///
-    /// Wraps the conditions from this attribute around a prior call. If
-    /// `use_nondet_result` is `true` we will use `kani::any()` to create a
-    /// result, otherwise whatever the `body` of our annotated function was.
-    ///
-    /// `use_nondet_result` will only be true if this is the first time we are
-    /// generating a replace function.
+    /// Returns a TokenStream containing the expanded inline function body with the appropriate contract
     pub fn expand_inline_body(&self, before: &[Stmt], after: &[Stmt]) -> TokenStream {
         match &self.condition_type {
             ContractConditionsData::Requires { attr } => {

@@ -553,7 +553,5 @@ fn contract_main(
     };
 
     let res = handler.dispatch_on(function_state).into();
-    // println!("res: {}", &res);
-    // panic!("res panic: {}", &res);
     res
 }

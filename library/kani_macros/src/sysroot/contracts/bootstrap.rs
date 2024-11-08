@@ -26,9 +26,6 @@ impl<'a> ContractConditionsHandler<'a> {
         let check_closure = self.check_closure();
         let inline_closure = self.inline_closure();
 
-        println!("\n\nInline closure\n: {}\n\n", &inline_closure);
-        println!("Replace name: {}", replace_name);
-
         let recursion_closure = self.new_recursion_closure(&replace_closure, &check_closure);
 
         let span = Span::call_site();
