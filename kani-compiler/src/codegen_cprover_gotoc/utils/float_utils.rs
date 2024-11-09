@@ -46,6 +46,18 @@ pub fn codegen_in_range_expr(
     mm: &MachineModel,
 ) -> Expr {
     match float_ty {
+        FloatTy::F16 => {
+            let (lower, upper) = get_bounds_f16(integral_ty, mm);
+            let mut in_range = Expr::bool_true();
+            // Avoid unnecessary comparison against -∞ or ∞
+            if lower != f16::NEG_INFINITY {
+                in_range = in_range.and(float_expr.clone().gt(Expr::float16_constant(lower)));
+            }
+            if upper != f16::INFINITY {
+                in_range = in_range.and(float_expr.clone().lt(Expr::float16_constant(upper)));
+            }
+            in_range
+        }
         FloatTy::F32 => {
             let (lower, upper) = get_bounds_f32(integral_ty, mm);
             let mut in_range = Expr::bool_true();
@@ -69,9 +81,30 @@ pub fn codegen_in_range_expr(
             }
             in_range
         }
-        _ => unimplemented!(),
+        FloatTy::F128 => {
+            let (lower, upper) = get_bounds_f128(integral_ty, mm);
+            let mut in_range = Expr::bool_true();
+            if lower != f128::NEG_INFINITY {
+                in_range = in_range.and(float_expr.clone().gt(Expr::float128_constant(lower)));
+            }
+            if upper != f128::INFINITY {
+                in_range = in_range.and(float_expr.clone().lt(Expr::float128_constant(upper)));
+            }
+            in_range
+        }
     }
 }
+
+const F16_I8_LOWER: [u8; 2] = [0x08, 0xD8];
+const F16_I8_UPPER: [u8; 2] = [0x00, 0x58];
+const F16_I16_LOWER: [u8; 2] = [0x01, 0xF8];
+const F16_I16_UPPER: [u8; 2] = [0x00, 0x78];
+const F16_I32_LOWER: [u8; 2] = [0x00, 0xFC]; // -inf
+const F16_I32_UPPER: [u8; 2] = [0x00, 0x7C]; // inf
+const F16_I64_LOWER: [u8; 2] = [0x00, 0xFC]; // -inf
+const F16_I64_UPPER: [u8; 2] = [0x00, 0x7C]; // inf
+const F16_I128_LOWER: [u8; 2] = [0x00, 0xFC]; // -inf
+const F16_I128_UPPER: [u8; 2] = [0x00, 0x7C]; // inf
 
 const F32_I8_LOWER: [u8; 4] = [0x00, 0x00, 0x01, 0xC3]; // -129.0
 const F32_I8_UPPER: [u8; 4] = [0x00, 0x00, 0x00, 0x43]; // 128.0
@@ -97,6 +130,44 @@ const F64_I64_UPPER: [u8; 8] = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xE0, 0x43];
 const F64_I128_LOWER: [u8; 8] = [0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0xE0, 0xC7]; // -170141183460469269510619166673045815296.0
 const F64_I128_UPPER: [u8; 8] = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xE0, 0x47]; // 170141183460469231731687303715884105728.0
 
+const F128_I8_LOWER: [u8; 16] = [
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x06, 0xC0,
+];
+const F128_I8_UPPER: [u8; 16] = [
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0x40,
+];
+const F128_I16_LOWER: [u8; 16] = [
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x0E, 0xC0,
+];
+const F128_I16_UPPER: [u8; 16] = [
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0E, 0x40,
+];
+const F128_I32_LOWER: [u8; 16] = [
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x1E, 0xC0,
+];
+const F128_I32_UPPER: [u8; 16] = [
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1E, 0x40,
+];
+const F128_I64_LOWER: [u8; 16] = [
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x3E, 0xC0,
+];
+const F128_I64_UPPER: [u8; 16] = [
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x3E, 0x40,
+];
+const F128_I128_LOWER: [u8; 16] = [
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x7F, 0xC0,
+];
+const F128_I128_UPPER: [u8; 16] = [
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x7E, 0x40,
+];
+
+const F16_U_LOWER: [u8; 2] = [0x00, 0xBC];
+const F16_U8_UPPER: [u8; 2] = [0x00, 0x5C];
+const F16_U16_UPPER: [u8; 2] = [0x00, 0x7C]; // inf
+const F16_U32_UPPER: [u8; 2] = [0x00, 0x7C]; // inf
+const F16_U64_UPPER: [u8; 2] = [0x00, 0x7C]; // inf
+const F16_U128_UPPER: [u8; 2] = [0x00, 0x7C]; // inf
+
 const F32_U_LOWER: [u8; 4] = [0x00, 0x00, 0x80, 0xBF]; // -1.0
 const F32_U8_UPPER: [u8; 4] = [0x00, 0x00, 0x80, 0x43]; // 256.0
 const F32_U16_UPPER: [u8; 4] = [0x00, 0x00, 0x80, 0x47]; // 65536.0
@@ -111,6 +182,25 @@ const F64_U16_UPPER: [u8; 8] = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF0, 0x40];
 const F64_U32_UPPER: [u8; 8] = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF0, 0x41]; // 4294967296.0
 const F64_U64_UPPER: [u8; 8] = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF0, 0x43]; // 18446744073709551616.0
 const F64_U128_UPPER: [u8; 8] = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF0, 0x47]; // 340282366920938463463374607431768211456.0
+
+const F128_U_LOWER: [u8; 16] = [
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xBF,
+];
+const F128_U8_UPPER: [u8; 16] = [
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, 0x40,
+];
+const F128_U16_UPPER: [u8; 16] = [
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0F, 0x40,
+];
+const F128_U32_UPPER: [u8; 16] = [
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1F, 0x40,
+];
+const F128_U64_UPPER: [u8; 16] = [
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x3F, 0x40,
+];
+const F128_U128_UPPER: [u8; 16] = [
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x7F, 0x40,
+];
 
 /// upper is the smallest `f32` that after truncation is strictly larger than i<N>::MAX or u<N>::MAX
 /// lower is the largest `f32` that after truncation is strictly smaller than i<N>::MIN or u<N>::MIN
@@ -135,6 +225,14 @@ const F64_U128_UPPER: [u8; 8] = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF0, 0x47]
 ///
 /// For all unsigned types, lower is -1.0 because the next higher number, when
 /// truncated is -0.0 (or 0.0) which is not strictly smaller than `u<N>::MIN`
+fn get_bounds_f16(integral_ty: RigidTy, mm: &MachineModel) -> (f16, f16) {
+    match integral_ty {
+        RigidTy::Int(int_ty) => get_bounds_f16_int(int_ty, mm),
+        RigidTy::Uint(uint_ty) => get_bounds_f16_uint(uint_ty, mm),
+        _ => unreachable!(),
+    }
+}
+
 fn get_bounds_f32(integral_ty: RigidTy, mm: &MachineModel) -> (f32, f32) {
     match integral_ty {
         RigidTy::Int(int_ty) => get_bounds_f32_int(int_ty, mm),
@@ -149,6 +247,31 @@ fn get_bounds_f64(integral_ty: RigidTy, mm: &MachineModel) -> (f64, f64) {
         RigidTy::Uint(uint_ty) => get_bounds_f64_uint(uint_ty, mm),
         _ => unreachable!(),
     }
+}
+
+fn get_bounds_f128(integral_ty: RigidTy, mm: &MachineModel) -> (f128, f128) {
+    match integral_ty {
+        RigidTy::Int(int_ty) => get_bounds_f128_int(int_ty, mm),
+        RigidTy::Uint(uint_ty) => get_bounds_f128_uint(uint_ty, mm),
+        _ => unreachable!(),
+    }
+}
+
+fn get_bounds_f16_uint(uint_ty: UintTy, mm: &MachineModel) -> (f16, f16) {
+    let lower: f16 = f16::from_le_bytes(F16_U_LOWER);
+    let upper: f16 = match uint_ty {
+        UintTy::U8 => f16::from_le_bytes(F16_U8_UPPER),
+        UintTy::U16 => f16::from_le_bytes(F16_U16_UPPER),
+        UintTy::U32 => f16::from_le_bytes(F16_U32_UPPER),
+        UintTy::U64 => f16::from_le_bytes(F16_U64_UPPER),
+        UintTy::U128 => f16::from_le_bytes(F16_U128_UPPER),
+        UintTy::Usize => match mm.pointer_width {
+            32 => f16::from_le_bytes(F16_U32_UPPER),
+            64 => f16::from_le_bytes(F16_U64_UPPER),
+            _ => unreachable!(),
+        },
+    };
+    (lower, upper)
 }
 
 fn get_bounds_f32_uint(uint_ty: UintTy, mm: &MachineModel) -> (f32, f32) {
@@ -179,6 +302,52 @@ fn get_bounds_f64_uint(uint_ty: UintTy, mm: &MachineModel) -> (f64, f64) {
         UintTy::Usize => match mm.pointer_width {
             32 => f64::from_le_bytes(F64_U32_UPPER),
             64 => f64::from_le_bytes(F64_U64_UPPER),
+            _ => unreachable!(),
+        },
+    };
+    (lower, upper)
+}
+
+fn get_bounds_f128_uint(uint_ty: UintTy, mm: &MachineModel) -> (f128, f128) {
+    let lower = f128::from_le_bytes(F128_U_LOWER);
+    let upper = match uint_ty {
+        UintTy::U8 => f128::from_le_bytes(F128_U8_UPPER),
+        UintTy::U16 => f128::from_le_bytes(F128_U16_UPPER),
+        UintTy::U32 => f128::from_le_bytes(F128_U32_UPPER),
+        UintTy::U64 => f128::from_le_bytes(F128_U64_UPPER),
+        UintTy::U128 => f128::from_le_bytes(F128_U128_UPPER),
+        UintTy::Usize => match mm.pointer_width {
+            32 => f128::from_le_bytes(F128_U32_UPPER),
+            64 => f128::from_le_bytes(F128_U64_UPPER),
+            _ => unreachable!(),
+        },
+    };
+    (lower, upper)
+}
+
+fn get_bounds_f16_int(int_ty: IntTy, mm: &MachineModel) -> (f16, f16) {
+    let lower = match int_ty {
+        IntTy::I8 => f16::from_le_bytes(F16_I8_LOWER),
+        IntTy::I16 => f16::from_le_bytes(F16_I16_LOWER),
+        IntTy::I32 => f16::from_le_bytes(F16_I32_LOWER),
+        IntTy::I64 => f16::from_le_bytes(F16_I64_LOWER),
+        IntTy::I128 => f16::from_le_bytes(F16_I128_LOWER),
+        IntTy::Isize => match mm.pointer_width {
+            32 => f16::from_le_bytes(F16_I32_LOWER),
+            64 => f16::from_le_bytes(F16_I64_LOWER),
+            _ => unreachable!(),
+        },
+    };
+
+    let upper = match int_ty {
+        IntTy::I8 => f16::from_le_bytes(F16_I8_UPPER),
+        IntTy::I16 => f16::from_le_bytes(F16_I16_UPPER),
+        IntTy::I32 => f16::from_le_bytes(F16_I32_UPPER),
+        IntTy::I64 => f16::from_le_bytes(F16_I64_UPPER),
+        IntTy::I128 => f16::from_le_bytes(F16_I128_UPPER),
+        IntTy::Isize => match mm.pointer_width {
+            32 => f16::from_le_bytes(F16_I32_UPPER),
+            64 => f16::from_le_bytes(F16_I64_UPPER),
             _ => unreachable!(),
         },
     };
@@ -236,6 +405,34 @@ fn get_bounds_f64_int(int_ty: IntTy, mm: &MachineModel) -> (f64, f64) {
         IntTy::Isize => match mm.pointer_width {
             32 => f64::from_le_bytes(F64_I32_UPPER),
             64 => f64::from_le_bytes(F64_I64_UPPER),
+            _ => unreachable!(),
+        },
+    };
+    (lower, upper)
+}
+
+fn get_bounds_f128_int(int_ty: IntTy, mm: &MachineModel) -> (f128, f128) {
+    let lower = match int_ty {
+        IntTy::I8 => f128::from_le_bytes(F128_I8_LOWER),
+        IntTy::I16 => f128::from_le_bytes(F128_I16_LOWER),
+        IntTy::I32 => f128::from_le_bytes(F128_I32_LOWER),
+        IntTy::I64 => f128::from_le_bytes(F128_I64_LOWER),
+        IntTy::I128 => f128::from_le_bytes(F128_I128_LOWER),
+        IntTy::Isize => match mm.pointer_width {
+            32 => f128::from_le_bytes(F128_I32_LOWER),
+            64 => f128::from_le_bytes(F128_I64_LOWER),
+            _ => unreachable!(),
+        },
+    };
+    let upper = match int_ty {
+        IntTy::I8 => f128::from_le_bytes(F128_I8_UPPER),
+        IntTy::I16 => f128::from_le_bytes(F128_I16_UPPER),
+        IntTy::I32 => f128::from_le_bytes(F128_I32_UPPER),
+        IntTy::I64 => f128::from_le_bytes(F128_I64_UPPER),
+        IntTy::I128 => f128::from_le_bytes(F128_I128_UPPER),
+        IntTy::Isize => match mm.pointer_width {
+            32 => f128::from_le_bytes(F128_I32_UPPER),
+            64 => f128::from_le_bytes(F128_I64_UPPER),
             _ => unreachable!(),
         },
     };

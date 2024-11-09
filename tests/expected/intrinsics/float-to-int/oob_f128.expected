@@ -1,0 +1,13 @@
+Verification failed for - check_cast_i16
+Verification failed for - check_cast_i128
+Verification failed for - check_cast_u8
+Verification failed for - check_cast_u32
+Verification failed for - check_cast_u64
+Verification failed for - check_cast_u16
+Verification failed for - check_cast_u128
+Verification failed for - check_cast_usize
+Verification failed for - check_cast_i8
+Verification failed for - check_cast_i64
+Verification failed for - check_cast_isize
+Verification failed for - check_cast_i32
+Complete - 0 successfully verified harnesses, 12 failures, 12 total.
