@@ -91,6 +91,13 @@ impl CodegenUnits {
         }
     }
 
+    /// We flag that the harness contains usage of loop contracts.
+    pub fn store_loop_contracts(&mut self, harnesses: &[Harness]) {
+        for harness in harnesses {
+            self.harness_info.get_mut(harness).unwrap().has_loop_contracts = true;
+        }
+    }
+
     /// Write compilation metadata into a file.
     pub fn write_metadata(&self, queries: &QueryDb, tcx: TyCtxt) {
         let metadata = self.generate_metadata(tcx);

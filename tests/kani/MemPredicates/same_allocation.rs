@@ -7,6 +7,7 @@ extern crate kani;
 
 use kani::mem::same_allocation;
 use kani::{AllocationStatus, ArbitraryPointer, PointerGenerator};
+use std::any::Any;
 
 #[kani::proof]
 fn check_inbounds() {
@@ -53,4 +54,46 @@ fn check_dyn_alloc() {
 
     let ArbitraryPointer { ptr: ptr2, .. } = generator2.any_in_bounds::<u8>();
     assert!(!same_allocation(ptr1a, ptr2));
+}
+
+#[kani::proof]
+fn check_same_alloc_dyn_ptr() {
+    let mut generator = PointerGenerator::<100>::new();
+    let ArbitraryPointer { ptr: ptr1, .. } = generator.any_in_bounds::<()>();
+    let ArbitraryPointer { ptr: ptr2, .. } = generator.any_in_bounds::<char>();
+    let dyn_1 = ptr1 as *const dyn Any;
+    let dyn_2 = ptr2 as *const dyn Any;
+    assert!(same_allocation(dyn_1, dyn_2));
+}
+
+#[kani::proof]
+fn check_not_same_alloc_dyn_ptr() {
+    let mut generator1 = PointerGenerator::<100>::new();
+    let mut generator2 = PointerGenerator::<100>::new();
+    let ArbitraryPointer { ptr: ptr1, .. } = generator1.any_in_bounds::<()>();
+    let ArbitraryPointer { ptr: ptr2, .. } = generator2.any_in_bounds::<char>();
+    let dyn_1 = ptr1 as *const dyn Any;
+    let dyn_2 = ptr2 as *const dyn Any;
+    assert!(!same_allocation(dyn_1, dyn_2));
+}
+
+#[kani::proof]
+fn check_same_alloc_slice() {
+    let mut generator = PointerGenerator::<100>::new();
+    let ArbitraryPointer { ptr: ptr1, .. } = generator.any_in_bounds::<[u16; 4]>();
+    let ArbitraryPointer { ptr: ptr2, .. } = generator.any_in_bounds::<[u16; 10]>();
+    let slice_1 = ptr1 as *const [_];
+    let slice_2 = ptr2 as *const [_];
+    assert!(same_allocation(slice_1, slice_2));
+}
+
+#[kani::proof]
+fn check_not_same_alloc_slice() {
+    let mut generator1 = PointerGenerator::<100>::new();
+    let mut generator2 = PointerGenerator::<100>::new();
+    let ArbitraryPointer { ptr: ptr1, .. } = generator1.any_in_bounds::<[u16; 4]>();
+    let ArbitraryPointer { ptr: ptr2, .. } = generator2.any_in_bounds::<[u16; 10]>();
+    let slice_1 = ptr1 as *const [_];
+    let slice_2 = ptr2 as *const [_];
+    assert!(!same_allocation(slice_1, slice_2));
 }

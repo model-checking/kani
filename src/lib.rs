@@ -140,7 +140,7 @@ fn exec(bin: &str) -> Result<()> {
 
     // Allow python scripts to find dependencies under our pyroot
     let pythonpath = prepend_search_path(&[pyroot], env::var_os("PYTHONPATH"))?;
-    // Add: kani, cbmc, viewer (pyroot), and our rust toolchain directly to our PATH
+    // Add: kani, cbmc, and our rust toolchain directly to our PATH
     let path = prepend_search_path(&[bin_kani, bin_pyroot], env::var_os("PATH"))?;
 
     // Ensure our environment variables for linker search paths won't cause failures, before we execute:

@@ -32,6 +32,8 @@ pub struct Project {
     pub metadata: Vec<KaniMetadata>,
     /// The directory where all outputs should be directed to. This path represents the canonical
     /// version of outdir.
+    /// NOTE: This needs to be marked as dead_code even when it's clearly not
+    #[allow(dead_code)]
     pub outdir: PathBuf,
     /// The path to the input file the project was built from.
     /// Note that it will only be `Some(...)` if this was built from a standalone project.

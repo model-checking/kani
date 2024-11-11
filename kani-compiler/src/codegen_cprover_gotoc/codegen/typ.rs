@@ -18,8 +18,8 @@ use rustc_middle::ty::{List, TypeFoldable};
 use rustc_smir::rustc_internal;
 use rustc_span::def_id::DefId;
 use rustc_target::abi::{
-    Abi::Vector, FieldIdx, FieldsShape, Float, Integer, LayoutS, Primitive, Size, TagEncoding,
-    TyAndLayout, VariantIdx, Variants,
+    BackendRepr::Vector, FieldIdx, FieldsShape, Float, Integer, LayoutData, Primitive, Size,
+    TagEncoding, TyAndLayout, VariantIdx, Variants,
 };
 use stable_mir::abi::{ArgAbi, FnAbi, PassMode};
 use stable_mir::mir::Body;
@@ -675,7 +675,7 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_alignment_padding(
         &self,
         size: Size,
-        layout: &LayoutS<FieldIdx, VariantIdx>,
+        layout: &LayoutData<FieldIdx, VariantIdx>,
         idx: usize,
     ) -> Option<DatatypeComponent> {
         let align = Size::from_bits(layout.align.abi.bits());
@@ -700,7 +700,7 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_struct_fields(
         &mut self,
         flds: Vec<(String, Ty<'tcx>)>,
-        layout: &LayoutS<FieldIdx, VariantIdx>,
+        layout: &LayoutData<FieldIdx, VariantIdx>,
         initial_offset: Size,
     ) -> Vec<DatatypeComponent> {
         match &layout.fields {
@@ -1112,7 +1112,7 @@ impl<'tcx> GotocCtx<'tcx> {
         &mut self,
         variant: &VariantDef,
         subst: &'tcx GenericArgsRef<'tcx>,
-        layout: &LayoutS<FieldIdx, VariantIdx>,
+        layout: &LayoutData<FieldIdx, VariantIdx>,
         initial_offset: Size,
     ) -> Vec<DatatypeComponent> {
         let flds: Vec<_> =
@@ -1251,7 +1251,7 @@ impl<'tcx> GotocCtx<'tcx> {
                             // https://github.com/rust-lang/rust/blob/e60ebb2f2c1facba87e7971798f3cbdfd309cd23/compiler/rustc_session/src/code_stats.rs#L166
                             let max_variant_size = variants
                                 .iter()
-                                .map(|l: &LayoutS<FieldIdx, VariantIdx>| l.size)
+                                .map(|l: &LayoutData<FieldIdx, VariantIdx>| l.size)
                                 .max()
                                 .unwrap();
                             let max_variant_size = std::cmp::max(max_variant_size, discr_offset);
@@ -1298,7 +1298,7 @@ impl<'tcx> GotocCtx<'tcx> {
         ty: Ty<'tcx>,
         adtdef: &'tcx AdtDef,
         subst: &'tcx GenericArgsRef<'tcx>,
-        variants: &IndexVec<VariantIdx, LayoutS<FieldIdx, VariantIdx>>,
+        variants: &IndexVec<VariantIdx, LayoutData<FieldIdx, VariantIdx>>,
     ) -> Type {
         let non_zst_count = variants.iter().filter(|layout| layout.size.bytes() > 0).count();
         let mangled_name = self.ty_mangled_name(ty);
@@ -1317,7 +1317,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     pub(crate) fn variant_min_offset(
         &self,
-        variants: &IndexVec<VariantIdx, LayoutS<FieldIdx, VariantIdx>>,
+        variants: &IndexVec<VariantIdx, LayoutData<FieldIdx, VariantIdx>>,
     ) -> Option<Size> {
         variants
             .iter()
@@ -1407,7 +1407,7 @@ impl<'tcx> GotocCtx<'tcx> {
         pretty_name: InternedString,
         def: &'tcx AdtDef,
         subst: &'tcx GenericArgsRef<'tcx>,
-        layouts: &IndexVec<VariantIdx, LayoutS<FieldIdx, VariantIdx>>,
+        layouts: &IndexVec<VariantIdx, LayoutData<FieldIdx, VariantIdx>>,
         initial_offset: Size,
     ) -> Vec<DatatypeComponent> {
         def.variants()
@@ -1439,7 +1439,7 @@ impl<'tcx> GotocCtx<'tcx> {
         pretty_name: InternedString,
         case: &VariantDef,
         subst: &'tcx GenericArgsRef<'tcx>,
-        variant: &LayoutS<FieldIdx, VariantIdx>,
+        variant: &LayoutData<FieldIdx, VariantIdx>,
         initial_offset: Size,
     ) -> Type {
         let case_name = format!("{name}::{}", case.name);
@@ -1451,7 +1451,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     fn codegen_vector(&mut self, ty: Ty<'tcx>) -> Type {
-        let layout = &self.layout_of(ty).layout.abi();
+        let layout = &self.layout_of(ty).layout.backend_repr();
         debug! {"handling simd with layout {:?}", layout};
 
         let (element, size) = match layout {

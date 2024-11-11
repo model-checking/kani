@@ -37,24 +37,6 @@ pub fn harness_stub_map(
     stub_pairs
 }
 
-/// Retrieve the index of the host parameter if old definition has one, but not the new definition.
-///
-/// This is to allow constant functions to be stubbed by non-constant functions when the
-/// `effect` feature is on.
-///
-/// Note that the opposite is not supported today, but users should be able to change their stubs.
-///
-/// Note that this has no effect at runtime.
-pub fn contract_host_param(tcx: TyCtxt, old_def: FnDef, new_def: FnDef) -> Option<usize> {
-    let old_generics = tcx.generics_of(rustc_internal::internal(tcx, old_def.def_id()));
-    let new_generics = tcx.generics_of(rustc_internal::internal(tcx, new_def.def_id()));
-    if old_generics.host_effect_index.is_some() && new_generics.host_effect_index.is_none() {
-        old_generics.host_effect_index
-    } else {
-        None
-    }
-}
-
 /// Checks whether the stub is compatible with the original function/method: do
 /// the arities and types (of the parameters and return values) match up? This
 /// does **NOT** check whether the type variables are constrained to implement
@@ -81,15 +63,12 @@ pub fn check_compatibility(tcx: TyCtxt, old_def: FnDef, new_def: FnDef) -> Resul
     let new_def_id = rustc_internal::internal(tcx, new_def.def_id());
     let old_ty = rustc_internal::stable(tcx.type_of(old_def_id)).value;
     let new_ty = rustc_internal::stable(tcx.type_of(new_def_id)).value;
-    let TyKind::RigidTy(RigidTy::FnDef(_, mut old_args)) = old_ty.kind() else {
+    let TyKind::RigidTy(RigidTy::FnDef(_, old_args)) = old_ty.kind() else {
         unreachable!("Expected function, but found {old_ty}")
     };
     let TyKind::RigidTy(RigidTy::FnDef(_, new_args)) = new_ty.kind() else {
         unreachable!("Expected function, but found {new_ty}")
     };
-    if let Some(idx) = contract_host_param(tcx, old_def, new_def) {
-        old_args.0.remove(idx);
-    }
 
     // TODO: We should check for the parameter type too or replacement will fail.
     if old_args.0.len() != new_args.0.len() {

@@ -272,7 +272,7 @@ jobs:
       - name: Run tests
         # TODO: Customize compiletest to run custom kani. For now, just run a few cargo kani tests.
         run: |
-          for dir in simple-lib simple-visualize build-rs-works simple-kissat; do
+          for dir in simple-lib build-rs-works simple-kissat; do
             >&2 echo "Running test $dir"
             pushd tests/cargo-kani/$dir
             cargo kani
@@ -312,7 +312,7 @@ jobs:
 
       - name: Run installed tests
         run: |
-          for dir in simple-lib simple-visualize build-rs-works simple-kissat; do
+          for dir in simple-lib build-rs-works simple-kissat; do
             >&2 echo "Running test $dir"
             docker run -v /var/run/docker.sock:/var/run/docker.sock \
               -w /tmp/kani/tests/cargo-kani/$dir kani-18-04 cargo kani
