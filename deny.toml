@@ -1,6 +1,12 @@
 # Copyright Kani Contributors
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
+[graph]
+# derivative is marked as unmaintained by RUSTSEC but still used in
+# Charon. We exclude it from the deny check until derivative is replaced
+# from Charon (https://github.com/AeneasVerif/charon/pull/459).
+exclude = ["derivative"]
+
 # This section is considered when running `cargo deny check advisories`
 # More documentation for the advisories section can be found here:
 # https://embarkstudios.github.io/cargo-deny/checks/advisories/cfg.html
