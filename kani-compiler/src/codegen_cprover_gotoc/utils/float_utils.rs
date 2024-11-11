@@ -25,14 +25,19 @@ use stable_mir::ty::{FloatTy, IntTy, RigidTy, UintTy};
 ///
 /// If we were to just use `MIN - 1`, the resulting expression may exclude values that are actually in range.
 /// For example, `float_expr > ((i32::MIN - 1) as f32)` would expand to `float_expr > -2147483649 as f32` which
-/// would result in `float_expr > -2147483648.0`. This expression incorrectly exlcudes a valid `i32`
-/// value: `i32::MIN` = -2147483648.
+/// would result in `float_expr > -2147483648.0`. This expression incorrectly excludes a valid `i32`
+/// value: `i32::MIN` = -2147483648. Note that CBMC for example uses the formula above which
+/// leads to bugs, e.g.: https://github.com/diffblue/cbmc/issues/8488
 ///
 /// Thus, to determine the lower bound, we need to find the **largest** floating-point value that is
 /// less than or equal to `MIN - 1`.
 /// For example, for `i32`, the largest such value is `-2147483904.0`
 /// Similarly, to determine the upper bound, we need to find the smallest floating-point value that is
 /// greater than or equal to `MAX + 1`.
+///
+/// Note that generally, `MAX + 1` values (=2^x) can be precisely represented as floating-point numbers
+/// Also, for all unsigned types, lower is -1.0 because the next higher number, when
+/// truncated is -0.0 (or 0.0) which is not strictly smaller than `u<N>::MIN`.
 ///
 /// An alternative approach would be to perform the float-to-int cast with a wider integer and
 /// then check if the wider integer value is in the range of the narrower integer value.
@@ -202,29 +207,17 @@ const F128_U128_UPPER: [u8; 16] = [
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x7F, 0x40,
 ];
 
-/// upper is the smallest `f32` that after truncation is strictly larger than i<N>::MAX or u<N>::MAX
-/// lower is the largest `f32` that after truncation is strictly smaller than i<N>::MIN or u<N>::MIN
+/// For the `get_bounds_fXY` functions below (`get_bounds_f16`, `get_bounds_f32`, etc.):
+/// upper is the smallest `fXY` that after truncation is strictly larger than i<N>::MAX or u<N>::MAX
+/// lower is the largest `fXY` that after truncation is strictly smaller than i<N>::MIN or u<N>::MIN
 ///
-/// For example, for `u8`, upper is 256.0 because the previous f32 (i.e.
+/// For example, for `u8` and `f32`, upper is 256.0 because the previous f32 (i.e.
 /// `256_f32.next_down()` which is 255.9999847412109375) when truncated is 255.0,
 /// which is not strictly larger than `u8::MAX`
 ///
-/// For `i16`, upper is 32768.0 because the previous f32 (i.e.
+/// For `i16` and `f32`, upper is 32768.0 because the previous f32 (i.e.
 /// `32768_f32.next_down()`) when truncated is 32767,
 /// which is not strictly larger than `i16::MAX`
-///
-/// Note that all upper bound values are 2^(w-1) which can be precisely
-/// represented in f32 (verified using
-/// https://www.h-schmidt.net/FloatConverter/IEEE754.html)
-/// However, for lower bound values, which should be -2^(w-1)-1 (i.e.
-/// i<N>::MIN-1), not all of them can be represented in f32.
-/// For instance, for w = 32, -2^(31)-1 = -2,147,483,649, but this number does
-/// **not** have an f32 representation, and the next **smaller** number is
-/// -2,147,483,904. Note that CBMC for example uses the formula above which
-/// leads to bugs, e.g.: https://github.com/diffblue/cbmc/issues/8488
-///
-/// For all unsigned types, lower is -1.0 because the next higher number, when
-/// truncated is -0.0 (or 0.0) which is not strictly smaller than `u<N>::MIN`
 fn get_bounds_f16(integral_ty: RigidTy, mm: &MachineModel) -> (f16, f16) {
     match integral_ty {
         RigidTy::Int(int_ty) => get_bounds_f16_int(int_ty, mm),
