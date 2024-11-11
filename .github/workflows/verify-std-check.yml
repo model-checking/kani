@@ -59,7 +59,7 @@ jobs:
         continue-on-error: true
         run: |
           kani verify-std -Z unstable-options ./library --target-dir ${{ runner.temp }} -Z function-contracts \
-            -Z mem-predicates
+            -Z mem-predicates -Z loop-contracts --enable-unstable --cbmc-args --object-bits 12
 
       # If the head failed, check if it's a new failure.
       - name: Checkout base
@@ -77,7 +77,7 @@ jobs:
         continue-on-error: true
         run: |
           kani verify-std -Z unstable-options ./library --target-dir ${{ runner.temp }} -Z function-contracts \
-            -Z mem-predicates
+            -Z mem-predicates -Z loop-contracts --enable-unstable --cbmc-args --object-bits 12
 
       - name: Compare PR results
         if: steps.check-head.outcome != 'success' && steps.check-head.outcome != steps.check-base.outcome
