@@ -16,12 +16,21 @@ mod issue_3615 {
     }
 
     #[kani::proof]
-    pub fn check_size_of_overflows() {
+    pub fn from_raw_parts_for_slices() {
         let var: Wrapper<[u64; 4]> = kani::any();
         let fat_ptr: *const Wrapper<[u64]> = &var as *const _;
         let (thin_ptr, _) = fat_ptr.to_raw_parts();
         let new_size: usize = kani::any();
         let _new_ptr: *const Wrapper<[u64]> = ptr::from_raw_parts(thin_ptr, new_size);
+    }
+
+    #[kani::proof]
+    pub fn from_raw_parts_for_slices_nested() {
+        let var: Wrapper<Wrapper<[u8; 4]>> = kani::any();
+        let fat_ptr: *const Wrapper<Wrapper<[u8]>> = &var as *const _;
+        let (thin_ptr, _) = fat_ptr.to_raw_parts();
+        let new_size: usize = kani::any();
+        let _new_ptr: *const Wrapper<Wrapper<[u8]>> = ptr::from_raw_parts(thin_ptr, new_size);
     }
 }
 
