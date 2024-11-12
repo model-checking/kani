@@ -165,8 +165,8 @@ impl GotocCtx<'_> {
                 let counter_data = format!("{coverage_opaque:?} ${function_name}$");
                 let maybe_source_region =
                     region_from_coverage_opaque(self.tcx, &coverage_opaque, instance);
-                if let Some((source_region, file_symbol)) = maybe_source_region {
-                    let file_name = format!("{file_symbol}");
+                if let Some(source_region) = maybe_source_region {
+                    let file_name = format!("{:?}", stmt.span.get_filename());
                     let coverage_stmt =
                         self.codegen_coverage(&counter_data, stmt.span, source_region, &file_name);
                     // TODO: Avoid single-statement blocks when conversion of
