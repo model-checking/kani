@@ -218,11 +218,14 @@ impl GotocCtx<'_> {
 }
 
 pub mod rustc_smir {
+    use crate::rustc_session::RemapFileNameExt;
     use crate::stable_mir::CrateDef;
     use rustc_middle::mir::coverage::CovTerm;
     use rustc_middle::mir::coverage::MappingKind::Code;
     use rustc_middle::mir::coverage::SourceRegion;
     use rustc_middle::ty::TyCtxt;
+    use rustc_session::config::RemapPathScopeComponents;
+    use rustc_span::{Span, Symbol};
     use stable_mir::Opaque;
     use stable_mir::mir::mono::Instance;
 
@@ -234,7 +237,7 @@ pub mod rustc_smir {
         tcx: TyCtxt,
         coverage_opaque: &CoverageOpaque,
         instance: Instance,
-    ) -> Option<SourceRegion> {
+    ) -> Option<(SourceRegion, Symbol)> {
         let cov_term = parse_coverage_opaque(coverage_opaque);
         region_from_coverage(tcx, cov_term, instance)
     }
@@ -246,7 +249,7 @@ pub mod rustc_smir {
         tcx: TyCtxt<'_>,
         coverage: CovTerm,
         instance: Instance,
-    ) -> Option<SourceRegion> {
+    ) -> Option<(SourceRegion, Symbol)> {
         // We need to pull the coverage info from the internal MIR instance.
         let instance_def = rustc_smir::rustc_internal::internal(tcx, instance.def.def_id());
         let body = tcx.instance_mir(rustc_middle::ty::InstanceKind::Item(instance_def));
@@ -258,7 +261,10 @@ pub mod rustc_smir {
             for mapping in &cov_info.mappings {
                 let Code(term) = mapping.kind else { unreachable!() };
                 if term == coverage {
-                    return Some(mapping.source_region.clone());
+                    return Some((
+                        mapping.source_region.clone(),
+                        span_file_name(tcx, cov_info.body_span),
+                    ));
                 }
             }
         }
@@ -285,5 +291,12 @@ pub mod rustc_smir {
         } else {
             CovTerm::Zero
         }
+    }
+
+    pub fn span_file_name(tcx: TyCtxt<'_>, span: Span) -> Symbol {
+        let source_file = tcx.sess.source_map().lookup_source_file(span.lo());
+        let name =
+            source_file.name.for_scope(tcx.sess, RemapPathScopeComponents::MACRO).to_string_lossy();
+        Symbol::intern(&name)
     }
 }
