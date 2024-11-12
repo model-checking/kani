@@ -1,6 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+use crate::args::Timeout;
 use crate::args::VerificationArgs;
 use crate::args::common::Verbosity;
 use crate::util::render_command;
@@ -8,10 +9,11 @@ use anyhow::{Context, Result, bail};
 use std::io::IsTerminal;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, ExitStatus, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use std::time::Instant;
 use strum_macros::Display;
+use tokio::process::Command as TokioCommand;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::{EnvFilter, Registry, layer::SubscriberExt};
 
@@ -38,6 +40,9 @@ pub struct KaniSession {
 
     /// The temporary files we littered that need to be cleaned up at the end of execution
     pub temporaries: Mutex<Vec<PathBuf>>,
+
+    /// The tokio runtime
+    pub runtime: tokio::runtime::Runtime,
 }
 
 /// Represents where we detected Kani, with helper methods for using that information to find critical paths
@@ -61,6 +66,7 @@ impl KaniSession {
             kani_compiler: install.kani_compiler()?,
             kani_lib_c: install.kani_lib_c()?,
             temporaries: Mutex::new(vec![]),
+            runtime: tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap(),
         })
     }
 
@@ -113,18 +119,23 @@ impl KaniSession {
         run_terminal(&self.args.common_args, cmd)
     }
 
+    /// Call [run_terminal_timeout] with the verbosity configured by the user.
+    /// The `bool` value indicates whether the command timed out
+    pub fn run_terminal_timeout(&self, cmd: TokioCommand) -> Result<bool> {
+        self.runtime.block_on(run_terminal_timeout(
+            &self.args.common_args,
+            cmd,
+            self.args.harness_timeout,
+        ))
+    }
+
     /// Call [run_suppress] with the verbosity configured by the user.
     pub fn run_suppress(&self, cmd: Command) -> Result<()> {
         run_suppress(&self.args.common_args, cmd)
     }
 
-    /// Call [run_redirect] with the verbosity configured by the user.
-    pub fn run_redirect(&self, cmd: Command, stdout: &Path) -> Result<ExitStatus> {
-        run_redirect(&self.args.common_args, cmd, stdout)
-    }
-
     /// Call [run_piped] with the verbosity configured by the user.
-    pub fn run_piped(&self, cmd: Command) -> Result<Option<Child>> {
+    pub fn run_piped(&self, cmd: Command) -> Result<Child> {
         run_piped(&self.args.common_args, cmd)
     }
 
@@ -148,7 +159,6 @@ impl KaniSession {
 //               Default  Quiet  Verbose   Default  Quiet  Verbose
 // run_terminal  Y        N      Y         Y        N      Y         (inherits terminal)
 // run_suppress  N        N      Y         Y        N      Y         (buffered text only)
-// run_redirect  (not applicable, always to the file)                (only option where error is acceptable)
 
 /// Run a job, leave it outputting to terminal (unless --quiet), and fail if there's a problem.
 pub fn run_terminal(verbosity: &impl Verbosity, mut cmd: Command) -> Result<()> {
@@ -174,6 +184,49 @@ pub fn run_terminal(verbosity: &impl Verbosity, mut cmd: Command) -> Result<()> 
     Ok(())
 }
 
+/// The `bool` value indicates whether the command timed out
+async fn run_terminal_timeout(
+    verbosity: &impl Verbosity,
+    mut cmd: TokioCommand,
+    timeout: Option<Timeout>,
+) -> Result<bool> {
+    if verbosity.quiet() {
+        cmd.stdout(std::process::Stdio::null());
+        cmd.stderr(std::process::Stdio::null());
+    }
+    if verbosity.verbose() {
+        println!("[Kani] Running: `{}`", render_command(&cmd.as_std()).to_string_lossy());
+    }
+    let program = cmd.as_std().get_program().to_string_lossy().to_string();
+    let result = with_timer(
+        verbosity,
+        || async {
+            if let Some(timeout) = timeout {
+                let mut child = cmd.spawn().unwrap();
+                let res = tokio::time::timeout(timeout.into(), child.wait()).await;
+                if res.is_err() {
+                    // Kill the process
+                    child.kill().await.unwrap();
+                }
+                res
+            } else {
+                Ok(cmd.status().await)
+            }
+        },
+        &program,
+    )
+    .await;
+    // outer result indicates whether the command timed out
+    if result.is_err() {
+        return Ok(true);
+    }
+    let result = result.unwrap().context(format!("Failed to invoke {program}"))?;
+    if !result.success() {
+        bail!("{} exited with status {}", cmd.as_std().get_program().to_string_lossy(), result);
+    }
+    Ok(false)
+}
+
 /// Run a job, but only output (unless --quiet) if it fails, and fail if there's a problem.
 pub fn run_suppress(verbosity: &impl Verbosity, mut cmd: Command) -> Result<()> {
     if verbosity.is_set() {
@@ -195,39 +248,12 @@ pub fn run_suppress(verbosity: &impl Verbosity, mut cmd: Command) -> Result<()> 
     Ok(())
 }
 
-/// Run a job, redirect its output to a file, and allow the caller to decide what to do with failure.
-pub fn run_redirect(
-    verbosity: &impl Verbosity,
-    mut cmd: Command,
-    stdout: &Path,
-) -> Result<ExitStatus> {
-    if verbosity.verbose() {
-        println!(
-            "[Kani] Running: `{} > {}`",
-            render_command(&cmd).to_string_lossy(),
-            stdout.display()
-        );
-    }
-    let output_file = std::fs::File::create(stdout)?;
-    cmd.stdout(output_file);
-
-    let program = cmd.get_program().to_string_lossy().to_string();
-    with_timer(
-        verbosity,
-        || {
-            cmd.status()
-                .context(format!("Failed to invoke {}", cmd.get_program().to_string_lossy()))
-        },
-        &program,
-    )
-}
-
 /// Run a job and pipe its output to this process.
 /// Returns an error if the process could not be spawned.
 ///
 /// NOTE: Unlike other `run_` functions, this function does not attempt to indicate
 /// the process exit code, you need to remember to check this yourself.
-pub fn run_piped(verbosity: &impl Verbosity, mut cmd: Command) -> Result<Option<Child>> {
+pub fn run_piped(verbosity: &impl Verbosity, mut cmd: Command) -> Result<Child> {
     if verbosity.verbose() {
         println!("[Kani] Running: `{}`", render_command(&cmd).to_string_lossy());
     }
@@ -237,7 +263,7 @@ pub fn run_piped(verbosity: &impl Verbosity, mut cmd: Command) -> Result<Option<
         .spawn()
         .context(format!("Failed to invoke {}", cmd.get_program().to_string_lossy()))?;
 
-    Ok(Some(process))
+    Ok(process)
 }
 
 /// Execute the provided function and measure the clock time it took for its execution.

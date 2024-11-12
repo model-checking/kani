@@ -364,6 +364,12 @@ fn fn_any_enum(ident: &Ident, data: &DataEnum) -> TokenStream {
         quote! {
             panic!(#msg)
         }
+    } else if data.variants.len() == 1 {
+        let variant = data.variants.first().unwrap();
+        let init = init_symbolic_item(&variant.ident, &variant.fields);
+        quote! {
+            #ident::#init
+        }
     } else {
         let arms = data.variants.iter().enumerate().map(|(idx, variant)| {
             let init = init_symbolic_item(&variant.ident, &variant.fields);

@@ -27,9 +27,5 @@ const fn count_zero(slice: &[u8]) -> usize {
 
 #[kani::proof]
 pub fn check_counter() {
-    // Needed to avoid having `free` be removed as unused function. This is
-    // because DFCC contract enforcement assumes that a definition for `free`
-    // exists.
-    let _ = Box::new(10);
     assert_eq!(count_zero(&[1, 2, 3]), 0)
 }

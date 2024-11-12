@@ -16,6 +16,7 @@
 #![feature(f128)]
 #![feature(f16)]
 #![feature(non_exhaustive_omitted_patterns_lint)]
+#![feature(float_next_up_down)]
 extern crate rustc_abi;
 extern crate rustc_ast;
 extern crate rustc_ast_pretty;
@@ -38,7 +39,7 @@ extern crate stable_mir;
 extern crate tempfile;
 
 mod args;
-#[cfg(feature = "aeneas")]
+#[cfg(feature = "llbc")]
 mod codegen_aeneas_llbc;
 #[cfg(feature = "cprover")]
 mod codegen_cprover_gotoc;

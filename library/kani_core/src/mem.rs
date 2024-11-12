@@ -148,7 +148,7 @@ macro_rules! kani_mem {
             reason = "experimental memory predicate API"
         )]
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
-        pub fn same_allocation<T>(ptr1: *const T, ptr2: *const T) -> bool {
+        pub fn same_allocation<T: ?Sized>(ptr1: *const T, ptr2: *const T) -> bool {
             cbmc::same_allocation(ptr1, ptr2)
         }
 
@@ -257,7 +257,7 @@ macro_rules! kani_mem {
 
         /// A helper to assert `is_initialized` to use it as a part of other predicates.
         fn assert_is_initialized<T: ?Sized>(ptr: *const T) -> bool {
-            super::check(
+            super::internal::check(
                 is_initialized(ptr),
                 "Undefined Behavior: Reading from an uninitialized pointer",
             );
@@ -267,18 +267,16 @@ macro_rules! kani_mem {
         pub(super) mod cbmc {
             use super::*;
             /// CBMC specific implementation of [super::same_allocation].
-            pub fn same_allocation<T>(ptr1: *const T, ptr2: *const T) -> bool {
-                let obj1 = crate::kani::mem::pointer_object(ptr1);
-                (obj1 == crate::kani::mem::pointer_object(ptr2)) && {
+            pub fn same_allocation<T: ?Sized>(ptr1: *const T, ptr2: *const T) -> bool {
+                let addr1 = ptr1 as *const ();
+                let addr2 = ptr2 as *const ();
+                let obj1 = crate::kani::mem::pointer_object(addr1);
+                (obj1 == crate::kani::mem::pointer_object(addr2)) && {
                     crate::kani::assert(
-                        unsafe {
-                            is_allocated(ptr1 as *const (), 0) || is_allocated(ptr2 as *const (), 0)
-                        },
+                        unsafe { is_allocated(addr1, 0) || is_allocated(addr2, 0) },
                         "Kani does not support reasoning about pointer to unallocated memory",
                     );
-                    unsafe {
-                        is_allocated(ptr1 as *const (), 0) && is_allocated(ptr2 as *const (), 0)
-                    }
+                    unsafe { is_allocated(addr1, 0) && is_allocated(addr2, 0) }
                 }
             }
         }

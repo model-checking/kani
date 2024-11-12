@@ -567,15 +567,52 @@ impl GotocHook for LoopInvariantRegister {
         gcx: &mut GotocCtx,
         instance: Instance,
         fargs: Vec<Expr>,
-        _assign_to: &Place,
+        assign_to: &Place,
         target: Option<BasicBlockIdx>,
         span: Span,
     ) -> Stmt {
         let loc = gcx.codegen_span_stable(span);
         let func_exp = gcx.codegen_func_expr(instance, loc);
 
-        Stmt::goto(bb_label(target.unwrap()), loc)
-            .with_loop_contracts(func_exp.call(fargs).cast_to(Type::CInteger(CIntType::Bool)))
+        gcx.has_loop_contracts = true;
+
+        if gcx.queries.args().unstable_features.contains(&"loop-contracts".to_string()) {
+            // When loop-contracts is enabled, codegen
+            // free(0)
+            // goto target --- with loop contracts annotated.
+
+            // Add `free(0)` to make sure the body of `free` won't be dropped to
+            // satisfy the requirement of DFCC.
+            Stmt::block(
+                vec![
+                    BuiltinFn::Free
+                        .call(vec![Expr::pointer_constant(0, Type::void_pointer())], loc)
+                        .as_stmt(loc),
+                    Stmt::goto(bb_label(target.unwrap()), loc).with_loop_contracts(
+                        func_exp.call(fargs).cast_to(Type::CInteger(CIntType::Bool)),
+                    ),
+                ],
+                loc,
+            )
+        } else {
+            // When loop-contracts is not enabled, codegen
+            // assign_to = true
+            // goto target
+            Stmt::block(
+                vec![
+                    unwrap_or_return_codegen_unimplemented_stmt!(
+                        gcx,
+                        gcx.codegen_place_stable(assign_to, loc)
+                    )
+                    .goto_expr
+                    .assign(Expr::c_true(), loc),
+                    Stmt::goto(bb_label(target.unwrap()), loc).with_loop_contracts(
+                        func_exp.call(fargs).cast_to(Type::CInteger(CIntType::Bool)),
+                    ),
+                ],
+                loc,
+            )
+        }
     }
 }
 

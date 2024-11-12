@@ -103,6 +103,13 @@ impl TyVisitor for FindUnsafeCell<'_> {
 pub fn check_reachable_items(tcx: TyCtxt, queries: &QueryDb, items: &[MonoItem]) {
     // Avoid printing the same error multiple times for different instantiations of the same item.
     let mut def_ids = HashSet::new();
+    let reachable_functions: HashSet<InternalDefId> = items
+        .iter()
+        .filter_map(|i| match i {
+            MonoItem::Fn(instance) => Some(rustc_internal::internal(tcx, instance.def.def_id())),
+            _ => None,
+        })
+        .collect();
     for item in items.iter().filter(|i| matches!(i, MonoItem::Fn(..) | MonoItem::Static(..))) {
         let def_id = match item {
             MonoItem::Fn(instance) => instance.def.def_id(),
@@ -112,19 +119,16 @@ pub fn check_reachable_items(tcx: TyCtxt, queries: &QueryDb, items: &[MonoItem])
             }
         };
         if !def_ids.contains(&def_id) {
+            let attributes = KaniAttributes::for_def_id(tcx, def_id);
             // Check if any unstable attribute was reached.
-            KaniAttributes::for_def_id(tcx, def_id)
-                .check_unstable_features(&queries.args().unstable_features);
+            attributes.check_unstable_features(&queries.args().unstable_features);
+            // Check whether all `proof_for_contract` functions are reachable
+            attributes.check_proof_for_contract(&reachable_functions);
             def_ids.insert(def_id);
         }
     }
     tcx.dcx().abort_if_errors();
 }
-
-/// Check that Kani library is configured correctly.
-///
-/// We cache the results for function definitions since it scans all functions defined in the
-/// `kani` or `core` library.
 
 /// Structure that represents the source location of a definition.
 /// TODO: Use `InternedString` once we move it out of the cprover_bindings.

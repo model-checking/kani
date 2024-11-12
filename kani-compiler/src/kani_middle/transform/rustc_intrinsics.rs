@@ -77,7 +77,7 @@ impl<'a> ReplaceIntrinsicVisitor<'a> {
     }
 }
 
-impl<'a> MutMirVisitor for ReplaceIntrinsicVisitor<'a> {
+impl MutMirVisitor for ReplaceIntrinsicVisitor<'_> {
     /// Replace the terminator for some intrinsics.
     ///
     /// Note that intrinsics must always be called directly.

@@ -20,8 +20,6 @@
 #![feature(ptr_metadata)]
 #![feature(f16)]
 #![feature(f128)]
-// Need to add this since we are deprecating `kani::check`. Remove this when we remove that API.
-#![allow(deprecated)]
 
 // Allow us to use `kani::` to access crate features.
 extern crate self as kani;
@@ -32,7 +30,6 @@ mod concrete_playback;
 pub mod futures;
 pub mod invariant;
 pub mod shadow;
-pub mod slice;
 pub mod vec;
 
 mod models;

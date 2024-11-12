@@ -21,6 +21,7 @@ use kani_metadata::CbmcSolver;
 use std::ffi::OsString;
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::time::Duration;
 use strum::VariantNames;
 
 /// Trait used to perform extra validation after parsing.
@@ -61,6 +62,53 @@ pub fn print_deprecated(verbosity: &CommonArgs, option: &str, alternative: &str)
 
 // By default we configure CBMC to use 16 bits to represent the object bits in pointers.
 const DEFAULT_OBJECT_BITS: u32 = 16;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, strum_macros::EnumString)]
+enum TimeUnit {
+    #[strum(serialize = "s")]
+    Seconds,
+    #[strum(serialize = "m")]
+    Minutes,
+    #[strum(serialize = "h")]
+    Hours,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Timeout {
+    value: u32,
+    unit: TimeUnit,
+}
+
+impl FromStr for Timeout {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let last_char = s.chars().last().unwrap();
+        let (value_str, unit_str) = if last_char.is_ascii_digit() {
+            // no suffix
+            (s, "s")
+        } else {
+            s.split_at(s.len() - 1)
+        };
+        let value = value_str.parse::<u32>().map_err(|_| "Invalid timeout value")?;
+
+        let unit = TimeUnit::from_str(unit_str).map_err(
+            |_| "Invalid time unit. Use 's' for seconds, 'm' for minutes, or 'h' for hours",
+        )?;
+
+        Ok(Timeout { value, unit })
+    }
+}
+
+impl From<Timeout> for Duration {
+    fn from(timeout: Timeout) -> Self {
+        match timeout.unit {
+            TimeUnit::Seconds => Duration::from_secs(timeout.value as u64),
+            TimeUnit::Minutes => Duration::from_secs(timeout.value as u64 * 60),
+            TimeUnit::Hours => Duration::from_secs(timeout.value as u64 * 3600),
+        }
+    }
+}
 
 #[derive(Debug, clap::Parser)]
 #[command(
@@ -136,19 +184,11 @@ pub struct VerificationArgs {
     #[arg(long, hide = true, requires("enable_unstable"))]
     pub assess: bool,
 
-    /// Generate visualizer report to `<target-dir>/report/html/index.html`
-    #[arg(long)]
-    pub visualize: bool,
     /// Generate concrete playback unit test.
     /// If value supplied is 'print', Kani prints the unit test to stdout.
     /// If value supplied is 'inplace', Kani automatically adds the unit test to your source code.
     /// This option does not work with `--output-format old`.
-    #[arg(
-        long,
-        conflicts_with_all(&["visualize"]),
-        ignore_case = true,
-        value_enum
-    )]
+    #[arg(long, ignore_case = true, value_enum)]
     pub concrete_playback: Option<ConcretePlaybackMode>,
     /// Keep temporary files generated throughout Kani process. This is already the default
     /// behavior for `cargo-kani`.
@@ -266,6 +306,10 @@ pub struct VerificationArgs {
     )]
     pub synthesize_loop_contracts: bool,
 
+    //Harness Output into individual files
+    #[arg(long, hide_short_help = true)]
+    pub output_into_files: bool,
+
     /// Randomize the layout of structures. This option can help catching code that relies on
     /// a specific layout chosen by the compiler that is not guaranteed to be stable in the future.
     /// If a value is given, it will be used as the seed for randomization
@@ -277,9 +321,13 @@ pub struct VerificationArgs {
     #[arg(long, hide_short_help = true)]
     pub coverage: bool,
 
-    /// Print final LLBC for Aeneas backend. This requires the `-Z aeneas` option.
+    /// Print final LLBC for Lean backend. This requires the `-Z lean` option.
     #[arg(long, hide = true)]
     pub print_llbc: bool,
+
+    /// Timeout for each harness with optional suffix ('s': seconds, 'm': minutes, 'h': hours). Default is seconds. This option is experimental and requires `-Z unstable-options` to be used.
+    #[arg(long)]
+    pub harness_timeout: Option<Timeout>,
 
     /// Arguments to pass down to Cargo
     #[command(flatten)]
@@ -299,9 +347,9 @@ impl VerificationArgs {
         // if we flip the default, this will become: !self.no_restrict_vtable
     }
 
-    /// Assertion reachability checks should be disabled when running with --visualize
+    /// Assertion reachability checks should be disabled
     pub fn assertion_reach_checks(&self) -> bool {
-        !self.no_assertion_reach_checks && !self.visualize
+        !self.no_assertion_reach_checks
     }
 
     /// Suppress our default value, if the user has supplied it explicitly in --cbmc-args
@@ -517,16 +565,8 @@ impl ValidateArgs for VerificationArgs {
             );
         }
 
-        if self.visualize {
-            if !self.common_args.enable_unstable {
-                return Err(Error::raw(
-                    ErrorKind::MissingRequiredArgument,
-                    "Missing argument: --visualize now requires --enable-unstable
-                    due to open issues involving incorrect results.",
-                ));
-            } else {
-                print_deprecated(&self.common_args, "--visualize", "--concrete-playback");
-            }
+        if self.write_json_symtab {
+            print_obsolete(&self.common_args, "--write-json-symtab");
         }
 
         // TODO: these conflicting flags reflect what's necessary to pass current tests unmodified.
@@ -621,21 +661,42 @@ impl ValidateArgs for VerificationArgs {
             ));
         }
 
-        if self.print_llbc && !self.common_args.unstable_features.contains(UnstableFeature::Aeneas)
+        if self.output_into_files
+            && !self.common_args.unstable_features.contains(UnstableFeature::UnstableOptions)
         {
             return Err(Error::raw(
                 ErrorKind::MissingRequiredArgument,
-                "The `--print-llbc` argument is unstable and requires `-Z aeneas` to be used.",
+                "The `--output-into-files` argument is unstable and requires `-Z unstable-options` to enable \
+            unstable options support.",
+            ));
+        }
+
+        if self.print_llbc && !self.common_args.unstable_features.contains(UnstableFeature::Lean) {
+            return Err(Error::raw(
+                ErrorKind::MissingRequiredArgument,
+                "The `--print-llbc` argument is unstable and requires `-Z lean` to be used.",
             ));
         }
 
         // TODO: error out for other CBMC-backend-specific arguments
-        if self.common_args.unstable_features.contains(UnstableFeature::Aeneas)
+        if self.common_args.unstable_features.contains(UnstableFeature::Lean)
             && !self.cbmc_args.is_empty()
         {
             return Err(Error::raw(
                 ErrorKind::ArgumentConflict,
-                "The `--cbmc-args` argument cannot be used with -Z aeneas.",
+                "The `--cbmc-args` argument cannot be used with -Z lean.",
+            ));
+        }
+
+        if self.harness_timeout.is_some()
+            && !self.common_args.unstable_features.contains(UnstableFeature::UnstableOptions)
+        {
+            return Err(Error::raw(
+                ErrorKind::MissingRequiredArgument,
+                format!(
+                    "The `--harness-timeout` argument is unstable and requires `-Z {}` to be used.",
+                    UnstableFeature::UnstableOptions
+                ),
             ));
         }
         Ok(())
@@ -930,8 +991,8 @@ mod tests {
     }
 
     #[test]
-    fn check_cbmc_args_aeneas_backend() {
-        let args = "kani input.rs -Z aeneas --enable-unstable --cbmc-args --object-bits 10"
+    fn check_cbmc_args_lean_backend() {
+        let args = "kani input.rs -Z lean --enable-unstable --cbmc-args --object-bits 10"
             .split_whitespace();
         let err = StandaloneArgs::try_parse_from(args).unwrap().validate().unwrap_err();
         assert_eq!(err.kind(), ErrorKind::ArgumentConflict);

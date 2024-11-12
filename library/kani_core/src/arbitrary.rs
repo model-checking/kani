@@ -9,6 +9,7 @@
 //! TODO: Use this inside kani library so that we dont have to maintain two copies of the same proc macro for arbitrary.
 
 mod pointer;
+mod slice;
 
 #[macro_export]
 #[allow(clippy::crate_in_macro_def)]
@@ -187,6 +188,78 @@ macro_rules! generate_arbitrary {
         pub use self::arbitrary_ptr::*;
         mod arbitrary_ptr {
             kani_core::ptr_generator!();
+        }
+
+        pub mod slice {
+            kani_core::slice_generator!();
+        }
+
+        mod range_structures {
+            use super::{
+                Arbitrary,
+                core_path::{
+                    mem,
+                    ops::{Bound, Range, RangeFrom, RangeInclusive, RangeTo, RangeToInclusive},
+                },
+            };
+
+            impl<T> Arbitrary for Bound<T>
+            where
+                T: Arbitrary,
+            {
+                fn any() -> Self {
+                    match u8::any() {
+                        0 => Bound::Included(T::any()),
+                        1 => Bound::Excluded(T::any()),
+                        _ => Bound::Unbounded,
+                    }
+                }
+            }
+
+            impl<T> Arbitrary for Range<T>
+            where
+                T: Arbitrary,
+            {
+                fn any() -> Self {
+                    T::any()..T::any()
+                }
+            }
+
+            impl<T> Arbitrary for RangeFrom<T>
+            where
+                T: Arbitrary,
+            {
+                fn any() -> Self {
+                    T::any()..
+                }
+            }
+
+            impl<T> Arbitrary for RangeInclusive<T>
+            where
+                T: Arbitrary,
+            {
+                fn any() -> Self {
+                    T::any()..=T::any()
+                }
+            }
+
+            impl<T> Arbitrary for RangeTo<T>
+            where
+                T: Arbitrary,
+            {
+                fn any() -> Self {
+                    ..T::any()
+                }
+            }
+
+            impl<T> Arbitrary for RangeToInclusive<T>
+            where
+                T: Arbitrary,
+            {
+                fn any() -> Self {
+                    ..=T::any()
+                }
+            }
         }
     };
 }

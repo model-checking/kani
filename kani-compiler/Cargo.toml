@@ -31,10 +31,9 @@ tracing-tree = "0.4.0"
 
 # Future proofing: enable backend dependencies using feature.
 [features]
-default = ['aeneas', 'cprover']
-aeneas = ['charon']
+default = ['cprover', 'llbc']
+llbc = ['charon']
 cprover = ['cbmc', 'num', 'serde']
-write_json_symtab = []
 
 [package.metadata.rust-analyzer]
 # This package uses rustc crates.

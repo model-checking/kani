@@ -16,7 +16,8 @@ use charon_lib::ast::Rvalue as CharonRvalue;
 use charon_lib::ast::Span as CharonSpan;
 use charon_lib::ast::meta::{AttrInfo, Loc, RawSpan};
 use charon_lib::ast::types::Ty as CharonTy;
-use charon_lib::ast::{AbortKind, Body as CharonBody, Var, VarId, make_locals_generator};
+use charon_lib::ast::types::TyKind as CharonTyKind;
+use charon_lib::ast::{AbortKind, Body as CharonBody, Var, VarId};
 use charon_lib::ast::{
     AnyTransId, Assert, BodyId, BuiltinTy, Disambiguator, FileName, FunDecl, FunSig, GenericArgs,
     GenericParams, IntegerTy, ItemKind, ItemMeta, ItemOpacity, Literal, LiteralTy, Name, Opaque,
@@ -30,7 +31,7 @@ use charon_lib::ast::{
 use charon_lib::ast::{
     BorrowKind as CharonBorrowKind, ConstantExpr, Operand as CharonOperand, UnOp,
 };
-use charon_lib::common::Error;
+use charon_lib::errors::Error;
 use charon_lib::errors::ErrorCtx;
 use charon_lib::ids::Vector;
 use charon_lib::ullbc_ast::{
@@ -39,14 +40,15 @@ use charon_lib::ullbc_ast::{
     Terminator as CharonTerminator,
 };
 use charon_lib::{error_assert, error_or_panic};
-use rustc_errors::MultiSpan;
+use rustc_data_structures::fx::FxHashMap;
 use rustc_middle::ty::TyCtxt;
 use rustc_smir::rustc_internal;
-use rustc_span::def_id::DefId as InternalDefId;
 use stable_mir::abi::PassMode;
+use stable_mir::mir::VarDebugInfoContents;
 use stable_mir::mir::mono::Instance;
+use stable_mir::mir::mono::InstanceDef;
 use stable_mir::mir::{
-    BasicBlock, BinOp, Body, BorrowKind, CastKind, ConstOperand, Mutability, Operand, Place,
+    BasicBlock, BinOp, Body, BorrowKind, CastKind, ConstOperand, Local, Mutability, Operand, Place,
     ProjectionElem, Rvalue, Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind,
 };
 use stable_mir::ty::{
@@ -63,7 +65,9 @@ pub struct Context<'a, 'tcx> {
     tcx: TyCtxt<'tcx>,
     instance: Instance,
     translated: &'a mut TranslatedCrate,
+    id_map: &'a mut FxHashMap<DefId, AnyTransId>,
     errors: &'a mut ErrorCtx<'tcx>,
+    local_names: FxHashMap<Local, String>,
 }
 
 impl<'a, 'tcx> Context<'a, 'tcx> {
@@ -73,16 +77,27 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         tcx: TyCtxt<'tcx>,
         instance: Instance,
         translated: &'a mut TranslatedCrate,
+        id_map: &'a mut FxHashMap<DefId, AnyTransId>,
         errors: &'a mut ErrorCtx<'tcx>,
     ) -> Self {
-        Self { tcx, instance, translated, errors }
+        let mut local_names = FxHashMap::default();
+        // populate names of locals
+        for info in instance.body().unwrap().var_debug_info {
+            if let VarDebugInfoContents::Place(p) = info.value {
+                if p.projection.is_empty() {
+                    local_names.insert(p.local, info.name);
+                }
+            }
+        }
+
+        Self { tcx, instance, translated, id_map, errors, local_names }
     }
 
     fn tcx(&self) -> TyCtxt<'tcx> {
         self.tcx
     }
 
-    fn span_err<S: Into<MultiSpan>>(&mut self, span: S, msg: &str) {
+    fn span_err(&mut self, span: CharonSpan, msg: &str) {
         self.errors.span_err(span, msg);
     }
 
@@ -92,13 +107,10 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
 
     /// Perform the translation
     pub fn translate(&mut self) -> Result<(), ()> {
-        // Charon's `id_map` is in terms of internal `DefId`
-        let def_id = rustc_internal::internal(self.tcx(), self.instance.def.def_id());
-
         // TODO: might want to populate `errors.dep_sources` to help with
         // debugging
 
-        let fid = self.register_fun_decl_id(def_id);
+        let fid = self.register_fun_decl_id(self.instance.def.def_id());
 
         let item_meta = match self.translate_item_meta_from_rid(self.instance) {
             Ok(item_meta) => item_meta,
@@ -115,14 +127,8 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             }
         };
 
-        let fun_decl = FunDecl {
-            def_id: fid,
-            rust_id: def_id,
-            item_meta,
-            signature,
-            kind: ItemKind::Regular,
-            body: Ok(body),
-        };
+        let fun_decl =
+            FunDecl { def_id: fid, item_meta, signature, kind: ItemKind::Regular, body: Ok(body) };
 
         self.translated.fun_decls.set_slot(fid, fun_decl);
 
@@ -130,24 +136,26 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
     }
 
     /// Get or create a `FunDeclId` for the given function
-    fn register_fun_decl_id(&mut self, def_id: InternalDefId) -> FunDeclId {
-        let tid = match self.translated.id_map.get(&def_id) {
+    fn register_fun_decl_id(&mut self, def_id: DefId) -> FunDeclId {
+        debug!("register_fun_decl_id: {:?}", def_id);
+        let tid = match self.id_map.get(&def_id) {
             Some(tid) => *tid,
             None => {
+                debug!("***Not found!");
                 let tid = AnyTransId::Fun(self.translated.fun_decls.reserve_slot());
-                self.translated.id_map.insert(def_id, tid);
-                self.translated.reverse_id_map.insert(tid, def_id);
+                self.id_map.insert(def_id, tid);
                 self.translated.all_ids.insert(tid);
                 tid
             }
         };
-        *tid.as_fun()
+        debug!("register_fun_decl_id: {:?}", self.id_map);
+        tid.try_into().unwrap()
     }
 
     /// Compute the meta information for a Rust item identified by its id.
     fn translate_item_meta_from_rid(&mut self, instance: Instance) -> Result<ItemMeta, Error> {
         let span = self.translate_instance_span(instance);
-        let name = self.def_id_to_name(instance.def.def_id())?;
+        let name = self.def_to_name(instance.def)?;
         // TODO: populate the source text
         let source_text = None;
         // TODO: populate the attribute info
@@ -168,11 +176,12 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
     /// Retrieve an item name from a [DefId].
     /// This function is adapted from Charon:
     /// https://github.com/AeneasVerif/charon/blob/53530427db2941ce784201e64086766504bc5642/charon/src/bin/charon-driver/translate/translate_ctx.rs#L344
-    fn def_id_to_name(&mut self, def_id: DefId) -> Result<Name, Error> {
+    fn def_to_name(&mut self, def: InstanceDef) -> Result<Name, Error> {
+        let def_id = def.def_id();
         trace!("{:?}", def_id);
-        let def_id = rustc_internal::internal(self.tcx(), def_id);
         let tcx = self.tcx();
-        let span = tcx.def_span(def_id);
+        let span: CharonSpan = self.translate_span(def.span());
+        let def_id = rustc_internal::internal(self.tcx(), def_id);
 
         // We have to be a bit careful when retrieving names from def ids. For instance,
         // due to reexports, [`TyCtxt::def_path_str`](TyCtxt::def_path_str) might give
@@ -328,7 +337,6 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             file_id,
             beg: Loc { line: lineinfo.start_line, col: lineinfo.start_col },
             end: Loc { line: lineinfo.end_line, col: lineinfo.end_col },
-            rust_span_data: rustc_internal::internal(self.tcx(), span).data(),
         };
 
         // TODO: populate `generated_from_span` info
@@ -392,7 +400,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         let body: BodyContents =
             mir_body.blocks.iter().map(|bb| self.translate_block(bb)).collect();
 
-        let body_expr = ExprBody { span, arg_count, locals, body };
+        let body_expr = ExprBody { span, arg_count, locals, body, comments: Vec::new() };
         CharonBody::Unstructured(body_expr)
     }
 
@@ -411,12 +419,16 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
     fn translate_rigid_ty(&self, rigid_ty: RigidTy) -> CharonTy {
         debug!("translate_rigid_ty: {rigid_ty:?}");
         match rigid_ty {
-            RigidTy::Bool => CharonTy::Literal(LiteralTy::Bool),
-            RigidTy::Char => CharonTy::Literal(LiteralTy::Char),
-            RigidTy::Int(it) => CharonTy::Literal(LiteralTy::Integer(translate_int_ty(it))),
-            RigidTy::Uint(uit) => CharonTy::Literal(LiteralTy::Integer(translate_uint_ty(uit))),
-            RigidTy::Never => CharonTy::Never,
-            RigidTy::Str => CharonTy::Adt(
+            RigidTy::Bool => CharonTy::new(CharonTyKind::Literal(LiteralTy::Bool)),
+            RigidTy::Char => CharonTy::new(CharonTyKind::Literal(LiteralTy::Char)),
+            RigidTy::Int(it) => {
+                CharonTy::new(CharonTyKind::Literal(LiteralTy::Integer(translate_int_ty(it))))
+            }
+            RigidTy::Uint(uit) => {
+                CharonTy::new(CharonTyKind::Literal(LiteralTy::Integer(translate_uint_ty(uit))))
+            }
+            RigidTy::Never => CharonTy::new(CharonTyKind::Never),
+            RigidTy::Str => CharonTy::new(CharonTyKind::Adt(
                 TypeId::Builtin(BuiltinTy::Str),
                 // TODO: find out whether any of the information below should be
                 // populated for strings
@@ -426,15 +438,15 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     const_generics: Vector::new(),
                     trait_refs: Vector::new(),
                 },
-            ),
-            RigidTy::Ref(region, ty, mutability) => CharonTy::Ref(
+            )),
+            RigidTy::Ref(region, ty, mutability) => CharonTy::new(CharonTyKind::Ref(
                 self.translate_region(region),
-                Box::new(self.translate_ty(ty)),
+                self.translate_ty(ty),
                 match mutability {
                     Mutability::Mut => RefKind::Mut,
                     Mutability::Not => RefKind::Shared,
                 },
-            ),
+            )),
             RigidTy::Tuple(ty) => {
                 let types = ty.iter().map(|ty| self.translate_ty(*ty)).collect();
                 // TODO: find out if any of the information below is needed
@@ -444,7 +456,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     const_generics: Vector::new(),
                     trait_refs: Vector::new(),
                 };
-                CharonTy::Adt(TypeId::Tuple, generic_args)
+                CharonTy::new(CharonTyKind::Adt(TypeId::Tuple, generic_args))
             }
             RigidTy::FnDef(def_id, args) => {
                 if !args.0.is_empty() {
@@ -454,7 +466,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 let inputs = sig.inputs().iter().map(|ty| self.translate_ty(*ty)).collect();
                 let output = self.translate_ty(sig.output());
                 // TODO: populate regions?
-                CharonTy::Arrow(Vector::new(), inputs, Box::new(output))
+                CharonTy::new(CharonTyKind::Arrow(Vector::new(), inputs, output))
             }
             _ => todo!(),
         }
@@ -466,19 +478,21 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         // - the input arguments
         // - the remaining locals, used for the intermediate computations
         let mut locals = Vector::new();
-        {
-            let mut add_variable = make_locals_generator(&mut locals);
-            mir_body.local_decls().for_each(|(_, local)| {
-                add_variable(self.translate_ty(local.ty));
-            });
-        }
+        mir_body.local_decls().for_each(|(local, local_decl)| {
+            let ty = self.translate_ty(local_decl.ty);
+            let name = self.local_names.get(&local);
+            locals.push_with(|index| Var { index, name: name.cloned(), ty });
+        });
         locals
     }
 
     fn translate_block(&mut self, bb: &BasicBlock) -> BlockData {
-        let statements =
+        let mut statements: Vec<CharonStatement> =
             bb.statements.iter().filter_map(|stmt| self.translate_statement(stmt)).collect();
-        let terminator = self.translate_terminator(&bb.terminator);
+        let (statement, terminator) = self.translate_terminator(&bb.terminator);
+        if let Some(statement) = statement {
+            statements.push(statement);
+        }
         BlockData { statements, terminator }
     }
 
@@ -508,21 +522,27 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         None
     }
 
-    fn translate_terminator(&mut self, terminator: &Terminator) -> CharonTerminator {
+    fn translate_terminator(
+        &mut self,
+        terminator: &Terminator,
+    ) -> (Option<CharonStatement>, CharonTerminator) {
         let span = self.translate_span(terminator.span);
-        let content = match &terminator.kind {
-            TerminatorKind::Return => RawTerminator::Return,
+        let (statement, terminator) = match &terminator.kind {
+            TerminatorKind::Return => (None, RawTerminator::Return),
             TerminatorKind::Goto { target } => {
-                RawTerminator::Goto { target: BlockId::from_usize(*target) }
+                (None, RawTerminator::Goto { target: BlockId::from_usize(*target) })
             }
-            TerminatorKind::Unreachable => RawTerminator::Abort(AbortKind::UndefinedBehavior),
-            TerminatorKind::Drop { place, target, .. } => RawTerminator::Drop {
-                place: self.translate_place(&place),
-                target: BlockId::from_usize(*target),
-            },
+            TerminatorKind::Unreachable => {
+                (None, RawTerminator::Abort(AbortKind::UndefinedBehavior))
+            }
+            TerminatorKind::Drop { place, target, .. } => {
+                (Some(RawStatement::Drop(self.translate_place(&place))), RawTerminator::Goto {
+                    target: BlockId::from_usize(*target),
+                })
+            }
             TerminatorKind::SwitchInt { discr, targets } => {
                 let (discr, targets) = self.translate_switch_targets(discr, targets);
-                RawTerminator::Switch { discr, targets }
+                (None, RawTerminator::Switch { discr, targets })
             }
             TerminatorKind::Call { func, args, destination, target, .. } => {
                 debug!("translate_call: {func:?} {args:?} {destination:?} {target:?}");
@@ -530,7 +550,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 let fn_ptr = match fn_ty.kind() {
                     TyKind::RigidTy(RigidTy::FnDef(def, args)) => {
                         let instance = Instance::resolve(def, &args).unwrap();
-                        let def_id = rustc_internal::internal(self.tcx(), instance.def.def_id());
+                        let def_id = instance.def.def_id();
                         let fid = self.register_fun_decl_id(def_id);
                         FnPtr {
                             func: FunIdOrTraitMethodRef::Fun(FunId::Regular(fid)),
@@ -555,17 +575,23 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     args: args.iter().map(|arg| self.translate_operand(arg)).collect(),
                     dest: self.translate_place(destination),
                 };
-                RawTerminator::Call { call, target: target.map(BlockId::from_usize) }
+                (Some(RawStatement::Call(call)), RawTerminator::Goto {
+                    target: BlockId::from_usize(target.unwrap()),
+                })
             }
-            TerminatorKind::Assert { cond, expected, msg: _, target, .. } => {
-                RawTerminator::Assert {
-                    assert: Assert { cond: self.translate_operand(cond), expected: *expected },
-                    target: BlockId::from_usize(*target),
-                }
-            }
+            TerminatorKind::Assert { cond, expected, msg: _, target, .. } => (
+                Some(RawStatement::Assert(Assert {
+                    cond: self.translate_operand(cond),
+                    expected: *expected,
+                })),
+                RawTerminator::Goto { target: BlockId::from_usize(*target) },
+            ),
             _ => todo!(),
         };
-        CharonTerminator { span, content }
+        (
+            statement.map(|statement| CharonStatement { span, content: statement }),
+            CharonTerminator { span, content: terminator },
+        )
     }
 
     fn translate_place(&self, place: &Place) -> CharonPlace {
@@ -695,7 +721,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 if value == 0 { (targets.otherwise(), bb) } else { (bb, targets.otherwise()) };
             CharonSwitchTargets::If(BlockId::from_usize(then_bb), BlockId::from_usize(else_bb))
         } else {
-            let CharonTy::Literal(LiteralTy::Integer(int_ty)) = charon_ty else {
+            let CharonTyKind::Literal(LiteralTy::Integer(int_ty)) = charon_ty.kind() else {
                 panic!("Expected integer type for switch discriminant");
             };
             let branches = targets
@@ -719,7 +745,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 })
                 .collect();
             let otherwise = BlockId::from_usize(targets.otherwise());
-            CharonSwitchTargets::SwitchInt(int_ty, branches, otherwise)
+            CharonSwitchTargets::SwitchInt(*int_ty, branches, otherwise)
         };
         (discr, switch_targets)
     }

@@ -38,6 +38,7 @@ pub fn gen_proof_metadata(tcx: TyCtxt, instance: Instance, base_name: &Path) -> 
         // TODO: This no longer needs to be an Option.
         goto_file: Some(model_file),
         contract: Default::default(),
+        has_loop_contracts: false,
     }
 }
 
@@ -108,5 +109,6 @@ pub fn gen_test_metadata(
         // TODO: This no longer needs to be an Option.
         goto_file: Some(model_file),
         contract: Default::default(),
+        has_loop_contracts: false,
     }
 }

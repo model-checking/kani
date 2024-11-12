@@ -1,0 +1,1 @@
+error: invalid value '5k' for '--harness-timeout <HARNESS_TIMEOUT>': Invalid time unit. Use 's' for seconds, 'm' for minutes, or 'h' for hours

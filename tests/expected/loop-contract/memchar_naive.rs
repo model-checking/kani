@@ -13,10 +13,6 @@
 
 #[kani::proof]
 fn memchar_naive_harness() {
-    // Needed to avoid having `free` be removed as unused function. This is
-    // because DFCC contract enforcement assumes that a definition for `free`
-    // exists.
-    let _ = Box::new(10);
     let text = [1, 2, 3, 4, 5];
     let x = 5;
     let mut i = 0;
