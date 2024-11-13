@@ -17,7 +17,6 @@ use rustc_smir::rustc_internal;
 use rustc_span::{Span, Symbol};
 use stable_mir::crate_def::Attribute as AttributeStable;
 use stable_mir::mir::mono::Instance as InstanceStable;
-use stable_mir::ty::FnDef;
 use stable_mir::{CrateDef, DefId as StableDefId, Symbol as SymbolStable};
 use std::str::FromStr;
 use strum_macros::{AsRefStr, EnumString};
@@ -1079,7 +1078,7 @@ fn pretty_type_path(path: &TypePath) -> String {
     }
 }
 
-pub(crate) fn fn_marker(def: FnDef) -> Option<String> {
+pub(crate) fn fn_marker<T: CrateDef>(def: T) -> Option<String> {
     let fn_marker: [SymbolStable; 2] = ["kanitool".into(), "fn_marker".into()];
     let marker = def.attrs_by_path(&fn_marker).pop()?;
     let attribute = syn_attr_stable(&marker);

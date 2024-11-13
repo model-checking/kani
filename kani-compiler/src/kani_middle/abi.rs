@@ -174,16 +174,18 @@ impl LayoutOf {
     fn last_field_layout(&self) -> LayoutOf {
         match self.ty.kind().rigid().unwrap() {
             RigidTy::Adt(adt_def, adt_args) => {
-                // We have to recurse and get the maximum alignment of all sized portions.
                 let fields = adt_def.variants_iter().next().unwrap().fields();
                 let fields_sorted = self.layout.fields.fields_by_offset_order();
                 let last_field_idx = *fields_sorted.last().unwrap();
                 LayoutOf::new(fields[last_field_idx].ty_with_args(adt_args))
             }
             RigidTy::Tuple(tys) => {
-                // We have to recurse and get the maximum alignment of all sized portions.
-                let last_ty = tys.last().expect("Expected unsized tail");
-                LayoutOf::new(*last_ty)
+                // For tuples, the unsized field is currently the last declared.
+                // To be on the safe side, we still get the sorted list by offset order.
+                let fields_sorted = self.layout.fields.fields_by_offset_order();
+                let last_field_idx = *fields_sorted.last().unwrap();
+                let last_ty = tys[last_field_idx];
+                LayoutOf::new(last_ty)
             }
             _ => {
                 unreachable!("Expected struct, enum or tuple. Found: `{}`", self.ty);

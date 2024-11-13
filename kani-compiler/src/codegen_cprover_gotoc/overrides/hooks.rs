@@ -12,6 +12,7 @@ use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::codegen_cprover_gotoc::codegen::{PropertyClass, bb_label};
 use crate::kani_middle::attributes::KaniAttributes;
 use crate::kani_middle::attributes::matches_diagnostic as matches_function;
+use crate::kani_middle::kani_functions::{KaniFunction, KaniIntrinsic};
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
 use cbmc::goto_program::CIntType;
 use cbmc::goto_program::{BuiltinFn, Expr, Stmt, Type};
@@ -139,6 +140,37 @@ impl GotocHook for Assert {
                 reach_stmt,
                 decl,
                 gcx.codegen_assert_assume(tmp, PropertyClass::Assertion, &msg, caller_loc),
+                Stmt::goto(bb_label(target), caller_loc),
+            ],
+            caller_loc,
+        )
+    }
+}
+
+struct SafetyCheck;
+impl GotocHook for SafetyCheck {
+    fn hook_applies(&self, _tcx: TyCtxt, instance: Instance) -> bool {
+        KaniFunction::try_from(instance) == Ok(KaniFunction::Intrinsic(KaniIntrinsic::SafetyCheck))
+    }
+
+    fn handle(
+        &self,
+        gcx: &mut GotocCtx,
+        _instance: Instance,
+        mut fargs: Vec<Expr>,
+        _assign_to: &Place,
+        target: Option<BasicBlockIdx>,
+        span: Span,
+    ) -> Stmt {
+        assert_eq!(fargs.len(), 2);
+        let cond = fargs.remove(0).cast_to(Type::bool());
+        let msg = fargs.remove(0);
+        let msg = gcx.extract_const_message(&msg).unwrap();
+        let target = target.unwrap();
+        let caller_loc = gcx.codegen_caller_span_stable(span);
+        Stmt::block(
+            vec![
+                gcx.codegen_assert_assume(cond, PropertyClass::SafetyCheck, &msg, caller_loc),
                 Stmt::goto(bb_label(target), caller_loc),
             ],
             caller_loc,
@@ -623,6 +655,7 @@ pub fn fn_hooks() -> GotocHooks {
             Rc::new(Assume),
             Rc::new(Assert),
             Rc::new(Check),
+            Rc::new(SafetyCheck),
             Rc::new(Cover),
             Rc::new(Nondet),
             Rc::new(IsAllocated),
