@@ -48,12 +48,10 @@ pub enum KaniIntrinsic {
     ValidValue,
     #[strum(serialize = "IsInitializedIntrinsic")]
     IsInitialized,
-    #[strum(serialize = "SizeOfSizedIntrinsic")]
-    SizeOfSized,
-    #[strum(serialize = "SizeOfUnsizedIntrinsic")]
-    SizeOfUnsized,
-    #[strum(serialize = "AlignOfRawIntrinsic")]
-    AlignOfRaw,
+    #[strum(serialize = "CheckedAlignOfIntrinsic")]
+    CheckedAlignOf,
+    #[strum(serialize = "CheckedSizeOfIntrinsic")]
+    CheckedSizeOf,
     #[strum(serialize = "SafetyCheckIntrinsic")]
     SafetyCheck,
 }
@@ -65,14 +63,16 @@ pub enum KaniModel {
     IsStrPtrInitialized,
     #[strum(serialize = "IsSlicePtrInitializedModel")]
     IsSlicePtrInitialized,
-    #[strum(serialize = "SizeOfDynPortionModel")]
-    SizeOfDynPortion,
-    #[strum(serialize = "AlignOfDynPortionModel")]
-    AlignOfDynPortion,
     #[strum(serialize = "SizeOfValRawModel")]
     SizeOfVal,
     #[strum(serialize = "AlignOfValRawModel")]
     AlignOfVal,
+    #[strum(serialize = "SizeOfDynObjectModel")]
+    SizeOfDynObject,
+    #[strum(serialize = "AlignOfDynObjectModel")]
+    AlignOfDynObject,
+    #[strum(serialize = "SizeOfSliceObjectModel")]
+    SizeOfSliceObject,
 }
 
 impl From<KaniIntrinsic> for KaniFunction {

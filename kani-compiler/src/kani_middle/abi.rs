@@ -88,7 +88,7 @@ impl LayoutOf {
     /// I.e.: the size of the type, excluding the trailing unsized portion.
     ///
     /// For example, this function will return 2 as the sized portion of `*const (u8,  [u16])`:
-    pub fn size_of_sized_portion(&self) -> usize {
+    pub fn size_of_head(&self) -> usize {
         if self.is_sized() {
             self.layout.size.bytes()
         } else {
@@ -105,7 +105,7 @@ impl LayoutOf {
                     // last element + the sized portion of that element.
                     let unsized_offset_unadjusted = offsets[last].bytes();
                     debug!(ty=?self.ty, ?unsized_offset_unadjusted, "size_of_sized_portion");
-                    unsized_offset_unadjusted + self.last_field_layout().size_of_sized_portion()
+                    unsized_offset_unadjusted + self.last_field_layout().size_of_head()
                 }
                 _ => {
                     unreachable!("Expected sized type, but found: `{}`", self.ty)
@@ -114,7 +114,7 @@ impl LayoutOf {
         }
     }
 
-    /// Return the alignment of the fields that are sized.
+    /// Return the alignment of the fields that are sized from the head of the object.
     ///
     /// For a sized type, this function will return the alignment of the type.
     ///
@@ -123,7 +123,7 @@ impl LayoutOf {
     /// and the alignment of the unsized portion.
     ///
     /// If there's no sized portion, this function will return the minimum alignment (i.e.: 1).
-    pub fn align_of_sized_portion(&self) -> usize {
+    pub fn align_of_head(&self) -> usize {
         if self.is_sized() {
             self.layout.abi_align.try_into().unwrap()
         } else {
@@ -132,9 +132,7 @@ impl LayoutOf {
                 RigidTy::Adt(..) | RigidTy::Tuple(..) => {
                     // We have to recurse and get the maximum alignment of all sized portions.
                     let field_layout = self.last_field_layout();
-                    field_layout
-                        .align_of_sized_portion()
-                        .max(self.layout.abi_align.try_into().unwrap())
+                    field_layout.align_of_head().max(self.layout.abi_align.try_into().unwrap())
                 }
                 _ => {
                     unreachable!("Expected sized type, but found: `{}`", self.ty);

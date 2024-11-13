@@ -156,16 +156,10 @@ macro_rules! kani_mem {
         ///
         /// Return `None` if an overflow would occur, or if alignment is not power of two.
         /// TODO: Optimize this if T is sized.
+        #[kanitool::fn_marker = "CheckedSizeOfIntrinsic"]
         pub fn checked_size_of_raw<T: ?Sized>(ptr: *const T) -> Option<usize> {
             #[cfg(not(feature = "concrete_playback"))]
-            {
-                let size_of_unsized = crate::kani::size_of_unsized_portion(ptr)?;
-                let sum = size_of_unsized.checked_add(crate::kani::size_of_sized_portion::<T>())?;
-                let align = checked_align_of_raw(ptr)?;
-                // Size must be multiple of alignment.
-                // Since alignment is power-of-two, we can compute as (size + (align - 1)) & -align
-                return Some((sum.checked_add(align - 1))? & align.wrapping_neg());
-            }
+            return kani_intrinsic();
 
             #[cfg(feature = "concrete_playback")]
             if core::mem::size_of::<<T as Pointee>::Metadata>() == 0 {
@@ -180,9 +174,18 @@ macro_rules! kani_mem {
         ///
         /// Return `None` if alignment information cannot be retrieved (foreign types), or if value
         /// is not power-of-two.
+        #[kanitool::fn_marker = "CheckedAlignOfIntrinsic"]
         pub fn checked_align_of_raw<T: ?Sized>(ptr: *const T) -> Option<usize> {
-            crate::kani::align_of_raw(ptr)
-                .and_then(|align| align.is_power_of_two().then_some(align))
+            #[cfg(not(feature = "concrete_playback"))]
+            return kani_intrinsic();
+
+            #[cfg(feature = "concrete_playback")]
+            if core::mem::size_of::<<T as Pointee>::Metadata>() == 0 {
+                // SAFETY: It is currently safe to call this with a thin pointer.
+                unsafe { Some(core::mem::align_of_val_raw(ptr)) }
+            } else {
+                panic!("Cannot safely compute size of `{}` at runtime", core::any::type_name::<T>())
+            }
         }
 
         /// Checks that `ptr` points to an allocation that can hold data of size calculated from `T`.

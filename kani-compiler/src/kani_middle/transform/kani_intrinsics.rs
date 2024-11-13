@@ -24,9 +24,8 @@ use crate::kani_queries::QueryDb;
 use rustc_middle::ty::TyCtxt;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{
-    AggregateKind, BasicBlock, BasicBlockIdx, BinOp, Body, ConstOperand, Local, Mutability,
-    Operand, Place, ProjectionElem, RETURN_LOCAL, Rvalue, Statement, StatementKind, SwitchTargets,
-    Terminator, TerminatorKind, UnOp, UnwindAction,
+    AggregateKind, BasicBlock, BinOp, Body, ConstOperand, Local, Mutability, Operand, Place,
+    RETURN_LOCAL, Rvalue, Statement, StatementKind, Terminator, TerminatorKind, UnOp, UnwindAction,
 };
 use stable_mir::target::MachineInfo;
 use stable_mir::ty::{
@@ -73,9 +72,8 @@ impl TransformPass for IntrinsicGeneratorPass {
             match kani_intrinsic {
                 KaniIntrinsic::IsInitialized => (true, self.is_initialized_body(tcx, body)),
                 KaniIntrinsic::ValidValue => (true, self.valid_value_body(tcx, body)),
-                KaniIntrinsic::SizeOfSized => (true, self.size_of_sized(body, instance)),
-                KaniIntrinsic::SizeOfUnsized => (true, self.size_of_unsized(body, instance)),
-                KaniIntrinsic::AlignOfRaw => (true, self.align_of_raw(body, instance)),
+                KaniIntrinsic::CheckedAlignOf => (true, self.checked_align_of(body, instance)),
+                KaniIntrinsic::CheckedSizeOf => (true, self.checked_size_of(body, instance)),
                 KaniIntrinsic::SafetyCheck => {
                     /* This is encoded in hooks*/
                     (false, body)
@@ -382,29 +380,32 @@ impl IntrinsicGeneratorPass {
         new_body.into()
     }
 
-    /// Generate the body for retrieving the size of the unsized portion of a pointed to type.
+    /// Generate the body for retrieving the size of a val starting from its raw pointer.
     ///
-    /// The body generated will depend on the type.
+    /// The body generated will depend on the type of the pointer.
     ///
     /// For sized type, this will generate:
     /// ```mir
     ///     _0: Option<usize>;
     ///     _1: *const T;
     ///    bb0:
-    ///     _0 = Some(0);
+    ///     _0 = Some(<const_size>);
     ///     return
     /// ```
     ///
-    /// For types with trait tail, invoke `size_of_dyn_portion`:
+    /// For types with foreign tails, this will generate a `None` value.
+    ///
+    /// For types with trait and slice tails, gather information about the type and invoke
+    /// `size_of_dyn_object` and `size_of_slice_object` respectively. E.g.::
     /// ```
     ///     _0: Option<usize>;
+    ///     _1: *const T;
     ///    bb0:
-    ///     _0 = size_of_dyn_portion(_1);
+    ///     _0 = size_of_dyn_object(_1, <head_sz>, <head_align>);
+    ///    bb1:
     ///     return
     /// ```
-    ///
-    /// For types where `<T as Pointee>::Metadata` is `usize` see [Self::size_of_slice_tail]:
-    fn size_of_unsized(&mut self, body: Body, instance: Instance) -> Body {
+    fn checked_size_of(&mut self, body: Body, instance: Instance) -> Body {
         // Get information about the pointer passed as an argument.
         let ptr_arg = body.arg_locals().first().expect("Expected a pointer argument");
         let ptr_ty = ptr_arg.ty;
@@ -412,9 +413,9 @@ impl IntrinsicGeneratorPass {
             unreachable!("Expected a pointer argument,but got {ptr_ty}")
         };
         let pointee_layout = LayoutOf::new(pointee_ty);
-        debug!(?ptr_ty, ?pointee_layout, "size_of_unsized");
+        debug!(?ptr_ty, ?pointee_layout, "checked_size_of");
 
-        // Get information about the return value (Option).
+        // Get information about the return value (`Option<usize>`).
         let ret_ty = body.ret_local().ty;
         let TyKind::RigidTy(RigidTy::Adt(option_def, option_args)) = ret_ty.kind() else {
             unreachable!("Expected `Option<usize>` as return but found `{ret_ty}`")
@@ -426,8 +427,12 @@ impl IntrinsicGeneratorPass {
         let mut source = SourceInstruction::Terminator { bb: 0 };
         let span = source.span(new_body.blocks());
         if pointee_layout.is_sized() {
-            // There is no unsized part. return Some(0);
-            let val_op = new_body.new_uint_operand(0, UintTy::Usize, span);
+            // Return Some(<size>);
+            let val_op = new_body.new_uint_operand(
+                pointee_layout.size_of().unwrap() as _,
+                UintTy::Usize,
+                span,
+            );
             let ret_val = build_some(option_def, option_args, val_op);
             new_body.assign_to(
                 Place::from(RETURN_LOCAL),
@@ -436,23 +441,55 @@ impl IntrinsicGeneratorPass {
                 InsertPosition::Before,
             );
         } else if pointee_layout.has_trait_tail() {
-            // Call `size_of_dyn_portion`.
+            // Return `size_of_dyn_object::<T, U>(ptr, head_size, head_align)`.
             let tail_ty = pointee_layout.unsized_tail().unwrap();
-            let mut args = instance.args();
-            args.0.push(GenericArgKind::Type(tail_ty));
-            let operands = vec![Operand::Copy(Place::from(Local::from(1usize)))];
+            let mut instance_args = instance.args(); // This should contain `T` already.
+            instance_args.0.push(GenericArgKind::Type(tail_ty)); // Now push the tail type `U`.
+            let ptr = Operand::Copy(Place::from(Local::from(1usize)));
+            let head_size =
+                new_body.new_uint_operand(pointee_layout.size_of_head() as _, UintTy::Usize, span);
+            let head_align =
+                new_body.new_uint_operand(pointee_layout.align_of_head() as _, UintTy::Usize, span);
+            let operands = vec![ptr, head_size, head_align];
             self.return_model(
                 &mut new_body,
                 &mut source,
-                KaniModel::SizeOfDynPortion,
-                &args,
+                KaniModel::SizeOfDynObject,
+                &instance_args,
                 operands,
             );
         } else if pointee_layout.has_slice_tail() {
-            // Size is Some(len x size_of::<elem_ty>()) if no overflow happens
-            self.size_of_slice_tail(&mut new_body, pointee_layout, option_def, option_args);
+            // Return `size_of_slice_object::<T, U>(len, elem_size, head_size, align)`.
+            let elem_ty = pointee_layout.unsized_tail_elem_ty().unwrap();
+            let elem_layout = LayoutOf::new(elem_ty);
+            assert!(elem_layout.is_sized());
+
+            let elem_size =
+                new_body.new_uint_operand(elem_layout.size_of().unwrap() as _, UintTy::Usize, span);
+            let head_size =
+                new_body.new_uint_operand(pointee_layout.size_of_head() as _, UintTy::Usize, span);
+            let align = new_body.new_uint_operand(
+                pointee_layout.align_of().unwrap() as _,
+                UintTy::Usize,
+                span,
+            );
+            let ptr = Operand::Copy(Place::from(Local::from(1usize)));
+            let len_local = new_body.insert_assignment(
+                Rvalue::UnaryOp(UnOp::PtrMetadata, ptr),
+                &mut source,
+                InsertPosition::Before,
+            );
+            let len_op = Operand::Move(Place::from(len_local));
+            let operands = vec![len_op, elem_size, head_size, align];
+            self.return_model(
+                &mut new_body,
+                &mut source,
+                KaniModel::SizeOfSliceObject,
+                &instance.args(),
+                operands,
+            );
         } else {
-            // Cannot compute size of foreign types. Return None!
+            // Cannot compute size of foreign types. Return `None`.
             assert!(
                 pointee_layout.has_foreign_tail(),
                 "Expected foreign, but found `{:?}` tail instead.",
@@ -466,133 +503,6 @@ impl IntrinsicGeneratorPass {
                 InsertPosition::Before,
             );
         }
-        new_body.into()
-    }
-
-    /// Generate the body for `size_of_unsized` when the tail of `T`, i.e.:
-    /// ```mir
-    ///     _0: Option<usize>;
-    ///     _1: *const T;
-    ///     _2: usize;  // Number of elements.
-    ///     _4: (usize, bool);
-    ///    bb0:
-    ///     _2 = PtrMetadata(_1);
-    ///     _4 = CheckedMul(_2, <size_of_elem>);
-    ///     switchInt(_4.1) -> [0: bb1, otherwise: bb2];
-    ///    bb1:
-    ///     _0 = Some(*(_4));
-    ///     goto bb3:
-    ///    bb2:
-    ///     _0 = None;
-    ///     goto bb3:
-    ///    bb3:
-    ///     return
-    /// ```
-    fn size_of_slice_tail(
-        &self,
-        new_body: &mut MutableBody,
-        pointee_layout: LayoutOf,
-        option_def: AdtDef,
-        option_args: GenericArgs,
-    ) {
-        let mut source = SourceInstruction::Terminator { bb: 0 };
-        let span = source.span(new_body.blocks());
-
-        // Get metadata
-        let ptr_arg = Operand::Copy(Place::from(1));
-        let metadata = new_body.insert_assignment(
-            Rvalue::UnaryOp(UnOp::PtrMetadata, ptr_arg),
-            &mut source,
-            InsertPosition::Before,
-        );
-
-        let elem_ty = pointee_layout.unsized_tail_elem_ty().unwrap();
-        let elem_layout = LayoutOf::new(elem_ty);
-        let size_elem =
-            new_body.new_uint_operand(elem_layout.size_of().unwrap() as u128, UintTy::Usize, span);
-
-        // Calculate size with overflow.
-        let checked_size = new_body.insert_assignment(
-            Rvalue::CheckedBinaryOp(BinOp::Mul, Operand::Copy(Place::from(metadata)), size_elem),
-            &mut source,
-            InsertPosition::Before,
-        );
-        let overflow = Operand::Copy(Place {
-            local: checked_size,
-            projection: vec![ProjectionElem::Field(1, Ty::bool_ty())],
-        });
-
-        // Encode `if !overflow` branch
-        let if_bb: BasicBlockIdx = new_body.blocks().len();
-        let else_bb: BasicBlockIdx = if_bb + 1;
-        let return_bb: BasicBlockIdx = else_bb + 1;
-        new_body.insert_terminator(&mut source, InsertPosition::Before, Terminator {
-            kind: TerminatorKind::SwitchInt {
-                discr: overflow,
-                targets: SwitchTargets::new(vec![(0, if_bb)], else_bb),
-            },
-            span,
-        });
-
-        // Encode if block
-        let size_op = Operand::Copy(Place {
-            local: checked_size,
-            projection: vec![ProjectionElem::Field(0, Ty::usize_ty())],
-        });
-        let size_val = build_some(option_def, option_args.clone(), size_op);
-        new_body.insert_stmt(
-            Statement { kind: StatementKind::Assign(Place::from(RETURN_LOCAL), size_val), span },
-            &mut source,
-            InsertPosition::Before,
-        );
-        new_body.insert_terminator(&mut source, InsertPosition::Before, Terminator {
-            kind: TerminatorKind::Goto { target: return_bb },
-            span,
-        });
-
-        // Encode else block
-        let ret_val = build_none(option_def, option_args);
-        new_body.insert_stmt(
-            Statement { kind: StatementKind::Assign(Place::from(RETURN_LOCAL), ret_val), span },
-            &mut source,
-            InsertPosition::Before,
-        );
-        new_body.insert_terminator(&mut source, InsertPosition::Before, Terminator {
-            kind: TerminatorKind::Goto { target: return_bb },
-            span,
-        });
-
-        assert_eq!(source.bb(), return_bb, "Unexpected return basic block");
-    }
-
-    /// Generate the body for retrieving the size of the sized portion of a type.
-    ///
-    /// ```ignore
-    ///     _0: usize;
-    ///     _0 = <size>;
-    ///     return;
-    /// ```
-    fn size_of_sized(&mut self, body: Body, instance: Instance) -> Body {
-        // Get the size of the sized portion of this type.
-        let Some(GenericArgKind::Type(ty)) = instance.args().0.first().cloned() else {
-            unreachable!("Expected target type");
-        };
-        let layout = LayoutOf::new(ty);
-        let size = layout.size_of_sized_portion();
-        debug!(?ty, ?size, "size_of_sized");
-
-        // Assign size to the return variable.
-        let mut new_body = MutableBody::from(body);
-        new_body.clear_body(TerminatorKind::Return);
-        let mut source = SourceInstruction::Terminator { bb: 0 };
-        let span = source.span(new_body.blocks());
-        let size_op = new_body.new_uint_operand(size as u128, UintTy::Usize, span);
-        let assignment = StatementKind::Assign(Place::from(RETURN_LOCAL), Rvalue::Use(size_op));
-        new_body.insert_stmt(
-            Statement { kind: assignment, span },
-            &mut source,
-            InsertPosition::Before,
-        );
         new_body.into()
     }
 
@@ -613,15 +523,15 @@ impl IntrinsicGeneratorPass {
     /// For types with trait tail, invoke `align_of_dyn_portion`:
     /// ```
     ///     _0: Option<usize>;
-    ///     _2: usize;
+    ///     _1: *const T;
     ///    bb0:
-    ///     _1 = <align_of_sized>;
-    ///     _0 = align_of_dyn_portion(_2, _1);
+    ///     _0 = align_of_dyn_object(_1, <head_align>);
+    ///    bb1:
     ///     return
     /// ```
     ///
     /// For types with foreign tails, this will return `None`.
-    fn align_of_raw(&mut self, body: Body, instance: Instance) -> Body {
+    fn checked_align_of(&mut self, body: Body, instance: Instance) -> Body {
         // Get information about the pointer passed as an argument.
         let ptr_arg = body.arg_locals().first().expect("Expected a pointer argument");
         let ptr_ty = ptr_arg.ty;
@@ -652,17 +562,17 @@ impl IntrinsicGeneratorPass {
                 InsertPosition::Before,
             );
         } else if pointee_layout.has_trait_tail() {
-            // Call `align_of_dyn_portion`.
-            let sized_align = pointee_layout.align_of_sized_portion();
-            let sized_op = new_body.new_uint_operand(sized_align as _, UintTy::Usize, span);
+            // Return `align_of_dyn_object::<T, U>(ptr, head_align)`.
+            let head_align =
+                new_body.new_uint_operand(pointee_layout.align_of_head() as _, UintTy::Usize, span);
             let tail_ty = pointee_layout.unsized_tail().unwrap();
-            let mut args = instance.args();
-            args.0.push(GenericArgKind::Type(tail_ty));
-            let operands = vec![Operand::Copy(Place::from(Local::from(1usize))), sized_op];
+            let mut args = instance.args(); // This already contains `T`.
+            args.0.push(GenericArgKind::Type(tail_ty)); // Now push the tail type `U`.
+            let operands = vec![Operand::Copy(Place::from(Local::from(1usize))), head_align];
             self.return_model(
                 &mut new_body,
                 &mut source,
-                KaniModel::AlignOfDynPortion,
+                KaniModel::AlignOfDynObject,
                 &args,
                 operands,
             );

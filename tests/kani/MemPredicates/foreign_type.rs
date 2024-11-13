@@ -28,8 +28,8 @@ extern "C" {
 #[kani::proof]
 pub fn check_write_is_unsafe() {
     let mut var: Wrapper<u64, usize> = kani::any();
-    let fat_ptr: *mut Wrapper<Foreign, usize> = &mut var as *mut _ as *mut _;
-    assert!(!can_write(fat_ptr));
+    let ptr: *mut Wrapper<Foreign, usize> = &mut var as *mut _ as *mut _;
+    assert!(!can_write(ptr));
 }
 
 #[kani::proof]

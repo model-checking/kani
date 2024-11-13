@@ -7,6 +7,7 @@ extern crate kani;
 
 use kani::mem::{checked_align_of_raw, checked_size_of_raw};
 use std::fmt::Debug;
+use std::mem;
 
 #[derive(kani::Arbitrary)]
 struct Pair<T, U: ?Sized>(T, U);
@@ -62,10 +63,53 @@ pub fn checked_size_with_overflow() {
 }
 
 #[kani::proof]
-pub fn checked_align_of_dyn_tail() {
-    let align_sized = checked_align_of_raw(&Pair(0u8, 19i32));
-    assert_eq!(align_sized, Some(4));
+pub fn checked_align_of_dyn_from_tail() {
+    let concrete = Pair(0u8, 19i32);
+    let dyn_ptr = &concrete as &Pair<u8, dyn Debug>;
+    let expected = std::mem::align_of::<Pair<u8, i32>>();
+    // Check methods with concrete.
+    assert_eq!(checked_align_of_raw(&concrete), Some(expected));
+    assert_eq!(std::mem::align_of_val(&concrete), expected);
+    // Check methods with dynamic.
+    assert_eq!(checked_align_of_raw(dyn_ptr), Some(expected));
+    assert_eq!(std::mem::align_of_val(dyn_ptr), expected);
+}
 
-    let align_dyn = checked_align_of_raw(&Pair(10u8, [1i32; 10]) as &Pair<u8, dyn Debug>);
-    assert_eq!(align_dyn, Some(4));
+#[kani::proof]
+pub fn checked_align_of_dyn_from_head() {
+    let concrete = Pair(19i32, 10u8);
+    let dyn_ptr = &concrete as &Pair<i32, dyn Debug>;
+    let expected = std::mem::align_of::<Pair<i32, u8>>();
+    // Check methods with concrete.
+    assert_eq!(checked_align_of_raw(&concrete), Some(expected));
+    assert_eq!(std::mem::align_of_val(&concrete), expected);
+    // Check methods with dynamic.
+    assert_eq!(checked_align_of_raw(dyn_ptr), Some(expected));
+    assert_eq!(std::mem::align_of_val(dyn_ptr), expected);
+}
+
+#[kani::proof]
+pub fn checked_align_of_slice_from_tail() {
+    let concrete = Pair([0u8; 5], ['a'; 7]);
+    let slice_ptr = &concrete as &Pair<[u8; 5], [char]>;
+    let expected = std::mem::align_of::<Pair<[u8; 5], [char; 5]>>();
+    // Check methods with concrete.
+    assert_eq!(checked_align_of_raw(&concrete), Some(expected));
+    assert_eq!(std::mem::align_of_val(&concrete), expected);
+    // Check methods with dynamic.
+    assert_eq!(checked_align_of_raw(slice_ptr), Some(expected));
+    assert_eq!(std::mem::align_of_val(slice_ptr), expected);
+}
+
+#[kani::proof]
+pub fn checked_align_of_slice_from_head() {
+    let concrete = Pair(['a'; 7], [0u8; 5]);
+    let slice_ptr = &concrete as &Pair<[char; 7], [u8]>;
+    let expected = std::mem::align_of::<Pair<[char; 7], [u8; 5]>>();
+    // Check methods with concrete.
+    assert_eq!(checked_align_of_raw(&concrete), Some(expected));
+    assert_eq!(std::mem::align_of_val(&concrete), expected);
+    // Check methods with dynamic.
+    assert_eq!(checked_align_of_raw(slice_ptr), Some(expected));
+    assert_eq!(std::mem::align_of_val(slice_ptr), expected);
 }

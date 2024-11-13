@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Z mem-predicates
 //! Check that Kani's memory predicates work for ADT with metadata.
+//! TODO: Add test with packed layout and with ZST converted to dyn T.
 #![feature(ptr_metadata)]
 
 extern crate kani;
