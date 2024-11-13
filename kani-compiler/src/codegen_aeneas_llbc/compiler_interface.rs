@@ -338,7 +338,7 @@ impl CodegenBackend for LlbcCodegenBackend {
             debug!(?crate_type, ?out_path, "link");
             if *crate_type == CrateType::Rlib {
                 // Emit the `rlib` that contains just one file: `<crate>.rmeta`
-                link_binary(sess, &ArArchiveBuilderBuilder, &codegen_results, outputs)?
+                link_binary(sess, &ArArchiveBuilderBuilder, codegen_results, outputs)?
             } else {
                 // Write the location of the kani metadata file in the requested compiler output file.
                 let base_filepath = outputs.path(OutputType::Object);

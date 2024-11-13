@@ -412,7 +412,7 @@ impl CodegenBackend for GotocCodegenBackend {
         let requested_crate_types = &codegen_results.crate_info.crate_types;
         // Create the rlib if one was requested.
         if requested_crate_types.iter().any(|crate_type| *crate_type == CrateType::Rlib) {
-            link_binary(sess, &ArArchiveBuilderBuilder, &codegen_results, outputs)?;
+            link_binary(sess, &ArArchiveBuilderBuilder, codegen_results, outputs)?;
         }
 
         // But override all the other outputs.
