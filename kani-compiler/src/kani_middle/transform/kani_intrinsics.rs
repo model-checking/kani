@@ -243,7 +243,7 @@ impl IntrinsicGeneratorPass {
                             return new_body.into();
                         }
                         let is_ptr_initialized_instance = resolve_mem_init_fn(
-                            *self.kani_defs.get(&KaniIntrinsic::IsInitialized.into()).unwrap(),
+                            *self.kani_defs.get(&KaniModel::IsPtrInitialized.into()).unwrap(),
                             layout.len(),
                             *pointee_info.ty(),
                         );

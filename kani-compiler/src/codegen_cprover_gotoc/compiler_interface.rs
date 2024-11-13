@@ -243,7 +243,9 @@ impl CodegenBackend for GotocCodegenBackend {
 
             check_target(tcx.sess);
             check_options(tcx.sess);
-            if !queries.args().build_std && queries.kani_functions().is_empty() {
+            if queries.args().reachability_analysis != ReachabilityType::None
+                && queries.kani_functions().is_empty()
+            {
                 tcx.sess.dcx().err(
                     "Failed to detect Kani functions. Please check your installation is correct.",
                 );

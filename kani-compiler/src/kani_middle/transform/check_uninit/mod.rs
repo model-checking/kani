@@ -35,6 +35,7 @@ pub trait TargetFinder {
     fn find_all(self, body: &MutableBody) -> Vec<InitRelevantInstruction>;
 }
 
+// TODO: Use `KaniFunctions` instead.
 const KANI_IS_PTR_INITIALIZED_DIAGNOSTIC: &str = "KaniIsPtrInitialized";
 const KANI_SET_PTR_INITIALIZED_DIAGNOSTIC: &str = "KaniSetPtrInitialized";
 const KANI_IS_SLICE_CHUNK_PTR_INITIALIZED_DIAGNOSTIC: &str = "KaniIsSliceChunkPtrInitialized";

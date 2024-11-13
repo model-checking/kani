@@ -29,8 +29,9 @@ use stable_mir::mir::mono::Instance;
 use stable_mir::ty::FnDef;
 use std::collections::HashMap;
 use std::str::FromStr;
-use strum_macros::{EnumString, IntoStaticStr};
-use tracing::{debug, trace};
+use strum::IntoEnumIterator;
+use strum_macros::{EnumIter, EnumString, IntoStaticStr};
+use tracing::debug;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub enum KaniFunction {
@@ -42,7 +43,7 @@ pub enum KaniFunction {
 ///
 /// These functions usually depend on information that require extra knowledge about the type
 /// or extra Kani instrumentation.
-#[derive(Debug, Copy, Clone, Eq, PartialEq, IntoStaticStr, EnumString, Hash)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, IntoStaticStr, EnumIter, EnumString, Hash)]
 pub enum KaniIntrinsic {
     #[strum(serialize = "ValidValueIntrinsic")]
     ValidValue,
@@ -57,8 +58,10 @@ pub enum KaniIntrinsic {
 }
 
 /// Kani models are Rust functions that model some runtime behavior used by Kani instrumentation.
-#[derive(Debug, Copy, Clone, Eq, PartialEq, IntoStaticStr, EnumString, Hash)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, IntoStaticStr, EnumIter, EnumString, Hash)]
 pub enum KaniModel {
+    #[strum(serialize = "IsPtrInitializedModel")]
+    IsPtrInitialized,
     #[strum(serialize = "IsStrPtrInitializedModel")]
     IsStrPtrInitialized,
     #[strum(serialize = "IsSlicePtrInitializedModel")]
@@ -122,21 +125,19 @@ impl TryFrom<Instance> for KaniFunction {
 /// First try to find `kani` crate. If that exists, look for the items there.
 /// If there's no Kani crate, look for the items in `core` since we could be using `kani_core`.
 /// Note that users could have other `kani` crates, so we look in all the ones we find.
-///
-/// TODO: We should check if there is no name conflict and that we found all functions.
 pub fn find_kani_functions() -> HashMap<KaniFunction, FnDef> {
     let mut kani = stable_mir::find_crates("kani");
     if kani.is_empty() {
         // In case we are using `kani_core`.
         kani.extend(stable_mir::find_crates("core"));
     }
-    kani.into_iter()
+    let fns = kani
+        .into_iter()
         .find_map(|krate| {
             let kani_funcs: HashMap<_, _> = krate
                 .fn_defs()
                 .into_iter()
                 .filter_map(|fn_def| {
-                    trace!(?krate, ?fn_def, "find_kani_functions");
                     KaniFunction::try_from(fn_def).ok().map(|kani_function| {
                         debug!(?kani_function, ?fn_def, "Found kani function");
                         (kani_function, fn_def)
@@ -147,12 +148,23 @@ pub fn find_kani_functions() -> HashMap<KaniFunction, FnDef> {
             // If there are no definitions, return `None` to indicate that.
             (!kani_funcs.is_empty()).then_some(kani_funcs)
         })
-        .unwrap_or_default()
+        .unwrap_or_default();
+    if cfg!(debug_assertions) {
+        validate_kani_functions(&fns);
+    }
+    fns
 }
 
 /// Ensure we have the valid definitions.
 pub fn validate_kani_functions(kani_funcs: &HashMap<KaniFunction, FnDef>) {
-    for (kani_function, fn_def) in kani_funcs {
-        assert_eq!(KaniFunction::try_from(*fn_def), Ok(*kani_function));
+    let mut missing = 0u8;
+    for func in KaniIntrinsic::iter().map(|i| i.into()).chain(KaniModel::iter().map(|m| m.into())) {
+        if let Some(fn_def) = kani_funcs.get(&func) {
+            assert_eq!(KaniFunction::try_from(*fn_def), Ok(func), "Unexpected function marker");
+        } else {
+            tracing::error!(?func, "Missing kani function");
+            missing += 1;
+        }
     }
+    assert_eq!(missing, 0, "Failed to find `{missing}` Kani functions");
 }

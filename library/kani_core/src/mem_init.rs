@@ -211,6 +211,7 @@ macro_rules! kani_mem_init {
 
         /// Get initialization state of `num_elts` items laid out according to the `layout` starting at address `ptr`.
         #[kanitool::disable_checks(pointer)]
+        #[kanitool::fn_marker = "IsPtrInitializedModel"]
         #[rustc_diagnostic_item = "KaniIsPtrInitialized"]
         fn is_ptr_initialized<const LAYOUT_SIZE: usize, T>(
             ptr: *const T,
@@ -275,6 +276,7 @@ macro_rules! kani_mem_init {
 
         /// Get initialization state of the slice, items of which are laid out according to the `layout` starting at address `ptr`.
         #[kanitool::disable_checks(pointer)]
+        #[kanitool::fn_marker = "IsSlicePtrInitializedModel"]
         #[rustc_diagnostic_item = "KaniIsSlicePtrInitialized"]
         fn is_slice_ptr_initialized<const LAYOUT_SIZE: usize, T>(
             ptr: *const [T],
@@ -306,6 +308,7 @@ macro_rules! kani_mem_init {
 
         /// Get initialization state of the string slice, items of which are laid out according to the `layout` starting at address `ptr`.
         #[kanitool::disable_checks(pointer)]
+        #[kanitool::fn_marker = "IsStrPtrInitializedModel"]
         #[rustc_diagnostic_item = "KaniIsStrPtrInitialized"]
         fn is_str_ptr_initialized<const LAYOUT_SIZE: usize>(
             ptr: *const str,
