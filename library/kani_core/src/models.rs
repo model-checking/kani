@@ -15,12 +15,14 @@ macro_rules! generate_models {
         #[allow(dead_code)]
         mod rustc_intrinsics {
             use crate::kani;
+            use core::ptr::Pointee;
             #[kanitool::fn_marker = "SizeOfValRawModel"]
             pub fn size_of_val_raw<T: ?Sized>(ptr: *const T) -> usize {
                 if let Some(size) = kani::mem::checked_size_of_raw(ptr) {
                     size
+                } else if core::mem::size_of::<<T as Pointee>::Metadata>() == 0 {
+                    kani::panic("cannot compute `size_of_val` for extern types")
                 } else {
-                    // Note that today we trigger a safety check for foreign types.
                     kani::safety_check(false, "failed to compute `size_of_val`");
                     // Unreachable without panic.
                     kani::kani_intrinsic()
@@ -31,6 +33,8 @@ macro_rules! generate_models {
             pub fn align_of_val_raw<T: ?Sized>(ptr: *const T) -> usize {
                 if let Some(size) = kani::mem::checked_align_of_raw(ptr) {
                     size
+                } else if core::mem::size_of::<<T as Pointee>::Metadata>() == 0 {
+                    kani::panic("cannot compute `align_of_val` for extern types")
                 } else {
                     // Note that today we trigger a safety check for foreign types.
                     kani::safety_check(false, "failed to compute `align_of_val`");

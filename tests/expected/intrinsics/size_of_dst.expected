@@ -1,0 +1,20 @@
+Checking harness check_size_of_overflows...
+
+safety_check\
+Status: FAILURE\
+Description: "failed to compute `size_of_val`"
+
+Status: SUCCESS\
+Description: "assertion failed: unsafe { size_of_val_raw(new_ptr) } == expected_size"
+
+Failed Checks: failed to compute `size_of_val`
+VERIFICATION:- FAILED
+
+Checking harness check_size_of_adt_overflows...
+
+0 of 2 cover properties satisfied (2 unreachable)
+Failed Checks: failed to compute `size_of_val`
+VERIFICATION:- FAILED
+
+Verification failed for - check_size_of_overflows
+Verification failed for - check_size_of_adt_overflows

@@ -296,7 +296,7 @@ macro_rules! kani_mem {
         #[doc(hidden)]
         #[rustc_diagnostic_item = "KaniPointerOffset"]
         #[inline(never)]
-        pub(crate) fn pointer_offset<T: ?Sized>(_ptr: *const T) -> usize {
+        pub fn pointer_offset<T: ?Sized>(_ptr: *const T) -> usize {
             kani_intrinsic()
         }
     };
