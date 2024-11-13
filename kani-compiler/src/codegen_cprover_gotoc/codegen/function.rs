@@ -223,8 +223,9 @@ pub mod rustc_smir {
     use rustc_middle::mir::coverage::MappingKind::Code;
     use rustc_middle::mir::coverage::SourceRegion;
     use rustc_middle::ty::TyCtxt;
-    use stable_mir::Opaque;
+    use rustc_smir::rustc_internal;
     use stable_mir::mir::mono::Instance;
+    use stable_mir::{Filename, Opaque};
 
     type CoverageOpaque = stable_mir::Opaque;
 
@@ -234,7 +235,7 @@ pub mod rustc_smir {
         tcx: TyCtxt,
         coverage_opaque: &CoverageOpaque,
         instance: Instance,
-    ) -> Option<SourceRegion> {
+    ) -> Option<(SourceRegion, Filename)> {
         let cov_term = parse_coverage_opaque(coverage_opaque);
         region_from_coverage(tcx, cov_term, instance)
     }
@@ -246,7 +247,7 @@ pub mod rustc_smir {
         tcx: TyCtxt<'_>,
         coverage: CovTerm,
         instance: Instance,
-    ) -> Option<SourceRegion> {
+    ) -> Option<(SourceRegion, Filename)> {
         // We need to pull the coverage info from the internal MIR instance.
         let instance_def = rustc_smir::rustc_internal::internal(tcx, instance.def.def_id());
         let body = tcx.instance_mir(rustc_middle::ty::InstanceKind::Item(instance_def));
@@ -258,7 +259,10 @@ pub mod rustc_smir {
             for mapping in &cov_info.mappings {
                 let Code(term) = mapping.kind else { unreachable!() };
                 if term == coverage {
-                    return Some(mapping.source_region.clone());
+                    return Some((
+                        mapping.source_region.clone(),
+                        rustc_internal::stable(cov_info.body_span).get_filename(),
+                    ));
                 }
             }
         }
