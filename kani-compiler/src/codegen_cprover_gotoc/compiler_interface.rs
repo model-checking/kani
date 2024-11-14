@@ -237,10 +237,19 @@ impl CodegenBackend for GotocCodegenBackend {
         let ret_val = rustc_internal::run(tcx, || {
             super::utils::init();
 
-            // Queries shouldn't change today once codegen starts.
+            // Any changes to queries from this point on is just related to caching information
+            // for efficiency purpose that should not outlive the stable-mir `run` scope.
             let queries = self.queries.lock().unwrap().clone();
+
             check_target(tcx.sess);
             check_options(tcx.sess);
+            if queries.args().reachability_analysis != ReachabilityType::None
+                && queries.kani_functions().is_empty()
+            {
+                tcx.sess.dcx().err(
+                    "Failed to detect Kani functions. Please check your installation is correct.",
+                );
+            }
 
             // Codegen all items that need to be processed according to the selected reachability mode:
             //

@@ -86,11 +86,7 @@ impl BodyTransformation {
             check_type: CheckType::new_assert(tcx),
             mem_init_fn_cache: HashMap::new(),
         });
-        transformer.add_pass(queries, IntrinsicGeneratorPass {
-            check_type,
-            mem_init_fn_cache: HashMap::new(),
-            arguments: queries.args().clone(),
-        });
+        transformer.add_pass(queries, IntrinsicGeneratorPass::new(check_type, &queries));
         transformer.add_pass(queries, LoopContractPass::new(tcx, &unit));
         transformer
     }

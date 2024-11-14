@@ -15,17 +15,17 @@ use rustc_middle::ty::{Instance, TyCtxt, TyKind};
 use rustc_session::Session;
 use rustc_smir::rustc_internal;
 use rustc_span::{Span, Symbol};
+use stable_mir::crate_def::Attribute as AttributeStable;
 use stable_mir::mir::mono::Instance as InstanceStable;
-use stable_mir::{CrateDef, DefId as StableDefId};
+use stable_mir::{CrateDef, DefId as StableDefId, Symbol as SymbolStable};
 use std::str::FromStr;
 use strum_macros::{AsRefStr, EnumString};
 use syn::parse::Parser;
 use syn::punctuated::Punctuated;
-use syn::{PathSegment, TypePath};
-
-use tracing::{debug, trace};
+use syn::{Expr, ExprLit, Lit, PathSegment, TypePath};
 
 use super::resolve::{FnResolution, ResolveError, resolve_fn, resolve_fn_path};
+use tracing::{debug, trace};
 
 #[derive(Debug, Clone, Copy, AsRefStr, EnumString, PartialEq, Eq, PartialOrd, Ord)]
 #[strum(serialize_all = "snake_case")]
@@ -1030,6 +1030,12 @@ fn syn_attr(attr: &Attribute) -> syn::Attribute {
     parser.parse_str(&attr_str).unwrap().pop().unwrap()
 }
 
+/// Parse a stable attribute using `syn`.
+fn syn_attr_stable(attr: &AttributeStable) -> syn::Attribute {
+    let parser = syn::Attribute::parse_outer;
+    parser.parse_str(&attr.as_str()).unwrap().pop().unwrap()
+}
+
 /// Return a more user-friendly string for path by trying to remove unneeded whitespace.
 ///
 /// `quote!()` and `TokenString::to_string()` introduce unnecessary space around separators.
@@ -1070,4 +1076,20 @@ fn pretty_type_path(path: &TypePath) -> String {
     } else {
         format!("{leading}{}", segments_str(&path.path.segments))
     }
+}
+
+pub(crate) fn fn_marker<T: CrateDef>(def: T) -> Option<String> {
+    let fn_marker: [SymbolStable; 2] = ["kanitool".into(), "fn_marker".into()];
+    let marker = def.attrs_by_path(&fn_marker).pop()?;
+    let attribute = syn_attr_stable(&marker);
+    let meta_name = attribute.meta.require_name_value().unwrap_or_else(|_| {
+        panic!("Expected name value attribute for `kanitool::fn_marker`, but found: `{:?}`", marker)
+    });
+    let Expr::Lit(ExprLit { lit: Lit::Str(lit_str), .. }) = &meta_name.value else {
+        panic!(
+            "Expected string literal for `kanitool::fn_marker`, but found: `{:?}`",
+            meta_name.value
+        );
+    };
+    Some(lit_str.value())
 }

@@ -7,14 +7,15 @@
 //! information; thus, they are implemented as a transformation pass where their body get generated
 //! by the transformation.
 
-use crate::args::{Arguments, ExtraChecks};
-use crate::kani_middle::attributes::matches_diagnostic;
+use crate::args::ExtraChecks;
+use crate::kani_middle::attributes::KaniAttributes;
+use crate::kani_middle::kani_functions::{KaniFunction, KaniIntrinsic, KaniModel};
 use crate::kani_middle::transform::body::{
     CheckType, InsertPosition, MutableBody, SourceInstruction,
 };
 use crate::kani_middle::transform::check_uninit::PointeeInfo;
 use crate::kani_middle::transform::check_uninit::{
-    PointeeLayout, get_mem_init_fn_def, mk_layout_operand, resolve_mem_init_fn,
+    PointeeLayout, mk_layout_operand, resolve_mem_init_fn,
 };
 use crate::kani_middle::transform::check_values::{build_limits, ty_validity_per_offset};
 use crate::kani_middle::transform::{TransformPass, TransformationType};
@@ -29,17 +30,17 @@ use stable_mir::target::MachineInfo;
 use stable_mir::ty::{FnDef, MirConst, RigidTy, Ty, TyKind, UintTy};
 use std::collections::HashMap;
 use std::fmt::Debug;
-use strum_macros::AsRefStr;
-use tracing::trace;
+use std::str::FromStr;
+use tracing::{debug, trace};
 
 /// Generate the body for a few Kani intrinsics.
 #[derive(Debug)]
 pub struct IntrinsicGeneratorPass {
-    pub check_type: CheckType,
-    /// Used to cache FnDef lookups of injected memory initialization functions.
-    pub mem_init_fn_cache: HashMap<&'static str, FnDef>,
+    check_type: CheckType,
+    /// Used to cache FnDef lookups for models and Kani intrinsics.
+    kani_defs: HashMap<KaniFunction, FnDef>,
     /// Used to enable intrinsics depending on the flags passed.
-    pub arguments: Arguments,
+    enable_uninit: bool,
 }
 
 impl TransformPass for IntrinsicGeneratorPass {
@@ -47,7 +48,7 @@ impl TransformPass for IntrinsicGeneratorPass {
     where
         Self: Sized,
     {
-        TransformationType::Instrumentation
+        TransformationType::Stubbing
     }
 
     fn is_enabled(&self, _query_db: &QueryDb) -> bool
@@ -61,10 +62,14 @@ impl TransformPass for IntrinsicGeneratorPass {
     /// For every unsafe dereference or a transmute operation, we check all values are valid.
     fn transform(&mut self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
         trace!(function=?instance.name(), "transform");
-        if matches_diagnostic(tcx, instance.def, Intrinsics::KaniValidValue.as_ref()) {
-            (true, self.valid_value_body(tcx, body))
-        } else if matches_diagnostic(tcx, instance.def, Intrinsics::KaniIsInitialized.as_ref()) {
-            (true, self.is_initialized_body(tcx, body))
+        let attributes = KaniAttributes::for_instance(tcx, instance);
+        if let Some(kani_intrinsic) =
+            attributes.fn_marker().and_then(|name| KaniIntrinsic::from_str(name.as_str()).ok())
+        {
+            match kani_intrinsic {
+                KaniIntrinsic::IsInitialized => (true, self.is_initialized_body(tcx, body)),
+                KaniIntrinsic::ValidValue => (true, self.valid_value_body(tcx, body)),
+            }
         } else {
             (false, body)
         }
@@ -72,6 +77,13 @@ impl TransformPass for IntrinsicGeneratorPass {
 }
 
 impl IntrinsicGeneratorPass {
+    pub fn new(check_type: CheckType, queries: &QueryDb) -> Self {
+        let enable_uninit = queries.args().ub_check.contains(&ExtraChecks::Uninit);
+        let kani_defs = queries.kani_functions().clone();
+        debug!(?kani_defs, ?enable_uninit, "IntrinsicGeneratorPass::new");
+        IntrinsicGeneratorPass { check_type, enable_uninit, kani_defs }
+    }
+
     /// Generate the body for valid value. Which should be something like:
     ///
     /// ```
@@ -168,7 +180,7 @@ impl IntrinsicGeneratorPass {
         let mut source = SourceInstruction::Terminator { bb: 0 };
 
         // Short-circut if uninitialized memory checks are not enabled.
-        if !self.arguments.ub_check.contains(&ExtraChecks::Uninit) {
+        if !self.enable_uninit {
             // Initialize return variable with True.
             let span = new_body.locals()[ret_var].span;
             let assign = StatementKind::Assign(
@@ -222,11 +234,7 @@ impl IntrinsicGeneratorPass {
                             return new_body.into();
                         }
                         let is_ptr_initialized_instance = resolve_mem_init_fn(
-                            get_mem_init_fn_def(
-                                tcx,
-                                "KaniIsPtrInitialized",
-                                &mut self.mem_init_fn_cache,
-                            ),
+                            *self.kani_defs.get(&KaniModel::IsPtrInitialized.into()).unwrap(),
                             layout.len(),
                             *pointee_info.ty(),
                         );
@@ -256,17 +264,17 @@ impl IntrinsicGeneratorPass {
                     }
                     PointeeLayout::Slice { element_layout } => {
                         // Since `str`` is a separate type, need to differentiate between [T] and str.
-                        let (slicee_ty, diagnostic) = match pointee_info.ty().kind() {
+                        let (slicee_ty, intrinsic) = match pointee_info.ty().kind() {
                             TyKind::RigidTy(RigidTy::Slice(slicee_ty)) => {
-                                (slicee_ty, "KaniIsSlicePtrInitialized")
+                                (slicee_ty, KaniModel::IsSlicePtrInitialized.into())
                             }
                             TyKind::RigidTy(RigidTy::Str) => {
-                                (Ty::unsigned_ty(UintTy::U8), "KaniIsStrPtrInitialized")
+                                (Ty::unsigned_ty(UintTy::U8), KaniModel::IsStrPtrInitialized.into())
                             }
                             _ => unreachable!(),
                         };
                         let is_ptr_initialized_instance = resolve_mem_init_fn(
-                            get_mem_init_fn_def(tcx, diagnostic, &mut self.mem_init_fn_cache),
+                            *self.kani_defs.get(&intrinsic).unwrap(),
                             element_layout.len(),
                             slicee_ty,
                         );
@@ -362,11 +370,4 @@ impl IntrinsicGeneratorPass {
         }
         new_body.into()
     }
-}
-
-#[derive(Debug, Copy, Clone, Eq, PartialEq, AsRefStr)]
-#[strum(serialize_all = "PascalCase")]
-enum Intrinsics {
-    KaniValidValue,
-    KaniIsInitialized,
 }
