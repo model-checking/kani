@@ -327,13 +327,14 @@ impl CodegenBackend for LlbcCodegenBackend {
         outputs: &OutputFilenames,
     ) -> Result<(), ErrorGuaranteed> {
         let requested_crate_types = &codegen_results.crate_info.crate_types.clone();
-        let mut link_result = link_binary(sess, &ArArchiveBuilderBuilder, codegen_results, outputs);
+        let local_crate_name = codegen_results.crate_info.local_crate_name;
+        let link_result = link_binary(sess, &ArArchiveBuilderBuilder, codegen_results, outputs);
         for crate_type in requested_crate_types {
             let out_fname = out_filename(
                 sess,
                 *crate_type,
                 outputs,
-                codegen_results.crate_info.local_crate_name,
+                local_crate_name,
             );
             let out_path = out_fname.as_path();
             debug!(?crate_type, ?out_path, "link");

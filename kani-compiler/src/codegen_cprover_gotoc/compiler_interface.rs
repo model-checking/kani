@@ -410,23 +410,17 @@ impl CodegenBackend for GotocCodegenBackend {
         outputs: &OutputFilenames,
     ) -> Result<(), ErrorGuaranteed> {
         let requested_crate_types = &codegen_results.crate_info.crate_types.clone();
+        let local_crate_name = codegen_results.crate_info.local_crate_name;
         // Create the rlib if one was requested.
         if requested_crate_types.iter().any(|crate_type| *crate_type == CrateType::Rlib) {
             link_binary(sess, &ArArchiveBuilderBuilder, codegen_results, outputs)?;
         }
 
-        let local_crate_name = 
-        codegen_results.crate_info.local_crate_name;
         // But override all the other outputs.
         // Note: Do this after `link_binary` call, since it may write to the object files
         // and override the json we are creating.
         for crate_type in requested_crate_types {
-            let out_fname = out_filename(
-                sess,
-                *crate_type,
-                outputs,
-                local_crate_name,
-            );
+            let out_fname = out_filename(sess, *crate_type, outputs, local_crate_name);
             let out_path = out_fname.as_path();
             debug!(?crate_type, ?out_path, "link");
             if *crate_type != CrateType::Rlib {
