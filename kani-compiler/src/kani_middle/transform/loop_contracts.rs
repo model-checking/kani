@@ -4,9 +4,10 @@
 //! This module contains code related to the MIR-to-MIR pass to enable loop contracts.
 //!
 
+use super::TransformPass;
 use crate::kani_middle::KaniAttributes;
 use crate::kani_middle::codegen_units::CodegenUnit;
-use crate::kani_middle::find_fn_def;
+use crate::kani_middle::kani_functions::KaniModel;
 use crate::kani_middle::transform::TransformationType;
 use crate::kani_middle::transform::body::{InsertPosition, MutableBody, SourceInstruction};
 use crate::kani_queries::QueryDb;
@@ -21,8 +22,6 @@ use stable_mir::mir::{
 use stable_mir::ty::{FnDef, MirConst, RigidTy, UintTy};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt::Debug;
-
-use super::TransformPass;
 
 #[derive(Debug, Default)]
 pub struct LoopContractPass {
@@ -146,9 +145,10 @@ impl TransformPass for LoopContractPass {
 }
 
 impl LoopContractPass {
-    pub fn new(tcx: TyCtxt, unit: &CodegenUnit) -> LoopContractPass {
+    pub fn new(_tcx: TyCtxt, queries: &QueryDb, unit: &CodegenUnit) -> LoopContractPass {
         if !unit.harnesses.is_empty() {
-            let run_contract_fn = find_fn_def(tcx, "KaniRunLoopContract");
+            let run_contract_fn =
+                queries.kani_functions().get(&KaniModel::RunLoopContract.into()).copied();
             assert!(run_contract_fn.is_some(), "Failed to find Kani run contract function");
             LoopContractPass { run_contract_fn, new_loop_latches: HashMap::new() }
         } else {
