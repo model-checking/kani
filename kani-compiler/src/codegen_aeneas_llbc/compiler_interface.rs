@@ -326,19 +326,16 @@ impl CodegenBackend for LlbcCodegenBackend {
         codegen_results: CodegenResults,
         outputs: &OutputFilenames,
     ) -> Result<(), ErrorGuaranteed> {
-        let requested_crate_types = &codegen_results.crate_info.crate_types;
+        let requested_crate_types = &codegen_results.crate_info.crate_types.clone();
+        let local_crate_name = codegen_results.crate_info.local_crate_name;
+        let link_result = link_binary(sess, &ArArchiveBuilderBuilder, codegen_results, outputs);
         for crate_type in requested_crate_types {
-            let out_fname = out_filename(
-                sess,
-                *crate_type,
-                outputs,
-                codegen_results.crate_info.local_crate_name,
-            );
+            let out_fname = out_filename(sess, *crate_type, outputs, local_crate_name);
             let out_path = out_fname.as_path();
             debug!(?crate_type, ?out_path, "link");
             if *crate_type == CrateType::Rlib {
                 // Emit the `rlib` that contains just one file: `<crate>.rmeta`
-                link_binary(sess, &ArArchiveBuilderBuilder, &codegen_results, outputs)?
+                link_result?
             } else {
                 // Write the location of the kani metadata file in the requested compiler output file.
                 let base_filepath = outputs.path(OutputType::Object);
