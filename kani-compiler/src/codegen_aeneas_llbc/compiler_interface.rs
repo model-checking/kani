@@ -330,12 +330,7 @@ impl CodegenBackend for LlbcCodegenBackend {
         let local_crate_name = codegen_results.crate_info.local_crate_name;
         let link_result = link_binary(sess, &ArArchiveBuilderBuilder, codegen_results, outputs);
         for crate_type in requested_crate_types {
-            let out_fname = out_filename(
-                sess,
-                *crate_type,
-                outputs,
-                local_crate_name,
-            );
+            let out_fname = out_filename(sess, *crate_type, outputs, local_crate_name);
             let out_path = out_fname.as_path();
             debug!(?crate_type, ?out_path, "link");
             if *crate_type == CrateType::Rlib {
