@@ -43,16 +43,16 @@ mod issue_3638 {
 
     #[cfg(kani)]
     #[kani::proof]
-    fn main() {
-        // Create a SampleTrait object from SampleStruct
+    fn slice_from_raw() {
+        // Create a SampleSlice object from SampleStruct
         let original: Wrapper<[u8; 10]> = kani::any();
         let slice: &Wrapper<[u8]> = &original;
 
-        // Get the raw data pointer and metadata for the trait object
+        // Get the raw data pointer and metadata for the slice object
         let slice_ptr = NonNull::new(slice as *const _ as *mut ()).unwrap();
         let metadata = std::ptr::metadata(slice);
 
-        // Create NonNull<dyn SampleTrait> from the data pointer and metadata
+        // Create NonNull<[u8]> from the data pointer and metadata
         let _: NonNull<Wrapper<[u8]>> = NonNull::from_raw_parts(slice_ptr, metadata);
     }
 }

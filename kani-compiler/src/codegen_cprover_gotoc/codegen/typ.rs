@@ -1571,14 +1571,11 @@ impl<'tcx> GotocCtx<'tcx> {
             return None;
         }
 
-        let mut typ = struct_type;
-        while let ty::Adt(adt_def, adt_args) = typ.kind() {
-            assert_eq!(adt_def.variants().len(), 1, "Expected a single-variant ADT. Found {typ:?}");
-            let fields = &adt_def.variants().get(VariantIdx::from_u32(0)).unwrap().fields;
-            let last_field = fields.last_index().expect("Trait should be the last element.");
-            typ = fields[last_field].ty(self.tcx, adt_args);
-        }
-        if typ.is_trait() { Some(typ) } else { None }
+        let ty = rustc_internal::stable(struct_type);
+        rustc_internal::internal(
+            self.tcx,
+            crate::kani_middle::abi::LayoutOf::new(ty).unsized_tail(),
+        )
     }
 
     /// This function provides an iterator that traverses the data path of a receiver type. I.e.:

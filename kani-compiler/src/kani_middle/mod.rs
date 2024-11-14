@@ -26,6 +26,7 @@ use std::ops::ControlFlow;
 
 use self::attributes::KaniAttributes;
 
+pub mod abi;
 pub mod analysis;
 pub mod attributes;
 pub mod codegen_units;
