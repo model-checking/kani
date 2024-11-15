@@ -4,7 +4,7 @@
 //!
 //! There are three types of functions today:
 //!    1. Kani intrinsics: These are functions whose body is generated during
-//!       compilation time. Their body usually require some extra knowledge about the given types
+//!       compilation time. Their body usually requires some extra knowledge about the given types
 //!       that's only available during compilation.
 //!    2. Kani models: These are functions that model a specific behavior but that cannot be used
 //!       directly by the user. For example, retrieving information about memory initialization.
@@ -148,8 +148,8 @@ impl TryFrom<FnDef> for KaniFunction {
 
     fn try_from(def: FnDef) -> Result<Self, Self::Error> {
         let value = attributes::fn_marker(def).ok_or(())?;
-        if let Ok(intrisic) = KaniIntrinsic::from_str(&value) {
-            Ok(intrisic.into())
+        if let Ok(intrinsic) = KaniIntrinsic::from_str(&value) {
+            Ok(intrinsic.into())
         } else if let Ok(model) = KaniModel::from_str(&value) {
             Ok(model.into())
         } else if let Ok(hook) = KaniHook::from_str(&value) {
@@ -165,8 +165,8 @@ impl TryFrom<Instance> for KaniFunction {
 
     fn try_from(instance: Instance) -> Result<Self, Self::Error> {
         let value = attributes::fn_marker(instance.def).ok_or(())?;
-        if let Ok(intrisic) = KaniIntrinsic::from_str(&value) {
-            Ok(intrisic.into())
+        if let Ok(intrinsic) = KaniIntrinsic::from_str(&value) {
+            Ok(intrinsic.into())
         } else if let Ok(model) = KaniModel::from_str(&value) {
             Ok(model.into())
         } else if let Ok(hook) = KaniHook::from_str(&value) {

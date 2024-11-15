@@ -237,8 +237,8 @@ impl CodegenBackend for GotocCodegenBackend {
         let ret_val = rustc_internal::run(tcx, || {
             super::utils::init();
 
-            // Any changes to queries from this point on is just related to caching information
-            // for efficiency purpose that should not outlive the stable-mir `run` scope.
+            // Any changes to queries from this point on is just related to caching;
+            // the cached information will not outlive the stable-mir `run` scope.
             let queries = self.queries.lock().unwrap().clone();
 
             check_target(tcx.sess);

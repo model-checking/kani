@@ -39,7 +39,7 @@ pub struct IntrinsicGeneratorPass {
     check_type: CheckType,
     /// Used to cache FnDef lookups for models and Kani intrinsics.
     kani_defs: HashMap<KaniFunction, FnDef>,
-    /// Used to enable intrinsics depending on the flags passed.
+    /// Whether the user enabled uninitialized memory checks when they invoked Kani.
     enable_uninit: bool,
 }
 
