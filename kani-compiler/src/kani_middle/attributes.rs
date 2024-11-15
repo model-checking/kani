@@ -1067,6 +1067,7 @@ fn pretty_type_path(path: &TypePath) -> String {
     }
 }
 
+/// Retrieve the value of the `fn_marker` attribute for the given definition if it has one.
 pub(crate) fn fn_marker<T: CrateDef>(def: T) -> Option<String> {
     let fn_marker: [SymbolStable; 2] = ["kanitool".into(), "fn_marker".into()];
     let marker = def.attrs_by_path(&fn_marker).pop()?;

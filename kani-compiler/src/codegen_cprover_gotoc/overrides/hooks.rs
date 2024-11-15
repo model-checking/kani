@@ -48,9 +48,12 @@ pub trait GotocHook {
 /// <https://github.com/model-checking/kani/blob/main/rfc/src/rfcs/0003-cover-statement.md>
 /// for more details.
 struct Cover;
+
+const UNEXPECTED_CALL: &str = "Hooks from kani library handled as a map";
+
 impl GotocHook for Cover {
     fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
-        unreachable!("Hooks from kani library handled as a map")
+        unreachable!("{UNEXPECTED_CALL}")
     }
 
     fn handle(
@@ -85,7 +88,7 @@ impl GotocHook for Cover {
 struct Assume;
 impl GotocHook for Assume {
     fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
-        unreachable!("Hooks from kani library handled as a map")
+        unreachable!("{UNEXPECTED_CALL}")
     }
 
     fn handle(
@@ -109,7 +112,7 @@ impl GotocHook for Assume {
 struct Assert;
 impl GotocHook for Assert {
     fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
-        unreachable!("Hooks from kani library handled as a map")
+        unreachable!("{UNEXPECTED_CALL}")
     }
 
     fn handle(
@@ -149,7 +152,7 @@ impl GotocHook for Assert {
 struct Check;
 impl GotocHook for Check {
     fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
-        unreachable!("Hooks from kani library handled as a map")
+        unreachable!("{UNEXPECTED_CALL}")
     }
 
     fn handle(
@@ -185,7 +188,7 @@ struct Nondet;
 
 impl GotocHook for Nondet {
     fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
-        unreachable!("Hooks from kani library handled as a map")
+        unreachable!("{UNEXPECTED_CALL}")
     }
 
     fn handle(
@@ -248,7 +251,7 @@ impl GotocHook for Panic {
 struct IsAllocated;
 impl GotocHook for IsAllocated {
     fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
-        unreachable!("Hooks from kani library handled as a map")
+        unreachable!("{UNEXPECTED_CALL}")
     }
 
     fn handle(
@@ -285,7 +288,7 @@ impl GotocHook for IsAllocated {
 struct PointerObject;
 impl GotocHook for PointerObject {
     fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
-        unreachable!("Hooks from kani library handled as a map")
+        unreachable!("{UNEXPECTED_CALL}")
     }
 
     fn handle(
@@ -321,7 +324,7 @@ impl GotocHook for PointerObject {
 struct PointerOffset;
 impl GotocHook for PointerOffset {
     fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
-        unreachable!("Hooks from kani library handled as a map")
+        unreachable!("{UNEXPECTED_CALL}")
     }
 
     fn handle(
@@ -467,7 +470,7 @@ struct UntrackedDeref;
 
 impl GotocHook for UntrackedDeref {
     fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
-        unreachable!("Hooks from kani library handled as a map")
+        unreachable!("{UNEXPECTED_CALL}")
     }
 
     fn handle(
@@ -515,7 +518,7 @@ struct InitContracts;
 /// ```
 impl GotocHook for InitContracts {
     fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
-        unreachable!("Hooks from kani library handled as a map")
+        unreachable!("{UNEXPECTED_CALL}")
     }
 
     fn handle(
@@ -616,7 +619,7 @@ impl GotocHook for LoopInvariantRegister {
 }
 
 pub fn fn_hooks() -> GotocHooks {
-    let kani_hooks: [(KaniHook, Rc<dyn GotocHook>); 11] = [
+    let kani_lib_hooks: [(KaniHook, Rc<dyn GotocHook>); 11] = [
         (KaniHook::Assert, Rc::new(Assert)),
         (KaniHook::Assume, Rc::new(Assume)),
         (KaniHook::Panic, Rc::new(Panic)),
@@ -630,27 +633,31 @@ pub fn fn_hooks() -> GotocHooks {
         (KaniHook::InitContracts, Rc::new(InitContracts)),
     ];
     GotocHooks {
-        rustc_hooks: vec![
+        kani_lib_hooks: HashMap::from(kani_lib_hooks),
+        other_hooks: vec![
             Rc::new(Panic),
             Rc::new(RustAlloc),
             Rc::new(MemCmp),
             Rc::new(LoopInvariantRegister),
         ],
-        kani_hooks: HashMap::from(kani_hooks),
     }
 }
 
 pub struct GotocHooks {
-    rustc_hooks: Vec<Rc<dyn GotocHook>>,
-    kani_hooks: HashMap<KaniHook, Rc<dyn GotocHook>>,
+    /// Match functions that are unique and defined in the Kani library, which we can prefetch
+    /// using `KaniFunctions`.
+    kani_lib_hooks: HashMap<KaniHook, Rc<dyn GotocHook>>,
+    /// Match functions that are not defined in the Kani library, which we cannot prefetch
+    /// beforehand.
+    other_hooks: Vec<Rc<dyn GotocHook>>,
 }
 
 impl GotocHooks {
     pub fn hook_applies(&self, tcx: TyCtxt, instance: Instance) -> Option<Rc<dyn GotocHook>> {
         if let Ok(KaniFunction::Hook(hook)) = KaniFunction::try_from(instance) {
-            Some(self.kani_hooks[&hook].clone())
+            Some(self.kani_lib_hooks[&hook].clone())
         } else {
-            for h in &self.rustc_hooks {
+            for h in &self.other_hooks {
                 if h.hook_applies(tcx, instance) {
                     return Some(h.clone());
                 }
