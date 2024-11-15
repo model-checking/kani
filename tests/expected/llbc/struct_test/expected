@@ -1,0 +1,27 @@
+struct test::MyStruct =
+{
+  a: i32,
+  b: bool,
+}
+
+fn test::struct_project(@1: @Adt0) -> i32
+{
+    let @0: i32; // return
+    let s@1: @Adt0; // arg #1
+
+    @0 := copy ((s@1).a)
+    return
+}
+
+fn test::main()
+{
+    let @0: (); // return
+    let s@1: @Adt0; // local
+    let a@2: i32; // local
+
+    s@1 := @Adt0 { a: const (1 : i32), b: const (true) }
+    a@2 := @Fun0(move (s@1))
+    drop a@2
+    @0 := ()
+    return
+}

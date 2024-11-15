@@ -1,0 +1,28 @@
+fn test::tuple_add(@1: (i32, i32)) -> i32
+{
+    let @0: i32; // return
+    let t@1: (i32, i32); // arg #1
+    let @2: i32; // anonymous local
+    let @3: i32; // anonymous local
+
+    @2 := copy ((t@1).0)
+    @3 := copy ((t@1).1)
+    @0 := copy (@2) + copy (@3)
+    drop @3
+    drop @2
+    return
+}
+
+fn test::main()
+{
+    let @0: (); // return
+    let s@1: i32; // local
+    let @2: (i32, i32); // anonymous local
+
+    @2 := (const (1 : i32), const (2 : i32))
+    s@1 := @Fun0(move (@2))
+    drop @2
+    drop s@1
+    @0 := ()
+    return
+}
