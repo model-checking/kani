@@ -7,7 +7,7 @@
 //! unstructured low-level borrow calculus (ULLBC)
 
 use core::panic;
-use std::any::Any;
+//use std::any::Any;
 //use std::ascii::Char;
 use std::path::PathBuf;
 
@@ -64,8 +64,8 @@ use charon_lib::ullbc_ast::{
 };
 use charon_lib::{error_assert, error_or_panic};
 use rustc_data_structures::fx::FxHashMap;
-use rustc_data_structures::stable_hasher::HashStable;
-use rustc_middle::ty::AdtKind as MirAdtKind;
+//use rustc_data_structures::stable_hasher::HashStable;
+//use rustc_middle::ty::AdtKind as MirAdtKind;
 use rustc_middle::ty::TyCtxt;
 use rustc_smir::rustc_internal;
 use stable_mir::abi::PassMode;
@@ -82,11 +82,11 @@ use stable_mir::ty::AdtDef;
 use stable_mir::ty::AdtKind;
 use stable_mir::ty::{
     Allocation, ConstantKind, IndexedVal, IntTy, MirConst, Region, RegionKind, RigidTy, Span,
-    TraitDef, Ty, TyConst, TyConstId, TyConstKind, TyKind, UintTy,
+    Ty, TyConst, TyConstKind, TyKind, UintTy,
 };
 use stable_mir::ty::{GenericArgKind, GenericArgs};
 use stable_mir::{CrateDef, DefId};
-use syn::token::Default;
+//use syn::token::Default;
 use tracing::{debug, trace};
 
 /// A context for translating a single MIR function to ULLBC.
@@ -187,12 +187,14 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         tid.try_into().unwrap()
     }
 
+    /* 
     fn find_fun_decl_id(&self, def_id: DefId) -> CharonFunDeclId {
         debug!("register_fun_decl_id: {:?}", def_id);
         let tid = *self.id_map.get(&def_id).unwrap();
         debug!("register_fun_decl_id: {:?}", self.id_map);
         tid.try_into().unwrap()
     }
+    */
 
     fn register_type_decl_id(&mut self, def_id: DefId) -> CharonTypeDeclId {
         debug!("register_type_decl_id: {:?}", def_id);
@@ -262,7 +264,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     let c_discr = self.get_discriminant(discr_val, discr_ty);
 
                     let c_variant = CharonVariant {
-                        span: span,
+                        span,
                         attr_info: CharonAttrInfo {
                             attributes: Vec::new(),
                             inline: None,
@@ -281,7 +283,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     def_id: c_typedeclid,
                     generics: CharonGenericParams::empty(),
                     kind: CharonTypeDeclKind::Enum(c_variants),
-                    item_meta: item_meta,
+                    item_meta,
                 };
                 self.translated.type_decls.set_slot(c_typedeclid, typedecl);
                 c_typedeclid
@@ -314,7 +316,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     def_id: c_typedeclid,
                     generics: CharonGenericParams::empty(),
                     kind: CharonTypeDeclKind::Struct(c_fields),
-                    item_meta: item_meta,
+                    item_meta,
                 };
                 self.translated.type_decls.set_slot(c_typedeclid, typedecl);
                 c_typedeclid
@@ -626,6 +628,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         CharonSpan { span: rspan, generated_from_span: None }
     }
 
+/*    
     fn translate_span_immut(&self, span: Span) -> CharonSpan {
         let filename = CharonFileName::Local(PathBuf::from(span.get_filename()));
         let file_id = *self.translated.file_to_id.get(&filename).unwrap();
@@ -639,6 +642,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         // TODO: populate `generated_from_span` info
         CharonSpan { span: rspan, generated_from_span: None }
     }
+*/ 
 
     fn translate_function_signature(&mut self) -> CharonFunSig {
         let instance = self.instance;
@@ -784,9 +788,9 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         match tyconst.kind() {
             TyConstKind::Value(ty, alloc) => {
                 let c_raw_constexpr = self.translate_allocation(alloc, *ty);
-                let c_const_generic =
-                    translate_constant_expr_to_const_generic(c_raw_constexpr).unwrap();
-                c_const_generic
+                //let c_const_generic =
+                    //translate_constant_expr_to_const_generic(c_raw_constexpr).unwrap();
+                translate_constant_expr_to_const_generic(c_raw_constexpr).unwrap()
             }
             _ => todo!(),
         }
@@ -1057,7 +1061,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     (*operands).iter().map(|operand| self.translate_operand(operand)).collect();
                 let akind = agg_kind.clone();
                 match akind {
-                    AggregateKind::Adt(adt_def, variant_id, gen_args, user_anot, field_id) => {
+                    AggregateKind::Adt(adt_def, variant_id, _gen_args, _user_anot, field_id) => {
                         let adt_kind = adt_def.kind();
                         match adt_kind {
                             AdtKind::Enum => {
@@ -1066,10 +1070,11 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                                 let c_type_id = CharonTypeId::Adt(c_typedeclid);
                                 let c_variant_id =
                                     Some(CharonVariantId::from_usize(variant_id.to_index()));
-                                let c_field_id = match field_id {
-                                    Some(fid) => Some(CharonFieldId::from_usize(fid)),
-                                    None => None,
-                                };
+                                //let c_field_id = match field_id {
+                                //    Some(fid) => Some(CharonFieldId::from_usize(fid)),
+                                //    None => None,
+                                //};
+                                let c_field_id = field_id.map(CharonFieldId::from_usize);
                                 let c_generic_args = CharonGenericArgs::empty();
                                 let c_agg_kind = CharonAggregateKind::Adt(
                                     c_type_id,
@@ -1264,26 +1269,26 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                                 CharonTypeDeclKind::Struct(_) => {
                                     let c_fprj = CharonFieldProjKind::Adt(*tdid, None);
                                     c_provec.push(CharonProjectionElem::Field(c_fprj, c_fieldid));
-                                    let current_ty = ty.clone();
+                                    current_ty = self.translate_ty(*ty);
                                 }
                                 CharonTypeDeclKind::Enum(_) => {
                                     let c_fprj = CharonFieldProjKind::Adt(*tdid, Some(c_variantid));
                                     c_provec.push(CharonProjectionElem::Field(c_fprj, c_fieldid));
-                                    let current_ty = ty.clone();
+                                    current_ty = self.translate_ty(*ty);
                                 }
                                 _ => (),
                             }
                         }
                         CharonTyKind::Adt(CharonTypeId::Tuple, genargs) => {
-                            let c_fprj = CharonFieldProjKind::Tuple((*genargs).types.len());
+                            let c_fprj = CharonFieldProjKind::Tuple(genargs.types.len());
                             c_provec.push(CharonProjectionElem::Field(c_fprj, c_fieldid));
-                            let current_ty = ty.clone();
+                            current_ty = self.translate_ty(*ty);
                         }
                         _ => (),
                     }
                 }
                 ProjectionElem::Downcast(varid) => {
-                    let current_var = varid.to_index();
+                    current_var = varid.to_index();
                 }
 
                 _ => continue,
