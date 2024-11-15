@@ -4,21 +4,17 @@
 
 //! This test checks that Kani's LLBC backend handles simple enum
 
-
 enum MyEnum {
     A(i32),
     B,
 }
 
-
 fn enum_match(e: MyEnum) -> i32 {
     match e {
-        MyEnum::A(i) => i ,
-        MyEnum::B => 0 ,
+        MyEnum::A(i) => i,
+        MyEnum::B => 0,
     }
 }
-
-
 
 #[kani::proof]
 fn main() {

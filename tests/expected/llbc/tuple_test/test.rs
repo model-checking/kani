@@ -4,7 +4,7 @@
 
 //! This test checks that Kani's LLBC backend handles simple tuple
 
-fn tuple_add (t: (i32, i32)) -> i32 {
+fn tuple_add(t: (i32, i32)) -> i32 {
     t.0 + t.1
 }
 

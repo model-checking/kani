@@ -4,7 +4,7 @@
 
 //! This test checks that Kani's LLBC backend handles simple struct
 
-struct MyStruct{
+struct MyStruct {
     a: i32,
     b: bool,
 }
