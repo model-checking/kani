@@ -49,8 +49,9 @@ impl LayoutOf {
 
     /// Return the unsized tail of the type if this is an unsized type.
     ///
-    /// For foreign types, return None.
-    /// For unsized types, this should return either a slice, a string slice, a dynamic type.
+    /// For foreign types, return `None`.
+    /// For unsized types, this should return either a slice, a string slice, a dynamic type,
+    /// or a foreign type.
     /// For other types, this function will return `None`.
     pub fn unsized_tail(&self) -> Option<Ty> {
         if self.layout.is_unsized() {
@@ -68,7 +69,7 @@ impl LayoutOf {
         }
     }
 
-    /// Return the type of the elements of the array or slice at the unsized tail of this type.
+    /// Return the type of the elements of the slice or `str` at the unsized tail of this type.
     ///
     /// For sized types and trait unsized type, this function will return `None`.
     pub fn unsized_tail_elem_ty(&self) -> Option<Ty> {
