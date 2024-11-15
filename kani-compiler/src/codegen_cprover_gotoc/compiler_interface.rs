@@ -239,7 +239,7 @@ impl CodegenBackend for GotocCodegenBackend {
 
             // Any changes to queries from this point on is just related to caching information
             // needed for generating code to the given crate.
-            // The cached information mut not outlive the stable-mir `run` scope.
+            // The cached information must not outlive the stable-mir `run` scope.
             // See [QueryDb::kani_functions] for more information.
             let queries = self.queries.lock().unwrap().clone();
 

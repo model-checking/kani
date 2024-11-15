@@ -436,7 +436,7 @@ impl MutableBody {
     }
 }
 
-// TODO: Remove-me
+// TODO: Remove this enum, since we now only support kani's assert.
 #[derive(Clone, Debug)]
 pub enum CheckType {
     /// This is used by default when the `kani` crate is available.
