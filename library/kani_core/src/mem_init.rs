@@ -23,7 +23,7 @@
 macro_rules! kani_mem_init {
     ($core:path) => {
         /// Global object for tracking memory initialization state.
-        #[kanitool::fn_marker = "MemoryInitializationStateModel"]
+        #[rustc_diagnostic_item = "KaniMemoryInitializationState"]
         static mut MEM_INIT_STATE: MemoryInitializationState = MemoryInitializationState::new();
 
         /// Global object for tracking union initialization state across function boundaries.
