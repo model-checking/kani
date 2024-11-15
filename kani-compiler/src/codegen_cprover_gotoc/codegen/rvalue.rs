@@ -6,6 +6,7 @@ use crate::codegen_cprover_gotoc::codegen::place::ProjectedPlace;
 use crate::codegen_cprover_gotoc::codegen::ty_stable::pointee_type_stable;
 use crate::codegen_cprover_gotoc::utils::{dynamic_fat_ptr, slice_fat_ptr};
 use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
+use crate::kani_middle::abi::LayoutOf;
 use crate::kani_middle::coercion::{
     CoerceUnsizedInfo, CoerceUnsizedIterator, CoercionBaseStable, extract_unsize_casting_stable,
 };
@@ -710,21 +711,32 @@ impl GotocCtx<'_> {
                         slice_fat_ptr(typ, data_cast, meta, &self.symbol_table)
                     }
                     TyKind::RigidTy(RigidTy::Adt(..)) => {
+                        let layout = LayoutOf::new(pointee_ty);
                         let pointee_goto_typ = self.codegen_ty_stable(pointee_ty);
                         let data_cast =
                             data.cast_to(Type::Pointer { typ: Box::new(pointee_goto_typ) });
-                        let meta = self.codegen_operand_stable(&operands[1]);
-                        if meta.typ().sizeof(&self.symbol_table) == 0 {
-                            data_cast
-                        } else {
-                            let vtable_expr = meta
-                                .member("_vtable_ptr", &self.symbol_table)
-                                .member("pointer", &self.symbol_table)
-                                .cast_to(
-                                    typ.lookup_field_type("vtable", &self.symbol_table).unwrap(),
-                                );
-                            dynamic_fat_ptr(typ, data_cast, vtable_expr, &self.symbol_table)
-                        }
+                        layout.unsized_tail().map_or(data_cast.clone(), |tail| {
+                            let meta = self.codegen_operand_stable(&operands[1]);
+                            match tail.kind().rigid().unwrap() {
+                                RigidTy::Foreign(..) => data_cast,
+                                RigidTy::Slice(..) | RigidTy::Str => {
+                                    slice_fat_ptr(typ, data_cast, meta, &self.symbol_table)
+                                }
+                                RigidTy::Dynamic(..) => {
+                                    let vtable_expr = meta
+                                        .member("_vtable_ptr", &self.symbol_table)
+                                        .member("pointer", &self.symbol_table)
+                                        .cast_to(
+                                            typ.lookup_field_type("vtable", &self.symbol_table)
+                                                .unwrap(),
+                                        );
+                                    dynamic_fat_ptr(typ, data_cast, vtable_expr, &self.symbol_table)
+                                }
+                                _ => {
+                                    unreachable!("Unexpected unsized tail: {tail:?}");
+                                }
+                            }
+                        })
                     }
                     TyKind::RigidTy(RigidTy::Dynamic(..)) => {
                         let pointee_goto_typ = self.codegen_ty_stable(pointee_ty);
