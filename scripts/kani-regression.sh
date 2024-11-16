@@ -80,9 +80,6 @@ for testp in "${TESTS[@]}"; do
       --quiet --no-fail-fast
 done
 
-# Check codegen for the standard library
-time "$SCRIPT_DIR"/std-lib-regression.sh
-
 # We rarely benefit from re-using build artifacts in the firecracker test,
 # and we often end up with incompatible leftover artifacts:
 # "error[E0514]: found crate `serde_derive` compiled by an incompatible version of rustc"

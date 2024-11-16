@@ -101,14 +101,14 @@ macro_rules! kani_intrinsics {
         /// kani::assume(i > 10);
         /// ```
         #[inline(never)]
-        #[rustc_diagnostic_item = "KaniAssume"]
+        #[kanitool::fn_marker = "AssumeHook"]
         #[cfg(not(feature = "concrete_playback"))]
         pub fn assume(cond: bool) {
             let _ = cond;
         }
 
         #[inline(never)]
-        #[rustc_diagnostic_item = "KaniAssume"]
+        #[kanitool::fn_marker = "AssumeHook"]
         #[cfg(feature = "concrete_playback")]
         pub fn assume(cond: bool) {
             assert!(cond, "`kani::assume` should always hold");
@@ -125,7 +125,7 @@ macro_rules! kani_intrinsics {
         /// ```
         #[cfg(not(feature = "concrete_playback"))]
         #[inline(never)]
-        #[rustc_diagnostic_item = "KaniAssert"]
+        #[kanitool::fn_marker = "AssertHook"]
         pub const fn assert(cond: bool, msg: &'static str) {
             let _ = cond;
             let _ = msg;
@@ -133,7 +133,7 @@ macro_rules! kani_intrinsics {
 
         #[cfg(feature = "concrete_playback")]
         #[inline(never)]
-        #[rustc_diagnostic_item = "KaniAssert"]
+        #[kanitool::fn_marker = "AssertHook"]
         pub const fn assert(cond: bool, msg: &'static str) {
             assert!(cond, "{}", msg);
         }
@@ -162,7 +162,7 @@ macro_rules! kani_intrinsics {
         /// convenient to use.
         ///
         #[inline(never)]
-        #[rustc_diagnostic_item = "KaniCover"]
+        #[kanitool::fn_marker = "CoverHook"]
         pub const fn cover(_cond: bool, _msg: &'static str) {}
 
         /// This creates an symbolic *valid* value of type `T`. You can assign the return value of this
@@ -185,7 +185,7 @@ macro_rules! kani_intrinsics {
         /// Note: This is a safe construct and can only be used with types that implement the `Arbitrary`
         /// trait. The Arbitrary trait is used to build a symbolic value that represents all possible
         /// valid values for type `T`.
-        #[rustc_diagnostic_item = "KaniAny"]
+        #[kanitool::fn_marker = "AnyModel"]
         #[inline(always)]
         pub fn any<T: Arbitrary>() -> T {
             T::any()
@@ -195,7 +195,7 @@ macro_rules! kani_intrinsics {
         /// It behaves exaclty like `kani::any<T>()`, except it will check for the trait bounds
         /// at compilation time. It allows us to avoid type checking errors while using function
         /// contracts only for verification.
-        #[rustc_diagnostic_item = "KaniAnyModifies"]
+        #[kanitool::fn_marker = "AnyModifiesIntrinsic"]
         #[inline(never)]
         #[doc(hidden)]
         pub fn any_modifies<T>() -> T {
@@ -264,7 +264,7 @@ macro_rules! kani_intrinsics {
         use concrete_playback::{any_raw_array, any_raw_internal};
 
         /// This low-level function returns nondet bytes of size T.
-        #[rustc_diagnostic_item = "KaniAnyRaw"]
+        #[kanitool::fn_marker = "AnyRawHook"]
         #[inline(never)]
         #[allow(dead_code)]
         fn any_raw<T: Copy>() -> T {
@@ -278,7 +278,7 @@ macro_rules! kani_intrinsics {
         /// invoke the regular `core::panic!()` function. This function is used by our standard library
         /// overrides, but not the other way around.
         #[inline(never)]
-        #[rustc_diagnostic_item = "KaniPanic"]
+        #[kanitool::fn_marker = "PanicHook"]
         #[doc(hidden)]
         pub const fn panic(message: &'static str) -> ! {
             panic!("{}", message)
@@ -350,7 +350,7 @@ macro_rules! kani_intrinsics {
             /// guarantee it is done safely.
             #[inline(never)]
             #[doc(hidden)]
-            #[rustc_diagnostic_item = "KaniUntrackedDeref"]
+            #[kanitool::fn_marker = "UntrackedDerefHook"]
             pub fn untracked_deref<T>(_: &T) -> T {
                 todo!()
             }
@@ -366,7 +366,7 @@ macro_rules! kani_intrinsics {
             /// ```
             #[inline(never)]
             #[doc(hidden)]
-            #[rustc_diagnostic_item = "KaniInitContracts"]
+            #[kanitool::fn_marker = "InitContractsHook"]
             pub fn init_contracts() {}
 
             /// This should only be used within contracts. The intent is to
@@ -379,7 +379,7 @@ macro_rules! kani_intrinsics {
             /// Recieves a reference to a pointer-like object and assigns kani::any_modifies to that object.
             /// Only for use within function contracts and will not be replaced if the recursive or function stub
             /// replace contracts are not used.
-            #[rustc_diagnostic_item = "KaniWriteAny"]
+            #[kanitool::fn_marker = "WriteAnyIntrinsic"]
             #[inline(never)]
             #[doc(hidden)]
             pub unsafe fn write_any<T: ?Sized>(_pointer: *mut T) {
@@ -387,12 +387,12 @@ macro_rules! kani_intrinsics {
                 // Users must include `#[kani::recursion]` in any function contracts for recursive functions;
                 // otherwise, this might not be properly instantiate. We mark this as unreachable to make
                 // sure Kani doesn't report any false positives.
-                unreachable!()
+                super::kani_intrinsic()
             }
 
             /// Fill in a slice with kani::any.
             /// Intended as a post compilation replacement for write_any
-            #[rustc_diagnostic_item = "KaniWriteAnySlice"]
+            #[kanitool::fn_marker = "WriteAnySliceModel"]
             #[inline(always)]
             pub unsafe fn write_any_slice<T: Arbitrary>(slice: *mut [T]) {
                 (*slice).fill_with(T::any)
@@ -400,7 +400,7 @@ macro_rules! kani_intrinsics {
 
             /// Fill in a pointer with kani::any.
             /// Intended as a post compilation replacement for write_any
-            #[rustc_diagnostic_item = "KaniWriteAnySlim"]
+            #[kanitool::fn_marker = "WriteAnySlimModel"]
             #[inline(always)]
             pub unsafe fn write_any_slim<T: Arbitrary>(pointer: *mut T) {
                 ptr::write(pointer, T::any())
@@ -409,7 +409,7 @@ macro_rules! kani_intrinsics {
             /// Fill in a str with kani::any.
             /// Intended as a post compilation replacement for write_any.
             /// Not yet implemented
-            #[rustc_diagnostic_item = "KaniWriteAnyStr"]
+            #[kanitool::fn_marker = "WriteAnyStrModel"]
             #[inline(always)]
             pub unsafe fn write_any_str(_s: *mut str) {
                 //TODO: strings introduce new UB
@@ -425,7 +425,7 @@ macro_rules! kani_intrinsics {
             /// so we swap the register body by this function body.
             #[doc(hidden)]
             #[allow(dead_code)]
-            #[rustc_diagnostic_item = "KaniRunContract"]
+            #[kanitool::fn_marker = "RunContractModel"]
             fn run_contract_fn<T, F: FnOnce() -> T>(func: F) -> T {
                 func()
             }
@@ -437,7 +437,7 @@ macro_rules! kani_intrinsics {
             /// so we swap the register body by this function body.
             #[doc(hidden)]
             #[allow(dead_code)]
-            #[rustc_diagnostic_item = "KaniRunLoopContract"]
+            #[kanitool::fn_marker = "RunLoopContractModel"]
             fn run_loop_contract_fn<F: Fn() -> bool>(func: &F, _transformed: usize) -> bool {
                 func()
             }
@@ -474,7 +474,7 @@ macro_rules! kani_intrinsics {
             ///
             #[cfg(not(feature = "concrete_playback"))]
             #[inline(never)]
-            #[rustc_diagnostic_item = "KaniCheck"]
+            #[kanitool::fn_marker = "CheckHook"]
             pub(crate) const fn check(cond: bool, msg: &'static str) {
                 let _ = cond;
                 let _ = msg;
@@ -482,7 +482,7 @@ macro_rules! kani_intrinsics {
 
             #[cfg(feature = "concrete_playback")]
             #[inline(never)]
-            #[rustc_diagnostic_item = "KaniCheck"]
+            #[kanitool::fn_marker = "CheckHook"]
             pub(crate) const fn check(cond: bool, msg: &'static str) {
                 assert!(cond, "{}", msg);
             }

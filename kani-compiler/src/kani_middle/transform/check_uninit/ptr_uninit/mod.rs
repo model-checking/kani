@@ -5,6 +5,7 @@
 //! uninitialized memory via raw pointers.
 
 use crate::args::ExtraChecks;
+use crate::kani_middle::kani_functions::{KaniFunction, KaniModel};
 use crate::kani_middle::transform::{
     TransformPass, TransformationType,
     body::{CheckType, InsertPosition, MutableBody, SourceInstruction},
@@ -30,7 +31,7 @@ mod uninit_visitor;
 #[derive(Debug)]
 pub struct UninitPass {
     pub check_type: CheckType,
-    pub mem_init_fn_cache: HashMap<&'static str, FnDef>,
+    pub mem_init_fn_cache: HashMap<KaniFunction, FnDef>,
 }
 
 impl TransformPass for UninitPass {
@@ -57,14 +58,13 @@ impl TransformPass for UninitPass {
 
         // Inject a call to set-up memory initialization state if the function is a harness.
         if is_harness(instance, tcx) {
-            inject_memory_init_setup(&mut new_body, tcx, &mut self.mem_init_fn_cache);
+            inject_memory_init_setup(&mut new_body, &mut self.mem_init_fn_cache);
             changed = true;
         }
 
         // Call a helper that performs the actual instrumentation.
         let (instrumentation_added, body) = UninitInstrumenter::run(
             new_body.into(),
-            tcx,
             instance,
             self.check_type.clone(),
             &mut self.mem_init_fn_cache,
@@ -95,8 +95,7 @@ fn is_harness(instance: Instance, tcx: TyCtxt) -> bool {
 /// Inject an initial call to set-up memory initialization tracking.
 fn inject_memory_init_setup(
     new_body: &mut MutableBody,
-    tcx: TyCtxt,
-    mem_init_fn_cache: &mut HashMap<&'static str, FnDef>,
+    mem_init_fn_cache: &mut HashMap<KaniFunction, FnDef>,
 ) {
     // First statement or terminator in the harness.
     let mut source = if !new_body.blocks()[0].statements.is_empty() {
@@ -117,7 +116,10 @@ fn inject_memory_init_setup(
 
     // Resolve the instance and inject a call to set-up the memory initialization state.
     let memory_initialization_init = Instance::resolve(
-        get_mem_init_fn_def(tcx, "KaniInitializeMemoryInitializationState", mem_init_fn_cache),
+        get_mem_init_fn_def(
+            KaniModel::InitializeMemoryInitializationState.into(),
+            mem_init_fn_cache,
+        ),
         &GenericArgs(vec![]),
     )
     .unwrap();
