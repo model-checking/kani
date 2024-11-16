@@ -561,7 +561,7 @@ pub struct LoopInvariantRegister;
 impl GotocHook for LoopInvariantRegister {
     fn hook_applies(&self, _tcx: TyCtxt, instance: Instance) -> bool {
         attributes::fn_marker(instance.def)
-            .map_or(false, |marker| marker == "kani_register_loop_contract")
+            .is_some_and(|marker| marker == "kani_register_loop_contract")
     }
 
     fn handle(
