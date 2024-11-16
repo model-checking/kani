@@ -4,15 +4,11 @@
 //! Module containing multiple transformation passes that instrument the code to detect possible UB
 //! due to the accesses to uninitialized memory.
 
-use crate::kani_middle::{
-    find_fn_def,
-    transform::body::{CheckType, InsertPosition, MutableBody, SourceInstruction},
+use crate::kani_middle::transform::body::{
+    CheckType, InsertPosition, MutableBody, SourceInstruction,
 };
 use relevant_instruction::{InitRelevantInstruction, MemoryInitOp};
-use rustc_middle::ty::TyCtxt;
-use rustc_smir::rustc_internal;
 use stable_mir::{
-    CrateDef,
     mir::{
         AggregateKind, BasicBlock, Body, ConstOperand, Mutability, Operand, Place, Rvalue,
         Statement, StatementKind, Terminator, TerminatorKind, UnwindAction, mono::Instance,
@@ -21,6 +17,7 @@ use stable_mir::{
 };
 use std::collections::HashMap;
 
+use crate::kani_middle::kani_functions::{KaniFunction, KaniModel};
 pub use delayed_ub::DelayedUbPass;
 pub use ptr_uninit::UninitPass;
 pub use ty_layout::{PointeeInfo, PointeeLayout};
@@ -35,56 +32,59 @@ pub trait TargetFinder {
     fn find_all(self, body: &MutableBody) -> Vec<InitRelevantInstruction>;
 }
 
-const KANI_IS_PTR_INITIALIZED_DIAGNOSTIC: &str = "KaniIsPtrInitialized";
-const KANI_SET_PTR_INITIALIZED_DIAGNOSTIC: &str = "KaniSetPtrInitialized";
-const KANI_IS_SLICE_CHUNK_PTR_INITIALIZED_DIAGNOSTIC: &str = "KaniIsSliceChunkPtrInitialized";
-const KANI_SET_SLICE_CHUNK_PTR_INITIALIZED_DIAGNOSTIC: &str = "KaniSetSliceChunkPtrInitialized";
-const KANI_IS_SLICE_PTR_INITIALIZED_DIAGNOSTIC: &str = "KaniIsSlicePtrInitialized";
-const KANI_SET_SLICE_PTR_INITIALIZED_DIAGNOSTIC: &str = "KaniSetSlicePtrInitialized";
-const KANI_IS_STR_PTR_INITIALIZED_DIAGNOSTIC: &str = "KaniIsStrPtrInitialized";
-const KANI_SET_STR_PTR_INITIALIZED_DIAGNOSTIC: &str = "KaniSetStrPtrInitialized";
-const KANI_COPY_INIT_STATE_DIAGNOSTIC: &str = "KaniCopyInitState";
-const KANI_COPY_INIT_STATE_SINGLE_DIAGNOSTIC: &str = "KaniCopyInitStateSingle";
-const KANI_LOAD_ARGUMENT_DIAGNOSTIC: &str = "KaniLoadArgument";
-const KANI_STORE_ARGUMENT_DIAGNOSTIC: &str = "KaniStoreArgument";
-const KANI_RESET_ARGUMENT_BUFFER_DIAGNOSTIC: &str = "KaniResetArgumentBuffer";
+const KANI_IS_PTR_INITIALIZED: KaniFunction = KaniFunction::Model(KaniModel::IsPtrInitialized);
+const KANI_SET_PTR_INITIALIZED: KaniFunction = KaniFunction::Model(KaniModel::SetPtrInitialized);
+const KANI_IS_SLICE_CHUNK_PTR_INITIALIZED: KaniFunction =
+    KaniFunction::Model(KaniModel::IsSliceChunkPtrInitialized);
+const KANI_SET_SLICE_CHUNK_PTR_INITIALIZED: KaniFunction =
+    KaniFunction::Model(KaniModel::SetSliceChunkPtrInitialized);
+const KANI_IS_SLICE_PTR_INITIALIZED: KaniFunction =
+    KaniFunction::Model(KaniModel::IsSlicePtrInitialized);
+const KANI_SET_SLICE_PTR_INITIALIZED: KaniFunction =
+    KaniFunction::Model(KaniModel::SetSlicePtrInitialized);
+const KANI_IS_STR_PTR_INITIALIZED: KaniFunction =
+    KaniFunction::Model(KaniModel::IsStrPtrInitialized);
+const KANI_SET_STR_PTR_INITIALIZED: KaniFunction =
+    KaniFunction::Model(KaniModel::SetStrPtrInitialized);
+const KANI_COPY_INIT_STATE: KaniFunction = KaniFunction::Model(KaniModel::CopyInitState);
+const KANI_COPY_INIT_STATE_SINGLE: KaniFunction =
+    KaniFunction::Model(KaniModel::CopyInitStateSingle);
+const KANI_LOAD_ARGUMENT: KaniFunction = KaniFunction::Model(KaniModel::LoadArgument);
+const KANI_STORE_ARGUMENT: KaniFunction = KaniFunction::Model(KaniModel::StoreArgument);
 
 // Function bodies of those functions will not be instrumented as not to cause infinite recursion.
-const SKIPPED_DIAGNOSTIC_ITEMS: &[&str] = &[
-    KANI_IS_PTR_INITIALIZED_DIAGNOSTIC,
-    KANI_SET_PTR_INITIALIZED_DIAGNOSTIC,
-    KANI_IS_SLICE_CHUNK_PTR_INITIALIZED_DIAGNOSTIC,
-    KANI_SET_SLICE_CHUNK_PTR_INITIALIZED_DIAGNOSTIC,
-    KANI_IS_SLICE_PTR_INITIALIZED_DIAGNOSTIC,
-    KANI_SET_SLICE_PTR_INITIALIZED_DIAGNOSTIC,
-    KANI_IS_STR_PTR_INITIALIZED_DIAGNOSTIC,
-    KANI_SET_STR_PTR_INITIALIZED_DIAGNOSTIC,
-    KANI_COPY_INIT_STATE_DIAGNOSTIC,
-    KANI_COPY_INIT_STATE_SINGLE_DIAGNOSTIC,
-    KANI_LOAD_ARGUMENT_DIAGNOSTIC,
-    KANI_STORE_ARGUMENT_DIAGNOSTIC,
-    KANI_RESET_ARGUMENT_BUFFER_DIAGNOSTIC,
+const SKIPPED_ITEMS: &[KaniFunction] = &[
+    KANI_IS_PTR_INITIALIZED,
+    KANI_SET_PTR_INITIALIZED,
+    KANI_IS_SLICE_CHUNK_PTR_INITIALIZED,
+    KANI_SET_SLICE_CHUNK_PTR_INITIALIZED,
+    KANI_IS_SLICE_PTR_INITIALIZED,
+    KANI_SET_SLICE_PTR_INITIALIZED,
+    KANI_IS_STR_PTR_INITIALIZED,
+    KANI_SET_STR_PTR_INITIALIZED,
+    KANI_COPY_INIT_STATE,
+    KANI_COPY_INIT_STATE_SINGLE,
+    KANI_LOAD_ARGUMENT,
+    KANI_STORE_ARGUMENT,
 ];
 
 /// Instruments the code with checks for uninitialized memory, agnostic to the source of targets.
-pub struct UninitInstrumenter<'a, 'tcx> {
+pub struct UninitInstrumenter<'a> {
     check_type: CheckType,
     /// Used to cache FnDef lookups of injected memory initialization functions.
-    mem_init_fn_cache: &'a mut HashMap<&'static str, FnDef>,
-    tcx: TyCtxt<'tcx>,
+    mem_init_fn_cache: &'a mut HashMap<KaniFunction, FnDef>,
 }
 
-impl<'a, 'tcx> UninitInstrumenter<'a, 'tcx> {
+impl<'a> UninitInstrumenter<'a> {
     /// Create the instrumenter and run it with the given parameters.
     pub(crate) fn run(
         body: Body,
-        tcx: TyCtxt<'tcx>,
         instance: Instance,
         check_type: CheckType,
-        mem_init_fn_cache: &'a mut HashMap<&'static str, FnDef>,
+        mem_init_fn_cache: &'a mut HashMap<KaniFunction, FnDef>,
         target_finder: impl TargetFinder,
     ) -> (bool, Body) {
-        let mut instrumenter = Self { check_type, mem_init_fn_cache, tcx };
+        let mut instrumenter = Self { check_type, mem_init_fn_cache };
         let body = MutableBody::from(body);
         let (changed, new_body) = instrumenter.instrument(body, instance, target_finder);
         (changed, new_body.into())
@@ -100,14 +100,7 @@ impl<'a, 'tcx> UninitInstrumenter<'a, 'tcx> {
     ) -> (bool, MutableBody) {
         // Need to break infinite recursion when memory initialization checks are inserted, so the
         // internal functions responsible for memory initialization are skipped.
-        if self
-            .tcx
-            .get_diagnostic_name(rustc_internal::internal(self.tcx, instance.def.def_id()))
-            .map(|diagnostic_name| {
-                SKIPPED_DIAGNOSTIC_ITEMS.contains(&diagnostic_name.to_ident_string().as_str())
-            })
-            .unwrap_or(false)
-        {
+        if KaniFunction::try_from(instance).map(|f| SKIPPED_ITEMS.contains(&f)).unwrap_or(false) {
             return (false, body);
         }
 
@@ -146,7 +139,7 @@ impl<'a, 'tcx> UninitInstrumenter<'a, 'tcx> {
         {
             // If the operation is unsupported or trivially accesses uninitialized memory, encode
             // the check as `assert!(false)`.
-            self.inject_assert_false(self.tcx, body, source, operation.position(), reason);
+            self.inject_assert_false(body, source, operation.position(), reason);
             return;
         };
 
@@ -169,7 +162,7 @@ impl<'a, 'tcx> UninitInstrumenter<'a, 'tcx> {
                     let reason = format!(
                         "Kani currently doesn't support checking memory initialization for pointers to `{pointee_ty}. {reason}",
                     );
-                    self.inject_assert_false(self.tcx, body, source, operation.position(), &reason);
+                    self.inject_assert_false(body, source, operation.position(), &reason);
                     return;
                 }
             }
@@ -224,12 +217,12 @@ impl<'a, 'tcx> UninitInstrumenter<'a, 'tcx> {
                 // pass is as an argument.
                 let (diagnostic, args) = match &operation {
                     MemoryInitOp::Check { .. } | MemoryInitOp::CheckRef { .. } => {
-                        let diagnostic = KANI_IS_PTR_INITIALIZED_DIAGNOSTIC;
+                        let diagnostic = KANI_IS_PTR_INITIALIZED;
                         let args = vec![ptr_operand.clone(), layout_operand];
                         (diagnostic, args)
                     }
                     MemoryInitOp::CheckSliceChunk { .. } => {
-                        let diagnostic = KANI_IS_SLICE_CHUNK_PTR_INITIALIZED_DIAGNOSTIC;
+                        let diagnostic = KANI_IS_SLICE_CHUNK_PTR_INITIALIZED;
                         let args =
                             vec![ptr_operand.clone(), layout_operand, operation.expect_count()];
                         (diagnostic, args)
@@ -237,7 +230,7 @@ impl<'a, 'tcx> UninitInstrumenter<'a, 'tcx> {
                     _ => unreachable!(),
                 };
                 let is_ptr_initialized_instance = resolve_mem_init_fn(
-                    get_mem_init_fn_def(self.tcx, diagnostic, &mut self.mem_init_fn_cache),
+                    get_mem_init_fn_def(diagnostic, &mut self.mem_init_fn_cache),
                     layout.len(),
                     *pointee_info.ty(),
                 );
@@ -260,15 +253,15 @@ impl<'a, 'tcx> UninitInstrumenter<'a, 'tcx> {
                 // Since `str`` is a separate type, need to differentiate between [T] and str.
                 let (slicee_ty, diagnostic) = match pointee_info.ty().kind() {
                     TyKind::RigidTy(RigidTy::Slice(slicee_ty)) => {
-                        (slicee_ty, KANI_IS_SLICE_PTR_INITIALIZED_DIAGNOSTIC)
+                        (slicee_ty, KANI_IS_SLICE_PTR_INITIALIZED)
                     }
                     TyKind::RigidTy(RigidTy::Str) => {
-                        (Ty::unsigned_ty(UintTy::U8), KANI_IS_STR_PTR_INITIALIZED_DIAGNOSTIC)
+                        (Ty::unsigned_ty(UintTy::U8), KANI_IS_STR_PTR_INITIALIZED)
                     }
                     _ => unreachable!(),
                 };
                 let is_ptr_initialized_instance = resolve_mem_init_fn(
-                    get_mem_init_fn_def(self.tcx, diagnostic, &mut self.mem_init_fn_cache),
+                    get_mem_init_fn_def(diagnostic, &mut self.mem_init_fn_cache),
                     element_layout.len(),
                     slicee_ty,
                 );
@@ -291,7 +284,7 @@ impl<'a, 'tcx> UninitInstrumenter<'a, 'tcx> {
             }
             PointeeLayout::TraitObject => {
                 let reason = "Kani does not support reasoning about memory initialization of pointers to trait objects.";
-                self.inject_assert_false(self.tcx, body, source, operation.position(), reason);
+                self.inject_assert_false(body, source, operation.position(), reason);
                 return;
             }
             PointeeLayout::Union { .. } => {
@@ -299,7 +292,7 @@ impl<'a, 'tcx> UninitInstrumenter<'a, 'tcx> {
                 // TODO: we perhaps need to check that the union at least contains an intersection
                 // of all layouts initialized.
                 let reason = "Interaction between raw pointers and unions is not yet supported.";
-                self.inject_assert_false(self.tcx, body, source, operation.position(), reason);
+                self.inject_assert_false(body, source, operation.position(), reason);
                 return;
             }
         };
@@ -316,7 +309,6 @@ impl<'a, 'tcx> UninitInstrumenter<'a, 'tcx> {
             _ => unreachable!(),
         };
         body.insert_check(
-            self.tcx,
             &self.check_type,
             source,
             operation.position(),
@@ -353,7 +345,7 @@ impl<'a, 'tcx> UninitInstrumenter<'a, 'tcx> {
                 // pass is as an argument.
                 let (diagnostic, args) = match &operation {
                     MemoryInitOp::Set { .. } | MemoryInitOp::SetRef { .. } => {
-                        let diagnostic = KANI_SET_PTR_INITIALIZED_DIAGNOSTIC;
+                        let diagnostic = KANI_SET_PTR_INITIALIZED;
                         let args = vec![
                             ptr_operand,
                             layout_operand,
@@ -366,7 +358,7 @@ impl<'a, 'tcx> UninitInstrumenter<'a, 'tcx> {
                         (diagnostic, args)
                     }
                     MemoryInitOp::SetSliceChunk { .. } => {
-                        let diagnostic = KANI_SET_SLICE_CHUNK_PTR_INITIALIZED_DIAGNOSTIC;
+                        let diagnostic = KANI_SET_SLICE_CHUNK_PTR_INITIALIZED;
                         let args = vec![
                             ptr_operand,
                             layout_operand,
@@ -382,7 +374,7 @@ impl<'a, 'tcx> UninitInstrumenter<'a, 'tcx> {
                     _ => unreachable!(),
                 };
                 let set_ptr_initialized_instance = resolve_mem_init_fn(
-                    get_mem_init_fn_def(self.tcx, diagnostic, &mut self.mem_init_fn_cache),
+                    get_mem_init_fn_def(diagnostic, &mut self.mem_init_fn_cache),
                     layout.len(),
                     *pointee_info.ty(),
                 );
@@ -405,15 +397,15 @@ impl<'a, 'tcx> UninitInstrumenter<'a, 'tcx> {
                 // Since `str`` is a separate type, need to differentiate between [T] and str.
                 let (slicee_ty, diagnostic) = match pointee_info.ty().kind() {
                     TyKind::RigidTy(RigidTy::Slice(slicee_ty)) => {
-                        (slicee_ty, KANI_SET_SLICE_PTR_INITIALIZED_DIAGNOSTIC)
+                        (slicee_ty, KANI_SET_SLICE_PTR_INITIALIZED)
                     }
                     TyKind::RigidTy(RigidTy::Str) => {
-                        (Ty::unsigned_ty(UintTy::U8), KANI_SET_STR_PTR_INITIALIZED_DIAGNOSTIC)
+                        (Ty::unsigned_ty(UintTy::U8), KANI_SET_STR_PTR_INITIALIZED)
                     }
                     _ => unreachable!(),
                 };
                 let set_ptr_initialized_instance = resolve_mem_init_fn(
-                    get_mem_init_fn_def(self.tcx, diagnostic, &mut self.mem_init_fn_cache),
+                    get_mem_init_fn_def(diagnostic, &mut self.mem_init_fn_cache),
                     element_layout.len(),
                     slicee_ty,
                 );
@@ -460,19 +452,13 @@ impl<'a, 'tcx> UninitInstrumenter<'a, 'tcx> {
                     None => {
                         let reason =
                             "Interaction between raw pointers and unions is not yet supported.";
-                        self.inject_assert_false(
-                            self.tcx,
-                            body,
-                            source,
-                            operation.position(),
-                            reason,
-                        );
+                        self.inject_assert_false(body, source, operation.position(), reason);
                         return;
                     }
                 };
                 let layout = &field_layouts[union_field];
                 let layout_operand = mk_layout_operand(body, &mut statements, source, layout);
-                let diagnostic = KANI_SET_PTR_INITIALIZED_DIAGNOSTIC;
+                let diagnostic = KANI_SET_PTR_INITIALIZED;
                 let args = vec![
                     ptr_operand,
                     layout_operand,
@@ -483,7 +469,7 @@ impl<'a, 'tcx> UninitInstrumenter<'a, 'tcx> {
                     }),
                 ];
                 let set_ptr_initialized_instance = resolve_mem_init_fn(
-                    get_mem_init_fn_def(self.tcx, diagnostic, &mut self.mem_init_fn_cache),
+                    get_mem_init_fn_def(diagnostic, &mut self.mem_init_fn_cache),
                     layout.len(),
                     *pointee_info.ty(),
                 );
@@ -521,11 +507,7 @@ impl<'a, 'tcx> UninitInstrumenter<'a, 'tcx> {
         };
         let layout_size = pointee_info.layout().maybe_size().unwrap();
         let copy_init_state_instance = resolve_mem_init_fn(
-            get_mem_init_fn_def(
-                self.tcx,
-                KANI_COPY_INIT_STATE_DIAGNOSTIC,
-                &mut self.mem_init_fn_cache,
-            ),
+            get_mem_init_fn_def(KANI_COPY_INIT_STATE, &mut self.mem_init_fn_cache),
             layout_size,
             *pointee_info.ty(),
         );
@@ -558,12 +540,12 @@ impl<'a, 'tcx> UninitInstrumenter<'a, 'tcx> {
         let mut statements = vec![];
         let layout_size = pointee_info.layout().maybe_size().unwrap();
         let diagnostic = match operation {
-            MemoryInitOp::LoadArgument { .. } => KANI_LOAD_ARGUMENT_DIAGNOSTIC,
-            MemoryInitOp::StoreArgument { .. } => KANI_STORE_ARGUMENT_DIAGNOSTIC,
+            MemoryInitOp::LoadArgument { .. } => KANI_LOAD_ARGUMENT,
+            MemoryInitOp::StoreArgument { .. } => KANI_STORE_ARGUMENT,
             _ => unreachable!(),
         };
         let argument_operation_instance = resolve_mem_init_fn(
-            get_mem_init_fn_def(self.tcx, diagnostic, &mut self.mem_init_fn_cache),
+            get_mem_init_fn_def(diagnostic, &mut self.mem_init_fn_cache),
             layout_size,
             *pointee_info.ty(),
         );
@@ -611,11 +593,7 @@ impl<'a, 'tcx> UninitInstrumenter<'a, 'tcx> {
         let mut statements = vec![];
         let layout_size = pointee_info.layout().maybe_size().unwrap();
         let copy_init_state_instance = resolve_mem_init_fn(
-            get_mem_init_fn_def(
-                self.tcx,
-                KANI_COPY_INIT_STATE_SINGLE_DIAGNOSTIC,
-                &mut self.mem_init_fn_cache,
-            ),
+            get_mem_init_fn_def(KANI_COPY_INIT_STATE_SINGLE, &mut self.mem_init_fn_cache),
             layout_size,
             *pointee_info.ty(),
         );
@@ -641,7 +619,6 @@ impl<'a, 'tcx> UninitInstrumenter<'a, 'tcx> {
 
     fn inject_assert_false(
         &self,
-        tcx: TyCtxt,
         body: &mut MutableBody,
         source: &mut SourceInstruction,
         position: InsertPosition,
@@ -654,7 +631,7 @@ impl<'a, 'tcx> UninitInstrumenter<'a, 'tcx> {
             user_ty: None,
         }));
         let result = body.insert_assignment(rvalue, source, position);
-        body.insert_check(tcx, &self.check_type, source, position, result, reason);
+        body.insert_check(&self.check_type, source, position, result, reason);
     }
 }
 
@@ -700,12 +677,10 @@ pub fn mk_layout_operand(
 
 /// Retrieve a function definition by diagnostic string, caching the result.
 pub fn get_mem_init_fn_def(
-    tcx: TyCtxt,
-    diagnostic: &'static str,
-    cache: &mut HashMap<&'static str, FnDef>,
+    diagnostic: KaniFunction,
+    cache: &mut HashMap<KaniFunction, FnDef>,
 ) -> FnDef {
-    let entry = cache.entry(diagnostic).or_insert_with(|| find_fn_def(tcx, diagnostic).unwrap());
-    *entry
+    cache[&diagnostic]
 }
 
 /// Resolves a given memory initialization function with passed type parameters.

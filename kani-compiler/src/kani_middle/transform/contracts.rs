@@ -3,7 +3,7 @@
 //! This module contains code related to the MIR-to-MIR pass to enable contracts.
 use crate::kani_middle::attributes::KaniAttributes;
 use crate::kani_middle::codegen_units::CodegenUnit;
-use crate::kani_middle::find_fn_def;
+use crate::kani_middle::kani_functions::{KaniIntrinsic, KaniModel};
 use crate::kani_middle::transform::body::{InsertPosition, MutableBody, SourceInstruction};
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
@@ -77,13 +77,14 @@ impl TransformPass for AnyModifiesPass {
 
 impl AnyModifiesPass {
     /// Build the pass with non-extern function stubs.
-    pub fn new(tcx: TyCtxt, unit: &CodegenUnit) -> AnyModifiesPass {
-        let kani_any = find_fn_def(tcx, "KaniAny");
-        let kani_any_modifies = find_fn_def(tcx, "KaniAnyModifies");
-        let kani_write_any = find_fn_def(tcx, "KaniWriteAny");
-        let kani_write_any_slim = find_fn_def(tcx, "KaniWriteAnySlim");
-        let kani_write_any_slice = find_fn_def(tcx, "KaniWriteAnySlice");
-        let kani_write_any_str = find_fn_def(tcx, "KaniWriteAnyStr");
+    pub fn new(tcx: TyCtxt, queries: &QueryDb, unit: &CodegenUnit) -> AnyModifiesPass {
+        let kani_fns = queries.kani_functions();
+        let kani_any = kani_fns.get(&KaniModel::Any.into()).copied();
+        let kani_any_modifies = kani_fns.get(&KaniIntrinsic::AnyModifies.into()).copied();
+        let kani_write_any = kani_fns.get(&KaniIntrinsic::WriteAny.into()).copied();
+        let kani_write_any_slim = kani_fns.get(&KaniModel::WriteAnySlim.into()).copied();
+        let kani_write_any_slice = kani_fns.get(&KaniModel::WriteAnySlice.into()).copied();
+        let kani_write_any_str = kani_fns.get(&KaniModel::WriteAnyStr.into()).copied();
         let target_fn = if let Some(harness) = unit.harnesses.first() {
             let attributes = KaniAttributes::for_instance(tcx, *harness);
             let target_fn =
@@ -330,7 +331,7 @@ impl TransformPass for FunctionWithContractPass {
 impl FunctionWithContractPass {
     /// Build the pass by collecting which functions we are stubbing and which ones we are
     /// verifying.
-    pub fn new(tcx: TyCtxt, unit: &CodegenUnit) -> FunctionWithContractPass {
+    pub fn new(tcx: TyCtxt, queries: &QueryDb, unit: &CodegenUnit) -> FunctionWithContractPass {
         if let Some(harness) = unit.harnesses.first() {
             let attrs = KaniAttributes::for_instance(tcx, *harness);
             let check_fn = attrs.interpret_for_contract_attribute().map(|(_, def_id, _)| def_id);
@@ -339,7 +340,8 @@ impl FunctionWithContractPass {
                 .iter()
                 .map(|(_, def_id, _)| *def_id)
                 .collect();
-            let run_contract_fn = find_fn_def(tcx, "KaniRunContract");
+            let run_contract_fn =
+                queries.kani_functions().get(&KaniModel::RunContract.into()).copied();
             assert!(run_contract_fn.is_some(), "Failed to find Kani run contract function");
             FunctionWithContractPass {
                 check_fn,

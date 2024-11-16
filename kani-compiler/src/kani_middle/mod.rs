@@ -32,6 +32,7 @@ pub mod attributes;
 pub mod codegen_units;
 pub mod coercion;
 mod intrinsics;
+pub mod kani_functions;
 pub mod metadata;
 pub mod points_to;
 pub mod provide;
@@ -226,16 +227,6 @@ impl<'tcx> FnAbiOfHelpers<'tcx> for CompilerHelpers<'tcx> {
             }
         }
     }
-}
-
-/// Find an instance of a function from the given crate that has been annotated with `diagnostic`
-/// item.
-fn find_fn_def(tcx: TyCtxt, diagnostic: &str) -> Option<FnDef> {
-    let attr_id = tcx
-        .all_diagnostic_items(())
-        .name_to_id
-        .get(&rustc_span::symbol::Symbol::intern(diagnostic))?;
-    stable_fn_def(tcx, *attr_id)
 }
 
 /// Try to convert an internal `DefId` to a `FnDef`.

@@ -10,23 +10,23 @@
 
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::codegen_cprover_gotoc::codegen::{PropertyClass, bb_label};
-use crate::kani_middle::attributes::KaniAttributes;
-use crate::kani_middle::attributes::matches_diagnostic as matches_function;
+use crate::kani_middle::attributes;
+use crate::kani_middle::kani_functions::{KaniFunction, KaniHook};
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
 use cbmc::goto_program::CIntType;
 use cbmc::goto_program::{BuiltinFn, Expr, Stmt, Type};
 use rustc_middle::ty::TyCtxt;
 use rustc_smir::rustc_internal;
-use rustc_span::Symbol;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{BasicBlockIdx, Place};
 use stable_mir::{CrateDef, ty::Span};
+use std::collections::HashMap;
 use std::rc::Rc;
 use tracing::debug;
 
 pub trait GotocHook {
     /// if the hook applies, it means the codegen would do something special to it
-    fn hook_applies(&self, tcx: TyCtxt, instance: Instance) -> bool;
+    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool;
     /// the handler for codegen
     fn handle(
         &self,
@@ -48,9 +48,12 @@ pub trait GotocHook {
 /// <https://github.com/model-checking/kani/blob/main/rfc/src/rfcs/0003-cover-statement.md>
 /// for more details.
 struct Cover;
+
+const UNEXPECTED_CALL: &str = "Hooks from kani library handled as a map";
+
 impl GotocHook for Cover {
-    fn hook_applies(&self, tcx: TyCtxt, instance: Instance) -> bool {
-        matches_function(tcx, instance.def, "KaniCover")
+    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+        unreachable!("{UNEXPECTED_CALL}")
     }
 
     fn handle(
@@ -84,8 +87,8 @@ impl GotocHook for Cover {
 
 struct Assume;
 impl GotocHook for Assume {
-    fn hook_applies(&self, tcx: TyCtxt, instance: Instance) -> bool {
-        matches_function(tcx, instance.def, "KaniAssume")
+    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+        unreachable!("{UNEXPECTED_CALL}")
     }
 
     fn handle(
@@ -108,8 +111,8 @@ impl GotocHook for Assume {
 
 struct Assert;
 impl GotocHook for Assert {
-    fn hook_applies(&self, tcx: TyCtxt, instance: Instance) -> bool {
-        matches_function(tcx, instance.def, "KaniAssert")
+    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+        unreachable!("{UNEXPECTED_CALL}")
     }
 
     fn handle(
@@ -148,8 +151,8 @@ impl GotocHook for Assert {
 
 struct Check;
 impl GotocHook for Check {
-    fn hook_applies(&self, tcx: TyCtxt, instance: Instance) -> bool {
-        matches_function(tcx, instance.def, "KaniCheck")
+    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+        unreachable!("{UNEXPECTED_CALL}")
     }
 
     fn handle(
@@ -184,8 +187,8 @@ impl GotocHook for Check {
 struct Nondet;
 
 impl GotocHook for Nondet {
-    fn hook_applies(&self, tcx: TyCtxt, instance: Instance) -> bool {
-        matches_function(tcx, instance.def, "KaniAnyRaw")
+    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+        unreachable!("{UNEXPECTED_CALL}")
     }
 
     fn handle(
@@ -229,7 +232,6 @@ impl GotocHook for Panic {
             || tcx.has_attr(def_id, rustc_span::sym::rustc_const_panic_str)
             || Some(def_id) == tcx.lang_items().panic_fmt()
             || Some(def_id) == tcx.lang_items().begin_panic_fn()
-            || matches_function(tcx, instance.def, "KaniPanic")
     }
 
     fn handle(
@@ -248,8 +250,8 @@ impl GotocHook for Panic {
 /// Encodes __CPROVER_r_ok(ptr, size)
 struct IsAllocated;
 impl GotocHook for IsAllocated {
-    fn hook_applies(&self, tcx: TyCtxt, instance: Instance) -> bool {
-        matches_function(tcx, instance.def, "KaniIsAllocated")
+    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+        unreachable!("{UNEXPECTED_CALL}")
     }
 
     fn handle(
@@ -285,8 +287,8 @@ impl GotocHook for IsAllocated {
 /// Encodes __CPROVER_pointer_object(ptr)
 struct PointerObject;
 impl GotocHook for PointerObject {
-    fn hook_applies(&self, tcx: TyCtxt, instance: Instance) -> bool {
-        matches_function(tcx, instance.def, "KaniPointerObject")
+    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+        unreachable!("{UNEXPECTED_CALL}")
     }
 
     fn handle(
@@ -321,8 +323,8 @@ impl GotocHook for PointerObject {
 /// Encodes __CPROVER_pointer_offset(ptr)
 struct PointerOffset;
 impl GotocHook for PointerOffset {
-    fn hook_applies(&self, tcx: TyCtxt, instance: Instance) -> bool {
-        matches_function(tcx, instance.def, "KaniPointerOffset")
+    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+        unreachable!("{UNEXPECTED_CALL}")
     }
 
     fn handle(
@@ -467,8 +469,8 @@ impl GotocHook for MemCmp {
 struct UntrackedDeref;
 
 impl GotocHook for UntrackedDeref {
-    fn hook_applies(&self, tcx: TyCtxt, instance: Instance) -> bool {
-        matches_function(tcx, instance.def, "KaniUntrackedDeref")
+    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+        unreachable!("{UNEXPECTED_CALL}")
     }
 
     fn handle(
@@ -515,8 +517,8 @@ struct InitContracts;
 /// free(NULL);
 /// ```
 impl GotocHook for InitContracts {
-    fn hook_applies(&self, tcx: TyCtxt, instance: Instance) -> bool {
-        matches_function(tcx, instance.def, "KaniInitContracts")
+    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+        unreachable!("{UNEXPECTED_CALL}")
     }
 
     fn handle(
@@ -557,9 +559,9 @@ impl GotocHook for InitContracts {
 pub struct LoopInvariantRegister;
 
 impl GotocHook for LoopInvariantRegister {
-    fn hook_applies(&self, tcx: TyCtxt, instance: Instance) -> bool {
-        KaniAttributes::for_instance(tcx, instance).fn_marker()
-            == Some(Symbol::intern("kani_register_loop_contract"))
+    fn hook_applies(&self, _tcx: TyCtxt, instance: Instance) -> bool {
+        attributes::fn_marker(instance.def)
+            .map_or(false, |marker| marker == "kani_register_loop_contract")
     }
 
     fn handle(
@@ -617,37 +619,50 @@ impl GotocHook for LoopInvariantRegister {
 }
 
 pub fn fn_hooks() -> GotocHooks {
+    let kani_lib_hooks: [(KaniHook, Rc<dyn GotocHook>); 11] = [
+        (KaniHook::Assert, Rc::new(Assert)),
+        (KaniHook::Assume, Rc::new(Assume)),
+        (KaniHook::Panic, Rc::new(Panic)),
+        (KaniHook::Check, Rc::new(Check)),
+        (KaniHook::Cover, Rc::new(Cover)),
+        (KaniHook::AnyRaw, Rc::new(Nondet)),
+        (KaniHook::IsAllocated, Rc::new(IsAllocated)),
+        (KaniHook::PointerObject, Rc::new(PointerObject)),
+        (KaniHook::PointerOffset, Rc::new(PointerOffset)),
+        (KaniHook::UntrackedDeref, Rc::new(UntrackedDeref)),
+        (KaniHook::InitContracts, Rc::new(InitContracts)),
+    ];
     GotocHooks {
-        hooks: vec![
+        kani_lib_hooks: HashMap::from(kani_lib_hooks),
+        other_hooks: vec![
             Rc::new(Panic),
-            Rc::new(Assume),
-            Rc::new(Assert),
-            Rc::new(Check),
-            Rc::new(Cover),
-            Rc::new(Nondet),
-            Rc::new(IsAllocated),
-            Rc::new(PointerObject),
-            Rc::new(PointerOffset),
             Rc::new(RustAlloc),
             Rc::new(MemCmp),
-            Rc::new(UntrackedDeref),
-            Rc::new(InitContracts),
             Rc::new(LoopInvariantRegister),
         ],
     }
 }
 
 pub struct GotocHooks {
-    hooks: Vec<Rc<dyn GotocHook>>,
+    /// Match functions that are unique and defined in the Kani library, which we can prefetch
+    /// using `KaniFunctions`.
+    kani_lib_hooks: HashMap<KaniHook, Rc<dyn GotocHook>>,
+    /// Match functions that are not defined in the Kani library, which we cannot prefetch
+    /// beforehand.
+    other_hooks: Vec<Rc<dyn GotocHook>>,
 }
 
 impl GotocHooks {
     pub fn hook_applies(&self, tcx: TyCtxt, instance: Instance) -> Option<Rc<dyn GotocHook>> {
-        for h in &self.hooks {
-            if h.hook_applies(tcx, instance) {
-                return Some(h.clone());
+        if let Ok(KaniFunction::Hook(hook)) = KaniFunction::try_from(instance) {
+            Some(self.kani_lib_hooks[&hook].clone())
+        } else {
+            for h in &self.other_hooks {
+                if h.hook_applies(tcx, instance) {
+                    return Some(h.clone());
+                }
             }
+            None
         }
-        None
     }
 }
