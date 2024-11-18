@@ -1742,11 +1742,11 @@ impl<'tcx> GotocCtx<'tcx> {
     /// TODO: Should we use `std_pointee_type` here?
     /// <https://github.com/model-checking/kani/issues/1529>
     pub fn is_fat_pointer(&self, pointer_ty: Ty<'tcx>) -> bool {
-        pointee_type(pointer_ty).map_or(false, |pointee_ty| self.use_fat_pointer(pointee_ty))
+        pointee_type(pointer_ty).is_some_and(|pointee_ty| self.use_fat_pointer(pointee_ty))
     }
 
     /// Check if the mir type already is a vtable fat pointer.
     pub fn is_vtable_fat_pointer(&self, mir_type: Ty<'tcx>) -> bool {
-        pointee_type(mir_type).map_or(false, |pointee_ty| self.use_vtable_fat_pointer(pointee_ty))
+        pointee_type(mir_type).is_some_and(|pointee_ty| self.use_vtable_fat_pointer(pointee_ty))
     }
 }

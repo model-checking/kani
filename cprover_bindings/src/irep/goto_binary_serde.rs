@@ -704,10 +704,7 @@ where
     /// Reads a reference encoded string from the byte stream.
     fn read_numbered_string_ref(&mut self) -> io::Result<NumberedString> {
         let string_number_result = self.read_usize_varenc();
-        let string_number = match string_number_result {
-            Ok(number) => number,
-            Err(error) => return Err(error),
-        };
+        let string_number = string_number_result?;
         if self.is_first_read_string(string_number) {
             // read raw string
             let mut string_buf: Vec<u8> = Vec::new();
@@ -779,10 +776,7 @@ where
     /// Reads a NumberedIrep from the byte stream.
     fn read_numbered_irep_ref(&mut self) -> io::Result<NumberedIrep> {
         let irep_number_result = self.read_usize_varenc();
-        let irep_number = match irep_number_result {
-            Ok(number) => number,
-            Err(error) => return Err(error),
-        };
+        let irep_number = irep_number_result?;
 
         if self.is_first_read_irep(irep_number) {
             let id = self.read_numbered_string_ref()?.number;
