@@ -119,7 +119,7 @@ impl<'a> ContractConditionsHandler<'a> {
                         // Add dummy assignments of the input variables to local variables
                         // to avoid may drop checks in const generic functions.
                         // https://github.com/model-checking/kani/issues/3667
-                        arg_redefinitions
+                        #arg_redefinitions
                     }
                     #result
                 })
