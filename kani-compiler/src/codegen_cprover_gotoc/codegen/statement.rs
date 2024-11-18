@@ -165,9 +165,9 @@ impl GotocCtx<'_> {
                 let counter_data = format!("{coverage_opaque:?} ${function_name}$");
                 let maybe_source_region =
                     region_from_coverage_opaque(self.tcx, &coverage_opaque, instance);
-                if let Some(source_region) = maybe_source_region {
+                if let Some((source_region, file_name)) = maybe_source_region {
                     let coverage_stmt =
-                        self.codegen_coverage(&counter_data, stmt.span, source_region);
+                        self.codegen_coverage(&counter_data, stmt.span, source_region, &file_name);
                     // TODO: Avoid single-statement blocks when conversion of
                     // standalone statements to the irep format is fixed.
                     // More details in <https://github.com/model-checking/kani/issues/3012>

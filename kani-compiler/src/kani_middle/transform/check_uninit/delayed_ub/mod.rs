@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 
 use crate::args::ExtraChecks;
+use crate::kani_middle::kani_functions::KaniFunction;
 use crate::kani_middle::{
     points_to::{MemLoc, PointsToGraph, run_points_to_analysis},
     reachability::CallGraph,
@@ -33,12 +34,12 @@ mod instrumentation_visitor;
 #[derive(Debug)]
 pub struct DelayedUbPass {
     pub check_type: CheckType,
-    pub mem_init_fn_cache: HashMap<&'static str, FnDef>,
+    pub mem_init_fn_cache: HashMap<KaniFunction, FnDef>,
 }
 
 impl DelayedUbPass {
-    pub fn new(check_type: CheckType) -> Self {
-        Self { check_type, mem_init_fn_cache: HashMap::new() }
+    pub fn new(check_type: CheckType, queries: &QueryDb) -> Self {
+        Self { check_type, mem_init_fn_cache: queries.kani_functions().clone() }
     }
 }
 
@@ -120,7 +121,6 @@ impl GlobalPass for DelayedUbPass {
                 );
                 let (instrumentation_added, body) = UninitInstrumenter::run(
                     body,
-                    tcx,
                     instance,
                     self.check_type.clone(),
                     &mut self.mem_init_fn_cache,

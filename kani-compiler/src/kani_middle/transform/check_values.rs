@@ -72,14 +72,14 @@ impl TransformPass for ValidValuePass {
             else {
                 continue;
             };
-            self.build_check(tcx, &mut new_body, candidate);
+            self.build_check(&mut new_body, candidate);
         }
         (orig_len != new_body.blocks().len(), new_body.into())
     }
 }
 
 impl ValidValuePass {
-    fn build_check(&self, tcx: TyCtxt, body: &mut MutableBody, instruction: UnsafeInstruction) {
+    fn build_check(&self, body: &mut MutableBody, instruction: UnsafeInstruction) {
         debug!(?instruction, "build_check");
         let mut source = instruction.source;
         for operation in instruction.operations {
@@ -92,7 +92,6 @@ impl ValidValuePass {
                         let msg =
                             format!("Undefined Behavior: Invalid value of type `{target_ty}`",);
                         body.insert_check(
-                            tcx,
                             &self.check_type,
                             &mut source,
                             InsertPosition::Before,
@@ -107,7 +106,6 @@ impl ValidValuePass {
                         let msg =
                             format!("Undefined Behavior: Invalid value of type `{pointee_ty}`",);
                         body.insert_check(
-                            tcx,
                             &self.check_type,
                             &mut source,
                             InsertPosition::Before,
@@ -120,7 +118,7 @@ impl ValidValuePass {
                     let reason = format!(
                         "Kani currently doesn't support checking validity of `{check}` for `{ty}`",
                     );
-                    self.unsupported_check(tcx, body, &mut source, &reason);
+                    self.unsupported_check(body, &mut source, &reason);
                 }
             }
         }
@@ -128,7 +126,6 @@ impl ValidValuePass {
 
     fn unsupported_check(
         &self,
-        tcx: TyCtxt,
         body: &mut MutableBody,
         source: &mut SourceInstruction,
         reason: &str,
@@ -140,7 +137,7 @@ impl ValidValuePass {
             user_ty: None,
         }));
         let result = body.insert_assignment(rvalue, source, InsertPosition::Before);
-        body.insert_check(tcx, &self.check_type, source, InsertPosition::Before, result, reason);
+        body.insert_check(&self.check_type, source, InsertPosition::Before, result, reason);
     }
 }
 

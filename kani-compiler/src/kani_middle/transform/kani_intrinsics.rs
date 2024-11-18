@@ -42,7 +42,7 @@ pub struct IntrinsicGeneratorPass {
     check_type: CheckType,
     /// Used to cache FnDef lookups for models and Kani intrinsics.
     kani_defs: HashMap<KaniFunction, FnDef>,
-    /// Used to enable intrinsics depending on the flags passed.
+    /// Whether the user enabled uninitialized memory checks when they invoked Kani.
     enable_uninit: bool,
 }
 
@@ -70,14 +70,12 @@ impl TransformPass for IntrinsicGeneratorPass {
             attributes.fn_marker().and_then(|name| KaniIntrinsic::from_str(name.as_str()).ok())
         {
             match kani_intrinsic {
-                KaniIntrinsic::IsInitialized => (true, self.is_initialized_body(tcx, body)),
-                KaniIntrinsic::ValidValue => (true, self.valid_value_body(tcx, body)),
                 KaniIntrinsic::CheckedAlignOf => (true, self.checked_align_of(body, instance)),
                 KaniIntrinsic::CheckedSizeOf => (true, self.checked_size_of(body, instance)),
-                KaniIntrinsic::SafetyCheck => {
-                    /* This is encoded in hooks*/
-                    (false, body)
-                }
+                KaniIntrinsic::IsInitialized => (true, self.is_initialized_body(body)),
+                KaniIntrinsic::ValidValue => (true, self.valid_value_body(body)),
+                // This is handled in contracts pass for now.
+                KaniIntrinsic::WriteAny | KaniIntrinsic::AnyModifies => (false, body),
             }
         } else {
             (false, body)
@@ -105,7 +103,7 @@ impl IntrinsicGeneratorPass {
     ///     ret
     /// }
     /// ```
-    fn valid_value_body(&self, tcx: TyCtxt, body: Body) -> Body {
+    fn valid_value_body(&self, body: Body) -> Body {
         let mut new_body = MutableBody::from(body);
         new_body.clear_body(TerminatorKind::Return);
 
@@ -162,7 +160,6 @@ impl IntrinsicGeneratorPass {
                     "Kani currently doesn't support checking validity of `{target_ty}`. {msg}"
                 );
                 new_body.insert_check(
-                    tcx,
                     &self.check_type,
                     &mut terminator,
                     InsertPosition::Before,
@@ -182,7 +179,7 @@ impl IntrinsicGeneratorPass {
     ///     __kani_mem_init_sm_get(ptr, layout, len)
     /// }
     /// ```
-    fn is_initialized_body(&mut self, tcx: TyCtxt, body: Body) -> Body {
+    fn is_initialized_body(&mut self, body: Body) -> Body {
         let mut new_body = MutableBody::from(body);
         new_body.clear_body(TerminatorKind::Return);
         let ret_var = RETURN_LOCAL;
@@ -325,7 +322,6 @@ impl IntrinsicGeneratorPass {
                         let reason: &str = "Kani does not support reasoning about memory initialization of pointers to trait objects.";
 
                         new_body.insert_check(
-                            tcx,
                             &self.check_type,
                             &mut source,
                             InsertPosition::Before,
@@ -345,7 +341,6 @@ impl IntrinsicGeneratorPass {
                             "Kani does not yet support using initialization predicates on unions.";
 
                         new_body.insert_check(
-                            tcx,
                             &self.check_type,
                             &mut source,
                             InsertPosition::Before,
@@ -368,7 +363,6 @@ impl IntrinsicGeneratorPass {
                     "Kani currently doesn't support checking memory initialization for pointers to `{pointee_ty}. {reason}",
                 );
                 new_body.insert_check(
-                    tcx,
                     &self.check_type,
                     &mut source,
                     InsertPosition::Before,

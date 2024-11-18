@@ -234,7 +234,7 @@ macro_rules! kani_mem {
         ///
         /// I.e.: This function always returns `true` if the pointer is valid.
         /// Otherwise, it returns non-det boolean.
-        #[rustc_diagnostic_item = "KaniIsAllocated"]
+        #[kanitool::fn_marker = "IsAllocatedHook"]
         #[inline(never)]
         unsafe fn is_allocated(_ptr: *const (), _size: usize) -> bool {
             kani_intrinsic()
@@ -286,7 +286,7 @@ macro_rules! kani_mem {
 
         /// Get the object ID of the given pointer.
         #[doc(hidden)]
-        #[rustc_diagnostic_item = "KaniPointerObject"]
+        #[kanitool::fn_marker = "PointerObjectHook"]
         #[inline(never)]
         pub(crate) fn pointer_object<T: ?Sized>(_ptr: *const T) -> usize {
             kani_intrinsic()
@@ -294,7 +294,12 @@ macro_rules! kani_mem {
 
         /// Get the object offset of the given pointer.
         #[doc(hidden)]
-        #[rustc_diagnostic_item = "KaniPointerOffset"]
+        #[crate::kani::unstable_feature(
+            feature = "ghost-state",
+            issue = 3184,
+            reason = "experimental ghost state/shadow memory API"
+        )]
+        #[kanitool::fn_marker = "PointerOffsetHook"]
         #[inline(never)]
         pub fn pointer_offset<T: ?Sized>(_ptr: *const T) -> usize {
             kani_intrinsic()

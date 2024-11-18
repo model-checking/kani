@@ -20,8 +20,7 @@ else
 fi
 
 # Get Kani root
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
-KANI_DIR=$SCRIPT_DIR/..
+KANI_DIR=$(git rev-parse --show-toplevel)
 
 echo
 echo "Starting Firecracker codegen regression..."
@@ -40,12 +39,16 @@ export RUST_BACKTRACE=1
 # Compile rust to iRep
 RUST_FLAGS=(
     "--kani-compiler"
-    "-Cpanic=abort"
-    "-Zalways-encode-mir"
-    "-Cllvm-args=--backend=cprover"
-    "-Cllvm-args=--ignore-global-asm"
-    "-Cllvm-args=--reachability=pub_fns"
-    "--sysroot=${KANI_DIR}/target/kani"
+    "-Cllvm-args=--assertion-reach-checks"
+    "-Zunstable-options"
+    "--sysroot"
+    "${KANI_DIR}/target/kani"
+    "-L"
+    "${KANI_DIR}/target/kani/lib"
+    "--extern"
+    "kani"
+    "--extern"
+    "noprelude:std=${KANI_DIR}/target/kani/lib/libstd.rlib"
 )
 export RUSTFLAGS="${RUST_FLAGS[@]}"
 export RUSTC="$KANI_DIR/target/kani/bin/kani-compiler"

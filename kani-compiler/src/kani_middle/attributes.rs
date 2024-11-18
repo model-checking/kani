@@ -1010,17 +1010,6 @@ fn attr_kind(tcx: TyCtxt, attr: &Attribute) -> Option<KaniAttributeKind> {
     }
 }
 
-pub fn matches_diagnostic<T: CrateDef>(tcx: TyCtxt, def: T, attr_name: &str) -> bool {
-    let attr_sym = rustc_span::symbol::Symbol::intern(attr_name);
-    if let Some(attr_id) = tcx.all_diagnostic_items(()).name_to_id.get(&attr_sym) {
-        if rustc_internal::internal(tcx, def.def_id()) == *attr_id {
-            debug!("matched: {:?} {:?}", attr_id, attr_sym);
-            return true;
-        }
-    }
-    false
-}
-
 /// Parse an attribute using `syn`.
 ///
 /// This provides a user-friendly interface to manipulate than the internal compiler AST.
@@ -1078,6 +1067,7 @@ fn pretty_type_path(path: &TypePath) -> String {
     }
 }
 
+/// Retrieve the value of the `fn_marker` attribute for the given definition if it has one.
 pub(crate) fn fn_marker<T: CrateDef>(def: T) -> Option<String> {
     let fn_marker: [SymbolStable; 2] = ["kanitool".into(), "fn_marker".into()];
     let marker = def.attrs_by_path(&fn_marker).pop()?;
