@@ -898,13 +898,9 @@ impl Type {
         } else if concrete_self.is_scalar() && concrete_other.is_scalar() {
             concrete_self == concrete_other
         } else if concrete_self.is_struct_like() && concrete_other.is_scalar() {
-            concrete_self
-                .unwrap_transparent_type(st)
-                .map_or(false, |wrapped| wrapped == *concrete_other)
+            concrete_self.unwrap_transparent_type(st) == Some(concrete_other.clone())
         } else if concrete_self.is_scalar() && concrete_other.is_struct_like() {
-            concrete_other
-                .unwrap_transparent_type(st)
-                .map_or(false, |wrapped| wrapped == *concrete_self)
+            concrete_other.unwrap_transparent_type(st) == Some(concrete_self.clone())
         } else if concrete_self.is_struct_like() && concrete_other.is_struct_like() {
             let self_components = concrete_self.get_non_empty_components(st).unwrap();
             let other_components = concrete_other.get_non_empty_components(st).unwrap();

@@ -173,7 +173,7 @@ pub(super) fn is_type_primitive(typ: &syn::Type) -> bool {
         }
         Type::Path(TypePath { qself: None, path }) => path
             .get_ident()
-            .map_or(false, |ident| PrimitiveIdent::from_str(&ident.to_string()).is_ok()),
+            .is_some_and(|ident| PrimitiveIdent::from_str(&ident.to_string()).is_ok()),
         Type::BareFn(_)
         | Type::Group(_)
         | Type::ImplTrait(_)
