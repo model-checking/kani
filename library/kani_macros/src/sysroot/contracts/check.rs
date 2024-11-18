@@ -84,7 +84,7 @@ impl<'a> ContractConditionsHandler<'a> {
         let wrapper_arg_ident = Ident::new(WRAPPER_ARG, Span::call_site());
         let return_type = return_type_to_type(&self.annotated_fn.sig.output);
         let mut_recv = self.has_mutable_receiver().then(|| quote!(core::ptr::addr_of!(self),));
-        let redefs = self.arg_redefinitions();
+        let redefs = self.arg_redefinitions(true);
         let modifies_closure =
             self.modifies_closure(&self.annotated_fn.sig.output, &self.annotated_fn.block, redefs);
         let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
@@ -175,14 +175,13 @@ impl<'a> ContractConditionsHandler<'a> {
     /// Generate argument re-definitions for mutable arguments.
     ///
     /// This is used so Kani doesn't think that modifying a local argument value is a side effect.
-    pub fn arg_redefinitions(&self) -> TokenStream2 {
+    pub fn arg_redefinitions(&self, redefine_only_mut: bool) -> TokenStream2 {
         let mut result = TokenStream2::new();
         for (mutability, ident) in self.arg_bindings() {
             if mutability == MutBinding::Mut {
-                result.extend(quote!(let mut #ident = #ident;))
-            } else {
-                // This would make some replace some temporary variables from error messages.
-                result.extend(quote!(let #ident = #ident; ))
+                result.extend(quote!(let mut #ident = #ident;));
+            } else if !redefine_only_mut {
+                result.extend(quote!(let #ident = #ident;));
             }
         }
         result
