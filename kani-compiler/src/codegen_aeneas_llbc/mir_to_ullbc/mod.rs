@@ -7,7 +7,6 @@
 //! unstructured low-level borrow calculus (ULLBC)
 
 use core::panic;
-//use std::ascii::Char;
 use std::path::PathBuf;
 
 use charon_lib::ast::AggregateKind as CharonAggregateKind;
@@ -688,7 +687,6 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         let mut c_types: CharonVector<CharonTypeVarId, CharonTy> = CharonVector::new();
         let mut c_const_generics: CharonVector<CharonConstGenericVarId, CharonConstGeneric> =
             CharonVector::new();
-        //let mut  trait_refs: CharonVector<CharonTraitClauseId, CharonTraitRef> = CharonVector::new();
         for genkind in genvec.iter() {
             let gk = genkind.clone();
             match gk {
@@ -725,8 +723,6 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         match tyconst.kind() {
             TyConstKind::Value(ty, alloc) => {
                 let c_raw_constexpr = self.translate_allocation(alloc, *ty);
-                //let c_const_generic =
-                //translate_constant_expr_to_const_generic(c_raw_constexpr).unwrap();
                 translate_constant_expr_to_const_generic(c_raw_constexpr).unwrap()
             }
             _ => todo!(),
