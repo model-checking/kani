@@ -175,14 +175,14 @@ impl<'a> ContractConditionsHandler<'a> {
     /// Generate argument re-definitions for mutable arguments.
     ///
     /// This is used so Kani doesn't think that modifying a local argument value is a side effect.
-    fn arg_redefinitions(&self) -> TokenStream2 {
+    pub fn arg_redefinitions(&self) -> TokenStream2 {
         let mut result = TokenStream2::new();
         for (mutability, ident) in self.arg_bindings() {
             if mutability == MutBinding::Mut {
                 result.extend(quote!(let mut #ident = #ident;))
             } else {
                 // This would make some replace some temporary variables from error messages.
-                //result.extend(quote!(let #ident = #ident; ))
+                result.extend(quote!(let #ident = #ident; ))
             }
         }
         result

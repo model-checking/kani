@@ -70,6 +70,8 @@ impl<'a> ContractConditionsHandler<'a> {
     /// `use_nondet_result` will only be true if this is the first time we are
     /// generating a replace function.
     fn expand_replace_body(&self, before: &[Stmt], after: &[Stmt]) -> TokenStream {
+
+        let arg_redefinitions = self.arg_redefinitions();
         match &self.condition_type {
             ContractConditionsData::Requires { attr } => {
                 let Self { attr_copy, .. } = self;
@@ -78,6 +80,12 @@ impl<'a> ContractConditionsHandler<'a> {
                     kani::assert(#attr, stringify!(#attr_copy));
                     #(#before)*
                     #(#after)*
+                    {
+                        // Add dummy assignments of the input variables to local variables
+                        // to avoid may drop checks in const generic functions.
+                        // https://github.com/model-checking/kani/issues/3667
+                        #arg_redefinitions
+                    }
                     #result
                 })
             }
@@ -93,6 +101,12 @@ impl<'a> ContractConditionsHandler<'a> {
                     #(#rest_of_before)*
                     #(#after)*
                     kani::assume(#ensures_clause);
+                    {                        
+                        // Add dummy assignments of the input variables to local variables
+                        // to avoid may drop checks in const generic functions.
+                        // https://github.com/model-checking/kani/issues/3667
+                        #arg_redefinitions
+                    }
                     #result
                 })
             }
@@ -102,6 +116,12 @@ impl<'a> ContractConditionsHandler<'a> {
                     #(#before)*
                     #(unsafe{kani::internal::write_any(kani::internal::Pointer::assignable(kani::internal::untracked_deref(&#attr)))};)*
                     #(#after)*
+                    {
+                        // Add dummy assignments of the input variables to local variables
+                        // to avoid may drop checks in const generic functions.
+                        // https://github.com/model-checking/kani/issues/3667
+                        arg_redefinitions
+                    }
                     #result
                 })
             }
