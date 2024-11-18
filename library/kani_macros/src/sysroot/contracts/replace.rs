@@ -84,7 +84,7 @@ impl<'a> ContractConditionsHandler<'a> {
                     // to avoid may drop checks in const generic functions.
                     // https://github.com/model-checking/kani/issues/3667
                     #redefs
-                    
+
                     #result
                 })
             }
