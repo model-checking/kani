@@ -3,8 +3,8 @@
 //
 //! Utility functions that allow us to modify a function body.
 
-use crate::kani_middle::find_fn_def;
-use rustc_middle::ty::TyCtxt;
+use crate::kani_middle::kani_functions::KaniHook;
+use crate::kani_queries::QueryDb;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::*;
 use stable_mir::ty::{GenericArgs, MirConst, Span, Ty, UintTy};
@@ -178,7 +178,6 @@ impl MutableBody {
     /// point to the new terminator.
     pub fn insert_check(
         &mut self,
-        tcx: TyCtxt,
         check_type: &CheckType,
         source: &mut SourceInstruction,
         position: InsertPosition,
@@ -192,37 +191,22 @@ impl MutableBody {
         );
         let new_bb = self.blocks.len();
         let span = source.span(&self.blocks);
-        match check_type {
-            CheckType::Assert(assert_fn) => {
-                let assert_op = Operand::Copy(Place::from(self.new_local(
-                    assert_fn.ty(),
-                    span,
-                    Mutability::Not,
-                )));
-                let msg_op = self.new_str_operand(msg, span);
-                let kind = TerminatorKind::Call {
-                    func: assert_op,
-                    args: vec![Operand::Move(Place::from(value)), msg_op],
-                    destination: Place {
-                        local: self.new_local(Ty::new_tuple(&[]), span, Mutability::Not),
-                        projection: vec![],
-                    },
-                    target: Some(new_bb),
-                    unwind: UnwindAction::Terminate,
-                };
-                let terminator = Terminator { kind, span };
-                self.insert_terminator(source, position, terminator);
-            }
-            CheckType::Panic | CheckType::NoCore => {
-                tcx.sess
-                    .dcx()
-                    .struct_err("Failed to instrument the code. Cannot find `kani::assert`")
-                    .with_note("Kani requires `kani` library in order to verify a crate.")
-                    .emit();
-                tcx.sess.dcx().abort_if_errors();
-                unreachable!();
-            }
-        }
+        let CheckType::Assert(assert_fn) = check_type;
+        let assert_op =
+            Operand::Copy(Place::from(self.new_local(assert_fn.ty(), span, Mutability::Not)));
+        let msg_op = self.new_str_operand(msg, span);
+        let kind = TerminatorKind::Call {
+            func: assert_op,
+            args: vec![Operand::Move(Place::from(value)), msg_op],
+            destination: Place {
+                local: self.new_local(Ty::new_tuple(&[]), span, Mutability::Not),
+                projection: vec![],
+            },
+            target: Some(new_bb),
+            unwind: UnwindAction::Terminate,
+        };
+        let terminator = Terminator { kind, span };
+        self.insert_terminator(source, position, terminator);
     }
 
     /// Add a new call to the basic block indicated by the given index.
@@ -452,32 +436,19 @@ impl MutableBody {
     }
 }
 
+// TODO: Remove this enum, since we now only support kani's assert.
 #[derive(Clone, Debug)]
 pub enum CheckType {
     /// This is used by default when the `kani` crate is available.
     Assert(Instance),
-    /// When the `kani` crate is not available, we have to model the check as an `if { panic!() }`.
-    Panic,
-    /// When building non-core crate, such as `rustc-std-workspace-core`, we cannot
-    /// instrument code, but we can still compile them.
-    NoCore,
 }
 
 impl CheckType {
     /// This will create the type of check that is available in the current crate, attempting to
     /// create a check that generates an assertion following by an assumption of the same assertion.
-    ///
-    /// If `kani` crate is available, this will return [CheckType::Assert], and the instance will
-    /// point to `kani::assert`. Otherwise, we will collect the `core::panic_str` method and return
-    /// [CheckType::Panic].
-    pub fn new_assert_assume(tcx: TyCtxt) -> CheckType {
-        if let Some(instance) = find_instance(tcx, "KaniAssert") {
-            CheckType::Assert(instance)
-        } else if find_instance(tcx, "panic_str").is_some() {
-            CheckType::Panic
-        } else {
-            CheckType::NoCore
-        }
+    pub fn new_assert_assume(queries: &QueryDb) -> CheckType {
+        let fn_def = queries.kani_functions()[&KaniHook::Assert.into()];
+        CheckType::Assert(Instance::resolve(fn_def, &GenericArgs(vec![])).unwrap())
     }
 
     /// This will create the type of check that is available in the current crate, attempting to
@@ -486,14 +457,9 @@ impl CheckType {
     /// If `kani` crate is available, this will return [CheckType::Assert], and the instance will
     /// point to `kani::assert`. Otherwise, we will collect the `core::panic_str` method and return
     /// [CheckType::Panic].
-    pub fn new_assert(tcx: TyCtxt) -> CheckType {
-        if let Some(instance) = find_instance(tcx, "KaniCheck") {
-            CheckType::Assert(instance)
-        } else if find_instance(tcx, "panic_str").is_some() {
-            CheckType::Panic
-        } else {
-            CheckType::NoCore
-        }
+    pub fn new_assert(queries: &QueryDb) -> CheckType {
+        let fn_def = queries.kani_functions()[&KaniHook::Check.into()];
+        CheckType::Assert(Instance::resolve(fn_def, &GenericArgs(vec![])).unwrap())
     }
 }
 
@@ -517,10 +483,6 @@ impl SourceInstruction {
             SourceInstruction::Statement { bb, .. } | SourceInstruction::Terminator { bb } => bb,
         }
     }
-}
-
-fn find_instance(tcx: TyCtxt, diagnostic: &str) -> Option<Instance> {
-    Instance::resolve(find_fn_def(tcx, diagnostic)?, &GenericArgs(vec![])).ok()
 }
 
 /// Basic mutable body visitor.
