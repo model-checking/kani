@@ -70,7 +70,6 @@ impl<'a> ContractConditionsHandler<'a> {
     /// `use_nondet_result` will only be true if this is the first time we are
     /// generating a replace function.
     fn expand_replace_body(&self, before: &[Stmt], after: &[Stmt]) -> TokenStream {
-
         let arg_redefinitions = self.arg_redefinitions();
         match &self.condition_type {
             ContractConditionsData::Requires { attr } => {
@@ -101,7 +100,7 @@ impl<'a> ContractConditionsHandler<'a> {
                     #(#rest_of_before)*
                     #(#after)*
                     kani::assume(#ensures_clause);
-                    {                        
+                    {
                         // Add dummy assignments of the input variables to local variables
                         // to avoid may drop checks in const generic functions.
                         // https://github.com/model-checking/kani/issues/3667
