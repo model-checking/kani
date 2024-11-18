@@ -78,8 +78,8 @@ use stable_mir::mir::{
 use stable_mir::ty::AdtDef;
 use stable_mir::ty::AdtKind;
 use stable_mir::ty::{
-    Allocation, ConstantKind, IndexedVal, IntTy, MirConst, Region, RegionKind, RigidTy, Span,
-    Ty, TyConst, TyConstKind, TyKind, UintTy,
+    Allocation, ConstantKind, IndexedVal, IntTy, MirConst, Region, RegionKind, RigidTy, Span, Ty,
+    TyConst, TyConstKind, TyKind, UintTy,
 };
 use stable_mir::ty::{GenericArgKind, GenericArgs};
 use stable_mir::{CrateDef, DefId};
@@ -182,7 +182,6 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         debug!("register_fun_decl_id: {:?}", self.id_map);
         tid.try_into().unwrap()
     }
-
 
     fn register_type_decl_id(&mut self, def_id: DefId) -> CharonTypeDeclId {
         debug!("register_type_decl_id: {:?}", def_id);
@@ -616,7 +615,6 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         CharonSpan { span: rspan, generated_from_span: None }
     }
 
-
     fn translate_function_signature(&mut self) -> CharonFunSig {
         let instance = self.instance;
         let fn_abi = instance.fn_abi().unwrap();
@@ -727,7 +725,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             TyConstKind::Value(ty, alloc) => {
                 let c_raw_constexpr = self.translate_allocation(alloc, *ty);
                 //let c_const_generic =
-                    //translate_constant_expr_to_const_generic(c_raw_constexpr).unwrap();
+                //translate_constant_expr_to_const_generic(c_raw_constexpr).unwrap();
                 translate_constant_expr_to_const_generic(c_raw_constexpr).unwrap()
             }
             _ => todo!(),
@@ -1230,7 +1228,6 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         }
         c_provec
     }
-
 
     fn translate_region(&self, region: Region) -> CharonRegion {
         match region.kind {
