@@ -33,7 +33,6 @@ use stable_mir::mir::mono::{Instance, MonoItem};
 use std::collections::HashMap;
 use std::fmt::Debug;
 
-use crate::kani_middle::transform::rustc_intrinsics::RustcIntrinsicsPass;
 pub use internal_mir::RustcInternalMir;
 
 pub(crate) mod body;
@@ -44,7 +43,6 @@ mod dump_mir_pass;
 mod internal_mir;
 mod kani_intrinsics;
 mod loop_contracts;
-mod rustc_intrinsics;
 mod stubs;
 
 /// Object used to retrieve a transformed instance body.
@@ -90,7 +88,6 @@ impl BodyTransformation {
         });
         transformer.add_pass(queries, IntrinsicGeneratorPass::new(check_type, &queries));
         transformer.add_pass(queries, LoopContractPass::new(tcx, queries, &unit));
-        transformer.add_pass(queries, RustcIntrinsicsPass::new(&queries));
         transformer
     }
 

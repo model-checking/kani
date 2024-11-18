@@ -61,8 +61,6 @@ pub enum KaniIntrinsic {
 pub enum KaniModel {
     #[strum(serialize = "AlignOfDynObjectModel")]
     AlignOfDynObject,
-    #[strum(serialize = "AlignOfValRawModel")]
-    AlignOfVal,
     #[strum(serialize = "AnyModel")]
     Any,
     #[strum(serialize = "CopyInitStateModel")]
@@ -97,8 +95,6 @@ pub enum KaniModel {
     SizeOfDynObject,
     #[strum(serialize = "SizeOfSliceObjectModel")]
     SizeOfSliceObject,
-    #[strum(serialize = "SizeOfValRawModel")]
-    SizeOfVal,
     #[strum(serialize = "StoreArgumentModel")]
     StoreArgument,
     #[strum(serialize = "WriteAnySliceModel")]
