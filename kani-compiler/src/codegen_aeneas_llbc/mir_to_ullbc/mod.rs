@@ -199,6 +199,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         tid.try_into().unwrap()
     }
 
+    // similar to register_type_decl_id, but not adding new def_id, used for cases where the def_id has been registered, or in functions that take immut &self
     fn find_type_decl_id(&self, def_id: DefId) -> CharonTypeDeclId {
         debug!("register_type_decl_id: {:?}", def_id);
         let tid = *self.id_map.get(&def_id).unwrap();
