@@ -4,43 +4,48 @@
 
 use std::{
     collections::{BTreeMap, BTreeSet},
+    fmt::Display,
     fs::File,
     io::BufWriter,
 };
 
-use crate::{list::Totals, version::KANI_VERSION};
+use crate::{args::list_args::Format, list::Totals, version::KANI_VERSION};
 use anyhow::Result;
 use colour::print_ln_bold;
+use comfy_table::Table as PrettyTable;
 use kani_metadata::ContractedFunction;
 use serde_json::json;
-use to_markdown_table::{MarkdownTable, MarkdownTableError};
+use to_markdown_table::MarkdownTable;
 
 // Represents the version of our JSON file format.
 // Increment this version (according to semantic versioning rules) whenever the JSON output format changes.
 const FILE_VERSION: &str = "0.1";
 const JSON_FILENAME: &str = "kani-list.json";
 
-/// Construct the table of contracts information.
+/// Construct the rows for the table of contracts information.
+/// Returns a tuple of the table header and the rows.
 fn construct_contracts_table(
     contracted_functions: BTreeSet<ContractedFunction>,
     totals: Totals,
-) -> Result<MarkdownTable, MarkdownTableError> {
+) -> (Vec<String>, Vec<Vec<String>>) {
     const NO_HARNESSES_MSG: &str = "NONE";
     const FUNCTION_HEADER: &str = "Function";
     const CONTRACT_HARNESSES_HEADER: &str = "Contract Harnesses (#[kani::proof_for_contract])";
     const TOTALS_HEADER: &str = "Total";
 
-    let mut table_rows: Vec<Vec<String>> = vec![];
+    let header =
+        vec![String::new(), FUNCTION_HEADER.to_string(), CONTRACT_HARNESSES_HEADER.to_string()];
+
+    let mut rows: Vec<Vec<String>> = vec![];
 
     for cf in contracted_functions {
-        let first_harness = cf.harnesses.first().map_or(NO_HARNESSES_MSG, |v| v).to_string();
-        let first_row = vec![String::new(), cf.function.clone(), first_harness];
-        table_rows.push(first_row);
-
-        for subsequent_harness in cf.harnesses.iter().skip(1) {
-            let row = vec![String::new(), cf.function.clone(), subsequent_harness.to_string()];
-            table_rows.push(row);
+        let mut row = vec![String::new(), cf.function];
+        if cf.harnesses.is_empty() {
+            row.push(NO_HARNESSES_MSG.to_string());
+        } else {
+            row.push(cf.harnesses.join(", "));
         }
+        rows.push(row);
     }
 
     let totals_row = vec![
@@ -48,20 +53,16 @@ fn construct_contracts_table(
         totals.contracted_functions.to_string(),
         totals.contract_harnesses.to_string(),
     ];
-    table_rows.push(totals_row);
+    rows.push(totals_row);
 
-    let table =
-        MarkdownTable::new(Some(vec!["", FUNCTION_HEADER, CONTRACT_HARNESSES_HEADER]), table_rows)?;
-
-    Ok(table)
+    (header, rows)
 }
 
-// /// Output results as a table printed to the terminal.
-pub fn markdown(
+/// Print results to the terminal.
+fn print_results<T: Display>(
+    table: Option<T>,
     standard_harnesses: BTreeMap<String, BTreeSet<String>>,
-    contracted_functions: BTreeSet<ContractedFunction>,
-    totals: Totals,
-) -> Result<()> {
+) {
     const CONTRACTS_SECTION: &str = "Contracts:";
     const HARNESSES_SECTION: &str = "Standard Harnesses (#[kani::proof]):";
     const NO_CONTRACTS_MSG: &str = "No contracts or contract harnesses found.";
@@ -69,12 +70,11 @@ pub fn markdown(
 
     print_ln_bold!("\n{CONTRACTS_SECTION}");
 
-    if contracted_functions.is_empty() {
-        println!("{NO_CONTRACTS_MSG}");
+    if let Some(table) = table {
+        println!("{table}");
     } else {
-        let table = construct_contracts_table(contracted_functions, totals)?;
-        println!("{}", table);
-    };
+        println!("{NO_CONTRACTS_MSG}");
+    }
 
     print_ln_bold!("\n{HARNESSES_SECTION}");
     if standard_harnesses.is_empty() {
@@ -91,12 +91,10 @@ pub fn markdown(
     }
 
     println!();
-
-    Ok(())
 }
 
 /// Output results as a JSON file.
-pub fn json(
+fn json(
     standard_harnesses: BTreeMap<String, BTreeSet<String>>,
     contract_harnesses: BTreeMap<String, BTreeSet<String>>,
     contracted_functions: BTreeSet<ContractedFunction>,
@@ -123,4 +121,39 @@ pub fn json(
     println!("Wrote list results to {}", std::fs::canonicalize(JSON_FILENAME)?.display());
 
     Ok(())
+}
+
+/// Output the results of the list subcommand.
+pub fn output_list_results(
+    standard_harnesses: BTreeMap<String, BTreeSet<String>>,
+    contract_harnesses: BTreeMap<String, BTreeSet<String>>,
+    contracted_functions: BTreeSet<ContractedFunction>,
+    totals: Totals,
+    format: Format,
+) -> Result<()> {
+    match format {
+        Format::Pretty => {
+            let table = if totals.contracted_functions == 0 {
+                None
+            } else {
+                let (header, rows) = construct_contracts_table(contracted_functions, totals);
+                let mut t = PrettyTable::new();
+                t.set_header(header).add_rows(rows);
+                Some(t)
+            };
+            print_results(table, standard_harnesses);
+            Ok(())
+        }
+        Format::Markdown => {
+            let table = if totals.contracted_functions == 0 {
+                None
+            } else {
+                let (header, rows) = construct_contracts_table(contracted_functions, totals);
+                Some(MarkdownTable::new(Some(header), rows)?)
+            };
+            print_results(table, standard_harnesses);
+            Ok(())
+        }
+        Format::Json => json(standard_harnesses, contract_harnesses, contracted_functions, totals),
+    }
 }
