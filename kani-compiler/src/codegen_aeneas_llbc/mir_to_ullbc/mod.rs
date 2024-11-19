@@ -996,7 +996,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                         match adt_kind {
                             AdtKind::Enum => {
                                 let def_id = adt_def.def_id();
-                                let c_typedeclid: CharonTypeDeclId = self.find_type_decl_id(def_id);
+                                let c_typedeclid: CharonTypeDeclId = self.get_type_decl_id(def_id);
                                 let c_type_id = CharonTypeId::Adt(c_typedeclid);
                                 let c_variant_id =
                                     Some(CharonVariantId::from_usize(variant_id.to_index()));
@@ -1012,7 +1012,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                             }
                             AdtKind::Struct => {
                                 let def_id = adt_def.def_id();
-                                let c_typedeclid: CharonTypeDeclId = self.find_type_decl_id(def_id);
+                                let c_typedeclid: CharonTypeDeclId = self.get_type_decl_id(def_id);
                                 let c_type_id = CharonTypeId::Adt(c_typedeclid);
                                 let c_variant_id = None;
                                 let c_field_id = None;
