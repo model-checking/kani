@@ -6,7 +6,7 @@
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 use std::mem;
-use syn::Stmt;
+use syn::{Block, Stmt};
 
 use super::{
     ClosureType, ContractConditionsData, ContractConditionsHandler, INTERNAL_RESULT_IDENT,
@@ -19,7 +19,18 @@ impl<'a> ContractConditionsHandler<'a> {
     fn initial_replace_stmts(&self) -> Vec<syn::Stmt> {
         let return_type = return_type_to_type(&self.annotated_fn.sig.output);
         let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
-        vec![syn::parse_quote!(let #result : #return_type = kani::any_modifies();)]
+        // Add dummy assignments of the input variables to local variables
+        // to avoid may drop checks in const generic functions.
+        // https://github.com/model-checking/kani/issues/3667
+        let redefs = self.arg_redefinitions(false);
+        let redefs_block: Block = syn::parse_quote!({#redefs});
+        vec![
+            vec![syn::parse_quote!(
+                let #result : #return_type = kani::any_modifies();
+            )],
+            redefs_block.stmts,
+        ]
+        .concat()
     }
 
     /// Split an existing replace body of the form
@@ -70,7 +81,6 @@ impl<'a> ContractConditionsHandler<'a> {
     /// `use_nondet_result` will only be true if this is the first time we are
     /// generating a replace function.
     fn expand_replace_body(&self, before: &[Stmt], after: &[Stmt]) -> TokenStream {
-        let redefs = &self.redefs;
         match &self.condition_type {
             ContractConditionsData::Requires { attr } => {
                 let Self { attr_copy, .. } = self;
@@ -79,12 +89,6 @@ impl<'a> ContractConditionsHandler<'a> {
                     kani::assert(#attr, stringify!(#attr_copy));
                     #(#before)*
                     #(#after)*
-
-                    // Add dummy assignments of the input variables to local variables
-                    // to avoid may drop checks in const generic functions.
-                    // https://github.com/model-checking/kani/issues/3667
-                    #redefs
-
                     #result
                 })
             }
@@ -100,12 +104,6 @@ impl<'a> ContractConditionsHandler<'a> {
                     #(#rest_of_before)*
                     #(#after)*
                     kani::assume(#ensures_clause);
-
-                    // Add dummy assignments of the input variables to local variables
-                    // to avoid may drop checks in const generic functions.
-                    // https://github.com/model-checking/kani/issues/3667
-                    #redefs
-
                     #result
                 })
             }
@@ -115,12 +113,6 @@ impl<'a> ContractConditionsHandler<'a> {
                     #(#before)*
                     #(unsafe{kani::internal::write_any(kani::internal::Pointer::assignable(kani::internal::untracked_deref(&#attr)))};)*
                     #(#after)*
-
-                    // Add dummy assignments of the input variables to local variables
-                    // to avoid may drop checks in const generic functions.
-                    // https://github.com/model-checking/kani/issues/3667
-                    #redefs
-
                     #result
                 })
             }

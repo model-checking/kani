@@ -21,8 +21,6 @@ impl<'a> ContractConditionsHandler<'a> {
         let recursion_name = &self.recursion_name;
         let check_name = &self.check_name;
 
-        // redefs will be used in replace_closure.
-        self.redefs = self.arg_redefinitions(false);
         let replace_closure = self.replace_closure();
         let check_closure = self.check_closure();
         let recursion_closure = self.new_recursion_closure(&replace_closure, &check_closure);
