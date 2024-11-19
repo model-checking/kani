@@ -3,7 +3,6 @@
 //! This module handles outputting the result for the list subcommand
 
 use std::{
-    cmp::max,
     collections::{BTreeMap, BTreeSet},
     fs::File,
     io::BufWriter,
@@ -14,6 +13,7 @@ use anyhow::Result;
 use colour::print_ln_bold;
 use kani_metadata::ContractedFunction;
 use serde_json::json;
+use to_markdown_table::{MarkdownTable, MarkdownTableError};
 
 // Represents the version of our JSON file format.
 // Increment this version (according to semantic versioning rules) whenever the JSON output format changes.
@@ -24,96 +24,40 @@ const JSON_FILENAME: &str = "kani-list.json";
 fn construct_contracts_table(
     contracted_functions: BTreeSet<ContractedFunction>,
     totals: Totals,
-) -> Vec<String> {
+) -> Result<MarkdownTable, MarkdownTableError> {
     const NO_HARNESSES_MSG: &str = "NONE";
-
-    // Since the harnesses will be separated by newlines, the column length is equal to the length of the longest harness
-    fn column_len(harnesses: &[String]) -> usize {
-        harnesses.iter().map(|s| s.len()).max().unwrap_or(NO_HARNESSES_MSG.len())
-    }
-
-    // Contracts table headers
     const FUNCTION_HEADER: &str = "Function";
     const CONTRACT_HARNESSES_HEADER: &str = "Contract Harnesses (#[kani::proof_for_contract])";
-
-    // Contracts table totals row
     const TOTALS_HEADER: &str = "Total";
-    let functions_total = totals.contracted_functions.to_string();
-    let harnesses_total = totals.contract_harnesses.to_string();
 
-    let mut table_rows: Vec<String> = vec![];
-    let mut max_function_fmt_width = max(FUNCTION_HEADER.len(), functions_total.len());
-    let mut max_contract_harnesses_fmt_width =
-        max(CONTRACT_HARNESSES_HEADER.len(), harnesses_total.len());
-
-    let mut data_rows: Vec<(String, Vec<String>)> = vec![];
+    let mut table_rows: Vec<Vec<String>> = vec![];
 
     for cf in contracted_functions {
-        max_function_fmt_width = max(max_function_fmt_width, cf.function.len());
-        max_contract_harnesses_fmt_width =
-            max(max_contract_harnesses_fmt_width, column_len(&cf.harnesses));
-
-        data_rows.push((cf.function, cf.harnesses));
-    }
-
-    let function_sep = "-".repeat(max_function_fmt_width);
-    let contract_harnesses_sep = "-".repeat(max_contract_harnesses_fmt_width);
-    let totals_sep = "-".repeat(TOTALS_HEADER.len());
-
-    let sep_row = format!("| {totals_sep} | {function_sep} | {contract_harnesses_sep} |");
-    table_rows.push(sep_row.clone());
-
-    let function_space = " ".repeat(max_function_fmt_width - FUNCTION_HEADER.len());
-    let contract_harnesses_space =
-        " ".repeat(max_contract_harnesses_fmt_width - CONTRACT_HARNESSES_HEADER.len());
-    let totals_space = " ".repeat(TOTALS_HEADER.len());
-
-    let header_row = format!(
-        "| {totals_space} | {FUNCTION_HEADER}{function_space} | {CONTRACT_HARNESSES_HEADER}{contract_harnesses_space} |"
-    );
-    table_rows.push(header_row);
-    table_rows.push(sep_row.clone());
-
-    for (function, harnesses) in data_rows {
-        let function_space = " ".repeat(max_function_fmt_width - function.len());
-        let first_harness = harnesses.first().map_or(NO_HARNESSES_MSG, |v| v);
-        let contract_harnesses_space =
-            " ".repeat(max_contract_harnesses_fmt_width - first_harness.len());
-
-        let first_row = format!(
-            "| {totals_space} | {function}{function_space} | {first_harness}{contract_harnesses_space} |"
-        );
+        let first_harness = cf.harnesses.first().map_or(NO_HARNESSES_MSG, |v| v).to_string();
+        let first_row = vec![String::new(), cf.function.clone(), first_harness];
         table_rows.push(first_row);
 
-        for subsequent_harness in harnesses.iter().skip(1) {
-            let function_space = " ".repeat(max_function_fmt_width);
-            let contract_harnesses_space =
-                " ".repeat(max_contract_harnesses_fmt_width - subsequent_harness.len());
-            let row = format!(
-                "| {totals_space} | {function_space} | {subsequent_harness}{contract_harnesses_space} |"
-            );
+        for subsequent_harness in cf.harnesses.iter().skip(1) {
+            let row = vec![String::new(), cf.function.clone(), subsequent_harness.to_string()];
             table_rows.push(row);
         }
-
-        table_rows.push(sep_row.clone())
     }
 
-    let total_function_space = " ".repeat(max_function_fmt_width - functions_total.len());
-    let total_harnesses_space =
-        " ".repeat(max_contract_harnesses_fmt_width - harnesses_total.len());
-
-    let totals_row = format!(
-        "| {TOTALS_HEADER} | {functions_total}{total_function_space} | {harnesses_total}{total_harnesses_space} |"
-    );
-
+    let totals_row = vec![
+        TOTALS_HEADER.to_string(),
+        totals.contracted_functions.to_string(),
+        totals.contract_harnesses.to_string(),
+    ];
     table_rows.push(totals_row);
-    table_rows.push(sep_row.clone());
 
-    table_rows
+    let table =
+        MarkdownTable::new(Some(vec!["", FUNCTION_HEADER, CONTRACT_HARNESSES_HEADER]), table_rows)?;
+
+    Ok(table)
 }
 
-/// Output results as a table printed to the terminal.
-pub fn pretty(
+// /// Output results as a table printed to the terminal.
+pub fn markdown(
     standard_harnesses: BTreeMap<String, BTreeSet<String>>,
     contracted_functions: BTreeSet<ContractedFunction>,
     totals: Totals,
@@ -128,8 +72,8 @@ pub fn pretty(
     if contracted_functions.is_empty() {
         println!("{NO_CONTRACTS_MSG}");
     } else {
-        let table_rows = construct_contracts_table(contracted_functions, totals);
-        println!("{}", table_rows.join("\n"));
+        let table = construct_contracts_table(contracted_functions, totals)?;
+        println!("{}", table);
     };
 
     print_ln_bold!("\n{HARNESSES_SECTION}");

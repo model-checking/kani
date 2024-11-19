@@ -11,7 +11,7 @@ use crate::{
         list_args::{CargoListArgs, Format, StandaloneListArgs},
     },
     list::Totals,
-    list::output::{json, pretty},
+    list::output::{json, markdown},
     project::{Project, cargo_project, standalone_project, std_project},
     session::KaniSession,
     version::print_kani_version,
@@ -73,7 +73,7 @@ fn process_metadata(metadata: Vec<KaniMetadata>, format: Format) -> Result<()> {
     };
 
     match format {
-        Format::Pretty => pretty(standard_harnesses, contracted_functions, totals),
+        Format::Markdown => markdown(standard_harnesses, contracted_functions, totals),
         Format::Json => json(standard_harnesses, contract_harnesses, contracted_functions, totals),
     }
 }

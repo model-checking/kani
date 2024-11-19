@@ -15,7 +15,7 @@ pub struct CargoListArgs {
     pub common_args: CommonArgs,
 
     /// Output format
-    #[clap(long, default_value = "pretty")]
+    #[clap(long, default_value = "markdown")]
     pub format: Format,
 }
 
@@ -33,7 +33,7 @@ pub struct StandaloneListArgs {
     pub common_args: CommonArgs,
 
     /// Output format
-    #[clap(long, default_value = "pretty")]
+    #[clap(long, default_value = "markdown")]
     pub format: Format,
 
     /// Pass this flag to run the `list` command on the standard library.
@@ -46,9 +46,9 @@ pub struct StandaloneListArgs {
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum, strum_macros::Display)]
 #[strum(serialize_all = "kebab-case")]
 pub enum Format {
-    /// Print diagnostic messages in a user friendly format.
-    Pretty,
-    /// Print diagnostic messages in JSON format.
+    /// Print output in Markdown format.
+    Markdown,
+    /// Print output in JSON format.
     Json,
 }
 
