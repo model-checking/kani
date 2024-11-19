@@ -88,7 +88,7 @@ impl<'a> ContractConditionsHandler<'a> {
         let modifies_closure = self.modifies_closure(
             &self.annotated_fn.sig.output,
             &self.annotated_fn.block,
-            redefs_mut_only
+            redefs_mut_only,
         );
         let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
         parse_quote!(
