@@ -84,9 +84,12 @@ impl<'a> ContractConditionsHandler<'a> {
         let wrapper_arg_ident = Ident::new(WRAPPER_ARG, Span::call_site());
         let return_type = return_type_to_type(&self.annotated_fn.sig.output);
         let mut_recv = self.has_mutable_receiver().then(|| quote!(core::ptr::addr_of!(self),));
-        let redefs = self.arg_redefinitions(true);
-        let modifies_closure =
-            self.modifies_closure(&self.annotated_fn.sig.output, &self.annotated_fn.block, redefs);
+        let redefs_mut_only = self.arg_redefinitions(true);
+        let modifies_closure = self.modifies_closure(
+            &self.annotated_fn.sig.output,
+            &self.annotated_fn.block,
+            redefs_mut_only
+        );
         let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
         parse_quote!(
             let #wrapper_arg_ident = (#mut_recv);
@@ -172,9 +175,10 @@ impl<'a> ContractConditionsHandler<'a> {
             .unwrap_or(false)
     }
 
-    /// Generate argument re-definitions for mutable arguments.
+    /// Generate argument re-definitions for arguments.
     ///
-    /// This is used so Kani doesn't think that modifying a local argument value is a side effect.
+    /// This is used so Kani doesn't think that modifying a local argument value is a side effect,
+    /// and avoid may-drop checks in const generic functions.
     pub fn arg_redefinitions(&self, redefine_only_mut: bool) -> TokenStream2 {
         let mut result = TokenStream2::new();
         for (mutability, ident) in self.arg_bindings() {

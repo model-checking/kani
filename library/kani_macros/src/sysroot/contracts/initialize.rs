@@ -80,6 +80,7 @@ impl<'a> ContractConditionsHandler<'a> {
             condition_type,
             annotated_fn,
             attr_copy,
+            redefs: Default::default(),
             output,
             check_name,
             replace_name,

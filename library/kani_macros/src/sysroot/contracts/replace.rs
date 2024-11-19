@@ -70,7 +70,7 @@ impl<'a> ContractConditionsHandler<'a> {
     /// `use_nondet_result` will only be true if this is the first time we are
     /// generating a replace function.
     fn expand_replace_body(&self, before: &[Stmt], after: &[Stmt]) -> TokenStream {
-        let redefs = self.arg_redefinitions(false);
+        let redefs = &self.redefs;
         match &self.condition_type {
             ContractConditionsData::Requires { attr } => {
                 let Self { attr_copy, .. } = self;

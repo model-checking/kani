@@ -475,6 +475,8 @@ struct ContractConditionsHandler<'a> {
     annotated_fn: &'a ItemFn,
     /// An unparsed, unmodified copy of `attr`, used in the error messages.
     attr_copy: TokenStream2,
+    /// Argument redefinitions.
+    redefs: TokenStream2,
     /// The stream to which we should write the generated code.
     output: TokenStream2,
     /// The name of the check closure.
