@@ -120,5 +120,7 @@ pub fn json(
 
     serde_json::to_writer_pretty(writer, &json_obj)?;
 
+    println!("Wrote list results to {}", std::fs::canonicalize(JSON_FILENAME)?.display());
+
     Ok(())
 }
