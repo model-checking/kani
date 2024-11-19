@@ -6,7 +6,10 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
     InvocationType,
-    args::list_args::{CargoListArgs, Format, StandaloneListArgs},
+    args::{
+        VerificationArgs,
+        list_args::{CargoListArgs, Format, StandaloneListArgs},
+    },
     list::Totals,
     list::output::{json, pretty},
     project::{Project, cargo_project, standalone_project, std_project},
@@ -75,8 +78,9 @@ fn process_metadata(metadata: Vec<KaniMetadata>, format: Format) -> Result<()> {
     }
 }
 
-pub fn list_cargo(args: CargoListArgs) -> Result<()> {
-    let session = KaniSession::new(args.verify_opts)?;
+pub fn list_cargo(args: CargoListArgs, mut verify_opts: VerificationArgs) -> Result<()> {
+    verify_opts.common_args = args.common_args;
+    let session = KaniSession::new(verify_opts)?;
     if !session.args.common_args.quiet {
         print_kani_version(InvocationType::CargoKani(vec![]));
     }
@@ -85,8 +89,9 @@ pub fn list_cargo(args: CargoListArgs) -> Result<()> {
     process_metadata(project.metadata, args.format)
 }
 
-pub fn list_standalone(args: StandaloneListArgs) -> Result<()> {
-    let session = KaniSession::new(args.verify_opts)?;
+pub fn list_standalone(args: StandaloneListArgs, mut verify_opts: VerificationArgs) -> Result<()> {
+    verify_opts.common_args = args.common_args;
+    let session = KaniSession::new(verify_opts)?;
     if !session.args.common_args.quiet {
         print_kani_version(InvocationType::Standalone);
     }

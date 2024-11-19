@@ -4,17 +4,15 @@
 
 use std::path::PathBuf;
 
-use crate::args::ValidateArgs;
+use crate::args::{CommonArgs, ValidateArgs};
 use clap::{Error, Parser, ValueEnum, error::ErrorKind};
 use kani_metadata::UnstableFeature;
-
-use super::VerificationArgs;
 
 /// List information relevant to verification
 #[derive(Debug, Parser)]
 pub struct CargoListArgs {
     #[command(flatten)]
-    pub verify_opts: VerificationArgs,
+    pub common_args: CommonArgs,
 
     /// Output format
     #[clap(long, default_value = "pretty")]
@@ -32,7 +30,7 @@ pub struct StandaloneListArgs {
     pub crate_name: Option<String>,
 
     #[command(flatten)]
-    pub verify_opts: VerificationArgs,
+    pub common_args: CommonArgs,
 
     /// Output format
     #[clap(long, default_value = "pretty")]
@@ -56,8 +54,8 @@ pub enum Format {
 
 impl ValidateArgs for CargoListArgs {
     fn validate(&self) -> Result<(), Error> {
-        self.verify_opts.validate()?;
-        if !self.verify_opts.common_args.unstable_features.contains(UnstableFeature::List) {
+        self.common_args.validate()?;
+        if !self.common_args.unstable_features.contains(UnstableFeature::List) {
             return Err(Error::raw(
                 ErrorKind::MissingRequiredArgument,
                 "The `list` subcommand is unstable and requires -Z list",
@@ -70,8 +68,8 @@ impl ValidateArgs for CargoListArgs {
 
 impl ValidateArgs for StandaloneListArgs {
     fn validate(&self) -> Result<(), Error> {
-        self.verify_opts.validate()?;
-        if !self.verify_opts.common_args.unstable_features.contains(UnstableFeature::List) {
+        self.common_args.validate()?;
+        if !self.common_args.unstable_features.contains(UnstableFeature::List) {
             return Err(Error::raw(
                 ErrorKind::MissingRequiredArgument,
                 "The `list` subcommand is unstable and requires -Z list",

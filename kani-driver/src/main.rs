@@ -68,8 +68,8 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
     let args = args::CargoKaniArgs::parse_from(&input_args);
     check_is_valid(&args);
 
-    if let Some(CargoKaniSubcommand::List(args)) = args.command {
-        return list_cargo(*args);
+    if let Some(CargoKaniSubcommand::List(list_args)) = args.command {
+        return list_cargo(*list_args, args.verify_opts);
     }
 
     let session = session::KaniSession::new(args.verify_opts)?;
@@ -104,7 +104,9 @@ fn standalone_main() -> Result<()> {
 
     let (session, project) = match args.command {
         Some(StandaloneSubcommand::Playback(args)) => return playback_standalone(*args),
-        Some(StandaloneSubcommand::List(args)) => return list_standalone(*args),
+        Some(StandaloneSubcommand::List(list_args)) => {
+            return list_standalone(*list_args, args.verify_opts);
+        }
         Some(StandaloneSubcommand::VerifyStd(args)) => {
             let session = KaniSession::new(args.verify_opts)?;
             if !session.args.common_args.quiet {
