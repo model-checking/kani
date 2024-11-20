@@ -42,15 +42,15 @@ pub struct StandaloneListArgs {
     pub std: bool,
 }
 
-/// Message formats available for the subcommand.
+/// Output formats available for the subcommand.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum, strum_macros::Display)]
 #[strum(serialize_all = "kebab-case")]
 pub enum Format {
     /// Print output in human-readable format.
     Pretty,
-    /// Print output in Markdown format.
+    /// Write output to a Markdown file.
     Markdown,
-    /// Print output in JSON format.
+    /// Write output to a JSON file.
     Json,
 }
 
