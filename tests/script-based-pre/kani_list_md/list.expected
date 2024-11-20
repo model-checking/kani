@@ -1,0 +1,14 @@
+
+Contracts:
+|       | Function                      | Contract Harnesses (#[kani::proof_for_contract])               |
+| ----- | ----------------------------- | -------------------------------------------------------------- |
+|       | example::implementation::bar  | example::verify::check_bar                                     |
+|       | example::implementation::foo  | example::verify::check_foo_u32, example::verify::check_foo_u64 |
+|       | example::implementation::func | example::verify::check_func                                    |
+|       | example::prep::parse          | NONE                                                           |
+| Total | 4                             | 4                                                              |
+
+
+Standard Harnesses (#[kani::proof]):
+1. example::verify::check_modify
+2. example::verify::check_new

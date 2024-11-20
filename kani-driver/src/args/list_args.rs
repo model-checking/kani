@@ -4,17 +4,15 @@
 
 use std::path::PathBuf;
 
-use crate::args::ValidateArgs;
+use crate::args::{CommonArgs, ValidateArgs};
 use clap::{Error, Parser, ValueEnum, error::ErrorKind};
 use kani_metadata::UnstableFeature;
-
-use super::VerificationArgs;
 
 /// List information relevant to verification
 #[derive(Debug, Parser)]
 pub struct CargoListArgs {
     #[command(flatten)]
-    pub verify_opts: VerificationArgs,
+    pub common_args: CommonArgs,
 
     /// Output format
     #[clap(long, default_value = "pretty")]
@@ -32,7 +30,7 @@ pub struct StandaloneListArgs {
     pub crate_name: Option<String>,
 
     #[command(flatten)]
-    pub verify_opts: VerificationArgs,
+    pub common_args: CommonArgs,
 
     /// Output format
     #[clap(long, default_value = "pretty")]
@@ -44,20 +42,22 @@ pub struct StandaloneListArgs {
     pub std: bool,
 }
 
-/// Message formats available for the subcommand.
+/// Output formats available for the subcommand.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum, strum_macros::Display)]
 #[strum(serialize_all = "kebab-case")]
 pub enum Format {
-    /// Print diagnostic messages in a user friendly format.
+    /// Print output in human-readable format.
     Pretty,
-    /// Print diagnostic messages in JSON format.
+    /// Write output to a Markdown file.
+    Markdown,
+    /// Write output to a JSON file.
     Json,
 }
 
 impl ValidateArgs for CargoListArgs {
     fn validate(&self) -> Result<(), Error> {
-        self.verify_opts.validate()?;
-        if !self.verify_opts.common_args.unstable_features.contains(UnstableFeature::List) {
+        self.common_args.validate()?;
+        if !self.common_args.unstable_features.contains(UnstableFeature::List) {
             return Err(Error::raw(
                 ErrorKind::MissingRequiredArgument,
                 "The `list` subcommand is unstable and requires -Z list",
@@ -70,8 +70,8 @@ impl ValidateArgs for CargoListArgs {
 
 impl ValidateArgs for StandaloneListArgs {
     fn validate(&self) -> Result<(), Error> {
-        self.verify_opts.validate()?;
-        if !self.verify_opts.common_args.unstable_features.contains(UnstableFeature::List) {
+        self.common_args.validate()?;
+        if !self.common_args.unstable_features.contains(UnstableFeature::List) {
             return Err(Error::raw(
                 ErrorKind::MissingRequiredArgument,
                 "The `list` subcommand is unstable and requires -Z list",

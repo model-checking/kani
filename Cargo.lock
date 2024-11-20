@@ -826,6 +826,7 @@ dependencies = [
  "strum_macros",
  "tempfile",
  "time",
+ "to_markdown_table",
  "tokio",
  "toml",
  "tracing",
@@ -1751,6 +1752,15 @@ checksum = "3f252a68540fde3a3877aeea552b832b40ab9a69e318efd078774a01ddee1ccf"
 dependencies = [
  "num-conv",
  "time-core",
+]
+
+[[package]]
+name = "to_markdown_table"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8450ade61b78735ed7811cc14639462723d87a6cd748a41e7bfde554ac5033dd"
+dependencies = [
+ "thiserror",
 ]
 
 [[package]]
