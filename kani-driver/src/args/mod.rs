@@ -143,7 +143,7 @@ pub enum StandaloneSubcommand {
     Playback(Box<playback_args::KaniPlaybackArgs>),
     /// Verify the rust standard library.
     VerifyStd(Box<std_args::VerifyStdArgs>),
-    /// Execute the list subcommand
+    /// List contracts and harnesses.
     List(Box<list_args::StandaloneListArgs>),
 }
 
@@ -171,7 +171,7 @@ pub enum CargoKaniSubcommand {
     /// Execute concrete playback testcases of a local package.
     Playback(Box<playback_args::CargoPlaybackArgs>),
 
-    /// List metadata relevant to verification, e.g., harnesses.
+    /// List contracts and harnesses.
     List(Box<list_args::CargoListArgs>),
 }
 
