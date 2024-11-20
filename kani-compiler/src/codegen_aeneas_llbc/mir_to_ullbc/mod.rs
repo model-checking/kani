@@ -213,7 +213,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         CharonScalarValue::from_bits(int_ty, discr_val)
     }
 
-    fn generic_params_from_adtdef(&self, adtdef: AdtDef) -> CharonGenericParams {
+    fn generic_params_from_adtdef(&mut self, adtdef: AdtDef) -> CharonGenericParams {
         let genvec = match adtdef.ty().kind() {
             TyKind::RigidTy(RigidTy::Adt(_, genarg)) => genarg.0,
             _ => panic!("generic_params_from_adtdef: not an adtdef"),
@@ -248,7 +248,21 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 GenericArgKind::Const(tc) => {
                     match tc.kind() {
                         TyConstKind::Param(paramtc) => {
-                            let lit_ty = CharonLiteralTy::Integer(CharonIntegerTy::I32); //TO BE CHECKED, PARAMENV
+                            //let lit_ty = CharonLiteralTy::Integer(CharonIntegerTy::I32); //TO BE CHECKED, PARAMENV
+                            let def_id_internal =
+                                rustc_internal::internal(self.tcx, adtdef.def_id());
+                            let paramenv = self.tcx.param_env(def_id_internal);
+                            let pc_internal = rustc_middle::ty::ParamConst {
+                                index: paramtc.index,
+                                name: rustc_span::Symbol::intern(&paramtc.name),
+                            };
+                            let ty_internal = pc_internal.find_ty_from_env(paramenv);
+                            let ty_stable = rustc_internal::stable(ty_internal);
+                            let trans_ty = self.translate_ty(ty_stable);
+                            let lit_ty = match trans_ty.kind() {
+                                CharonTyKind::Literal(lit) => lit.clone(),
+                                _ => panic!("generic_params_from_adtdef: not a literal type"),
+                            };
                             let c_constgeneric = CharonConstGenericVar {
                                 index: CharonConstGenericVarId::from_usize(paramtc.index as usize),
                                 name: paramtc.name.clone(),
