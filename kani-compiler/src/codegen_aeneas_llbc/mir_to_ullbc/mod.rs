@@ -248,7 +248,6 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 GenericArgKind::Const(tc) => {
                     match tc.kind() {
                         TyConstKind::Param(paramtc) => {
-                            //let lit_ty = CharonLiteralTy::Integer(CharonIntegerTy::I32); //TO BE CHECKED, PARAMENV
                             let def_id_internal =
                                 rustc_internal::internal(self.tcx, adtdef.def_id());
                             let paramenv = self.tcx.param_env(def_id_internal);
@@ -260,7 +259,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                             let ty_stable = rustc_internal::stable(ty_internal);
                             let trans_ty = self.translate_ty(ty_stable);
                             let lit_ty = match trans_ty.kind() {
-                                CharonTyKind::Literal(lit) => lit.clone(),
+                                CharonTyKind::Literal(lit) => *lit,
                                 _ => panic!("generic_params_from_adtdef: not a literal type"),
                             };
                             let c_constgeneric = CharonConstGenericVar {
@@ -802,6 +801,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 let c_raw_constexpr = self.translate_allocation(alloc, *ty);
                 translate_constant_expr_to_const_generic(c_raw_constexpr).unwrap()
             }
+            TyConstKind::Param(paramc) => CharonConstGeneric::Var(CharonConstGenericVarId::from_usize(paramc.index as usize)),
             _ => todo!(),
         }
     }
