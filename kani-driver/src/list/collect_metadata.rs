@@ -6,9 +6,12 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
     InvocationType,
-    args::list_args::{CargoListArgs, Format, StandaloneListArgs},
-    list::Totals,
-    list::output::{json, pretty},
+    args::{
+        VerificationArgs,
+        list_args::{CargoListArgs, StandaloneListArgs},
+    },
+    list::ListMetadata,
+    list::output::output_list_results,
     project::{Project, cargo_project, standalone_project, std_project},
     session::KaniSession,
     version::print_kani_version,
@@ -17,7 +20,7 @@ use anyhow::Result;
 use kani_metadata::{ContractedFunction, HarnessKind, KaniMetadata};
 
 /// Process the KaniMetadata output from kani-compiler and output the list subcommand results
-fn process_metadata(metadata: Vec<KaniMetadata>, format: Format) -> Result<()> {
+fn process_metadata(metadata: Vec<KaniMetadata>) -> ListMetadata {
     // We use ordered maps and sets so that the output is in lexicographic order (and consistent across invocations).
 
     // Map each file to a vector of its harnesses.
@@ -26,14 +29,14 @@ fn process_metadata(metadata: Vec<KaniMetadata>, format: Format) -> Result<()> {
 
     let mut contracted_functions: BTreeSet<ContractedFunction> = BTreeSet::new();
 
-    let mut total_standard_harnesses = 0;
-    let mut total_contract_harnesses = 0;
+    let mut standard_harnesses_count = 0;
+    let mut contract_harnesses_count = 0;
 
     for kani_meta in metadata {
         for harness_meta in kani_meta.proof_harnesses {
             match harness_meta.attributes.kind {
                 HarnessKind::Proof => {
-                    total_standard_harnesses += 1;
+                    standard_harnesses_count += 1;
                     if let Some(harnesses) = standard_harnesses.get_mut(&harness_meta.original_file)
                     {
                         harnesses.insert(harness_meta.pretty_name);
@@ -45,7 +48,7 @@ fn process_metadata(metadata: Vec<KaniMetadata>, format: Format) -> Result<()> {
                     }
                 }
                 HarnessKind::ProofForContract { .. } => {
-                    total_contract_harnesses += 1;
+                    contract_harnesses_count += 1;
                     if let Some(harnesses) = contract_harnesses.get_mut(&harness_meta.original_file)
                     {
                         harnesses.insert(harness_meta.pretty_name);
@@ -63,31 +66,34 @@ fn process_metadata(metadata: Vec<KaniMetadata>, format: Format) -> Result<()> {
         contracted_functions.extend(kani_meta.contracted_functions.into_iter());
     }
 
-    let totals = Totals {
-        standard_harnesses: total_standard_harnesses,
-        contract_harnesses: total_contract_harnesses,
-        contracted_functions: contracted_functions.len(),
-    };
-
-    match format {
-        Format::Pretty => pretty(standard_harnesses, contracted_functions, totals),
-        Format::Json => json(standard_harnesses, contract_harnesses, contracted_functions, totals),
+    ListMetadata {
+        standard_harnesses,
+        standard_harnesses_count,
+        contract_harnesses,
+        contract_harnesses_count,
+        contracted_functions,
     }
 }
 
-pub fn list_cargo(args: CargoListArgs) -> Result<()> {
-    let session = KaniSession::new(args.verify_opts)?;
-    if !session.args.common_args.quiet {
+pub fn list_cargo(args: CargoListArgs, mut verify_opts: VerificationArgs) -> Result<()> {
+    let quiet = args.common_args.quiet;
+    verify_opts.common_args = args.common_args;
+    let session = KaniSession::new(verify_opts)?;
+    if !quiet {
         print_kani_version(InvocationType::CargoKani(vec![]));
     }
 
     let project = cargo_project(&session, false)?;
-    process_metadata(project.metadata, args.format)
+    let list_metadata = process_metadata(project.metadata);
+
+    output_list_results(list_metadata, args.format, quiet)
 }
 
-pub fn list_standalone(args: StandaloneListArgs) -> Result<()> {
-    let session = KaniSession::new(args.verify_opts)?;
-    if !session.args.common_args.quiet {
+pub fn list_standalone(args: StandaloneListArgs, mut verify_opts: VerificationArgs) -> Result<()> {
+    let quiet = args.common_args.quiet;
+    verify_opts.common_args = args.common_args;
+    let session = KaniSession::new(verify_opts)?;
+    if !quiet {
         print_kani_version(InvocationType::Standalone);
     }
 
@@ -97,5 +103,7 @@ pub fn list_standalone(args: StandaloneListArgs) -> Result<()> {
         standalone_project(&args.input, args.crate_name, &session)?
     };
 
-    process_metadata(project.metadata, args.format)
+    let list_metadata = process_metadata(project.metadata);
+
+    output_list_results(list_metadata, args.format, quiet)
 }
