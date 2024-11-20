@@ -6,7 +6,7 @@
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 use std::mem;
-use syn::Stmt;
+use syn::{Block, Stmt};
 
 use super::{
     ClosureType, ContractConditionsData, ContractConditionsHandler, INTERNAL_RESULT_IDENT,
@@ -19,7 +19,18 @@ impl<'a> ContractConditionsHandler<'a> {
     fn initial_replace_stmts(&self) -> Vec<syn::Stmt> {
         let return_type = return_type_to_type(&self.annotated_fn.sig.output);
         let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
-        vec![syn::parse_quote!(let #result : #return_type = kani::any_modifies();)]
+        // Add dummy assignments of the input variables to local variables
+        // to avoid may drop checks in const generic functions.
+        // https://github.com/model-checking/kani/issues/3667
+        let redefs = self.arg_redefinitions(false);
+        let redefs_block: Block = syn::parse_quote!({#redefs});
+        vec![
+            vec![syn::parse_quote!(
+                let #result : #return_type = kani::any_modifies();
+            )],
+            redefs_block.stmts,
+        ]
+        .concat()
     }
 
     /// Split an existing replace body of the form
