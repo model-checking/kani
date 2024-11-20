@@ -32,16 +32,17 @@ use charon_lib::ast::{
 use charon_lib::ast::{
     AnyTransId as CharonAnyTransId, Assert as CharonAssert, BodyId as CharonBodyId,
     BuiltinTy as CharonBuiltinTy, ConstGeneric as CharonConstGeneric,
-    ConstGenericVarId as CharonConstGenericVarId, Disambiguator as CharonDisambiguator,
-    FieldProjKind as CharonFieldProjKind, FileName as CharonFileName, FunDecl as CharonFunDecl,
-    FunSig as CharonFunSig, GenericArgs as CharonGenericArgs, GenericParams as CharonGenericParams,
+    ConstGenericVar as CharonConstGenericVar, ConstGenericVarId as CharonConstGenericVarId,
+    Disambiguator as CharonDisambiguator, FieldProjKind as CharonFieldProjKind,
+    FileName as CharonFileName, FunDecl as CharonFunDecl, FunSig as CharonFunSig,
+    GenericArgs as CharonGenericArgs, GenericParams as CharonGenericParams,
     IntegerTy as CharonIntegerTy, ItemKind as CharonItemKind, ItemMeta as CharonItemMeta,
     ItemOpacity as CharonItemOpacity, Literal as CharonLiteral, LiteralTy as CharonLiteralTy,
     Name as CharonName, Opaque as CharonOpaque, PathElem as CharonPathElem,
     RawConstantExpr as CharonRawConstantExpr, RefKind as CharonRefKind, Region as CharonRegion,
-    RegionId as CharonRegionId, ScalarValue as CharonScalarValue,
-    TranslatedCrate as CharonTranslatedCrate, TypeId as CharonTypeId, TypeVarId as CharonTypeVarId,
-    UnOp as CharonUnOp,
+    RegionId as CharonRegionId, RegionVar as CharonRegionVar, ScalarValue as CharonScalarValue,
+    TranslatedCrate as CharonTranslatedCrate, TypeId as CharonTypeId, TypeVar as CharonTypeVar,
+    TypeVarId as CharonTypeVarId, UnOp as CharonUnOp,
 };
 use charon_lib::ast::{
     BinOp as CharonBinOp, Call as CharonCall, FnOperand as CharonFnOperand, FnPtr as CharonFnPtr,
@@ -212,7 +213,68 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         CharonScalarValue::from_bits(int_ty, discr_val)
     }
 
-    fn translate_adtdef(&mut self, adt_def: AdtDef) -> CharonTypeDeclId {
+    fn generic_params_from_adtdef(&self, adtdef: AdtDef) -> CharonGenericParams {
+        let genvec = match adtdef.ty().kind() {
+            TyKind::RigidTy(RigidTy::Adt(_, genarg)) => genarg.0,
+            _ => panic!("generic_params_from_adtdef: not an adtdef"),
+        };
+        let mut c_regions: CharonVector<CharonRegionId, CharonRegionVar> = CharonVector::new();
+        let mut c_types: CharonVector<CharonTypeVarId, CharonTypeVar> = CharonVector::new();
+        let mut c_const_generics: CharonVector<CharonConstGenericVarId, CharonConstGenericVar> =
+            CharonVector::new();
+        for genkind in genvec.iter() {
+            let gk = genkind.clone();
+            match gk {
+                GenericArgKind::Lifetime(region) => match region.kind {
+                    RegionKind::ReEarlyParam(epr) => {
+                        let c_region = CharonRegionVar {
+                            index: CharonRegionId::from_usize(epr.index as usize),
+                            name: Some(epr.name),
+                        };
+                        c_regions.push(c_region);
+                    }
+                    _ => panic!("generic_params_from_adtdef: not an early bound region"),
+                },
+                GenericArgKind::Type(ty) => match ty.kind() {
+                    TyKind::Param(paramty) => {
+                        let c_typevar = CharonTypeVar {
+                            index: CharonTypeVarId::from_usize(paramty.index as usize),
+                            name: paramty.name,
+                        };
+                        c_types.push(c_typevar);
+                    }
+                    _ => panic!("generic_params_from_adtdef: not a param type"),
+                },
+                GenericArgKind::Const(tc) => {
+                    match tc.kind() {
+                        TyConstKind::Param(paramtc) => {
+                            let lit_ty = CharonLiteralTy::Integer(CharonIntegerTy::I32); //TO BE CHECKED
+                            let c_constgeneric = CharonConstGenericVar {
+                                index: CharonConstGenericVarId::from_usize(paramtc.index as usize),
+                                name: paramtc.name.clone(),
+                                ty: lit_ty,
+                            };
+                            c_const_generics.push(c_constgeneric);
+                        }
+                        _ => panic!("generic_params_from_adtdef: not a param const"),
+                    }
+                }
+            }
+        }
+        CharonGenericParams {
+            regions: c_regions,
+            types: c_types,
+            const_generics: c_const_generics,
+            trait_clauses: CharonVector::new(),
+            regions_outlive: Vec::new(),
+            types_outlive: Vec::new(),
+            trait_type_constraints: Vec::new(),
+        }
+    }
+
+    fn translate_adtdef(&mut self, adt_def: AdtDef) -> CharonTypeDecl {
+        let c_genparam = self.generic_params_from_adtdef(adt_def);
+        let item_meta = self.translate_item_meta_adt(adt_def).unwrap();
         match adt_def.kind() {
             AdtKind::Enum => {
                 let def_id = adt_def.def_id();
@@ -265,15 +327,14 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     let c_varidx = c_variants.push(c_variant);
                     assert_eq!(c_varidx.index(), var_def.idx.to_index());
                 }
-                let item_meta = self.translate_item_meta_adt(adt_def).unwrap();
                 let typedecl = CharonTypeDecl {
                     def_id: c_typedeclid,
-                    generics: CharonGenericParams::empty(),
+                    generics: c_genparam,
                     kind: CharonTypeDeclKind::Enum(c_variants),
                     item_meta,
                 };
-                self.translated.type_decls.set_slot(c_typedeclid, typedecl);
-                c_typedeclid
+                self.translated.type_decls.set_slot(c_typedeclid, typedecl.clone());
+                typedecl
             }
             AdtKind::Struct => {
                 let def_id = adt_def.def_id();
@@ -298,15 +359,14 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     };
                     c_fields.push(c_field);
                 }
-                let item_meta = self.translate_item_meta_adt(adt_def).unwrap();
                 let typedecl = CharonTypeDecl {
                     def_id: c_typedeclid,
-                    generics: CharonGenericParams::empty(),
+                    generics: c_genparam,
                     kind: CharonTypeDeclKind::Struct(c_fields),
                     item_meta,
                 };
-                self.translated.type_decls.set_slot(c_typedeclid, typedecl);
-                c_typedeclid
+                self.translated.type_decls.set_slot(c_typedeclid, typedecl.clone());
+                typedecl
             }
             _ => todo!(),
         }
@@ -460,7 +520,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     found_crate_name = true;
                     name.push(CharonPathElem::Ident(crate_name.clone(), disambiguator));
                 }
-                DefPathData::Impl => todo!(),
+                DefPathData::Impl => {} //will check
                 DefPathData::OpaqueTy => {
                     // TODO: do nothing for now
                 }
@@ -715,6 +775,9 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
     fn translate_ty(&mut self, ty: Ty) -> CharonTy {
         match ty.kind() {
             TyKind::RigidTy(rigid_ty) => self.translate_rigid_ty(rigid_ty),
+            TyKind::Param(paramty) => CharonTy::new(CharonTyKind::TypeVar(
+                CharonTypeVarId::from_usize(paramty.index as usize),
+            )),
             x => unreachable!("Not yet implemented translation for TyKind: {:?}", x),
         }
     }
@@ -902,7 +965,10 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                         }
                     }
                     TyKind::RigidTy(RigidTy::FnPtr(..)) => todo!(),
-                    x => unreachable!("Function call where the function was of unexpected type: {:?}",x),
+                    x => unreachable!(
+                        "Function call where the function was of unexpected type: {:?}",
+                        x
+                    ),
                 };
                 let func = CharonFnOperand::Regular(fn_ptr);
                 let call = CharonCall {
@@ -991,7 +1057,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     (*operands).iter().map(|operand| self.translate_operand(operand)).collect();
                 let akind = agg_kind.clone();
                 match akind {
-                    AggregateKind::Adt(adt_def, variant_id, _gen_args, _user_anot, field_id) => {
+                    AggregateKind::Adt(adt_def, variant_id, genarg, _user_anot, field_id) => {
                         let adt_kind = adt_def.kind();
                         match adt_kind {
                             AdtKind::Enum => {
@@ -1001,7 +1067,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                                 let c_variant_id =
                                     Some(CharonVariantId::from_usize(variant_id.to_index()));
                                 let c_field_id = field_id.map(CharonFieldId::from_usize);
-                                let c_generic_args = CharonGenericArgs::empty();
+                                let c_generic_args = self.translate_generic_args(genarg);
                                 let c_agg_kind = CharonAggregateKind::Adt(
                                     c_type_id,
                                     c_variant_id,
@@ -1016,7 +1082,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                                 let c_type_id = CharonTypeId::Adt(c_typedeclid);
                                 let c_variant_id = None;
                                 let c_field_id = None;
-                                let c_generic_args = CharonGenericArgs::empty();
+                                let c_generic_args = self.translate_generic_args(genarg);
                                 let c_agg_kind = CharonAggregateKind::Adt(
                                     c_type_id,
                                     c_variant_id,
@@ -1229,7 +1295,9 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             RegionKind::ReErased => CharonRegion::Erased,
             RegionKind::ReEarlyParam(_)
             | RegionKind::ReBound(_, _)
-            | RegionKind::RePlaceholder(_) => todo!(),
+            | RegionKind::RePlaceholder(_) => {
+                unreachable!("Not yet implemented RegionKind: {:?}", region.kind)
+            }
         }
     }
 }
