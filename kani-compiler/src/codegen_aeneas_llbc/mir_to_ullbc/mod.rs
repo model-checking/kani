@@ -6,54 +6,36 @@
 //! This module contains a context for translating stable MIR into Charon's
 //! unstructured low-level borrow calculus (ULLBC)
 
-use core::panic;
-use std::path::PathBuf;
-
-use charon_lib::ast::AggregateKind as CharonAggregateKind;
-use charon_lib::ast::CastKind as CharonCastKind;
-use charon_lib::ast::Field as CharonField;
-use charon_lib::ast::FieldId as CharonFieldId;
-use charon_lib::ast::Place as CharonPlace;
-use charon_lib::ast::ProjectionElem as CharonProjectionElem;
-use charon_lib::ast::Rvalue as CharonRvalue;
-use charon_lib::ast::Span as CharonSpan;
-use charon_lib::ast::TypeDecl as CharonTypeDecl;
-use charon_lib::ast::TypeDeclKind as CharonTypeDeclKind;
-use charon_lib::ast::Variant as CharonVariant;
 use charon_lib::ast::meta::{
     AttrInfo as CharonAttrInfo, Loc as CharonLoc, RawSpan as CharonRawSpan,
 };
-use charon_lib::ast::types::Ty as CharonTy;
-use charon_lib::ast::types::TyKind as CharonTyKind;
-use charon_lib::ast::types::TypeDeclId as CharonTypeDeclId;
-use charon_lib::ast::{
-    AbortKind as CharonAbortKind, Body as CharonBody, Var as CharonVar, VarId as CharonVarId,
+use charon_lib::ast::types::{
+    Ty as CharonTy, TyKind as CharonTyKind, TypeDeclId as CharonTypeDeclId,
 };
 use charon_lib::ast::{
-    AnyTransId as CharonAnyTransId, Assert as CharonAssert, BodyId as CharonBodyId,
-    BuiltinTy as CharonBuiltinTy, ConstGeneric as CharonConstGeneric,
-    ConstGenericVar as CharonConstGenericVar, ConstGenericVarId as CharonConstGenericVarId,
-    Disambiguator as CharonDisambiguator, FieldProjKind as CharonFieldProjKind,
-    FileName as CharonFileName, FunDecl as CharonFunDecl, FunSig as CharonFunSig,
-    GenericArgs as CharonGenericArgs, GenericParams as CharonGenericParams,
+    AbortKind as CharonAbortKind, AggregateKind as CharonAggregateKind,
+    AnyTransId as CharonAnyTransId, Assert as CharonAssert, BinOp as CharonBinOp,
+    Body as CharonBody, BodyId as CharonBodyId, BorrowKind as CharonBorrowKind,
+    BuiltinTy as CharonBuiltinTy, Call as CharonCall, CastKind as CharonCastKind,
+    ConstGeneric as CharonConstGeneric, ConstGenericVar as CharonConstGenericVar,
+    ConstGenericVarId as CharonConstGenericVarId, ConstantExpr as CharonConstantExpr,
+    Disambiguator as CharonDisambiguator, Field as CharonField, FieldId as CharonFieldId,
+    FieldProjKind as CharonFieldProjKind, FileName as CharonFileName, FnOperand as CharonFnOperand,
+    FnPtr as CharonFnPtr, FunDecl as CharonFunDecl, FunDeclId as CharonFunDeclId,
+    FunId as CharonFunId, FunIdOrTraitMethodRef as CharonFunIdOrTraitMethodRef,
+    FunSig as CharonFunSig, GenericArgs as CharonGenericArgs, GenericParams as CharonGenericParams,
     IntegerTy as CharonIntegerTy, ItemKind as CharonItemKind, ItemMeta as CharonItemMeta,
     ItemOpacity as CharonItemOpacity, Literal as CharonLiteral, LiteralTy as CharonLiteralTy,
-    Name as CharonName, Opaque as CharonOpaque, PathElem as CharonPathElem,
+    Name as CharonName, Opaque as CharonOpaque, Operand as CharonOperand,
+    PathElem as CharonPathElem, Place as CharonPlace, ProjectionElem as CharonProjectionElem,
     RawConstantExpr as CharonRawConstantExpr, RefKind as CharonRefKind, Region as CharonRegion,
-    RegionId as CharonRegionId, RegionVar as CharonRegionVar, ScalarValue as CharonScalarValue,
-    TranslatedCrate as CharonTranslatedCrate, TypeId as CharonTypeId, TypeVar as CharonTypeVar,
-    TypeVarId as CharonTypeVarId, UnOp as CharonUnOp,
+    RegionId as CharonRegionId, RegionVar as CharonRegionVar, Rvalue as CharonRvalue,
+    ScalarValue as CharonScalarValue, Span as CharonSpan, TranslatedCrate as CharonTranslatedCrate,
+    TypeDecl as CharonTypeDecl, TypeDeclKind as CharonTypeDeclKind, TypeId as CharonTypeId,
+    TypeVar as CharonTypeVar, TypeVarId as CharonTypeVarId, UnOp as CharonUnOp, Var as CharonVar,
+    VarId as CharonVarId, Variant as CharonVariant, VariantId as CharonVariantId,
 };
-use charon_lib::ast::{
-    BinOp as CharonBinOp, Call as CharonCall, FnOperand as CharonFnOperand, FnPtr as CharonFnPtr,
-    FunDeclId as CharonFunDeclId, FunId as CharonFunId,
-    FunIdOrTraitMethodRef as CharonFunIdOrTraitMethodRef, VariantId as CharonVariantId,
-};
-use charon_lib::ast::{
-    BorrowKind as CharonBorrowKind, ConstantExpr as CharonConstantExpr, Operand as CharonOperand,
-};
-use charon_lib::errors::Error as CharonError;
-use charon_lib::errors::ErrorCtx as CharonErrorCtx;
+use charon_lib::errors::{Error as CharonError, ErrorCtx as CharonErrorCtx};
 use charon_lib::ids::Vector as CharonVector;
 use charon_lib::ullbc_ast::{
     BlockData as CharonBlockData, BlockId as CharonBlockId, BodyContents as CharonBodyContents,
@@ -62,27 +44,23 @@ use charon_lib::ullbc_ast::{
     SwitchTargets as CharonSwitchTargets, Terminator as CharonTerminator,
 };
 use charon_lib::{error_assert, error_or_panic};
+use core::panic;
 use rustc_data_structures::fx::FxHashMap;
 use rustc_middle::ty::TyCtxt;
 use rustc_smir::rustc_internal;
 use stable_mir::abi::PassMode;
-use stable_mir::mir::AggregateKind;
-use stable_mir::mir::VarDebugInfoContents;
-use stable_mir::mir::mono::Instance;
-use stable_mir::mir::mono::InstanceDef;
+use stable_mir::mir::mono::{Instance, InstanceDef};
 use stable_mir::mir::{
-    BasicBlock, BinOp, Body, BorrowKind, CastKind, ConstOperand, Local, Mutability, Operand, Place,
-    ProjectionElem, Rvalue, Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind,
-    UnOp,
+    AggregateKind, BasicBlock, BinOp, Body, BorrowKind, CastKind, ConstOperand, Local, Mutability,
+    Operand, Place, ProjectionElem, Rvalue, Statement, StatementKind, SwitchTargets, Terminator,
+    TerminatorKind, UnOp, VarDebugInfoContents,
 };
-use stable_mir::ty::AdtDef;
-use stable_mir::ty::AdtKind;
 use stable_mir::ty::{
-    Allocation, ConstantKind, IndexedVal, IntTy, MirConst, Region, RegionKind, RigidTy, Span, Ty,
-    TyConst, TyConstKind, TyKind, UintTy,
+    AdtDef, AdtKind, Allocation, ConstantKind, GenericArgKind, GenericArgs, IndexedVal, IntTy,
+    MirConst, Region, RegionKind, RigidTy, Span, Ty, TyConst, TyConstKind, TyKind, UintTy,
 };
-use stable_mir::ty::{GenericArgKind, GenericArgs};
 use stable_mir::{CrateDef, DefId};
+use std::path::PathBuf;
 use tracing::{debug, trace};
 
 /// A context for translating a single MIR function to ULLBC.
@@ -788,7 +766,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             TyKind::Param(paramty) => CharonTy::new(CharonTyKind::TypeVar(
                 CharonTypeVarId::from_usize(paramty.index as usize),
             )),
-            x => unreachable!("Not yet implemented translation for TyKind: {:?}", x),
+            x => todo!("Not yet implemented translation for TyKind: {:?}", x),
         }
     }
 
@@ -1061,7 +1039,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     CharonTyKind::Adt(CharonTypeId::Adt(c_typedeclid), _) => {
                         CharonRvalue::Discriminant(c_place, *c_typedeclid)
                     }
-                    _ => todo!(),
+                    _ => todo!("Not yet implemented:{:?}", c_ty.kind()),
                 }
             }
 
@@ -1294,6 +1272,15 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 }
                 ProjectionElem::Downcast(varid) => {
                     current_var = varid.to_index();
+                }
+                ProjectionElem::Index(local) => {
+                    let c_operand =
+                        CharonOperand::Copy(CharonPlace::new(CharonVarId::from_usize(*local)));
+                    c_provec.push(CharonProjectionElem::Index {
+                        offset: c_operand,
+                        from_end: false,
+                        ty: current_ty.clone(),
+                    });
                 }
 
                 _ => continue,
