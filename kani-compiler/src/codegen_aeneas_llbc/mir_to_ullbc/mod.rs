@@ -1296,7 +1296,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             RegionKind::ReEarlyParam(_)
             | RegionKind::ReBound(_, _)
             | RegionKind::RePlaceholder(_) => {
-                todo! ("Not yet implemented RegionKind: {:?}", region.kind)
+                todo!("Not yet implemented RegionKind: {:?}", region.kind)
             }
         }
     }
