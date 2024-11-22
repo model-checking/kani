@@ -1,0 +1,36 @@
+enum test::MyEnum =
+|  A(0: i32)
+|  B()
+
+
+fn test::enum_match(@1: @Adt0) -> i32
+{
+    let @0: i32; // return
+    let e@1: @Adt0; // arg #1
+    let i@2: i32; // local
+
+    match e@1 {
+        0 => {
+            i@2 := copy ((e@1 as variant @0).0)
+            @0 := copy (i@2)
+            drop i@2
+        },
+        1 => {
+            @0 := const (0 : i32)
+        },
+    }
+    return
+}
+
+fn test::main()
+{
+    let @0: (); // return
+    let e@1: @Adt0; // local
+    let i@2: i32; // local
+
+    e@1 := test::MyEnum::A { 0: const (1 : i32) }
+    i@2 := @Fun0(move (e@1))
+    drop i@2
+    @0 := ()
+    return
+}

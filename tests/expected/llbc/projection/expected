@@ -1,0 +1,84 @@
+struct test::MyStruct =
+{
+  a: i32,
+  b: i32,
+}
+
+enum test::MyEnum0 =
+|  A(0: @Adt1, 1: i32)
+|  B()
+
+
+enum test::MyEnum =
+|  A(0: @Adt1, 1: @Adt2)
+|  B(0: (i32, i32))
+
+
+fn test::enum_match(@1: @Adt0) -> i32
+{
+    let @0: i32; // return
+    let e@1: @Adt0; // arg #1
+    let s@2: @Adt1; // local
+    let e0@3: @Adt2; // local
+    let s1@4: @Adt1; // local
+    let b@5: i32; // local
+    let @6: i32; // anonymous local
+    let @7: i32; // anonymous local
+    let @8: i32; // anonymous local
+    let a@9: i32; // local
+    let b@10: i32; // local
+
+    match e@1 {
+        0 => {
+            s@2 := move ((e@1 as variant @0).0)
+            e0@3 := move ((e@1 as variant @0).1)
+            match e0@3 {
+                0 => {
+                    s1@4 := move ((e0@3 as variant @0).0)
+                    b@5 := copy ((e0@3 as variant @0).1)
+                    @6 := copy ((s1@4).a)
+                    @0 := copy (@6) + copy (b@5)
+                    drop @6
+                    drop s1@4
+                    drop e0@3
+                    drop s@2
+                },
+                1 => {
+                    @7 := copy ((s@2).a)
+                    @8 := copy ((s@2).b)
+                    @0 := copy (@7) + copy (@8)
+                    drop @8
+                    drop @7
+                    drop e0@3
+                    drop s@2
+                },
+            }
+        },
+        1 => {
+            a@9 := copy (((e@1 as variant @1).0).0)
+            b@10 := copy (((e@1 as variant @1).0).1)
+            @0 := copy (a@9) + copy (b@10)
+        },
+    }
+    return
+}
+
+fn test::main()
+{
+    let @0: (); // return
+    let s@1: @Adt1; // local
+    let s0@2: @Adt1; // local
+    let e@3: @Adt0; // local
+    let @4: @Adt2; // anonymous local
+    let i@5: i32; // local
+
+    s@1 := @Adt1 { a: const (1 : i32), b: const (2 : i32) }
+    s0@2 := @Adt1 { a: const (1 : i32), b: const (2 : i32) }
+    @4 := test::MyEnum0::A { 0: move (s0@2), 1: const (1 : i32) }
+    e@3 := test::MyEnum::A { 0: move (s@1), 1: move (@4) }
+    drop @4
+    i@5 := @Fun0(move (e@3))
+    drop i@5
+    @0 := ()
+    return
+}
