@@ -3,7 +3,8 @@
 //! Contains definitions that Kani compiler may use to model functions that are not suitable for
 //! verification or functions without a body, such as intrinsics.
 //!
-//! Note that these are models that Kani uses by default; thus, we keep them separate from stubs.
+//! Note that these are models that Kani uses by default, and they should not be user visible.
+//! Thus, we separate them from stubs.
 //! TODO: Move SIMD model here.
 
 #[macro_export]
@@ -17,6 +18,16 @@ macro_rules! generate_models {
             /// Retrieve the size of the object pointed by the given raw pointer.
             ///
             /// Where `U` is a trait, and `T` is either equal to `U` or has a tail `U`.
+            ///
+            /// In cases where `T` is different than `U`,
+            /// `T` may have a sized portion, the head, while the unsized portion will be at its
+            /// tail.
+            ///
+            /// Arguments `head_size` and `head_align` represent the size and alignment of the sized
+            /// portion.
+            /// These values are known at compilation time, and they are extracted by the compiler.
+            /// If `T` doesn't have a sized portion, or if `T` is equal to `U`,
+            /// `head_size` will be set to `0`, and `head_align` will be set to 1.
             ///
             /// This model is used to implement `checked_size_of_raw`.
             #[kanitool::fn_marker = "SizeOfDynObjectModel"]
@@ -49,6 +60,16 @@ macro_rules! generate_models {
             /// Retrieve the alignment of the object stored in the vtable.
             ///
             /// Where `U` is a trait, and `T` is either equal to `U` or has a tail `U`.
+            ///
+            /// In cases where `T` is different than `U`,
+            /// `T` may have a sized portion, the head, while the unsized portion will be at its
+            /// tail.
+            ///
+            /// `head_align` represents the alignment of the sized portion,
+            /// and its value is known at compilation time.
+            ///
+            /// If `T` doesn't have a sized portion, or if `T` is equal to `U`,
+            /// `head_align` will be set to 1.
             ///
             /// This model is used to implement `checked_aligned_of_raw`.
             #[kanitool::fn_marker = "AlignOfDynObjectModel"]
