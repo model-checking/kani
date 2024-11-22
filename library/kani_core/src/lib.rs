@@ -23,6 +23,7 @@
 mod arbitrary;
 mod mem;
 mod mem_init;
+mod models;
 
 pub use kani_macros::*;
 
@@ -42,6 +43,7 @@ macro_rules! kani_lib {
             pub use kani_core::*;
             kani_core::kani_intrinsics!(core);
             kani_core::generate_arbitrary!(core);
+            kani_core::generate_models!();
 
             pub mod mem {
                 kani_core::kani_mem!(core);
@@ -57,6 +59,7 @@ macro_rules! kani_lib {
         pub use kani_core::*;
         kani_core::kani_intrinsics!(std);
         kani_core::generate_arbitrary!(std);
+        kani_core::generate_models!();
 
         pub mod mem {
             kani_core::kani_mem!(std);
@@ -282,6 +285,18 @@ macro_rules! kani_intrinsics {
         #[doc(hidden)]
         pub const fn panic(message: &'static str) -> ! {
             panic!("{}", message)
+        }
+
+        #[doc(hidden)]
+        #[allow(dead_code)]
+        #[kanitool::fn_marker = "SafetyCheckHook"]
+        #[inline(never)]
+        pub(crate) fn safety_check(cond: bool, msg: &'static str) {
+            #[cfg(not(feature = "concrete_playback"))]
+            return kani_intrinsic();
+
+            #[cfg(feature = "concrete_playback")]
+            assert!(cond, "Safety check failed: {msg}");
         }
 
         /// An empty body that can be used to define Kani intrinsic functions.

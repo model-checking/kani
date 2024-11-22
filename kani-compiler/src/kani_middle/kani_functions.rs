@@ -44,6 +44,10 @@ pub enum KaniFunction {
 pub enum KaniIntrinsic {
     #[strum(serialize = "AnyModifiesIntrinsic")]
     AnyModifies,
+    #[strum(serialize = "CheckedAlignOfIntrinsic")]
+    CheckedAlignOf,
+    #[strum(serialize = "CheckedSizeOfIntrinsic")]
+    CheckedSizeOf,
     #[strum(serialize = "IsInitializedIntrinsic")]
     IsInitialized,
     #[strum(serialize = "ValidValueIntrinsic")]
@@ -55,6 +59,8 @@ pub enum KaniIntrinsic {
 /// Kani models are Rust functions that model some runtime behavior used by Kani instrumentation.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, IntoStaticStr, EnumIter, EnumString, Hash)]
 pub enum KaniModel {
+    #[strum(serialize = "AlignOfDynObjectModel")]
+    AlignOfDynObject,
     #[strum(serialize = "AnyModel")]
     Any,
     #[strum(serialize = "CopyInitStateModel")]
@@ -85,6 +91,10 @@ pub enum KaniModel {
     SetSlicePtrInitialized,
     #[strum(serialize = "SetStrPtrInitializedModel")]
     SetStrPtrInitialized,
+    #[strum(serialize = "SizeOfDynObjectModel")]
+    SizeOfDynObject,
+    #[strum(serialize = "SizeOfSliceObjectModel")]
+    SizeOfSliceObject,
     #[strum(serialize = "StoreArgumentModel")]
     StoreArgument,
     #[strum(serialize = "WriteAnySliceModel")]
@@ -121,6 +131,8 @@ pub enum KaniHook {
     PointerObject,
     #[strum(serialize = "PointerOffsetHook")]
     PointerOffset,
+    #[strum(serialize = "SafetyCheckHook")]
+    SafetyCheck,
     #[strum(serialize = "UntrackedDerefHook")]
     UntrackedDeref,
 }

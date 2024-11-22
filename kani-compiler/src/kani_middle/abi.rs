@@ -13,7 +13,6 @@ pub struct LayoutOf {
     layout: LayoutShape,
 }
 
-#[allow(dead_code)] // TODO: Remove this in https://github.com/model-checking/kani/pull/3687
 impl LayoutOf {
     /// Create the layout structure for the given type
     pub fn new(ty: Ty) -> LayoutOf {
