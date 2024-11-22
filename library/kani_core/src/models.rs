@@ -33,7 +33,7 @@ macro_rules! generate_models {
                 if align.is_power_of_two() {
                     let size_dyn = metadata.size_of();
                     let (total, sum_overflow) = size_dyn.overflowing_add(head_size);
-                    // Adjust size to be a multiple of alignment, i.e.: (size + (align - 1)) & -align
+                    // Round up size to the nearest multiple of alignment, i.e.: (size + (align - 1)) & -align
                     let (adjust, adjust_overflow) = total.overflowing_add(align.wrapping_sub(1));
                     let adjusted_size = adjust & align.wrapping_neg();
                     if sum_overflow || adjust_overflow || adjusted_size > isize::MAX as _ {
@@ -80,7 +80,7 @@ macro_rules! generate_models {
             ) -> Option<usize> {
                 let (slice_sz, mul_overflow) = elem_size.overflowing_mul(len);
                 let (total, sum_overflow) = slice_sz.overflowing_add(head_size);
-                // Adjust size to be a multiple of alignment, i.e.: (size + (align - 1)) & -align
+                // Round up size to the nearest multiple of alignment, i.e.: (size + (align - 1)) & -align
                 let (adjust, adjust_overflow) = total.overflowing_add(align.wrapping_sub(1));
                 let adjusted_size = adjust & align.wrapping_neg();
                 if mul_overflow

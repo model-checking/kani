@@ -404,7 +404,7 @@ impl IntrinsicGeneratorPass {
         let ptr_arg = body.arg_locals().first().expect("Expected a pointer argument");
         let ptr_ty = ptr_arg.ty;
         let TyKind::RigidTy(RigidTy::RawPtr(pointee_ty, _)) = ptr_ty.kind() else {
-            unreachable!("Expected a pointer argument,but got {ptr_ty}")
+            unreachable!("Expected a pointer argument, but got {ptr_ty}")
         };
         let pointee_layout = LayoutOf::new(pointee_ty);
         debug!(?ptr_ty, ?pointee_layout, "checked_size_of");
@@ -530,7 +530,7 @@ impl IntrinsicGeneratorPass {
         let ptr_arg = body.arg_locals().first().expect("Expected a pointer argument");
         let ptr_ty = ptr_arg.ty;
         let TyKind::RigidTy(RigidTy::RawPtr(pointee_ty, _)) = ptr_ty.kind() else {
-            unreachable!("Expected a pointer argument,but got {ptr_ty}")
+            unreachable!("Expected a pointer argument, but got {ptr_ty}")
         };
         let pointee_layout = LayoutOf::new(pointee_ty);
         debug!(?ptr_ty, "align_of_raw");
@@ -572,7 +572,11 @@ impl IntrinsicGeneratorPass {
             );
         } else {
             // Cannot compute size of foreign types. Return None!
-            assert!(pointee_layout.has_foreign_tail());
+            assert!(
+                pointee_layout.has_foreign_tail(),
+                "Expected foreign, but found `{:?}` tail instead.",
+                pointee_layout.unsized_tail()
+            );
             let ret_val = build_none(option_def, option_args);
             new_body.assign_to(
                 Place::from(RETURN_LOCAL),
@@ -605,6 +609,7 @@ impl IntrinsicGeneratorPass {
 }
 
 /// Build an Rvalue `Some(val)`.
+/// Since the variants of `Option` are `Some(val)` and `None`, we know we've found the `Some` variant when we find the first variant with a field.
 fn build_some(option: AdtDef, args: GenericArgs, val_op: Operand) -> Rvalue {
     let var_idx = option
         .variants_iter()
@@ -614,6 +619,7 @@ fn build_some(option: AdtDef, args: GenericArgs, val_op: Operand) -> Rvalue {
 }
 
 /// Build an Rvalue `None`.
+/// Since the variants of `Option` are `Some(val)` and `None`, we know we've found the `None` variant when we find the first variant without fields.
 fn build_none(option: AdtDef, args: GenericArgs) -> Rvalue {
     let var_idx =
         option.variants_iter().find_map(|var| var.fields().is_empty().then_some(var.idx)).unwrap();

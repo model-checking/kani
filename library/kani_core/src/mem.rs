@@ -152,7 +152,7 @@ macro_rules! kani_mem {
             cbmc::same_allocation(ptr1, ptr2)
         }
 
-        /// Compute the size of the val pointed to if safe.
+        /// Compute the size of the val pointed to if it is safe to do so.
         ///
         /// Return `None` if an overflow would occur, or if alignment is not power of two.
         /// TODO: Optimize this if T is sized.
