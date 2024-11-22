@@ -861,7 +861,23 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 let c_generic_args = self.translate_generic_args(genarg);
                 CharonTy::new(CharonTyKind::Adt(CharonTypeId::Adt(c_typedeclid), c_generic_args))
             }
-            _ => todo!(),
+            RigidTy::Slice(ty) => {
+                let c_ty = self.translate_ty(ty);
+                let mut c_types = CharonVector::new();
+                c_types.push(c_ty);
+                CharonTy::new(CharonTyKind::Adt(
+                    CharonTypeId::Builtin(CharonBuiltinTy::Slice),
+                    CharonGenericArgs::new_from_types(c_types),
+                ))
+            }
+            RigidTy::RawPtr(ty, mutability) => {
+                let c_ty = self.translate_ty(ty);
+                CharonTy::new(CharonTyKind::RawPtr(c_ty, match mutability {
+                    Mutability::Mut => CharonRefKind::Mut,
+                    Mutability::Not => CharonRefKind::Shared,
+                }))
+            }
+            _ => todo!("Not yet implemented RigidTy: {:?}", rigid_ty),
         }
     }
 
@@ -1293,9 +1309,8 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         match region.kind {
             RegionKind::ReStatic => CharonRegion::Static,
             RegionKind::ReErased => CharonRegion::Erased,
-            RegionKind::ReEarlyParam(_)
-            | RegionKind::ReBound(_, _)
-            | RegionKind::RePlaceholder(_) => {
+            RegionKind::ReEarlyParam(_) => CharonRegion::Unknown,
+            RegionKind::ReBound(_, _) | RegionKind::RePlaceholder(_) => {
                 todo!("Not yet implemented RegionKind: {:?}", region.kind)
             }
         }
@@ -1310,7 +1325,7 @@ fn translate_int_ty(int_ty: IntTy) -> CharonIntegerTy {
         IntTy::I64 => CharonIntegerTy::I64,
         IntTy::I128 => CharonIntegerTy::I128,
         // TODO: assumes 64-bit platform
-        IntTy::Isize => CharonIntegerTy::I64,
+        IntTy::Isize => CharonIntegerTy::Isize,
     }
 }
 
@@ -1322,7 +1337,7 @@ fn translate_uint_ty(uint_ty: UintTy) -> CharonIntegerTy {
         UintTy::U64 => CharonIntegerTy::U64,
         UintTy::U128 => CharonIntegerTy::U128,
         // TODO: assumes 64-bit platform
-        UintTy::Usize => CharonIntegerTy::U64,
+        UintTy::Usize => CharonIntegerTy::Usize,
     }
 }
 
