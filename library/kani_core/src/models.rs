@@ -65,9 +65,10 @@ macro_rules! generate_models {
 
             /// Compute the size of a slice or object with a slice tail.
             ///
-            /// Most information are extracted by the Kani compiler at compilation time,
-            /// except for the length of the slice.
-            /// Thus, alignment should be safe to use (power-of-two and smaller than isize::MAX).
+            /// The slice length may be a symbolic value which is computed at runtime.
+            /// All the other inputs are extracted and validated by Kani compiler,
+            /// i.e., these are well known concrete values that should be safe to use.
+            /// Example, align is a power-of-two and smaller than isize::MAX.
             ///
             /// Thus, this generate the logic to ensure the size computation does not
             /// does not overflow and it is smaller than `isize::MAX`.
