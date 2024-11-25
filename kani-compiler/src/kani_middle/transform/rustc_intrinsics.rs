@@ -78,9 +78,16 @@ impl<'a> ReplaceIntrinsicVisitor<'a> {
 }
 
 impl MutMirVisitor for ReplaceIntrinsicVisitor<'_> {
-    /// Replace the terminator for some intrinsics.
+    /// Replace the terminator for some rustc's intrinsics.
     ///
-    /// Note that intrinsics must always be called directly.
+    /// In some cases, we replace a function call to a rustc intrinsic by a call to the
+    /// corresponding Kani intrinsic.
+    ///
+    /// Our models are usually augmented by some trait bounds, or they leverage Kani intrinsics to
+    /// implement the given semantics.
+    ///
+    /// Note that we only need to replace function calls since intrinsics must always be called
+    /// directly. I.e., no need to handle function pointers.
     fn visit_terminator(&mut self, term: &mut Terminator) {
         if let TerminatorKind::Call { func, .. } = &mut term.kind {
             if let TyKind::RigidTy(RigidTy::FnDef(def, args)) =
