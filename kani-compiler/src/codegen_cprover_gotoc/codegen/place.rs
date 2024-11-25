@@ -456,7 +456,7 @@ impl GotocCtx<'_> {
                     | TyKind::RigidTy(RigidTy::Dynamic(..)) => {
                         inner_goto_expr.member("data", &self.symbol_table)
                     }
-                    TyKind::RigidTy(RigidTy::Adt(..))
+                    TyKind::RigidTy(RigidTy::Adt(..)) | TyKind::RigidTy(RigidTy::Tuple(..))
                         if self.is_unsized(inner_mir_typ_internal) =>
                     {
                         // in tests/kani/Strings/os_str_reduced.rs, we see

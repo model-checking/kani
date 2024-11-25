@@ -149,6 +149,37 @@ impl GotocHook for Assert {
     }
 }
 
+struct SafetyCheck;
+impl GotocHook for SafetyCheck {
+    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+        unreachable!("{UNEXPECTED_CALL}")
+    }
+
+    fn handle(
+        &self,
+        gcx: &mut GotocCtx,
+        _instance: Instance,
+        mut fargs: Vec<Expr>,
+        _assign_to: &Place,
+        target: Option<BasicBlockIdx>,
+        span: Span,
+    ) -> Stmt {
+        assert_eq!(fargs.len(), 2);
+        let cond = fargs.remove(0).cast_to(Type::bool());
+        let msg = fargs.remove(0);
+        let msg = gcx.extract_const_message(&msg).unwrap();
+        let target = target.unwrap();
+        let caller_loc = gcx.codegen_caller_span_stable(span);
+        Stmt::block(
+            vec![
+                gcx.codegen_assert_assume(cond, PropertyClass::SafetyCheck, &msg, caller_loc),
+                Stmt::goto(bb_label(target), caller_loc),
+            ],
+            caller_loc,
+        )
+    }
+}
+
 struct Check;
 impl GotocHook for Check {
     fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
@@ -619,13 +650,14 @@ impl GotocHook for LoopInvariantRegister {
 }
 
 pub fn fn_hooks() -> GotocHooks {
-    let kani_lib_hooks: [(KaniHook, Rc<dyn GotocHook>); 11] = [
-        (KaniHook::Assert, Rc::new(Assert)),
+    let kani_lib_hooks = [
+        (KaniHook::Assert, Rc::new(Assert) as Rc<dyn GotocHook>),
         (KaniHook::Assume, Rc::new(Assume)),
         (KaniHook::Panic, Rc::new(Panic)),
         (KaniHook::Check, Rc::new(Check)),
         (KaniHook::Cover, Rc::new(Cover)),
         (KaniHook::AnyRaw, Rc::new(Nondet)),
+        (KaniHook::SafetyCheck, Rc::new(SafetyCheck)),
         (KaniHook::IsAllocated, Rc::new(IsAllocated)),
         (KaniHook::PointerObject, Rc::new(PointerObject)),
         (KaniHook::PointerOffset, Rc::new(PointerOffset)),
