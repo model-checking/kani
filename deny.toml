@@ -22,7 +22,7 @@ confidence-threshold = 0.8
 
 # All these exceptions should probably appear in: tools/build-kani/license-notes.txt
 exceptions = [
-    { name = "unicode-ident", allow=["Unicode-DFS-2016"] },
+    { name = "unicode-ident", allow=["Unicode-3.0"] },
     { name = "rustc_apfloat", allow=["Apache-2.0 WITH LLVM-exception"] },
 ]
 
