@@ -7,8 +7,9 @@
 //! `typ.rs`.
 
 use crate::codegen_cprover_gotoc::GotocCtx;
+use crate::kani_middle::abi::LayoutOf;
 use cbmc::goto_program::Type;
-use rustc_middle::ty::layout::{LayoutOf, TyAndLayout};
+use rustc_middle::ty::layout::{LayoutOf as _, TyAndLayout};
 use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{Local, Operand, Place, Rvalue};
@@ -36,7 +37,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     pub fn is_zst_stable(&self, ty: Ty) -> bool {
-        self.is_zst(rustc_internal::internal(self.tcx, ty))
+        LayoutOf::new(ty).is_zst()
     }
 
     pub fn layout_of_stable(&self, ty: Ty) -> TyAndLayout<'tcx> {
@@ -113,7 +114,7 @@ impl<'tcx> GotocCtx<'tcx> {
     /// This should be replaced by StableMIR `pretty_ty()` after
     /// <https://github.com/rust-lang/rust/pull/118364> is merged.
     pub fn pretty_ty(&self, ty: Ty) -> String {
-        rustc_internal::internal(self.tcx, ty).to_string()
+        ty.to_string()
     }
 
     pub fn requires_caller_location(&self, instance: Instance) -> bool {
@@ -121,6 +122,7 @@ impl<'tcx> GotocCtx<'tcx> {
         instance_internal.def.requires_caller_location(self.tcx)
     }
 }
+
 /// If given type is a Ref / Raw ref, return the pointee type.
 pub fn pointee_type(mir_type: Ty) -> Option<Ty> {
     match mir_type.kind() {
