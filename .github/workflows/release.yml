@@ -119,7 +119,7 @@ jobs:
           rm get-pip.py
 
       - name: Checkout Kani
-        uses: actions/checkout@v3
+        run: git clone https://github.com/model-checking/kani/
 
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
