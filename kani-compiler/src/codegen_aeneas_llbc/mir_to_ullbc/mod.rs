@@ -46,7 +46,7 @@ use charon_lib::ullbc_ast::{
 use charon_lib::{error_assert, error_or_panic};
 use core::panic;
 use rustc_data_structures::fx::FxHashMap;
-use rustc_middle::ty::TyCtxt;
+use rustc_middle::ty::{TyCtxt, TypingEnv};
 use rustc_smir::rustc_internal;
 use stable_mir::abi::PassMode;
 use stable_mir::mir::mono::{Instance, InstanceDef};
@@ -226,7 +226,8 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 GenericArgKind::Const(tc) => match tc.kind() {
                     TyConstKind::Param(paramtc) => {
                         let def_id_internal = rustc_internal::internal(self.tcx, adtdef.def_id());
-                        let paramenv = self.tcx.param_env(def_id_internal);
+                        let paramenv =
+                            TypingEnv::post_analysis(self.tcx, def_id_internal).param_env;
                         let pc_internal = rustc_middle::ty::ParamConst {
                             index: paramtc.index,
                             name: rustc_span::Symbol::intern(&paramtc.name),

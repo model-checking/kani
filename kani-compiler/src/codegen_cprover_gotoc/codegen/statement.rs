@@ -8,7 +8,7 @@ use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
 use cbmc::goto_program::{Expr, Location, Stmt, Type};
 use rustc_middle::ty::layout::LayoutOf;
-use rustc_middle::ty::{List, ParamEnv};
+use rustc_middle::ty::{List, TypingEnv};
 use rustc_smir::rustc_internal;
 use rustc_target::abi::{FieldsShape, Primitive, TagEncoding, Variants};
 use stable_mir::abi::{ArgAbi, FnAbi, PassMode};
@@ -663,7 +663,8 @@ impl GotocCtx<'_> {
                 let fn_ptr_abi = rustc_internal::stable(
                     self.tcx
                         .fn_abi_of_fn_ptr(
-                            ParamEnv::reveal_all().and((fn_sig_internal, &List::empty())),
+                            TypingEnv::fully_monomorphized()
+                                .as_query_input((fn_sig_internal, &List::empty())),
                         )
                         .unwrap(),
                 );
