@@ -24,6 +24,11 @@ impl LayoutOf {
         self.layout.is_sized()
     }
 
+    /// Return whether this is a zero-sized type
+    pub fn is_zst(&self) -> bool {
+        self.is_sized() && self.layout.size.bytes() == 0
+    }
+
     /// Return whether the type is unsized and its tail is a foreign item.
     ///
     /// This will also return `true` if the type is foreign.

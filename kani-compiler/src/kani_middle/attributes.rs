@@ -622,8 +622,9 @@ impl<'tcx> KaniAttributes<'tcx> {
                 ),
             );
         } else {
-            let instance = Instance::mono(tcx, self.item);
-            if !super::fn_abi(tcx, instance).args.is_empty() {
+            let instance = rustc_internal::stable(Instance::mono(tcx, self.item));
+            let fn_abi = instance.fn_abi().unwrap();
+            if !fn_abi.args.is_empty() {
                 tcx.dcx().span_err(span, "functions used as harnesses cannot have any arguments");
             }
         }
