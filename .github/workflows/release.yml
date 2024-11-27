@@ -120,6 +120,7 @@ jobs:
 
       - name: Checkout Kani
         run: |
+          git config --global --add safe.directory /__w/kani/kani
           git clone --depth 1 https://github.com/model-checking/kani .
           git submodule update --init --recursive --depth 1
 
