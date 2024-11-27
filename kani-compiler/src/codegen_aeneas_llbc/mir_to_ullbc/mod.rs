@@ -160,6 +160,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             let trait_def = trait_ref.def_id;
             let c_traitdecl_id = self.translate_traitdecl(trait_def);
             let c_genarg = self.translate_generic_args_withouttrait(trait_ref.args().clone());
+            //println!("Genargs Type: {:?}", c_genarg.types);
             let c_polytrait = CharonPolyTraitDeclRef{
                 regions: CharonVector::new(),
                 skip_binder : CharonTraitDeclRef {trait_id: c_traitdecl_id, generics: c_genarg},
@@ -185,7 +186,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             let trait_def = trait_ref.def_id;
             let c_traitdecl_id = self.translate_traitdecl(trait_def);
             let c_genarg = self.translate_generic_args_withouttrait(trait_ref.args().clone());
-            println!("Genargs Type: {:?}", c_genarg.types);
+            //println!("Genargs Type: {:?}", c_genarg.types);
             let c_polytrait = CharonPolyTraitDeclRef{
                 regions: CharonVector::new(),
                 skip_binder : CharonTraitDeclRef {trait_id: c_traitdecl_id, generics: c_genarg},
@@ -1131,7 +1132,33 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 }
             }
         }
-        let trait_refs = self.get_traitrefs_from_defid(defid);
+        let gen_trait_refs = self.get_traitrefs_from_defid(defid);
+        let mut trait_refs;
+        for (i, trait_ref) in gen_trait_refs.iter().enumerate() {
+            let traitgenarg = trait_ref.trait_decl_ref.skip_binder.generics.clone();
+            let mut t_regions: CharonVector<CharonRegionId, CharonRegion> = CharonVector::new();
+            let mut t_types: CharonVector<CharonTypeVarId, CharonTy> = CharonVector::new();
+            let mut t_const_generics: CharonVector<CharonConstGenericVarId, CharonConstGeneric> = CharonVector::new();
+            for tyvar in traitgenarg.types.iter(){
+                match tyvar.kind() {
+                    CharonTyKind::TypeVar(tyvarid) => {
+                        let subs_ty = c_types.get(*tyvarid).unwrap().clone();
+                        t_types.push(subs_ty);
+                    }
+                    _ => todo!("TyKind of gen must be TyVar: {:?}", tyvar.kind()),
+                }
+            }
+            for region in traitgenarg.regions.iter(){
+                match region.kind() {
+                    CharonRegionKind::RegionVar(regionid) => {
+                        let subs_region = c_regions.get(*regionid).unwrap().clone();
+                        t_regions.push(subs_region);
+                    }
+                    _ => todo!("RegionKind of gen must be RegionVar: {:?}", region.kind()),
+                }
+            }      
+            
+        }
         CharonGenericArgs {
             regions: c_regions,
             types: c_types,
@@ -1270,6 +1297,9 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     self.translate_adtdef(adt_def);
                 }
                 let c_generic_args = self.translate_generic_args(genarg, adt_def.def_id());
+                //println!("Generic arg type {:?}", c_generic_args.types);
+                //println!("Generic param type {:?}", self.generic_params_from_adtdef(adt_def).types);
+                //println!("Generic trait type {:?}", c_generic_args.trait_refs);
                 CharonTy::new(CharonTyKind::Adt(CharonTypeId::Adt(c_typedeclid), c_generic_args))
             }
             RigidTy::Slice(ty) => {
