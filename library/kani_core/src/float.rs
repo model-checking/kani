@@ -25,6 +25,11 @@ macro_rules! generate_float {
         /// // fits in `u32` because the value after truncation (`1e6`) is smaller than `u32::MAX`
         /// assert!(fits_in_u32);
         /// ```
+        #[crate::kani::unstable_feature(
+            feature = "float-lib",
+            issue = "none",
+            reason = "experimental floating-point API"
+        )]
         #[kanitool::fn_marker = "FloatToIntInRangeHook"]
         #[inline(never)]
         pub fn float_to_int_in_range<Float, Int>(value: Float) -> bool

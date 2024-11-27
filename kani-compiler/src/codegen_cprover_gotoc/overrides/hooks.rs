@@ -343,7 +343,7 @@ impl GotocHook for FloatToIntInRange {
         let RigidTy::Float(float_ty) = *generic_args[0].expect_ty().kind().rigid().unwrap() else {
             unreachable!()
         };
-        let integral_ty = *generic_args[1].expect_ty().kind().rigid().unwrap();
+        let integral_ty = generic_args[1].expect_ty().kind().rigid().unwrap().clone();
 
         let is_in_range = utils::codegen_in_range_expr(
             &float,

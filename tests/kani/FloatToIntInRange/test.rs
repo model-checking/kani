@@ -1,5 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+// kani-flags: -Zfloat-lib
 
 //! This test checks that `kani::float::float_to_int_in_range` works as expected
 
