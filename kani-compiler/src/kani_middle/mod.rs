@@ -7,17 +7,8 @@ use std::collections::HashSet;
 
 use crate::kani_queries::QueryDb;
 use rustc_hir::{def::DefKind, def_id::DefId as InternalDefId, def_id::LOCAL_CRATE};
-use rustc_middle::span_bug;
-use rustc_middle::ty::layout::{
-    FnAbiError, FnAbiOf, FnAbiOfHelpers, FnAbiRequest, HasParamEnv, HasTyCtxt, LayoutError,
-    LayoutOfHelpers, TyAndLayout,
-};
-use rustc_middle::ty::{self, Instance as InstanceInternal, Ty as TyInternal, TyCtxt};
+use rustc_middle::ty::TyCtxt;
 use rustc_smir::rustc_internal;
-use rustc_span::Span;
-use rustc_span::source_map::respan;
-use rustc_target::abi::call::FnAbi;
-use rustc_target::abi::{HasDataLayout, TargetDataLayout};
 use stable_mir::CrateDef;
 use stable_mir::mir::mono::MonoItem;
 use stable_mir::ty::{FnDef, RigidTy, Span as SpanStable, Ty, TyKind};
@@ -152,80 +143,6 @@ impl SourceLocation {
         let end_line = loc.end_line;
         let end_col = loc.end_col;
         SourceLocation { filename, start_line, start_col, end_line, end_col }
-    }
-}
-
-/// Get the FnAbi of a given instance with no extra variadic arguments.
-/// TODO: Get rid of this. Use instance.fn_abi() instead.
-/// <https://github.com/model-checking/kani/issues/1365>
-pub fn fn_abi<'tcx>(
-    tcx: TyCtxt<'tcx>,
-    instance: InstanceInternal<'tcx>,
-) -> &'tcx FnAbi<'tcx, TyInternal<'tcx>> {
-    let helper = CompilerHelpers { tcx };
-    helper.fn_abi_of_instance(instance, ty::List::empty())
-}
-
-struct CompilerHelpers<'tcx> {
-    tcx: TyCtxt<'tcx>,
-}
-
-impl<'tcx> HasParamEnv<'tcx> for CompilerHelpers<'tcx> {
-    fn param_env(&self) -> ty::ParamEnv<'tcx> {
-        ty::ParamEnv::reveal_all()
-    }
-}
-
-impl<'tcx> HasTyCtxt<'tcx> for CompilerHelpers<'tcx> {
-    fn tcx(&self) -> TyCtxt<'tcx> {
-        self.tcx
-    }
-}
-
-impl HasDataLayout for CompilerHelpers<'_> {
-    fn data_layout(&self) -> &TargetDataLayout {
-        self.tcx.data_layout()
-    }
-}
-
-impl<'tcx> LayoutOfHelpers<'tcx> for CompilerHelpers<'tcx> {
-    type LayoutOfResult = TyAndLayout<'tcx>;
-
-    #[inline]
-    fn handle_layout_err(&self, err: LayoutError<'tcx>, span: Span, ty: TyInternal<'tcx>) -> ! {
-        span_bug!(span, "failed to get layout for `{}`: {}", ty, err)
-    }
-}
-
-/// Implement error handling for extracting function ABI information.
-impl<'tcx> FnAbiOfHelpers<'tcx> for CompilerHelpers<'tcx> {
-    type FnAbiOfResult = &'tcx FnAbi<'tcx, TyInternal<'tcx>>;
-
-    #[inline]
-    fn handle_fn_abi_err(
-        &self,
-        err: FnAbiError<'tcx>,
-        span: Span,
-        fn_abi_request: FnAbiRequest<'tcx>,
-    ) -> ! {
-        if let FnAbiError::Layout(LayoutError::SizeOverflow(_)) = err {
-            self.tcx.dcx().emit_fatal(respan(span, err))
-        } else {
-            match fn_abi_request {
-                FnAbiRequest::OfFnPtr { sig, extra_args } => {
-                    span_bug!(
-                        span,
-                        "Error: {err:?}\n while running `fn_abi_of_fn_ptr. ({sig}, {extra_args:?})`",
-                    );
-                }
-                FnAbiRequest::OfInstance { instance, extra_args } => {
-                    span_bug!(
-                        span,
-                        "Error: {err:?}\n while running `fn_abi_of_instance. ({instance}, {extra_args:?})`",
-                    );
-                }
-            }
-        }
     }
 }
 
