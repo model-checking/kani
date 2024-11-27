@@ -120,10 +120,7 @@ jobs:
 
       - name: Checkout Kani
         run: |
-          git init .
-          git remote add origin model-checking/kani
-          git fetch --depth 1 origin 
-          git checkout main
+          git clone --depth 1 model-checking/kani .
           git submodule update --init --recursive --depth 1
 
       - name: Setup Kani Dependencies
