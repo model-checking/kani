@@ -96,7 +96,7 @@ jobs:
         uses: ./.github/actions/build-bundle
         with:
           os: linux
-          arch: x86_64-unknown-linux-gnu 
+          arch: x86_64-unknown-linux-gnu
 
   test-use-local-toolchain:
     name: TestLocalToolchain
