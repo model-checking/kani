@@ -78,6 +78,7 @@ pub struct Context<'a, 'tcx> {
     id_map: &'a mut FxHashMap<DefId, CharonAnyTransId>,
     errors: &'a mut CharonErrorCtx<'tcx>,
     local_names: FxHashMap<Local, String>,
+    trait_clauses : &'a mut CharonVector<CharonTraitClauseId,CharonTraitClause>,
 }
 
 impl<'a, 'tcx> Context<'a, 'tcx> {
@@ -99,8 +100,8 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 }
             }
         }
-
-        Self { tcx, instance, translated, id_map, errors, local_names }
+        let mut 
+        Self { tcx, instance, translated, id_map, errors, local_names, trait_clauses: CharonVector::new() }
     }
 
     fn tcx(&self) -> TyCtxt<'tcx> {
@@ -224,6 +225,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         let funcname = item_meta.name.clone();
         println!("Func name: {:?}", funcname);
         let signature = self.translate_function_signature();
+        println!("Func sig: {:?}", signature.generics.trait_clauses);
         let body = if is_builtin {
             Err(CharonOpaque)
         } else {
@@ -1038,6 +1040,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             TyKind::RigidTy(RigidTy::FnDef(fndef,_ )) => fndef,
             _ => panic!("Expected a function type"),
         };
+        let c_genparam = self.generic_params_from_fndef(fndef);  
         let value = fndef.fn_sig().value;
         let inputs = value.inputs().to_vec();
         let c_inputs: Vec<CharonTy> = inputs.iter().map(|ty| self.translate_ty(*ty)).collect();
@@ -1073,7 +1076,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         //let ret_type = self.translate_ty(fn_abi.ret.ty);
         //println!("cinput len {:?} ", c_inputs.len());
         //println!("args len {:?}", args.clone().len());
-        let c_genparam = self.generic_params_from_fndef(fndef);         
+               
         // TODO: populate the rest of the information (`is_unsafe`, `is_closure`, etc.)
         CharonFunSig {
             is_unsafe: false,
@@ -1306,9 +1309,9 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     self.translate_adtdef(adt_def);
                 }
                 let c_generic_args = self.translate_generic_args(genarg, adt_def.def_id());
-                println!("Generic arg type {:?}", c_generic_args.types);
+                //println!("Generic arg type {:?}", c_generic_args.types);
                 //println!("Generic param type {:?}", self.generic_params_from_adtdef(adt_def).types);
-                println!("Generic trait type {:?}", c_generic_args.trait_refs);
+                //println!("Generic trait type {:?}", c_generic_args.trait_refs);
                 CharonTy::new(CharonTyKind::Adt(CharonTypeId::Adt(c_typedeclid), c_generic_args))
             }
             RigidTy::Slice(ty) => {
