@@ -75,63 +75,28 @@ jobs:
   build_bundle_linux:
     name: BuildBundle-Linux
     runs-on: ubuntu-20.04
+    permissions:
+      contents: write
     outputs:
-      # The bundle version (latest or the version to be released)
       version: ${{ steps.bundle.outputs.version }}
       bundle: ${{ steps.bundle.outputs.bundle }}
       package: ${{ steps.bundle.outputs.package }}
       crate_version: ${{ steps.bundle.outputs.crate_version }}
-    container:
-      # Build using ubuntu 18 due to compatibility issues with older OS.
-      image: ubuntu:18.04
-      volumes:
-        - /usr/local:/mnt/host-local
     steps:
-
-      - name: Free up docker disk space
-        run: |
-          # inspired by https://github.com/easimon/maximize-build-space/blob/master/action.yml
-          df -h
-          rm -r /mnt/host-local/lib/android /mnt/host-local/.ghcup
-          df -h
-
-      # This is required before checkout because the container does not
-      # have Git installed, so cannot run checkout action.
-      # The checkout action requires Git >=2.18 and python 3.7, so use the Git maintainers' PPA.
-      # and the "deadsnakes" PPA, as the default version of python on ubuntu 22.04 is Python 3.10
-      - name: Install system dependencies
-        run: |
-          apt-get update
-          apt-get install -y software-properties-common apt-utils
-          add-apt-repository ppa:git-core/ppa
-          add-apt-repository ppa:deadsnakes/ppa
-          add-apt-repository ppa:ubuntu-toolchain-r/test
-          apt-get update
-          apt-get install -y \
-            build-essential bash-completion curl lsb-release sudo g++-9 gcc-9 flex \
-            bison make patch git python3.7 python3.7-dev python3.7-distutils
-          update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-9 110 \
-            --slave /usr/bin/g++ g++ /usr/bin/g++-9
-          ln -sf cpp-9 /usr/bin/cpp
-          update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.7 1
-          curl -s https://bootstrap.pypa.io/pip/3.7/get-pip.py -o get-pip.py
-          python3 get-pip.py --force-reinstall
-          rm get-pip.py
-
-      - name: Checkout Kani
-        uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
         with:
-          os: ubuntu-18.04
+          os: ubuntu-20.04
 
       - name: Build bundle
         id: bundle
         uses: ./.github/actions/build-bundle
         with:
           os: linux
-          arch: x86_64-unknown-linux-gnu
+          arch: x86_64-unknown-linux-gnu 
 
   test-use-local-toolchain:
     name: TestLocalToolchain
@@ -279,56 +244,11 @@ jobs:
             popd
           done
 
-  # This job will run tests for platforms that don't have a respective GitHub worker.
-  # For now, we only test for Ubuntu-18.04 so we don't bother using matrix to configure the platform.
-  test_alt_platform:
-    name: TestAlternativePlatforms
-    needs: [build_bundle_linux]
-    runs-on: ubuntu-22.04
-    env:
-      PKG: ${{ needs.build_bundle_linux.outputs.package }}
-      BUNDLE: ${{ needs.build_bundle_linux.outputs.bundle }}
-      VERSION: ${{ needs.build_bundle_linux.outputs.crate_version }}
-      KANI_SRC: ./kani_src
-    steps:
-      - name: Checkout Kani
-        uses: actions/checkout@v4
-        with:
-          path: ${{ env.KANI_SRC }}
-
-      - name: Download bundle
-        uses: actions/download-artifact@v3
-        with:
-          name: ${{ env.BUNDLE }}
-
-      - name: Download kani-verifier crate
-        uses: actions/download-artifact@v3
-        with:
-          name: ${{ env.PKG }}
-
-      - name: Build container test
-        run: |
-          docker build -t kani-18-04 -f ${{ env.KANI_SRC }}/scripts/ci/Dockerfile.bundle-test-ubuntu-18-04 .
-
-      - name: Run installed tests
-        run: |
-          for dir in simple-lib build-rs-works simple-kissat; do
-            >&2 echo "Running test $dir"
-            docker run -v /var/run/docker.sock:/var/run/docker.sock \
-              -w /tmp/kani/tests/cargo-kani/$dir kani-18-04 cargo kani
-          done
-
-          # While the above test OS issues, now try testing with nightly as
-          # default:
-          docker run -v /var/run/docker.sock:/var/run/docker.sock \
-            -w /tmp/kani/tests/cargo-kani/simple-lib kani-18-04  \
-            bash -c "rustup default nightly && cargo kani"
-
   kani_release:
     if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/kani-') }}
     name: Release
     runs-on: ubuntu-20.04
-    needs: [build_bundle_macos, build_bundle_macos_aarch64, build_bundle_linux, test_bundle, test_alt_platform]
+    needs: [build_bundle_macos, build_bundle_macos_aarch64, build_bundle_linux, test_bundle]
     permissions:
       contents: write
     outputs:
