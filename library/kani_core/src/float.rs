@@ -6,6 +6,7 @@
 #[macro_export]
 macro_rules! generate_float {
     ($core:path) => {
+        use super::kani_intrinsic;
         /// Returns whether the given float `value` satisfies the range
         /// condition of the `to_int_unchecked` methods, namely that the `value`
         /// after truncation is in range of the target `Int`
@@ -24,8 +25,9 @@ macro_rules! generate_float {
         /// assert!(fits_in_u32);
         /// ```
         #[kanitool::fn_marker = "FloatToIntInRangeHook"]
+        #[inline(never)]
         pub fn float_to_int_in_range<Float, Int>(value: Float) -> bool {
-            kani::kani_intrinsic()
+            kani_intrinsic()
         }
     };
 }
