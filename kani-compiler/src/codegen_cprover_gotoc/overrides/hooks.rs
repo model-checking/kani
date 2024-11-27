@@ -8,8 +8,8 @@
 //! It would be too nasty if we spread around these sort of undocumented hooks in place, so
 //! this module addresses this issue.
 
-use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::codegen_cprover_gotoc::codegen::{PropertyClass, bb_label};
+use crate::codegen_cprover_gotoc::{GotocCtx, utils};
 use crate::kani_middle::attributes;
 use crate::kani_middle::kani_functions::{KaniFunction, KaniHook};
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
@@ -19,6 +19,7 @@ use rustc_middle::ty::TyCtxt;
 use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{BasicBlockIdx, Place};
+use stable_mir::ty::RigidTy;
 use stable_mir::{CrateDef, ty::Span};
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -312,6 +313,54 @@ impl GotocHook for IsAllocated {
             ],
             loc,
         )
+    }
+}
+
+/// This is the hook for the `kani::float::float_to_int_in_range` intrinsic
+/// TODO: This should be replaced by a Rust function instead so that it's
+/// independent of the backend
+struct FloatToIntInRange;
+impl GotocHook for FloatToIntInRange {
+    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+        unreachable!("{UNEXPECTED_CALL}")
+    }
+
+    fn handle(
+        &self,
+        gcx: &mut GotocCtx,
+        instance: Instance,
+        mut fargs: Vec<Expr>,
+        assign_to: &Place,
+        target: Option<BasicBlockIdx>,
+        span: Span,
+    ) -> Stmt {
+        assert_eq!(fargs.len(), 1);
+        let float = fargs.remove(0);
+        let target = target.unwrap();
+        let loc = gcx.codegen_span_stable(span);
+
+        let generic_args = instance.args().0;
+        let RigidTy::Float(float_ty) = generic_args[0].expect_ty().kind().rigid().unwrap().clone()
+        else {
+            unreachable!()
+        };
+        let integral_ty = generic_args[1].expect_ty().kind().rigid().unwrap().clone();
+
+        let is_in_range = utils::codegen_in_range_expr(
+            &float,
+            float_ty,
+            integral_ty,
+            gcx.symbol_table.machine_model(),
+        )
+        .cast_to(Type::CInteger(CIntType::Bool));
+
+        let pe = unwrap_or_return_codegen_unimplemented_stmt!(
+            gcx,
+            gcx.codegen_place_stable(assign_to, loc)
+        )
+        .goto_expr;
+
+        Stmt::block(vec![pe.assign(is_in_range, loc), Stmt::goto(bb_label(target), loc)], loc)
     }
 }
 
@@ -663,6 +712,7 @@ pub fn fn_hooks() -> GotocHooks {
         (KaniHook::PointerOffset, Rc::new(PointerOffset)),
         (KaniHook::UntrackedDeref, Rc::new(UntrackedDeref)),
         (KaniHook::InitContracts, Rc::new(InitContracts)),
+        (KaniHook::FloatToIntInRange, Rc::new(FloatToIntInRange)),
     ];
     GotocHooks {
         kani_lib_hooks: HashMap::from(kani_lib_hooks),

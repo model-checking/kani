@@ -1,0 +1,1 @@
+error: Invalid type for second argument of `float_to_int_in_range` intrinsic. Expected an integer type. Got `bool`

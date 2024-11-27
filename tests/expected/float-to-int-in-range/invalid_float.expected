@@ -1,0 +1,1 @@
+error: Invalid type for first argument of `float_to_int_in_range` intrinsic. Expected a float type. Got `i32`

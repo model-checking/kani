@@ -21,6 +21,7 @@
 #![feature(f128)]
 
 mod arbitrary;
+mod float;
 mod mem;
 mod mem_init;
 mod models;
@@ -45,6 +46,10 @@ macro_rules! kani_lib {
             kani_core::generate_arbitrary!(core);
             kani_core::generate_models!();
 
+            pub mod float {
+                kani_core::generate_float!(core);
+            }
+
             pub mod mem {
                 kani_core::kani_mem!(core);
             }
@@ -60,6 +65,10 @@ macro_rules! kani_lib {
         kani_core::kani_intrinsics!(std);
         kani_core::generate_arbitrary!(std);
         kani_core::generate_models!();
+
+        pub mod float {
+            kani_core::generate_float!(std);
+        }
 
         pub mod mem {
             kani_core::kani_mem!(std);
