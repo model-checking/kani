@@ -10,7 +10,7 @@
 use crate::args::ExtraChecks;
 use crate::kani_middle::abi::LayoutOf;
 use crate::kani_middle::attributes::KaniAttributes;
-use crate::kani_middle::kani_functions::{KaniFunction, KaniHook, KaniIntrinsic, KaniModel};
+use crate::kani_middle::kani_functions::{KaniFunction, KaniIntrinsic, KaniModel};
 use crate::kani_middle::transform::body::{
     CheckType, InsertPosition, MutableBody, SourceInstruction,
 };
@@ -22,8 +22,6 @@ use crate::kani_middle::transform::check_values::{build_limits, ty_validity_per_
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
 use rustc_middle::ty::TyCtxt;
-use rustc_smir::rustc_internal;
-use stable_mir::CrateDef;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{
     AggregateKind, BasicBlock, BinOp, Body, ConstOperand, Local, Mutability, Operand, Place,
@@ -78,16 +76,6 @@ impl TransformPass for IntrinsicGeneratorPass {
                 KaniIntrinsic::ValidValue => (true, self.valid_value_body(body)),
                 // This is handled in contracts pass for now.
                 KaniIntrinsic::WriteAny | KaniIntrinsic::AnyModifies => (false, body),
-            }
-        } else if let Some(kani_hook) =
-            attributes.fn_marker().and_then(|name| KaniHook::from_str(name.as_str()).ok())
-        {
-            match kani_hook {
-                KaniHook::FloatToIntInRange => {
-                    IntrinsicGeneratorPass::check_float_to_int_in_range_valid_types(tcx, instance);
-                    (false, body)
-                }
-                _ => (false, body),
             }
         } else {
             (false, body)
@@ -617,24 +605,6 @@ impl IntrinsicGeneratorPass {
             operands,
             Place::from(RETURN_LOCAL),
         );
-    }
-
-    fn check_float_to_int_in_range_valid_types(tcx: TyCtxt, instance: Instance) {
-        let generic_args = instance.args().0;
-        let arg0 = generic_args[0].expect_ty();
-        if !arg0.kind().is_float() {
-            let msg = format!(
-                "Invalid type for first argument of `float_to_int_in_range` intrinsic. Expected a float type. Got `{arg0}`"
-            );
-            tcx.dcx().span_err(rustc_internal::internal(tcx, instance.def.span()), msg);
-        }
-        let arg1 = generic_args[1].expect_ty();
-        if !arg1.kind().is_integral() {
-            let msg = format!(
-                "Invalid type for second argument of `float_to_int_in_range` intrinsic. Expected an integer type. Got `{arg1}`"
-            );
-            tcx.dcx().span_err(rustc_internal::internal(tcx, instance.def.span()), msg);
-        }
     }
 }
 

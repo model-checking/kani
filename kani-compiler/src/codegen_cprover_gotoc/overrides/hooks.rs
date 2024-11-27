@@ -340,11 +340,10 @@ impl GotocHook for FloatToIntInRange {
         let loc = gcx.codegen_span_stable(span);
 
         let generic_args = instance.args().0;
-        let RigidTy::Float(float_ty) = generic_args[0].expect_ty().kind().rigid().unwrap().clone()
-        else {
+        let RigidTy::Float(float_ty) = *generic_args[0].expect_ty().kind().rigid().unwrap() else {
             unreachable!()
         };
-        let integral_ty = generic_args[1].expect_ty().kind().rigid().unwrap().clone();
+        let integral_ty = *generic_args[1].expect_ty().kind().rigid().unwrap();
 
         let is_in_range = utils::codegen_in_range_expr(
             &float,
