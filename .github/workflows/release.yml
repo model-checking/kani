@@ -119,7 +119,12 @@ jobs:
           rm get-pip.py
 
       - name: Checkout Kani
-        run: git clone https://github.com/model-checking/kani/
+        run: |
+          git init .
+          git remote add origin model-checking/kani
+          git fetch --depth 1 origin 
+          git checkout main
+          git submodule update --init --recursive --depth 1
 
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
