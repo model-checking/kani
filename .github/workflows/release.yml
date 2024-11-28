@@ -75,8 +75,6 @@ jobs:
   build_bundle_linux:
     name: BuildBundle-Linux
     runs-on: ubuntu-20.04
-    permissions:
-      contents: write
     outputs:
       version: ${{ steps.bundle.outputs.version }}
       bundle: ${{ steps.bundle.outputs.bundle }}
