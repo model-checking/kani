@@ -3,6 +3,7 @@
 
 //! This module contains functions useful for float-related checks
 
+#[allow(clippy::crate_in_macro_def)]
 #[macro_export]
 macro_rules! generate_float {
     ($core:tt) => {
