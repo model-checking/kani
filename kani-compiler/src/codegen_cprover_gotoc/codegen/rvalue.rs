@@ -18,7 +18,7 @@ use cbmc::goto_program::{
 };
 use cbmc::{InternString, InternedString, btree_string_map};
 use num::bigint::BigInt;
-use rustc_middle::ty::{ParamEnv, TyCtxt, VtblEntry};
+use rustc_middle::ty::{TyCtxt, TypingEnv, VtblEntry};
 use rustc_smir::rustc_internal;
 use rustc_target::abi::{FieldsShape, TagEncoding, Variants};
 use stable_mir::abi::{Primitive, Scalar, ValueAbi};
@@ -832,7 +832,7 @@ impl GotocCtx<'_> {
                     NullOp::OffsetOf(fields) => Expr::int_constant(
                         self.tcx
                             .offset_of_subfield(
-                                ParamEnv::reveal_all(),
+                                TypingEnv::fully_monomorphized(),
                                 layout,
                                 fields.iter().map(|(var_idx, field_idx)| {
                                     (

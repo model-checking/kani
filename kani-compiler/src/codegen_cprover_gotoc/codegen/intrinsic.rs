@@ -10,7 +10,7 @@ use crate::unwrap_or_return_codegen_unimplemented_stmt;
 use cbmc::goto_program::{
     ArithmeticOverflowResult, BinaryOperator, BuiltinFn, Expr, Location, Stmt, Type,
 };
-use rustc_middle::ty::ParamEnv;
+use rustc_middle::ty::TypingEnv;
 use rustc_middle::ty::layout::ValidityRequirement;
 use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::Instance;
@@ -730,15 +730,15 @@ impl GotocCtx<'_> {
             );
         }
 
-        let param_env_and_type =
-            ParamEnv::reveal_all().and(rustc_internal::internal(self.tcx, target_ty));
+        let typing_env_and_type = TypingEnv::fully_monomorphized()
+            .as_query_input(rustc_internal::internal(self.tcx, target_ty));
 
         // Then we check if the type allows "raw" initialization for the cases
         // where memory is zero-initialized or entirely uninitialized
         if intrinsic == "assert_zero_valid"
             && !self
                 .tcx
-                .check_validity_requirement((ValidityRequirement::Zero, param_env_and_type))
+                .check_validity_requirement((ValidityRequirement::Zero, typing_env_and_type))
                 .unwrap()
         {
             return self.codegen_fatal_error(
@@ -756,7 +756,7 @@ impl GotocCtx<'_> {
                 .tcx
                 .check_validity_requirement((
                     ValidityRequirement::UninitMitigated0x01Fill,
-                    param_env_and_type,
+                    typing_env_and_type,
                 ))
                 .unwrap()
         {
