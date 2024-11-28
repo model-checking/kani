@@ -78,7 +78,7 @@ pub struct Context<'a, 'tcx> {
     id_map: &'a mut FxHashMap<DefId, CharonAnyTransId>,
     errors: &'a mut CharonErrorCtx<'tcx>,
     local_names: FxHashMap<Local, String>,
-    trait_clauses : &'a mut CharonVector<CharonTraitClauseId,CharonTraitClause>,
+    trait_clauses : CharonVector<CharonTraitClauseId,CharonTraitClause>,
 }
 
 impl<'a, 'tcx> Context<'a, 'tcx> {
@@ -100,7 +100,6 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 }
             }
         }
-        let mut 
         Self { tcx, instance, translated, id_map, errors, local_names, trait_clauses: CharonVector::new() }
     }
 
@@ -151,6 +150,18 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
 
     }
 
+    fn find_trait_clause_id(&mut self, id: CharonTraitDeclId, genarg: CharonGenericArgs, j: usize) -> CharonTraitClauseId {
+        for (i, tc) in self.trait_clauses.iter().enumerate() {
+            if tc.trait_.skip_binder.trait_id == id {
+                if tc.trait_.skip_binder.generics == genarg {
+                    println!("found {:?} {:?}", i, j);
+                    return CharonTraitClauseId::from_usize(i);
+                }
+            }
+        }
+        CharonTraitClauseId::from_usize(j)
+    }
+
     fn get_traitrefs_from_defid(&mut self, defid: DefId) -> CharonVector<CharonTraitClauseId, CharonTraitRef>{
         let inter_defid = rustc_internal::internal(self.tcx,defid);
         let predicates = self.tcx().predicates_of(inter_defid).predicates.to_vec();
@@ -166,7 +177,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             //println!("Genargs Type: {:?}", c_genarg.types);
             let c_polytrait = CharonPolyTraitDeclRef{
                 regions: CharonVector::new(),
-                skip_binder : CharonTraitDeclRef {trait_id: c_traitdecl_id, generics: c_genarg},
+                skip_binder : CharonTraitDeclRef {trait_id: c_traitdecl_id, generics: c_genarg.clone()},
             };
             let c_traitref = CharonTraitRef{
                 kind: CharonTraitRefKind::Clause(CharonTraitClauseId::from_usize(i)),
@@ -175,7 +186,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             c_trait_refs.push(c_traitref);
 
         }        
-        //println!("Predicates: {:?}", predicates);
+        //println!("Predicates: {:?}", predicates);cargo build-dev
         c_trait_refs
     }
 
@@ -225,7 +236,9 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         let funcname = item_meta.name.clone();
         println!("Func name: {:?}", funcname);
         let signature = self.translate_function_signature();
-        println!("Func sig: {:?}", signature.generics.trait_clauses);
+        for l in self.trait_clauses.iter(){
+            println!("Fun Trait Clause: {:?}", l);
+        }
         let body = if is_builtin {
             Err(CharonOpaque)
         } else {
@@ -1040,10 +1053,14 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             TyKind::RigidTy(RigidTy::FnDef(fndef,_ )) => fndef,
             _ => panic!("Expected a function type"),
         };
-        let c_genparam = self.generic_params_from_fndef(fndef);  
+        let c_genparam = self.generic_params_from_fndef(fndef); 
+        self.trait_clauses = c_genparam.trait_clauses.clone(); 
         let value = fndef.fn_sig().value;
         let inputs = value.inputs().to_vec();
         let c_inputs: Vec<CharonTy> = inputs.iter().map(|ty| self.translate_ty(*ty)).collect();
+        for l in c_inputs.iter() {
+            println!("Input ty {:?}", l);
+        }
         let c_output = self.translate_ty(value.output());
 
 /* 
@@ -1153,20 +1170,23 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     _ => todo!("TyKind of gen must be TyVar: {:?}", tyvar.kind()),
                 }
             }
+            let generics= CharonGenericArgs {
+                regions: t_regions,
+                types: t_types,
+                const_generics: t_const_generics,
+                trait_refs: trait_ref.trait_decl_ref.skip_binder.generics.trait_refs.clone(),
+            };
+            let traitdecl_id = trait_ref.trait_decl_ref.skip_binder.trait_id;
             let subs_traitdeclref = CharonPolyTraitDeclRef {
                 regions : trait_ref.trait_decl_ref.regions.clone(),
                 skip_binder : CharonTraitDeclRef {
-                    trait_id: trait_ref.trait_decl_ref.skip_binder.trait_id,
-                    generics: CharonGenericArgs {
-                        regions: t_regions,
-                        types: t_types,
-                        const_generics: t_const_generics,
-                        trait_refs: trait_ref.trait_decl_ref.skip_binder.generics.trait_refs.clone(),
-                    },
+                    trait_id: traitdecl_id.clone(),
+                    generics: generics.clone(),
                 },
             };
+            let traitclause_id = self.find_trait_clause_id(traitdecl_id, generics.clone(), 0);
             let subs_traitref = CharonTraitRef {
-                kind : trait_ref.kind.clone(),
+                kind : CharonTraitRefKind::Clause(traitclause_id),
                 trait_decl_ref: subs_traitdeclref
             };
             trait_refs.push(subs_traitref);
