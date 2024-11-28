@@ -71,8 +71,6 @@ jobs:
   build_bundle_linux:
     name: BuildBundle-Linux
     runs-on: ubuntu-20.04
-    permissions:
-      contents: write
     outputs:
       version: ${{ steps.bundle.outputs.version }}
       bundle: ${{ steps.bundle.outputs.bundle }}
@@ -92,7 +90,7 @@ jobs:
         uses: ./.github/actions/build-bundle
         with:
           os: linux
-          arch: x86_64-unknown-linux-gnu 
+          arch: x86_64-unknown-linux-gnu
 
   test-use-local-toolchain:
     name: TestLocalToolchain
