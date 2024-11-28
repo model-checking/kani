@@ -20,6 +20,7 @@
 #![feature(ptr_metadata)]
 #![feature(f16)]
 #![feature(f128)]
+#![feature(convert_float_to_int)]
 
 // Allow us to use `kani::` to access crate features.
 extern crate self as kani;
