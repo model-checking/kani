@@ -100,6 +100,8 @@ pub enum UnstableFeature {
     UnstableOptions,
     /// The list subcommand [RFC 13](https://model-checking.github.io/kani/rfc/rfcs/0013-list.html)
     List,
+    /// Kani APIs related to floating-point operations (e.g. `float_to_int_in_range`)
+    FloatLib,
 }
 
 impl UnstableFeature {
