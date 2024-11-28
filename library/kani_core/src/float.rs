@@ -6,9 +6,9 @@
 #[allow(clippy::crate_in_macro_def)]
 #[macro_export]
 macro_rules! generate_float {
-    ($core:tt) => {
+    ($core:path) => {
         use super::kani_intrinsic;
-        use $core::convert::FloatToInt;
+        use core::convert::FloatToInt;
         /// Returns whether the given float `value` satisfies the range
         /// condition of the `to_int_unchecked` methods, namely that the `value`
         /// after truncation is in range of the target `Int`
