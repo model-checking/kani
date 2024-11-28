@@ -23,8 +23,6 @@ jobs:
   build_bundle_macos:
     name: BuildBundle-MacOs
     runs-on: macos-13
-    permissions:
-      contents: write
     outputs:
       version: ${{ steps.bundle.outputs.version }}
       bundle: ${{ steps.bundle.outputs.bundle }}
@@ -49,8 +47,6 @@ jobs:
   build_bundle_macos_aarch64:
     name: BuildBundle-MacOs-ARM
     runs-on: macos-14
-    permissions:
-      contents: write
     outputs:
       version: ${{ steps.bundle.outputs.version }}
       bundle: ${{ steps.bundle.outputs.bundle }}
@@ -247,8 +243,6 @@ jobs:
     name: Release
     runs-on: ubuntu-20.04
     needs: [build_bundle_macos, build_bundle_macos_aarch64, build_bundle_linux, test_bundle]
-    permissions:
-      contents: write
     outputs:
       version: ${{ steps.versioning.outputs.version }}
       upload_url: ${{ steps.create_release.outputs.upload_url }}
