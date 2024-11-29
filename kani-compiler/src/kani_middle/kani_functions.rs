@@ -61,6 +61,8 @@ pub enum KaniIntrinsic {
 pub enum KaniModel {
     #[strum(serialize = "AlignOfDynObjectModel")]
     AlignOfDynObject,
+    #[strum(serialize = "AlignOfValRawModel")]
+    AlignOfVal,
     #[strum(serialize = "AnyModel")]
     Any,
     #[strum(serialize = "CopyInitStateModel")]
@@ -95,6 +97,8 @@ pub enum KaniModel {
     SizeOfDynObject,
     #[strum(serialize = "SizeOfSliceObjectModel")]
     SizeOfSliceObject,
+    #[strum(serialize = "SizeOfValRawModel")]
+    SizeOfVal,
     #[strum(serialize = "StoreArgumentModel")]
     StoreArgument,
     #[strum(serialize = "WriteAnySliceModel")]
@@ -121,6 +125,9 @@ pub enum KaniHook {
     Check,
     #[strum(serialize = "CoverHook")]
     Cover,
+    // TODO: this is temporarily implemented as a hook, but should be implemented as an intrinsic
+    #[strum(serialize = "FloatToIntInRangeHook")]
+    FloatToIntInRange,
     #[strum(serialize = "InitContractsHook")]
     InitContracts,
     #[strum(serialize = "IsAllocatedHook")]

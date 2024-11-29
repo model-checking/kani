@@ -38,7 +38,7 @@ use rustc_middle::{
         ProjectionElem, Rvalue, Statement, StatementKind, Terminator, TerminatorEdges,
         TerminatorKind,
     },
-    ty::{Instance, InstanceKind, List, ParamEnv, TyCtxt, TyKind},
+    ty::{Instance, InstanceKind, List, TyCtxt, TyKind, TypingEnv},
 };
 use rustc_mir_dataflow::{Analysis, Forward, JoinSemiLattice};
 use rustc_smir::rustc_internal;
@@ -179,6 +179,7 @@ impl<'tcx> Analysis<'tcx> for PointsToAnalysis<'_, 'tcx> {
             | StatementKind::AscribeUserType(..)
             | StatementKind::Coverage(..)
             | StatementKind::ConstEvalCounter
+            | StatementKind::BackwardIncompatibleDropHint { .. }
             | StatementKind::Nop => { /* This is a no-op with regard to aliasing. */ }
         }
     }
@@ -356,7 +357,13 @@ fn try_resolve_instance<'tcx>(
         TyKind::FnDef(def, args) => {
             // Span here is used for error-reporting, which we don't expect to encounter anyway, so
             // it is ok to use a dummy.
-            Ok(Instance::expect_resolve(tcx, ParamEnv::reveal_all(), *def, &args, DUMMY_SP))
+            Ok(Instance::expect_resolve(
+                tcx,
+                TypingEnv::fully_monomorphized(),
+                *def,
+                &args,
+                DUMMY_SP,
+            ))
         }
         _ => Err(format!(
             "Kani was not able to resolve the instance of the function operand `{ty:?}`. Currently, memory initialization checks in presence of function pointers and vtable calls are not supported. For more information about planned support, see https://github.com/model-checking/kani/issues/3300."

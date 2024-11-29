@@ -10,7 +10,7 @@ use crate::unwrap_or_return_codegen_unimplemented_stmt;
 use cbmc::goto_program::{
     ArithmeticOverflowResult, BinaryOperator, BuiltinFn, Expr, Location, Stmt, Type,
 };
-use rustc_middle::ty::ParamEnv;
+use rustc_middle::ty::TypingEnv;
 use rustc_middle::ty::layout::ValidityRequirement;
 use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::Instance;
@@ -215,17 +215,6 @@ impl GotocCtx<'_> {
             }};
         }
 
-        macro_rules! codegen_size_align {
-            ($which: ident) => {{
-                let args = instance_args(&instance);
-                // The type `T` that we'll compute the size or alignment.
-                let target_ty = args.0[0].expect_ty();
-                let arg = fargs.remove(0);
-                let size_align = self.size_and_align_of_dst(*target_ty, arg);
-                self.codegen_expr_to_place_stable(place, size_align.$which, loc)
-            }};
-        }
-
         // Most atomic intrinsics do:
         //   1. Perform an operation on a primary argument (e.g., addition)
         //   2. Return the previous value of the primary argument
@@ -422,7 +411,6 @@ impl GotocCtx<'_> {
             Intrinsic::MaxNumF32 => codegen_simple_intrinsic!(Fmaxf),
             Intrinsic::MaxNumF64 => codegen_simple_intrinsic!(Fmax),
             Intrinsic::MinAlignOf => codegen_intrinsic_const!(),
-            Intrinsic::MinAlignOfVal => codegen_size_align!(align),
             Intrinsic::MinNumF32 => codegen_simple_intrinsic!(Fminf),
             Intrinsic::MinNumF64 => codegen_simple_intrinsic!(Fmin),
             Intrinsic::MulWithOverflow => {
@@ -516,7 +504,6 @@ impl GotocCtx<'_> {
                 loc,
             ),
             Intrinsic::SimdXor => codegen_intrinsic_binop!(bitxor),
-            Intrinsic::SizeOfVal => codegen_size_align!(size),
             Intrinsic::SqrtF32 => codegen_simple_intrinsic!(Sqrtf),
             Intrinsic::SqrtF64 => codegen_simple_intrinsic!(Sqrt),
             Intrinsic::SubWithOverflow => self.codegen_op_with_overflow(
@@ -558,6 +545,9 @@ impl GotocCtx<'_> {
             Intrinsic::WriteBytes => {
                 assert!(self.place_ty_stable(place).kind().is_unit());
                 self.codegen_write_bytes(fargs, farg_types, loc)
+            }
+            Intrinsic::SizeOfVal | Intrinsic::MinAlignOfVal => {
+                unreachable!("Intrinsic `{}` is handled before codegen", intrinsic_str)
             }
             // Unimplemented
             Intrinsic::Unimplemented { name, issue_link } => {
@@ -740,15 +730,15 @@ impl GotocCtx<'_> {
             );
         }
 
-        let param_env_and_type =
-            ParamEnv::reveal_all().and(rustc_internal::internal(self.tcx, target_ty));
+        let typing_env_and_type = TypingEnv::fully_monomorphized()
+            .as_query_input(rustc_internal::internal(self.tcx, target_ty));
 
         // Then we check if the type allows "raw" initialization for the cases
         // where memory is zero-initialized or entirely uninitialized
         if intrinsic == "assert_zero_valid"
             && !self
                 .tcx
-                .check_validity_requirement((ValidityRequirement::Zero, param_env_and_type))
+                .check_validity_requirement((ValidityRequirement::Zero, typing_env_and_type))
                 .unwrap()
         {
             return self.codegen_fatal_error(
@@ -766,7 +756,7 @@ impl GotocCtx<'_> {
                 .tcx
                 .check_validity_requirement((
                     ValidityRequirement::UninitMitigated0x01Fill,
-                    param_env_and_type,
+                    typing_env_and_type,
                 ))
                 .unwrap()
         {

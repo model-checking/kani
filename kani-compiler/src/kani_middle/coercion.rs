@@ -17,7 +17,7 @@ use rustc_hir::lang_items::LangItem;
 use rustc_middle::traits::{ImplSource, ImplSourceUserDefinedData};
 use rustc_middle::ty::TraitRef;
 use rustc_middle::ty::adjustment::CustomCoerceUnsized;
-use rustc_middle::ty::{ParamEnv, Ty, TyCtxt};
+use rustc_middle::ty::{PseudoCanonicalInput, Ty, TyCtxt, TypingEnv};
 use rustc_smir::rustc_internal;
 use stable_mir::Symbol;
 use stable_mir::ty::{RigidTy, Ty as TyStable, TyKind};
@@ -102,7 +102,7 @@ pub fn extract_unsize_casting<'tcx>(
     let (src_base_ty, dst_base_ty) = tcx.struct_lockstep_tails_for_codegen(
         src_pointee_ty,
         dst_pointee_ty,
-        ParamEnv::reveal_all(),
+        TypingEnv::fully_monomorphized(),
     );
     trace!(?src_base_ty, ?dst_base_ty, "extract_unsize_casting result");
     assert!(
@@ -251,7 +251,10 @@ fn custom_coerce_unsize_info<'tcx>(
 
     let trait_ref = TraitRef::new(tcx, def_id, tcx.mk_args_trait(source_ty, [target_ty.into()]));
 
-    match tcx.codegen_select_candidate((ParamEnv::reveal_all(), trait_ref)) {
+    match tcx.codegen_select_candidate(PseudoCanonicalInput {
+        typing_env: TypingEnv::fully_monomorphized(),
+        value: trait_ref,
+    }) {
         Ok(ImplSource::UserDefined(ImplSourceUserDefinedData { impl_def_id, .. })) => {
             tcx.coerce_unsized_info(impl_def_id).unwrap().custom_kind.unwrap()
         }

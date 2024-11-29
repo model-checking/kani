@@ -12,7 +12,7 @@ use tracing::{debug, trace};
 use kani_metadata::HarnessMetadata;
 use rustc_hir::def_id::DefId;
 use rustc_middle::mir::Const;
-use rustc_middle::ty::{self, EarlyBinder, ParamEnv, TyCtxt, TypeFoldable};
+use rustc_middle::ty::{self, EarlyBinder, TyCtxt, TypeFoldable, TypingEnv};
 use rustc_smir::rustc_internal;
 use stable_mir::mir::ConstOperand;
 use stable_mir::mir::mono::Instance;
@@ -152,7 +152,7 @@ impl<'tcx> StubConstChecker<'tcx> {
         trace!(instance=?self.instance, ?value, "monomorphize");
         self.instance.instantiate_mir_and_normalize_erasing_regions(
             self.tcx,
-            ParamEnv::reveal_all(),
+            TypingEnv::fully_monomorphized(),
             EarlyBinder::bind(value),
         )
     }
@@ -171,7 +171,11 @@ impl MirVisitor for StubConstChecker<'_> {
             Const::Val(..) | Const::Ty(..) => {}
             Const::Unevaluated(un_eval, _) => {
                 // Thread local fall into this category.
-                if self.tcx.const_eval_resolve(ParamEnv::reveal_all(), un_eval, DUMMY_SP).is_err() {
+                if self
+                    .tcx
+                    .const_eval_resolve(TypingEnv::fully_monomorphized(), un_eval, DUMMY_SP)
+                    .is_err()
+                {
                     // The `monomorphize` call should have evaluated that constant already.
                     let tcx = self.tcx;
                     let mono_const = &un_eval;

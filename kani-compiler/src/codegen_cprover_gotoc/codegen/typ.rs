@@ -229,7 +229,7 @@ impl<'tcx> GotocCtx<'tcx> {
         if let Some(current_fn) = &self.current_fn {
             current_fn.instance().instantiate_mir_and_normalize_erasing_regions(
                 self.tcx,
-                ty::ParamEnv::reveal_all(),
+                ty::TypingEnv::fully_monomorphized(),
                 ty::EarlyBinder::bind(value),
             )
         } else {
@@ -251,7 +251,7 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn is_unsized(&self, t: Ty<'tcx>) -> bool {
         !self
             .monomorphize(t)
-            .is_sized(*self.tcx.at(rustc_span::DUMMY_SP), ty::ParamEnv::reveal_all())
+            .is_sized(*self.tcx.at(rustc_span::DUMMY_SP), ty::TypingEnv::fully_monomorphized())
     }
 
     /// Generates the type for a single field for a dynamic vtable.
@@ -523,7 +523,8 @@ impl<'tcx> GotocCtx<'tcx> {
     ///      c.f. <https://rust-lang.github.io/unsafe-code-guidelines/introduction.html>
     pub fn codegen_ty(&mut self, ty: Ty<'tcx>) -> Type {
         // TODO: Remove all monomorphize calls
-        let normalized = self.tcx.normalize_erasing_regions(ty::ParamEnv::reveal_all(), ty);
+        let normalized =
+            self.tcx.normalize_erasing_regions(ty::TypingEnv::fully_monomorphized(), ty);
         let goto_typ = self.codegen_ty_inner(normalized);
         if let Some(tag) = goto_typ.tag() {
             self.type_map.entry(tag).or_insert_with(|| {
@@ -573,10 +574,14 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::Str => Type::unsigned_int(8).flexible_array_of(),
             ty::Ref(_, t, _) | ty::RawPtr(t, _) => self.codegen_ty_ref(*t),
             ty::FnDef(def_id, args) => {
-                let instance =
-                    Instance::try_resolve(self.tcx, ty::ParamEnv::reveal_all(), *def_id, args)
-                        .unwrap()
-                        .unwrap();
+                let instance = Instance::try_resolve(
+                    self.tcx,
+                    ty::TypingEnv::fully_monomorphized(),
+                    *def_id,
+                    args,
+                )
+                .unwrap()
+                .unwrap();
                 self.codegen_fndef_type(instance)
             }
             ty::FnPtr(sig_tys, hdr) => {
@@ -980,7 +985,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // Normalize pointee_type to remove projection and opaque types
         trace!(?pointee_type, "codegen_ty_ref");
         let pointee_type =
-            self.tcx.normalize_erasing_regions(ty::ParamEnv::reveal_all(), pointee_type);
+            self.tcx.normalize_erasing_regions(ty::TypingEnv::fully_monomorphized(), pointee_type);
 
         if !self.use_thin_pointer(pointee_type) {
             return self.codegen_fat_ptr(pointee_type);
@@ -1076,7 +1081,9 @@ impl<'tcx> GotocCtx<'tcx> {
     /// one can only apply this function to a monomorphized signature
     pub fn codegen_function_sig(&mut self, sig: PolyFnSig<'tcx>) -> Type {
         let sig = self.monomorphize(sig);
-        let sig = self.tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), sig);
+        let sig = self
+            .tcx
+            .normalize_erasing_late_bound_regions(ty::TypingEnv::fully_monomorphized(), sig);
         self.codegen_function_sig_stable(rustc_internal::stable(sig))
     }
 
