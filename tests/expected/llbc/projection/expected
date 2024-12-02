@@ -5,7 +5,7 @@ struct test::MyStruct =
 }
 
 enum test::MyEnum0 =
-|  A(0: @Adt0, 1: i32)
+|  A(0: @Adt1, 1: i32)
 |  B()
 
 
