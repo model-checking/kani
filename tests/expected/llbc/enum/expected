@@ -29,7 +29,7 @@ fn test::main()
     let i@2: i32; // local
 
     e@1 := test::MyEnum::A { 0: const (1 : i32) }
-    i@2 := @Fun1(move (e@1))
+    i@2 := @Fun0(move (e@1))
     drop i@2
     @0 := ()
     return

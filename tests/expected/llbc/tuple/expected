@@ -20,7 +20,7 @@ fn test::main()
     let @2: (i32, i32); // anonymous local
 
     @2 := (const (1 : i32), const (2 : i32))
-    s@1 := @Fun1(move (@2))
+    s@1 := @Fun0(move (@2))
     drop @2
     drop s@1
     @0 := ()
