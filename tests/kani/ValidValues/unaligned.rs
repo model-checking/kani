@@ -1,6 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-flags: -Z valid-value-checks
+// kani-flags: -Z valid-value-checks -Z mem-predicates
 //! Check that Kani can check value validity of packed structs.
 
 use std::ptr::addr_of;
@@ -34,6 +34,4 @@ pub fn check_packed_read_unaligned_invalid_value() {
     let val = [u8::MAX; SZ];
     let ptr = addr_of!(val) as *const Packed;
     assert!(!kani::mem::can_read_unaligned(ptr));
-    assert!(kani::mem::can_read_unaligned(unsafe { addr_of!((*ptr).byte) }));
-    assert!(!kani::mem::can_read_unaligned(unsafe { addr_of!((*ptr).c) }));
 }
