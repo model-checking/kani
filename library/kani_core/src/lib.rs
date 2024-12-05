@@ -308,6 +308,20 @@ macro_rules! kani_intrinsics {
             assert!(cond, "Safety check failed: {msg}");
         }
 
+        /// This should indicate that Kani does not support a certain operation.
+        #[doc(hidden)]
+        #[allow(dead_code)]
+        #[kanitool::fn_marker = "UnsupportedCheckHook"]
+        #[inline(never)]
+        #[allow(clippy::diverging_sub_expression)]
+        pub(crate) fn unsupported(msg: &'static str) -> ! {
+            #[cfg(not(feature = "concrete_playback"))]
+            return kani_intrinsic();
+
+            #[cfg(feature = "concrete_playback")]
+            unimplemented!("Unsupported Kani operation: {msg}")
+        }
+
         /// An empty body that can be used to define Kani intrinsic functions.
         ///
         /// A Kani intrinsic is a function that is interpreted by Kani compiler.
