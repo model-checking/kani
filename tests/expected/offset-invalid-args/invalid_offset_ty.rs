@@ -4,12 +4,13 @@
 
 #![feature(core_intrinsics)]
 use std::intrinsics::offset;
+use std::ptr::addr_of;
 
 /// The rust compiler currently ICE.
 #[kani::proof]
 fn check_intrinsic_args() {
     let array = [0];
     let delta: u32 = kani::any();
-    let new = unsafe { offset(&array, delta) };
+    let new = unsafe { offset(addr_of!(array), delta) };
     assert_ne!(new, &array)
 }
