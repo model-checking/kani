@@ -45,6 +45,39 @@ macro_rules! generate_models {
                 }
             }
 
+            #[kanitool::fn_marker = "PtrOffsetFromModel"]
+            pub unsafe fn ptr_offset_from<T>(ptr1: *const T, ptr2: *const T) -> isize {
+                if ptr1 == ptr2 {
+                    0
+                } else {
+                    kani::safety_check(
+                        kani::mem::same_allocation_internal(ptr1, ptr2),
+                        "Offset result and original pointer should point to the same allocation",
+                    );
+                    kani::safety_check(
+                        core::mem::size_of::<T>() > 0,
+                        "Cannot compute offset of a ZST",
+                    );
+                    // The offset must fit in isize since this represents the same allocation.
+                    let offset_bytes = ptr1.addr().wrapping_sub(ptr2.addr()) as isize;
+                    // We know `t_size` is a power of two, so avoid division.
+                    let t_size = size_of::<T>() as isize;
+                    kani::safety_check(
+                        offset_bytes & (t_size - 1) == 0,
+                        "Expected the distance between the pointers, in bytes, to be a
+                        multiple of the size of `T`",
+                    );
+                    offset_bytes >> t_size.trailing_zeros()
+                }
+            }
+
+            #[kanitool::fn_marker = "PtrSubPtrModel"]
+            pub unsafe fn ptr_sub_ptr<T>(ptr1: *const T, ptr2: *const T) -> usize {
+                let offset = ptr_offset_from(ptr1, ptr2);
+                kani::safety_check(offset >= 0, "Expected non-negative distance between pointers");
+                offset as usize
+            }
+
             /// An offset model that checks UB.
             #[kanitool::fn_marker = "OffsetModel"]
             pub fn offset<T, P: Ptr<T>, O: ToISize>(ptr: P, offset: O) -> P {
