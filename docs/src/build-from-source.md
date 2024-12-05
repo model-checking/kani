@@ -18,7 +18,7 @@ Kani has been tested in [Ubuntu](#install-dependencies-on-ubuntu) and [macOS](##
 
 ### Install dependencies on Ubuntu
 
-Support is available for Ubuntu 18.04, 20.04 and 22.04.
+Support is available for Ubuntu 20.04, 22.04, and 24.04.
 The simplest way to install dependencies (especially if you're using a fresh VM)
 is following our CI scripts:
 
