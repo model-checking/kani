@@ -4,7 +4,7 @@
 //! This test checks that Kani correctly computes the value of a wrapping_offset in cases where
 //! the add operation wraps.
 //!
-//! Note that CBMC offset logic will wrap around the object bits, not the entire space address when
+//! Note that CBMC offset logic will wrap around the object bits, not the entire address space, when
 //! computing the offset between pointers. Doing that is UB in Rust, so we should be OK
 //! as long as Kani can detect UB in that case.
 
@@ -20,7 +20,7 @@ fn original_harness() {
         // This should trigger UB!!
         let wrapped_offset = unsafe { v_wrap.offset_from(v_0) };
         // Without UB detection, the offsets are the same, but CBMC pointer arithmetic
-        // would "wrapping around" making this incorrect
+        // would "wrap around" making this incorrect
         // https://github.com/model-checking/kani/issues/1150
         assert!(high_offset == wrapped_offset.try_into().unwrap());
     }

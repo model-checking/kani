@@ -54,13 +54,13 @@ macro_rules! generate_models {
                     // It's always safe to perform an offset of length 0.
                     ptr
                 } else {
-                    let (byte_offset, overflow) = offset.overflowing_mul(t_size as isize);
-                    kani::safety_check(!overflow, "Offset in bytes overflow isize");
+                    let (byte_offset, overflow) = offset.overflowing_mul(t_size);
+                    kani::safety_check(!overflow, "Offset in bytes overflows isize");
                     let orig_ptr = ptr.to_const_ptr();
                     let new_ptr = orig_ptr.wrapping_byte_offset(byte_offset);
                     kani::safety_check(
                         kani::mem::same_allocation_internal(orig_ptr, new_ptr),
-                        "Offset result and original pointer should point to the same allocation",
+                        "Offset result and original pointer must point to the same allocation",
                     );
                     P::from_const_ptr(new_ptr)
                 }

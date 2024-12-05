@@ -62,7 +62,7 @@ Description: "assertion failed: slice.others[0] == second"\
 in function check_naive_iterator_should_fail
 
 Status: FAILURE\
-Description: "Offset result and original pointer should point to the same allocation"
+Description: "Offset result and original pointer must point to the same allocation"
 
 VERIFICATION:- FAILED
 

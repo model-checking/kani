@@ -1,6 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-//! Check Kani output if the arguments provided to the offset intrisic are incorrect.
+//! Check Kani output if the arguments provided to the offset intrinsic are incorrect.
 
 #![feature(core_intrinsics)]
 use std::intrinsics::offset;

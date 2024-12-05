@@ -1,4 +1,4 @@
-Failed Checks: Offset in bytes overflow isize
+Failed Checks: Offset in bytes overflows isize
 Verification failed for - main
 
 Complete - 0 successfully verified harnesses, 1 failures, 1 total.
