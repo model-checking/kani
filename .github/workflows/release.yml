@@ -97,7 +97,7 @@ jobs:
     needs: [build_bundle_macos, build_bundle_linux]
     strategy:
       matrix:
-        os: [macos-13, ubuntu-20.04, ubuntu-22.04]
+        os: [macos-13, ubuntu-20.04, ubuntu-22.04, ubuntu-24.04]
         include:
         - os: macos-13
           rust_target: x86_64-apple-darwin
@@ -106,6 +106,9 @@ jobs:
           rust_target: x86_64-unknown-linux-gnu
           prev_job: ${{ needs.build_bundle_linux.outputs }}
         - os: ubuntu-22.04
+          rust_target: x86_64-unknown-linux-gnu
+          prev_job: ${{ needs.build_bundle_linux.outputs }}
+        - os: ubuntu-24.04
           rust_target: x86_64-unknown-linux-gnu
           prev_job: ${{ needs.build_bundle_linux.outputs }}
     runs-on: ${{ matrix.os }}
@@ -197,7 +200,7 @@ jobs:
     needs: [build_bundle_macos, build_bundle_linux]
     strategy:
       matrix:
-        os: [macos-13, ubuntu-20.04, ubuntu-22.04]
+        os: [macos-13, ubuntu-20.04, ubuntu-22.04, ubuntu-24.04]
         include:
           # Stores the output of the previous job conditional to the OS
           - prev_job: ${{ needs.build_bundle_linux.outputs }}

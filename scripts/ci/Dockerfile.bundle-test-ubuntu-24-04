@@ -3,7 +3,7 @@
 
 # Note: this file is intended only for testing the kani release bundle
 
-FROM ubuntu:20.04
+FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive \
     DEBCONF_NONINTERACTIVE_SEEN=true
 RUN apt-get update && \
@@ -13,8 +13,8 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 
 WORKDIR /tmp/kani
 COPY ./tests ./tests
-COPY ./kani-latest-*.tar.gz ./
+COPY ./kani-latest-x86_64-unknown-linux-gnu.tar.gz ./
 # Very awkward glob (not regex!) to get `kani-verifier-*` and not `kani-verifier-*.crate`
 COPY ./target/package/kani-verifier-*[^e] ./kani-verifier
 RUN cargo install --path ./kani-verifier
-RUN cargo-kani setup --use-local-bundle ./kani-latest-*.tar.gz
+RUN cargo-kani setup --use-local-bundle ./kani-latest-x86_64-unknown-linux-gnu.tar.gz
