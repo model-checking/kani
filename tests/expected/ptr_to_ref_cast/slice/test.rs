@@ -31,6 +31,6 @@ fn check_with_byte_add_sub_pass() {
     let ptr = &data as *const [u8];
     let offset = kani::any_where(|i| *i < 100);
     // This should pass since the resulting metadata is valid
-    let val = unsafe { &*ptr.byte_add(offset).byte_sub(offset) };
+    let val = unsafe { &*ptr.wrapping_byte_add(offset).wrapping_byte_sub(offset) };
     assert_eq!(val.len(), data.len());
 }

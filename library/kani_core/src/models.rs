@@ -16,7 +16,9 @@ macro_rules! generate_models {
         #[allow(dead_code)]
         mod rustc_intrinsics {
             use crate::kani;
+            use core::convert::TryFrom;
             use core::ptr::Pointee;
+
             #[kanitool::fn_marker = "SizeOfValRawModel"]
             pub fn size_of_val_raw<T: ?Sized>(ptr: *const T) -> usize {
                 if let Some(size) = kani::mem::checked_size_of_raw(ptr) {
@@ -40,6 +42,104 @@ macro_rules! generate_models {
                     kani::safety_check(false, "failed to compute `align_of_val`");
                     // Unreachable without panic.
                     kani::kani_intrinsic()
+                }
+            }
+
+            #[kanitool::fn_marker = "PtrOffsetFromModel"]
+            pub unsafe fn ptr_offset_from<T>(ptr1: *const T, ptr2: *const T) -> isize {
+                if ptr1 == ptr2 {
+                    0
+                } else {
+                    kani::safety_check(
+                        kani::mem::same_allocation_internal(ptr1, ptr2),
+                        "Offset result and original pointer should point to the same allocation",
+                    );
+                    kani::safety_check(
+                        core::mem::size_of::<T>() > 0,
+                        "Cannot compute offset of a ZST",
+                    );
+                    // The offset must fit in isize since this represents the same allocation.
+                    let offset_bytes = ptr1.addr().wrapping_sub(ptr2.addr()) as isize;
+                    // We know `t_size` is a power of two, so avoid division.
+                    let t_size = size_of::<T>() as isize;
+                    kani::safety_check(
+                        offset_bytes & (t_size - 1) == 0,
+                        "Expected the distance between the pointers, in bytes, to be a
+                        multiple of the size of `T`",
+                    );
+                    offset_bytes >> t_size.trailing_zeros()
+                }
+            }
+
+            #[kanitool::fn_marker = "PtrSubPtrModel"]
+            pub unsafe fn ptr_sub_ptr<T>(ptr1: *const T, ptr2: *const T) -> usize {
+                let offset = ptr_offset_from(ptr1, ptr2);
+                kani::safety_check(offset >= 0, "Expected non-negative distance between pointers");
+                offset as usize
+            }
+
+            /// An offset model that checks UB.
+            #[kanitool::fn_marker = "OffsetModel"]
+            pub fn offset<T, P: Ptr<T>, O: ToISize>(ptr: P, offset: O) -> P {
+                let offset = offset.to_isize();
+                let t_size = core::mem::size_of::<T>() as isize;
+                if offset == 0 || t_size == 0 {
+                    // It's always safe to perform an offset of length 0.
+                    ptr
+                } else {
+                    let (byte_offset, overflow) = offset.overflowing_mul(t_size as isize);
+                    kani::safety_check(!overflow, "Offset in bytes overflow isize");
+                    let orig_ptr = ptr.to_const_ptr();
+                    let new_ptr = orig_ptr.wrapping_byte_offset(byte_offset);
+                    kani::safety_check(
+                        kani::mem::same_allocation_internal(orig_ptr, new_ptr),
+                        "Offset result and original pointer should point to the same allocation",
+                    );
+                    P::from_const_ptr(new_ptr)
+                }
+            }
+
+            pub trait Ptr<T> {
+                fn to_const_ptr(self) -> *const T;
+                fn from_const_ptr(ptr: *const T) -> Self;
+            }
+
+            impl<T> Ptr<T> for *const T {
+                fn to_const_ptr(self) -> *const T {
+                    self
+                }
+                fn from_const_ptr(ptr: *const T) -> Self {
+                    ptr
+                }
+            }
+
+            impl<T> Ptr<T> for *mut T {
+                fn to_const_ptr(self) -> *const T {
+                    self
+                }
+                fn from_const_ptr(ptr: *const T) -> Self {
+                    ptr as _
+                }
+            }
+
+            pub trait ToISize {
+                fn to_isize(self) -> isize;
+            }
+
+            impl ToISize for isize {
+                fn to_isize(self) -> isize {
+                    self
+                }
+            }
+
+            impl ToISize for usize {
+                fn to_isize(self) -> isize {
+                    if let Ok(val) = self.try_into() {
+                        val
+                    } else {
+                        kani::safety_check(false, "Offset in bytes overflow isize");
+                        unreachable!();
+                    }
                 }
             }
         }
