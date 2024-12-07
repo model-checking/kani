@@ -1,5 +1,6 @@
 SUMMARY:\
- ** 5 of
+ ** 6 of
+Failed Checks: "Expected 0 and 1 to be the only safe values for offset"
 Failed Checks: Offset in bytes overflows isize
 Failed Checks: Offset result and original pointer must point to the same allocation
 Failed Checks: Offset value overflows isize

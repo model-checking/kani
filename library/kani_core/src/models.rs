@@ -59,9 +59,12 @@ macro_rules! generate_models {
                     let orig_ptr = ptr.to_const_ptr();
                     // NOTE: For CBMC, using the pointer addition can have unexpected behavior
                     // when the offset is higher than the object bits since it will wrap around.
-                    // TODO: Use `wrapping_byte_offset` once we fix:
-                    //       https://github.com/model-checking/kani/issues/1150
-                    let new_ptr = orig_ptr.addr().wrapping_add_signed(byte_offset) as *const T;
+                    // See for more details: https://github.com/model-checking/kani/issues/1150
+                    //
+                    // However, when I tried implementing this using usize operation, we got some
+                    // unexpected failures that still require further debugging.
+                    // let new_ptr = orig_ptr.addr().wrapping_add_signed(byte_offset) as *const T;
+                    let new_ptr = orig_ptr.wrapping_byte_offset(byte_offset);
                     kani::safety_check(
                         kani::mem::same_allocation_internal(orig_ptr, new_ptr),
                         "Offset result and original pointer must point to the same allocation",
