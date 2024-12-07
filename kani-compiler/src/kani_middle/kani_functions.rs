@@ -81,6 +81,8 @@ pub enum KaniModel {
     IsSliceChunkPtrInitialized,
     #[strum(serialize = "IsSlicePtrInitializedModel")]
     IsSlicePtrInitialized,
+    #[strum(serialize = "OffsetModel")]
+    Offset,
     #[strum(serialize = "RunContractModel")]
     RunContract,
     #[strum(serialize = "RunLoopContractModel")]
@@ -140,6 +142,8 @@ pub enum KaniHook {
     PointerOffset,
     #[strum(serialize = "SafetyCheckHook")]
     SafetyCheck,
+    #[strum(serialize = "UnsupportedCheckHook")]
+    UnsupportedCheck,
     #[strum(serialize = "UntrackedDerefHook")]
     UntrackedDeref,
 }
