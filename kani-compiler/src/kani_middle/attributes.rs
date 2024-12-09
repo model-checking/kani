@@ -673,12 +673,12 @@ fn expect_key_string_value(
     attr: &Attribute,
 ) -> Result<rustc_span::Symbol, ErrorGuaranteed> {
     let span = attr.span;
-    let AttrArgs::Eq(_, it) = &attr.get_normal_item().args else {
+    let AttrArgs::Eq { eq_span: _, value } = &attr.get_normal_item().args else {
         return Err(sess
             .dcx()
             .span_err(span, "Expected attribute of the form #[attr = \"value\"]"));
     };
-    let maybe_str = match it {
+    let maybe_str = match value {
         AttrArgsEq::Ast(expr) => {
             if let ExprKind::Lit(tok) = expr.kind {
                 match LitKind::from_token_lit(tok) {
