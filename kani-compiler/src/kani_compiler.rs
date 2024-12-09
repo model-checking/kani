@@ -27,6 +27,7 @@ use clap::Parser;
 use rustc_codegen_ssa::traits::CodegenBackend;
 use rustc_driver::{Callbacks, Compilation, RunCompiler};
 use rustc_interface::Config;
+use rustc_middle::ty::TyCtxt;
 use rustc_session::config::ErrorOutputType;
 use rustc_smir::rustc_internal;
 use rustc_span::ErrorGuaranteed;
@@ -124,17 +125,15 @@ impl Callbacks for KaniCompiler {
     }
 
     /// After analysis, we check the crate items for Kani API misuse or configuration issues.
-    fn after_analysis<'tcx>(
+    fn after_analysis(
         &mut self,
         _compiler: &rustc_interface::interface::Compiler,
-        rustc_queries: &'tcx rustc_interface::Queries<'tcx>,
+        tcx: TyCtxt<'_>,
     ) -> Compilation {
-        rustc_queries.global_ctxt().unwrap().enter(|tcx| {
-            rustc_internal::run(tcx, || {
-                check_crate_items(tcx, self.queries.lock().unwrap().args().ignore_global_asm);
-            })
-            .unwrap()
-        });
+        rustc_internal::run(tcx, || {
+            check_crate_items(tcx, self.queries.lock().unwrap().args().ignore_global_asm);
+        })
+        .unwrap();
         Compilation::Continue
     }
 }
