@@ -1,0 +1,65 @@
+Kani Rust Verifier 0.56.0 (standalone)
+Checking harness check_sub_ptr_same_dangling...
+
+VERIFICATION RESULT:
+ ** 0 of 13 failed (3 unreachable)
+
+VERIFICATION:- SUCCESSFUL
+Verification Time: 0.03525919s
+
+Checking harness check_sub_ptr_unit_panic...
+
+VERIFICATION RESULT:
+ ** 1 of 12 failed (3 unreachable)
+Failed Checks: assertion failed: 0 < pointee_size && pointee_size <= isize::MAX as usize
+ File: "/home/ANT.AMAZON.COM/celinval/.rustup/toolchains/nightly-2024-11-28-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/const_ptr.rs", line 784, in std::ptr::const_ptr::<impl *const ()>::sub_ptr
+
+VERIFICATION:- SUCCESSFUL (encountered one or more panics as expected)
+Verification Time: 0.032447934s
+
+Checking harness check_sub_ptr_negative_result...
+
+VERIFICATION RESULT:
+ ** 1 of 15 failed (1 unreachable)
+Failed Checks: Expected non-negative distance between pointers
+ File: "/home/ANT.AMAZON.COM/celinval/workspace/kani-project/kani/library/kani/src/lib.rs", line 54, in kani::rustc_intrinsics::ptr_sub_ptr::<u8>
+
+VERIFICATION:- FAILED
+Verification Time: 0.05667276s
+
+Checking harness check_sub_ptr_diff_alloc...
+
+VERIFICATION RESULT:
+ ** 1 of 12 failed (3 unreachable)
+Failed Checks: Offset result and original pointer should point to the same allocation
+ File: "/home/ANT.AMAZON.COM/celinval/workspace/kani-project/kani/library/kani/src/lib.rs", line 54, in kani::rustc_intrinsics::ptr_offset_from::<u128>
+
+VERIFICATION:- FAILED
+Verification Time: 0.037252095s
+
+Checking harness check_sub_ptr_oob_ptr...
+
+VERIFICATION RESULT:
+ ** 1 of 12 failed (2 unreachable)
+Failed Checks: Offset result and original pointer should point to the same allocation
+ File: "/home/ANT.AMAZON.COM/celinval/workspace/kani-project/kani/library/kani/src/lib.rs", line 54, in kani::rustc_intrinsics::ptr_offset_from::<u128>
+
+VERIFICATION:- FAILED
+Verification Time: 0.040543832s
+
+Checking harness check_sub_ptr_self_oob...
+
+VERIFICATION RESULT:
+ ** 1 of 12 failed (2 unreachable)
+Failed Checks: Offset result and original pointer should point to the same allocation
+ File: "/home/ANT.AMAZON.COM/celinval/workspace/kani-project/kani/library/kani/src/lib.rs", line 54, in kani::rustc_intrinsics::ptr_offset_from::<u128>
+
+VERIFICATION:- FAILED
+Verification Time: 0.036195125s
+
+Summary:
+Verification failed for - check_sub_ptr_negative_result
+Verification failed for - check_sub_ptr_diff_alloc
+Verification failed for - check_sub_ptr_oob_ptr
+Verification failed for - check_sub_ptr_self_oob
+Complete - 2 successfully verified harnesses, 4 failures, 6 total.
