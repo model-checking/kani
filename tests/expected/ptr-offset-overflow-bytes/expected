@@ -1,5 +1,3 @@
-std::ptr::const_ptr::<impl *const Foo>::offset.arithmetic_overflow\
-Status: FAILURE\
-Description: "offset: attempt to compute number in bytes which would overflow"
-
-VERIFICATION:- FAILED
+Failed Checks: Offset in bytes overflows isize
+Verification failed for - main
+Complete - 0 successfully verified harnesses, 1 failures, 1 total.
