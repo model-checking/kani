@@ -1,2 +1,12 @@
-FAILURE\
-assertion failed: high_offset == wrapped_offset.try_into().unwrap()
+Checking harness check_wrap_around_ptr...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness harness_without_ub...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness original_harness...
+Failed Checks: assertion failed: high_offset == wrapped_offset.try_into().unwrap()
+VERIFICATION:- FAILED
+
+Verification failed for - original_harness
+Complete - 2 successfully verified harnesses, 1 failures, 3 total.

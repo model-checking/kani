@@ -62,8 +62,7 @@ Description: "assertion failed: slice.others[0] == second"\
 slice.rs:96:5 in function check_naive_iterator_should_fail
 
 Status: FAILURE\
-Description: "dereference failure: pointer outside object bounds"\
-slice.rs:100:32 in function check_naive_iterator_should_fail
+Description: "Offset result and original pointer must point to the same allocation"
 
 VERIFICATION:- FAILED
 
