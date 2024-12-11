@@ -43,7 +43,7 @@ fn test::main()
 
     @2 := core::option::Option::Some { 0: const (1 : i32) }
     @3 := core::option::Option::Some { 0: const (2 : i32) }
-    e@1 := @Fun1(move (@2), move (@3))
+    e@1 := @Fun0(move (@2), move (@3))
     drop @3
     drop @2
     drop e@1

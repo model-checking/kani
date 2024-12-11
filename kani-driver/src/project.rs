@@ -76,7 +76,7 @@ impl Project {
         trace!(?harness.goto_file, ?expected_path, ?typ, "get_harness_artifact");
         self.artifacts.iter().find(|artifact| {
             artifact.has_type(typ)
-                && expected_path.as_ref().map_or(true, |goto_file| *goto_file == artifact.path)
+                && expected_path.as_ref().is_none_or(|goto_file| *goto_file == artifact.path)
         })
     }
 
