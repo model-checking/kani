@@ -434,11 +434,6 @@ impl MutableBody {
     ) {
         self.blocks.get_mut(source_instruction.bb()).unwrap().terminator = new_term;
     }
-
-    /// Remove the given statement.
-    pub fn remove_stmt(&mut self, bb: BasicBlockIdx, stmt: usize) {
-        self.blocks[bb].statements.remove(stmt);
-    }
 }
 
 // TODO: Remove this enum, since we now only support kani's assert.

@@ -1,4 +1,0 @@
-Failed Checks: Offset result is out of bounds of initial allocation
-Verification failed for - check_ptr_oob
-
-Complete - 1 successfully verified harnesses, 1 failures, 2 total.

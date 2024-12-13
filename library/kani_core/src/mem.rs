@@ -149,14 +149,7 @@ macro_rules! kani_mem {
         )]
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
         pub fn same_allocation<T: ?Sized>(ptr1: *const T, ptr2: *const T) -> bool {
-            same_allocation_internal(ptr1, ptr2)
-        }
-
-        #[allow(clippy::not_unsafe_ptr_arg_deref)]
-        pub(super) fn same_allocation_internal<T: ?Sized>(ptr1: *const T, ptr2: *const T) -> bool {
-            let addr1 = ptr1 as *const ();
-            let addr2 = ptr2 as *const ();
-            cbmc::same_allocation(addr1, addr2)
+            cbmc::same_allocation(ptr1, ptr2)
         }
 
         /// Compute the size of the val pointed to if it is safe to do so.
@@ -251,7 +244,7 @@ macro_rules! kani_mem {
         ///
         /// # Safety
         ///
-        /// - Users have to ensure that the pointed to memory is allocated.
+        /// - Users have to ensure that the pointer is aligned the pointed memory is allocated.
         #[kanitool::fn_marker = "ValidValueIntrinsic"]
         #[inline(never)]
         unsafe fn has_valid_value<T: ?Sized>(_ptr: *const T) -> bool {
@@ -277,10 +270,11 @@ macro_rules! kani_mem {
         pub(super) mod cbmc {
             use super::*;
             /// CBMC specific implementation of [super::same_allocation].
-            pub fn same_allocation(addr1: *const (), addr2: *const ()) -> bool {
+            pub fn same_allocation<T: ?Sized>(ptr1: *const T, ptr2: *const T) -> bool {
+                let addr1 = ptr1 as *const ();
+                let addr2 = ptr2 as *const ();
                 let obj1 = crate::kani::mem::pointer_object(addr1);
                 (obj1 == crate::kani::mem::pointer_object(addr2)) && {
-                    // TODO(3571): This should be a unsupported check
                     crate::kani::assert(
                         unsafe { is_allocated(addr1, 0) || is_allocated(addr2, 0) },
                         "Kani does not support reasoning about pointer to unallocated memory",

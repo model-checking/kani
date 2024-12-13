@@ -1015,7 +1015,7 @@ impl GotocCtx<'_> {
     ///
     /// This function handles code generation for the `arith_offset` intrinsic.
     ///     <https://doc.rust-lang.org/std/intrinsics/fn.arith_offset.html>
-    /// According to the documentation, the operation is always safe.
+    /// According to the documenation, the operation is always safe.
     fn codegen_arith_offset(&mut self, mut fargs: Vec<Expr>, p: &Place, loc: Location) -> Stmt {
         let src_ptr = fargs.remove(0);
         let offset = fargs.remove(0);
