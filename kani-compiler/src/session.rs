@@ -5,10 +5,9 @@
 
 use crate::args::Arguments;
 use rustc_data_structures::sync::Lrc;
-use rustc_errors::emitter::Emitter;
 use rustc_errors::{
-    ColorConfig, DiagInner, emitter::HumanReadableErrorType, fallback_fluent_bundle,
-    json::JsonEmitter,
+    ColorConfig, DiagInner, emitter::Emitter, emitter::HumanReadableErrorType,
+    fallback_fluent_bundle, json::JsonEmitter, registry::Registry as ErrorRegistry,
 };
 use rustc_session::EarlyDiagCtxt;
 use rustc_session::config::ErrorOutputType;
@@ -64,8 +63,9 @@ static JSON_PANIC_HOOK: LazyLock<Box<dyn Fn(&panic::PanicHookInfo<'_>) + Sync + 
                 HumanReadableErrorType::Default,
                 ColorConfig::Never,
             );
+            let registry = ErrorRegistry::new(&[]);
             let diagnostic = DiagInner::new(rustc_errors::Level::Bug, msg);
-            emitter.emit_diagnostic(diagnostic);
+            emitter.emit_diagnostic(diagnostic, &registry);
             (*JSON_PANIC_HOOK)(info);
         }));
         hook

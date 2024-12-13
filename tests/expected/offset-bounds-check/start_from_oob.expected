@@ -1,4 +1,4 @@
 Failed Checks: Offset result and original pointer must point to the same allocation
-Verification failed for - test_offset_overflow
+Verification failed for - check_add_to_oob
 
 Complete - 0 successfully verified harnesses, 1 failures, 1 total.

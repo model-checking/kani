@@ -1,0 +1,11 @@
+SUMMARY:\
+ ** 6 of
+Failed Checks: "Expected 0 and 1 to be the only safe values for offset"
+Failed Checks: Offset in bytes overflows isize
+Failed Checks: Offset result and original pointer must point to the same allocation
+Failed Checks: Offset value overflows isize
+Failed Checks: "This should fail for delta `1`"
+Failed Checks: "This should fail for delta `0`"
+
+Verification failed for - check_intrinsic_args
+Complete - 0 successfully verified harnesses, 1 failures, 1 total.
