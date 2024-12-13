@@ -1,0 +1,3 @@
+Failed Checks: Expected the distance between the pointers, in bytes, to be a
+                        multiple of the size of `T`
+VERIFICATION:- FAILED

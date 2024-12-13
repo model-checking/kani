@@ -9,8 +9,6 @@
 //! Kani will detect the usage of MaybeUninit and fail the verification.
 extern crate kani;
 
-use kani::PointerGenerator;
-
 #[kani::proof]
 fn check_inbounds() {
     let mut generator = kani::pointer_generator::<char, 3>();
