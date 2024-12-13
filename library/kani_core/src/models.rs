@@ -47,16 +47,16 @@ macro_rules! generate_models {
 
             #[kanitool::fn_marker = "PtrOffsetFromModel"]
             pub unsafe fn ptr_offset_from<T>(ptr1: *const T, ptr2: *const T) -> isize {
+                kani::safety_check(
+                    core::mem::size_of::<T>() > 0,
+                    "Cannot compute offset of a ZST",
+                );
                 if ptr1 == ptr2 {
                     0
                 } else {
                     kani::safety_check(
                         kani::mem::same_allocation_internal(ptr1, ptr2),
                         "Offset result and original pointer should point to the same allocation",
-                    );
-                    kani::safety_check(
-                        core::mem::size_of::<T>() > 0,
-                        "Cannot compute offset of a ZST",
                     );
                     // The offset must fit in isize since this represents the same allocation.
                     let offset_bytes = ptr1.addr().wrapping_sub(ptr2.addr()) as isize;
