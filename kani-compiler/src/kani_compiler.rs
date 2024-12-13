@@ -30,19 +30,14 @@ use rustc_interface::Config;
 use rustc_middle::ty::TyCtxt;
 use rustc_session::config::ErrorOutputType;
 use rustc_smir::rustc_internal;
-use rustc_span::ErrorGuaranteed;
-use std::process::ExitCode;
 use std::sync::{Arc, Mutex};
 use tracing::debug;
 
 /// Run the Kani flavour of the compiler.
 /// This may require multiple runs of the rustc driver ([RunCompiler::run]).
-pub fn run(args: Vec<String>) -> ExitCode {
+pub fn run(args: Vec<String>) {
     let mut kani_compiler = KaniCompiler::new();
-    match kani_compiler.run(args) {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(_) => ExitCode::FAILURE,
-    }
+    kani_compiler.run(args);
 }
 
 /// Configure the LLBC backend (Aeneas's IR).
@@ -99,13 +94,12 @@ impl KaniCompiler {
     ///
     /// Since harnesses may have different attributes that affect compilation, Kani compiler can
     /// actually invoke the rust compiler multiple times.
-    pub fn run(&mut self, args: Vec<String>) -> Result<(), ErrorGuaranteed> {
+    pub fn run(&mut self, args: Vec<String>) {
         debug!(?args, "run_compilation_session");
         let queries = self.queries.clone();
         let mut compiler = RunCompiler::new(&args, self);
         compiler.set_make_codegen_backend(Some(Box::new(move |_cfg| backend(queries))));
-        compiler.run()?;
-        Ok(())
+        compiler.run();
     }
 }
 

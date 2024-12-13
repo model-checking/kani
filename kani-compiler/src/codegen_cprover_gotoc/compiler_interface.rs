@@ -30,7 +30,7 @@ use rustc_codegen_ssa::back::link::link_binary;
 use rustc_codegen_ssa::traits::CodegenBackend;
 use rustc_codegen_ssa::{CodegenResults, CrateInfo};
 use rustc_data_structures::fx::{FxHashMap, FxIndexMap};
-use rustc_errors::{DEFAULT_LOCALE_RESOURCE, ErrorGuaranteed};
+use rustc_errors::DEFAULT_LOCALE_RESOURCE;
 use rustc_hir::def_id::{DefId as InternalDefId, LOCAL_CRATE};
 use rustc_metadata::EncodedMetadata;
 use rustc_middle::dep_graph::{WorkProduct, WorkProductId};
@@ -414,17 +414,12 @@ impl CodegenBackend for GotocCodegenBackend {
     /// For other crate types, we stub the file requested by writing the
     /// path of the `kani-metadata.json` file so `kani-driver` can safely find the latest metadata.
     /// See <https://github.com/model-checking/kani/issues/2234> for more details.
-    fn link(
-        &self,
-        sess: &Session,
-        codegen_results: CodegenResults,
-        outputs: &OutputFilenames,
-    ) -> Result<(), ErrorGuaranteed> {
+    fn link(&self, sess: &Session, codegen_results: CodegenResults, outputs: &OutputFilenames) {
         let requested_crate_types = &codegen_results.crate_info.crate_types.clone();
         let local_crate_name = codegen_results.crate_info.local_crate_name;
         // Create the rlib if one was requested.
         if requested_crate_types.iter().any(|crate_type| *crate_type == CrateType::Rlib) {
-            link_binary(sess, &ArArchiveBuilderBuilder, codegen_results, outputs)?;
+            link_binary(sess, &ArArchiveBuilderBuilder, codegen_results, outputs);
         }
 
         // But override all the other outputs.
@@ -445,7 +440,6 @@ impl CodegenBackend for GotocCodegenBackend {
                 serde_json::to_writer(out_file, &content_stub).unwrap();
             }
         }
-        Ok(())
     }
 }
 
