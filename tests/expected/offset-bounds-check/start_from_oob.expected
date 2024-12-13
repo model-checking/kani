@@ -1,4 +1,4 @@
-Failed Checks: Offset result and original pointer should point to the same allocation
+Failed Checks: Offset result is out of bounds of initial allocation
 Verification failed for - check_add_to_oob
 
 Complete - 0 successfully verified harnesses, 1 failures, 1 total.

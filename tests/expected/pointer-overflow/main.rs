@@ -1,6 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
+// kani-flags: --enable-unstable --extra-pointer-checks
 // Checks that overflows for pointer arithmetic are reported
 
 #[kani::proof]

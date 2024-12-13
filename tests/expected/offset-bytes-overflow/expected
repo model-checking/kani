@@ -1,4 +1,2 @@
-Failed Checks: Offset in bytes overflow isize
-Verification failed for - check_wrap_offset
-
-Complete - 0 successfully verified harnesses, 1 failures, 1 total.
+FAILURE\
+offset: attempt to compute number in bytes which would overflow
