@@ -1,6 +1,0 @@
-Failed Checks: assertion failed: 0 < pointee_size && pointee_size <= isize::MAX as usize
-Failed Checks: Offset result and original pointer should point to the same allocation
-
-Verification failed for - check_offset_from_diff_alloc
-Verification failed for - check_offset_from_oob_ptr
-Complete - 2 successfully verified harnesses, 2 failures, 4 total.
