@@ -283,6 +283,16 @@ impl GotocCtx<'_> {
                             .member("direct_fields", &self.symbol_table)
                             .member(field_name, &self.symbol_table))
                     }
+                    TyKind::RigidTy(RigidTy::CoroutineClosure(def, args)) => {
+                        let typ = Ty::new_coroutine_closure(def, args);
+                        let goto_typ = self.codegen_ty_stable(typ);
+                        Err(UnimplementedData::new(
+                            "Coroutine closures",
+                            "https://github.com/model-checking/kani/issues/3783",
+                            goto_typ,
+                            *parent_expr.location(),
+                        ))
+                    }
                     TyKind::RigidTy(RigidTy::Str)
                     | TyKind::RigidTy(RigidTy::Array(_, _))
                     | TyKind::RigidTy(RigidTy::Slice(_))
