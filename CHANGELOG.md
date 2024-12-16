@@ -49,12 +49,6 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 * Automatic upgrade of CBMC from 6.3.1 to 6.4.1
 * Rust toolchain upgraded to nightly-2024-12-13 by @zhassan-aws @carolynzech @qinheping @celinval @tautschnig
 
-### New Contributors
-* @c410-f3r made their first contribution in https://github.com/model-checking/kani/pull/3666
-* @workingjubilee made their first contribution in https://github.com/model-checking/kani/pull/3675
-* @Alexander-Aghili made their first contribution in https://github.com/model-checking/kani/pull/3360
-* @AlgebraicWolf made their first contribution in https://github.com/model-checking/kani/pull/3692
-* @thanhnguyen-aws made their first contribution in https://github.com/model-checking/kani/pull/3721
 
 **Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.56.0...kani-0.57.0
 
