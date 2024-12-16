@@ -56,6 +56,12 @@ impl RustcInternalMir for AggregateKind {
                     internal(tcx, generic_args),
                 )
             }
+            AggregateKind::CoroutineClosure(coroutine_def, generic_args) => {
+                rustc_middle::mir::AggregateKind::CoroutineClosure(
+                    internal(tcx, coroutine_def.0),
+                    internal(tcx, generic_args),
+                )
+            }
             AggregateKind::RawPtr(ty, mutability) => rustc_middle::mir::AggregateKind::RawPtr(
                 internal(tcx, ty),
                 internal(tcx, mutability),

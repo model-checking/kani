@@ -393,6 +393,7 @@ fn data_bytes_for_ty(
                 | RigidTy::FnPtr(_)
                 | RigidTy::Closure(_, _)
                 | RigidTy::Coroutine(_, _, _)
+                | RigidTy::CoroutineClosure(_, _)
                 | RigidTy::CoroutineWitness(_, _)
                 | RigidTy::Foreign(_)
                 | RigidTy::Dynamic(_, _, _) => Err(LayoutComputationError::UnsupportedType(ty)),
