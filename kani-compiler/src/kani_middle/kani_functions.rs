@@ -83,6 +83,10 @@ pub enum KaniModel {
     IsSlicePtrInitialized,
     #[strum(serialize = "OffsetModel")]
     Offset,
+    #[strum(serialize = "PtrOffsetFromModel")]
+    PtrOffsetFrom,
+    #[strum(serialize = "PtrSubPtrModel")]
+    PtrSubPtr,
     #[strum(serialize = "RunContractModel")]
     RunContract,
     #[strum(serialize = "RunLoopContractModel")]
