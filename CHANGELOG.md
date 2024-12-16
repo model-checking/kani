@@ -34,7 +34,6 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 * Apply loop contracts only if there exists some usage by @qinheping in https://github.com/model-checking/kani/pull/3694
 * Update verify-std-check workflow to enable loop contracts by @qinheping in https://github.com/model-checking/kani/pull/3705
 * Add support for f16 and f128 in float_to_int_unchecked intrinsic by @zhassan-aws in https://github.com/model-checking/kani/pull/3701
-* Revert "Ignore derivative in Cargo deny" by @qinheping in https://github.com/model-checking/kani/pull/3712
 * Fix codegen for rvalue aggregate raw pointer to an adt with slice tail by @carolynzech in https://github.com/model-checking/kani/pull/3644
 * Improve Kani handling of function markers by @celinval in https://github.com/model-checking/kani/pull/3718
 * Enable contracts for const generic functions by @qinheping in https://github.com/model-checking/kani/pull/3726
