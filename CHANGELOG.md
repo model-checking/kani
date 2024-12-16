@@ -42,7 +42,6 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 * add support for enum, struct, tuple in llbc backend by @thanhnguyen-aws in https://github.com/model-checking/kani/pull/3721
 * Fix issues with how we compute DST size by @celinval in https://github.com/model-checking/kani/pull/3687
 * Fix size and alignment computation for intrinsics by @celinval in https://github.com/model-checking/kani/pull/3734
-* Cleanup a few internal compiler deps by @celinval in https://github.com/model-checking/kani/pull/3739
 * Add a Kani function that checks if the range of a float is valid for conversion to int by @zhassan-aws in https://github.com/model-checking/kani/pull/3742
 * Setup/CI: cleanup Ubuntu 18.04 and cbmc-viewer left-overs and enable 24.04 by @tautschnig in https://github.com/model-checking/kani/pull/3758
 * Add out of bounds check for `offset` intrinsics by @celinval in https://github.com/model-checking/kani/pull/3755
