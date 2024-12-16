@@ -27,8 +27,6 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 * Fix loop contracts transformation when loops in branching by @qinheping in https://github.com/model-checking/kani/pull/3640
 * Move any_slice_from_array to kani_core by @qinheping in https://github.com/model-checking/kani/pull/3646
 * Implement `Arbitrary` for `Range*` by @c410-f3r in https://github.com/model-checking/kani/pull/3666
-* codegen: Ask the layout if it is uninhabited, not its impl detail by @workingjubilee in https://github.com/model-checking/kani/pull/3675
-* Update dependencies following Audit workflow failure. by @remi-delmas-3000 in https://github.com/model-checking/kani/pull/3680
 * Harness output individual files by @Alexander-Aghili in https://github.com/model-checking/kani/pull/3360
 * Add support for float_to_int_unchecked by @zhassan-aws in https://github.com/model-checking/kani/pull/3660
 * Change `same_allocation` to accept wide pointers by @celinval in https://github.com/model-checking/kani/pull/3684
