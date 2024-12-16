@@ -48,7 +48,6 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 * Add a Kani function that checks if the range of a float is valid for conversion to int by @zhassan-aws in https://github.com/model-checking/kani/pull/3742
 * Setup/CI: cleanup Ubuntu 18.04 and cbmc-viewer left-overs and enable 24.04 by @tautschnig in https://github.com/model-checking/kani/pull/3758
 * Add out of bounds check for `offset` intrinsics by @celinval in https://github.com/model-checking/kani/pull/3755
-
 * Automatic upgrade of CBMC from 6.3.1 to 6.4.1
 * Rust toolchain upgraded to nightly-2024-12-13 by @zhassan-aws @carolynzech @qinheping @celinval @tautschnig
 
