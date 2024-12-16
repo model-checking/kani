@@ -9,7 +9,8 @@ use crate::util;
 use anyhow::{Context, Result, bail};
 use cargo_metadata::diagnostic::{Diagnostic, DiagnosticLevel};
 use cargo_metadata::{
-    Artifact as RustcArtifact, Message, Metadata, MetadataCommand, Package, PackageId, Target,
+    Artifact as RustcArtifact, CrateType, Message, Metadata, MetadataCommand, Package, PackageId,
+    Target, TargetKind,
 };
 use kani_metadata::{ArtifactType, CompilerArtifactStub};
 use std::collections::HashMap;
@@ -21,16 +22,6 @@ use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tracing::{debug, trace};
-
-//---- Crate types identifier used by cargo.
-const CRATE_TYPE_BIN: &str = "bin";
-const CRATE_TYPE_CDYLIB: &str = "cdylib";
-const CRATE_TYPE_DYLIB: &str = "dylib";
-const CRATE_TYPE_LIB: &str = "lib";
-const CRATE_TYPE_PROC_MACRO: &str = "proc-macro";
-const CRATE_TYPE_RLIB: &str = "rlib";
-const CRATE_TYPE_STATICLIB: &str = "staticlib";
-const CRATE_TYPE_TEST: &str = "test";
 
 /// The outputs of kani-compiler being invoked via cargo on a project.
 pub struct CargoOutputs {
@@ -123,8 +114,8 @@ crate-type = ["lib"]
             .run_build(cmd)?
             .into_iter()
             .filter_map(|artifact| {
-                if artifact.target.crate_types.contains(&CRATE_TYPE_LIB.to_string())
-                    || artifact.target.crate_types.contains(&CRATE_TYPE_RLIB.to_string())
+                if artifact.target.crate_types.contains(&CrateType::Lib)
+                    || artifact.target.crate_types.contains(&CrateType::RLib)
                 {
                     map_kani_artifact(artifact)
                 } else {
@@ -576,26 +567,29 @@ fn package_targets(args: &VerificationArgs, package: &Package) -> Vec<Verificati
                 "package_targets");
         let (mut supported_lib, mut unsupported_lib) = (false, false);
         for kind in &target.kind {
-            match kind.as_str() {
-                CRATE_TYPE_BIN => {
+            match kind {
+                TargetKind::Bin => {
                     if args.target.include_bin(&target.name) {
                         // Binary targets.
                         verification_targets.push(VerificationTarget::Bin(target.clone()));
                     }
                 }
-                CRATE_TYPE_LIB | CRATE_TYPE_RLIB | CRATE_TYPE_CDYLIB | CRATE_TYPE_DYLIB
-                | CRATE_TYPE_STATICLIB => {
+                TargetKind::Lib
+                | TargetKind::RLib
+                | TargetKind::CDyLib
+                | TargetKind::DyLib
+                | TargetKind::StaticLib => {
                     if args.target.include_lib() {
                         supported_lib = true;
                     }
                 }
-                CRATE_TYPE_PROC_MACRO => {
+                TargetKind::ProcMacro => {
                     if args.target.include_lib() {
                         unsupported_lib = true;
                         ignored_unsupported.push(target.name.as_str());
                     }
                 }
-                CRATE_TYPE_TEST => {
+                TargetKind::Test => {
                     // Test target.
                     if args.target.include_tests() {
                         if args.tests {

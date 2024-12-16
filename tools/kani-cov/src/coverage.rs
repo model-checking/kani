@@ -154,7 +154,7 @@ pub struct FunctionInfo {
 pub fn function_info_from_file(filepath: &PathBuf) -> Vec<FunctionInfo> {
     let source_code = fs::read_to_string(filepath).expect("could not read source file");
     let mut parser = Parser::new();
-    parser.set_language(&tree_sitter_rust::language()).expect("Error loading Rust grammar");
+    parser.set_language(&tree_sitter_rust::LANGUAGE.into()).expect("Error loading Rust grammar");
 
     let tree = parser.parse(&source_code, None).expect("Failed to parse file");
 
