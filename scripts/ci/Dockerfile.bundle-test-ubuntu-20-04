@@ -7,7 +7,7 @@ FROM ubuntu:20.04
 ENV DEBIAN_FRONTEND=noninteractive \
     DEBCONF_NONINTERACTIVE_SEEN=true
 RUN apt-get update && \
-    apt-get install -y curl && \
+    apt-get install -y curl build-essential && \
     curl -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
 
