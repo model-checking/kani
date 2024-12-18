@@ -103,14 +103,23 @@ impl<'pr> HarnessRunner<'_, 'pr> {
 }
 
 impl KaniSession {
-    fn process_output(&self, result: &VerificationResult, harness: &HarnessMetadata) {
+    fn process_output(
+        &self,
+        result: &VerificationResult,
+        harness: &HarnessMetadata,
+        thread_index: usize,
+    ) {
         if self.should_print_output() {
             if self.args.output_into_files {
-                self.write_output_to_file(result, harness);
+                self.write_output_to_file(result, harness, thread_index);
             }
 
             let output = result.render(&self.args.output_format, harness.attributes.should_panic);
-            println!("{}", output);
+            if rayon::current_num_threads() > 1 {
+                println!("Thread {thread_index}: {}", output);
+            } else {
+                println!("{}", output);
+            }
         }
     }
 
@@ -118,7 +127,12 @@ impl KaniSession {
         !self.args.common_args.quiet && self.args.output_format != OutputFormat::Old
     }
 
-    fn write_output_to_file(&self, result: &VerificationResult, harness: &HarnessMetadata) {
+    fn write_output_to_file(
+        &self,
+        result: &VerificationResult,
+        harness: &HarnessMetadata,
+        thread_index: usize,
+    ) {
         let target_dir = self.result_output_dir().unwrap();
         let file_name = target_dir.join(harness.pretty_name.clone());
         let path = Path::new(&file_name);
@@ -126,7 +140,11 @@ impl KaniSession {
 
         std::fs::create_dir_all(prefix).unwrap();
         let mut file = File::create(&file_name).unwrap();
-        let file_output = result.render(&OutputFormat::Regular, harness.attributes.should_panic);
+        let mut file_output =
+            result.render(&OutputFormat::Regular, harness.attributes.should_panic);
+        if rayon::current_num_threads() > 1 {
+            file_output = format!("Thread {thread_index}:\n{file_output}");
+        }
 
         if let Err(e) = writeln!(file, "{}", file_output) {
             eprintln!(
@@ -148,13 +166,18 @@ impl KaniSession {
         binary: &Path,
         harness: &HarnessMetadata,
     ) -> Result<VerificationResult> {
+        let thread_index = rayon::current_thread_index().unwrap_or_default();
         if !self.args.common_args.quiet {
-            println!("Checking harness {}...", harness.pretty_name);
+            if rayon::current_num_threads() > 1 {
+                println!("Thread {thread_index}: Checking harness {}...", harness.pretty_name);
+            } else {
+                println!("Checking harness {}...", harness.pretty_name);
+            }
         }
 
         let mut result = self.with_timer(|| self.run_cbmc(binary, harness), "run_cbmc")?;
 
-        self.process_output(&result, harness);
+        self.process_output(&result, harness, thread_index);
         self.gen_and_add_concrete_playback(harness, &mut result)?;
         Ok(result)
     }
