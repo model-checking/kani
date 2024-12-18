@@ -257,8 +257,11 @@ pub struct VerificationArgs {
     // consumes everything
     pub cbmc_args: Vec<OsString>,
 
-    /// Number of parallel jobs, defaults to 1
-    #[arg(short, long, hide = true, requires("enable_unstable"))]
+    /// Number of threads to spawn to verify harnesses in parallel.
+    /// Omit the flag entirely to run sequentially (i.e. one thread).
+    /// Pass -j to run with the thread pool's default number of threads.
+    /// Pass -j <N> to specify N threads.
+    #[arg(short, long, hide_short_help = true, requires("enable_unstable"))]
     pub jobs: Option<Option<usize>>,
 
     /// Enable extra pointer checks such as invalid pointers in relation operations and pointer
