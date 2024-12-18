@@ -116,9 +116,9 @@ impl KaniSession {
 
             let output = result.render(&self.args.output_format, harness.attributes.should_panic);
             if rayon::current_num_threads() > 1 {
-                println!("Thread {thread_index}: {}", output);
+                println!("Thread {thread_index}: {output}");
             } else {
-                println!("{}", output);
+                println!("{output}");
             }
         }
     }
