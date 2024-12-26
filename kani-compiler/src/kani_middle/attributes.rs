@@ -6,11 +6,9 @@ use std::collections::{BTreeMap, HashSet};
 
 use kani_metadata::{CbmcSolver, HarnessAttributes, HarnessKind, Stub};
 use quote::ToTokens;
-use rustc_ast::{
-    AttrArgs, AttrArgsEq, AttrKind, Attribute, ExprKind, LitKind, MetaItem, MetaItemKind, attr,
-};
+use rustc_ast::{LitKind, MetaItem, MetaItemKind, attr};
 use rustc_errors::ErrorGuaranteed;
-use rustc_hir::{def::DefKind, def_id::DefId};
+use rustc_hir::{AttrArgs, AttrKind, Attribute, def::DefKind, def_id::DefId};
 use rustc_middle::ty::{Instance, TyCtxt, TyKind};
 use rustc_session::Session;
 use rustc_smir::rustc_internal;
@@ -673,31 +671,12 @@ fn expect_key_string_value(
     attr: &Attribute,
 ) -> Result<rustc_span::Symbol, ErrorGuaranteed> {
     let span = attr.span;
-    let AttrArgs::Eq { eq_span: _, value } = &attr.get_normal_item().args else {
+    let AttrArgs::Eq { expr, .. } = &attr.get_normal_item().args else {
         return Err(sess
             .dcx()
             .span_err(span, "Expected attribute of the form #[attr = \"value\"]"));
     };
-    let maybe_str = match value {
-        AttrArgsEq::Ast(expr) => {
-            if let ExprKind::Lit(tok) = expr.kind {
-                match LitKind::from_token_lit(tok) {
-                    Ok(l) => l.str(),
-                    Err(err) => {
-                        return Err(sess.dcx().span_err(
-                            span,
-                            format!("Invalid string literal on right hand side of `=` {err:?}"),
-                        ));
-                    }
-                }
-            } else {
-                return Err(sess
-                    .dcx()
-                    .span_err(span, "Expected literal string as right hand side of `=`"));
-            }
-        }
-        AttrArgsEq::Hir(lit) => lit.kind.str(),
-    };
+    let maybe_str = expr.kind.str();
     if let Some(str) = maybe_str {
         Ok(str)
     } else {
@@ -841,7 +820,7 @@ fn parse_stubs(tcx: TyCtxt, harness: DefId, attributes: &[&Attribute]) -> Vec<St
     attributes
         .iter()
         .filter_map(|attr| {
-            let paths = parse_paths(attr).unwrap_or_else(|_| {
+            let paths = parse_paths(tcx, attr).unwrap_or_else(|_| {
                 tcx.dcx().span_err(
                     attr.span,
                     format!(
@@ -952,8 +931,8 @@ fn parse_integer(attr: &Attribute) -> Option<u128> {
 /// Extracts a vector with the path arguments of an attribute.
 ///
 /// Emits an error if it couldn't convert any of the arguments and return an empty vector.
-fn parse_paths(attr: &Attribute) -> Result<Vec<TypePath>, syn::Error> {
-    let syn_attr = syn_attr(attr);
+fn parse_paths(tcx: TyCtxt, attr: &Attribute) -> Result<Vec<TypePath>, syn::Error> {
+    let syn_attr = syn_attr(tcx, attr);
     let parser = Punctuated::<TypePath, syn::Token![,]>::parse_terminated;
     let paths = syn_attr.parse_args_with(parser)?;
     Ok(paths.into_iter().collect())
@@ -990,11 +969,11 @@ fn parse_str_value(attr: &Attribute) -> Option<String> {
 fn attr_kind(tcx: TyCtxt, attr: &Attribute) -> Option<KaniAttributeKind> {
     match &attr.kind {
         AttrKind::Normal(normal) => {
-            let segments = &normal.item.path.segments;
-            if (!segments.is_empty()) && segments[0].ident.as_str() == "kanitool" {
+            let segments = &normal.path.segments;
+            if (!segments.is_empty()) && segments[0].as_str() == "kanitool" {
                 let ident_str = segments[1..]
                     .iter()
-                    .map(|segment| segment.ident.as_str())
+                    .map(|segment| segment.as_str())
                     .intersperse("::")
                     .collect::<String>();
                 KaniAttributeKind::try_from(ident_str.as_str())
@@ -1014,8 +993,8 @@ fn attr_kind(tcx: TyCtxt, attr: &Attribute) -> Option<KaniAttributeKind> {
 /// Parse an attribute using `syn`.
 ///
 /// This provides a user-friendly interface to manipulate than the internal compiler AST.
-fn syn_attr(attr: &Attribute) -> syn::Attribute {
-    let attr_str = rustc_ast_pretty::pprust::attribute_to_string(attr);
+fn syn_attr(tcx: TyCtxt, attr: &Attribute) -> syn::Attribute {
+    let attr_str = rustc_hir_pretty::attribute_to_string(&tcx, attr);
     let parser = syn::Attribute::parse_outer;
     parser.parse_str(&attr_str).unwrap().pop().unwrap()
 }
