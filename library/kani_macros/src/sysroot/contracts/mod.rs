@@ -514,15 +514,13 @@ enum ContractConditionsData {
     },
 }
 
-/// Enumeration that stores the contract mode values.
-///
-/// Keep the discriminant values in sync with [kani::internal::mode].
+/// Enumeration that stores (some of) the contract mode values.
+/// We elide the Original and RecursiveCheck variants because we don't need them for any work in this module.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum ContractMode {
-    Original = 0,
-    RecursiveCheck = 1,
-    SimpleCheck = 2,
-    Replace = 3,
+    SimpleCheck,
+    Replace,
+    Assert,
 }
 
 impl<'a> ContractConditionsHandler<'a> {
