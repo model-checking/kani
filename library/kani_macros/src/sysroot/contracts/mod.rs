@@ -514,11 +514,15 @@ enum ContractConditionsData {
     },
 }
 
-/// Which function are we currently generating?
-#[derive(Copy, Clone, Eq, PartialEq)]
-enum ClosureType {
-    Check,
-    Replace,
+/// Enumeration that stores the contract mode values.
+///
+/// Keep the discriminant values in sync with [kani::internal::mode].
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+enum ContractMode {
+    Original = 0,
+    RecursiveCheck = 1,
+    SimpleCheck = 2,
+    Replace = 3,
 }
 
 impl<'a> ContractConditionsHandler<'a> {

@@ -4,7 +4,7 @@
 //! Functions that operate third party data structures with no logic that is
 //! specific to Kani and contracts.
 
-use crate::attr_impl::contracts::ClosureType;
+use crate::attr_impl::contracts::ContractMode;
 use proc_macro2::{Ident, Span};
 use std::borrow::Cow;
 use syn::spanned::Spanned;
@@ -174,7 +174,7 @@ pub fn chunks_by<'a, T, C: Default + Extend<T>>(
 }
 
 /// Splits `stmts` into (preconditions, rest).
-/// For example, ClosureType::Check assumes preconditions, so given this sequence of statements:
+/// For example, ContractMode::SimpleCheck assumes preconditions, so given this sequence of statements:
 /// ```ignore
 /// kani::assume(.. precondition_1);
 /// kani::assume(.. precondition_2);
@@ -183,7 +183,7 @@ pub fn chunks_by<'a, T, C: Default + Extend<T>>(
 /// ```
 /// This function would return the two kani::assume statements in the former slice
 /// and the remaining statements in the latter.
-/// The flow for ClosureType::Replace is the same, except preconditions are asserted rather than assumed.
+/// The flow for ContractMode::Replace is the same, except preconditions are asserted rather than assumed.
 ///
 /// The caller can use the returned tuple to insert remembers statements after `preconditions` and before `rest`.
 /// Inserting the remembers statements after `preconditions` ensures that they are bound by the preconditions.
@@ -197,12 +197,12 @@ pub fn chunks_by<'a, T, C: Default + Extend<T>>(
 ///
 /// Inserting the remembers statements before `rest` ensures that they are declared before the original function executes,
 /// so that they will store historical, pre-computation values as intended.
-pub fn split_for_remembers(stmts: &[Stmt], closure_type: ClosureType) -> (&[Stmt], &[Stmt]) {
+pub fn split_for_remembers(stmts: &[Stmt], closure_type: ContractMode) -> (&[Stmt], &[Stmt]) {
     let mut pos = 0;
 
     let check_str = match closure_type {
-        ClosureType::Check => "assume",
-        ClosureType::Replace => "assert",
+        ContractMode::SimpleCheck => "assume",
+        ContractMode::Replace => "assert",
     };
 
     for stmt in stmts {

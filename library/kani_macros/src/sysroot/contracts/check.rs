@@ -9,7 +9,7 @@ use std::mem;
 use syn::{Block, Expr, FnArg, Local, LocalInit, Pat, PatIdent, ReturnType, Stmt, parse_quote};
 
 use super::{
-    ClosureType, ContractConditionsData, ContractConditionsHandler, INTERNAL_RESULT_IDENT,
+    ContractMode, ContractConditionsData, ContractConditionsHandler, INTERNAL_RESULT_IDENT,
     helpers::*, shared::build_ensures,
 };
 
@@ -40,7 +40,7 @@ impl<'a> ContractConditionsHandler<'a> {
                 let return_expr = body_stmts.pop();
 
                 let (assumes, rest_of_body) =
-                    split_for_remembers(&body_stmts[..], ClosureType::Check);
+                    split_for_remembers(&body_stmts[..], ContractMode::SimpleCheck);
 
                 quote!({
                     #(#assumes)*
