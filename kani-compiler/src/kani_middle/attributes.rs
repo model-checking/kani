@@ -44,6 +44,9 @@ enum KaniAttributeKind {
     /// contract, e.g. the contract check is substituted for the target function
     /// before the the verification runs.
     ProofForContract,
+    /// Internal attribute of the contracts implementation that identifies the
+    /// code implementing the function with the contract clauses as assertions.
+    AssertedWith,
     /// Attribute on a function with a contract that identifies the code
     /// implementing the check for this contract.
     CheckedWith,
@@ -96,6 +99,7 @@ impl KaniAttributeKind {
             | KaniAttributeKind::RecursionCheck
             | KaniAttributeKind::CheckedWith
             | KaniAttributeKind::ModifiesWrapper
+            | KaniAttributeKind::AssertedWith
             | KaniAttributeKind::IsContractGenerated
             | KaniAttributeKind::DisableChecks => false,
         }
@@ -138,6 +142,8 @@ pub struct ContractAttributes {
     pub replaced_with: Symbol,
     /// The name of the inner check used to modify clauses.
     pub modifies_wrapper: Symbol,
+    /// The name of the contract assert closure
+    pub asserted_with: Symbol,
 }
 
 impl std::fmt::Debug for KaniAttributes<'_> {
@@ -266,17 +272,19 @@ impl<'tcx> KaniAttributes<'tcx> {
         let checked_with = self.attribute_value(KaniAttributeKind::CheckedWith);
         let replace_with = self.attribute_value(KaniAttributeKind::ReplacedWith);
         let modifies_wrapper = self.attribute_value(KaniAttributeKind::ModifiesWrapper);
+        let asserted_with = self.attribute_value(KaniAttributeKind::AssertedWith);
 
         let total = recursion_check
             .iter()
             .chain(&checked_with)
             .chain(&replace_with)
             .chain(&modifies_wrapper)
+            .chain(&asserted_with)
             .count();
-        if total != 0 && total != 4 {
+        if total != 0 && total != 5 {
             self.tcx.sess.dcx().err(format!(
                 "Failed to parse contract instrumentation tags in function `{}`.\
-                Expected `4` attributes, but was only able to process `{total}`",
+                Expected `5` attributes, but was only able to process `{total}`",
                 self.tcx.def_path_str(self.item)
             ));
         }
@@ -286,6 +294,7 @@ impl<'tcx> KaniAttributes<'tcx> {
             checked_with: checked_with?,
             replaced_with: replace_with?,
             modifies_wrapper: modifies_wrapper?,
+            asserted_with: asserted_with?,
         })
     }
 
@@ -379,6 +388,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                 | KaniAttributeKind::CheckedWith
                 | KaniAttributeKind::ModifiesWrapper
                 | KaniAttributeKind::RecursionCheck
+                | KaniAttributeKind::AssertedWith
                 | KaniAttributeKind::ReplacedWith => {
                     self.attribute_value(kind);
                 }
@@ -531,6 +541,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                 | KaniAttributeKind::ModifiesWrapper
                 | KaniAttributeKind::RecursionCheck
                 | KaniAttributeKind::RecursionTracker
+                | KaniAttributeKind::AssertedWith
                 | KaniAttributeKind::ReplacedWith => {
                     self.tcx.dcx().span_err(self.tcx.def_span(self.item), format!("Contracts are not supported on harnesses. (Found the kani-internal contract attribute `{}`)", kind.as_ref()));
                 }

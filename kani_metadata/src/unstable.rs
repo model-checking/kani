@@ -85,6 +85,8 @@ pub enum UnstableFeature {
     FunctionContracts,
     /// Enable loop contracts [RFC 12](https://model-checking.github.io/kani/rfc/rfcs/0012-loop-contracts.html)
     LoopContracts,
+    /// Enable function contracts to be interpreted as assertions. (Requires function-contracts option).
+    ContractsAsAssertions,
     /// Memory predicate APIs.
     MemPredicates,
     /// Automatically check that no invalid value is produced which is considered UB in Rust.
