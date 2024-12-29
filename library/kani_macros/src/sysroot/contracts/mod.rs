@@ -132,6 +132,7 @@
 //! #[kanitool::checked_with = "__kani_check_div"]
 //! #[kanitool::replaced_with = "__kani_replace_div"]
 //! #[kanitool::modifies_wrapper = "__kani_modifies_div"]
+//! #[kanitool::asserted_with = "__kani_assert_div"]
 //! fn div(dividend: u32, divisor: u32) -> u32 {
 //!     #[inline(never)]
 //!     #[kanitool::fn_marker = "kani_register_contract"]
@@ -226,6 +227,22 @@
 //!             ;
 //!             kani_register_contract(__kani_check_div)
 //!         }
+//!         kani::internal::ASSERT => {
+//!             #[kanitool::is_contract_generated(assert)]
+//!             #[allow(dead_code, unused_variables, unused_mut)]
+//!             let mut __kani_assert_div =
+//!                 || -> u32
+//!                     {
+//!                         kani::assert(divisor != 0, "divisor != 0");
+//!                         let result_kani_internal: u32 = { dividend / divisor };
+//!                         kani::assert(kani::internal::apply_closure(|result: &u32|
+//!                                     *result <= dividend, &result_kani_internal),
+//!                             "|result : &u32| *result <= dividend");
+//!                         result_kani_internal
+//!                     };
+//!             ;
+//!             kani_register_contract(__kani_assert_div)
+//!         }
 //!         _ => { dividend / divisor }
 //!     }
 //! }
@@ -265,6 +282,7 @@
 //! #[kanitool::checked_with = "__kani_check_modify"]
 //! #[kanitool::replaced_with = "__kani_replace_modify"]
 //! #[kanitool::modifies_wrapper = "__kani_modifies_modify"]
+//! #[kanitool::asserted_with = "__kani_assert_modify"]
 //! fn modify(ptr: &mut u32) {
 //!     #[inline(never)]
 //!     #[kanitool::fn_marker = "kani_register_contract"]
@@ -387,6 +405,27 @@
 //!             ;
 //!             kani_register_contract(__kani_check_modify)
 //!         }
+//!         kani::internal::ASSERT => {
+//!             #[kanitool::is_contract_generated(assert)]
+//!             #[allow(dead_code, unused_variables, unused_mut)]
+//!             let mut __kani_assert_modify =
+//!                 ||
+//!                     {
+//!                         kani::assert(*ptr < 100, "*ptr < 100");
+//!                         let remember_kani_internal_92cc419d8aca576c = *ptr + 1;
+//!                         let remember_kani_internal_92cc419d8aca576c = *ptr + 1;
+//!                         let result_kani_internal: () = { *ptr += 1; };
+//!                         kani::assert(kani::internal::apply_closure(|result|
+//!                                     (remember_kani_internal_92cc419d8aca576c) == *ptr,
+//!                                 &result_kani_internal), "|result| old(*ptr + 1) == *ptr");
+//!                         kani::assert(kani::internal::apply_closure(|result|
+//!                                     (remember_kani_internal_92cc419d8aca576c) == *ptr,
+//!                                 &result_kani_internal), "|result| old(*ptr + 1) == *ptr");
+//!                         result_kani_internal
+//!                     };
+//!             ;
+//!             kani_register_contract(__kani_assert_modify)
+//!         }
 //!         _ => { *ptr += 1; }
 //!     }
 //! }
@@ -397,6 +436,7 @@ use proc_macro2::{Ident, TokenStream as TokenStream2};
 use quote::quote;
 use syn::{Expr, ExprClosure, ItemFn, parse_macro_input, parse_quote};
 
+mod assert;
 mod bootstrap;
 mod check;
 #[macro_use]
@@ -483,6 +523,8 @@ struct ContractConditionsHandler<'a> {
     replace_name: String,
     /// The name of the recursion closure.
     recursion_name: String,
+    /// The name of the assertion closure.
+    assert_name: String,
     /// The name of the modifies closure.
     modify_name: String,
 }

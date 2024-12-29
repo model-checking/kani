@@ -20,15 +20,18 @@ impl<'a> ContractConditionsHandler<'a> {
         let modifies_name = &self.modify_name;
         let recursion_name = &self.recursion_name;
         let check_name = &self.check_name;
+        let assert_name = &self.assert_name;
 
         let replace_closure = self.replace_closure();
         let check_closure = self.check_closure();
         let recursion_closure = self.new_recursion_closure(&replace_closure, &check_closure);
+        let assert_closure = self.assert_closure();
 
         let span = Span::call_site();
         let replace_ident = Ident::new(&self.replace_name, span);
         let check_ident = Ident::new(&self.check_name, span);
         let recursion_ident = Ident::new(&self.recursion_name, span);
+        let assert_ident = Ident::new(&self.assert_name, span);
 
         // The order of `attrs` and `kanitool::{checked_with,
         // is_contract_generated}` is important here, because macros are
@@ -41,6 +44,7 @@ impl<'a> ContractConditionsHandler<'a> {
             #[kanitool::recursion_check = #recursion_name]
             #[kanitool::checked_with = #check_name]
             #[kanitool::replaced_with = #replace_name]
+            #[kanitool::asserted_with = #assert_name]
             #[kanitool::modifies_wrapper = #modifies_name]
             #vis #sig {
                 // Dummy function used to force the compiler to capture the environment.
@@ -72,6 +76,10 @@ impl<'a> ContractConditionsHandler<'a> {
                         #check_closure;
                         kani_register_contract(#check_ident)
                     }
+                    kani::internal::ASSERT => {
+                        #assert_closure;
+                        kani_register_contract(#assert_ident)
+                    }
                     _ => #block
                 }
             }
@@ -93,6 +101,9 @@ impl<'a> ContractConditionsHandler<'a> {
 
         let check_closure = expect_closure_in_match(&mut block.stmts, "check");
         self.expand_check(check_closure);
+
+        let assert_closure = expect_closure_in_match(&mut block.stmts, "assert");
+        self.expand_assert(assert_closure);
 
         self.output.extend(quote!(#annotated_fn));
     }

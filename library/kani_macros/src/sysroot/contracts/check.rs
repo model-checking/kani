@@ -9,8 +9,9 @@ use std::mem;
 use syn::{Block, Expr, FnArg, Local, LocalInit, Pat, PatIdent, ReturnType, Stmt, parse_quote};
 
 use super::{
-    ContractMode, ContractConditionsData, ContractConditionsHandler, INTERNAL_RESULT_IDENT,
-    helpers::*, shared::{build_ensures, split_for_remembers}
+    ContractConditionsData, ContractConditionsHandler, ContractMode, INTERNAL_RESULT_IDENT,
+    helpers::*,
+    shared::{build_ensures, split_for_remembers},
 };
 
 const WRAPPER_ARG: &str = "_wrapper_arg";

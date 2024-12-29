@@ -7,10 +7,7 @@
 use proc_macro2::{Ident, Span};
 use std::borrow::Cow;
 use syn::spanned::Spanned;
-use syn::{
-    Attribute, Expr, ExprBlock, Local, LocalInit, PatIdent, Stmt,
-    parse_quote,
-};
+use syn::{Attribute, Expr, ExprBlock, Local, LocalInit, PatIdent, Stmt, parse_quote};
 
 /// If an explicit return type was provided it is returned, otherwise `()`.
 pub fn return_type_to_type(return_type: &syn::ReturnType) -> Cow<syn::Type> {

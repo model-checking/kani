@@ -9,7 +9,7 @@ use std::mem;
 use syn::{Block, Stmt};
 
 use super::{
-    ContractMode, ContractConditionsData, ContractConditionsHandler, INTERNAL_RESULT_IDENT,
+    ContractConditionsData, ContractConditionsHandler, ContractMode, INTERNAL_RESULT_IDENT,
     helpers::*,
     shared::{build_ensures, split_for_remembers, try_as_result_assign},
 };
