@@ -44,8 +44,8 @@ enum KaniAttributeKind {
     /// contract, e.g. the contract check is substituted for the target function
     /// before the the verification runs.
     ProofForContract,
-    /// Internal attribute of the contracts implementation that identifies the
-    /// code implementing the function with the contract clauses as assertions.
+    /// Internal attribute of the contracts implementation. Identifies the
+    /// code implementing the function with its contract clauses asserted.
     AssertedWith,
     /// Attribute on a function with a contract that identifies the code
     /// implementing the check for this contract.
