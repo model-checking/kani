@@ -446,7 +446,9 @@ impl FunctionWithContractPass {
     }
 
     /// Return which contract mode to use for this function if any.
-    /// TODO document precedence
+    /// Note that the Check and Replace modes take precedence over the Assert mode.
+    /// This precedence ensures that a given `target` of a proof_for_contract(target) or stub_verified(target)
+    /// use their Check or Replace closures, respectively, rather than the Assert closure.
     fn contract_mode(&self, tcx: TyCtxt, fn_def: FnDef) -> Option<ContractMode> {
         let kani_attributes = KaniAttributes::for_def_id(tcx, fn_def.def_id());
         kani_attributes.has_contract().then(|| {
