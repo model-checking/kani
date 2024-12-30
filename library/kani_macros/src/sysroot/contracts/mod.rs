@@ -128,11 +128,11 @@
 //!  }
 //!  
 //!  #[kani::requires(x > 0)]
-//!  fn bar(x: i32) {...}
+//!  fn bar(x: i32) { }
 //! ```
 //! If we call foo(0), we would satisfy the check closure, since we satisfy foo's precondition.
-//! However, we would violate bar()'s precondition that x > 0.
-//! By using bar's assert closure instead of its original body, we can assert that callers of bar() respect its contract
+//! However, we would violate bar's precondition that x > 0.
+//! By using bar's assert closure instead of its original body, we can assert that callers of bar respect its contract
 //! and catch this issue.
 //!
 //! We register this closure as `#[kanitool::asserted_with = "__kani_assert_..."]`
