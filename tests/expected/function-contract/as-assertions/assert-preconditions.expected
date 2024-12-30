@@ -1,0 +1,21 @@
+assertion\
+	 - Status: SUCCESS\
+	 - Description: "*ptr < 100"\
+
+assertion\
+	 - Status: FAILURE\
+	 - Description: "*ptr == 1"
+
+assertion\
+	 - Status: FAILURE\
+	 - Description: "*ptr < 100"
+
+assertion\
+	 - Status: FAILURE\
+	 - Description: "*ptr == 1"
+
+Summary:
+Verification failed for - should_fail::prove_add_three_contract
+Verification failed for - should_fail::prove_add_one
+Verification failed for - should_fail::prove_add_three
+Complete - 1 successfully verified harnesses, 3 failures, 4 total.

@@ -1,0 +1,13 @@
+assertion\
+	 - Status: UNREACHABLE\
+	 - Description: "*add_one_ptr == 1"
+
+assertion\
+	 - Status: UNREACHABLE\
+	 - Description: "|result| old(*add_one_ptr + 1) == *add_one_ptr"
+
+assertion\
+	 - Status: UNREACHABLE\
+	 - Description: "|result| old(*add_one_ptr + 1) == *add_one_ptr"
+
+Complete - 2 successfully verified harnesses, 0 failures, 2 total.
