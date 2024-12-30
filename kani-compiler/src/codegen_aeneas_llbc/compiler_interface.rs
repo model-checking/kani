@@ -397,7 +397,7 @@ where
 fn create_charon_transformation_context(tcx: TyCtxt) -> TransformCtx {
     let options = TransformOptions {
         no_code_duplication: false,
-        hide_marker_traits: false,
+        hide_marker_traits: true,
         no_merge_goto_chains: false,
         item_opacities: Vec::new(),
     };
