@@ -38,7 +38,6 @@ use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::{Instance, MonoItem};
 use stable_mir::{CrateDef, DefId};
 use std::any::Any;
-use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -394,16 +393,6 @@ fn create_charon_transformation_context(tcx: TyCtxt) -> TransformCtx {
     };
     let crate_name = tcx.crate_name(LOCAL_CRATE).as_str().into();
     let translated = TranslatedCrate { crate_name, ..TranslatedCrate::default() };
-    let errors = ErrorCtx {
-        continue_on_failure: true,
-        error_on_warnings: false,
-        dcx: &(),
-        external_decls_with_errors: HashSet::new(),
-        ignored_failed_decls: HashSet::new(),
-        external_dep_sources: HashMap::new(),
-        def_id: None,
-        def_id_is_local: true,
-        error_count: 0,
-    };
+    let errors = ErrorCtx::new(true, false);
     TransformCtx { options, translated, errors }
 }
