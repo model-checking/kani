@@ -40,14 +40,21 @@ impl<'a> ContractConditionsHandler<'a> {
     }
 
     /// Initialize the list of statements for the assert closure body.
+    /// Construct a closure that wraps the body of the function, then invoke it and return the result.
     fn initial_assert_stmts(&self) -> Vec<syn::Stmt> {
-        let return_type = return_type_to_type(&self.annotated_fn.sig.output);
+        let body_wrapper_ident = Ident::new("body_wrapper", Span::call_site());
+        let output = &self.annotated_fn.sig.output;
+        let return_type = return_type_to_type(&output);
         let stmts = &self.annotated_fn.block.stmts;
         let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
-        parse_quote! {
-            let #result : #return_type = {#(#stmts)*};
+
+        parse_quote!(
+            let mut body_wrapper = || #output {
+                #(#stmts)*
+            };
+            let #result : #return_type = #body_wrapper_ident();
             #result
-        }
+        )
     }
 
     /// Create the body of an assert closure.
