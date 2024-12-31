@@ -17,8 +17,6 @@ fn add_two(add_two_ptr: &mut u32) {
     add_one(add_two_ptr)
 }
 
-#[kani::requires(*add_one_ptr < 102)]
-#[kani::modifies(add_one_ptr)]
 #[kani::ensures(|result| old(*add_one_ptr + 1) == *add_one_ptr)] // correct -- assertion should always succeed
 fn add_one(add_one_ptr: &mut u32) {
     *add_one_ptr += 1;
