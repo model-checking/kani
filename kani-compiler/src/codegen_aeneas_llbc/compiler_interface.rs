@@ -38,7 +38,6 @@ use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::{Instance, MonoItem};
 use stable_mir::{CrateDef, DefId};
 use std::any::Any;
-use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -320,23 +319,15 @@ impl CodegenBackend for LlbcCodegenBackend {
     /// For cases where no metadata file was requested, we stub the file requested by writing the
     /// path of the `kani-metadata.json` file so `kani-driver` can safely find the latest metadata.
     /// See <https://github.com/model-checking/kani/issues/2234> for more details.
-    fn link(
-        &self,
-        sess: &Session,
-        codegen_results: CodegenResults,
-        outputs: &OutputFilenames,
-    ) -> Result<(), ErrorGuaranteed> {
+    fn link(&self, sess: &Session, codegen_results: CodegenResults, outputs: &OutputFilenames) {
         let requested_crate_types = &codegen_results.crate_info.crate_types.clone();
         let local_crate_name = codegen_results.crate_info.local_crate_name;
-        let link_result = link_binary(sess, &ArArchiveBuilderBuilder, codegen_results, outputs);
+        link_binary(sess, &ArArchiveBuilderBuilder, codegen_results, outputs);
         for crate_type in requested_crate_types {
             let out_fname = out_filename(sess, *crate_type, outputs, local_crate_name);
             let out_path = out_fname.as_path();
             debug!(?crate_type, ?out_path, "link");
-            if *crate_type == CrateType::Rlib {
-                // Emit the `rlib` that contains just one file: `<crate>.rmeta`
-                link_result?
-            } else {
+            if *crate_type != CrateType::Rlib {
                 // Write the location of the kani metadata file in the requested compiler output file.
                 let base_filepath = outputs.path(OutputType::Object);
                 let base_filename = base_filepath.as_path();
@@ -347,7 +338,6 @@ impl CodegenBackend for LlbcCodegenBackend {
                 serde_json::to_writer(out_file, &content_stub).unwrap();
             }
         }
-        Ok(())
     }
 }
 
@@ -403,16 +393,6 @@ fn create_charon_transformation_context(tcx: TyCtxt) -> TransformCtx {
     };
     let crate_name = tcx.crate_name(LOCAL_CRATE).as_str().into();
     let translated = TranslatedCrate { crate_name, ..TranslatedCrate::default() };
-    let errors = ErrorCtx {
-        continue_on_failure: true,
-        error_on_warnings: false,
-        dcx: &(),
-        external_decls_with_errors: HashSet::new(),
-        ignored_failed_decls: HashSet::new(),
-        external_dep_sources: HashMap::new(),
-        def_id: None,
-        def_id_is_local: true,
-        error_count: 0,
-    };
+    let errors = ErrorCtx::new(true, false);
     TransformCtx { options, translated, errors }
 }

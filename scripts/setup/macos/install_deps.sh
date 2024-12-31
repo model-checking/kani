@@ -14,9 +14,6 @@ brew update
 brew install python@3 || true
 brew link --overwrite python@3
 
-# Install dependencies via `brew`
-brew install universal-ctags wget jq
-
 # Get the directory containing this script
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 

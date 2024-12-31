@@ -590,6 +590,9 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             ty::Closure(_, subst) => self.codegen_ty_closure(ty, subst),
             ty::Coroutine(..) => self.codegen_ty_coroutine(ty),
+            ty::CoroutineClosure(..) => unimplemented!(
+                "Kani does not yet support coroutine closures. Please post your example at https://github.com/model-checking/kani/issues/3783"
+            ),
             ty::Never => self.ensure_struct(NEVER_TYPE_EMPTY_STRUCT_NAME, "!", |_, _| vec![]),
             ty::Tuple(ts) => {
                 if ts.is_empty() {
@@ -619,11 +622,7 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::Bound(_, _) | ty::Param(_) => unreachable!("monomorphization bug"),
 
             // type checking remnants which shouldn't be reachable
-            ty::CoroutineWitness(_, _)
-            | ty::CoroutineClosure(_, _)
-            | ty::Infer(_)
-            | ty::Placeholder(_)
-            | ty::Error(_) => {
+            ty::CoroutineWitness(_, _) | ty::Infer(_) | ty::Placeholder(_) | ty::Error(_) => {
                 unreachable!("remnants of type checking")
             }
         }
@@ -879,7 +878,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// Generates a struct for a variant of the coroutine.
     ///
-    /// The field `discriminant_field` should be `Some(idx)` when generating the variant for the direct (top-[evel) fields of the coroutine.
+    /// The field `discriminant_field` should be `Some(idx)` when generating the variant for the direct (top-level) fields of the coroutine.
     /// Then the field with the index `idx` will be treated as the discriminant and will be given a special name to work with the rest of the code.
     /// The field `discriminant_field` should be `None` when generating an actual variant of the coroutine because those don't contain the discriminant as a field.
     fn codegen_coroutine_variant_struct(

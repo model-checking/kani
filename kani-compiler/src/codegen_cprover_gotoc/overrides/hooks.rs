@@ -134,15 +134,46 @@ impl GotocHook for Assert {
 
         let (msg, reach_stmt) = gcx.codegen_reachability_check(msg, span);
 
-        // Since `cond` might have side effects, assign it to a temporary
-        // variable so that it's evaluated once, then assert and assume it
-        // TODO: I don't think `cond` can have side effects, this is MIR, it's going to be temps
-        let (tmp, decl) = gcx.decl_temp_variable(cond.typ().clone(), Some(cond), caller_loc);
         Stmt::block(
             vec![
                 reach_stmt,
-                decl,
-                gcx.codegen_assert_assume(tmp, PropertyClass::Assertion, &msg, caller_loc),
+                gcx.codegen_assert_assume(cond, PropertyClass::Assertion, &msg, caller_loc),
+                Stmt::goto(bb_label(target), caller_loc),
+            ],
+            caller_loc,
+        )
+    }
+}
+
+struct UnsupportedCheck;
+impl GotocHook for UnsupportedCheck {
+    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+        unreachable!("{UNEXPECTED_CALL}")
+    }
+
+    fn handle(
+        &self,
+        gcx: &mut GotocCtx,
+        _instance: Instance,
+        mut fargs: Vec<Expr>,
+        _assign_to: &Place,
+        target: Option<BasicBlockIdx>,
+        span: Span,
+    ) -> Stmt {
+        assert_eq!(fargs.len(), 2);
+        let msg = fargs.pop().unwrap();
+        let cond = fargs.pop().unwrap().cast_to(Type::bool());
+        let msg = gcx.extract_const_message(&msg).unwrap();
+        let target = target.unwrap();
+        let caller_loc = gcx.codegen_caller_span_stable(span);
+        Stmt::block(
+            vec![
+                gcx.codegen_assert_assume(
+                    cond,
+                    PropertyClass::UnsupportedConstruct,
+                    &msg,
+                    caller_loc,
+                ),
                 Stmt::goto(bb_label(target), caller_loc),
             ],
             caller_loc,
@@ -166,8 +197,8 @@ impl GotocHook for SafetyCheck {
         span: Span,
     ) -> Stmt {
         assert_eq!(fargs.len(), 2);
-        let cond = fargs.remove(0).cast_to(Type::bool());
-        let msg = fargs.remove(0);
+        let msg = fargs.pop().unwrap();
+        let cond = fargs.pop().unwrap().cast_to(Type::bool());
         let msg = gcx.extract_const_message(&msg).unwrap();
         let target = target.unwrap();
         let caller_loc = gcx.codegen_caller_span_stable(span);
@@ -181,6 +212,7 @@ impl GotocHook for SafetyCheck {
     }
 }
 
+// TODO: Remove this and replace occurrences with `SanityCheck`.
 struct Check;
 impl GotocHook for Check {
     fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
@@ -709,6 +741,7 @@ pub fn fn_hooks() -> GotocHooks {
         (KaniHook::IsAllocated, Rc::new(IsAllocated)),
         (KaniHook::PointerObject, Rc::new(PointerObject)),
         (KaniHook::PointerOffset, Rc::new(PointerOffset)),
+        (KaniHook::UnsupportedCheck, Rc::new(UnsupportedCheck)),
         (KaniHook::UntrackedDeref, Rc::new(UntrackedDeref)),
         (KaniHook::InitContracts, Rc::new(InitContracts)),
         (KaniHook::FloatToIntInRange, Rc::new(FloatToIntInRange)),

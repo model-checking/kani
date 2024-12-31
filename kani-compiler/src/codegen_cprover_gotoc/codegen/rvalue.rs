@@ -356,7 +356,7 @@ impl GotocCtx<'_> {
 
     fn codegen_rvalue_binary_op(
         &mut self,
-        ty: Ty,
+        _ty: Ty,
         op: &BinOp,
         e1: &Operand,
         e2: &Operand,
@@ -405,42 +405,15 @@ impl GotocCtx<'_> {
             }
             // https://doc.rust-lang.org/std/primitive.pointer.html#method.offset
             BinOp::Offset => {
+                // We don't need to check for UB since we handled user calls of offset already
+                // via rustc_intrinsic transformation pass.
+                //
+                // This operation may still be used by other Kani instrumentation which should
+                // ensure safety.
+                // We should consider adding sanity checks if `debug_assertions` are enabled.
                 let ce1 = self.codegen_operand_stable(e1);
                 let ce2 = self.codegen_operand_stable(e2);
-
-                // Check that computing `offset` in bytes would not overflow
-                let (offset_bytes, bytes_overflow_check) = self.count_in_bytes(
-                    ce2.clone().cast_to(Type::ssize_t()),
-                    pointee_type_stable(ty).unwrap(),
-                    Type::ssize_t(),
-                    "offset",
-                    loc,
-                );
-
-                // Check that the computation would not overflow an `isize` which is UB:
-                // https://doc.rust-lang.org/std/primitive.pointer.html#method.offset
-                // These checks may allow a wrapping-around behavior in CBMC:
-                // https://github.com/model-checking/kani/issues/1150
-                // Note(std): We don't check that the starting or resulting pointer stay
-                // within bounds of the object they point to. Doing so causes spurious
-                // failures due to the usage of these intrinsics in the standard library.
-                // See <https://github.com/model-checking/kani/issues/1233> for more details.
-                // Note that this is one of the safety conditions for `offset`:
-                // <https://doc.rust-lang.org/std/primitive.pointer.html#safety-2>
-
-                let overflow_res = ce1.clone().cast_to(Type::ssize_t()).add_overflow(offset_bytes);
-                let overflow_check = self.codegen_assert_assume(
-                    overflow_res.overflowed.not(),
-                    PropertyClass::ArithmeticOverflow,
-                    "attempt to compute offset which would overflow",
-                    loc,
-                );
-                let res = ce1.clone().plus(ce2);
-                Expr::statement_expression(
-                    vec![bytes_overflow_check, overflow_check, res.as_stmt(loc)],
-                    ce1.typ().clone(),
-                    loc,
-                )
+                ce1.clone().plus(ce2)
             }
         }
     }
@@ -756,6 +729,15 @@ impl GotocCtx<'_> {
                 }
             }
             AggregateKind::Coroutine(_, _, _) => self.codegen_rvalue_coroutine(&operands, res_ty),
+            AggregateKind::CoroutineClosure(_, _) => {
+                let ty = self.codegen_ty_stable(res_ty);
+                self.codegen_unimplemented_expr(
+                    "CoroutineClosure",
+                    ty,
+                    loc,
+                    "https://github.com/model-checking/kani/issues/3783",
+                )
+            }
         }
     }
 

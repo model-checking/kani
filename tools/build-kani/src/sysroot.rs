@@ -13,7 +13,7 @@
 
 use crate::{AutoRun, cp};
 use anyhow::{Result, bail, format_err};
-use cargo_metadata::{Artifact, Message};
+use cargo_metadata::{Artifact, Message, TargetKind};
 use std::ffi::OsStr;
 use std::fs;
 use std::io::BufReader;
@@ -194,9 +194,13 @@ fn copy_artifacts(artifacts: &[Artifact], sysroot_lib: &Path, copy_std: bool) ->
 /// Check if an artifact is a rust library that can be used by rustc on further crates compilations.
 /// This inspects the kind of targets that this artifact originates from.
 fn is_rust_lib(artifact: &Artifact) -> bool {
-    artifact.target.kind.iter().any(|kind| match kind.as_str() {
-        "lib" | "rlib" | "proc-macro" => true,
-        "bin" | "dylib" | "cdylib" | "staticlib" | "custom-build" => false,
+    artifact.target.kind.iter().any(|kind| match kind {
+        TargetKind::Lib | TargetKind::RLib | TargetKind::ProcMacro => true,
+        TargetKind::Bin
+        | TargetKind::DyLib
+        | TargetKind::CDyLib
+        | TargetKind::StaticLib
+        | TargetKind::CustomBuild => false,
         _ => unreachable!("Unknown crate type {kind}"),
     })
 }
