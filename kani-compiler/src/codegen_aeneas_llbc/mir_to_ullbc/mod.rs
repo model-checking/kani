@@ -6,14 +6,11 @@
 //! This module contains a context for translating stable MIR into Charon's
 //! unstructured low-level borrow calculus (ULLBC)
 
+use charon_lib::ast::krate::TypeDeclId as CharonTypeDeclId;
 use charon_lib::ast::meta::{
     AttrInfo as CharonAttrInfo, Loc as CharonLoc, RawSpan as CharonRawSpan,
 };
-use charon_lib::ast::types::{
-    Ty as CharonTy, TyKind as CharonTyKind,
-};
-use charon_lib::ast::krate::TypeDeclId as CharonTypeDeclId;
-use std::iter::zip;
+use charon_lib::ast::types::{Ty as CharonTy, TyKind as CharonTyKind};
 use charon_lib::ast::{
     AbortKind as CharonAbortKind, AggregateKind as CharonAggregateKind,
     AnyTransId as CharonAnyTransId, Assert as CharonAssert, BinOp as CharonBinOp,
@@ -21,28 +18,31 @@ use charon_lib::ast::{
     BuiltinTy as CharonBuiltinTy, Call as CharonCall, CastKind as CharonCastKind,
     ConstGeneric as CharonConstGeneric, ConstGenericVar as CharonConstGenericVar,
     ConstGenericVarId as CharonConstGenericVarId, ConstantExpr as CharonConstantExpr,
-    Disambiguator as CharonDisambiguator, Field as CharonField, FieldId as CharonFieldId,
-    FieldProjKind as CharonFieldProjKind, FileName as CharonFileName, FnOperand as CharonFnOperand,
-    FnPtr as CharonFnPtr, FunDecl as CharonFunDecl, FunDeclId as CharonFunDeclId,
-    FunId as CharonFunId, FunIdOrTraitMethodRef as CharonFunIdOrTraitMethodRef,
-    FunSig as CharonFunSig, GenericArgs as CharonGenericArgs, GenericParams as CharonGenericParams,
+    DeBruijnId as CharonDeBruijnId, DeBruijnVar as CharonDeBruijnVar,
+    Disambiguator as CharonDisambiguator, ExistentialPredicate as CharonExistentialPredicate,
+    Field as CharonField, FieldId as CharonFieldId, FieldProjKind as CharonFieldProjKind,
+    File as CharonFile, FileId as CharonFileId, FileName as CharonFileName,
+    FnOperand as CharonFnOperand, FnPtr as CharonFnPtr, FunDecl as CharonFunDecl,
+    FunDeclId as CharonFunDeclId, FunId as CharonFunId,
+    FunIdOrTraitMethodRef as CharonFunIdOrTraitMethodRef, FunSig as CharonFunSig,
+    GenericArgs as CharonGenericArgs, GenericParams as CharonGenericParams,
+    GlobalDeclId as CharonGlobalDeclId, GlobalDeclRef as CharonGlobalDeclRef,
     IntegerTy as CharonIntegerTy, ItemKind as CharonItemKind, ItemMeta as CharonItemMeta,
     ItemOpacity as CharonItemOpacity, Literal as CharonLiteral, LiteralTy as CharonLiteralTy,
-    Name as CharonName, Opaque as CharonOpaque, Operand as CharonOperand,
-    PathElem as CharonPathElem, Place as CharonPlace, ProjectionElem as CharonProjectionElem,
+    Locals as CharonLocals, Name as CharonName, Opaque as CharonOpaque, Operand as CharonOperand,
+    PathElem as CharonPathElem, Place as CharonPlace, PolyTraitDeclRef as CharonPolyTraitDeclRef,
+    PredicateOrigin as CharonPredicateOrigin, ProjectionElem as CharonProjectionElem,
     RawConstantExpr as CharonRawConstantExpr, RefKind as CharonRefKind, Region as CharonRegion,
-    RegionId as CharonRegionId, RegionVar as CharonRegionVar, Rvalue as CharonRvalue,
-    ScalarValue as CharonScalarValue, Span as CharonSpan, TranslatedCrate as CharonTranslatedCrate,
-    TypeDecl as CharonTypeDecl, TypeDeclKind as CharonTypeDeclKind, TypeId as CharonTypeId,
-    TypeVar as CharonTypeVar, TypeVarId as CharonTypeVarId, UnOp as CharonUnOp, Var as CharonVar,
-    VarId as CharonVarId, Variant as CharonVariant, VariantId as CharonVariantId,
-    TraitClauseId as CharonTraitClauseId, TraitClause as CharonTraitClause, TraitDeclId as CharonTraitDeclId,
-    TraitDecl as CharonTraitDecl, TraitRef as CharonTraitRef, PolyTraitDeclRef as CharonPolyTraitDeclRef,
-    TraitDeclRef as CharonTraitDeclRef, TraitRefKind as CharonTraitRefKind, PredicateOrigin as CharonPredicateOrigin,
-    DeBruijnId as CharonDeBruijnId, GlobalDeclId as CharonGlobalDeclId, 
-    GlobalDeclRef as CharonGlobalDeclRef, ExistentialPredicate as CharonExistentialPredicate,
-    TraitImplId as CharonTraitImplId,  Locals as CharonLocals, RegionBinder as CharonRegionBinder,
-    DeBruijnVar as CharonDeBruijnVar, FileId as CharonFileId, File as CharonFile,
+    RegionBinder as CharonRegionBinder, RegionId as CharonRegionId, RegionVar as CharonRegionVar,
+    Rvalue as CharonRvalue, ScalarValue as CharonScalarValue, Span as CharonSpan,
+    TraitClause as CharonTraitClause, TraitClauseId as CharonTraitClauseId,
+    TraitDecl as CharonTraitDecl, TraitDeclId as CharonTraitDeclId,
+    TraitDeclRef as CharonTraitDeclRef, TraitImplId as CharonTraitImplId,
+    TraitRef as CharonTraitRef, TraitRefKind as CharonTraitRefKind,
+    TranslatedCrate as CharonTranslatedCrate, TypeDecl as CharonTypeDecl,
+    TypeDeclKind as CharonTypeDeclKind, TypeId as CharonTypeId, TypeVar as CharonTypeVar,
+    TypeVarId as CharonTypeVarId, UnOp as CharonUnOp, Var as CharonVar, VarId as CharonVarId,
+    Variant as CharonVariant, VariantId as CharonVariantId,
 };
 use charon_lib::errors::{Error as CharonError, ErrorCtx as CharonErrorCtx};
 use charon_lib::ids::Vector as CharonVector;
@@ -52,7 +52,6 @@ use charon_lib::ullbc_ast::{
     RawTerminator as CharonRawTerminator, Statement as CharonStatement,
     SwitchTargets as CharonSwitchTargets, Terminator as CharonTerminator,
 };
-use std::collections::HashMap;
 use charon_lib::{error_assert, error_or_panic};
 use core::panic;
 use rustc_data_structures::fx::FxHashMap;
@@ -65,9 +64,13 @@ use stable_mir::mir::{
     TerminatorKind, UnOp, VarDebugInfoContents,
 };
 use stable_mir::ty::{
-    AdtDef, AdtKind, Allocation, ConstantKind, FnDef, GenericArgKind, GenericArgs, GenericParamDefKind, IndexedVal, IntTy, MirConst, Region, RegionKind, RigidTy, Span, TraitDecl, TraitDef, Ty, TyConst, TyConstKind, TyKind, UintTy
+    AdtDef, AdtKind, Allocation, ConstantKind, FnDef, GenericArgKind, GenericArgs,
+    GenericParamDefKind, IndexedVal, IntTy, MirConst, Region, RegionKind, RigidTy, Span, TraitDecl,
+    TraitDef, Ty, TyConst, TyConstKind, TyKind, UintTy,
 };
 use stable_mir::{CrateDef, CrateDefType, DefId};
+use std::collections::HashMap;
+use std::iter::zip;
 use std::path::PathBuf;
 use tracing::{debug, trace};
 
@@ -101,7 +104,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 }
             }
         }
-        Self { tcx, instance, translated, id_map, errors, local_names}
+        Self { tcx, instance, translated, id_map, errors, local_names }
     }
 
     fn tcx(&self) -> TyCtxt<'tcx> {
@@ -122,7 +125,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         let trait_decl_id = self.register_trait_decl_id(trait_def_id);
         match self.translated.trait_decls.get(trait_decl_id) {
             None => {
-                let trait_decl = TraitDef::declaration(&trait_def); 
+                let trait_decl = TraitDef::declaration(&trait_def);
                 let consts = Vec::new();
                 let const_defaults = HashMap::new();
                 let types = Vec::new();
@@ -131,7 +134,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 let required_methods = Vec::new();
                 let provided_methods = Vec::new();
                 let parent_clauses = CharonVector::new();
-                let c_traitdecl = CharonTraitDecl{
+                let c_traitdecl = CharonTraitDecl {
                     def_id: trait_decl_id,
                     item_meta: self.translate_item_meta_from_defid(trait_def_id),
                     generics: self.generic_params_from_traitdecl(trait_decl),
@@ -142,75 +145,90 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     types,
                     type_defaults,
                     required_methods,
-                    provided_methods,                 
+                    provided_methods,
                 };
                 self.translated.trait_decls.set_slot(trait_decl_id, c_traitdecl);
-                trait_decl_id                
-            },
-            Some(_) => trait_decl_id
+                trait_decl_id
+            }
+            Some(_) => trait_decl_id,
         }
-
     }
 
-
-    fn get_traitrefs_and_span_from_defid(&mut self, defid: DefId) -> (CharonVector<CharonTraitClauseId, CharonTraitRef>, Vec<CharonSpan>){
-        let inter_defid = rustc_internal::internal(self.tcx,defid);
+    fn get_traitrefs_and_span_from_defid(
+        &mut self,
+        defid: DefId,
+    ) -> (CharonVector<CharonTraitClauseId, CharonTraitRef>, Vec<CharonSpan>) {
+        let inter_defid = rustc_internal::internal(self.tcx, defid);
         let predicates = self.tcx().predicates_of(inter_defid).predicates.to_vec();
-        let mut c_trait_refs: CharonVector<CharonTraitClauseId, CharonTraitRef> = CharonVector::new();
+        let mut c_trait_refs: CharonVector<CharonTraitClauseId, CharonTraitRef> =
+            CharonVector::new();
         let mut c_spans = Vec::new();
-        for (i,(clause, span)) in predicates.iter().enumerate() {
+        for (i, (clause, span)) in predicates.iter().enumerate() {
             let trait_clause = clause.as_trait_clause();
-            if trait_clause.is_none() {continue};
+            if trait_clause.is_none() {
+                continue;
+            };
             let trait_id_internal = clause.as_trait_clause().unwrap();
             let trait_binder = rustc_internal::stable(trait_id_internal);
             let trait_ref = trait_binder.value.trait_ref;
             let trait_def = trait_ref.def_id;
-            if self.is_marker_trait(trait_def) {continue};
+            if self.is_marker_trait(trait_def) {
+                continue;
+            };
             let c_traitdecl_id = self.translate_traitdecl(trait_def);
             let c_genarg = self.translate_generic_args_withouttrait(trait_ref.args().clone());
-            let c_polytrait = CharonPolyTraitDeclRef{
+            let c_polytrait = CharonPolyTraitDeclRef {
                 regions: CharonVector::new(),
-                skip_binder : CharonTraitDeclRef {trait_id: c_traitdecl_id, generics: c_genarg.clone()},
+                skip_binder: CharonTraitDeclRef {
+                    trait_id: c_traitdecl_id,
+                    generics: c_genarg.clone(),
+                },
             };
             let debr = CharonDeBruijnVar::free(CharonTraitClauseId::from_usize(i));
-            let c_traitref = CharonTraitRef{
+            let c_traitref = CharonTraitRef {
                 kind: CharonTraitRefKind::Clause(debr),
                 trait_decl_ref: c_polytrait,
             };
             c_trait_refs.push(c_traitref);
             c_spans.push(self.translate_span(rustc_internal::stable(span)));
-        }        
+        }
         (c_trait_refs, c_spans)
     }
 
-    fn get_traitclauses_from_defid(&mut self, defid: DefId) -> CharonVector<CharonTraitClauseId, CharonTraitClause>{
-        let inter_defid = rustc_internal::internal(self.tcx,defid);
+    fn get_traitclauses_from_defid(
+        &mut self,
+        defid: DefId,
+    ) -> CharonVector<CharonTraitClauseId, CharonTraitClause> {
+        let inter_defid = rustc_internal::internal(self.tcx, defid);
         let predicates = self.tcx().predicates_of(inter_defid).predicates.to_vec();
-        let mut c_trait_clauses: CharonVector<CharonTraitClauseId, CharonTraitClause> = CharonVector::new();
-        for (i,(clause, span)) in predicates.iter().enumerate() {
+        let mut c_trait_clauses: CharonVector<CharonTraitClauseId, CharonTraitClause> =
+            CharonVector::new();
+        for (i, (clause, span)) in predicates.iter().enumerate() {
             let trait_clause = clause.as_trait_clause();
-            if trait_clause.is_none() {continue};
+            if trait_clause.is_none() {
+                continue;
+            };
             let trait_id_internal = clause.as_trait_clause().unwrap();
             let trait_ref = rustc_internal::stable(trait_id_internal).value.trait_ref;
             let trait_def = trait_ref.def_id;
-            if self.is_marker_trait(trait_def) {continue};
+            if self.is_marker_trait(trait_def) {
+                continue;
+            };
             let c_traitdecl_id = self.translate_traitdecl(trait_def);
             let c_genarg = self.translate_generic_args_withouttrait(trait_ref.args().clone());
-            let c_polytrait = CharonPolyTraitDeclRef{
+            let c_polytrait = CharonPolyTraitDeclRef {
                 regions: CharonVector::new(),
-                skip_binder : CharonTraitDeclRef {trait_id: c_traitdecl_id, generics: c_genarg},
+                skip_binder: CharonTraitDeclRef { trait_id: c_traitdecl_id, generics: c_genarg },
             };
-            let c_traitclause = CharonTraitClause{
+            let c_traitclause = CharonTraitClause {
                 clause_id: CharonTraitClauseId::from_usize(i),
                 span: Some(self.translate_span(rustc_internal::stable(span))),
                 trait_: c_polytrait,
-                origin: CharonPredicateOrigin::WhereClauseOnType
-
+                origin: CharonPredicateOrigin::WhereClauseOnType,
             };
             c_trait_clauses.push(c_traitclause);
+        }
 
-        }        
-        
         c_trait_clauses
     }
 
@@ -240,7 +258,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     return Err(());
                 }
             };
-            Ok(bodyid)    
+            Ok(bodyid)
         };
         let fun_decl = CharonFunDecl {
             def_id: fid,
@@ -248,17 +266,12 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             signature,
             kind: CharonItemKind::Regular,
             body,
-            is_global_initializer :None
+            is_global_initializer: None,
         };
-        match self.translated.fun_decls.get(fid) {
-            None => self.translated.fun_decls.set_slot(fid, fun_decl),
-            Some(_) => {},
-        };
+        if self.translated.fun_decls.get(fid).is_none() { self.translated.fun_decls.set_slot(fid, fun_decl) };
         println!("Complete Func name: {:?}", funcname);
         Ok(())
-        
     }
-
 
     /// Get or create a `CharonFunDeclId` for the given function
     fn register_fun_decl_id(&mut self, def_id: DefId) -> CharonFunDeclId {
@@ -367,35 +380,38 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             let name = gendef.name.clone();
             match genkind {
                 GenericParamDefKind::Lifetime => {
-                        let c_region = CharonRegionVar {index: CharonRegionId::from_usize(index), name: Some(name),};
-                        c_regions.push(c_region);
-                    },
-                GenericParamDefKind::Type{has_default : _, synthetic : _ } => {
-                    let c_region = CharonTypeVar {index: CharonTypeVarId::from_usize(index) ,name};
+                    let c_region = CharonRegionVar {
+                        index: CharonRegionId::from_usize(index),
+                        name: Some(name),
+                    };
+                    c_regions.push(c_region);
+                }
+                GenericParamDefKind::Type { has_default: _, synthetic: _ } => {
+                    let c_region =
+                        CharonTypeVar { index: CharonTypeVarId::from_usize(index), name };
                     c_types.push(c_region);
-                },
-                GenericParamDefKind::Const{has_default: _} => {
-                        let def_id_internal = rustc_internal::internal(self.tcx, gendef.def_id.0);
-                        let pc_internal = rustc_middle::ty::ParamConst {
-                            index : index as u32,
-                            name: rustc_span::Symbol::intern(&name.clone()),
-                        };
-                        let paramenv =
-                            TypingEnv::post_analysis(self.tcx, def_id_internal).param_env;
-                        let ty_internal = pc_internal.find_ty_from_env(paramenv);
-                        let ty_stable = rustc_internal::stable(ty_internal);
-                        let trans_ty = self.translate_ty(ty_stable);
-                        let lit_ty = match trans_ty.kind() {
-                            CharonTyKind::Literal(lit) => *lit,
-                            _ => panic!("generic_params_from_fndef: not a literal type"),
-                        };
-                        let c_constgeneric = CharonConstGenericVar {
-                            index: CharonConstGenericVarId::from_usize(index),
-                            name,
-                            ty: lit_ty,
-                        };
-                        c_const_generics.push(c_constgeneric);
-                },
+                }
+                GenericParamDefKind::Const { has_default: _ } => {
+                    let def_id_internal = rustc_internal::internal(self.tcx, gendef.def_id.0);
+                    let pc_internal = rustc_middle::ty::ParamConst {
+                        index: index as u32,
+                        name: rustc_span::Symbol::intern(&name.clone()),
+                    };
+                    let paramenv = TypingEnv::post_analysis(self.tcx, def_id_internal).param_env;
+                    let ty_internal = pc_internal.find_ty_from_env(paramenv);
+                    let ty_stable = rustc_internal::stable(ty_internal);
+                    let trans_ty = self.translate_ty(ty_stable);
+                    let lit_ty = match trans_ty.kind() {
+                        CharonTyKind::Literal(lit) => *lit,
+                        _ => panic!("generic_params_from_fndef: not a literal type"),
+                    };
+                    let c_constgeneric = CharonConstGenericVar {
+                        index: CharonConstGenericVarId::from_usize(index),
+                        name,
+                        ty: lit_ty,
+                    };
+                    c_const_generics.push(c_constgeneric);
+                }
             }
         }
         CharonGenericParams {
@@ -410,7 +426,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
     }
 
     fn generic_params_from_fndef(&mut self, fndef: FnDef, input: Vec<Ty>) -> CharonGenericParams {
-        let genvec = match fndef.ty().kind(){
+        let genvec = match fndef.ty().kind() {
             TyKind::RigidTy(RigidTy::FnDef(_, genarg)) => genarg.0,
             _ => panic!("generic_params_from_fndef: not an FnDef"),
         };
@@ -467,25 +483,18 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 },
             }
         }
-        for inpty in input.iter(){
-            match inpty.kind() {
-                TyKind::RigidTy(rty) => match rty {
-                    RigidTy::Ref(r, _  , _ ) => match r.kind {
-                        RegionKind::ReBound(_,br ) => {
-                            let id =br.var as usize;
-                            let c_region = CharonRegionVar {
-                                index: CharonRegionId::from_usize(id),
-                                name: None
-                            };
-                            c_regions.push(c_region);
-                        }
-                        _ => (),
+        for inpty in input.iter() {
+            if let TyKind::RigidTy(RigidTy::Ref(r, _, _)) =  inpty.kind() {
+                if let RegionKind::ReBound(_, br) = r.kind {
+                        let id = br.var as usize;
+                        let c_region = CharonRegionVar {
+                            index: CharonRegionId::from_usize(id),
+                            name: None,
+                        };
+                        c_regions.push(c_region);
                     }
-                    _ => (),
                 }
-                _ => (),
-            }
-        }
+            }        
         let trait_clauses = self.get_traitclauses_from_defid(fndef.def_id());
         CharonGenericParams {
             regions: c_regions,
@@ -693,10 +702,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         Ok(CharonItemMeta { span, source_text, attr_info, name, is_local, opacity })
     }
 
-    fn translate_item_meta_from_defid(
-        &mut self,
-        defid: DefId,
-    ) -> CharonItemMeta {
+    fn translate_item_meta_from_defid(&mut self, defid: DefId) -> CharonItemMeta {
         let def_id = rustc_internal::internal(self.tcx(), defid);
         let span = self.translate_span(rustc_internal::stable(self.tcx.def_span(def_id)));
         let name = self.defid_to_name(defid).unwrap();
@@ -737,29 +743,29 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         Ok(CharonItemMeta { span, source_text, attr_info, name, is_local, opacity })
     }
 
-
-    fn is_builtin_fun(&mut self, func_def: InstanceDef ) -> bool {
+    fn is_builtin_fun(&mut self, func_def: InstanceDef) -> bool {
         let name = self.def_to_name(func_def).unwrap();
-        let crate_name = match name.name.get(0).unwrap() {
-            CharonPathElem::Ident(cn,_) => cn,
+        let crate_name = match name.name.first().unwrap() {
+            CharonPathElem::Ident(cn, _) => cn,
             _ => panic!("Imple name"),
         };
-        crate_name.starts_with("std") || crate_name.starts_with("core") || crate_name.starts_with("alloc")
+        crate_name.starts_with("std")
+            || crate_name.starts_with("core")
+            || crate_name.starts_with("alloc")
     }
 
-    fn is_marker_trait(&mut self, traitdef: TraitDef ) -> bool {
+    fn is_marker_trait(&mut self, traitdef: TraitDef) -> bool {
         let name = self.defid_to_name(traitdef.def_id()).unwrap();
-        let crate_name = match name.name.get(0).unwrap() {
-            CharonPathElem::Ident(cn,_) => cn,
+        let crate_name = match name.name.first().unwrap() {
+            CharonPathElem::Ident(cn, _) => cn,
             _ => panic!("Imple name"),
         };
         let marker = match name.name.get(1).unwrap() {
-            CharonPathElem::Ident(cn,_) => cn,
+            CharonPathElem::Ident(cn, _) => cn,
             _ => panic!("Imple name"),
         };
-        crate_name.starts_with("core") && marker.starts_with("marker") 
+        crate_name.starts_with("core") && marker.starts_with("marker")
     }
-
 
     fn defid_to_name(&mut self, defid: DefId) -> Result<CharonName, CharonError> {
         let tcx = self.tcx();
@@ -983,18 +989,20 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             name.push(CharonPathElem::Ident(crate_name, CharonDisambiguator::new(0)));
         }
 
-        let instancedef_internal = rustc_span::def_id::DefId::local(rustc_span::def_id::DefIndex::from_usize(def_id.index.as_usize()));
+        let instancedef_internal = rustc_span::def_id::DefId::local(
+            rustc_span::def_id::DefIndex::from_usize(def_id.index.as_usize()),
+        );
         match self.tcx.impl_of_method(instancedef_internal) {
             Some(impl_defid_internal) => {
                 let impl_defid = DefId::to_val(impl_defid_internal.index.as_usize());
-                let impl_id =self.register_trait_impl_id(impl_defid);
-                let funcname =match name.pop().unwrap() {
+                let impl_id = self.register_trait_impl_id(impl_defid);
+                let funcname = match name.pop().unwrap() {
                     CharonPathElem::Ident(name, _) => name + &impl_id.to_string(),
-                    _ => panic!("Expected ident")
+                    _ => panic!("Expected ident"),
                 };
                 name.push(CharonPathElem::Ident(funcname, CharonDisambiguator::new(0)));
             }
-            None => {}
+            None => panic!("Expected impl"),
         };
         trace!("{:?}", name);
         Ok(CharonName { name })
@@ -1095,14 +1103,14 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
     }
 
     fn file_to_id(&mut self, filename: &CharonFileName) -> Option<CharonFileId> {
-        for (id,file) in self.translated.files.iter().enumerate() {
+        for (id, file) in self.translated.files.iter().enumerate() {
             if file.name == *filename {
-                return Some(CharonFileId::from_usize(id))
+                return Some(CharonFileId::from_usize(id));
             }
         }
         None
     }
-    
+
     /// Compute the span information for MIR span
     fn translate_span(&mut self, span: Span) -> CharonSpan {
         let filename = CharonFileName::Local(PathBuf::from(span.get_filename()));
@@ -1110,8 +1118,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             Some(file_id) => file_id,
             None => {
                 let file = CharonFile { name: filename.clone(), contents: None };
-                let file_id = self.translated.files.push(file);
-                file_id
+                self.translated.files.push(file)
             }
         };
         let lineinfo = span.get_lines();
@@ -1128,13 +1135,13 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
     fn translate_function_signature(&mut self, instance: Instance) -> CharonFunSig {
         //let instance = self.instance;
         let fndef = match instance.ty().kind() {
-            TyKind::RigidTy(RigidTy::FnDef(fndef,_ )) => fndef,
+            TyKind::RigidTy(RigidTy::FnDef(fndef, _)) => fndef,
             _ => panic!("Expected a function type"),
         };
-        //self.trait_clauses = c_genparam.trait_clauses.clone(); 
+        //self.trait_clauses = c_genparam.trait_clauses.clone();
         let value = fndef.fn_sig().value;
         let inputs = value.inputs().to_vec();
-        let c_genparam = self.generic_params_from_fndef(fndef, inputs.clone()); 
+        let c_genparam = self.generic_params_from_fndef(fndef, inputs.clone());
         //println!("generic param {:?}", c_genparam.clone());
         //println!("inp types {:?}", inputs.clone());
         let c_inputs: Vec<CharonTy> = inputs.iter().map(|ty| self.translate_ty(*ty)).collect();
@@ -1151,10 +1158,13 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         }
     }
 
-    fn translate_function_body(&mut self, instance: Instance) -> Result<CharonBodyId, CharonOpaque> {
+    fn translate_function_body(
+        &mut self,
+        instance: Instance,
+    ) -> Result<CharonBodyId, CharonOpaque> {
         //let instance = self.instance;
         let fndef = match instance.ty().kind() {
-            TyKind::RigidTy(RigidTy::FnDef(fndef,_ )) => fndef,
+            TyKind::RigidTy(RigidTy::FnDef(fndef, _)) => fndef,
             _ => panic!("Expected a function type"),
         };
         let mir_body = fndef.body().unwrap();
@@ -1176,7 +1186,6 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         CharonBody::Unstructured(body_expr)
     }
 
-
     fn translate_generic_args(&mut self, ga: GenericArgs, defid: DefId) -> CharonGenericArgs {
         let genvec = ga.0;
         let mut c_regions: CharonVector<CharonRegionId, CharonRegion> = CharonVector::new();
@@ -1186,12 +1195,11 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         for genkind in genvec.iter() {
             let gk = genkind.clone();
             match gk {
-                 
                 GenericArgKind::Lifetime(region) => {
                     let c_region = self.translate_region(region);
                     c_regions.push(c_region);
                 }
-                
+
                 GenericArgKind::Type(ty) => {
                     let c_ty = self.translate_ty(ty);
                     c_types.push(c_ty);
@@ -1199,8 +1207,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 GenericArgKind::Const(tc) => {
                     let c_const_generic = self.tyconst_to_constgeneric(tc);
                     c_const_generics.push(c_const_generic);
-                }
-                //_ => (),
+                } //_ => (),
             }
         }
         let (gen_trait_refs, spans) = self.get_traitrefs_and_span_from_defid(defid);
@@ -1210,13 +1217,14 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             let traitgenarg = trait_ref.trait_decl_ref.skip_binder.generics.clone();
             let t_regions: CharonVector<CharonRegionId, CharonRegion> = CharonVector::new();
             let mut t_types: CharonVector<CharonTypeVarId, CharonTy> = CharonVector::new();
-            let t_const_generics: CharonVector<CharonConstGenericVarId, CharonConstGeneric> = CharonVector::new();
-            for tyvar in traitgenarg.types.iter(){
+            let t_const_generics: CharonVector<CharonConstGenericVarId, CharonConstGeneric> =
+                CharonVector::new();
+            for tyvar in traitgenarg.types.iter() {
                 match tyvar.kind() {
                     CharonTyKind::TypeVar(dbtyvarid) => {
-                        let tyvarid= match dbtyvarid {
+                        let tyvarid = match dbtyvarid {
                             CharonDeBruijnVar::Free(tyvarid) => *tyvarid,
-                            _ => panic!("Expect free type var id")
+                            _ => panic!("Expect free type var id"),
                         };
                         let subs_ty = c_types.get(tyvarid).unwrap().clone();
                         t_types.push(subs_ty);
@@ -1224,7 +1232,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     _ => todo!("TyKind of gen must be TyVar: {:?}", tyvar.kind()),
                 }
             }
-            let generics= CharonGenericArgs {
+            let generics = CharonGenericArgs {
                 regions: t_regions,
                 types: t_types,
                 const_generics: t_const_generics,
@@ -1232,18 +1240,18 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             };
             let traitdecl_id = trait_ref.trait_decl_ref.skip_binder.trait_id;
             let subs_traitdeclref = CharonPolyTraitDeclRef {
-                regions : trait_ref.trait_decl_ref.regions.clone(),
-                skip_binder : CharonTraitDeclRef {
-                    trait_id: traitdecl_id.clone(),
+                regions: trait_ref.trait_decl_ref.regions.clone(),
+                skip_binder: CharonTraitDeclRef {
+                    trait_id: traitdecl_id,
                     generics: generics.clone(),
                 },
             };
             let subs_traitref = CharonTraitRef {
-                kind : CharonTraitRefKind::BuiltinOrAuto(subs_traitdeclref.clone()),
-                trait_decl_ref: subs_traitdeclref
+                kind: CharonTraitRefKind::BuiltinOrAuto(subs_traitdeclref.clone()),
+                trait_decl_ref: subs_traitdeclref,
             };
             trait_refs.push(subs_traitref);
-        }    
+        }
         CharonGenericArgs {
             regions: c_regions,
             types: c_types,
@@ -1287,10 +1295,11 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         match ty.kind() {
             TyKind::RigidTy(rigid_ty) => self.translate_rigid_ty(rigid_ty),
             TyKind::Param(paramty) => {
-                let debr = CharonDeBruijnVar::free(CharonTypeVarId::from_usize(paramty.index as usize));
+                let debr =
+                    CharonDeBruijnVar::free(CharonTypeVarId::from_usize(paramty.index as usize));
                 CharonTy::new(CharonTyKind::TypeVar(debr))
             }
-            /* 
+            /*
             TyKind::Alias(akind, atype) => {
                 let tk_internal = rustc_internal::internal(self.tcx, ty).kind().clone();
                 match tk_internal {
@@ -1322,7 +1331,9 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 translate_constant_expr_to_const_generic(c_raw_constexpr).unwrap()
             }
             TyConstKind::Param(paramc) => {
-                let debr = CharonDeBruijnVar::free(CharonConstGenericVarId::from_usize(paramc.index as usize));
+                let debr = CharonDeBruijnVar::free(CharonConstGenericVarId::from_usize(
+                    paramc.index as usize,
+                ));
                 CharonConstGeneric::Var(debr)
             }
             _ => todo!(),
@@ -1395,7 +1406,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 // TODO: populate regions?
                 let rb = CharonRegionBinder {
                     regions: CharonVector::new(),
-                    skip_binder: (inputs, output)
+                    skip_binder: (inputs, output),
                 };
                 CharonTy::new(CharonTyKind::Arrow(rb))
             }
@@ -1427,15 +1438,18 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             RigidTy::FnPtr(polyfunsig) => {
                 let value = polyfunsig.value;
                 let inputs = value.inputs().to_vec();
-                let c_inputs: Vec<CharonTy> = inputs.iter().map(|ty| self.translate_ty(*ty)).collect();
+                let c_inputs: Vec<CharonTy> =
+                    inputs.iter().map(|ty| self.translate_ty(*ty)).collect();
                 let c_output = self.translate_ty(value.output());
                 let rb = CharonRegionBinder {
                     regions: CharonVector::new(),
-                    skip_binder: (c_inputs, c_output)
+                    skip_binder: (c_inputs, c_output),
                 };
                 CharonTy::new(CharonTyKind::Arrow(rb))
             }
-            RigidTy::Dynamic(_,_ ,_ ) => CharonTy::new(CharonTyKind::DynTrait(CharonExistentialPredicate)),
+            RigidTy::Dynamic(_, _, _) => {
+                CharonTy::new(CharonTyKind::DynTrait(CharonExistentialPredicate))
+            }
             _ => todo!("Not yet implemented RigidTy: {:?}", rigid_ty),
         }
     }
@@ -1519,18 +1533,18 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     TyKind::RigidTy(RigidTy::FnDef(def, genarg)) => {
                         let instance = Instance::resolve(def, &genarg).unwrap();
                         let def_id = instance.def.def_id();
-                        let fid = self.register_fun_decl_id(def_id);    
+                        let fid = self.register_fun_decl_id(def_id);
                         let genarg_resolve = match instance.ty().kind() {
-                            TyKind::RigidTy(RigidTy::FnDef(_, ga )) => ga,
+                            TyKind::RigidTy(RigidTy::FnDef(_, ga)) => ga,
                             _ => panic!("Expected a function type"),
-                        };               
+                        };
                         let funcid = CharonFunIdOrTraitMethodRef::Fun(CharonFunId::Regular(fid));
                         let generics = self.translate_generic_args(genarg_resolve, def_id);
                         println!("Func call genarg {:?}", generics);
                         CharonFnPtr {
                             func: funcid,
                             // TODO: populate generics?
-                            generics
+                            generics,
                         }
                     }
                     TyKind::RigidTy(RigidTy::FnPtr(..)) => todo!(),
@@ -1635,7 +1649,8 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                                 let c_variant_id =
                                     Some(CharonVariantId::from_usize(variant_id.to_index()));
                                 let c_field_id = field_id.map(CharonFieldId::from_usize);
-                                let c_generic_args = self.translate_generic_args(genarg, adt_def.def_id());
+                                let c_generic_args =
+                                    self.translate_generic_args(genarg, adt_def.def_id());
                                 let c_agg_kind = CharonAggregateKind::Adt(
                                     c_type_id,
                                     c_variant_id,
@@ -1650,7 +1665,8 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                                 let c_type_id = CharonTypeId::Adt(c_typedeclid);
                                 let c_variant_id = None;
                                 let c_field_id = None;
-                                let c_generic_args = self.translate_generic_args(genarg, adt_def.def_id());
+                                let c_generic_args =
+                                    self.translate_generic_args(genarg, adt_def.def_id());
                                 let c_agg_kind = CharonAggregateKind::Adt(
                                     c_type_id,
                                     c_variant_id,
@@ -1714,7 +1730,10 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 let defid = uc.def.def_id();
                 let c_defid = self.register_global_decl_id(defid);
                 let c_genarg = self.translate_generic_args(uc.args.clone(), defid);
-                CharonRawConstantExpr::Global(CharonGlobalDeclRef{id: c_defid, generics: c_genarg})
+                CharonRawConstantExpr::Global(CharonGlobalDeclRef {
+                    id: c_defid,
+                    generics: c_genarg,
+                })
             }
             ConstantKind::Param(_) => todo!(),
         }
@@ -1824,10 +1843,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         for prj in projection.iter() {
             match prj {
                 ProjectionElem::Deref => {
-                    match current_ty.kind() {
-                        CharonTyKind::Ref(_,ty,_ , ) => current_ty = ty.clone(),
-                        _ => (),
-                    }
+                    if let CharonTyKind::Ref(_, ty, _) = current_ty.kind() { current_ty = ty.clone() };
                     c_provec.push(CharonProjectionElem::Deref)
                 }
                 ProjectionElem::Field(fid, ty) => {
@@ -1862,8 +1878,10 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     current_var = varid.to_index();
                 }
                 ProjectionElem::Index(local) => {
-                    let c_operand =
-                        CharonOperand::Copy(CharonPlace::new(CharonVarId::from_usize(*local), current_ty.clone()));
+                    let c_operand = CharonOperand::Copy(CharonPlace::new(
+                        CharonVarId::from_usize(*local),
+                        current_ty.clone(),
+                    ));
                     c_provec.push(CharonProjectionElem::Index {
                         offset: Box::new(c_operand),
                         from_end: false,
@@ -1881,12 +1899,16 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             RegionKind::ReStatic => CharonRegion::Static,
             RegionKind::ReErased => CharonRegion::Erased,
             RegionKind::ReEarlyParam(_) => CharonRegion::Erased,
-            RegionKind::ReBound(var,boundregion) => //CharonRegion::Static,
-                {
+            RegionKind::ReBound(var, boundregion) =>
+            //CharonRegion::Static,
+            {
                 println!("region {:?}", boundregion.var.clone());
-                let debr = CharonDeBruijnVar::bound(CharonDeBruijnId{index: var as usize}, CharonRegionId::from_usize(boundregion.var as usize));
+                let debr = CharonDeBruijnVar::bound(
+                    CharonDeBruijnId { index: var as usize },
+                    CharonRegionId::from_usize(boundregion.var as usize),
+                );
                 CharonRegion::Var(debr)
-                }
+            }
             RegionKind::RePlaceholder(_) => {
                 todo!("Not yet implemented RegionKind: {:?}", region.kind)
             }
