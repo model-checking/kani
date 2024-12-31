@@ -255,7 +255,8 @@
 //!                 || -> u32
 //!                     {
 //!                         kani::assert(divisor != 0, "divisor != 0");
-//!                         let result_kani_internal: u32 = { dividend / divisor };
+//!                         let mut body_wrapper = || -> u32 { dividend / divisor };
+//!                         let result_kani_internal: u32 = body_wrapper();
 //!                         kani::assert(kani::internal::apply_closure(|result: &u32|
 //!                                     *result <= dividend, &result_kani_internal),
 //!                             "|result : &u32| *result <= dividend");
@@ -435,7 +436,8 @@
 //!                         kani::assert(*ptr < 100, "*ptr < 100");
 //!                         let remember_kani_internal_92cc419d8aca576c = *ptr + 1;
 //!                         let remember_kani_internal_92cc419d8aca576c = *ptr + 1;
-//!                         let result_kani_internal: () = { *ptr += 1; };
+//!                         let mut body_wrapper = || { *ptr += 1; };
+//!                         let result_kani_internal: () = body_wrapper();
 //!                         kani::assert(kani::internal::apply_closure(|result|
 //!                                     (remember_kani_internal_92cc419d8aca576c) == *ptr,
 //!                                 &result_kani_internal), "|result| old(*ptr + 1) == *ptr");
