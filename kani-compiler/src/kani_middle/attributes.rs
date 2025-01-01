@@ -371,7 +371,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                     attrs.iter().for_each(|attr| self.check_proof_attribute(kind, attr))
                 }
                 KaniAttributeKind::StubVerified => {
-                    expect_single(self.tcx, kind, &attrs);
+                    self.parse_stub_verifieds();
                 }
                 KaniAttributeKind::FnMarker
                 | KaniAttributeKind::CheckedWith
@@ -519,7 +519,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                 }
                 KaniAttributeKind::Proof => { /* no-op */ }
                 KaniAttributeKind::ProofForContract => self.handle_proof_for_contract(&mut harness),
-                KaniAttributeKind::StubVerified => self.handle_stub_verified(&mut harness),
+                KaniAttributeKind::StubVerified => harness.verified_stubs.extend_from_slice(&self.parse_stub_verifieds()),
                 KaniAttributeKind::Unstable => {
                     // Internal attribute which shouldn't exist here.
                     unreachable!()
@@ -566,8 +566,9 @@ impl<'tcx> KaniAttributes<'tcx> {
         }
     }
 
-    fn handle_stub_verified(&self, harness: &mut HarnessAttributes) {
+    fn parse_stub_verifieds(&self) -> Vec<String> {
         let dcx = self.tcx.dcx();
+        let mut verified_stubs = Vec::new();
         for (name, def_id, span) in self.interpret_stub_verified_attribute() {
             if KaniAttributes::for_item(self.tcx, def_id).contract_attributes().is_none() {
                 dcx.struct_span_err(
@@ -585,10 +586,11 @@ impl<'tcx> KaniAttributes<'tcx> {
                         ),
                     )
                     .emit();
-                return;
+                return verified_stubs;
             }
-            harness.verified_stubs.push(name.to_string())
+            verified_stubs.push(name.to_string());
         }
+        verified_stubs
     }
 
     fn item_name(&self) -> Symbol {
