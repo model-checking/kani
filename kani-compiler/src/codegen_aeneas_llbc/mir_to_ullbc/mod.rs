@@ -237,8 +237,13 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         // TODO: might want to populate `errors.dep_sources` to help with
         // debugging
         let instance_def = self.instance.def;
+
         let is_builtin = self.is_builtin_fun(instance_def);
+
+        println!("Func name: {:?}", self.instance.name());  
         let fid = self.register_fun_decl_id(self.instance.def.def_id());
+
+        
         let item_meta = match self.translate_item_meta_from_rid(self.instance) {
             Ok(item_meta) => item_meta,
             Err(_) => {
@@ -246,8 +251,6 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             }
         };
         let funcname = item_meta.name.clone();
-        println!("Func name: {:?}", funcname);
-        println!("Func def_id: {:?}", fid);
         let signature = self.translate_function_signature(self.instance);
         let body = if is_builtin {
             Err(CharonOpaque)

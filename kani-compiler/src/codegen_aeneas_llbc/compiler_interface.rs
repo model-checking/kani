@@ -106,10 +106,12 @@ impl LlbcCodegenBackend {
         // Create a Charon transformation context that will be populated with translation results
         let mut ccx = create_charon_transformation_context(tcx);
         let mut id_map: FxHashMap<DefId, AnyTransId> = FxHashMap::default();
+        for item in &items {
+            println!("Translate {item:?}");}
 
         // Translate all the items
         for item in &items {
-            println!("Translating: {item:?}");
+            //println!("Translating: {item:?}");
             match item {
                 MonoItem::Fn(instance) => {
                     if let InstanceKind::Item = instance.kind {
