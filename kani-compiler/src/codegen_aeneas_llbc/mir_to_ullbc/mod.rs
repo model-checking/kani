@@ -6,15 +6,35 @@
 //! This module contains a context for translating stable MIR into Charon's
 //! unstructured low-level borrow calculus (ULLBC)
 
+use charon_lib::ast::krate::TypeDeclId as CharonTypeDeclId;
 use charon_lib::ast::meta::{
     AttrInfo as CharonAttrInfo, Loc as CharonLoc, RawSpan as CharonRawSpan,
 };
-use charon_lib::ast::types::{
-    Ty as CharonTy, TyKind as CharonTyKind,
-};
-use charon_lib::ast::krate::TypeDeclId as CharonTypeDeclId;
+use charon_lib::ast::types::{Ty as CharonTy, TyKind as CharonTyKind};
 use charon_lib::ast::{
-    AbortKind as CharonAbortKind, AggregateKind as CharonAggregateKind, AnyTransId as CharonAnyTransId, Assert as CharonAssert, BinOp as CharonBinOp, Body as CharonBody, BodyId as CharonBodyId, BorrowKind as CharonBorrowKind, BuiltinTy as CharonBuiltinTy, Call as CharonCall, CastKind as CharonCastKind, ConstGeneric as CharonConstGeneric, ConstGenericVar as CharonConstGenericVar, ConstGenericVarId as CharonConstGenericVarId, ConstantExpr as CharonConstantExpr, Disambiguator as CharonDisambiguator, Field as CharonField, FieldId as CharonFieldId, FieldProjKind as CharonFieldProjKind, FileName as CharonFileName, FnOperand as CharonFnOperand, FnPtr as CharonFnPtr, FunDecl as CharonFunDecl, FunDeclId as CharonFunDeclId, FunId as CharonFunId, FunIdOrTraitMethodRef as CharonFunIdOrTraitMethodRef, FunSig as CharonFunSig, GenericArgs as CharonGenericArgs, GenericParams as CharonGenericParams, IntegerTy as CharonIntegerTy, ItemKind as CharonItemKind, ItemMeta as CharonItemMeta, ItemOpacity as CharonItemOpacity, Literal as CharonLiteral, LiteralTy as CharonLiteralTy, Locals, Name as CharonName, Opaque as CharonOpaque, Operand as CharonOperand, PathElem as CharonPathElem, Place as CharonPlace, ProjectionElem as CharonProjectionElem, RawConstantExpr as CharonRawConstantExpr, RefKind as CharonRefKind, Region as CharonRegion, RegionId as CharonRegionId, RegionVar as CharonRegionVar, Rvalue as CharonRvalue, ScalarValue as CharonScalarValue, Span as CharonSpan, TranslatedCrate as CharonTranslatedCrate, TypeDecl as CharonTypeDecl, TypeDeclKind as CharonTypeDeclKind, TypeId as CharonTypeId, TypeVar as CharonTypeVar, TypeVarId as CharonTypeVarId, UnOp as CharonUnOp, Var as CharonVar, VarId as CharonVarId, Variant as CharonVariant, VariantId as CharonVariantId
+    AbortKind as CharonAbortKind, AggregateKind as CharonAggregateKind,
+    AnyTransId as CharonAnyTransId, Assert as CharonAssert, BinOp as CharonBinOp,
+    Body as CharonBody, BodyId as CharonBodyId, BorrowKind as CharonBorrowKind,
+    BuiltinTy as CharonBuiltinTy, Call as CharonCall, CastKind as CharonCastKind,
+    ConstGeneric as CharonConstGeneric, ConstGenericVar as CharonConstGenericVar,
+    ConstGenericVarId as CharonConstGenericVarId, ConstantExpr as CharonConstantExpr,
+    DeBruijnVar as CharonDeBruijnVar, Disambiguator as CharonDisambiguator, Field as CharonField,
+    FieldId as CharonFieldId, FieldProjKind as CharonFieldProjKind, File as CharonFile,
+    FileId as CharonFileId, FileName as CharonFileName, FnOperand as CharonFnOperand,
+    FnPtr as CharonFnPtr, FunDecl as CharonFunDecl, FunDeclId as CharonFunDeclId,
+    FunId as CharonFunId, FunIdOrTraitMethodRef as CharonFunIdOrTraitMethodRef,
+    FunSig as CharonFunSig, GenericArgs as CharonGenericArgs, GenericParams as CharonGenericParams,
+    IntegerTy as CharonIntegerTy, ItemKind as CharonItemKind, ItemMeta as CharonItemMeta,
+    ItemOpacity as CharonItemOpacity, Literal as CharonLiteral, LiteralTy as CharonLiteralTy,
+    Locals, Name as CharonName, Opaque as CharonOpaque, Operand as CharonOperand,
+    PathElem as CharonPathElem, Place as CharonPlace, ProjectionElem as CharonProjectionElem,
+    RawConstantExpr as CharonRawConstantExpr, RefKind as CharonRefKind, Region as CharonRegion,
+    RegionBinder as CharonRegionBinder, RegionId as CharonRegionId, RegionVar as CharonRegionVar,
+    Rvalue as CharonRvalue, ScalarValue as CharonScalarValue, Span as CharonSpan,
+    TranslatedCrate as CharonTranslatedCrate, TypeDecl as CharonTypeDecl,
+    TypeDeclKind as CharonTypeDeclKind, TypeId as CharonTypeId, TypeVar as CharonTypeVar,
+    TypeVarId as CharonTypeVarId, UnOp as CharonUnOp, Var as CharonVar, VarId as CharonVarId,
+    Variant as CharonVariant, VariantId as CharonVariantId,
 };
 use charon_lib::errors::{Error as CharonError, ErrorCtx as CharonErrorCtx};
 use charon_lib::ids::Vector as CharonVector;
@@ -624,14 +644,23 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         self.translate_span(instance.def.span())
     }
 
+    fn file_to_id(&mut self, filename: &CharonFileName) -> Option<CharonFileId> {
+        for (id, file) in self.translated.files.iter().enumerate() {
+            if file.name == *filename {
+                return Some(CharonFileId::from_usize(id));
+            }
+        }
+        None
+    }
+
     /// Compute the span information for MIR span
     fn translate_span(&mut self, span: Span) -> CharonSpan {
         let filename = CharonFileName::Local(PathBuf::from(span.get_filename()));
-        let file_id = match self.translated.file_to_id.get(&filename) {
-            Some(file_id) => *file_id,
+        let file_id = match self.file_to_id(&filename) {
+            Some(file_id) => file_id,
             None => {
-                let file_id = self.translated.id_to_file.push(filename.clone());
-                self.translated.file_to_id.insert(filename, file_id);
+                let file = CharonFile { name: filename.clone(), contents: None };
+                let file_id = self.translated.files.push(file);
                 file_id
             }
         };
@@ -746,9 +775,11 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
     fn translate_ty(&mut self, ty: Ty) -> CharonTy {
         match ty.kind() {
             TyKind::RigidTy(rigid_ty) => self.translate_rigid_ty(rigid_ty),
-            TyKind::Param(paramty) => CharonTy::new(CharonTyKind::TypeVar(
-                CharonTypeVarId::from_usize(paramty.index as usize),
-            )),
+            TyKind::Param(paramty) => {
+                let debr =
+                    CharonDeBruijnVar::free(CharonTypeVarId::from_usize(paramty.index as usize));
+                CharonTy::new(CharonTyKind::TypeVar(debr))
+            }
             x => todo!("Not yet implemented translation for TyKind: {:?}", x),
         }
     }
@@ -760,7 +791,10 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 translate_constant_expr_to_const_generic(c_raw_constexpr).unwrap()
             }
             TyConstKind::Param(paramc) => {
-                CharonConstGeneric::Var(CharonConstGenericVarId::from_usize(paramc.index as usize))
+                let debr = CharonDeBruijnVar::free(CharonConstGenericVarId::from_usize(
+                    paramc.index as usize,
+                ));
+                CharonConstGeneric::Var(debr)
             }
             _ => todo!(),
         }
@@ -825,15 +859,16 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 };
                 CharonTy::new(CharonTyKind::Adt(CharonTypeId::Tuple, generic_args))
             }
-            RigidTy::FnDef(def_id, args) => {
-                if !args.0.is_empty() {
-                    unimplemented!("generic args are not yet handled");
-                }
+            RigidTy::FnDef(def_id, _args) => {
                 let sig = def_id.fn_sig().value;
                 let inputs = sig.inputs().iter().map(|ty| self.translate_ty(*ty)).collect();
                 let output = self.translate_ty(sig.output());
                 // TODO: populate regions?
-                CharonTy::new(CharonTyKind::Arrow(inputs))
+                let rb = CharonRegionBinder {
+                    regions: CharonVector::new(),
+                    skip_binder: (inputs, output),
+                };
+                CharonTy::new(CharonTyKind::Arrow(rb))
             }
             RigidTy::Adt(adt_def, genarg) => {
                 let def_id = adt_def.def_id();
@@ -1273,8 +1308,10 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     current_var = varid.to_index();
                 }
                 ProjectionElem::Index(local) => {
-                    let c_operand =
-                        CharonOperand::Copy(CharonPlace::new(CharonVarId::from_usize(*local), current_ty.clone()));
+                    let c_operand = CharonOperand::Copy(CharonPlace::new(
+                        CharonVarId::from_usize(*local),
+                        current_ty.clone(),
+                    ));
                     c_provec.push(CharonProjectionElem::Index {
                         offset: Box::new(c_operand),
                         from_end: false,
@@ -1291,7 +1328,9 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         match region.kind {
             RegionKind::ReStatic => CharonRegion::Static,
             RegionKind::ReErased => CharonRegion::Erased,
-            RegionKind::ReEarlyParam(_) | RegionKind::ReBound(_, _) | RegionKind::RePlaceholder(_) => {
+            RegionKind::ReEarlyParam(_)
+            | RegionKind::ReBound(_, _)
+            | RegionKind::RePlaceholder(_) => {
                 todo!("Not yet implemented RegionKind: {:?}", region.kind)
             }
         }
