@@ -106,6 +106,7 @@ mod tests {
     use num::BigInt;
 
     #[test]
+    #[allow(clippy::bool_assert_comparison)]
     fn test_fits_in_bits() {
         assert_eq!(BigInt::from(10).fits_in_bits(3, false), false);
         assert_eq!(BigInt::from(10).fits_in_bits(4, false), true);
