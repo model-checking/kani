@@ -936,9 +936,9 @@ where
     }
 }
 
-////////////////////////////////////////
-//// Dynamic memory usage computation
-////////////////////////////////////////
+// ==================================
+//  Dynamic memory usage computation
+// ==================================
 
 #[cfg(test)]
 mod sharing_stats {
@@ -1032,7 +1032,7 @@ mod sharing_stats {
         }
     }
 
-    impl<'a, W> DynamicUsage for GotoBinarySerializer<'a, W>
+    impl<W> DynamicUsage for GotoBinarySerializer<'_, W>
     where
         W: Write,
     {
@@ -1127,9 +1127,9 @@ mod sharing_stats {
                     max_count = *count;
                     max_id = Some(id);
                 };
-                nof_unique = nof_unique + 1;
+                nof_unique += 1;
                 let incr = (*count as f64 - avg_count) / (nof_unique as f64);
-                avg_count = avg_count + incr;
+                avg_count += incr;
             }
             SharingStats {
                 _nof_unique: nof_unique,
@@ -1156,7 +1156,7 @@ mod sharing_stats {
     }
 
     impl GotoBinarySharingStats {
-        fn from_serializer<'a, W: Write>(s: &GotoBinarySerializer<'a, W>) -> Self {
+        fn from_serializer<W: Write>(s: &GotoBinarySerializer<'_, W>) -> Self {
             GotoBinarySharingStats {
                 _allocated_bytes: s.dynamic_usage(),
                 _string_stats: SharingStats::new(&s.string_count),
@@ -1173,7 +1173,7 @@ mod sharing_stats {
         }
     }
 
-    impl<'a, W> GotoBinarySerializer<'a, W>
+    impl<W> GotoBinarySerializer<'_, W>
     where
         W: Write,
     {
@@ -1277,13 +1277,13 @@ mod tests {
             let mut writer = BufWriter::new(&mut vec);
             let mut serializer = GotoBinarySerializer::new(&mut writer);
 
-            for u in std::u8::MIN..std::u8::MAX {
+            for u in u8::MIN..u8::MAX {
                 serializer.write_u8(u);
             }
         }
 
         // read back from byte stream
-        for u in std::u8::MIN..std::u8::MAX {
+        for u in u8::MIN..u8::MAX {
             assert_eq!(vec[u as usize], u);
         }
     }
@@ -1352,7 +1352,7 @@ mod tests {
         let foo = String::from("foo").intern();
         let bar = String::from("bar").intern();
         let baz = String::from("baz").intern();
-        let strings = vec![foo, bar, foo, bar, foo, baz, baz, bar, foo];
+        let strings = [foo, bar, foo, bar, foo, baz, baz, bar, foo];
 
         let mut vec: Vec<u8> = Vec::new();
 
