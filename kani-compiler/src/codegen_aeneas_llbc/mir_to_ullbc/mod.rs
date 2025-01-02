@@ -268,7 +268,9 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             body,
             is_global_initializer: None,
         };
-        if self.translated.fun_decls.get(fid).is_none() { self.translated.fun_decls.set_slot(fid, fun_decl) };
+        if self.translated.fun_decls.get(fid).is_none() {
+            self.translated.fun_decls.set_slot(fid, fun_decl)
+        };
         println!("Complete Func name: {:?}", funcname);
         Ok(())
     }
@@ -484,17 +486,15 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             }
         }
         for inpty in input.iter() {
-            if let TyKind::RigidTy(RigidTy::Ref(r, _, _)) =  inpty.kind() {
+            if let TyKind::RigidTy(RigidTy::Ref(r, _, _)) = inpty.kind() {
                 if let RegionKind::ReBound(_, br) = r.kind {
-                        let id = br.var as usize;
-                        let c_region = CharonRegionVar {
-                            index: CharonRegionId::from_usize(id),
-                            name: None,
-                        };
-                        c_regions.push(c_region);
-                    }
+                    let id = br.var as usize;
+                    let c_region =
+                        CharonRegionVar { index: CharonRegionId::from_usize(id), name: None };
+                    c_regions.push(c_region);
                 }
-            }        
+            }
+        }
         let trait_clauses = self.get_traitclauses_from_defid(fndef.def_id());
         CharonGenericParams {
             regions: c_regions,
@@ -1000,7 +1000,6 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 _ => panic!("Expected ident"),
             };
             name.push(CharonPathElem::Ident(funcname, CharonDisambiguator::new(0)));
-
         };
         trace!("{:?}", name);
         Ok(CharonName { name })
@@ -1293,8 +1292,10 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         match ty.kind() {
             TyKind::RigidTy(rigid_ty) => self.translate_rigid_ty(rigid_ty),
             TyKind::Param(paramty) => {
-                let debr =
-                    CharonDeBruijnVar::Bound(CharonDeBruijnId::new(0), CharonTypeVarId::from_usize(paramty.index as usize));
+                let debr = CharonDeBruijnVar::Bound(
+                    CharonDeBruijnId::new(0),
+                    CharonTypeVarId::from_usize(paramty.index as usize),
+                );
                 CharonTy::new(CharonTyKind::TypeVar(debr))
             }
             /*
@@ -1329,9 +1330,10 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 translate_constant_expr_to_const_generic(c_raw_constexpr).unwrap()
             }
             TyConstKind::Param(paramc) => {
-                let debr = CharonDeBruijnVar::Bound(CharonDeBruijnId::new(0),CharonConstGenericVarId::from_usize(
-                    paramc.index as usize,
-                ));
+                let debr = CharonDeBruijnVar::Bound(
+                    CharonDeBruijnId::new(0),
+                    CharonConstGenericVarId::from_usize(paramc.index as usize),
+                );
                 CharonConstGeneric::Var(debr)
             }
             _ => todo!(),
@@ -1841,7 +1843,9 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         for prj in projection.iter() {
             match prj {
                 ProjectionElem::Deref => {
-                    if let CharonTyKind::Ref(_, ty, _) = current_ty.kind() { current_ty = ty.clone() };
+                    if let CharonTyKind::Ref(_, ty, _) = current_ty.kind() {
+                        current_ty = ty.clone()
+                    };
                     c_provec.push(CharonProjectionElem::Deref)
                 }
                 ProjectionElem::Field(fid, ty) => {
