@@ -4,21 +4,13 @@ assertion\
 
 assertion\
 	 - Status: FAILURE\
-	 - Description: "*ptr == 1"
+	 - Description: "*ptr == 4"
 
 assertion\
 	 - Status: FAILURE\
 	 - Description: "*ptr < 100"
 
-assertion\
-	 - Status: SUCCESS\
-	 - Description: "*ptr < 100"\
-
-assertion\
-	 - Status: SUCCESS\
-	 - Description: "*ptr < 101"
-
 Summary:
-Verification failed for - should_fail::prove_add_one
-Verification failed for - should_fail::prove_add_three
-Complete - 1 successfully verified harnesses, 2 failures, 3 total.
+Verification failed for - prove_add_one
+Verification failed for - prove_add_three
+Complete - 0 successfully verified harnesses, 2 failures, 2 total.

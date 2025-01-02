@@ -13,28 +13,33 @@ fn add_three(add_three_ptr: &mut u32) {
 }
 
 #[kani::requires(*add_two_ptr < 101)]
-#[kani::ensures(|result| old(*add_two_ptr + 2) == *add_two_ptr)]
+#[kani::ensures(|_| old(*add_two_ptr + 2) == *add_two_ptr)]
 fn add_two(add_two_ptr: &mut u32) {
     *add_two_ptr += 1;
     add_one(add_two_ptr);
 }
 
 #[kani::modifies(add_one_ptr)]
-#[kani::requires(*add_one_ptr == 1)]
-#[kani::ensures(|result| old(*add_one_ptr + 1) == *add_one_ptr)]
+// 4 is arbitrary -- just needs to be some value that's possible after calling add_three and add_two
+#[kani::requires(*add_one_ptr == 4)]
+#[kani::ensures(|_| old(*add_one_ptr + 1) == *add_one_ptr)]
 fn add_one(add_one_ptr: &mut u32) {
     *add_one_ptr += 1;
 }
 
 // Test that proof_for_contract takes precedence over the assert mode, i.e.
-// that the target of the proof for contract still has its preconditions assumed.
+// that the target of the proof for contract still has its preconditions assumed
+// when combined with other contracts that are being asserted.
+// In this harness, add_three and add_two's contracts are asserted, but add_one (the target) should have its precondition assumed.
+// So, assume add_three's precondition to ensure that its precondition assertion passes,
+// but do not assume add_one's stricter precondition--if precedence is implemented correctly
+// it should get assumed without us having to specify it in the harness, and verification should succeed.
+// For a version of this harness without the assumption, see assert-preconditions::prove_add_one.
 #[kani::proof_for_contract(add_one)]
 fn proof_for_contract_takes_precedence() {
     let mut i = kani::any();
-    // if add_one's precondition was asserted, verification would fail,
-    // but since it's assumed, we get a vacuously successful proof instead.
-    kani::assume(i == 2);
-    add_one(&mut i);
+    kani::assume(i < 100);
+    add_three(&mut i);
 }
 
 // Test that stub_verified takes precedence over the assert mode.

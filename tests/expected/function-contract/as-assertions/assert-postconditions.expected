@@ -1,9 +1,9 @@
 assertion\
 	 - Status: FAILURE\
-	 - Description: "|result| old(*add_two_ptr + 1) == *add_two_ptr"
+	 - Description: "|_| old(*add_two_ptr + 1) == *add_two_ptr"
 
 assertion\
 	 - Status: SUCCESS\
-	 - Description: "|result| old(*add_one_ptr + 1) == *add_one_ptr"
+	 - Description: "|_| old(*add_one_ptr + 1) == *add_one_ptr"
 
 VERIFICATION:- FAILED

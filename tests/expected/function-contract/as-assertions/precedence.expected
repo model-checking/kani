@@ -1,13 +1,25 @@
 assertion\
 	 - Status: UNREACHABLE\
-	 - Description: "*add_one_ptr == 1"
+	 - Description: "*add_one_ptr == 4"
 
 assertion\
 	 - Status: UNREACHABLE\
-	 - Description: "|result| old(*add_one_ptr + 1) == *add_one_ptr"
+	 - Description: "|_| old(*add_one_ptr + 1) == *add_one_ptr"
 
 assertion\
-	 - Status: UNREACHABLE\
-	 - Description: "|result| old(*add_one_ptr + 1) == *add_one_ptr"
+	 - Status: SUCCESS\
+	 - Description: "*add_three_ptr < 100"
+
+assertion\
+	 - Status: SUCCESS\
+	 - Description: "*add_two_ptr < 101"
+
+assertion\
+	 - Status: SUCCESS\
+	 - Description: "|_| old(*add_two_ptr + 2) == *add_two_ptr"
+
+assertion\
+	 - Status: SUCCESS\
+	 - Description: "|_| old(*add_one_ptr + 1) == *add_one_ptr"
 
 Complete - 2 successfully verified harnesses, 0 failures, 2 total.
