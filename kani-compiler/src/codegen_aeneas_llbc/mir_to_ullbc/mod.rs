@@ -992,17 +992,15 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         let instancedef_internal = rustc_span::def_id::DefId::local(
             rustc_span::def_id::DefIndex::from_usize(def_id.index.as_usize()),
         );
-        match self.tcx.impl_of_method(instancedef_internal) {
-            Some(impl_defid_internal) => {
-                let impl_defid = DefId::to_val(impl_defid_internal.index.as_usize());
-                let impl_id = self.register_trait_impl_id(impl_defid);
-                let funcname = match name.pop().unwrap() {
-                    CharonPathElem::Ident(name, _) => name + &impl_id.to_string(),
-                    _ => panic!("Expected ident"),
-                };
-                name.push(CharonPathElem::Ident(funcname, CharonDisambiguator::new(0)));
-            }
-            None => panic!("Expected impl"),
+        if let Some(impl_defid_internal) = self.tcx.impl_of_method(instancedef_internal) {
+            let impl_defid = DefId::to_val(impl_defid_internal.index.as_usize());
+            let impl_id = self.register_trait_impl_id(impl_defid);
+            let funcname = match name.pop().unwrap() {
+                CharonPathElem::Ident(name, _) => name + &impl_id.to_string(),
+                _ => panic!("Expected ident"),
+            };
+            name.push(CharonPathElem::Ident(funcname, CharonDisambiguator::new(0)));
+
         };
         trace!("{:?}", name);
         Ok(CharonName { name })
@@ -1296,7 +1294,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             TyKind::RigidTy(rigid_ty) => self.translate_rigid_ty(rigid_ty),
             TyKind::Param(paramty) => {
                 let debr =
-                    CharonDeBruijnVar::free(CharonTypeVarId::from_usize(paramty.index as usize));
+                    CharonDeBruijnVar::Bound(CharonDeBruijnId::new(0), CharonTypeVarId::from_usize(paramty.index as usize));
                 CharonTy::new(CharonTyKind::TypeVar(debr))
             }
             /*
@@ -1331,7 +1329,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 translate_constant_expr_to_const_generic(c_raw_constexpr).unwrap()
             }
             TyConstKind::Param(paramc) => {
-                let debr = CharonDeBruijnVar::free(CharonConstGenericVarId::from_usize(
+                let debr = CharonDeBruijnVar::Bound(CharonDeBruijnId::new(0),CharonConstGenericVarId::from_usize(
                     paramc.index as usize,
                 ));
                 CharonConstGeneric::Var(debr)

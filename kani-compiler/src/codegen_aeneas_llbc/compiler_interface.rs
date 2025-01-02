@@ -35,7 +35,7 @@ use rustc_session::Session;
 use rustc_session::config::{CrateType, OutputFilenames, OutputType};
 use rustc_session::output::out_filename;
 use rustc_smir::rustc_internal;
-use stable_mir::mir::mono::{Instance, MonoItem};
+use stable_mir::mir::mono::{Instance, MonoItem, InstanceKind};
 use stable_mir::{CrateDef, DefId};
 use std::any::Any;
 use std::fs::File;
@@ -109,16 +109,19 @@ impl LlbcCodegenBackend {
 
         // Translate all the items
         for item in &items {
+            println!("Translating: {item:?}");
             match item {
                 MonoItem::Fn(instance) => {
-                    let mut fcx = Context::new(
-                        tcx,
-                        *instance,
-                        &mut ccx.translated,
-                        &mut id_map,
-                        &mut ccx.errors,
-                    );
-                    let _ = fcx.translate();
+                    if let InstanceKind::Item = instance.kind {
+                        let mut fcx = Context::new(
+                            tcx,
+                            *instance,
+                            &mut ccx.translated,
+                            &mut id_map,
+                            &mut ccx.errors,
+                        );
+                        let _ = fcx.translate();
+                    }
                 }
                 MonoItem::Static(_def) => todo!(),
                 MonoItem::GlobalAsm(_) => {} // We have already warned above
@@ -392,7 +395,8 @@ fn create_charon_transformation_context(tcx: TyCtxt) -> TransformCtx {
         item_opacities: Vec::new(),
     };
     let crate_name = tcx.crate_name(LOCAL_CRATE).as_str().into();
-    let translated = TranslatedCrate { crate_name, ..TranslatedCrate::default() };
+    let mut translated = TranslatedCrate { crate_name, ..TranslatedCrate::default() };
+    translated.options.hide_marker_traits = true;
     let errors = ErrorCtx::new(true, false);
     TransformCtx { options, translated, errors }
 }
