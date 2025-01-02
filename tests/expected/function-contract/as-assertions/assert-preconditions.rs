@@ -13,7 +13,7 @@ fn add_three(ptr: &mut u32) {
 }
 
 #[kani::requires(*ptr < 101)]
-#[kani::ensures(|result| old(*ptr + 2) == *ptr)]
+#[kani::ensures(|_| old(*ptr + 2) == *ptr)]
 fn add_two(ptr: &mut u32) {
     *ptr += 1;
     add_one(ptr);

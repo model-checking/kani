@@ -11,13 +11,13 @@ fn add_three(add_three_ptr: &mut u32) {
     add_two(add_three_ptr);
 }
 
-#[kani::ensures(|result| old(*add_two_ptr + 1) == *add_two_ptr)] // incorrect -- should be old(*add_two_ptr + 1)
+#[kani::ensures(|_| old(*add_two_ptr + 1) == *add_two_ptr)] // incorrect -- should be old(*add_two_ptr + 2)
 fn add_two(add_two_ptr: &mut u32) {
     *add_two_ptr += 1;
     add_one(add_two_ptr)
 }
 
-#[kani::ensures(|result| old(*add_one_ptr + 1) == *add_one_ptr)] // correct -- assertion should always succeed
+#[kani::ensures(|_| old(*add_one_ptr + 1) == *add_one_ptr)] // correct -- assertion should always succeed
 fn add_one(add_one_ptr: &mut u32) {
     *add_one_ptr += 1;
 }
