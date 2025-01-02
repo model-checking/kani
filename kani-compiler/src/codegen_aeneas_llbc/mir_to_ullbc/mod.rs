@@ -757,6 +757,17 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             || crate_name.starts_with("alloc")
     }
 
+    fn is_builtin_adt(&mut self, adtdef: AdtDef) -> bool {
+        let name = self.adtdef_to_name(adtdef).unwrap();
+        let crate_name = match name.name.first().unwrap() {
+            CharonPathElem::Ident(cn, _) => cn,
+            _ => panic!("Imple name"),
+        };
+        crate_name.starts_with("std")
+            || crate_name.starts_with("core")
+            || crate_name.starts_with("alloc")
+    }
+
     fn is_marker_trait(&mut self, traitdef: TraitDef) -> bool {
         let name = self.defid_to_name(traitdef.def_id()).unwrap();
         let crate_name = match name.name.first().unwrap() {
@@ -992,9 +1003,12 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             name.push(CharonPathElem::Ident(crate_name, CharonDisambiguator::new(0)));
         }
 
+        
         let instancedef_internal = rustc_span::def_id::DefId::local(
             rustc_span::def_id::DefIndex::from_usize(def_id.index.as_usize()),
         );
+        
+        //let impltrait = rustc_internal::internal(self.tcx, def_id);
         if let Some(impl_defid_internal) = self.tcx.impl_of_method(instancedef_internal) {
             let impl_defid = DefId::to_val(impl_defid_internal.index.as_usize());
             let impl_id = self.register_trait_impl_id(impl_defid);
@@ -1903,11 +1917,16 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         match region.kind {
             RegionKind::ReStatic => CharonRegion::Static,
             RegionKind::ReErased => CharonRegion::Erased,
-            RegionKind::ReEarlyParam(_) => CharonRegion::Erased,
-            RegionKind::ReBound(var, boundregion) =>
-            //CharonRegion::Static,
+            RegionKind::ReEarlyParam(epr) =>             
             {
-                println!("region {:?}", boundregion.var.clone());
+                let debr = CharonDeBruijnVar::bound(
+                    CharonDeBruijnId { index: 0 as usize },
+                    CharonRegionId::from_usize(epr.index as usize),
+                );
+                CharonRegion::Var(debr)
+            }
+            RegionKind::ReBound(var, boundregion) =>
+            {
                 let debr = CharonDeBruijnVar::bound(
                     CharonDeBruijnId { index: var as usize },
                     CharonRegionId::from_usize(boundregion.var as usize),
