@@ -61,6 +61,7 @@ use stable_mir::ty::{
     MirConst, Region, RegionKind, RigidTy, Span, Ty, TyConst, TyConstKind, TyKind, UintTy,
 };
 use stable_mir::{CrateDef, DefId};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use tracing::{debug, trace};
 
@@ -73,6 +74,7 @@ pub struct Context<'a, 'tcx> {
     id_map: &'a mut FxHashMap<DefId, CharonAnyTransId>,
     errors: &'a mut CharonErrorCtx,
     local_names: FxHashMap<Local, String>,
+    file_to_id: HashMap<CharonFileName, CharonFileId>,
 }
 
 impl<'a, 'tcx> Context<'a, 'tcx> {
@@ -94,8 +96,8 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 }
             }
         }
-
-        Self { tcx, instance, translated, id_map, errors, local_names }
+        let file_to_id: HashMap<CharonFileName, CharonFileId> = HashMap::new();
+        Self { tcx, instance, translated, id_map, errors, local_names, file_to_id }
     }
 
     fn tcx(&self) -> TyCtxt<'tcx> {
@@ -644,23 +646,15 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         self.translate_span(instance.def.span())
     }
 
-    fn file_to_id(&mut self, filename: &CharonFileName) -> Option<CharonFileId> {
-        for (id, file) in self.translated.files.iter().enumerate() {
-            if file.name == *filename {
-                return Some(CharonFileId::from_usize(id));
-            }
-        }
-        None
-    }
-
     /// Compute the span information for MIR span
     fn translate_span(&mut self, span: Span) -> CharonSpan {
         let filename = CharonFileName::Local(PathBuf::from(span.get_filename()));
-        let file_id = match self.file_to_id(&filename) {
-            Some(file_id) => file_id,
+        let file_id = match self.file_to_id.get(&filename) {
+            Some(file_id) => *file_id,
             None => {
                 let file = CharonFile { name: filename.clone(), contents: None };
                 let file_id = self.translated.files.push(file);
+                self.file_to_id.insert(filename, file_id);
                 file_id
             }
         };

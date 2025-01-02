@@ -35,7 +35,7 @@ use rustc_session::Session;
 use rustc_session::config::{CrateType, OutputFilenames, OutputType};
 use rustc_session::output::out_filename;
 use rustc_smir::rustc_internal;
-use stable_mir::mir::mono::{Instance, InstanceKind, MonoItem};
+use stable_mir::mir::mono::{Instance, MonoItem};
 use stable_mir::{CrateDef, DefId};
 use std::any::Any;
 use std::fs::File;
@@ -111,16 +111,14 @@ impl LlbcCodegenBackend {
         for item in &items {
             match item {
                 MonoItem::Fn(instance) => {
-                    if let InstanceKind::Item = instance.kind {
-                        let mut fcx = Context::new(
-                            tcx,
-                            *instance,
-                            &mut ccx.translated,
-                            &mut id_map,
-                            &mut ccx.errors,
-                        );
-                        let _ = fcx.translate();
-                    }
+                    let mut fcx = Context::new(
+                        tcx,
+                        *instance,
+                        &mut ccx.translated,
+                        &mut id_map,
+                        &mut ccx.errors,
+                    );
+                    let _ = fcx.translate();
                 }
                 MonoItem::Static(_def) => todo!(),
                 MonoItem::GlobalAsm(_) => {} // We have already warned above
