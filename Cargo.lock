@@ -524,18 +524,18 @@ dependencies = [
 
 [[package]]
 name = "derive_generic_visitor"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e0729a8f5d509da0c280502837a56a9d05c16866ae5b608ef34bd687e9f21af8"
+checksum = "b3e1c241e4f464b614bd7650f1a7c4c0e20e5ef21564d6b916b4c51fd76f7688"
 dependencies = [
  "derive_generic_visitor_macros",
 ]
 
 [[package]]
 name = "derive_generic_visitor_macros"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3c2b7f15bf93ca0d978ecb96792c71a43c629a1e18b2a5de7a35a5d218e6c85e"
+checksum = "885f5274163b5b1720591c0c24b34350a0b05e4774351f9fb3d13c192d8c995b"
 dependencies = [
  "convert_case",
  "darling",
