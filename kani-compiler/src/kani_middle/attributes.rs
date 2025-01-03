@@ -371,7 +371,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                     attrs.iter().for_each(|attr| self.check_proof_attribute(kind, attr))
                 }
                 KaniAttributeKind::StubVerified => {
-                    expect_single(self.tcx, kind, &attrs);
+                    // Actual validation happens when the annotation are handled
                 }
                 KaniAttributeKind::FnMarker
                 | KaniAttributeKind::CheckedWith
@@ -568,7 +568,21 @@ impl<'tcx> KaniAttributes<'tcx> {
 
     fn handle_stub_verified(&self, harness: &mut HarnessAttributes) {
         let dcx = self.tcx.dcx();
+        let mut seen = HashSet::new();
         for (name, def_id, span) in self.interpret_stub_verified_attribute() {
+            if seen.contains(&name) {
+                dcx.struct_span_err(
+                    span,
+                    format!("Multiple occurrences of `stub_verified({})`.", name),
+                )
+                .with_span_note(
+                    self.tcx.def_span(def_id),
+                    format!("Use a single `stub_verified({})` annotation.", name),
+                )
+                .emit();
+            } else {
+                seen.insert(name);
+            }
             if KaniAttributes::for_item(self.tcx, def_id).contract_attributes().is_none() {
                 dcx.struct_span_err(
                     span,
