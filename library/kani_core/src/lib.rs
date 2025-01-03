@@ -496,6 +496,9 @@ macro_rules! kani_intrinsics {
             /// Stub the body with its contract.
             pub const REPLACE: Mode = 3;
 
+            /// Insert the contract into the body of the function as assertion(s).
+            pub const ASSERT: Mode = 4;
+
             /// Creates a non-fatal property with the specified condition and message.
             ///
             /// This check will not impact the program control flow even when it fails.

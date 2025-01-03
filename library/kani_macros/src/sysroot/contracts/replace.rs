@@ -9,9 +9,9 @@ use std::mem;
 use syn::{Block, Stmt};
 
 use super::{
-    ClosureType, ContractConditionsData, ContractConditionsHandler, INTERNAL_RESULT_IDENT,
+    ContractConditionsData, ContractConditionsHandler, ContractMode, INTERNAL_RESULT_IDENT,
     helpers::*,
-    shared::{build_ensures, try_as_result_assign},
+    shared::{build_ensures, split_for_remembers, try_as_result_assign},
 };
 
 impl<'a> ContractConditionsHandler<'a> {
@@ -96,7 +96,7 @@ impl<'a> ContractConditionsHandler<'a> {
                 let (remembers, ensures_clause) = build_ensures(attr);
                 let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
 
-                let (asserts, rest_of_before) = split_for_remembers(before, ClosureType::Replace);
+                let (asserts, rest_of_before) = split_for_remembers(before, ContractMode::Replace);
 
                 quote!({
                     #(#asserts)*
