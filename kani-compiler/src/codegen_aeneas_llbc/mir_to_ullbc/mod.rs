@@ -83,6 +83,7 @@ pub struct Context<'a, 'tcx> {
     id_map: &'a mut FxHashMap<DefId, CharonAnyTransId>,
     errors: &'a mut CharonErrorCtx,
     local_names: FxHashMap<Local, String>,
+    file_to_id: HashMap<CharonFileName, CharonFileId>,
 }
 
 impl<'a, 'tcx> Context<'a, 'tcx> {
@@ -104,7 +105,8 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 }
             }
         }
-        Self { tcx, instance, translated, id_map, errors, local_names }
+        let file_to_id: HashMap<CharonFileName, CharonFileId> = HashMap::new();
+        Self { tcx, instance, translated, id_map, errors, local_names, file_to_id }
     }
 
     fn tcx(&self) -> TyCtxt<'tcx> {
@@ -268,8 +270,8 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             item_meta,
             signature,
             kind: CharonItemKind::Regular,
-            body,
             is_global_initializer: None,
+            body: Ok(body),
         };
         if self.translated.fun_decls.get(fid).is_none() {
             self.translated.fun_decls.set_slot(fid, fun_decl)
@@ -1123,11 +1125,13 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
     /// Compute the span information for MIR span
     fn translate_span(&mut self, span: Span) -> CharonSpan {
         let filename = CharonFileName::Local(PathBuf::from(span.get_filename()));
-        let file_id = match self.file_to_id(&filename) {
-            Some(file_id) => file_id,
+        let file_id = match self.file_to_id.get(&filename) {
+            Some(file_id) => *file_id,
             None => {
                 let file = CharonFile { name: filename.clone(), contents: None };
-                self.translated.files.push(file)
+                let file_id = self.translated.files.push(file);
+                self.file_to_id.insert(filename, file_id);
+                file_id
             }
         };
         let lineinfo = span.get_lines();
@@ -1411,7 +1415,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 };
                 CharonTy::new(CharonTyKind::Adt(CharonTypeId::Tuple, generic_args))
             }
-            RigidTy::FnDef(def_id, _) => {
+            RigidTy::FnDef(def_id, _args) => {
                 let sig = def_id.fn_sig().value;
                 let inputs = sig.inputs().iter().map(|ty| self.translate_ty(*ty)).collect();
                 let output = self.translate_ty(sig.output());
@@ -1591,7 +1595,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
     }
 
     fn translate_place(&mut self, place: &Place) -> CharonPlace {
-        let projection = self.translate_projection(place, &place.projection);
+        let (_projection, ty) = self.translate_projection(place, &place.projection);
         let local = place.local;
         let var_id = CharonVarId::from_usize(local);
         let basetype =  self.translate_ty(self.place_ty(&place));
@@ -1911,7 +1915,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 _ => continue,
             }
         }
-        c_provec
+        (c_provec, current_ty)
     }
 
     fn translate_region(&self, region: Region) -> CharonRegion {
