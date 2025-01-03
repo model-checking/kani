@@ -112,7 +112,6 @@ impl LlbcCodegenBackend {
             //println!("Translating: {item:?}");
             match item {
                 MonoItem::Fn(instance) => {
-                    //if let InstanceKind::Item = instance.kind {
                         let mut fcx = Context::new(
                             tcx,
                             *instance,
@@ -121,7 +120,6 @@ impl LlbcCodegenBackend {
                             &mut ccx.errors,
                         );
                         let _ = fcx.translate();
-                    //}
                 }
                 MonoItem::Static(_def) => todo!(),
                 MonoItem::GlobalAsm(_) => {} // We have already warned above

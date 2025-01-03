@@ -1002,18 +1002,13 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         if !found_crate_name {
             name.push(CharonPathElem::Ident(crate_name, CharonDisambiguator::new(0)));
         }
-
         
-        let instancedef_internal = rustc_span::def_id::DefId::local(
-            rustc_span::def_id::DefIndex::from_usize(def_id.index.as_usize()),
-        );
-        
-        //let impltrait = rustc_internal::internal(self.tcx, def_id);
-        if let Some(impl_defid_internal) = self.tcx.impl_of_method(instancedef_internal) {
+        if let Some(impl_defid_internal) = self.tcx.impl_of_method(def_id) {
+            let traitref = self.tcx.impl_trait_ref(impl_defid_internal).unwrap().skip_binder().args.first().unwrap().to_string();
             let impl_defid = DefId::to_val(impl_defid_internal.index.as_usize());
             let impl_id = self.register_trait_impl_id(impl_defid);
             let funcname = match name.pop().unwrap() {
-                CharonPathElem::Ident(name, _) => name + &impl_id.to_string(),
+                CharonPathElem::Ident(name, _) => name + traitref.as_str(),
                 _ => panic!("Expected ident"),
             };
             name.push(CharonPathElem::Ident(funcname, CharonDisambiguator::new(0)));
@@ -1596,10 +1591,15 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
     }
 
     fn translate_place(&mut self, place: &Place) -> CharonPlace {
-        let (_projection, ty) = self.translate_projection(place, &place.projection);
+        let projection = self.translate_projection(place, &place.projection);
         let local = place.local;
         let var_id = CharonVarId::from_usize(local);
-        CharonPlace::new(var_id, ty)
+        let basetype =  self.translate_ty(self.place_ty(&place));
+        let mut prjplace = CharonPlace::new(var_id, basetype);
+        for (projelem, ty) in projection.iter() {
+            prjplace = prjplace.project(projelem.clone(), ty.clone());
+        }
+        prjplace
     }
 
     fn place_ty(&self, place: &Place) -> Ty {
@@ -1852,7 +1852,8 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         &mut self,
         place: &Place,
         projection: &[ProjectionElem],
-    ) -> (Vec<CharonProjectionElem>, CharonTy) {
+    ) -> Vec<(CharonProjectionElem, CharonTy)> {
+        println!("translate_projection: {projection:?}");
         let c_place_ty = self.translate_ty(self.place_ty(place));
         let mut c_provec = Vec::new();
         let mut current_ty = c_place_ty.clone();
@@ -1863,7 +1864,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     if let CharonTyKind::Ref(_, ty, _) = current_ty.kind() {
                         current_ty = ty.clone()
                     };
-                    c_provec.push(CharonProjectionElem::Deref)
+                    c_provec.push((CharonProjectionElem::Deref, current_ty.clone()))
                 }
                 ProjectionElem::Field(fid, ty) => {
                     let c_fieldid = CharonFieldId::from_usize(*fid);
@@ -1874,21 +1875,21 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                             match adttype.kind {
                                 CharonTypeDeclKind::Struct(_) => {
                                     let c_fprj = CharonFieldProjKind::Adt(*tdid, None);
-                                    c_provec.push(CharonProjectionElem::Field(c_fprj, c_fieldid));
                                     current_ty = self.translate_ty(*ty);
+                                    c_provec.push((CharonProjectionElem::Field(c_fprj, c_fieldid), current_ty.clone()));
                                 }
                                 CharonTypeDeclKind::Enum(_) => {
                                     let c_fprj = CharonFieldProjKind::Adt(*tdid, Some(c_variantid));
-                                    c_provec.push(CharonProjectionElem::Field(c_fprj, c_fieldid));
                                     current_ty = self.translate_ty(*ty);
+                                    c_provec.push((CharonProjectionElem::Field(c_fprj, c_fieldid), current_ty.clone()));
                                 }
                                 _ => (),
                             }
                         }
                         CharonTyKind::Adt(CharonTypeId::Tuple, genargs) => {
                             let c_fprj = CharonFieldProjKind::Tuple(genargs.types.len());
-                            c_provec.push(CharonProjectionElem::Field(c_fprj, c_fieldid));
                             current_ty = self.translate_ty(*ty);
+                            c_provec.push((CharonProjectionElem::Field(c_fprj, c_fieldid), current_ty.clone()));                            
                         }
                         _ => (),
                     }
@@ -1901,16 +1902,16 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                         CharonVarId::from_usize(*local),
                         current_ty.clone(),
                     ));
-                    c_provec.push(CharonProjectionElem::Index {
+                    c_provec.push((CharonProjectionElem::Index {
                         offset: Box::new(c_operand),
                         from_end: false,
-                    });
+                    }, current_ty.clone()));
                 }
 
                 _ => continue,
             }
         }
-        (c_provec, current_ty)
+        c_provec
     }
 
     fn translate_region(&self, region: Region) -> CharonRegion {
