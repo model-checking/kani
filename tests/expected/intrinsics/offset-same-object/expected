@@ -1,2 +1,1 @@
-FAILURE\
-"same object violation"
+Failed Checks: Offset result and original pointer should point to the same allocation
