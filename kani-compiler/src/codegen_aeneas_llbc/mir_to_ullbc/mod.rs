@@ -284,7 +284,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         let tid = match self.id_map.get(&def_id) {
             Some(tid) => *tid,
             None => {
-                debug!("***Not found!");
+                debug!("***Not found fun_decl_id!");
                 let tid = CharonAnyTransId::Fun(self.translated.fun_decls.reserve_slot());
                 self.id_map.insert(def_id, tid);
                 self.translated.all_ids.insert(tid);
@@ -300,7 +300,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         let tid = match self.id_map.get(&def_id) {
             Some(tid) => *tid,
             None => {
-                debug!("***Not found!");
+                debug!("***Not found type_decl_id!");
                 let tid = CharonAnyTransId::Type(self.translated.type_decls.reserve_slot());
                 self.id_map.insert(def_id, tid);
                 self.translated.all_ids.insert(tid);
@@ -316,7 +316,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         let tid = match self.id_map.get(&def_id) {
             Some(tid) => *tid,
             None => {
-                debug!("***Not found!");
+                debug!("***Not found trait_decl_id!");
                 let tid = CharonAnyTransId::TraitDecl(self.translated.trait_decls.reserve_slot());
                 self.id_map.insert(def_id, tid);
                 self.translated.all_ids.insert(tid);
@@ -332,7 +332,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         let tid = match self.id_map.get(&def_id) {
             Some(tid) => *tid,
             None => {
-                debug!("***Not found!");
+                debug!("***Not found trait_impl_id!");
                 let tid = CharonAnyTransId::TraitImpl(self.translated.trait_impls.reserve_slot());
                 self.id_map.insert(def_id, tid);
                 self.translated.all_ids.insert(tid);
@@ -348,7 +348,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         let tid = match self.id_map.get(&def_id) {
             Some(tid) => *tid,
             None => {
-                debug!("***Not found!");
+                debug!("***Not found global_decl_id!");
                 let tid = CharonAnyTransId::Global(self.translated.global_decls.reserve_slot());
                 self.id_map.insert(def_id, tid);
                 self.translated.all_ids.insert(tid);
@@ -750,7 +750,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         let name = self.def_to_name(func_def).unwrap();
         let crate_name = match name.name.first().unwrap() {
             CharonPathElem::Ident(cn, _) => cn,
-            _ => panic!("Imple name"),
+            _ => panic!("Expected function name"),
         };
         crate_name.starts_with("std")
             || crate_name.starts_with("core")
@@ -761,11 +761,11 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         let name = self.defid_to_name(traitdef.def_id()).unwrap();
         let crate_name = match name.name.first().unwrap() {
             CharonPathElem::Ident(cn, _) => cn,
-            _ => panic!("Imple name"),
+            _ => panic!("Expected crate name"),
         };
         let marker = match name.name.get(1).unwrap() {
             CharonPathElem::Ident(cn, _) => cn,
-            _ => panic!("Imple name"),
+            _ => panic!("Expected trait name"),
         };
         crate_name.starts_with("core") && marker.starts_with("marker")
     }
@@ -1892,7 +1892,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             RegionKind::ReErased => CharonRegion::Erased,
             RegionKind::ReEarlyParam(epr) => {
                 let debr = CharonDeBruijnVar::bound(
-                    CharonDeBruijnId { index: 0 as usize },
+                    CharonDeBruijnId { index: 0_usize },
                     CharonRegionId::from_usize(epr.index as usize),
                 );
                 CharonRegion::Var(debr)
