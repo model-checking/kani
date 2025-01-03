@@ -6,12 +6,11 @@
 //! This module contains a context for translating stable MIR into Charon's
 //! unstructured low-level borrow calculus (ULLBC)
 
+use charon_lib::ast::krate::TypeDeclId as CharonTypeDeclId;
 use charon_lib::ast::meta::{
     AttrInfo as CharonAttrInfo, Loc as CharonLoc, RawSpan as CharonRawSpan,
 };
-use charon_lib::ast::types::{
-    Ty as CharonTy, TyKind as CharonTyKind, TypeDeclId as CharonTypeDeclId,
-};
+use charon_lib::ast::types::{Ty as CharonTy, TyKind as CharonTyKind};
 use charon_lib::ast::{
     AbortKind as CharonAbortKind, AggregateKind as CharonAggregateKind,
     AnyTransId as CharonAnyTransId, Assert as CharonAssert, BinOp as CharonBinOp,
@@ -19,21 +18,23 @@ use charon_lib::ast::{
     BuiltinTy as CharonBuiltinTy, Call as CharonCall, CastKind as CharonCastKind,
     ConstGeneric as CharonConstGeneric, ConstGenericVar as CharonConstGenericVar,
     ConstGenericVarId as CharonConstGenericVarId, ConstantExpr as CharonConstantExpr,
-    Disambiguator as CharonDisambiguator, Field as CharonField, FieldId as CharonFieldId,
-    FieldProjKind as CharonFieldProjKind, FileName as CharonFileName, FnOperand as CharonFnOperand,
+    DeBruijnVar as CharonDeBruijnVar, Disambiguator as CharonDisambiguator, Field as CharonField,
+    FieldId as CharonFieldId, FieldProjKind as CharonFieldProjKind, File as CharonFile,
+    FileId as CharonFileId, FileName as CharonFileName, FnOperand as CharonFnOperand,
     FnPtr as CharonFnPtr, FunDecl as CharonFunDecl, FunDeclId as CharonFunDeclId,
     FunId as CharonFunId, FunIdOrTraitMethodRef as CharonFunIdOrTraitMethodRef,
     FunSig as CharonFunSig, GenericArgs as CharonGenericArgs, GenericParams as CharonGenericParams,
     IntegerTy as CharonIntegerTy, ItemKind as CharonItemKind, ItemMeta as CharonItemMeta,
     ItemOpacity as CharonItemOpacity, Literal as CharonLiteral, LiteralTy as CharonLiteralTy,
-    Name as CharonName, Opaque as CharonOpaque, Operand as CharonOperand,
+    Locals, Name as CharonName, Opaque as CharonOpaque, Operand as CharonOperand,
     PathElem as CharonPathElem, Place as CharonPlace, ProjectionElem as CharonProjectionElem,
     RawConstantExpr as CharonRawConstantExpr, RefKind as CharonRefKind, Region as CharonRegion,
-    RegionId as CharonRegionId, RegionVar as CharonRegionVar, Rvalue as CharonRvalue,
-    ScalarValue as CharonScalarValue, Span as CharonSpan, TranslatedCrate as CharonTranslatedCrate,
-    TypeDecl as CharonTypeDecl, TypeDeclKind as CharonTypeDeclKind, TypeId as CharonTypeId,
-    TypeVar as CharonTypeVar, TypeVarId as CharonTypeVarId, UnOp as CharonUnOp, Var as CharonVar,
-    VarId as CharonVarId, Variant as CharonVariant, VariantId as CharonVariantId,
+    RegionBinder as CharonRegionBinder, RegionId as CharonRegionId, RegionVar as CharonRegionVar,
+    Rvalue as CharonRvalue, ScalarValue as CharonScalarValue, Span as CharonSpan,
+    TranslatedCrate as CharonTranslatedCrate, TypeDecl as CharonTypeDecl,
+    TypeDeclKind as CharonTypeDeclKind, TypeId as CharonTypeId, TypeVar as CharonTypeVar,
+    TypeVarId as CharonTypeVarId, UnOp as CharonUnOp, Var as CharonVar, VarId as CharonVarId,
+    Variant as CharonVariant, VariantId as CharonVariantId,
 };
 use charon_lib::errors::{Error as CharonError, ErrorCtx as CharonErrorCtx};
 use charon_lib::ids::Vector as CharonVector;
@@ -60,6 +61,7 @@ use stable_mir::ty::{
     MirConst, Region, RegionKind, RigidTy, Span, Ty, TyConst, TyConstKind, TyKind, UintTy,
 };
 use stable_mir::{CrateDef, DefId};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use tracing::{debug, trace};
 
@@ -70,8 +72,9 @@ pub struct Context<'a, 'tcx> {
     instance: Instance,
     translated: &'a mut CharonTranslatedCrate,
     id_map: &'a mut FxHashMap<DefId, CharonAnyTransId>,
-    errors: &'a mut CharonErrorCtx<'tcx>,
+    errors: &'a mut CharonErrorCtx,
     local_names: FxHashMap<Local, String>,
+    file_to_id: HashMap<CharonFileName, CharonFileId>,
 }
 
 impl<'a, 'tcx> Context<'a, 'tcx> {
@@ -82,7 +85,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         instance: Instance,
         translated: &'a mut CharonTranslatedCrate,
         id_map: &'a mut FxHashMap<DefId, CharonAnyTransId>,
-        errors: &'a mut CharonErrorCtx<'tcx>,
+        errors: &'a mut CharonErrorCtx,
     ) -> Self {
         let mut local_names = FxHashMap::default();
         // populate names of locals
@@ -93,8 +96,8 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 }
             }
         }
-
-        Self { tcx, instance, translated, id_map, errors, local_names }
+        let file_to_id: HashMap<CharonFileName, CharonFileId> = HashMap::new();
+        Self { tcx, instance, translated, id_map, errors, local_names, file_to_id }
     }
 
     fn tcx(&self) -> TyCtxt<'tcx> {
@@ -102,7 +105,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
     }
 
     fn span_err(&mut self, span: CharonSpan, msg: &str) {
-        self.errors.span_err(span, msg);
+        self.errors.span_err(self.translated, span, msg);
     }
 
     fn continue_on_failure(&self) -> bool {
@@ -136,6 +139,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             item_meta,
             signature,
             kind: CharonItemKind::Regular,
+            is_global_initializer: None,
             body: Ok(body),
         };
 
@@ -645,11 +649,12 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
     /// Compute the span information for MIR span
     fn translate_span(&mut self, span: Span) -> CharonSpan {
         let filename = CharonFileName::Local(PathBuf::from(span.get_filename()));
-        let file_id = match self.translated.file_to_id.get(&filename) {
+        let file_id = match self.file_to_id.get(&filename) {
             Some(file_id) => *file_id,
             None => {
-                let file_id = self.translated.id_to_file.push(filename.clone());
-                self.translated.file_to_id.insert(filename, file_id);
+                let file = CharonFile { name: filename.clone(), contents: None };
+                let file_id = self.translated.files.push(file);
+                self.file_to_id.insert(filename, file_id);
                 file_id
             }
         };
@@ -699,7 +704,6 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             is_closure: false,
             closure_info: None,
             generics: CharonGenericParams::default(),
-            parent_params_info: None,
             inputs: args,
             output: ret_type,
         }
@@ -717,11 +721,12 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
     fn translate_body(&mut self, mir_body: Body) -> CharonBody {
         let span = self.translate_span(mir_body.span);
         let arg_count = self.instance.fn_abi().unwrap().args.len();
-        let locals = self.translate_body_locals(&mir_body);
+        let vars = self.translate_body_locals(&mir_body);
+        let locals = Locals { vars, arg_count };
         let body: CharonBodyContents =
             mir_body.blocks.iter().map(|bb| self.translate_block(bb)).collect();
 
-        let body_expr = CharonExprBody { span, arg_count, locals, body, comments: Vec::new() };
+        let body_expr = CharonExprBody { span, locals, body, comments: Vec::new() };
         CharonBody::Unstructured(body_expr)
     }
 
@@ -764,9 +769,11 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
     fn translate_ty(&mut self, ty: Ty) -> CharonTy {
         match ty.kind() {
             TyKind::RigidTy(rigid_ty) => self.translate_rigid_ty(rigid_ty),
-            TyKind::Param(paramty) => CharonTy::new(CharonTyKind::TypeVar(
-                CharonTypeVarId::from_usize(paramty.index as usize),
-            )),
+            TyKind::Param(paramty) => {
+                let debr =
+                    CharonDeBruijnVar::free(CharonTypeVarId::from_usize(paramty.index as usize));
+                CharonTy::new(CharonTyKind::TypeVar(debr))
+            }
             x => todo!("Not yet implemented translation for TyKind: {:?}", x),
         }
     }
@@ -778,7 +785,10 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 translate_constant_expr_to_const_generic(c_raw_constexpr).unwrap()
             }
             TyConstKind::Param(paramc) => {
-                CharonConstGeneric::Var(CharonConstGenericVarId::from_usize(paramc.index as usize))
+                let debr = CharonDeBruijnVar::free(CharonConstGenericVarId::from_usize(
+                    paramc.index as usize,
+                ));
+                CharonConstGeneric::Var(debr)
             }
             _ => todo!(),
         }
@@ -843,15 +853,16 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 };
                 CharonTy::new(CharonTyKind::Adt(CharonTypeId::Tuple, generic_args))
             }
-            RigidTy::FnDef(def_id, args) => {
-                if !args.0.is_empty() {
-                    unimplemented!("generic args are not yet handled");
-                }
+            RigidTy::FnDef(def_id, _args) => {
                 let sig = def_id.fn_sig().value;
                 let inputs = sig.inputs().iter().map(|ty| self.translate_ty(*ty)).collect();
                 let output = self.translate_ty(sig.output());
                 // TODO: populate regions?
-                CharonTy::new(CharonTyKind::Arrow(CharonVector::new(), inputs, output))
+                let rb = CharonRegionBinder {
+                    regions: CharonVector::new(),
+                    skip_binder: (inputs, output),
+                };
+                CharonTy::new(CharonTyKind::Arrow(rb))
             }
             RigidTy::Adt(adt_def, genarg) => {
                 let def_id = adt_def.def_id();
@@ -1004,10 +1015,10 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
     }
 
     fn translate_place(&mut self, place: &Place) -> CharonPlace {
-        let projection = self.translate_projection(place, &place.projection);
+        let (_projection, ty) = self.translate_projection(place, &place.projection);
         let local = place.local;
         let var_id = CharonVarId::from_usize(local);
-        CharonPlace { var_id, projection }
+        CharonPlace::new(var_id, ty)
     }
 
     fn place_ty(&self, place: &Place) -> Ty {
@@ -1251,7 +1262,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         &mut self,
         place: &Place,
         projection: &[ProjectionElem],
-    ) -> Vec<CharonProjectionElem> {
+    ) -> (Vec<CharonProjectionElem>, CharonTy) {
         let c_place_ty = self.translate_ty(self.place_ty(place));
         let mut c_provec = Vec::new();
         let mut current_ty = c_place_ty.clone();
@@ -1291,27 +1302,29 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     current_var = varid.to_index();
                 }
                 ProjectionElem::Index(local) => {
-                    let c_operand =
-                        CharonOperand::Copy(CharonPlace::new(CharonVarId::from_usize(*local)));
+                    let c_operand = CharonOperand::Copy(CharonPlace::new(
+                        CharonVarId::from_usize(*local),
+                        current_ty.clone(),
+                    ));
                     c_provec.push(CharonProjectionElem::Index {
-                        offset: c_operand,
+                        offset: Box::new(c_operand),
                         from_end: false,
-                        ty: current_ty.clone(),
                     });
                 }
 
                 _ => continue,
             }
         }
-        c_provec
+        (c_provec, current_ty)
     }
 
     fn translate_region(&self, region: Region) -> CharonRegion {
         match region.kind {
             RegionKind::ReStatic => CharonRegion::Static,
             RegionKind::ReErased => CharonRegion::Erased,
-            RegionKind::ReEarlyParam(_) => CharonRegion::Unknown,
-            RegionKind::ReBound(_, _) | RegionKind::RePlaceholder(_) => {
+            RegionKind::ReEarlyParam(_)
+            | RegionKind::ReBound(_, _)
+            | RegionKind::RePlaceholder(_) => {
                 todo!("Not yet implemented RegionKind: {:?}", region.kind)
             }
         }
