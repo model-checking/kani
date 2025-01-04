@@ -45,12 +45,31 @@ macro_rules! generate_models {
                 }
             }
 
+            /// Implements core::intrinsics::ptr_offfset_from with safety checks in place.
+            ///
+            /// From original documentation:
+            ///
+            /// # Safety
+            ///
+            /// If any of the following conditions are violated, the result is Undefined Behavior:
+            ///
+            /// * `self` and `origin` must either
+            ///
+            ///   * point to the same address, or
+            ///   * both be *derived from* a pointer to the same allocated object,
+            ///     and the memory range between
+            ///     the two pointers must be in bounds of that object.
+            ///
+            /// * The distance between the pointers, in bytes, must be an exact multiple
+            ///   of the size of `T`.
+            ///
+            /// # Panics
+            ///
+            /// This function panics if `T` is a Zero-Sized Type ("ZST").
             #[kanitool::fn_marker = "PtrOffsetFromModel"]
             pub unsafe fn ptr_offset_from<T>(ptr1: *const T, ptr2: *const T) -> isize {
-                kani::safety_check(
-                    core::mem::size_of::<T>() > 0,
-                    "Cannot compute offset of a ZST",
-                );
+                // This is not a safety condition.
+                kani::assert(core::mem::size_of::<T>() > 0, "Cannot compute offset of a ZST");
                 if ptr1 == ptr2 {
                     0
                 } else {

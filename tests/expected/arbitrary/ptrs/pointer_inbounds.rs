@@ -46,13 +46,9 @@ fn check_overlap() {
     kani::cover!(ptr_1 == ptr_2, "Same");
     kani::cover!(ptr_1 == unsafe { ptr_2.byte_add(1) }, "Overlap");
 
-    // offset_from is only safe if the distance between the pointers in bytes is a multiple of size_of::<T>,
-    // which holds if either both ptr_1 and ptr_2 are aligned or neither are.
-    if ptr_1.is_aligned() == ptr_2.is_aligned() {
-        let distance = unsafe { ptr_1.offset_from(ptr_2) };
-        kani::cover!(distance > 0, "Greater");
-        kani::cover!(distance < 0, "Smaller");
+    let distance = unsafe { ptr_1.byte_offset_from(ptr_2) };
+    kani::cover!(distance > 0, "Greater");
+    kani::cover!(distance < 0, "Smaller");
 
-        assert!(distance >= -4 && distance <= 4, "Expected a maximum distance of 4 elements");
-    }
+    assert!(distance >= -4 && distance <= 4, "Expected a maximum distance of 4 elements");
 }
