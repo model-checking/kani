@@ -50,5 +50,5 @@ fn check_overlap() {
     kani::cover!(distance > 0, "Greater");
     kani::cover!(distance < 0, "Smaller");
 
-    assert!(distance >= -4 && distance <= 4, "Expected a maximum distance of 4 elements");
+    assert!(distance >= -8 && distance <= 8, "Expected a maximum distance of 8 bytes");
 }
