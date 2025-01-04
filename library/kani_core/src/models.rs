@@ -79,14 +79,13 @@ macro_rules! generate_models {
                     );
                     // The offset must fit in isize since this represents the same allocation.
                     let offset_bytes = ptr1.addr().wrapping_sub(ptr2.addr()) as isize;
-                    // We know `t_size` is a power of two, so avoid division.
                     let t_size = size_of::<T>() as isize;
                     kani::safety_check(
-                        offset_bytes & (t_size - 1) == 0,
+                        offset_bytes % t_size == 0,
                         "Expected the distance between the pointers, in bytes, to be a
                         multiple of the size of `T`",
                     );
-                    offset_bytes >> t_size.trailing_zeros()
+                    offset_bytes / t_size
                 }
             }
 
