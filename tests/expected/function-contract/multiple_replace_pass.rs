@@ -26,5 +26,5 @@ fn check_one_too() {
 #[kani::stub_verified(one)]
 #[kani::stub_verified(one_too)]
 fn main() {
-    assert_eq!(one() == one_too());
+    assert_eq!(one(), one_too());
 }

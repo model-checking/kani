@@ -1,1 +1,1 @@
-error: Multiple occurrences of the same `stub_verified` target: 'one'
+warning: Multiple occurrences of `stub_verified(one)`.

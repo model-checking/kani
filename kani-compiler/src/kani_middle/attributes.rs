@@ -371,7 +371,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                     attrs.iter().for_each(|attr| self.check_proof_attribute(kind, attr))
                 }
                 KaniAttributeKind::StubVerified => {
-                    // Actual validation happens when the annotation are handled
+                    self.check_stub_verified();
                 }
                 KaniAttributeKind::FnMarker
                 | KaniAttributeKind::CheckedWith
@@ -566,12 +566,12 @@ impl<'tcx> KaniAttributes<'tcx> {
         }
     }
 
-    fn handle_stub_verified(&self, harness: &mut HarnessAttributes) {
+    fn check_stub_verified(&self) {
         let dcx = self.tcx.dcx();
         let mut seen = HashSet::new();
         for (name, def_id, span) in self.interpret_stub_verified_attribute() {
             if seen.contains(&name) {
-                dcx.struct_span_err(
+                dcx.struct_span_warn(
                     span,
                     format!("Multiple occurrences of `stub_verified({})`.", name),
                 )
@@ -587,8 +587,8 @@ impl<'tcx> KaniAttributes<'tcx> {
                 dcx.struct_span_err(
                     span,
                     format!(
-                        "Failed to generate verified stub: Function `{}` has no contract.",
-                        self.item_name(),
+                        "Target function in `stub_verified({})` has no contract.",
+                        name,
                     ),
                 )
                     .with_span_note(
@@ -601,9 +601,20 @@ impl<'tcx> KaniAttributes<'tcx> {
                     .emit();
                 return;
             }
+        }
+    }
+
+    /// Adds the verified stub names to the `harness.verfied_stubs`.
+    ///
+    /// This method must be called after `check_stub_verified`, to ensure that
+    /// the target names are known and have contracts, and there are no
+    /// duplicate target names.
+    fn handle_stub_verified(&self, harness: &mut HarnessAttributes) {
+        for (name, _, _) in self.interpret_stub_verified_attribute() {
             harness.verified_stubs.push(name.to_string())
         }
     }
+
 
     fn item_name(&self) -> Symbol {
         self.tcx.item_name(self.item)
