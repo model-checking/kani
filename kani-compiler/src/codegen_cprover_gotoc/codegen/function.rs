@@ -218,10 +218,10 @@ impl GotocCtx<'_> {
 }
 
 pub mod rustc_smir {
+    use crate::codegen_cprover_gotoc::codegen::source_region::{SourceRegion, make_source_region};
     use crate::stable_mir::CrateDef;
     use rustc_middle::mir::coverage::CovTerm;
     use rustc_middle::mir::coverage::MappingKind::Code;
-    use rustc_middle::mir::coverage::SourceRegion;
     use rustc_middle::ty::TyCtxt;
     use rustc_smir::rustc_internal;
     use stable_mir::mir::mono::Instance;
@@ -258,9 +258,12 @@ pub mod rustc_smir {
             // Iterate over the coverage mappings and match with the coverage term.
             for mapping in &cov_info.mappings {
                 let Code(term) = mapping.kind else { unreachable!() };
+                let source_map = tcx.sess.source_map();
+                let file = source_map.lookup_source_file(cov_info.body_span.lo());
                 if term == coverage {
                     return Some((
-                        mapping.source_region.clone(),
+                        make_source_region(source_map, cov_info, &file, mapping.span.clone())
+                            .unwrap(),
                         rustc_internal::stable(cov_info.body_span).get_filename(),
                     ));
                 }
