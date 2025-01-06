@@ -305,7 +305,7 @@ impl GotocCtx<'_> {
         let variant_index_internal = rustc_internal::internal(self.tcx, variant_index);
         let layout = self.layout_of(dest_ty_internal);
         match &layout.variants {
-            Variants::Single { .. } => Stmt::skip(location),
+            Variants::Empty | Variants::Single { .. } => Stmt::skip(location),
             Variants::Multiple { tag, tag_encoding, .. } => match tag_encoding {
                 TagEncoding::Direct => {
                     let discr = dest_ty_internal

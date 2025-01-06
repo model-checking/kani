@@ -217,6 +217,7 @@ fn data_bytes_for_ty(
                             // Support basic enumeration forms
                             let ty_variants = def.variants();
                             match layout.variants {
+                                VariantsShape::Empty => Ok(vec![]),
                                 VariantsShape::Single { index } => {
                                     // Only one variant is reachable. This behaves like a struct.
                                     let fields = ty_variants[index.to_index()].fields();

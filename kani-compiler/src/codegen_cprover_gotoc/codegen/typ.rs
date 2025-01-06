@@ -1191,12 +1191,17 @@ impl<'tcx> GotocCtx<'tcx> {
         let layout = self.layout_of(ty);
         // variants appearing in mir code
         match &layout.variants {
+            Variants::Empty => {
+                // an empty enum with no variants (its value cannot be instantiated)
+                self.ensure_struct(self.ty_mangled_name(ty), pretty_name, |_, _| vec![])
+            }
             Variants::Single { index } => {
                 self.ensure_struct(self.ty_mangled_name(ty), pretty_name, |gcx, _| {
                     match source_variants.get(*index) {
                         None => {
-                            // an empty enum with no variants (its value cannot be instantiated)
-                            vec![]
+                            unreachable!(
+                                "Enum with no variants must be represented as Variants::Empty"
+                            );
                         }
                         Some(variant) => {
                             // a single enum is pretty much like a struct

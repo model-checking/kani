@@ -554,6 +554,9 @@ impl GotocCtx<'_> {
             let variant_expr = variant_proj.goto_expr.clone();
             let layout = self.layout_of_stable(res_ty);
             let fields = match &layout.variants {
+                Variants::Empty => {
+                    unreachable!("Aggregate expression for uninhabited enum with no variants")
+                }
                 Variants::Single { index } => {
                     if *index != rustc_internal::internal(self.tcx, variant_index) {
                         // This may occur if all variants except for the one pointed by
@@ -960,6 +963,7 @@ impl GotocCtx<'_> {
     pub fn codegen_get_discriminant(&mut self, e: Expr, ty: Ty, res_ty: Ty) -> Expr {
         let layout = self.layout_of_stable(ty);
         match &layout.variants {
+            Variants::Empty => unreachable!("Discriminant for uninhabited enum with no variants"),
             Variants::Single { index } => {
                 let discr_val = layout
                     .ty
