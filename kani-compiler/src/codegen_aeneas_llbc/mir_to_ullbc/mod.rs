@@ -1514,11 +1514,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                         };
                         let funcid = CharonFunIdOrTraitMethodRef::Fun(CharonFunId::Regular(fid));
                         let generics = self.translate_generic_args(genarg_resolve, def_id);
-                        CharonFnPtr {
-                            func: funcid,
-                            // TODO: populate generics?
-                            generics,
-                        }
+                        CharonFnPtr { func: funcid, generics }
                     }
                     TyKind::RigidTy(RigidTy::FnPtr(..)) => todo!(),
                     x => unreachable!(
