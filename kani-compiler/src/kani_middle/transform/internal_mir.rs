@@ -251,7 +251,10 @@ impl RustcInternalMir for Rvalue {
             Rvalue::Discriminant(place) => {
                 rustc_middle::mir::Rvalue::Discriminant(internal(tcx, place))
             }
-            Rvalue::Len(place) => rustc_middle::mir::Rvalue::Len(internal(tcx, place)),
+            Rvalue::Len(place) => rustc_middle::mir::Rvalue::UnaryOp(
+                rustc_middle::mir::UnOp::PtrMetadata,
+                rustc_middle::mir::Operand::Copy(internal(tcx, place)),
+            ),
             Rvalue::Ref(region, borrow_kind, place) => rustc_middle::mir::Rvalue::Ref(
                 internal(tcx, region),
                 borrow_kind.internal_mir(tcx),
