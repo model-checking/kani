@@ -156,7 +156,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
     }
 
     //This function extract the traitrefs and their span from a def_id
-    //Those information will be added into that def_id's generic args
+    //Those information will be added into generic args of the type or the func with the def_id
     //Note that Generic args of Charon contains trait_refs while those of stable_mir do not 
     fn get_traitrefs_and_span_from_defid(
         &mut self,
@@ -199,6 +199,8 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         (c_trait_refs, c_spans)
     }
 
+    //Get the trait clauses of an Adt or a Func from their def_id
+    //Those information will be added into GenericParams of the Type Decl or Func Decl
     fn get_traitclauses_from_defid(
         &mut self,
         defid: DefId,
@@ -370,6 +372,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         tid.try_into().unwrap()
     }
 
+    //This function is implemented accordingto how Charon encode discriminant
     fn get_discriminant(&mut self, discr_val: u128, ty: Ty) -> CharonScalarValue {
         let ty = self.translate_ty(ty);
         let int_ty = *ty.kind().as_literal().unwrap().as_integer().unwrap();
@@ -1565,6 +1568,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         prjplace
     }
 
+    //Get the Ty of the Place
     fn place_ty(&self, place: &Place) -> Ty {
         let body = self.instance.body().unwrap();
         let ty = body.local_decl(place.local).unwrap().ty;
