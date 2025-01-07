@@ -389,7 +389,7 @@ impl Intrinsic {
                 assert_sig_matches!(sig, => RigidTy::Ref(_, _, Mutability::Not));
                 Self::TypeName
             }
-            "typed_swap" => {
+            "typed_swap_nonoverlapping" => {
                 assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), RigidTy::RawPtr(_, Mutability::Mut) => RigidTy::Tuple(_));
                 Self::TypedSwap
             }

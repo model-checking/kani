@@ -1864,7 +1864,7 @@ impl GotocCtx<'_> {
     }
 
     /// Swaps the memory contents pointed to by arguments `x` and `y`, respectively, which is
-    /// required for the `typed_swap` intrinsic.
+    /// required for the `typed_swap_nonoverlapping` intrinsic.
     ///
     /// The standard library API requires that `x` and `y` are readable and writable as their
     /// (common) type (which auto-generated checks for dereferencing will take care of), and the
