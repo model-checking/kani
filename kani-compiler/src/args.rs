@@ -36,7 +36,7 @@ pub enum ReachabilityType {
 /// with. Usually stored in and accessible via [`crate::kani_queries::QueryDb`].
 #[derive(Debug, Default, Clone, clap::Parser)]
 pub struct Arguments {
-    /// Option used to enable asserting function contracts.
+    /// Option used to disable asserting function contracts.
     #[clap(long)]
     pub no_assert_contracts: bool,
     /// Option name used to enable assertion reachability checks.

@@ -310,7 +310,7 @@ pub struct VerificationArgs {
     pub synthesize_loop_contracts: bool,
 
     /// Do not assert the function contracts of dependencies. Requires -Z function-contracts.
-    #[arg(long)]
+    #[arg(long, hide_short_help = true)]
     pub no_assert_contracts: bool,
 
     //Harness Output into individual files
