@@ -26,8 +26,17 @@ fn add_one(add_one_ptr: &mut u32) {
     *add_one_ptr += 1;
 }
 
-// Test that proof_for_contract takes precedence over the assert mode, i.e.
-// that the target of the proof for contract still has its preconditions assumed
+// Simple test that proof_for_contract takes precedence over the assert mode, i.e.
+// that the target of the proof for contract still has its preconditions assumed.
+// If the precondition wasn't assumed, then the addition would overflow,
+// so if verification succeeds, we know that the precondition was assumed.
+#[kani::proof_for_contract(add_one)]
+fn simple_proof_for_contract_takes_precedence() {
+    let mut i = kani::any();
+    add_one(&mut i);
+}
+
+// Complex test that proof_for_contract takes precedence over the assert mode
 // when combined with other contracts that are being asserted.
 // In this harness, add_three and add_two's contracts are asserted, but add_one (the target) should have its precondition assumed.
 // So, assume add_three's precondition to ensure that its precondition assertion passes,
@@ -35,7 +44,7 @@ fn add_one(add_one_ptr: &mut u32) {
 // it should get assumed without us having to specify it in the harness, and verification should succeed.
 // For a version of this harness without the assumption, see assert-preconditions::prove_add_one.
 #[kani::proof_for_contract(add_one)]
-fn proof_for_contract_takes_precedence() {
+fn complex_proof_for_contract_takes_precedence() {
     let mut i = kani::any();
     kani::assume(i < 100);
     add_three(&mut i);

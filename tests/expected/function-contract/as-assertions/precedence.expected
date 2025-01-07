@@ -1,3 +1,12 @@
+
+assertion\
+	 - Status: SUCCESS\
+	 - Description: "attempt to add with overflow"
+
+assertion\
+	 - Status: SUCCESS\
+	 - Description: "|_| old(*add_one_ptr + 1) == *add_one_ptr"
+
 assertion\
 	 - Status: UNREACHABLE\
 	 - Description: "*add_one_ptr == 4"
@@ -22,4 +31,4 @@ assertion\
 	 - Status: SUCCESS\
 	 - Description: "|_| old(*add_one_ptr + 1) == *add_one_ptr"
 
-Complete - 2 successfully verified harnesses, 0 failures, 2 total.
+Complete - 3 successfully verified harnesses, 0 failures, 3 total.
