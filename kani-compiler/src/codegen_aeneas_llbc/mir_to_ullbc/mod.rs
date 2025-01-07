@@ -157,7 +157,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
 
     //This function extract the traitrefs and their span from a def_id
     //Those information will be added into generic args of the type or the func with the def_id
-    //Note that Generic args of Charon contains trait_refs while those of stable_mir do not 
+    //Note that Generic args of Charon contains trait_refs while those of stable_mir do not
     fn get_traitrefs_and_span_from_defid(
         &mut self,
         defid: DefId,
@@ -1201,7 +1201,6 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     let c_region = self.translate_region(region);
                     c_regions.push(c_region);
                 }
-
                 GenericArgKind::Type(ty) => {
                     let c_ty = self.translate_ty(ty);
                     c_types.push(c_ty);
@@ -1209,7 +1208,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 GenericArgKind::Const(tc) => {
                     let c_const_generic = self.tyconst_to_constgeneric(tc);
                     c_const_generics.push(c_const_generic);
-                } //_ => (),
+                }
             }
         }
         let (gen_trait_refs, spans) = self.get_traitrefs_and_span_from_defid(defid);
