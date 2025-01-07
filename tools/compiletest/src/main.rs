@@ -149,7 +149,7 @@ pub fn parse_config(args: Vec<String>) -> Config {
     let timeout = matches.opt_str("timeout").map(|val| {
         Duration::from_secs(
             u64::from_str(&val)
-                .expect("Unexpected timeout format. Expected a positive number but found {val}"),
+                .expect(&format!("Unexpected timeout format. Expected a positive number but found {val}")),
         )
     });
 

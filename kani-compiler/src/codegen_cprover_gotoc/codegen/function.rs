@@ -262,7 +262,7 @@ pub mod rustc_smir {
                 let file = source_map.lookup_source_file(cov_info.body_span.lo());
                 if term == coverage {
                     return Some((
-                        make_source_region(source_map, cov_info, &file, mapping.span.clone())
+                        make_source_region(source_map, cov_info, &file, mapping.span)
                             .unwrap(),
                         rustc_internal::stable(cov_info.body_span).get_filename(),
                     ));
