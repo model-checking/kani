@@ -16,14 +16,13 @@ yanked = "deny"
 allow = [
     "MIT",
     "Apache-2.0",
-    "MPL-2.0",
 ]
 confidence-threshold = 0.8
 
 # All these exceptions should probably appear in: tools/build-kani/license-notes.txt
 exceptions = [
     { name = "unicode-ident", allow=["Unicode-3.0"] },
-    { name = "rustc_apfloat", allow=["Apache-2.0 WITH LLVM-exception"] },
+    { name = "foldhash", allow=["Zlib"] },
 ]
 
 [licenses.private]
@@ -43,4 +42,3 @@ wildcards = "allow"
 unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
-allow-git = ["https://github.com/Nadrieril/tracing-tree"]

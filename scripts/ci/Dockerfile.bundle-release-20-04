@@ -17,7 +17,7 @@ COPY ./target/package/kani-verifier-*[^e] ./kani-verifier
 # directory. Rustup is purged for space.
 
 RUN apt-get update && \
-    apt-get install -y curl && \
+    apt-get install -y curl build-essential && \
     curl -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain none && \
     (cd kani-verifier/; cargo) && \
     rustup default $(rustup toolchain list | awk '{ print $1 }') && \

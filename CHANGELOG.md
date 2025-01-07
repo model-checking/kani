@@ -4,6 +4,52 @@ This file contains notable changes (e.g. breaking changes, major changes, etc.) 
 
 This file was introduced starting Kani 0.23.0, so it only contains changes from version 0.23.0 onwards.
 
+## [0.57.0]
+
+### Major Changes
+* `kani-cov`: A coverage tool for Kani by @adpaco-aws in https://github.com/model-checking/kani/pull/3121
+* Add a timeout option by @zhassan-aws in https://github.com/model-checking/kani/pull/3649
+* Loop Contracts Annotation for While-Loop by @qinheping in https://github.com/model-checking/kani/pull/3151
+* Harness output individual files by @Alexander-Aghili in https://github.com/model-checking/kani/pull/3360
+* Enable support for Ubuntu 24.04 by @tautschnig in https://github.com/model-checking/kani/pull/3758
+
+### Breaking Changes
+* Make `kani::check` private by @celinval in https://github.com/model-checking/kani/pull/3614
+* Remove symtab json support by @celinval in https://github.com/model-checking/kani/pull/3695
+* Remove CBMC viewer and visualize option by @zhassan-aws in https://github.com/model-checking/kani/pull/3699
+* Dropping support for Ubuntu 18.04 / AL2. by @thanhnguyen-aws in https://github.com/model-checking/kani/pull/3744
+
+### What's Changed
+* Remove the overflow checks for wrapping_offset by @zhassan-aws in https://github.com/model-checking/kani/pull/3589
+* Support fully-qualified --package arguments by @celinval in https://github.com/model-checking/kani/pull/3593
+* Implement proper function pointer handling for validity checks by @celinval in https://github.com/model-checking/kani/pull/3606
+* Add fn that checks pointers point to same allocation by @celinval in https://github.com/model-checking/kani/pull/3583
+* [Lean back-end] Preserve variable names by @zhassan-aws in https://github.com/model-checking/kani/pull/3560
+* Emit an error when proof_for_contract function is not found by @zhassan-aws in https://github.com/model-checking/kani/pull/3609
+* [Lean back-end] Rename user-facing options from Aeneas to Lean by @zhassan-aws in https://github.com/model-checking/kani/pull/3630
+* Fix ICE due to mishandling of Aggregate rvalue for raw pointers to trait objects by @carolynzech in https://github.com/model-checking/kani/pull/3636
+* Fix loop contracts transformation when loops in branching by @qinheping in https://github.com/model-checking/kani/pull/3640
+* Move any_slice_from_array to kani_core by @qinheping in https://github.com/model-checking/kani/pull/3646
+* Implement `Arbitrary` for `Range*` by @c410-f3r in https://github.com/model-checking/kani/pull/3666
+* Add support for float_to_int_unchecked by @zhassan-aws in https://github.com/model-checking/kani/pull/3660
+* Change `same_allocation` to accept wide pointers by @celinval in https://github.com/model-checking/kani/pull/3684
+* Derive `Arbitrary` for enums with a single variant by @AlgebraicWolf in https://github.com/model-checking/kani/pull/3692
+* Apply loop contracts only if there exists some usage by @qinheping in https://github.com/model-checking/kani/pull/3694
+* Add support for f16 and f128 in float_to_int_unchecked intrinsic by @zhassan-aws in https://github.com/model-checking/kani/pull/3701
+* Fix codegen for rvalue aggregate raw pointer to an adt with slice tail by @carolynzech in https://github.com/model-checking/kani/pull/3644
+* Improve Kani handling of function markers by @celinval in https://github.com/model-checking/kani/pull/3718
+* Enable contracts for const generic functions by @qinheping in https://github.com/model-checking/kani/pull/3726
+* List Subcommand Improvements by @carolynzech in https://github.com/model-checking/kani/pull/3729
+* [Lean back-end] add support for enum, struct, tuple in llbc backend by @thanhnguyen-aws in https://github.com/model-checking/kani/pull/3721
+* Fix issues with how we compute DST size by @celinval in https://github.com/model-checking/kani/pull/3687
+* Fix size and alignment computation for intrinsics by @celinval in https://github.com/model-checking/kani/pull/3734
+* Add a Kani function that checks if the range of a float is valid for conversion to int by @zhassan-aws in https://github.com/model-checking/kani/pull/3742
+* Add out of bounds check for `offset` intrinsics by @celinval in https://github.com/model-checking/kani/pull/3755
+* Automatic upgrade of CBMC from 6.3.1 to 6.4.1
+* Rust toolchain upgraded to nightly-2024-12-15 by @zhassan-aws @carolynzech @qinheping @celinval @tautschnig
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.56.0...kani-0.57.0
+
 ## [0.56.0]
 
 ### Major/Breaking Changes

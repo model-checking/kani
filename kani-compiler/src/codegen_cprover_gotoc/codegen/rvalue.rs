@@ -729,6 +729,15 @@ impl GotocCtx<'_> {
                 }
             }
             AggregateKind::Coroutine(_, _, _) => self.codegen_rvalue_coroutine(&operands, res_ty),
+            AggregateKind::CoroutineClosure(_, _) => {
+                let ty = self.codegen_ty_stable(res_ty);
+                self.codegen_unimplemented_expr(
+                    "CoroutineClosure",
+                    ty,
+                    loc,
+                    "https://github.com/model-checking/kani/issues/3783",
+                )
+            }
         }
     }
 
