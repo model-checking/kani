@@ -109,7 +109,7 @@ impl LlbcCodegenBackend {
 
         // Translate all the items
         for item in &items {
-            //println!("Translating: {item:?}");
+            debug!("Translating: {item:?}");
             match item {
                 MonoItem::Fn(instance) => {
                     let mut fcx = Context::new(
@@ -394,6 +394,7 @@ fn create_charon_transformation_context(tcx: TyCtxt) -> TransformCtx {
     };
     let crate_name = tcx.crate_name(LOCAL_CRATE).as_str().into();
     let mut translated = TranslatedCrate { crate_name, ..TranslatedCrate::default() };
+    //This option setting is for Aeneas compatibility
     translated.options.hide_marker_traits = true;
     let errors = ErrorCtx::new(true, false);
     TransformCtx { options, translated, errors }

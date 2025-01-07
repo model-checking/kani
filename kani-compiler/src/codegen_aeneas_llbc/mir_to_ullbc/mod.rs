@@ -155,6 +155,9 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         }
     }
 
+    //This function extract the traitrefs and their span from a def_id
+    //Those information will be added into that def_id's generic args
+    //Note that Generic args of Charon contains trait_refs while those of stable_mir do not 
     fn get_traitrefs_and_span_from_defid(
         &mut self,
         defid: DefId,
@@ -373,6 +376,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         CharonScalarValue::from_bits(int_ty, discr_val)
     }
 
+    //Get the GenericParams for Trait Decl, which is neccessary in Trait Decl translation
     fn generic_params_from_traitdecl(&mut self, traitdecl: TraitDecl) -> CharonGenericParams {
         let genvec = traitdecl.generics_of().params;
         let mut c_regions: CharonVector<CharonRegionId, CharonRegionVar> = CharonVector::new();
@@ -430,6 +434,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         }
     }
 
+    //Get the GenericParams for Func Decl, which is neccessary in Func Decl translation
     fn generic_params_from_fndef(&mut self, fndef: FnDef, input: Vec<Ty>) -> CharonGenericParams {
         let genvec = match fndef.ty().kind() {
             TyKind::RigidTy(RigidTy::FnDef(_, genarg)) => genarg.0,
@@ -510,6 +515,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         }
     }
 
+    //Get the GenericParams for Adt Decl, which is neccessary in Adt Decl translation
     fn generic_params_from_adtdef(&mut self, adtdef: AdtDef) -> CharonGenericParams {
         let genvec = match adtdef.ty().kind() {
             TyKind::RigidTy(RigidTy::Adt(_, genarg)) => genarg.0,
@@ -1747,7 +1753,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 let value = char::from_u32(alloc.read_uint().unwrap() as u32);
                 CharonRawConstantExpr::Literal(CharonLiteral::Char(value.unwrap()))
             }
-            _ => todo!(),
+            _ => todo!("Not yet implement {:?}, {:?}", ty, alloc),
         }
     }
 
