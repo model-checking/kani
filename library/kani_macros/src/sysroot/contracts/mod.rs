@@ -117,9 +117,10 @@
 //! We register this closure as `#[kanitool::recursion_check = "__kani_recursion_..."]`.
 //!
 //! ## Assert closure
-//! Kani has an option to interpret contracts as assertions.
-//! To support that option, we generate a closure that asserts preconditions and postconditions.
-//! This option is especially useful for verifying that a function does not violate the contracts of its dependencies.
+//! By default, if we are not checking the function's contract or stubbing it,
+//! (i.e., if we are not using the check or replace closures),
+//! we use its assert closure, which asserts both preconditions and postconditions.
+//! This behavior is useful for verifying that a function does not violate the contracts of its dependencies.
 //! For example:
 //! ```ignore
 //!  #[kani::requires(x >= 0)]
@@ -130,7 +131,7 @@
 //!  #[kani::requires(x > 0)]
 //!  fn bar(x: i32) { }
 //! ```
-//! If we call foo(0), we would satisfy the check closure, since we satisfy foo's precondition.
+//! If we call foo(0), we would satisfy foo's check closure, since we satisfy foo's precondition.
 //! However, we would violate bar's precondition that x > 0.
 //! By using bar's assert closure instead of its original body, we can assert that callers of bar respect its contract
 //! and catch this issue.

@@ -1,8 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-flags: -Zfunction-contracts
+// kani-flags: -Zfunction-contracts --no-assert-contracts
 
-// Test -Zfunction-contracts for asserting postconditions.
+// Check that the -no-assert-contracts option disables the default behavior of asserting contracts of dependencies.
 
 #[kani::requires(*add_three_ptr < 100)]
 #[kani::modifies(add_three_ptr)]
@@ -22,6 +22,7 @@ fn add_one(add_one_ptr: &mut u32) {
     *add_one_ptr += 1;
 }
 
+// With --no-assert-contracts, add_two's and add_one's contracts are ignored, so verification should succeed.
 #[kani::proof_for_contract(add_three)]
 fn prove_add_three() {
     let mut i = kani::any();

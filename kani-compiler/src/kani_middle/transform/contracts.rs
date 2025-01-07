@@ -273,8 +273,8 @@ pub struct FunctionWithContractPass {
     check_fn: Option<InternalDefId>,
     /// Functions that should be stubbed by their contract.
     replace_fns: HashSet<InternalDefId>,
-    /// Should we interpret contracts as assertions? (true iff the contracts-as-assertions option is passed)
-    are_contracts_asserted: bool,
+    /// Should we interpret contracts as assertions? (true iff the no-assert-contracts option is not passed)
+    assert_contracts: bool,
     /// Functions annotated with contract attributes will contain contract closures even if they
     /// are not to be used in this harness.
     /// In order to avoid bringing unnecessary logic, we clear their body.
@@ -354,10 +354,7 @@ impl FunctionWithContractPass {
             FunctionWithContractPass {
                 check_fn,
                 replace_fns,
-                are_contracts_asserted: queries
-                    .args()
-                    .unstable_features
-                    .contains(&"contracts-as-assertions".to_string()),
+                assert_contracts: !queries.args().no_assert_contracts,
                 unused_closures: Default::default(),
                 run_contract_fn,
             }
@@ -461,7 +458,7 @@ impl FunctionWithContractPass {
                 }
             } else if self.replace_fns.contains(&fn_def_id) {
                 ContractMode::Replace
-            } else if self.are_contracts_asserted {
+            } else if self.assert_contracts {
                 ContractMode::Assert
             } else {
                 ContractMode::Original

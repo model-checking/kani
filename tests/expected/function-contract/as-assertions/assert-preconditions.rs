@@ -1,8 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-flags: -Zfunction-contracts -Zcontracts-as-assertions
+// kani-flags: -Zfunction-contracts
 
-// Test -Zcontracts-as-assertions for preconditions.
+// Test -Zfunction-contracts for asserting preconditions.
 
 #[kani::requires(*ptr < 100)]
 #[kani::ensures(|result| old(*ptr + 3) == *ptr)]

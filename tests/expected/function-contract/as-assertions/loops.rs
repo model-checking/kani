@@ -1,8 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-flags: -Zfunction-contracts -Zcontracts-as-assertions
+// kani-flags: -Zfunction-contracts
 
-// Check that the -Zcontracts-as-assertions option asserts preconditions and postconditions correctly
+// Check that the -Zfunction-contracts option asserts preconditions and postconditions correctly
 // when the body of the function has a loop.
 // This code is taken from function-contracts/gcd_success.rs
 

@@ -1,9 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-flags: -Zfunction-contracts -Zcontracts-as-assertions
+// kani-flags: -Zfunction-contracts
 
 // If a function is the target of a proof_for_contract or stub_verified, we should defer to the contract handling for those modes.
-// i.e., test that -Zcontracts-as-assertions does not override the contract handling for proof_for_contract and stub_verified.
 
 #[kani::modifies(add_three_ptr)]
 #[kani::requires(*add_three_ptr < 100)]
