@@ -191,7 +191,7 @@ mod test {
         u64: From<M>,
     {
         assert_eq!(
-            unsafe { u64::from(kani_intrinsic::simd_bitmask::<_, M, E, LANES>(mask.clone())) },
+            unsafe { u64::from(kani_intrinsic::simd_bitmask::<_, M, E, LANES>(mask)) },
             mask.to_bitmask()
         );
     }
@@ -220,8 +220,7 @@ mod test {
         let bitmask = mask.to_bitmask();
         assert_eq!(bitmask, 0b1010);
 
-        let kani_mask =
-            unsafe { u64::from(kani_intrinsic::simd_bitmask::<_, u8, u32, 4>(mask.clone())) };
+        let kani_mask = unsafe { u64::from(kani_intrinsic::simd_bitmask::<_, u8, u32, 4>(mask)) };
         assert_eq!(kani_mask, bitmask);
     }
 }
