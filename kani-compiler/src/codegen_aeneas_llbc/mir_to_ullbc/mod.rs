@@ -372,7 +372,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         tid.try_into().unwrap()
     }
 
-    //This function is implemented accordingto how Charon encode discriminant
+    //This function is implemented according to how Charon encodes discriminants
     fn get_discriminant(&mut self, discr_val: u128, ty: Ty) -> CharonScalarValue {
         let ty = self.translate_ty(ty);
         let int_ty = *ty.kind().as_literal().unwrap().as_integer().unwrap();
