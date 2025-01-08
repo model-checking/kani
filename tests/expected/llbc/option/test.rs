@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Zlean --print-llbc
 
-//! This test checks that Kani's LLBC backend handles trait clauses in generic args
+//! This test checks that Kani's LLBC backend handles option in generic args
 
 fn both_none<T,U>(a: Option<T>, b: Option<U>)-> bool{
     match a {
