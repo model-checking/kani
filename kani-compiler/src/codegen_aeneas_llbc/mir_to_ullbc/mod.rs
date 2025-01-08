@@ -257,6 +257,12 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         };
         let funcname = item_meta.name.clone();
         let signature = self.translate_function_signature(self.instance);
+        //We temporarily don't translate the body of built-in function
+        //because at the current step, we want to extend the amount of syntaxes
+        //and test each syntax we extended (in tests/expected/llbc).
+        //Enabling translation of dependent built-in functions now may make the
+        //translation of the tests fail because of not-yet-implemented syntaxes
+        //Example: 
         let body = if is_builtin {
             Err(CharonOpaque)
         } else {
@@ -1512,7 +1518,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 debug!("translate_call: {func:?} {args:?} {destination:?} {target:?}");
                 let fn_ty = func.ty(self.instance.body().unwrap().locals()).unwrap();
                 let fn_ptr = match fn_ty.kind() {
-                    TyKind::RigidTy(RigidTy::FnDef(def, genarg)) => {
+                    TyKind::RigidTy(RigidTy::FnDef(def, genarg)) => {                      
                         let instance = Instance::resolve(def, &genarg).unwrap();
                         let def_id = instance.def.def_id();
                         let fid = self.register_fun_decl_id(def_id);
