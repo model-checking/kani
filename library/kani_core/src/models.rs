@@ -45,7 +45,7 @@ macro_rules! generate_models {
                 }
             }
 
-            /// Implements core::intrinsics::ptr_offfset_from with safety checks in place.
+            /// Implements core::intrinsics::ptr_offset_from with safety checks in place.
             ///
             /// From original documentation:
             ///
