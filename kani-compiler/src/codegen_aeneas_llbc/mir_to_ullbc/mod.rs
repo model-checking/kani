@@ -262,7 +262,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         //and test each syntax we extended (in tests/expected/llbc).
         //Enabling translation of dependent built-in functions now may make the
         //translation of the tests fail because of not-yet-implemented syntaxes
-        //Example: 
+        //Example: tests/expected/llbc/option test fails because of the function std::ptr::drop_in_place
         let body = if is_builtin {
             Err(CharonOpaque)
         } else {
