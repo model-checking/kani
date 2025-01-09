@@ -93,7 +93,7 @@ impl KaniSession {
         Ok(())
     }
 
-    /// Create a compiler option that represents the reachability mod.
+    /// Create a compiler option that represents the reachability mode.
     pub fn reachability_arg(&self) -> String {
         to_rustc_arg(vec![format!("--reachability={}", self.reachability_mode())])
     }
@@ -150,6 +150,10 @@ impl KaniSession {
 
         if self.args.print_llbc {
             flags.push("--print-llbc".into());
+        }
+
+        if self.args.no_assert_contracts {
+            flags.push("--no-assert-contracts".into());
         }
 
         flags.extend(self.args.common_args.unstable_features.as_arguments().map(str::to_string));

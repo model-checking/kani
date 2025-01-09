@@ -1,0 +1,16 @@
+assertion\
+	 - Status: FAILURE\
+	 - Description: "*ptr < 100"
+
+assertion\
+	 - Status: FAILURE\
+	 - Description: "*ptr == 4"
+
+assertion\
+	 - Status: FAILURE\
+	 - Description: "*ptr < 100"
+
+Summary:
+Verification failed for - prove_add_one
+Verification failed for - prove_add_three
+Complete - 0 successfully verified harnesses, 2 failures, 2 total.

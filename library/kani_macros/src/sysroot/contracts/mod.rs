@@ -116,6 +116,28 @@
 //!
 //! We register this closure as `#[kanitool::recursion_check = "__kani_recursion_..."]`.
 //!
+//! ## Assert closure
+//! By default, if we are not checking the function's contract or stubbing it,
+//! (i.e., if we are not using the check or replace closures),
+//! we use its assert closure, which asserts both preconditions and postconditions.
+//! This behavior is useful for verifying that a function does not violate the contracts of its dependencies.
+//! For example:
+//! ```ignore
+//!  #[kani::requires(x >= 0)]
+//!  fn foo(x: i32) {
+//!    bar(x);
+//!  }
+//!  
+//!  #[kani::requires(x > 0)]
+//!  fn bar(x: i32) { }
+//! ```
+//! If we call foo(0), we would satisfy foo's check closure, since we satisfy foo's precondition.
+//! However, we would violate bar's precondition that x > 0.
+//! By using bar's assert closure instead of its original body, we can assert that callers of bar respect its contract
+//! and catch this issue.
+//!
+//! We register this closure as `#[kanitool::asserted_with = "__kani_assert_..."]`
+//!
 //! # Complete example
 //!
 //! ```
@@ -132,6 +154,7 @@
 //! #[kanitool::checked_with = "__kani_check_div"]
 //! #[kanitool::replaced_with = "__kani_replace_div"]
 //! #[kanitool::modifies_wrapper = "__kani_modifies_div"]
+//! #[kanitool::asserted_with = "__kani_assert_div"]
 //! fn div(dividend: u32, divisor: u32) -> u32 {
 //!     #[inline(never)]
 //!     #[kanitool::fn_marker = "kani_register_contract"]
@@ -226,6 +249,23 @@
 //!             ;
 //!             kani_register_contract(__kani_check_div)
 //!         }
+//!         kani::internal::ASSERT => {
+//!             #[kanitool::is_contract_generated(assert)]
+//!             #[allow(dead_code, unused_variables, unused_mut)]
+//!             let mut __kani_assert_div =
+//!                 || -> u32
+//!                     {
+//!                         kani::assert(divisor != 0, "divisor != 0");
+//!                         let mut body_wrapper = || -> u32 { dividend / divisor };
+//!                         let result_kani_internal: u32 = body_wrapper();
+//!                         kani::assert(kani::internal::apply_closure(|result: &u32|
+//!                                     *result <= dividend, &result_kani_internal),
+//!                             "|result : &u32| *result <= dividend");
+//!                         result_kani_internal
+//!                     };
+//!             ;
+//!             kani_register_contract(__kani_assert_div)
+//!         }
 //!         _ => { dividend / divisor }
 //!     }
 //! }
@@ -265,6 +305,7 @@
 //! #[kanitool::checked_with = "__kani_check_modify"]
 //! #[kanitool::replaced_with = "__kani_replace_modify"]
 //! #[kanitool::modifies_wrapper = "__kani_modifies_modify"]
+//! #[kanitool::asserted_with = "__kani_assert_modify"]
 //! fn modify(ptr: &mut u32) {
 //!     #[inline(never)]
 //!     #[kanitool::fn_marker = "kani_register_contract"]
@@ -387,6 +428,28 @@
 //!             ;
 //!             kani_register_contract(__kani_check_modify)
 //!         }
+//!         kani::internal::ASSERT => {
+//!             #[kanitool::is_contract_generated(assert)]
+//!             #[allow(dead_code, unused_variables, unused_mut)]
+//!             let mut __kani_assert_modify =
+//!                 ||
+//!                     {
+//!                         kani::assert(*ptr < 100, "*ptr < 100");
+//!                         let remember_kani_internal_92cc419d8aca576c = *ptr + 1;
+//!                         let remember_kani_internal_92cc419d8aca576c = *ptr + 1;
+//!                         let mut body_wrapper = || { *ptr += 1; };
+//!                         let result_kani_internal: () = body_wrapper();
+//!                         kani::assert(kani::internal::apply_closure(|result|
+//!                                     (remember_kani_internal_92cc419d8aca576c) == *ptr,
+//!                                 &result_kani_internal), "|result| old(*ptr + 1) == *ptr");
+//!                         kani::assert(kani::internal::apply_closure(|result|
+//!                                     (remember_kani_internal_92cc419d8aca576c) == *ptr,
+//!                                 &result_kani_internal), "|result| old(*ptr + 1) == *ptr");
+//!                         result_kani_internal
+//!                     };
+//!             ;
+//!             kani_register_contract(__kani_assert_modify)
+//!         }
 //!         _ => { *ptr += 1; }
 //!     }
 //! }
@@ -397,6 +460,7 @@ use proc_macro2::{Ident, TokenStream as TokenStream2};
 use quote::quote;
 use syn::{Expr, ExprClosure, ItemFn, parse_macro_input, parse_quote};
 
+mod assert;
 mod bootstrap;
 mod check;
 #[macro_use]
@@ -483,6 +547,8 @@ struct ContractConditionsHandler<'a> {
     replace_name: String,
     /// The name of the recursion closure.
     recursion_name: String,
+    /// The name of the assertion closure.
+    assert_name: String,
     /// The name of the modifies closure.
     modify_name: String,
 }
@@ -514,11 +580,13 @@ enum ContractConditionsData {
     },
 }
 
-/// Which function are we currently generating?
-#[derive(Copy, Clone, Eq, PartialEq)]
-enum ClosureType {
-    Check,
+/// Enumeration that stores (some of) the contract mode values.
+/// We elide the Original and RecursiveCheck variants because we don't need them for any work in this crate.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+enum ContractMode {
+    SimpleCheck,
     Replace,
+    Assert,
 }
 
 impl<'a> ContractConditionsHandler<'a> {
