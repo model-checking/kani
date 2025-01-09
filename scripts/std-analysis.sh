@@ -104,10 +104,8 @@ for f in $results/*overall.csv; do
     fname=$(basename $f)
     crate=${fname%_scan_overall.csv}
     echo -n "$crate," >> $summary
-    temp_file=$(mktemp)
-    tr -d '[:alpha:]_,;' < "$f" > $temp_file
-    tr -s '\n' ',' < $temp_file >> "$summary"
-    rm $temp_file
+    tr -d '[:alpha:]_,;' < $f | tr -s '\n' ',' \
+        >> $summary
     echo "" >> $summary
 done
 
