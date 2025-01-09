@@ -1518,7 +1518,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 debug!("translate_call: {func:?} {args:?} {destination:?} {target:?}");
                 let fn_ty = func.ty(self.instance.body().unwrap().locals()).unwrap();
                 let fn_ptr = match fn_ty.kind() {
-                    TyKind::RigidTy(RigidTy::FnDef(def, genarg)) => {                      
+                    TyKind::RigidTy(RigidTy::FnDef(def, genarg)) => {
                         let instance = Instance::resolve(def, &genarg).unwrap();
                         let def_id = instance.def.def_id();
                         let fid = self.register_fun_decl_id(def_id);

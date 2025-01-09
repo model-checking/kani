@@ -4,13 +4,13 @@
 
 //! This test checks that Kani's LLBC backend handles option in generic args
 
-fn both_none<T,U>(a: Option<T>, b: Option<U>)-> bool{
+fn both_none<T, U>(a: Option<T>, b: Option<U>) -> bool {
     match a {
         None => match b {
             None => true,
-            _ => false
+            _ => false,
         },
-        _ => false
+        _ => false,
     }
 }
 
