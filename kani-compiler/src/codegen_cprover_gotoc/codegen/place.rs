@@ -611,7 +611,7 @@ impl GotocCtx<'_> {
                 };
                 let layout = self.layout_of(rustc_internal::internal(self.tcx, ty));
                 let expr = match &layout.variants {
-                    Variants::Single { .. } => before.goto_expr,
+                    Variants::Empty | Variants::Single { .. } => before.goto_expr,
                     Variants::Multiple { tag_encoding, .. } => match tag_encoding {
                         TagEncoding::Direct => {
                             let cases = if ty_kind.is_coroutine() {
