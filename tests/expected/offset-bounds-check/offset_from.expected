@@ -1,0 +1,18 @@
+Checking harness check_offset_from_same_dangling...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness check_offset_from_unit_panic...
+Failed Checks: assertion failed: 0 < pointee_size && pointee_size <= isize::MAX as usize
+VERIFICATION:- SUCCESSFUL (encountered one or more panics as expected)
+
+Checking harness check_offset_from_diff_alloc...
+Failed Checks: Offset result and original pointer should point to the same allocation
+VERIFICATION:- FAILED
+
+Checking harness check_offset_from_oob_ptr...
+Failed Checks: Offset result and original pointer should point to the same allocation
+VERIFICATION:- FAILED (encountered failures other than panics, which were unexpected)
+
+Verification failed for - check_offset_from_diff_alloc
+Verification failed for - check_offset_from_oob_ptr
+Complete - 2 successfully verified harnesses, 2 failures, 4 total.

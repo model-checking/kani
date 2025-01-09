@@ -9,8 +9,6 @@
 //! Kani will detect the usage of MaybeUninit and fail the verification.
 extern crate kani;
 
-use kani::PointerGenerator;
-
 #[kani::proof]
 fn check_inbounds() {
     let mut generator = kani::pointer_generator::<char, 3>();
@@ -48,9 +46,9 @@ fn check_overlap() {
     kani::cover!(ptr_1 == ptr_2, "Same");
     kani::cover!(ptr_1 == unsafe { ptr_2.byte_add(1) }, "Overlap");
 
-    let distance = unsafe { ptr_1.offset_from(ptr_2) };
+    let distance = unsafe { ptr_1.byte_offset_from(ptr_2) };
     kani::cover!(distance > 0, "Greater");
     kani::cover!(distance < 0, "Smaller");
 
-    assert!(distance >= -4 && distance <= 4, "Expected a maximum distance of 4 elements");
+    assert!(distance >= -8 && distance <= 8, "Expected a maximum distance of 8 bytes");
 }

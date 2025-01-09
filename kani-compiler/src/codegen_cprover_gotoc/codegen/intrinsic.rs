@@ -7,9 +7,7 @@ use crate::codegen_cprover_gotoc::codegen::ty_stable::pointee_type_stable;
 use crate::codegen_cprover_gotoc::{GotocCtx, utils};
 use crate::intrinsics::Intrinsic;
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
-use cbmc::goto_program::{
-    ArithmeticOverflowResult, BinaryOperator, BuiltinFn, Expr, Location, Stmt, Type,
-};
+use cbmc::goto_program::{BinaryOperator, BuiltinFn, Expr, Location, Stmt, Type};
 use rustc_middle::ty::TypingEnv;
 use rustc_middle::ty::layout::ValidityRequirement;
 use rustc_smir::rustc_internal;
@@ -425,10 +423,6 @@ impl GotocCtx<'_> {
             Intrinsic::PowIF64 => codegen_simple_intrinsic!(Powi),
             Intrinsic::PrefAlignOf => codegen_intrinsic_const!(),
             Intrinsic::PtrGuaranteedCmp => self.codegen_ptr_guaranteed_cmp(fargs, place, loc),
-            Intrinsic::PtrOffsetFrom => self.codegen_ptr_offset_from(fargs, place, loc),
-            Intrinsic::PtrOffsetFromUnsigned => {
-                self.codegen_ptr_offset_from_unsigned(fargs, place, loc)
-            }
             Intrinsic::RawEq => self.codegen_intrinsic_raw_eq(instance, fargs, place, loc),
             Intrinsic::RetagBoxToRaw => self.codegen_retag_box_to_raw(fargs, place, loc),
             Intrinsic::RintF32 => codegen_simple_intrinsic!(Rintf),
@@ -546,7 +540,10 @@ impl GotocCtx<'_> {
                 assert!(self.place_ty_stable(place).kind().is_unit());
                 self.codegen_write_bytes(fargs, farg_types, loc)
             }
-            Intrinsic::SizeOfVal | Intrinsic::MinAlignOfVal => {
+            Intrinsic::PtrOffsetFrom
+            | Intrinsic::PtrOffsetFromUnsigned
+            | Intrinsic::SizeOfVal
+            | Intrinsic::MinAlignOfVal => {
                 unreachable!("Intrinsic `{}` is handled before codegen", intrinsic_str)
             }
             // Unimplemented
@@ -1023,77 +1020,6 @@ impl GotocCtx<'_> {
         // Compute `dst_ptr` with standard addition to avoid conversion
         let dst_ptr = src_ptr.plus(offset);
         self.codegen_expr_to_place_stable(p, dst_ptr, loc)
-    }
-
-    /// ptr_offset_from returns the offset between two pointers
-    /// <https://doc.rust-lang.org/std/intrinsics/fn.ptr_offset_from.html>
-    fn codegen_ptr_offset_from(&mut self, fargs: Vec<Expr>, p: &Place, loc: Location) -> Stmt {
-        let (offset_expr, offset_overflow) = self.codegen_ptr_offset_from_expr(fargs);
-
-        // Check that computing `offset` in bytes would not overflow an `isize`
-        // These checks may allow a wrapping-around behavior in CBMC:
-        // https://github.com/model-checking/kani/issues/1150
-        let overflow_check = self.codegen_assert_assume(
-            offset_overflow.overflowed.not(),
-            PropertyClass::ArithmeticOverflow,
-            "attempt to compute offset in bytes which would overflow an `isize`",
-            loc,
-        );
-
-        let offset_expr = self.codegen_expr_to_place_stable(p, offset_expr, loc);
-        Stmt::block(vec![overflow_check, offset_expr], loc)
-    }
-
-    /// `ptr_offset_from_unsigned` returns the offset between two pointers where the order is known.
-    /// The logic is similar to `ptr_offset_from` but the return value is a `usize`.
-    /// See <https://github.com/rust-lang/rust/issues/95892> for more details
-    fn codegen_ptr_offset_from_unsigned(
-        &mut self,
-        fargs: Vec<Expr>,
-        p: &Place,
-        loc: Location,
-    ) -> Stmt {
-        let (offset_expr, offset_overflow) = self.codegen_ptr_offset_from_expr(fargs);
-
-        // Check that computing `offset` in bytes would not overflow an `isize`
-        // These checks may allow a wrapping-around behavior in CBMC:
-        // https://github.com/model-checking/kani/issues/1150
-        let overflow_check = self.codegen_assert_assume(
-            offset_overflow.overflowed.not(),
-            PropertyClass::ArithmeticOverflow,
-            "attempt to compute offset in bytes which would overflow an `isize`",
-            loc,
-        );
-
-        let non_negative_check = self.codegen_assert_assume(
-            offset_overflow.result.is_non_negative(),
-            PropertyClass::SafetyCheck,
-            "attempt to compute unsigned offset with negative distance",
-            loc,
-        );
-
-        let offset_expr =
-            self.codegen_expr_to_place_stable(p, offset_expr.cast_to(Type::size_t()), loc);
-        Stmt::block(vec![overflow_check, non_negative_check, offset_expr], loc)
-    }
-
-    /// Both `ptr_offset_from` and `ptr_offset_from_unsigned` return the offset between two pointers.
-    /// This function implements the common logic between them.
-    fn codegen_ptr_offset_from_expr(
-        &mut self,
-        mut fargs: Vec<Expr>,
-    ) -> (Expr, ArithmeticOverflowResult) {
-        let dst_ptr = fargs.remove(0);
-        let src_ptr = fargs.remove(0);
-
-        // Compute the offset with standard substraction using `isize`
-        let cast_dst_ptr = dst_ptr.clone().cast_to(Type::ssize_t());
-        let cast_src_ptr = src_ptr.clone().cast_to(Type::ssize_t());
-        let offset_overflow = cast_dst_ptr.sub_overflow(cast_src_ptr);
-
-        // Re-compute the offset with standard substraction (no casts this time)
-        let ptr_offset_expr = dst_ptr.sub(src_ptr);
-        (ptr_offset_expr, offset_overflow)
     }
 
     /// A transmute is a bitcast from the argument type to the return type.

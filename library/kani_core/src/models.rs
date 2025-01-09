@@ -45,6 +45,57 @@ macro_rules! generate_models {
                 }
             }
 
+            /// Implements core::intrinsics::ptr_offset_from with safety checks in place.
+            ///
+            /// From original documentation:
+            ///
+            /// # Safety
+            ///
+            /// If any of the following conditions are violated, the result is Undefined Behavior:
+            ///
+            /// * `self` and `origin` must either
+            ///
+            ///   * point to the same address, or
+            ///   * both be *derived from* a pointer to the same allocated object,
+            ///     and the memory range between
+            ///     the two pointers must be in bounds of that object.
+            ///
+            /// * The distance between the pointers, in bytes, must be an exact multiple
+            ///   of the size of `T`.
+            ///
+            /// # Panics
+            ///
+            /// This function panics if `T` is a Zero-Sized Type ("ZST").
+            #[kanitool::fn_marker = "PtrOffsetFromModel"]
+            pub unsafe fn ptr_offset_from<T>(ptr1: *const T, ptr2: *const T) -> isize {
+                // This is not a safety condition.
+                kani::assert(core::mem::size_of::<T>() > 0, "Cannot compute offset of a ZST");
+                if ptr1 == ptr2 {
+                    0
+                } else {
+                    kani::safety_check(
+                        kani::mem::same_allocation_internal(ptr1, ptr2),
+                        "Offset result and original pointer should point to the same allocation",
+                    );
+                    // The offset must fit in isize since this represents the same allocation.
+                    let offset_bytes = ptr1.addr().wrapping_sub(ptr2.addr()) as isize;
+                    let t_size = size_of::<T>() as isize;
+                    kani::safety_check(
+                        offset_bytes % t_size == 0,
+                        "Expected the distance between the pointers, in bytes, to be a
+                        multiple of the size of `T`",
+                    );
+                    offset_bytes / t_size
+                }
+            }
+
+            #[kanitool::fn_marker = "PtrSubPtrModel"]
+            pub unsafe fn ptr_sub_ptr<T>(ptr1: *const T, ptr2: *const T) -> usize {
+                let offset = ptr_offset_from(ptr1, ptr2);
+                kani::safety_check(offset >= 0, "Expected non-negative distance between pointers");
+                offset as usize
+            }
+
             /// An offset model that checks UB.
             #[kanitool::fn_marker = "OffsetModel"]
             pub fn offset<T, P: Ptr<T>, O: ToISize>(ptr: P, offset: O) -> P {
