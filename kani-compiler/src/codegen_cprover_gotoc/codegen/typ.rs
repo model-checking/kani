@@ -625,7 +625,9 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::CoroutineWitness(_, _) | ty::Infer(_) | ty::Placeholder(_) | ty::Error(_) => {
                 unreachable!("remnants of type checking")
             }
-            ty::UnsafeBinder(_) => todo!("Implement support for UnsafeBinder https://github.com/rust-lang/rust/issues/130516"),
+            ty::UnsafeBinder(_) => todo!(
+                "Implement support for UnsafeBinder https://github.com/rust-lang/rust/issues/130516"
+            ),
         }
     }
 
@@ -1033,7 +1035,9 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::Infer(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
             ty::Param(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
             ty::Placeholder(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
-            ty::UnsafeBinder(_) => todo!("Implement support for UnsafeBinder https://github.com/rust-lang/rust/issues/130516"),
+            ty::UnsafeBinder(_) => todo!(
+                "Implement support for UnsafeBinder https://github.com/rust-lang/rust/issues/130516"
+            ),
         }
     }
 
