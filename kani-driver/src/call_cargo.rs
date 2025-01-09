@@ -188,6 +188,9 @@ crate-type = ["lib"]
         if let Some(backend_arg) = self.backend_arg() {
             pkg_args.push(backend_arg);
         }
+        if self.args.no_assert_contracts {
+            pkg_args.push("--no-assert-contracts".into());
+        }
 
         let mut found_target = false;
         let packages = self.packages_to_verify(&self.args, &metadata)?;

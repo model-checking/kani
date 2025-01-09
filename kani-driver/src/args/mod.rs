@@ -309,6 +309,10 @@ pub struct VerificationArgs {
     )]
     pub synthesize_loop_contracts: bool,
 
+    /// Do not assert the function contracts of dependencies. Requires -Z function-contracts.
+    #[arg(long, hide_short_help = true)]
+    pub no_assert_contracts: bool,
+
     //Harness Output into individual files
     #[arg(long, hide_short_help = true)]
     pub output_into_files: bool,
@@ -702,6 +706,17 @@ impl ValidateArgs for VerificationArgs {
                 ),
             ));
         }
+
+        if !self.is_function_contracts_enabled() && self.no_assert_contracts {
+            return Err(Error::raw(
+                ErrorKind::MissingRequiredArgument,
+                format!(
+                    "The `--no-assert-contracts` option requires `-Z {}`.",
+                    UnstableFeature::FunctionContracts
+                ),
+            ));
+        }
+
         Ok(())
     }
 }
@@ -999,5 +1014,12 @@ mod tests {
             .split_whitespace();
         let err = StandaloneArgs::try_parse_from(args).unwrap().validate().unwrap_err();
         assert_eq!(err.kind(), ErrorKind::ArgumentConflict);
+    }
+
+    #[test]
+    fn check_no_assert_contracts() {
+        let args = "kani input.rs --no-assert-contracts".split_whitespace();
+        let err = StandaloneArgs::try_parse_from(args).unwrap().validate().unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::MissingRequiredArgument);
     }
 }
