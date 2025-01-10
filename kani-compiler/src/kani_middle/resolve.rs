@@ -170,6 +170,8 @@ fn resolve_path<'tcx>(
 pub enum ResolveError<'tcx> {
     /// Ambiguous glob resolution.
     AmbiguousGlob { tcx: TyCtxt<'tcx>, name: String, base: DefId, candidates: Vec<DefId> },
+    /// Ambiguous partial path (multiple inherent impls, c.f. https://github.com/model-checking/kani/issues/3773)
+    AmbiguousPartialPath { tcx: TyCtxt<'tcx>, name: String, base: DefId, candidates: Vec<DefId> },
     /// Use super past the root of a crate.
     ExtraSuper,
     /// Invalid path.
@@ -201,6 +203,18 @@ impl fmt::Display for ResolveError<'_> {
                 write!(
                     f,
                     "`{name}` is ambiguous because of multiple glob imports in {location}. Found:\n{}",
+                    candidates
+                        .iter()
+                        .map(|def_id| tcx.def_path_str(*def_id))
+                        .intersperse("\n".to_string())
+                        .collect::<String>()
+                )
+            }
+            ResolveError::AmbiguousPartialPath { tcx, base, name, candidates } => {
+                let location = description(*tcx, *base);
+                write!(
+                    f,
+                    "there are multiple implementations of {name} in {location}. Found:\n{}",
                     candidates
                         .iter()
                         .map(|def_id| tcx.def_path_str(*def_id))
@@ -540,15 +554,25 @@ fn resolve_in_type_def<'tcx>(
     name: &str,
 ) -> Result<DefId, ResolveError<'tcx>> {
     debug!(?name, ?type_id, "resolve_in_type");
-    let missing_item_err =
-        || ResolveError::MissingItem { tcx, base: type_id, unresolved: name.to_string() };
     // Try the inherent `impl` blocks (i.e., non-trait `impl`s).
-    tcx.inherent_impls(type_id)
+    let candidates: Vec<DefId> = tcx
+        .inherent_impls(type_id)
         .iter()
         .flat_map(|impl_id| tcx.associated_item_def_ids(impl_id))
         .cloned()
-        .find(|item| is_item_name(tcx, *item, name))
-        .ok_or_else(missing_item_err)
+        .filter(|item| is_item_name(tcx, *item, name))
+        .collect();
+
+    match candidates.len() {
+        0 => Err(ResolveError::MissingItem { tcx, base: type_id, unresolved: name.to_string() }),
+        1 => Ok(candidates[0]),
+        _ => Err(ResolveError::AmbiguousPartialPath {
+            tcx,
+            name: name.into(),
+            base: type_id,
+            candidates,
+        }),
+    }
 }
 
 /// Resolves a function in a trait.
