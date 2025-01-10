@@ -13,9 +13,10 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 
 ### What's Changed
 * Package Docker release step: ensure compiler is installed by @tautschnig in https://github.com/model-checking/kani/pull/3789
-* fix: clippy by @ShoyuVanilla in https://github.com/model-checking/kani/pull/3806
 * Fix hanging command in `std-analysis.sh` by @carolynzech in https://github.com/model-checking/kani/pull/3818
 * Include manifest-path when checking if packages are in the workspace by @qinheping in https://github.com/model-checking/kani/pull/3819
+* Update kissat to v4.0.1 by @remi-delmas-3000 in https://github.com/model-checking/kani/pull/3791
+* Rust toolchain upgraded to 2025-01-07 by @remi-delmas-3000 @zhassan-aws
 
 **Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.57.0...kani-0.58.0
 
