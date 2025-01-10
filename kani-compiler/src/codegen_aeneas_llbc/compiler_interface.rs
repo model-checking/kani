@@ -440,10 +440,7 @@ fn get_transform_options(tcx: &TranslatedCrate, error_ctx: &mut ErrorCtx) -> Tra
 
 fn create_charon_transformation_context(tcx: TyCtxt) -> TransformCtx {
     let crate_name = tcx.crate_name(LOCAL_CRATE).as_str().into();
-    let mut translated = TranslatedCrate { crate_name, ..TranslatedCrate::default() };
-    //This option setting is for Aeneas compatibility
-    translated.options.hide_marker_traits = true;
-    let mut errors = ErrorCtx::new(true, false);
-    let options = get_transform_options(&translated, &mut errors);
+    let translated = TranslatedCrate { crate_name, ..TranslatedCrate::default() };
+    let errors = ErrorCtx::new(true, false);
     TransformCtx { options, translated, errors }
 }

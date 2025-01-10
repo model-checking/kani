@@ -371,6 +371,10 @@ crate-type = ["lib"]
             .map(|pkg| {
                 let mut cmd = setup_cargo_command()?;
                 cmd.arg("pkgid");
+                if let Some(path) = &self.args.cargo.manifest_path {
+                    cmd.arg("--manifest-path");
+                    cmd.arg(path);
+                }
                 cmd.arg(pkg);
                 // For some reason clippy cannot see that we are invoking wait() in the next line.
                 #[allow(clippy::zombie_processes)]

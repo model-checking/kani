@@ -1238,7 +1238,6 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     _ => todo!("TyKind of gen must be TyVar: {:?}", tyvar.kind()),
                 }
             }
-
             let generics = CharonGenericArgs {
                 regions: t_regions,
                 types: t_types,
