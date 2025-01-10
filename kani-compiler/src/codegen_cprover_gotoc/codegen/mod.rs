@@ -12,6 +12,7 @@ mod intrinsic;
 mod operand;
 mod place;
 mod rvalue;
+mod source_region;
 mod span;
 mod statement;
 mod static_var;

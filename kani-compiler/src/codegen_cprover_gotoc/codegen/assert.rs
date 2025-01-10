@@ -18,10 +18,10 @@
 //! 7. `codegen_sanity` : `assert` but not normally displayed as failure would be a Kani bug
 //!
 
+use super::source_region::SourceRegion;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::InternedString;
 use cbmc::goto_program::{Expr, Location, Stmt, Type};
-use rustc_middle::mir::coverage::SourceRegion;
 use stable_mir::mir::{Place, ProjectionElem};
 use stable_mir::ty::{Span as SpanStable, Ty};
 use strum_macros::{AsRefStr, EnumString};

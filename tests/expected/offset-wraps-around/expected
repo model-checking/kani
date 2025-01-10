@@ -5,7 +5,7 @@ Checking harness harness_without_ub...
 VERIFICATION:- SUCCESSFUL
 
 Checking harness original_harness...
-Failed Checks: assertion failed: high_offset == wrapped_offset.try_into().unwrap()
+Failed Checks: Offset result and original pointer should point to the same allocation
 VERIFICATION:- FAILED
 
 Verification failed for - original_harness

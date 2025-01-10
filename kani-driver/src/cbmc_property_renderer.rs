@@ -61,7 +61,6 @@ static CBMC_ALT_DESCRIPTIONS: Lazy<CbmcAltDescriptions> = Lazy::new(|| {
         ("NaN on /", Some("NaN on division")),
         ("NaN on *", Some("NaN on multiplication")),
     ]);
-    map.insert("pointer", vec![("same object violation", None)]);
     map.insert("pointer_arithmetic", vec![
         ("pointer relation: deallocated dynamic object", None),
         ("pointer relation: dead object", None),
