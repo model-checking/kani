@@ -4,6 +4,21 @@ This file contains notable changes (e.g. breaking changes, major changes, etc.) 
 
 This file was introduced starting Kani 0.23.0, so it only contains changes from version 0.23.0 onwards.
 
+## [0.58.0]
+
+### Major/Breaking Changes
+* Improve `--jobs` UI by @carolynzech in https://github.com/model-checking/kani/pull/3790
+* Generate contracts of dependencies as assertions by @carolynzech in https://github.com/model-checking/kani/pull/3802
+* Add UB checks for ptr_offset_from* intrinsics by @celinval in https://github.com/model-checking/kani/pull/3757
+
+### What's Changed
+* Package Docker release step: ensure compiler is installed by @tautschnig in https://github.com/model-checking/kani/pull/3789
+* fix: clippy by @ShoyuVanilla in https://github.com/model-checking/kani/pull/3806
+* Fix hanging command in `std-analysis.sh` by @carolynzech in https://github.com/model-checking/kani/pull/3818
+* Include manifest-path when checking if packages are in the workspace by @qinheping in https://github.com/model-checking/kani/pull/3819
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.57.0...kani-0.58.0
+
 ## [0.57.0]
 
 ### Major Changes
