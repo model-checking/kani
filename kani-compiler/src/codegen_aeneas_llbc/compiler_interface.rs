@@ -153,11 +153,6 @@ impl LlbcCodegenBackend {
 
         // # Go from ULLBC to LLBC (Low-Level Borrow Calculus) by reconstructing
         // the control flow.
-        //let ullbc_to_llbc = charon_lib::ullbc_to_llbc::Transform {};
-        //ullbc_to_llbc.transform_ctx(&mut ccx);
-
-        trace!("# LLBC resulting from control-flow reconstruction:\n\n{}\n", ccx);
-
         // Run the micro-passes that clean up bodies.
         for pass in charon_lib::transform::LLBC_PASSES.iter() {
             pass.run(&mut ccx)
