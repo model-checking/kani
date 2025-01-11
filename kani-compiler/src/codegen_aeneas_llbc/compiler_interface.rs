@@ -441,6 +441,7 @@ fn get_transform_options(tcx: &TranslatedCrate, error_ctx: &mut ErrorCtx) -> Tra
 fn create_charon_transformation_context(tcx: TyCtxt) -> TransformCtx {
     let crate_name = tcx.crate_name(LOCAL_CRATE).as_str().into();
     let translated = TranslatedCrate { crate_name, ..TranslatedCrate::default() };
-    let errors = ErrorCtx::new(true, false);
+    let mut errors = ErrorCtx::new(true, false);
+    let options = get_transform_options(&translated, &mut errors);
     TransformCtx { options, translated, errors }
 }
