@@ -4,6 +4,20 @@ This file contains notable changes (e.g. breaking changes, major changes, etc.) 
 
 This file was introduced starting Kani 0.23.0, so it only contains changes from version 0.23.0 onwards.
 
+## [0.58.0]
+
+### Major/Breaking Changes
+* Improve `--jobs` UI by @carolynzech in https://github.com/model-checking/kani/pull/3790
+* Generate contracts of dependencies as assertions by @carolynzech in https://github.com/model-checking/kani/pull/3802
+* Add UB checks for ptr_offset_from* intrinsics by @celinval in https://github.com/model-checking/kani/pull/3757
+
+### What's Changed
+* Include manifest-path when checking if packages are in the workspace by @qinheping in https://github.com/model-checking/kani/pull/3819
+* Update kissat to v4.0.1 by @remi-delmas-3000 in https://github.com/model-checking/kani/pull/3791
+* Rust toolchain upgraded to 2025-01-07 by @remi-delmas-3000 @zhassan-aws
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.57.0...kani-0.58.0
+
 ## [0.57.0]
 
 ### Major Changes
