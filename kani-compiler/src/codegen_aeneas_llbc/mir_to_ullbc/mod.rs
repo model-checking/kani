@@ -1192,7 +1192,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
     }
 
     fn translate_generic_args(&mut self, ga: GenericArgs, defid: DefId) -> CharonGenericArgs {
-        let target = CharonGenericsSource::Item(self.id_map.get(&defid).unwrap().clone());
+        let target = CharonGenericsSource::Item(*self.id_map.get(&defid).unwrap());
         let genvec = ga.0;
         let mut c_regions: CharonVector<CharonRegionId, CharonRegion> = CharonVector::new();
         let mut c_types: CharonVector<CharonTypeVarId, CharonTy> = CharonVector::new();
@@ -1272,7 +1272,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         ga: GenericArgs,
         defid: DefId,
     ) -> CharonGenericArgs {
-        let target = CharonGenericsSource::Item(self.id_map.get(&defid).unwrap().clone());
+        let target = CharonGenericsSource::Item(*self.id_map.get(&defid).unwrap());
         let genvec = ga.0;
         let mut c_regions: CharonVector<CharonRegionId, CharonRegion> = CharonVector::new();
         let mut c_types: CharonVector<CharonTypeVarId, CharonTy> = CharonVector::new();
