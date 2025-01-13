@@ -417,7 +417,8 @@ fn get_transform_options(tcx: &TranslatedCrate, error_ctx: &mut ErrorCtx) -> Tra
 
         // We always hide this trait.
         opacities.push(("core::alloc::Allocator".to_string(), Invisible));
-        opacities.push(("alloc::alloc::{{impl core::alloc::Allocator for _}}".to_string(), Invisible));
+        opacities
+            .push(("alloc::alloc::{{impl core::alloc::Allocator for _}}".to_string(), Invisible));
 
         opacities
             .into_iter()
