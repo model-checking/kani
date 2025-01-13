@@ -24,7 +24,7 @@ use stable_mir::ty::{FnDef, RigidTy, Ty, TyKind};
 use std::collections::HashSet;
 use std::fmt;
 use std::iter::Peekable;
-use syn::{PathSegment, QSelf, TypePath};
+use syn::{PathArguments, PathSegment, QSelf, TypePath};
 use tracing::{debug, debug_span};
 
 mod type_resolution;
@@ -153,7 +153,7 @@ fn resolve_path<'tcx>(
         let next_item = match def_kind {
             DefKind::ForeignMod | DefKind::Mod => resolve_in_module(tcx, base, &name),
             DefKind::Struct | DefKind::Enum | DefKind::Union => {
-                resolve_in_type_def(tcx, base, &name)
+                resolve_in_type_def(tcx, base, &path.base_path_args, &name)
             }
             DefKind::Trait => resolve_in_trait(tcx, base, &name),
             kind => {
@@ -246,12 +246,13 @@ impl fmt::Display for ResolveError<'_> {
 /// The segments of a path.
 type Segments = Vec<PathSegment>;
 
-/// A path consisting of a starting point and a bunch of segments. If `base`
+/// A path consisting of a starting point, any PathArguments for that starting point, and a bunch of segments. If `base`
 /// matches `Base::LocalModule { id: _, may_be_external_path : true }`, then
 /// `segments` cannot be empty.
 #[derive(Debug, Hash)]
 struct Path {
     pub base: DefId,
+    pub base_path_args: PathArguments,
     pub segments: Segments,
 }
 
@@ -285,7 +286,11 @@ fn resolve_prefix<'tcx>(
             let next_name = segment.ident.to_string();
             let result = resolve_external(tcx, &next_name);
             if let Some(def_id) = result {
-                Ok(Path { base: def_id, segments: segments.cloned().collect() })
+                Ok(Path {
+                    base: def_id,
+                    base_path_args: segment.arguments.clone(),
+                    segments: segments.cloned().collect(),
+                })
             } else {
                 Err(ResolveError::MissingItem {
                     tcx,
@@ -306,7 +311,11 @@ fn resolve_prefix<'tcx>(
                 None => current_module,
                 Some((hir_id, _)) => hir_id.owner.def_id,
             };
-            Ok(Path { base: crate_root.to_def_id(), segments: segments.cloned().collect() })
+            Ok(Path {
+                base: crate_root.to_def_id(),
+                base_path_args: segment.arguments.clone(),
+                segments: segments.cloned().collect(),
+            })
         }
         // Path starting with "self::"
         (None, Some(segment)) if segment.ident == SELF => {
@@ -334,7 +343,11 @@ fn resolve_prefix<'tcx>(
                         Err(err)
                     }
                 })?;
-            Ok(Path { base: def_id, segments: segments.cloned().collect() })
+            Ok(Path {
+                base: def_id,
+                base_path_args: segment.arguments.clone(),
+                segments: segments.cloned().collect(),
+            })
         }
         _ => {
             unreachable!("Empty path: `{path:?}`")
@@ -364,7 +377,11 @@ where
         }
     }
     debug!("base: {base_module:?}");
-    Ok(Path { base: base_module.to_def_id(), segments: segments.cloned().collect() })
+    Ok(Path {
+        base: base_module.to_def_id(),
+        base_path_args: PathArguments::None,
+        segments: segments.cloned().collect(),
+    })
 }
 
 /// Resolves an external crate name.
@@ -543,14 +560,19 @@ where
     if segments.next().is_some() {
         Err(ResolveError::UnexpectedType { tcx, item: def_id, expected: "module" })
     } else {
-        resolve_in_type_def(tcx, def_id, &name.ident.to_string())
+        resolve_in_type_def(tcx, def_id, &PathArguments::None, &name.ident.to_string())
     }
+}
+
+fn generic_args_to_string<T: ToTokens>(args: &T) -> String {
+    args.to_token_stream().to_string().chars().filter(|c| !c.is_whitespace()).collect::<String>()
 }
 
 /// Resolves a function in a type given its `def_id`.
 fn resolve_in_type_def<'tcx>(
     tcx: TyCtxt<'tcx>,
     type_id: DefId,
+    base_path_args: &PathArguments,
     name: &str,
 ) -> Result<DefId, ResolveError<'tcx>> {
     debug!(?name, ?type_id, "resolve_in_type");
@@ -566,12 +588,57 @@ fn resolve_in_type_def<'tcx>(
     match candidates.len() {
         0 => Err(ResolveError::MissingItem { tcx, base: type_id, unresolved: name.to_string() }),
         1 => Ok(candidates[0]),
-        _ => Err(ResolveError::AmbiguousPartialPath {
-            tcx,
-            name: name.into(),
-            base: type_id,
-            candidates,
-        }),
+        _ => {
+            let invalid_path_err = |generic_args, candidates: Vec<DefId>| -> ResolveError {
+                ResolveError::InvalidPath {
+                    msg: format!(
+                        "the generic arguments {} are invalid. The available implementations are: \n{}",
+                        &generic_args,
+                        &candidates
+                            .iter()
+                            .map(|def_id| tcx.def_path_str(def_id))
+                            .intersperse("\n".to_string())
+                            .collect::<String>()
+                    ),
+                }
+            };
+            // If there are multiple implementations, we need generic arguments on the base type to refine our options.
+            match base_path_args {
+                // If there aren't such arguments, report the ambiguity.
+                PathArguments::None => Err(ResolveError::AmbiguousPartialPath {
+                    tcx,
+                    name: name.into(),
+                    base: type_id,
+                    candidates,
+                }),
+                // Otherwise, use the provided generic arguments to refine our options.
+                PathArguments::AngleBracketed(args) => {
+                    let generic_args = generic_args_to_string(&args);
+                    let refined_candidates: Vec<DefId> = candidates
+                        .iter()
+                        .cloned()
+                        .filter(|item| {
+                            is_item_name_with_generic_args(tcx, *item, &generic_args, name)
+                        })
+                        .collect();
+                    match refined_candidates.len() {
+                        0 => Err(invalid_path_err(&generic_args, candidates)),
+                        1 => Ok(refined_candidates[0]),
+                        // since is_item_name_with_generic_args looks at the entire item path after the base type, it shouldn't be possible to have more than one match
+                        _ => unreachable!(
+                            "Got multiple refined candidates {:?}",
+                            refined_candidates
+                                .iter()
+                                .map(|def_id| tcx.def_path_str(def_id))
+                                .collect::<Vec<String>>()
+                        ),
+                    }
+                }
+                PathArguments::Parenthesized(args) => {
+                    Err(invalid_path_err(&generic_args_to_string(args), candidates))
+                }
+            }
+        }
     }
 }
 
@@ -625,7 +692,11 @@ where
                 base: ty,
                 unresolved: name.to_string(),
             })?;
-        Ok(Path { base: item, segments: segments.cloned().collect() })
+        Ok(Path {
+            base: item,
+            base_path_args: PathArguments::None,
+            segments: segments.cloned().collect(),
+        })
     } else {
         Err(ResolveError::InvalidPath { msg: format!("Unexpected primitive type `{ty}`") })
     }
@@ -635,4 +706,15 @@ fn is_item_name(tcx: TyCtxt, item: DefId, name: &str) -> bool {
     let item_path = tcx.def_path_str(item);
     let last = item_path.split("::").last().unwrap();
     last == name
+}
+
+fn is_item_name_with_generic_args(
+    tcx: TyCtxt,
+    item: DefId,
+    generic_args: &str,
+    name: &str,
+) -> bool {
+    let item_path = tcx.def_path_str(item);
+    let all_but_base_type = item_path.find("::").map_or("", |idx| &item_path[idx..]);
+    all_but_base_type == format!("{}::{}", generic_args, name)
 }
