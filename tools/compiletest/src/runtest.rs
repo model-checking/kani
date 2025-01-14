@@ -611,7 +611,7 @@ impl TestCx<'_> {
         let coverage_path = coverage_info
             .unwrap()
             .split(' ')
-            .last()
+            .next_back()
             .expect("couldn't retrieve path to the coverage results");
         PathBuf::from(coverage_path)
     }

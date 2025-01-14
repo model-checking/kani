@@ -213,13 +213,20 @@ impl<'tcx> KaniAttributes<'tcx> {
                 let def = self
                     .resolve_from_mod(name.as_str())
                     .map_err(|e| {
-                        self.tcx.dcx().span_err(
+                        let mut err = self.tcx.dcx().struct_span_err(
                             attr.span,
                             format!(
                                 "Failed to resolve replacement function {}: {e}",
                                 name.as_str()
                             ),
-                        )
+                        );
+                        if let ResolveError::AmbiguousPartialPath { .. } = e {
+                            err = err.with_help(format!(
+                                "Replace {} with a specific implementation.",
+                                name.as_str()
+                            ));
+                        }
+                        err.emit();
                     })
                     .ok()?;
                 Some((name, def, attr.span))
@@ -242,13 +249,20 @@ impl<'tcx> KaniAttributes<'tcx> {
             self.resolve_from_mod(name.as_str())
                 .map(|ok| (name, ok, target.span))
                 .map_err(|resolve_err| {
-                    self.tcx.dcx().span_err(
+                    let mut err = self.tcx.dcx().struct_span_err(
                         target.span,
                         format!(
                             "Failed to resolve checking function {} because {resolve_err}",
                             name.as_str()
                         ),
-                    )
+                    );
+                    if let ResolveError::AmbiguousPartialPath { .. } = resolve_err {
+                        err = err.with_help(format!(
+                            "Replace {} with a specific implementation.",
+                            name.as_str()
+                        ));
+                    }
+                    err.emit();
                 })
                 .ok()
         })
