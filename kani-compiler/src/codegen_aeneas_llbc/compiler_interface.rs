@@ -12,10 +12,12 @@ use crate::kani_middle::provide;
 use crate::kani_middle::reachability::{collect_reachable_items, filter_crate_items};
 use crate::kani_middle::transform::{BodyTransformation, GlobalPasses};
 use crate::kani_queries::QueryDb;
-use charon_lib::ast::{AnyTransId, TranslatedCrate};
+use charon_lib::ast::{AnyTransId, TranslatedCrate, meta::ItemOpacity::*, meta::Span};
 use charon_lib::errors::ErrorCtx;
+use charon_lib::errors::error_or_panic;
+use charon_lib::name_matcher::NamePattern;
 use charon_lib::transform::TransformCtx;
-use charon_lib::transform::ctx::TransformOptions;
+use charon_lib::transform::ctx::{TransformOptions, TransformPass};
 use kani_metadata::ArtifactType;
 use kani_metadata::{AssignsContract, CompilerArtifactStub};
 use rustc_codegen_ssa::back::archive::{
@@ -133,8 +135,8 @@ impl LlbcCodegenBackend {
         // - compute the order in which to extract the definitions
         // - find the recursive definitions
         // - group the mutually recursive definitions
-        let reordered_decls = charon_lib::reorder_decls::compute_reordered_decls(&ccx);
-        ccx.translated.ordered_decls = Some(reordered_decls);
+        let reordered_decls = charon_lib::transform::reorder_decls::Transform {};
+        reordered_decls.transform_ctx(&mut ccx);
 
         //
         // =================
@@ -151,10 +153,6 @@ impl LlbcCodegenBackend {
 
         // # Go from ULLBC to LLBC (Low-Level Borrow Calculus) by reconstructing
         // the control flow.
-        charon_lib::ullbc_to_llbc::translate_functions(&mut ccx);
-
-        trace!("# LLBC resulting from control-flow reconstruction:\n\n{}\n", ccx);
-
         // Run the micro-passes that clean up bodies.
         for pass in charon_lib::transform::LLBC_PASSES.iter() {
             pass.run(&mut ccx)
@@ -385,17 +383,61 @@ where
     ret
 }
 
-fn create_charon_transformation_context(tcx: TyCtxt) -> TransformCtx {
-    let options = TransformOptions {
+fn get_transform_options(tcx: &TranslatedCrate, error_ctx: &mut ErrorCtx) -> TransformOptions {
+    let mut parse_pattern = |s: &str| match NamePattern::parse(s) {
+        Ok(p) => Ok(p),
+        Err(e) => {
+            let msg = format!("failed to parse pattern `{s}` ({e})");
+            error_or_panic!(error_ctx, &TranslatedCrate::default(), Span::dummy(), msg)
+        }
+    };
+    let options = tcx.options.clone();
+    let item_opacities = {
+        let mut opacities = vec![];
+
+        // This is how to treat items that don't match any other pattern.
+        if options.extract_opaque_bodies {
+            opacities.push(("_".to_string(), Transparent));
+        } else {
+            opacities.push(("_".to_string(), Foreign));
+        }
+
+        // We always include the items from the crate.
+        opacities.push(("crate".to_owned(), Transparent));
+
+        for pat in options.include.iter() {
+            opacities.push((pat.to_string(), Transparent));
+        }
+        for pat in options.opaque.iter() {
+            opacities.push((pat.to_string(), Opaque));
+        }
+        for pat in options.exclude.iter() {
+            opacities.push((pat.to_string(), Invisible));
+        }
+
+        // We always hide this trait.
+        opacities.push(("core::alloc::Allocator".to_string(), Invisible));
+        opacities
+            .push(("alloc::alloc::{{impl core::alloc::Allocator for _}}".to_string(), Invisible));
+
+        opacities
+            .into_iter()
+            .filter_map(|(s, opacity)| parse_pattern(&s).ok().map(|pat| (pat, opacity)))
+            .collect()
+    };
+    TransformOptions {
         no_code_duplication: false,
         hide_marker_traits: true,
         no_merge_goto_chains: false,
-        item_opacities: Vec::new(),
-    };
+        item_opacities,
+        print_built_llbc: true,
+    }
+}
+
+fn create_charon_transformation_context(tcx: TyCtxt) -> TransformCtx {
     let crate_name = tcx.crate_name(LOCAL_CRATE).as_str().into();
-    let mut translated = TranslatedCrate { crate_name, ..TranslatedCrate::default() };
-    //This option setting is for Aeneas compatibility
-    translated.options.hide_marker_traits = true;
-    let errors = ErrorCtx::new(true, false);
+    let translated = TranslatedCrate { crate_name, ..TranslatedCrate::default() };
+    let mut errors = ErrorCtx::new(true, false);
+    let options = get_transform_options(&translated, &mut errors);
     TransformCtx { options, translated, errors }
 }
