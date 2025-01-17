@@ -265,7 +265,7 @@ macro_rules! ptr_generator {
                 let ptr = match status {
                     AllocationStatus::Dangling => {
                         // Generate potentially unaligned pointer.
-                        let offset = kani::any_where(|b: &usize| *b < size_of::<T>());
+                        let offset = kani::any_where(|b: &usize| *b < core::mem::size_of::<T>());
                         crate::ptr::NonNull::<T>::dangling().as_ptr().wrapping_add(offset)
                     }
                     AllocationStatus::DeadObject => {
@@ -279,7 +279,7 @@ macro_rules! ptr_generator {
                     AllocationStatus::OutOfBounds => {
                         // Generate potentially unaligned pointer.
                         let buf_ptr = addr_of_mut!(self.buf) as *mut u8;
-                        let offset = kani::any_where(|b: &usize| *b < size_of::<T>());
+                        let offset = kani::any_where(|b: &usize| *b < core::mem::size_of::<T>());
                         unsafe { buf_ptr.add(Self::BUF_LEN - offset) as *mut T }
                     }
                 };
@@ -331,7 +331,7 @@ macro_rules! ptr_generator {
                     "Cannot generate in-bounds object of the requested type. Buffer is not big enough."
                 );
                 let buf_ptr = addr_of_mut!(self.buf) as *mut u8;
-                let offset = kani::any_where(|b: &usize| *b <= Self::BUF_LEN - size_of::<T>());
+                let offset = kani::any_where(|b: &usize| *b <= Self::BUF_LEN - core::mem::size_of::<T>());
                 let ptr = unsafe { buf_ptr.add(offset) as *mut T };
                 let is_initialized = kani::any();
                 if is_initialized {
@@ -356,8 +356,8 @@ macro_rules! ptr_generator_fn {
     () => {
         /// Create a pointer generator that fits at least `N` elements of type `T`.
         pub fn pointer_generator<T, const NUM_ELTS: usize>()
-        -> PointerGenerator<{ size_of::<T>() * NUM_ELTS }> {
-            PointerGenerator::<{ size_of::<T>() * NUM_ELTS }>::new()
+        -> PointerGenerator<{ core::mem::size_of::<T>() * NUM_ELTS }> {
+            PointerGenerator::<{ core::mem::size_of::<T>() * NUM_ELTS }>::new()
         }
     };
 }
