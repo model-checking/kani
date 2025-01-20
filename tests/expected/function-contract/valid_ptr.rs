@@ -28,7 +28,6 @@ mod pre_condition {
     }
 
     #[kani::proof_for_contract(read_ptr)]
-    #[kani::should_panic]
     fn harness_invalid_ptr() {
         let ptr = std::ptr::NonNull::<i32>::dangling().as_ptr();
         assert_eq!(unsafe { read_ptr(ptr) }, -20);
