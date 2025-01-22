@@ -3,8 +3,6 @@
 // kani-flags: -Zfunction-contracts -Zmem-predicates
 
 //! Test that it is sound to use memory predicates inside a contract pre-condition.
-//! We cannot validate post-condition yet. This can be done once we fix:
-//! <https://github.com/model-checking/kani/issues/2997>
 
 mod pre_condition {
     /// This contract should succeed only if the input is a valid pointer.
@@ -35,8 +33,6 @@ mod pre_condition {
     }
 }
 
-/// TODO: Enable once we fix: <https://github.com/model-checking/kani/issues/2997>
-#[cfg(not_supported)]
 mod post_condition {
 
     /// This contract should fail since we are creating a dangling pointer.
