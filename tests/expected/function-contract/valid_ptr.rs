@@ -36,7 +36,7 @@ mod pre_condition {
 mod post_condition {
 
     /// This contract should fail since we are creating a dangling pointer.
-    #[kani::ensures(kani::mem::can_dereference(result.0))]
+    #[kani::ensures(|result| kani::mem::can_dereference(result.0))]
     unsafe fn new_invalid_ptr() -> PtrWrapper<char> {
         let var = 'c';
         PtrWrapper(&var as *const _)
