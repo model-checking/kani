@@ -1,3 +1,8 @@
+Checking harness post_condition::harness...
+Failed Checks: Kani does not support reasoning about pointer to unallocated memory
+Failed Checks: |result| kani::mem::can_dereference(result.0)
+VERIFICATION:- FAILED
+
 Checking harness pre_condition::harness_invalid_ptr...
 Failed Checks: assertion failed: unsafe { read_ptr(ptr) } == -20
 Failed Checks: Kani does not support reasoning about pointer to unallocated memory
@@ -10,4 +15,4 @@ VERIFICATION:- SUCCESSFUL
 Checking harness pre_condition::harness_head_ptr...
 VERIFICATION:- SUCCESSFUL
 
-Complete - 2 successfully verified harnesses, 1 failures, 3 total
+Complete - 2 successfully verified harnesses, 2 failures, 4 total
