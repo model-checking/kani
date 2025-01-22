@@ -50,11 +50,16 @@ source $HOME/.cargo/env
 
 ## Build and test Kani
 
-Build the Kani package:
+Build the Kani package using:
 
+```
+cargo build-dev -- --release
+```
+to compile with optimizations turned on or using:
 ```
 cargo build-dev
 ```
+to compile in debug/development mode.
 
 Then, optionally, run the regression tests:
 
