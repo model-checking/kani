@@ -44,8 +44,13 @@ fn simple_loop_with_loop_contracts() {
 Here, the loop invariant `#[kani::loop_invariant(x >= 1)]` specifies that the condition `x >= 1` must hold true at the start of each iteration before the loop guard is
  checked. Once Kani verifies that the loop invariant is inductive, it will use the invariant to abstract the loop and avoid unwinding. 
 
+ Now let's run the proof with loop contracts through kani:
+ ``` bash
+kani simple_loop_with_loop_contracts.rs  -Z loop-contracts
+ ```
 
-## Loop Contracts for `while` Loops
+
+## Loop contracts for `while` loops
 
 > **Syntax**
 > 
