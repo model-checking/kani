@@ -48,7 +48,9 @@ Here, the loop invariant `#[kani::loop_invariant(x >= 1)]` specifies that the co
 ## Loop Contracts for `while` Loops
 
 > **Syntax**
+> 
 > \#\[kani::loop_invariant\( [_Expression_](https://doc.rust-lang.org/reference/expressions.html) \)\]
+> 
 >  `while` [_Expression_](https://doc.rust-lang.org/reference/expressions.html)<sub>_except struct expression_</sub> [_BlockExpression_](https://doc.rust-lang.org/reference/expressions/block-expr.html)
 
 
