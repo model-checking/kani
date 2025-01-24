@@ -1,20 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-//! This module provides instrumentation for tracking memory initialization of raw pointers.
-//!
-//! Currently, memory initialization is tracked on per-byte basis, so each byte of memory pointed to
-//! by raw pointers could be either initialized or uninitialized. Padding bytes are always
-//! considered uninitialized when read as data bytes. Each type has a type layout to specify which
-//! bytes are considered to be data and which -- padding. This is determined at compile time and
-//! statically injected into the program (see `Layout`).
-//!
-//! Compiler automatically inserts calls to `is_xxx_initialized` and `set_xxx_initialized` at
-//! appropriate locations to get or set the initialization status of the memory pointed to.
-//!
-//! Note that for each harness, tracked object and tracked offset are chosen non-deterministically,
-//! so calls to `is_xxx_initialized` should be only used in assertion contexts.
-
 // Definitions in this module are not meant to be visible to the end user, only the compiler.
 #![allow(dead_code)]
 
