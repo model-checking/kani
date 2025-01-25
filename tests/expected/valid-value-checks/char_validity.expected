@@ -1,0 +1,37 @@
+Checking harness check_invalid_char_unit_wrapper_should_fail...
+- Status: UNREACHABLE\
+- Description: ""Unreachable code: Expected invalid char wrapper detection""
+Failed Checks: Undefined Behavior: Invalid value of type `TwoFields<char, ()>`
+Failed Checks: Undefined Behavior: Invalid value of type `TwoFields<(), char>`
+VERIFICATION:- FAILED
+
+Checking harness check_invalid_char_nonzero_wrapper_should_fail...
+- Status: UNREACHABLE\
+- Description: ""Unreachable code: Expected invalid char / NonZero detection""
+Failed Checks: Undefined Behavior: Invalid value of type `TwoFields<char, std::num::NonZero<u32>>`
+VERIFICATION:- FAILED
+
+Checking harness check_invalid_char_should_fail...
+- Status: UNREACHABLE\
+- Description: ""Unreachable code: Expected invalid char detection""
+Failed Checks: Undefined Behavior: Invalid value of type `char`
+VERIFICATION:- FAILED
+
+
+Checking harness check_valid_mixed_wrapper...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness check_valid_char_wrappers...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness cannot_dereference_invalid_char...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness check_char_ok...
+VERIFICATION:- SUCCESSFUL
+
+Summary:
+Verification failed for - check_invalid_char_unit_wrapper_should_fail
+Verification failed for - check_invalid_char_nonzero_wrapper_should_fail
+Verification failed for - check_invalid_char_should_fail
+Complete - 4 successfully verified harnesses, 3 failures, 7 total.

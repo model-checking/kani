@@ -32,7 +32,7 @@ use stable_mir::mir::{
     Statement, StatementKind, Terminator, TerminatorKind,
 };
 use stable_mir::target::{MachineInfo, MachineSize};
-use stable_mir::ty::{AdtKind, IndexedVal, MirConst, RigidTy, Ty, TyKind, UintTy};
+use stable_mir::ty::{AdtKind, IndexedVal, MirConst, RigidTy, Span, Ty, TyKind, UintTy};
 use std::fmt::Debug;
 use strum_macros::AsRefStr;
 use tracing::{debug, trace};
@@ -164,7 +164,18 @@ pub struct ValidValueReq {
     /// Size of this requirement.
     size: MachineSize,
     /// The range restriction is represented by a Scalar.
-    valid_range: WrappingRange,
+    valid_range: ValidityRange,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+enum ValidityRange {
+    /// The value validity fits in a single value range.
+    /// This includes cases where the full range is covered.
+    Single(WrappingRange),
+    /// The validity includes more than one value range.
+    /// Currently, this is only the case for `char`, which has two ranges.
+    /// If more cases come up, we could turn this into a vector instead.
+    Multiple([WrappingRange; 2]),
 }
 
 // TODO: Optimize checks by merging requirements whenever possible.
@@ -180,23 +191,42 @@ impl ValidValueReq {
     /// It's not possible to define a `rustc_layout_scalar_valid_range_*` to any other structure.
     /// Note that this annotation only applies to the first scalar in the layout.
     pub fn try_from_ty(machine_info: &MachineInfo, ty: Ty) -> Option<ValidValueReq> {
-        let shape = ty.layout().unwrap().shape();
-        match shape.abi {
-            ValueAbi::Scalar(Scalar::Initialized { value, valid_range })
-            | ValueAbi::ScalarPair(Scalar::Initialized { value, valid_range }, _) => {
-                Some(ValidValueReq { offset: 0, size: value.size(machine_info), valid_range })
+        if ty.kind().is_char() {
+            Some(ValidValueReq {
+                offset: 0,
+                size: MachineSize::from_bits(size_of::<char>() * 8),
+                valid_range: ValidityRange::Multiple([
+                    WrappingRange { start: 0, end: 0xD7FF },
+                    WrappingRange { start: 0xE000, end: char::MAX.into() },
+                ]),
+            })
+        } else {
+            let shape = ty.layout().unwrap().shape();
+            match shape.abi {
+                ValueAbi::Scalar(Scalar::Initialized { value, valid_range })
+                | ValueAbi::ScalarPair(Scalar::Initialized { value, valid_range }, _) => {
+                    Some(ValidValueReq {
+                        offset: 0,
+                        size: value.size(machine_info),
+                        valid_range: ValidityRange::Single(valid_range),
+                    })
+                }
+                ValueAbi::Scalar(_)
+                | ValueAbi::ScalarPair(_, _)
+                | ValueAbi::Uninhabited
+                | ValueAbi::Vector { .. }
+                | ValueAbi::Aggregate { .. } => None,
             }
-            ValueAbi::Scalar(_)
-            | ValueAbi::ScalarPair(_, _)
-            | ValueAbi::Uninhabited
-            | ValueAbi::Vector { .. }
-            | ValueAbi::Aggregate { .. } => None,
         }
     }
 
     /// Check if range is full.
     pub fn is_full(&self) -> bool {
-        self.valid_range.is_full(self.size).unwrap()
+        if let ValidityRange::Single(valid_range) = self.valid_range {
+            valid_range.is_full(self.size).unwrap()
+        } else {
+            false
+        }
     }
 
     /// Check if this range contains `other` range.
@@ -204,17 +234,42 @@ impl ValidValueReq {
     /// I.e., `scalar_2` ⊆ `scalar_1`
     pub fn contains(&self, other: &ValidValueReq) -> bool {
         assert_eq!(self.size, other.size);
-        match (self.valid_range.wraps_around(), other.valid_range.wraps_around()) {
-            (true, true) | (false, false) => {
-                self.valid_range.start <= other.valid_range.start
-                    && self.valid_range.end >= other.valid_range.end
+        match (&self.valid_range, &other.valid_range) {
+            (ValidityRange::Single(this_range), ValidityRange::Single(other_range)) => {
+                range_contains(this_range, other_range, self.size)
             }
-            (true, false) => {
-                self.valid_range.start <= other.valid_range.start
-                    || self.valid_range.end >= other.valid_range.end
+            (ValidityRange::Multiple(this_ranges), ValidityRange::Single(other_range)) => {
+                range_contains(&this_ranges[0], other_range, self.size)
+                    || range_contains(&this_ranges[1], other_range, self.size)
             }
-            (false, true) => self.is_full(),
+            (ValidityRange::Single(this_range), ValidityRange::Multiple(other_ranges)) => {
+                range_contains(this_range, &other_ranges[0], self.size)
+                    && range_contains(this_range, &other_ranges[1], self.size)
+            }
+            (ValidityRange::Multiple(this_ranges), ValidityRange::Multiple(other_ranges)) => {
+                let contains = (range_contains(&this_ranges[0], &other_ranges[0], self.size)
+                    || range_contains(&this_ranges[1], &other_ranges[0], self.size))
+                    && (range_contains(&this_ranges[0], &other_ranges[1], self.size)
+                        || range_contains(&this_ranges[1], &other_ranges[1], self.size));
+                // Multiple today only cover `char` case.
+                debug_assert!(
+                    contains,
+                    "Expected validity of `char` for Multiple ranges. Found: {self:?}, {other:?}"
+                );
+                contains
+            }
         }
+    }
+}
+
+/// Check if range `r1` contains range `r2`.
+///
+/// I.e., `r2` ⊆ `r1`
+fn range_contains(r1: &WrappingRange, r2: &WrappingRange, sz: MachineSize) -> bool {
+    match (r1.wraps_around(), r2.wraps_around()) {
+        (true, true) | (false, false) => r1.start <= r2.start && r1.end >= r2.end,
+        (true, false) => r1.start <= r2.start || r1.end >= r2.end,
+        (false, true) => r1.is_full(sz).unwrap(),
     }
 }
 
@@ -763,8 +818,6 @@ pub fn build_limits(
     let span = source.span(body.blocks());
     debug!(?req, ?rvalue_ptr, ?span, "build_limits");
     let primitive_ty = uint_ty(req.size.bytes());
-    let start_const = body.new_uint_operand(req.valid_range.start, primitive_ty, span);
-    let end_const = body.new_uint_operand(req.valid_range.end, primitive_ty, span);
     let orig_ptr = if req.offset != 0 {
         let start_ptr =
             move_local(body.insert_assignment(rvalue_ptr, source, InsertPosition::Before));
@@ -799,6 +852,35 @@ pub fn build_limits(
         InsertPosition::Before,
     );
     let value = Operand::Copy(Place { local: value_ptr, projection: vec![ProjectionElem::Deref] });
+    match &req.valid_range {
+        ValidityRange::Single(range) => {
+            build_single_limit(body, range, source, span, primitive_ty, value)
+        }
+        ValidityRange::Multiple([range1, range2]) => {
+            // Build `let valid = range1.contains(value) || range2.contains(value);
+            let cond1 = build_single_limit(body, range1, source, span, primitive_ty, value.clone());
+            let cond2 = build_single_limit(body, range2, source, span, primitive_ty, value);
+            body.insert_binary_op(
+                BinOp::BitOr,
+                move_local(cond1),
+                move_local(cond2),
+                source,
+                InsertPosition::Before,
+            )
+        }
+    }
+}
+
+fn build_single_limit(
+    body: &mut MutableBody,
+    range: &WrappingRange,
+    source: &mut SourceInstruction,
+    span: Span,
+    primitive_ty: UintTy,
+    value: Operand,
+) -> Local {
+    let start_const = body.new_uint_operand(range.start, primitive_ty, span);
+    let end_const = body.new_uint_operand(range.end, primitive_ty, span);
     let start_result = body.insert_binary_op(
         BinOp::Ge,
         value.clone(),
@@ -808,7 +890,7 @@ pub fn build_limits(
     );
     let end_result =
         body.insert_binary_op(BinOp::Le, value, end_const, source, InsertPosition::Before);
-    if req.valid_range.wraps_around() {
+    if range.wraps_around() {
         // valid >= start || valid <= end
         body.insert_binary_op(
             BinOp::BitOr,
