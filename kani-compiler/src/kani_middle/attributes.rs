@@ -604,7 +604,7 @@ impl<'tcx> KaniAttributes<'tcx> {
         }
     }
 
-    /// Adds the verified stub names to the `harness.verfied_stubs`.
+    /// Adds the verified stub names to the `harness.verified_stubs`.
     ///
     /// This method must be called after `check_stub_verified`, to ensure that
     /// the target names are known and have contracts, and there are no
@@ -614,7 +614,6 @@ impl<'tcx> KaniAttributes<'tcx> {
             harness.verified_stubs.push(name.to_string())
         }
     }
-
 
     fn item_name(&self) -> Symbol {
         self.tcx.item_name(self.item)
