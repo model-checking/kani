@@ -160,24 +160,25 @@ impl GotocHook for UnsupportedCheck {
         target: Option<BasicBlockIdx>,
         span: Span,
     ) -> Stmt {
-        assert_eq!(fargs.len(), 2);
+        assert_eq!(fargs.len(), 1);
         let msg = fargs.pop().unwrap();
-        let cond = fargs.pop().unwrap().cast_to(Type::bool());
         let msg = gcx.extract_const_message(&msg).unwrap();
-        let target = target.unwrap();
         let caller_loc = gcx.codegen_caller_span_stable(span);
-        Stmt::block(
-            vec![
-                gcx.codegen_assert_assume(
-                    cond,
-                    PropertyClass::UnsupportedConstruct,
-                    &msg,
-                    caller_loc,
-                ),
-                Stmt::goto(bb_label(target), caller_loc),
-            ],
-            caller_loc,
-        )
+        if let Some(target) = target {
+            Stmt::block(
+                vec![
+                    gcx.codegen_assert_assume_false(
+                        PropertyClass::UnsupportedConstruct,
+                        &msg,
+                        caller_loc,
+                    ),
+                    Stmt::goto(bb_label(target), caller_loc),
+                ],
+                caller_loc,
+            )
+        } else {
+            gcx.codegen_assert_assume_false(PropertyClass::UnsupportedConstruct, &msg, caller_loc)
+        }
     }
 }
 
