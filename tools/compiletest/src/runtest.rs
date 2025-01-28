@@ -308,7 +308,7 @@ impl TestCx<'_> {
         kani.arg(&self.testpaths.file).args(&self.props.kani_flags);
 
         if !self.props.cbmc_flags.is_empty() {
-            kani.arg("--enable-unstable").arg("--cbmc-args").args(&self.props.cbmc_flags);
+            kani.arg("-Zunstable-options").arg("--cbmc-args").args(&self.props.cbmc_flags);
         }
 
         self.compose_and_run(kani)

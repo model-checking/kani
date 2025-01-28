@@ -1,6 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-flags: --default-unwind 30 --enable-unstable --cbmc-args --object-bits 5
+// kani-flags: --default-unwind 30 -Z unstable-options --cbmc-args --object-bits 5
 //! Checks for error message with an --object-bits value that is too small
 //! Use linked list to ensure that each member represents a new object.
 
