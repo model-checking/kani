@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// kani-flags: -Z loop-contracts --enable-unstable --cbmc-args --object-bits 8
+// kani-flags: -Z loop-contracts -Z unstable-options --cbmc-args --object-bits 8
 
 //! Check if loop contracts is correctly applied.
 

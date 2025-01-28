@@ -102,6 +102,8 @@ pub enum UnstableFeature {
     List,
     /// Kani APIs related to floating-point operations (e.g. `float_to_int_in_range`)
     FloatLib,
+    /// Enable vtable restriction.
+    RestrictVtable,
 }
 
 impl UnstableFeature {

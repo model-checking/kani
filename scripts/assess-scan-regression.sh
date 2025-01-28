@@ -10,7 +10,7 @@ KANI_DIR=$SCRIPT_DIR/..
 echo "Running assess scan test:"
 
 cd $KANI_DIR/tests/assess-scan-test-scaffold
-cargo kani --enable-unstable assess scan
+cargo kani -Z unstable-options assess scan
 
 # Clean up
 (cd foo && cargo clean)

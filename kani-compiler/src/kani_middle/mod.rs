@@ -44,7 +44,7 @@ pub fn check_crate_items(tcx: TyCtxt, ignore_asm: bool) {
             if !ignore_asm {
                 let error_msg = format!(
                     "Crate {krate} contains global ASM, which is not supported by Kani. Rerun with \
-                    `--enable-unstable --ignore-global-asm` to suppress this error \
+                    `-Z unstable-options --ignore-global-asm` to suppress this error \
                     (**Verification results may be impacted**).",
                 );
                 tcx.dcx().err(error_msg);

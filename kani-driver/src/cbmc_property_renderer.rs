@@ -456,7 +456,7 @@ fn postprocess_error_message(message: ParserItem) -> ParserItem {
     {
         ParserItem::Message {
             message_text: message_text
-                .replace("--object-bits ", "--enable-unstable --cbmc-args --object-bits "),
+                .replace("--object-bits ", "-Z unstable-options --cbmc-args --object-bits "),
             message_type: String::from("ERROR"),
         }
     } else {

@@ -1,1 +1,1 @@
-too many addressed objects: maximum number of objects is set to 2^n=32 (with n=5); use the `--enable-unstable --cbmc-args --object-bits n` option to increase the maximum number
+too many addressed objects: maximum number of objects is set to 2^n=32 (with n=5); use the `-Z unstable-options --cbmc-args --object-bits n` option to increase the maximum number
