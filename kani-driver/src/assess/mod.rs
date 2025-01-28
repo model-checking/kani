@@ -49,7 +49,7 @@ fn assess_project(mut session: KaniSession) -> Result<AssessMetadata> {
     session.codegen_tests = true;
     if session.args.jobs.is_none() {
         // assess will default to fully parallel instead of single-threaded.
-        // can be overridden with e.g. `cargo kani --enable-unstable -j 8 assess`
+        // can be overridden with e.g. `cargo kani -Z unstable-options -j 8 assess`
         session.args.jobs = Some(None); // -j, num_cpu
     }
 

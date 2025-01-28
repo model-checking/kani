@@ -6,7 +6,7 @@
 // Modifications Copyright Kani Contributors
 // See GitHub history for details.
 
-// kani-flags: -Z loop-contracts -Z mem-predicates --enable-unstable --cbmc-args --object-bits 8
+// kani-flags: -Z loop-contracts -Z mem-predicates -Z unstable-options --cbmc-args --object-bits 8
 
 //! Check if loop contracts are correctly applied.
 
