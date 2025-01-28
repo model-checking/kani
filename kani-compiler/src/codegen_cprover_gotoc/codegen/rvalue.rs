@@ -801,8 +801,30 @@ impl GotocCtx<'_> {
                 self.codegen_pointer_cast(k, e, *t, loc)
             }
             Rvalue::Cast(CastKind::Transmute, operand, ty) => {
-                let goto_typ = self.codegen_ty_stable(*ty);
-                self.codegen_operand_stable(operand).transmute_to(goto_typ, &self.symbol_table)
+                let src_ty = operand.ty(self.current_fn().locals()).unwrap();
+                // Transmute requires sized types.
+                let src_sz = LayoutOf::new(src_ty).size_of().unwrap();
+                let dst_sz = LayoutOf::new(*ty).size_of().unwrap();
+                let dst_type = self.codegen_ty_stable(*ty);
+                if src_sz != dst_sz {
+                    Expr::statement_expression(
+                        vec![
+                            self.codegen_assert_assume_false(
+                                PropertyClass::SafetyCheck,
+                                &format!(
+                                    "Cannot transmute between types of different sizes. \
+                                Transmuting from `{src_sz}` to `{dst_sz}` bytes"
+                                ),
+                                loc,
+                            ),
+                            dst_type.nondet().as_stmt(loc),
+                        ],
+                        dst_type,
+                        loc,
+                    )
+                } else {
+                    self.codegen_operand_stable(operand).transmute_to(dst_type, &self.symbol_table)
+                }
             }
             Rvalue::BinaryOp(op, e1, e2) => self.codegen_rvalue_binary_op(res_ty, op, e1, e2, loc),
             Rvalue::CheckedBinaryOp(op, e1, e2) => {
