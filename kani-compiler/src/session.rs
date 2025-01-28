@@ -57,7 +57,7 @@ static JSON_PANIC_HOOK: LazyLock<Box<dyn Fn(&panic::PanicHookInfo<'_>) + Sync + 
             let mut emitter = JsonEmitter::new(
                 Box::new(io::BufWriter::new(io::stderr())),
                 #[allow(clippy::arc_with_non_send_sync)]
-                Lrc::new(SourceMap::new(FilePathMapping::empty())),
+                Some(Lrc::new(SourceMap::new(FilePathMapping::empty()))),
                 fallback_bundle,
                 false,
                 HumanReadableErrorType::Default,
