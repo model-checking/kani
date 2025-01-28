@@ -29,6 +29,9 @@ Kani needs to unwind the loop for `u64::MAX` iterations, which is computationall
 With loop contracts, we can specify the loop’s behavior using invariants. For example:
 
 ``` Rust
+#![feature(stmt_expr_attributes)]
+#![feature(proc_macro_hygiene)]
+
 fn simple_loop_with_loop_contracts() {
     let mut x: u64 = kani::any_where(|i| *i >= 1);
 
@@ -42,17 +45,57 @@ fn simple_loop_with_loop_contracts() {
 ```
 
 Here, the loop invariant `#[kani::loop_invariant(x >= 1)]` specifies that the condition `x >= 1` must hold true at the start of each iteration before the loop guard is
- checked. Once Kani verifies that the loop invariant is inductive, it will use the invariant to abstract the loop and avoid unwinding. 
+checked. Once Kani verifies that the loop invariant is inductive, it will use the invariant to abstract the loop and avoid unwinding. 
 
- Now let's run the proof with loop contracts through kani:
- ``` bash
+Now let's run the proof with loop contracts through kani:
+``` bash
 kani simple_loop_with_loop_contracts.rs  -Z loop-contracts
- ```
+```
+The output reported by Kani on the example will be
+```
+...
+
+
+Check 10: simple_loop_with_loop_contracts.loop_invariant_base.1
+         - Status: SUCCESS
+         - Description: "Check invariant before entry for loop simple_loop_with_loop_contracts.0"
+         - Location: simple_while_loop.rs:15:5 in function simple_loop_with_loop_contracts
+
+Check 11: simple_loop_with_loop_contracts.loop_assigns.1
+         - Status: SUCCESS
+         - Description: "Check assigns clause inclusion for loop simple_loop_with_loop_contracts.0"
+         - Location: simple_while_loop.rs:15:5 in function simple_loop_with_loop_contracts
+
+Check 13: simple_loop_with_loop_contracts.assigns.1
+         - Status: SUCCESS
+         - Description: "Check that x is assignable"
+         - Location: simple_while_loop.rs:17:9 in function simple_loop_with_loop_contracts
+
+Check 14: simple_loop_with_loop_contracts.loop_invariant_step.1
+         - Status: SUCCESS
+         - Description: "Check invariant after step for loop simple_loop_with_loop_contracts.0"
+         - Location: simple_while_loop.rs:15:5 in function simple_loop_with_loop_contracts
+
+Check 15: simple_loop_with_loop_contracts.loop_invariant_step.2
+         - Status: SUCCESS
+         - Description: "Check invariant after step for loop simple_loop_with_loop_contracts.0"
+         - Location: simple_while_loop.rs:15:5 in function simple_loop_with_loop_contracts
+
+...
+
+SUMMARY:
+ ** 0 of 99 failed
+
+VERIFICATION:- SUCCESSFUL
+Verification Time: 0.3897019s
+
+Complete - 1 successfully verified harnesses, 0 failures, 1 total.
+```
 
 
 ## Loop contracts for `while` loops
 
-> **Syntax**
+### Syntax
 > 
 > \#\[kani::loop_invariant\( [_Expression_](https://doc.rust-lang.org/reference/expressions.html) \)\]
 > 
@@ -87,9 +130,9 @@ if x > 1 {
 //   loop invariant is satisfied and loop guard is violated.
 assert!(x == 1);
 ```
-That is, we assume that we are in an arbitrary iteration after checking that the loop invariant holds for the base case. With the inductive hypothesis (`assume!(x >= 1);`),
-we will either enter the loop (proof path 1) or leave the loop (proof path 2). We prove the two paths separately by killing path 1 with `assume!(false);`.
-Note that all assertions after `assume!(false)` will be ignored as `false => p` can be deduced as `true` for any `p`.
+That is, we assume that we are in an arbitrary iteration after checking that the loop invariant holds for the base case. With the inductive hypothesis (`kani::assume(x >= 1);`),
+we will either enter the loop (proof path 1) or leave the loop (proof path 2). We prove the two paths separately by killing path 1 with `kani::assume(false);`.
+Note that all assertions after `kani::assume(false)` will be ignored as `false => p` can be deduced as `true` for any `p`.
 
 In proof path 1, we prove properties inside the loop and at last check that the loop invariant is inductive.
 
@@ -103,7 +146,9 @@ Loop contracts comes with the following limitations.
 
 1. Only `while` loops are supported. The other three kinds of loops are not supported: [`loop` loops](https://doc.rust-lang.org/reference/expressions/loop-expr.html#infinite-loops)
    , [`while let` loops](https://doc.rust-lang.org/reference/expressions/loop-expr.html#predicate-pattern-loops), and [`for` loops](https://doc.rust-lang.org/reference/expressions/loop-expr.html#iterator-loops).
-2. Kani infers *loop modifies* with alias analysis. Loop modifies are those variables we assume to be arbitrary in the inductive hypothesis, and should cover all memory locations that are written to during the execution of the loops. A proof will fail if the inferred loop modifies misses some targets written in the loops.
+2. Kani infers *loop modifies* with alias analysis. Loop modifies are those variables we assume to be arbitrary in the inductive hypothesis, and should cover all memory locations that are written to during 
+   the execution of the loops. A proof will fail if the inferred loop modifies misses some targets written in the loops.
    We observed this happens when some fields of structs are modified by some other functions called in the loops.
-3. Kani doesn't check if a loop will always terminate in proofs with loop contracts. So it could be that some properties are proved successfully with Kani but actually are unreachable due to the non-termination of some loops.
+3. Kani doesn't check if a loop will always terminate in proofs with loop contracts. So it could be that some properties are proved successfully with Kani but actually are unreachable due to the 
+   non-termination of some loops.
 4. We don't check if loop invariants are side-effect free. A loop invariant with a side effect could lead to an unsound proof result. Make sure that the specified loop contracts are side-effect free.
