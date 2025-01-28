@@ -1,0 +1,9 @@
+Checking harness check_unreachable_extern_fn...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness check_missing_extern_fn...
+Failed Checks: call to foreign "C" function `BZ2_bzCompressInit` is not currently supported by Kani.
+VERIFICATION:- FAILED
+
+Verification failed for - check_missing_extern_fn
+1 successfully verified harnesses, 1 failures, 2 total

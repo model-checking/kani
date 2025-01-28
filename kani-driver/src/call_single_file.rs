@@ -181,6 +181,8 @@ impl KaniSession {
                 "-Z",
                 "mir-enable-passes=-RemoveStorageMarkers",
                 "--check-cfg=cfg(kani)",
+                // Do not invoke the linker since the compiler will not generate real object files
+                "-Clinker=echo",
             ]
             .map(OsString::from),
         );
