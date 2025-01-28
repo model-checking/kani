@@ -1,6 +1,9 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+// This module provides instrumentation for tracking memory initialization of raw pointers.
+// For full documentation, see the usage of `kani_core::kani_mem_init!(std);` in library/kani_core/src/lib.rs
+
 // Definitions in this module are not meant to be visible to the end user, only the compiler.
 #![allow(dead_code)]
 

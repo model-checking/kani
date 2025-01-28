@@ -1,6 +1,9 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+// This module contains functions useful for checking unsafe memory access.
+// For full documentation, see the usage of `kani_core::kani_mem!(std);` in library/kani_core/src/lib.rs
+
 // TODO: This module is currently tightly coupled with CBMC's memory model, and it needs some
 //       refactoring to be used with other backends.
 

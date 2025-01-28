@@ -1,6 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+// This module contains functions useful for float-related checks.
+
 #[allow(clippy::crate_in_macro_def)]
 #[macro_export]
 macro_rules! generate_float {
