@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! Converts a typed goto-program into the `Irep` serilization format of CBMC
 // TODO: consider making a macro to replace `linear_map![])` for initilizing btrees.
-use super::super::goto_program;
 use super::super::MachineModel;
+use super::super::goto_program;
 use super::{Irep, IrepId};
-use crate::linear_map;
 use crate::InternedString;
+use crate::linear_map;
 use goto_program::{
     BinaryOperator, CIntType, DatatypeComponent, Expr, ExprValue, Lambda, Location, Parameter,
     SelfOperator, Stmt, StmtBody, SwitchCase, SymbolValues, Type, UnaryOperator,
@@ -132,7 +132,7 @@ impl ToIrep for DatatypeComponent {
         match self {
             DatatypeComponent::Field { name, typ } => Irep::just_named_sub(linear_map![
                 (IrepId::Name, Irep::just_string_id(name.to_string())),
-                (IrepId::PrettyName, Irep::just_string_id(name.to_string())),
+                (IrepId::CPrettyName, Irep::just_string_id(name.to_string())),
                 (IrepId::Type, typ.to_irep(mm)),
             ]),
             DatatypeComponent::Padding { name, bits } => Irep::just_named_sub(linear_map![
@@ -254,10 +254,31 @@ impl ToIrep for ExprValue {
                     )],
                 }
             }
-            ExprValue::FunctionCall { function, arguments } => side_effect_irep(
-                IrepId::FunctionCall,
-                vec![function.to_irep(mm), arguments_irep(arguments.iter(), mm)],
-            ),
+            ExprValue::Float16Constant(i) => {
+                let c: u16 = i.to_bits();
+                Irep {
+                    id: IrepId::Constant,
+                    sub: vec![],
+                    named_sub: linear_map![(IrepId::Value, Irep::just_bitpattern_id(c, 16, false))],
+                }
+            }
+            ExprValue::Float128Constant(i) => {
+                let c: u128 = i.to_bits();
+                Irep {
+                    id: IrepId::Constant,
+                    sub: vec![],
+                    named_sub: linear_map![(
+                        IrepId::Value,
+                        Irep::just_bitpattern_id(c, 128, false)
+                    )],
+                }
+            }
+            ExprValue::FunctionCall { function, arguments } => {
+                side_effect_irep(IrepId::FunctionCall, vec![
+                    function.to_irep(mm),
+                    arguments_irep(arguments.iter(), mm),
+                ])
+            }
             ExprValue::If { c, t, e } => Irep {
                 id: IrepId::If,
                 sub: vec![c.to_irep(mm), t.to_irep(mm), e.to_irep(mm)],
@@ -299,10 +320,11 @@ impl ToIrep for ExprValue {
                 named_sub: linear_map![],
             },
             ExprValue::SelfOp { op, e } => side_effect_irep(op.to_irep_id(), vec![e.to_irep(mm)]),
-            ExprValue::StatementExpression { statements: ops, location: loc } => side_effect_irep(
-                IrepId::StatementExpression,
-                vec![Stmt::block(ops.to_vec(), *loc).to_irep(mm)],
-            ),
+            ExprValue::StatementExpression { statements: ops, location: loc } => {
+                side_effect_irep(IrepId::StatementExpression, vec![
+                    Stmt::block(ops.to_vec(), *loc).to_irep(mm),
+                ])
+            }
             ExprValue::StringConstant { s } => Irep {
                 id: IrepId::StringConstant,
                 sub: vec![],
@@ -370,15 +392,32 @@ impl ToIrep for Location {
                 (IrepId::Function, Irep::just_string_id(function_name.to_string())),
             ])
             .with_named_sub_option(IrepId::Line, line.map(Irep::just_int_id)),
-            Location::Loc { file, function, start_line, start_col, end_line: _, end_col: _ } => {
-                Irep::just_named_sub(linear_map![
-                    (IrepId::File, Irep::just_string_id(file.to_string())),
-                    (IrepId::Line, Irep::just_int_id(*start_line)),
-                ])
-                .with_named_sub_option(IrepId::Column, start_col.map(Irep::just_int_id))
-                .with_named_sub_option(IrepId::Function, function.map(Irep::just_string_id))
-            }
-            Location::Property { file, function, line, col, property_class, comment } => {
+            Location::Loc {
+                file,
+                function,
+                start_line,
+                start_col,
+                end_line: _,
+                end_col: _,
+                pragmas,
+            } => Irep::just_named_sub(linear_map![
+                (IrepId::File, Irep::just_string_id(file.to_string())),
+                (IrepId::Line, Irep::just_int_id(*start_line)),
+            ])
+            .with_named_sub_option(IrepId::Column, start_col.map(Irep::just_int_id))
+            .with_named_sub_option(IrepId::Function, function.map(Irep::just_string_id))
+            .with_named_sub_option(
+                IrepId::Pragma,
+                Some(Irep::just_named_sub(
+                    pragmas
+                        .iter()
+                        .map(|pragma| {
+                            (IrepId::from_string(*pragma), Irep::just_id(IrepId::EmptyString))
+                        })
+                        .collect(),
+                )),
+            ),
+            Location::Property { file, function, line, col, property_class, comment, pragmas } => {
                 Irep::just_named_sub(linear_map![
                     (IrepId::File, Irep::just_string_id(file.to_string())),
                     (IrepId::Line, Irep::just_int_id(*line)),
@@ -389,6 +428,17 @@ impl ToIrep for Location {
                 .with_named_sub(
                     IrepId::PropertyClass,
                     Irep::just_string_id(property_class.to_string()),
+                )
+                .with_named_sub_option(
+                    IrepId::Pragma,
+                    Some(Irep::just_named_sub(
+                        pragmas
+                            .iter()
+                            .map(|pragma| {
+                                (IrepId::from_string(*pragma), Irep::just_id(IrepId::EmptyString))
+                            })
+                            .collect(),
+                    )),
                 )
             }
             Location::PropertyUnknownLocation { property_class, comment } => {
@@ -441,10 +491,10 @@ impl ToIrep for StmtBody {
             StmtBody::Dead(symbol) => code_irep(IrepId::Dead, vec![symbol.to_irep(mm)]),
             StmtBody::Decl { lhs, value } => {
                 if value.is_some() {
-                    code_irep(
-                        IrepId::Decl,
-                        vec![lhs.to_irep(mm), value.as_ref().unwrap().to_irep(mm)],
-                    )
+                    code_irep(IrepId::Decl, vec![
+                        lhs.to_irep(mm),
+                        value.as_ref().unwrap().to_irep(mm),
+                    ])
                 } else {
                     code_irep(IrepId::Decl, vec![lhs.to_irep(mm)])
                 }
@@ -457,28 +507,36 @@ impl ToIrep for StmtBody {
                     .with_comment("deinit")
             }
             StmtBody::Expression(e) => code_irep(IrepId::Expression, vec![e.to_irep(mm)]),
-            StmtBody::For { init, cond, update, body } => code_irep(
-                IrepId::For,
-                vec![init.to_irep(mm), cond.to_irep(mm), update.to_irep(mm), body.to_irep(mm)],
-            ),
-            StmtBody::FunctionCall { lhs, function, arguments } => code_irep(
-                IrepId::FunctionCall,
-                vec![
+            StmtBody::For { init, cond, update, body } => code_irep(IrepId::For, vec![
+                init.to_irep(mm),
+                cond.to_irep(mm),
+                update.to_irep(mm),
+                body.to_irep(mm),
+            ]),
+            StmtBody::FunctionCall { lhs, function, arguments } => {
+                code_irep(IrepId::FunctionCall, vec![
                     lhs.as_ref().map_or(Irep::nil(), |x| x.to_irep(mm)),
                     function.to_irep(mm),
                     arguments_irep(arguments.iter(), mm),
-                ],
-            ),
-            StmtBody::Goto(dest) => code_irep(IrepId::Goto, vec![])
-                .with_named_sub(IrepId::Destination, Irep::just_string_id(dest.to_string())),
-            StmtBody::Ifthenelse { i, t, e } => code_irep(
-                IrepId::Ifthenelse,
-                vec![
-                    i.to_irep(mm),
-                    t.to_irep(mm),
-                    e.as_ref().map_or(Irep::nil(), |x| x.to_irep(mm)),
-                ],
-            ),
+                ])
+            }
+            StmtBody::Goto { dest, loop_invariants } => {
+                let stmt_goto = code_irep(IrepId::Goto, vec![])
+                    .with_named_sub(IrepId::Destination, Irep::just_string_id(dest.to_string()));
+                if let Some(inv) = loop_invariants {
+                    stmt_goto.with_named_sub(
+                        IrepId::CSpecLoopInvariant,
+                        inv.clone().and(Expr::bool_true()).to_irep(mm),
+                    )
+                } else {
+                    stmt_goto
+                }
+            }
+            StmtBody::Ifthenelse { i, t, e } => code_irep(IrepId::Ifthenelse, vec![
+                i.to_irep(mm),
+                t.to_irep(mm),
+                e.as_ref().map_or(Irep::nil(), |x| x.to_irep(mm)),
+            ]),
             StmtBody::Label { label, body } => code_irep(IrepId::Label, vec![body.to_irep(mm)])
                 .with_named_sub(IrepId::Label, Irep::just_string_id(label.to_string())),
             StmtBody::Return(e) => {
@@ -490,10 +548,10 @@ impl ToIrep for StmtBody {
                 if default.is_some() {
                     switch_arms.push(switch_default_irep(default.as_ref().unwrap(), mm));
                 }
-                code_irep(
-                    IrepId::Switch,
-                    vec![control.to_irep(mm), code_irep(IrepId::Block, switch_arms)],
-                )
+                code_irep(IrepId::Switch, vec![
+                    control.to_irep(mm),
+                    code_irep(IrepId::Block, switch_arms),
+                ])
             }
             StmtBody::While { cond, body } => {
                 code_irep(IrepId::While, vec![cond.to_irep(mm), body.to_irep(mm)])
@@ -550,6 +608,10 @@ impl goto_program::Symbol {
                 IrepId::CSpecAssigns,
                 Irep::just_sub(contract.assigns.iter().map(|req| req.to_irep(mm)).collect()),
             );
+        }
+        if self.is_static_const {
+            // Add a `const` to the type.
+            typ = typ.with_named_sub(IrepId::CConstant, Irep::just_id(IrepId::from_int(1)))
         }
         super::Symbol {
             typ,
@@ -693,6 +755,30 @@ impl ToIrep for Type {
                     (IrepId::F, Irep::just_int_id(23)),
                     (IrepId::Width, Irep::just_int_id(32)),
                     (IrepId::CCType, Irep::just_id(IrepId::Float)),
+                ],
+            },
+            Type::Float16 => Irep {
+                id: IrepId::Floatbv,
+                sub: vec![],
+                // Fraction bits: 10
+                // Exponent width bits: 5
+                // Sign bit: 1
+                named_sub: linear_map![
+                    (IrepId::F, Irep::just_int_id(10)),
+                    (IrepId::Width, Irep::just_int_id(16)),
+                    (IrepId::CCType, Irep::just_id(IrepId::Float16)),
+                ],
+            },
+            Type::Float128 => Irep {
+                id: IrepId::Floatbv,
+                sub: vec![],
+                // Fraction bits: 112
+                // Exponent width bits: 15
+                // Sign bit: 1
+                named_sub: linear_map![
+                    (IrepId::F, Irep::just_int_id(112)),
+                    (IrepId::Width, Irep::just_int_id(128)),
+                    (IrepId::CCType, Irep::just_id(IrepId::Float128)),
                 ],
             },
             Type::IncompleteStruct { tag } => Irep {

@@ -7,3 +7,4 @@ extern crate kani;
 
 pub mod mem;
 pub mod ptr;
+pub mod slice;

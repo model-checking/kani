@@ -4,38 +4,28 @@
 //! and transformations.
 
 use std::collections::HashSet;
-use std::path::Path;
 
-use crate::kani_middle::transform::BodyTransformation;
 use crate::kani_queries::QueryDb;
-use rustc_hir::{def::DefKind, def_id::LOCAL_CRATE};
-use rustc_middle::span_bug;
-use rustc_middle::ty::layout::{
-    FnAbiError, FnAbiOf, FnAbiOfHelpers, FnAbiRequest, HasParamEnv, HasTyCtxt, LayoutError,
-    LayoutOfHelpers, TyAndLayout,
-};
-use rustc_middle::ty::{self, Instance as InstanceInternal, Ty as TyInternal, TyCtxt};
-use rustc_session::config::OutputType;
+use rustc_hir::{def::DefKind, def_id::DefId as InternalDefId, def_id::LOCAL_CRATE};
+use rustc_middle::ty::TyCtxt;
 use rustc_smir::rustc_internal;
-use rustc_span::source_map::respan;
-use rustc_span::Span;
-use rustc_target::abi::call::FnAbi;
-use rustc_target::abi::{HasDataLayout, TargetDataLayout};
-use stable_mir::mir::mono::{Instance, MonoItem};
-use stable_mir::ty::{FnDef, RigidTy, Span as SpanStable, TyKind};
 use stable_mir::CrateDef;
-use std::fs::File;
-use std::io::BufWriter;
-use std::io::Write;
+use stable_mir::mir::mono::MonoItem;
+use stable_mir::ty::{FnDef, RigidTy, Span as SpanStable, Ty, TyKind};
+use stable_mir::visitor::{Visitable, Visitor as TyVisitor};
+use std::ops::ControlFlow;
 
 use self::attributes::KaniAttributes;
 
+pub mod abi;
 pub mod analysis;
 pub mod attributes;
 pub mod codegen_units;
 pub mod coercion;
 mod intrinsics;
+pub mod kani_functions;
 pub mod metadata;
+pub mod points_to;
 pub mod provide;
 pub mod reachability;
 pub mod resolve;
@@ -54,7 +44,7 @@ pub fn check_crate_items(tcx: TyCtxt, ignore_asm: bool) {
             if !ignore_asm {
                 let error_msg = format!(
                     "Crate {krate} contains global ASM, which is not supported by Kani. Rerun with \
-                    `--enable-unstable --ignore-global-asm` to suppress this error \
+                    `-Z unstable-options --ignore-global-asm` to suppress this error \
                     (**Verification results may be impacted**).",
                 );
                 tcx.dcx().err(error_msg);
@@ -68,12 +58,49 @@ pub fn check_crate_items(tcx: TyCtxt, ignore_asm: bool) {
     tcx.dcx().abort_if_errors();
 }
 
+/// Traverse the type definition to see if the type contains interior mutability.
+///
+/// See <https://doc.rust-lang.org/reference/interior-mutability.html> for more details.
+pub fn is_interior_mut(tcx: TyCtxt, ty: Ty) -> bool {
+    let mut visitor = FindUnsafeCell { tcx };
+    visitor.visit_ty(&ty) == ControlFlow::Break(())
+}
+
+struct FindUnsafeCell<'tcx> {
+    tcx: TyCtxt<'tcx>,
+}
+
+impl TyVisitor for FindUnsafeCell<'_> {
+    type Break = ();
+    fn visit_ty(&mut self, ty: &Ty) -> ControlFlow<Self::Break> {
+        match ty.kind() {
+            TyKind::RigidTy(RigidTy::Adt(def, _))
+                if rustc_internal::internal(self.tcx, def).is_unsafe_cell() =>
+            {
+                ControlFlow::Break(())
+            }
+            TyKind::RigidTy(RigidTy::Ref(..) | RigidTy::RawPtr(..)) => {
+                // We only care about the current memory space.
+                ControlFlow::Continue(())
+            }
+            _ => ty.super_visit(self),
+        }
+    }
+}
+
 /// Check that all given items are supported and there's no misconfiguration.
 /// This method will exhaustively print any error / warning and it will abort at the end if any
 /// error was found.
 pub fn check_reachable_items(tcx: TyCtxt, queries: &QueryDb, items: &[MonoItem]) {
     // Avoid printing the same error multiple times for different instantiations of the same item.
     let mut def_ids = HashSet::new();
+    let reachable_functions: HashSet<InternalDefId> = items
+        .iter()
+        .filter_map(|i| match i {
+            MonoItem::Fn(instance) => Some(rustc_internal::internal(tcx, instance.def.def_id())),
+            _ => None,
+        })
+        .collect();
     for item in items.iter().filter(|i| matches!(i, MonoItem::Fn(..) | MonoItem::Static(..))) {
         let def_id = match item {
             MonoItem::Fn(instance) => instance.def.def_id(),
@@ -83,48 +110,15 @@ pub fn check_reachable_items(tcx: TyCtxt, queries: &QueryDb, items: &[MonoItem])
             }
         };
         if !def_ids.contains(&def_id) {
+            let attributes = KaniAttributes::for_def_id(tcx, def_id);
             // Check if any unstable attribute was reached.
-            KaniAttributes::for_def_id(tcx, def_id)
-                .check_unstable_features(&queries.args().unstable_features);
+            attributes.check_unstable_features(&queries.args().unstable_features);
+            // Check whether all `proof_for_contract` functions are reachable
+            attributes.check_proof_for_contract(&reachable_functions);
             def_ids.insert(def_id);
         }
     }
     tcx.dcx().abort_if_errors();
-}
-
-/// Print MIR for the reachable items if the `--emit mir` option was provided to rustc.
-pub fn dump_mir_items(
-    tcx: TyCtxt,
-    transformer: &mut BodyTransformation,
-    items: &[MonoItem],
-    output: &Path,
-) {
-    /// Convert MonoItem into a DefId.
-    /// Skip stuff that we cannot generate the MIR items.
-    fn get_instance(item: &MonoItem) -> Option<Instance> {
-        match item {
-            // Exclude FnShims and others that cannot be dumped.
-            MonoItem::Fn(instance) => Some(*instance),
-            MonoItem::Static(def) => {
-                let instance: Instance = (*def).into();
-                instance.has_body().then_some(instance)
-            }
-            MonoItem::GlobalAsm(_) => None,
-        }
-    }
-
-    if tcx.sess.opts.output_types.contains_key(&OutputType::Mir) {
-        // Create output buffer.
-        let out_file = File::create(output).unwrap();
-        let mut writer = BufWriter::new(out_file);
-
-        // For each def_id, dump their MIR
-        for instance in items.iter().filter_map(get_instance) {
-            writeln!(writer, "// Item: {} ({})", instance.name(), instance.mangled_name()).unwrap();
-            let body = transformer.body(tcx, instance);
-            let _ = body.dump(&mut writer, &instance.name());
-        }
-    }
 }
 
 /// Structure that represents the source location of a definition.
@@ -152,91 +146,13 @@ impl SourceLocation {
     }
 }
 
-/// Get the FnAbi of a given instance with no extra variadic arguments.
-/// TODO: Get rid of this. Use instance.fn_abi() instead.
-/// <https://github.com/model-checking/kani/issues/1365>
-pub fn fn_abi<'tcx>(
-    tcx: TyCtxt<'tcx>,
-    instance: InstanceInternal<'tcx>,
-) -> &'tcx FnAbi<'tcx, TyInternal<'tcx>> {
-    let helper = CompilerHelpers { tcx };
-    helper.fn_abi_of_instance(instance, ty::List::empty())
-}
-
-struct CompilerHelpers<'tcx> {
-    tcx: TyCtxt<'tcx>,
-}
-
-impl<'tcx> HasParamEnv<'tcx> for CompilerHelpers<'tcx> {
-    fn param_env(&self) -> ty::ParamEnv<'tcx> {
-        ty::ParamEnv::reveal_all()
+/// Try to convert an internal `DefId` to a `FnDef`.
+pub fn stable_fn_def(tcx: TyCtxt, def_id: InternalDefId) -> Option<FnDef> {
+    if let TyKind::RigidTy(RigidTy::FnDef(def, _)) =
+        rustc_internal::stable(tcx.type_of(def_id)).value.kind()
+    {
+        Some(def)
+    } else {
+        None
     }
-}
-
-impl<'tcx> HasTyCtxt<'tcx> for CompilerHelpers<'tcx> {
-    fn tcx(&self) -> TyCtxt<'tcx> {
-        self.tcx
-    }
-}
-
-impl<'tcx> HasDataLayout for CompilerHelpers<'tcx> {
-    fn data_layout(&self) -> &TargetDataLayout {
-        self.tcx.data_layout()
-    }
-}
-
-impl<'tcx> LayoutOfHelpers<'tcx> for CompilerHelpers<'tcx> {
-    type LayoutOfResult = TyAndLayout<'tcx>;
-
-    #[inline]
-    fn handle_layout_err(&self, err: LayoutError<'tcx>, span: Span, ty: TyInternal<'tcx>) -> ! {
-        span_bug!(span, "failed to get layout for `{}`: {}", ty, err)
-    }
-}
-
-/// Implement error handling for extracting function ABI information.
-impl<'tcx> FnAbiOfHelpers<'tcx> for CompilerHelpers<'tcx> {
-    type FnAbiOfResult = &'tcx FnAbi<'tcx, TyInternal<'tcx>>;
-
-    #[inline]
-    fn handle_fn_abi_err(
-        &self,
-        err: FnAbiError<'tcx>,
-        span: Span,
-        fn_abi_request: FnAbiRequest<'tcx>,
-    ) -> ! {
-        if let FnAbiError::Layout(LayoutError::SizeOverflow(_)) = err {
-            self.tcx.dcx().emit_fatal(respan(span, err))
-        } else {
-            match fn_abi_request {
-                FnAbiRequest::OfFnPtr { sig, extra_args } => {
-                    span_bug!(
-                        span,
-                        "Error: {err:?}\n while running `fn_abi_of_fn_ptr. ({sig}, {extra_args:?})`",
-                    );
-                }
-                FnAbiRequest::OfInstance { instance, extra_args } => {
-                    span_bug!(
-                        span,
-                        "Error: {err:?}\n while running `fn_abi_of_instance. ({instance}, {extra_args:?})`",
-                    );
-                }
-            }
-        }
-    }
-}
-
-/// Find an instance of a function from the given crate that has been annotated with `diagnostic`
-/// item.
-fn find_fn_def(tcx: TyCtxt, diagnostic: &str) -> Option<FnDef> {
-    let attr_id = tcx
-        .all_diagnostic_items(())
-        .name_to_id
-        .get(&rustc_span::symbol::Symbol::intern(diagnostic))?;
-    let TyKind::RigidTy(RigidTy::FnDef(def, _)) =
-        rustc_internal::stable(tcx.type_of(attr_id)).value.kind()
-    else {
-        return None;
-    };
-    Some(def)
 }

@@ -17,9 +17,14 @@
 
 #![feature(no_core)]
 #![no_core]
+#![feature(f16)]
+#![feature(f128)]
 
 mod arbitrary;
+mod float;
 mod mem;
+mod mem_init;
+mod models;
 
 pub use kani_macros::*;
 
@@ -39,9 +44,18 @@ macro_rules! kani_lib {
             pub use kani_core::*;
             kani_core::kani_intrinsics!(core);
             kani_core::generate_arbitrary!(core);
+            kani_core::generate_models!();
+
+            pub mod float {
+                kani_core::generate_float!(core);
+            }
 
             pub mod mem {
                 kani_core::kani_mem!(core);
+            }
+
+            mod mem_init {
+                kani_core::kani_mem_init!(core);
             }
         }
     };
@@ -50,6 +64,19 @@ macro_rules! kani_lib {
         pub use kani_core::*;
         kani_core::kani_intrinsics!(std);
         kani_core::generate_arbitrary!(std);
+        kani_core::generate_models!();
+
+        pub mod float {
+            kani_core::generate_float!(std);
+        }
+
+        pub mod mem {
+            kani_core::kani_mem!(std);
+        }
+
+        mod mem_init {
+            kani_core::kani_mem_init!(std);
+        }
     };
 }
 
@@ -58,6 +85,7 @@ macro_rules! kani_lib {
 /// such as core in rust's std library itself.
 ///
 /// TODO: Use this inside kani library so that we dont have to maintain two copies of the same intrinsics.
+#[allow(clippy::crate_in_macro_def)]
 #[macro_export]
 macro_rules! kani_intrinsics {
     ($core:tt) => {
@@ -69,7 +97,7 @@ macro_rules! kani_intrinsics {
         ///
         /// The code snippet below should never panic.
         ///
-        /// ```rust
+        /// ```no_run
         /// let i : i32 = kani::any();
         /// kani::assume(i > 10);
         /// if i < 0 {
@@ -79,20 +107,20 @@ macro_rules! kani_intrinsics {
         ///
         /// The following code may panic though:
         ///
-        /// ```rust
+        /// ```no_run
         /// let i : i32 = kani::any();
         /// assert!(i < 0, "This may panic and verification should fail.");
         /// kani::assume(i > 10);
         /// ```
         #[inline(never)]
-        #[rustc_diagnostic_item = "KaniAssume"]
+        #[kanitool::fn_marker = "AssumeHook"]
         #[cfg(not(feature = "concrete_playback"))]
         pub fn assume(cond: bool) {
             let _ = cond;
         }
 
         #[inline(never)]
-        #[rustc_diagnostic_item = "KaniAssume"]
+        #[kanitool::fn_marker = "AssumeHook"]
         #[cfg(feature = "concrete_playback")]
         pub fn assume(cond: bool) {
             assert!(cond, "`kani::assume` should always hold");
@@ -102,14 +130,14 @@ macro_rules! kani_intrinsics {
         ///
         /// # Example:
         ///
-        /// ```rust
+        /// ```no_run
         /// let x: bool = kani::any();
         /// let y = !x;
         /// kani::assert(x || y, "ORing a boolean variable with its negation must be true")
         /// ```
         #[cfg(not(feature = "concrete_playback"))]
         #[inline(never)]
-        #[rustc_diagnostic_item = "KaniAssert"]
+        #[kanitool::fn_marker = "AssertHook"]
         pub const fn assert(cond: bool, msg: &'static str) {
             let _ = cond;
             let _ = msg;
@@ -117,7 +145,7 @@ macro_rules! kani_intrinsics {
 
         #[cfg(feature = "concrete_playback")]
         #[inline(never)]
-        #[rustc_diagnostic_item = "KaniAssert"]
+        #[kanitool::fn_marker = "AssertHook"]
         pub const fn assert(cond: bool, msg: &'static str) {
             assert!(cond, "{}", msg);
         }
@@ -126,7 +154,11 @@ macro_rules! kani_intrinsics {
         ///
         /// # Example:
         ///
-        /// ```rust
+        /// ```no_run
+        /// # use crate::kani;
+        /// #
+        /// # let array: [u8; 10]  = kani::any();
+        /// # let slice = kani::slice::any_slice_of_array(&array);
         /// kani::cover(slice.len() == 0, "The slice may have a length of 0");
         /// ```
         ///
@@ -142,7 +174,7 @@ macro_rules! kani_intrinsics {
         /// convenient to use.
         ///
         #[inline(never)]
-        #[rustc_diagnostic_item = "KaniCover"]
+        #[kanitool::fn_marker = "CoverHook"]
         pub const fn cover(_cond: bool, _msg: &'static str) {}
 
         /// This creates an symbolic *valid* value of type `T`. You can assign the return value of this
@@ -153,15 +185,19 @@ macro_rules! kani_intrinsics {
         /// In the snippet below, we are verifying the behavior of the function `fn_under_verification`
         /// under all possible `NonZeroU8` input values, i.e., all possible `u8` values except zero.
         ///
-        /// ```rust
-        /// let inputA = kani::any::<std::num::NonZeroU8>();
+        /// ```no_run
+        /// # use std::num::NonZeroU8;
+        /// # use crate::kani;
+        /// #
+        /// # fn fn_under_verification(_: NonZeroU8) {}
+        /// let inputA = kani::any::<core::num::NonZeroU8>();
         /// fn_under_verification(inputA);
         /// ```
         ///
         /// Note: This is a safe construct and can only be used with types that implement the `Arbitrary`
         /// trait. The Arbitrary trait is used to build a symbolic value that represents all possible
         /// valid values for type `T`.
-        #[rustc_diagnostic_item = "KaniAny"]
+        #[kanitool::fn_marker = "AnyModel"]
         #[inline(always)]
         pub fn any<T: Arbitrary>() -> T {
             T::any()
@@ -171,7 +207,7 @@ macro_rules! kani_intrinsics {
         /// It behaves exaclty like `kani::any<T>()`, except it will check for the trait bounds
         /// at compilation time. It allows us to avoid type checking errors while using function
         /// contracts only for verification.
-        #[rustc_diagnostic_item = "KaniAnyModifies"]
+        #[kanitool::fn_marker = "AnyModifiesIntrinsic"]
         #[inline(never)]
         #[doc(hidden)]
         pub fn any_modifies<T>() -> T {
@@ -191,7 +227,11 @@ macro_rules! kani_intrinsics {
         /// In the snippet below, we are verifying the behavior of the function `fn_under_verification`
         /// under all possible `u8` input values between 0 and 12.
         ///
-        /// ```rust
+        /// ```no_run
+        /// # use std::num::NonZeroU8;
+        /// # use crate::kani;
+        /// #
+        /// # fn fn_under_verification(_: u8) {}
         /// let inputA: u8 = kani::any_where(|x| *x < 12);
         /// fn_under_verification(inputA);
         /// ```
@@ -221,21 +261,25 @@ macro_rules! kani_intrinsics {
         /// Note that SIZE_T must be equal the size of type T in bytes.
         #[inline(never)]
         #[cfg(not(feature = "concrete_playback"))]
-        pub(crate) unsafe fn any_raw_internal<T, const SIZE_T: usize>() -> T {
-            any_raw_inner::<T>()
+        unsafe fn any_raw_internal<T: Copy>() -> T {
+            any_raw::<T>()
         }
 
+        /// This is the same as [any_raw_internal] for verification flow, but not for concrete playback.
         #[inline(never)]
-        #[cfg(feature = "concrete_playback")]
-        pub(crate) unsafe fn any_raw_internal<T, const SIZE_T: usize>() -> T {
-            concrete_playback::any_raw_internal::<T, SIZE_T>()
+        #[cfg(not(feature = "concrete_playback"))]
+        unsafe fn any_raw_array<T: Copy, const N: usize>() -> [T; N] {
+            any_raw::<[T; N]>()
         }
+
+        #[cfg(feature = "concrete_playback")]
+        use concrete_playback::{any_raw_array, any_raw_internal};
 
         /// This low-level function returns nondet bytes of size T.
-        #[rustc_diagnostic_item = "KaniAnyRaw"]
+        #[kanitool::fn_marker = "AnyRawHook"]
         #[inline(never)]
         #[allow(dead_code)]
-        pub fn any_raw_inner<T>() -> T {
+        fn any_raw<T: Copy>() -> T {
             kani_intrinsic()
         }
 
@@ -243,13 +287,39 @@ macro_rules! kani_intrinsics {
         /// supported by Kani display.
         ///
         /// During verification this will get replaced by `assert(false)`. For concrete executions, we just
-        /// invoke the regular `std::panic!()` function. This function is used by our standard library
+        /// invoke the regular `core::panic!()` function. This function is used by our standard library
         /// overrides, but not the other way around.
         #[inline(never)]
-        #[rustc_diagnostic_item = "KaniPanic"]
+        #[kanitool::fn_marker = "PanicHook"]
         #[doc(hidden)]
         pub const fn panic(message: &'static str) -> ! {
             panic!("{}", message)
+        }
+
+        #[doc(hidden)]
+        #[allow(dead_code)]
+        #[kanitool::fn_marker = "SafetyCheckHook"]
+        #[inline(never)]
+        pub(crate) fn safety_check(cond: bool, msg: &'static str) {
+            #[cfg(not(feature = "concrete_playback"))]
+            return kani_intrinsic();
+
+            #[cfg(feature = "concrete_playback")]
+            assert!(cond, "Safety check failed: {msg}");
+        }
+
+        /// This should indicate that Kani does not support a certain operation.
+        #[doc(hidden)]
+        #[allow(dead_code)]
+        #[kanitool::fn_marker = "UnsupportedCheckHook"]
+        #[inline(never)]
+        #[allow(clippy::diverging_sub_expression)]
+        pub(crate) fn unsupported(msg: &'static str) -> ! {
+            #[cfg(not(feature = "concrete_playback"))]
+            return kani_intrinsic();
+
+            #[cfg(feature = "concrete_playback")]
+            unimplemented!("Unsupported Kani operation: {msg}")
         }
 
         /// An empty body that can be used to define Kani intrinsic functions.
@@ -267,72 +337,50 @@ macro_rules! kani_intrinsics {
             loop {}
         }
 
+        #[doc(hidden)]
         pub mod internal {
+            use crate::kani::Arbitrary;
+            use core::ptr;
 
             /// Helper trait for code generation for `modifies` contracts.
             ///
             /// We allow the user to provide us with a pointer-like object that we convert as needed.
             #[doc(hidden)]
-            pub trait Pointer<'a> {
+            pub trait Pointer {
                 /// Type of the pointed-to data
-                type Inner;
-
-                /// Used for checking assigns contracts where we pass immutable references to the function.
-                ///
-                /// We're using a reference to self here, because the user can use just a plain function
-                /// argument, for instance one of type `&mut _`, in the `modifies` clause which would move it.
-                unsafe fn decouple_lifetime(&self) -> &'a Self::Inner;
+                type Inner: ?Sized;
 
                 /// used for havocking on replecement of a `modifies` clause.
-                unsafe fn assignable(self) -> &'a mut Self::Inner;
+                unsafe fn assignable(self) -> *mut Self::Inner;
             }
 
-            impl<'a, 'b, T> Pointer<'a> for &'b T {
+            impl<T: ?Sized> Pointer for &T {
                 type Inner = T;
-                unsafe fn decouple_lifetime(&self) -> &'a Self::Inner {
-                    $core::mem::transmute(*self)
-                }
-
-                #[allow(clippy::transmute_ptr_to_ref)]
-                unsafe fn assignable(self) -> &'a mut Self::Inner {
-                    $core::mem::transmute(self as *const T)
+                unsafe fn assignable(self) -> *mut Self::Inner {
+                    self as *const T as *mut T
                 }
             }
 
-            impl<'a, 'b, T> Pointer<'a> for &'b mut T {
+            impl<T: ?Sized> Pointer for &mut T {
                 type Inner = T;
 
-                #[allow(clippy::transmute_ptr_to_ref)]
-                unsafe fn decouple_lifetime(&self) -> &'a Self::Inner {
-                    $core::mem::transmute::<_, &&'a T>(self)
-                }
-
-                unsafe fn assignable(self) -> &'a mut Self::Inner {
-                    $core::mem::transmute(self)
+                unsafe fn assignable(self) -> *mut Self::Inner {
+                    self as *mut T
                 }
             }
 
-            impl<'a, T> Pointer<'a> for *const T {
+            impl<T: ?Sized> Pointer for *const T {
                 type Inner = T;
-                unsafe fn decouple_lifetime(&self) -> &'a Self::Inner {
-                    &**self as &'a T
-                }
 
-                #[allow(clippy::transmute_ptr_to_ref)]
-                unsafe fn assignable(self) -> &'a mut Self::Inner {
-                    $core::mem::transmute(self)
+                unsafe fn assignable(self) -> *mut Self::Inner {
+                    self as *mut T
                 }
             }
 
-            impl<'a, T> Pointer<'a> for *mut T {
+            impl<T: ?Sized> Pointer for *mut T {
                 type Inner = T;
-                unsafe fn decouple_lifetime(&self) -> &'a Self::Inner {
-                    &**self as &'a T
-                }
-
-                #[allow(clippy::transmute_ptr_to_ref)]
-                unsafe fn assignable(self) -> &'a mut Self::Inner {
-                    $core::mem::transmute(self)
+                unsafe fn assignable(self) -> *mut Self::Inner {
+                    self
                 }
             }
 
@@ -340,7 +388,7 @@ macro_rules! kani_intrinsics {
             /// guarantee it is done safely.
             #[inline(never)]
             #[doc(hidden)]
-            #[rustc_diagnostic_item = "KaniUntrackedDeref"]
+            #[kanitool::fn_marker = "UntrackedDerefHook"]
             pub fn untracked_deref<T>(_: &T) -> T {
                 todo!()
             }
@@ -356,8 +404,129 @@ macro_rules! kani_intrinsics {
             /// ```
             #[inline(never)]
             #[doc(hidden)]
-            #[rustc_diagnostic_item = "KaniInitContracts"]
+            #[kanitool::fn_marker = "InitContractsHook"]
             pub fn init_contracts() {}
+
+            /// This should only be used within contracts. The intent is to
+            /// perform type inference on a closure's argument
+            #[doc(hidden)]
+            pub fn apply_closure<T, U: Fn(&T) -> bool>(f: U, x: &T) -> bool {
+                f(x)
+            }
+
+            /// Recieves a reference to a pointer-like object and assigns kani::any_modifies to that object.
+            /// Only for use within function contracts and will not be replaced if the recursive or function stub
+            /// replace contracts are not used.
+            #[kanitool::fn_marker = "WriteAnyIntrinsic"]
+            #[inline(never)]
+            #[doc(hidden)]
+            pub unsafe fn write_any<T: ?Sized>(_pointer: *mut T) {
+                // This function should not be reacheable.
+                // Users must include `#[kani::recursion]` in any function contracts for recursive functions;
+                // otherwise, this might not be properly instantiate. We mark this as unreachable to make
+                // sure Kani doesn't report any false positives.
+                super::kani_intrinsic()
+            }
+
+            /// Fill in a slice with kani::any.
+            /// Intended as a post compilation replacement for write_any
+            #[kanitool::fn_marker = "WriteAnySliceModel"]
+            #[inline(always)]
+            pub unsafe fn write_any_slice<T: Arbitrary>(slice: *mut [T]) {
+                (*slice).fill_with(T::any)
+            }
+
+            /// Fill in a pointer with kani::any.
+            /// Intended as a post compilation replacement for write_any
+            #[kanitool::fn_marker = "WriteAnySlimModel"]
+            #[inline(always)]
+            pub unsafe fn write_any_slim<T: Arbitrary>(pointer: *mut T) {
+                ptr::write(pointer, T::any())
+            }
+
+            /// Fill in a str with kani::any.
+            /// Intended as a post compilation replacement for write_any.
+            /// Not yet implemented
+            #[kanitool::fn_marker = "WriteAnyStrModel"]
+            #[inline(always)]
+            pub unsafe fn write_any_str(_s: *mut str) {
+                //TODO: strings introduce new UB
+                //(*s).as_bytes_mut().fill_with(u8::any)
+                //TODO: String validation
+                unimplemented!("Kani does not support creating arbitrary `str`")
+            }
+
+            /// Function that calls a closure used to implement contracts.
+            ///
+            /// In contracts, we cannot invoke the generated closures directly, instead, we call register
+            /// contract. This function is a no-op. However, in the reality, we do want to call the closure,
+            /// so we swap the register body by this function body.
+            #[doc(hidden)]
+            #[allow(dead_code)]
+            #[kanitool::fn_marker = "RunContractModel"]
+            fn run_contract_fn<T, F: FnOnce() -> T>(func: F) -> T {
+                func()
+            }
+
+            /// Function that calls a closure used to implement loop contracts.
+            ///
+            /// In contracts, we cannot invoke the generated closures directly, instead, we call register
+            /// contract. This function is a no-op. However, in the reality, we do want to call the closure,
+            /// so we swap the register body by this function body.
+            #[doc(hidden)]
+            #[allow(dead_code)]
+            #[kanitool::fn_marker = "RunLoopContractModel"]
+            fn run_loop_contract_fn<F: Fn() -> bool>(func: &F, _transformed: usize) -> bool {
+                func()
+            }
+
+            /// This is used by contracts to select which version of the contract to use during codegen.
+            #[doc(hidden)]
+            pub type Mode = u8;
+
+            /// Keep the original body.
+            pub const ORIGINAL: Mode = 0;
+
+            /// Run the check with recursion support.
+            pub const RECURSION_CHECK: Mode = 1;
+
+            /// Run the simple check with no recursion support.
+            pub const SIMPLE_CHECK: Mode = 2;
+
+            /// Stub the body with its contract.
+            pub const REPLACE: Mode = 3;
+
+            /// Insert the contract into the body of the function as assertion(s).
+            pub const ASSERT: Mode = 4;
+
+            /// Creates a non-fatal property with the specified condition and message.
+            ///
+            /// This check will not impact the program control flow even when it fails.
+            ///
+            /// # Example:
+            ///
+            /// ```no_run
+            /// let x: bool = kani::any();
+            /// let y = !x;
+            /// kani::check(x || y, "ORing a boolean variable with its negation must be true");
+            /// kani::check(x == y, "A boolean variable is always different than its negation");
+            /// kani::cover!(true, "This should still be reachable");
+            /// ```
+            ///
+            #[cfg(not(feature = "concrete_playback"))]
+            #[inline(never)]
+            #[kanitool::fn_marker = "CheckHook"]
+            pub(crate) const fn check(cond: bool, msg: &'static str) {
+                let _ = cond;
+                let _ = msg;
+            }
+
+            #[cfg(feature = "concrete_playback")]
+            #[inline(never)]
+            #[kanitool::fn_marker = "CheckHook"]
+            pub(crate) const fn check(cond: bool, msg: &'static str) {
+                assert!(cond, "{}", msg);
+            }
         }
     };
 }

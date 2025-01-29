@@ -10,7 +10,7 @@ invalid.rs:\
 | #[kani::proof]
 | ^^^^^^^^^^^^^^
 
-error: the `proof` attribute cannot be applied to generic functions\
+error: the '#[kani::proof]' attribute cannot be applied to generic functions\
 invalid.rs:\
 |\
 | #[kani::proof]\

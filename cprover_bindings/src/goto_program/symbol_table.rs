@@ -1,6 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-use super::super::{env, MachineModel};
+use super::super::{MachineModel, env};
 use super::{BuiltinFn, FunctionContract, Stmt, Symbol};
 use crate::InternedString;
 use std::collections::BTreeMap;
@@ -105,6 +105,11 @@ impl SymbolTable {
     pub fn lookup<T: Into<InternedString>>(&self, name: T) -> Option<&Symbol> {
         let name = name.into();
         self.symbol_table.get(&name)
+    }
+
+    pub fn lookup_mut<T: Into<InternedString>>(&mut self, name: T) -> Option<&mut Symbol> {
+        let name = name.into();
+        self.symbol_table.get_mut(&name)
     }
 
     pub fn machine_model(&self) -> &MachineModel {

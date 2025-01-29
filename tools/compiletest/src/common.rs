@@ -10,13 +10,14 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use std::time::Duration;
-use test::test::TestTimeOptions;
 use test::ColorConfig;
+use test::test::TestTimeOptions;
 
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]
 pub enum Mode {
     Kani,
     KaniFixme,
+    CargoCoverage,
     CargoKani,
     CargoKaniTest, // `cargo kani --tests`. This is temporary and should be removed when s2n-quic moves --tests to `Cargo.toml`.
     CoverageBased,
@@ -34,6 +35,7 @@ impl FromStr for Mode {
             "cargo-kani" => Ok(CargoKani),
             "cargo-kani-test" => Ok(CargoKaniTest),
             "coverage-based" => Ok(CoverageBased),
+            "cargo-coverage" => Ok(CargoCoverage),
             "exec" => Ok(Exec),
             "expected" => Ok(Expected),
             "stub-tests" => Ok(Stub),
@@ -47,6 +49,7 @@ impl fmt::Display for Mode {
         let s = match *self {
             Kani => "kani",
             KaniFixme => "kani-fixme",
+            CargoCoverage => "cargo-coverage",
             CargoKani => "cargo-kani",
             CargoKaniTest => "cargo-kani-test",
             CoverageBased => "coverage-based",

@@ -3,17 +3,17 @@
 //! This module contains code related to the MIR-to-MIR pass that performs the
 //! stubbing of functions and methods.
 use crate::kani_middle::codegen_units::Stubs;
-use crate::kani_middle::stubbing::{contract_host_param, validate_stub_const};
+use crate::kani_middle::stubbing::validate_stub_const;
 use crate::kani_middle::transform::body::{MutMirVisitor, MutableBody};
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
 use rustc_middle::ty::TyCtxt;
 use rustc_smir::rustc_internal;
+use stable_mir::CrateDef;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::visit::{Location, MirVisitor};
 use stable_mir::mir::{Body, ConstOperand, LocalDecl, Operand, Terminator, TerminatorKind};
 use stable_mir::ty::{FnDef, MirConst, RigidTy, TyKind};
-use stable_mir::CrateDef;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use tracing::{debug, trace};
@@ -43,15 +43,11 @@ impl TransformPass for FnStubPass {
     }
 
     /// Transform the function body by replacing it with the stub body.
-    fn transform(&self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
+    fn transform(&mut self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
         trace!(function=?instance.name(), "transform");
         let ty = instance.ty();
-        if let TyKind::RigidTy(RigidTy::FnDef(fn_def, mut args)) = ty.kind() {
+        if let TyKind::RigidTy(RigidTy::FnDef(fn_def, args)) = ty.kind() {
             if let Some(replace) = self.stubs.get(&fn_def) {
-                if let Some(idx) = contract_host_param(tcx, fn_def, *replace) {
-                    debug!(?idx, "FnStubPass::transform remove_host_param");
-                    args.0.remove(idx);
-                }
                 let new_instance = Instance::resolve(*replace, &args).unwrap();
                 debug!(from=?instance.name(), to=?new_instance.name(), "FnStubPass::transform");
                 if let Some(body) = FnStubValidator::validate(tcx, (fn_def, *replace), new_instance)
@@ -103,7 +99,7 @@ impl TransformPass for ExternFnStubPass {
     ///
     /// We need to find function calls and function pointers.
     /// We should replace this with a visitor once StableMIR includes a mutable one.
-    fn transform(&self, _tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
+    fn transform(&mut self, _tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
         trace!(function=?instance.name(), "transform");
         let mut new_body = MutableBody::from(body);
         let changed = false;
@@ -139,7 +135,7 @@ struct FnStubValidator<'a, 'tcx> {
     is_valid: bool,
 }
 
-impl<'a, 'tcx> FnStubValidator<'a, 'tcx> {
+impl FnStubValidator<'_, '_> {
     fn validate(tcx: TyCtxt, stub: (FnDef, FnDef), new_instance: Instance) -> Option<Body> {
         if validate_stub_const(tcx, new_instance) {
             let body = new_instance.body().unwrap();
@@ -153,7 +149,7 @@ impl<'a, 'tcx> FnStubValidator<'a, 'tcx> {
     }
 }
 
-impl<'a, 'tcx> MirVisitor for FnStubValidator<'a, 'tcx> {
+impl MirVisitor for FnStubValidator<'_, '_> {
     fn visit_operand(&mut self, op: &Operand, loc: Location) {
         let op_ty = op.ty(self.locals).unwrap();
         if let TyKind::RigidTy(RigidTy::FnDef(def, args)) = op_ty.kind() {
@@ -188,7 +184,7 @@ struct ExternFnStubVisitor<'a> {
     stubs: &'a Stubs,
 }
 
-impl<'a> MutMirVisitor for ExternFnStubVisitor<'a> {
+impl MutMirVisitor for ExternFnStubVisitor<'_> {
     fn visit_terminator(&mut self, term: &mut Terminator) {
         // Replace direct calls
         if let TerminatorKind::Call { func, .. } = &mut term.kind {

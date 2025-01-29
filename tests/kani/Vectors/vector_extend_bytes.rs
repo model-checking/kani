@@ -1,10 +1,11 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-//! Check that we propertly handle `Vec::extend` with a constant byte slice.
+//! Check that we properly handle `Vec::extend` with a constant byte slice.
 //! This used to fail previously (see
 //! https://github.com/model-checking/kani/issues/2656).
 
+#[kani::unwind(4)]
 #[kani::proof]
 fn check_extend_const_byte_slice() {
     const MY_CONSTANT: &[u8] = b"Hi";

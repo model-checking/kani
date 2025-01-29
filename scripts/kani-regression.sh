@@ -23,11 +23,8 @@ source "${KANI_DIR}/kani-dependencies"
 # Sanity check dependencies values.
 [[ "${CBMC_MAJOR}.${CBMC_MINOR}" == "${CBMC_VERSION%.*}" ]] || \
     (echo "Conflicting CBMC versions"; exit 1)
-[[ "${CBMC_VIEWER_MAJOR}.${CBMC_VIEWER_MINOR}" == "${CBMC_VIEWER_VERSION}" ]] || \
-    (echo "Conflicting CBMC viewer versions"; exit 1)
 # Check if installed versions are correct.
 check-cbmc-version.py --major ${CBMC_MAJOR} --minor ${CBMC_MINOR}
-check-cbmc-viewer-version.py --major ${CBMC_VIEWER_MAJOR} --minor ${CBMC_VIEWER_MINOR}
 check_kissat_version.sh
 
 # Formatting check
@@ -41,8 +38,8 @@ cargo test -p cprover_bindings
 cargo test -p kani-compiler
 cargo test -p kani-driver
 cargo test -p kani_metadata
-# skip doc tests and enable assertions to fail
-cargo test -p kani --lib --features concrete_playback
+# Use concrete playback to enable assertions failure
+cargo test -p kani --features concrete_playback
 # Test the actual macros, skipping doc tests and enabling extra traits for "syn"
 # so we can debug print AST
 RUSTFLAGS=--cfg=kani_sysroot cargo test -p kani_macros --features syn/extra-traits --lib
@@ -60,6 +57,7 @@ TESTS=(
     "cargo-ui cargo-kani"
     "script-based-pre exec"
     "coverage coverage-based"
+    "cargo-coverage cargo-coverage"
     "kani-docs cargo-kani"
     "kani-fixme kani-fixme"
 )
@@ -68,6 +66,9 @@ TESTS=(
 echo "--- Compiletest configuration"
 cargo run -p compiletest --quiet -- --suite kani --mode cargo-kani --dry-run --verbose
 echo "-----------------------------"
+
+# Build `kani-cov`
+cargo build -p kani-cov
 
 # Extract testing suite information and run compiletest
 for testp in "${TESTS[@]}"; do
@@ -78,9 +79,6 @@ for testp in "${TESTS[@]}"; do
   cargo run -p compiletest --quiet -- --suite $suite --mode $mode \
       --quiet --no-fail-fast
 done
-
-# Check codegen for the standard library
-time "$SCRIPT_DIR"/std-lib-regression.sh
 
 # We rarely benefit from re-using build artifacts in the firecracker test,
 # and we often end up with incompatible leftover artifacts:

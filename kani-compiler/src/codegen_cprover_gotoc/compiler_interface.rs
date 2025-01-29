@@ -6,43 +6,39 @@
 use crate::args::ReachabilityType;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::kani_middle::analysis;
-use crate::kani_middle::attributes::{is_test_harness_description, KaniAttributes};
+use crate::kani_middle::attributes::{KaniAttributes, is_test_harness_description};
+use crate::kani_middle::check_reachable_items;
 use crate::kani_middle::codegen_units::{CodegenUnit, CodegenUnits};
 use crate::kani_middle::metadata::gen_test_metadata;
 use crate::kani_middle::provide;
 use crate::kani_middle::reachability::{
     collect_reachable_items, filter_const_crate_items, filter_crate_items,
 };
-use crate::kani_middle::transform::BodyTransformation;
-use crate::kani_middle::{check_reachable_items, dump_mir_items};
+use crate::kani_middle::transform::{BodyTransformation, GlobalPasses};
 use crate::kani_queries::QueryDb;
+use cbmc::RoundingMode;
 use cbmc::goto_program::Location;
 use cbmc::irep::goto_binary_serde::write_goto_binary_file;
-use cbmc::RoundingMode;
 use cbmc::{InternedString, MachineModel};
 use kani_metadata::artifact::convert_type;
-use kani_metadata::UnsupportedFeature;
-use kani_metadata::{ArtifactType, HarnessMetadata, KaniMetadata};
+use kani_metadata::{ArtifactType, HarnessMetadata, KaniMetadata, UnsupportedFeature};
 use kani_metadata::{AssignsContract, CompilerArtifactStub};
 use rustc_codegen_ssa::back::archive::{
-    get_native_object_symbols, ArArchiveBuilder, ArchiveBuilder,
+    ArArchiveBuilder, ArchiveBuilder, ArchiveBuilderBuilder, DEFAULT_OBJECT_READER,
 };
-use rustc_codegen_ssa::back::metadata::create_wrapper_file;
+use rustc_codegen_ssa::back::link::link_binary;
 use rustc_codegen_ssa::traits::CodegenBackend;
 use rustc_codegen_ssa::{CodegenResults, CrateInfo};
 use rustc_data_structures::fx::{FxHashMap, FxIndexMap};
-use rustc_data_structures::temp_dir::MaybeTempDir;
-use rustc_errors::{ErrorGuaranteed, DEFAULT_LOCALE_RESOURCE};
+use rustc_errors::DEFAULT_LOCALE_RESOURCE;
 use rustc_hir::def_id::{DefId as InternalDefId, LOCAL_CRATE};
-use rustc_metadata::creader::MetadataLoaderDyn;
-use rustc_metadata::fs::{emit_wrapper_file, METADATA_FILENAME};
 use rustc_metadata::EncodedMetadata;
 use rustc_middle::dep_graph::{WorkProduct, WorkProductId};
 use rustc_middle::ty::TyCtxt;
 use rustc_middle::util::Providers;
+use rustc_session::Session;
 use rustc_session::config::{CrateType, OutputFilenames, OutputType};
 use rustc_session::output::out_filename;
-use rustc_session::Session;
 use rustc_smir::rustc_internal;
 use rustc_target::abi::Endian;
 use rustc_target::spec::PanicStrategy;
@@ -50,16 +46,13 @@ use stable_mir::mir::mono::{Instance, MonoItem};
 use stable_mir::{CrateDef, DefId};
 use std::any::Any;
 use std::collections::BTreeMap;
-use std::ffi::OsString;
 use std::fmt::Write;
 use std::fs::File;
 use std::io::BufWriter;
-use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
-use tempfile::Builder as TempFileBuilder;
-use tracing::{debug, error, info};
+use tracing::{debug, info};
 
 pub type UnsupportedConstructs = FxHashMap<InternedString, Vec<Location>>;
 
@@ -89,11 +82,47 @@ impl GotocCodegenBackend {
         check_contract: Option<InternalDefId>,
         mut transformer: BodyTransformation,
     ) -> (GotocCtx<'tcx>, Vec<MonoItem>, Option<AssignsContract>) {
-        let items = with_timer(
+        // This runs reachability analysis before global passes are applied.
+        //
+        // Alternatively, we could run reachability only once after the global passes are applied
+        // and resolve the necessary dependencies inside the passes on the fly. This, however, has a
+        // disadvantage of not having a precomputed call graph for the global passes to use. The
+        // call graph could be used, for example, in resolving function pointer or vtable calls for
+        // global passes that need this.
+        let (items, call_graph) = with_timer(
             || collect_reachable_items(tcx, &mut transformer, starting_items),
             "codegen reachability analysis",
         );
-        dump_mir_items(tcx, &mut transformer, &items, &symtab_goto.with_extension("kani.mir"));
+
+        // Retrieve all instances from the currently codegened items.
+        let instances = items
+            .iter()
+            .filter_map(|item| match item {
+                MonoItem::Fn(instance) => Some(*instance),
+                MonoItem::Static(static_def) => {
+                    let instance: Instance = (*static_def).into();
+                    instance.has_body().then_some(instance)
+                }
+                MonoItem::GlobalAsm(_) => None,
+            })
+            .collect();
+
+        // Apply all transformation passes, including global passes.
+        let mut global_passes = GlobalPasses::new(&self.queries.lock().unwrap(), tcx);
+        global_passes.run_global_passes(
+            &mut transformer,
+            tcx,
+            starting_items,
+            instances,
+            call_graph,
+        );
+
+        // Re-collect reachable items after global transformations were applied. This is necessary
+        // since global pass could add extra calls to instrumentation.
+        let (items, _) = with_timer(
+            || collect_reachable_items(tcx, &mut transformer, starting_items),
+            "codegen reachability analysis (second pass)",
+        );
 
         // Follow rustc naming convention (cx is abbrev for context).
         // https://rustc-dev-guide.rust-lang.org/conventions.html#naming-conventions
@@ -173,12 +202,7 @@ impl GotocCodegenBackend {
         if !tcx.sess.opts.unstable_opts.no_codegen && tcx.sess.opts.output_types.should_codegen() {
             let pretty = self.queries.lock().unwrap().args().output_pretty_json;
             write_file(&symtab_goto, ArtifactType::PrettyNameMap, &pretty_name_map, pretty);
-            if gcx.queries.args().write_json_symtab {
-                write_file(&symtab_goto, ArtifactType::SymTab, &gcx.symbol_table, pretty);
-                symbol_table_to_gotoc(&tcx, &symtab_goto);
-            } else {
-                write_goto_binary_file(symtab_goto, &gcx.symbol_table);
-            }
+            write_goto_binary_file(symtab_goto, &gcx.symbol_table);
             write_file(&symtab_goto, ArtifactType::TypeMap, &type_map, pretty);
             // If they exist, write out vtable virtual call function pointer restrictions
             if let Some(restrictions) = vtable_restrictions {
@@ -191,10 +215,6 @@ impl GotocCodegenBackend {
 }
 
 impl CodegenBackend for GotocCodegenBackend {
-    fn metadata_loader(&self) -> Box<MetadataLoaderDyn> {
-        Box::new(rustc_codegen_ssa::back::metadata::DefaultMetadataLoader)
-    }
-
     fn provide(&self, providers: &mut Providers) {
         provide::provide(providers, &self.queries.lock().unwrap());
     }
@@ -217,10 +237,21 @@ impl CodegenBackend for GotocCodegenBackend {
         let ret_val = rustc_internal::run(tcx, || {
             super::utils::init();
 
-            // Queries shouldn't change today once codegen starts.
+            // Any changes to queries from this point on is just related to caching information
+            // needed for generating code to the given crate.
+            // The cached information must not outlive the stable-mir `run` scope.
+            // See [QueryDb::kani_functions] for more information.
             let queries = self.queries.lock().unwrap().clone();
+
             check_target(tcx.sess);
             check_options(tcx.sess);
+            if queries.args().reachability_analysis != ReachabilityType::None
+                && queries.kani_functions().is_empty()
+            {
+                tcx.sess.dcx().err(
+                    "Failed to detect Kani functions. Please check your installation is correct.",
+                );
+            }
 
             // Codegen all items that need to be processed according to the selected reachability mode:
             //
@@ -236,15 +267,16 @@ impl CodegenBackend for GotocCodegenBackend {
                 ReachabilityType::Harnesses => {
                     let mut units = CodegenUnits::new(&queries, tcx);
                     let mut modifies_instances = vec![];
+                    let mut loop_contracts_instances = vec![];
                     // Cross-crate collecting of all items that are reachable from the crate harnesses.
                     for unit in units.iter() {
                         // We reset the body cache for now because each codegen unit has different
                         // configurations that affect how we transform the instance body.
-                        let mut transformer = BodyTransformation::new(&queries, tcx, &unit);
                         for harness in &unit.harnesses {
+                            let transformer = BodyTransformation::new(&queries, tcx, &unit);
                             let model_path = units.harness_model_path(*harness).unwrap();
                             let contract_metadata =
-                                contract_metadata_for_harness(tcx, harness.def.def_id()).unwrap();
+                                contract_metadata_for_harness(tcx, harness.def.def_id());
                             let (gcx, items, contract_info) = self.codegen_items(
                                 tcx,
                                 &[MonoItem::Fn(*harness)],
@@ -253,13 +285,17 @@ impl CodegenBackend for GotocCodegenBackend {
                                 contract_metadata,
                                 transformer,
                             );
-                            transformer = results.extend(gcx, items, None);
+                            if gcx.has_loop_contracts {
+                                loop_contracts_instances.push(*harness);
+                            }
+                            results.extend(gcx, items, None);
                             if let Some(assigns_contract) = contract_info {
                                 modifies_instances.push((*harness, assigns_contract));
                             }
                         }
                     }
                     units.store_modifies(&modifies_instances);
+                    units.store_loop_contracts(&loop_contracts_instances);
                     units.write_metadata(&queries, tcx);
                 }
                 ReachabilityType::Tests => {
@@ -375,45 +411,25 @@ impl CodegenBackend for GotocCodegenBackend {
     /// We need to emit `rlib` files normally if requested. Cargo expects these in some
     /// circumstances and sends them to subsequent builds with `-L`.
     ///
-    /// We CAN NOT invoke the native linker, because that will fail. We don't have real objects.
-    /// What determines whether the native linker is invoked or not is the set of `crate_types`.
-    /// Types such as `bin`, `cdylib`, `dylib` will trigger the native linker.
-    ///
-    /// Thus, we manually build the rlib file including only the `rmeta` file.
-    ///
-    /// For cases where no metadata file was requested, we stub the file requested by writing the
+    /// For other crate types, we stub the file requested by writing the
     /// path of the `kani-metadata.json` file so `kani-driver` can safely find the latest metadata.
     /// See <https://github.com/model-checking/kani/issues/2234> for more details.
-    fn link(
-        &self,
-        sess: &Session,
-        codegen_results: CodegenResults,
-        outputs: &OutputFilenames,
-    ) -> Result<(), ErrorGuaranteed> {
-        let requested_crate_types = &codegen_results.crate_info.crate_types;
+    fn link(&self, sess: &Session, codegen_results: CodegenResults, outputs: &OutputFilenames) {
+        let requested_crate_types = &codegen_results.crate_info.crate_types.clone();
+        let local_crate_name = codegen_results.crate_info.local_crate_name;
+        // Create the rlib if one was requested.
+        if requested_crate_types.iter().any(|crate_type| *crate_type == CrateType::Rlib) {
+            link_binary(sess, &ArArchiveBuilderBuilder, codegen_results, outputs);
+        }
+
+        // But override all the other outputs.
+        // Note: Do this after `link_binary` call, since it may write to the object files
+        // and override the json we are creating.
         for crate_type in requested_crate_types {
-            let out_fname = out_filename(
-                sess,
-                *crate_type,
-                outputs,
-                codegen_results.crate_info.local_crate_name,
-            );
+            let out_fname = out_filename(sess, *crate_type, outputs, local_crate_name);
             let out_path = out_fname.as_path();
             debug!(?crate_type, ?out_path, "link");
-            if *crate_type == CrateType::Rlib {
-                // Emit the `rlib` that contains just one file: `<crate>.rmeta`
-                let mut builder = Box::new(ArArchiveBuilder::new(sess, get_native_object_symbols));
-                let tmp_dir = TempFileBuilder::new().prefix("kani").tempdir().unwrap();
-                let path = MaybeTempDir::new(tmp_dir, sess.opts.cg.save_temps);
-                let (metadata, _metadata_position) = create_wrapper_file(
-                    sess,
-                    ".rmeta".to_string(),
-                    codegen_results.metadata.raw_data(),
-                );
-                let metadata = emit_wrapper_file(sess, &metadata, &path, METADATA_FILENAME);
-                builder.add_file(&metadata);
-                builder.build(&out_path);
-            } else {
+            if *crate_type != CrateType::Rlib {
                 // Write the location of the kani metadata file in the requested compiler output file.
                 let base_filepath = outputs.path(OutputType::Object);
                 let base_filename = base_filepath.as_path();
@@ -424,16 +440,20 @@ impl CodegenBackend for GotocCodegenBackend {
                 serde_json::to_writer(out_file, &content_stub).unwrap();
             }
         }
-        Ok(())
     }
 }
 
-fn contract_metadata_for_harness(
-    tcx: TyCtxt,
-    def_id: DefId,
-) -> Result<Option<InternalDefId>, ErrorGuaranteed> {
+struct ArArchiveBuilderBuilder;
+
+impl ArchiveBuilderBuilder for ArArchiveBuilderBuilder {
+    fn new_archive_builder<'a>(&self, sess: &'a Session) -> Box<dyn ArchiveBuilder + 'a> {
+        Box::new(ArArchiveBuilder::new(sess, &DEFAULT_OBJECT_READER))
+    }
+}
+
+fn contract_metadata_for_harness(tcx: TyCtxt, def_id: DefId) -> Option<InternalDefId> {
     let attrs = KaniAttributes::for_def_id(tcx, def_id);
-    Ok(attrs.interpret_the_for_contract_attribute().transpose()?.map(|(_, id, _)| id))
+    attrs.interpret_for_contract_attribute().map(|(_, id, _)| id)
 }
 
 fn check_target(session: &Session) {
@@ -517,40 +537,6 @@ fn codegen_results(
     ))
 }
 
-fn symbol_table_to_gotoc(tcx: &TyCtxt, base_path: &Path) -> PathBuf {
-    let output_filename = base_path.to_path_buf();
-    let input_filename = convert_type(base_path, ArtifactType::SymTabGoto, ArtifactType::SymTab);
-
-    let args = vec![
-        input_filename.clone().into_os_string(),
-        "--out".into(),
-        OsString::from(output_filename.as_os_str()),
-    ];
-    // TODO get symtab2gb path from self
-    let mut cmd = Command::new("symtab2gb");
-    cmd.args(args);
-    info!("[Kani] Running: `{:?} {:?}`", cmd.get_program(), cmd.get_args());
-
-    let result = with_timer(
-        || {
-            cmd.output()
-                .expect(&format!("Failed to generate goto model for {}", input_filename.display()))
-        },
-        "symtab2gb",
-    );
-    if !result.status.success() {
-        error!("Symtab error output:\n{}", String::from_utf8_lossy(&result.stderr));
-        error!("Symtab output:\n{}", String::from_utf8_lossy(&result.stdout));
-        let err_msg = format!(
-            "Failed to generate goto model:\n\tsymtab2gb failed on file {}.",
-            input_filename.display()
-        );
-        tcx.dcx().err(err_msg);
-        tcx.dcx().abort_if_errors();
-    };
-    output_filename
-}
-
 pub fn write_file<T>(base_path: &Path, file_type: ArtifactType, source: &T, pretty: bool)
 where
     T: serde::Serialize,
@@ -621,6 +607,10 @@ impl GotoCodegenResults {
             proof_harnesses: proofs,
             unsupported_features,
             test_harnesses: tests,
+            // We don't collect the contracts metadata because the FunctionWithContractPass
+            // removes any contracts logic for ReachabilityType::Test or ReachabilityType::PubFns,
+            // which are the two ReachabilityTypes under which the compiler calls this function.
+            contracted_functions: vec![],
         }
     }
 

@@ -3,9 +3,8 @@
 
 extern crate clap;
 
-use std::{collections::HashSet, path::PathBuf};
-
 use serde::{Deserialize, Serialize};
+use std::{collections::HashSet, path::PathBuf};
 
 pub use artifact::ArtifactType;
 pub use cbmc_solver::CbmcSolver;
@@ -32,6 +31,18 @@ pub struct KaniMetadata {
     pub unsupported_features: Vec<UnsupportedFeature>,
     /// If crates are built in test-mode, then test harnesses will be recorded here.
     pub test_harnesses: Vec<HarnessMetadata>,
+    /// The functions with contracts in this crate
+    pub contracted_functions: Vec<ContractedFunction>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord)]
+pub struct ContractedFunction {
+    /// The fully qualified name the user gave to the function (i.e. includes the module path).
+    pub function: String,
+    /// The (currently full-) path to the file this function was declared within.
+    pub file: String,
+    /// The pretty names of the proof harnesses (`#[kani::proof_for_contract]`) for this function
+    pub harnesses: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

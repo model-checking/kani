@@ -1,0 +1,5 @@
+error[E0277]: the trait bound `i32: std::convert::FloatToInt<u8>` is not satisfied
+invalid_float.rs:
+|     let _c = kani::float::float_to_int_in_range::<i32, u8>(i);
+|                                                   ^^^ the trait `std::convert::FloatToInt<u8>` is not implemented for `i32`
+|

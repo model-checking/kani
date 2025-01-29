@@ -4,6 +4,189 @@ This file contains notable changes (e.g. breaking changes, major changes, etc.) 
 
 This file was introduced starting Kani 0.23.0, so it only contains changes from version 0.23.0 onwards.
 
+## [0.58.0]
+
+### Major/Breaking Changes
+* Improve `--jobs` UI by @carolynzech in https://github.com/model-checking/kani/pull/3790
+* Generate contracts of dependencies as assertions by @carolynzech in https://github.com/model-checking/kani/pull/3802
+* Add UB checks for ptr_offset_from* intrinsics by @celinval in https://github.com/model-checking/kani/pull/3757
+
+### What's Changed
+* Include manifest-path when checking if packages are in the workspace by @qinheping in https://github.com/model-checking/kani/pull/3819
+* Update kissat to v4.0.1 by @remi-delmas-3000 in https://github.com/model-checking/kani/pull/3791
+* Rust toolchain upgraded to 2025-01-07 by @remi-delmas-3000 @zhassan-aws
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.57.0...kani-0.58.0
+
+## [0.57.0]
+
+### Major Changes
+* `kani-cov`: A coverage tool for Kani by @adpaco-aws in https://github.com/model-checking/kani/pull/3121
+* Add a timeout option by @zhassan-aws in https://github.com/model-checking/kani/pull/3649
+* Loop Contracts Annotation for While-Loop by @qinheping in https://github.com/model-checking/kani/pull/3151
+* Harness output individual files by @Alexander-Aghili in https://github.com/model-checking/kani/pull/3360
+* Enable support for Ubuntu 24.04 by @tautschnig in https://github.com/model-checking/kani/pull/3758
+
+### Breaking Changes
+* Make `kani::check` private by @celinval in https://github.com/model-checking/kani/pull/3614
+* Remove symtab json support by @celinval in https://github.com/model-checking/kani/pull/3695
+* Remove CBMC viewer and visualize option by @zhassan-aws in https://github.com/model-checking/kani/pull/3699
+* Dropping support for Ubuntu 18.04 / AL2. by @thanhnguyen-aws in https://github.com/model-checking/kani/pull/3744
+
+### What's Changed
+* Remove the overflow checks for wrapping_offset by @zhassan-aws in https://github.com/model-checking/kani/pull/3589
+* Support fully-qualified --package arguments by @celinval in https://github.com/model-checking/kani/pull/3593
+* Implement proper function pointer handling for validity checks by @celinval in https://github.com/model-checking/kani/pull/3606
+* Add fn that checks pointers point to same allocation by @celinval in https://github.com/model-checking/kani/pull/3583
+* [Lean back-end] Preserve variable names by @zhassan-aws in https://github.com/model-checking/kani/pull/3560
+* Emit an error when proof_for_contract function is not found by @zhassan-aws in https://github.com/model-checking/kani/pull/3609
+* [Lean back-end] Rename user-facing options from Aeneas to Lean by @zhassan-aws in https://github.com/model-checking/kani/pull/3630
+* Fix ICE due to mishandling of Aggregate rvalue for raw pointers to trait objects by @carolynzech in https://github.com/model-checking/kani/pull/3636
+* Fix loop contracts transformation when loops in branching by @qinheping in https://github.com/model-checking/kani/pull/3640
+* Move any_slice_from_array to kani_core by @qinheping in https://github.com/model-checking/kani/pull/3646
+* Implement `Arbitrary` for `Range*` by @c410-f3r in https://github.com/model-checking/kani/pull/3666
+* Add support for float_to_int_unchecked by @zhassan-aws in https://github.com/model-checking/kani/pull/3660
+* Change `same_allocation` to accept wide pointers by @celinval in https://github.com/model-checking/kani/pull/3684
+* Derive `Arbitrary` for enums with a single variant by @AlgebraicWolf in https://github.com/model-checking/kani/pull/3692
+* Apply loop contracts only if there exists some usage by @qinheping in https://github.com/model-checking/kani/pull/3694
+* Add support for f16 and f128 in float_to_int_unchecked intrinsic by @zhassan-aws in https://github.com/model-checking/kani/pull/3701
+* Fix codegen for rvalue aggregate raw pointer to an adt with slice tail by @carolynzech in https://github.com/model-checking/kani/pull/3644
+* Improve Kani handling of function markers by @celinval in https://github.com/model-checking/kani/pull/3718
+* Enable contracts for const generic functions by @qinheping in https://github.com/model-checking/kani/pull/3726
+* List Subcommand Improvements by @carolynzech in https://github.com/model-checking/kani/pull/3729
+* [Lean back-end] add support for enum, struct, tuple in llbc backend by @thanhnguyen-aws in https://github.com/model-checking/kani/pull/3721
+* Fix issues with how we compute DST size by @celinval in https://github.com/model-checking/kani/pull/3687
+* Fix size and alignment computation for intrinsics by @celinval in https://github.com/model-checking/kani/pull/3734
+* Add a Kani function that checks if the range of a float is valid for conversion to int by @zhassan-aws in https://github.com/model-checking/kani/pull/3742
+* Add out of bounds check for `offset` intrinsics by @celinval in https://github.com/model-checking/kani/pull/3755
+* Automatic upgrade of CBMC from 6.3.1 to 6.4.1
+* Rust toolchain upgraded to nightly-2024-12-15 by @zhassan-aws @carolynzech @qinheping @celinval @tautschnig
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.56.0...kani-0.57.0
+
+## [0.56.0]
+
+### Major/Breaking Changes
+
+* Remove obsolete linker options (`--mir-linker` and `--legacy-linker`) by @zhassan-aws in https://github.com/model-checking/kani/pull/3559
+* List Subcommand by @carolynzech in https://github.com/model-checking/kani/pull/3523
+* Deprecate `kani::check` by @celinval in https://github.com/model-checking/kani/pull/3557
+
+### What's Changed
+
+* Enable stubbing and function contracts for primitive types by @celinval in https://github.com/model-checking/kani/pull/3496
+* Instrument validity checks for pointer to reference casts for slices and str's by @zhassan-aws in https://github.com/model-checking/kani/pull/3513
+* Fail compilation if `proof_for_contract` is added to generic function by @carolynzech in https://github.com/model-checking/kani/pull/3522
+* Fix storing coverage data in cargo projects by @adpaco-aws in https://github.com/model-checking/kani/pull/3527
+* Add experimental API to generate arbitrary pointers by @celinval in https://github.com/model-checking/kani/pull/3538
+* Running `verify-std` no longer changes Cargo files by @celinval in https://github.com/model-checking/kani/pull/3577
+* Add an LLBC backend by @zhassan-aws in https://github.com/model-checking/kani/pull/3514
+* Fix the computation of the number of bytes of a pointer offset by @zhassan-aws in https://github.com/model-checking/kani/pull/3584
+* Rust toolchain upgraded to nightly-2024-10-03 by @qinheping @tautschnig @celinval
+* CBMC upgraded to 6.3.1 by @tautschnig in https://github.com/model-checking/kani/pull/3537
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.55.0...kani-0.56.0
+
+## [0.55.0]
+
+### Major/Breaking Changes
+* Coverage reporting in Kani is now source-based instead of line-based.
+Consequently, the unstable `-Zline-coverage` flag has been replaced with a `-Zsource-coverage` one.
+Check the [Source-Coverage RFC](https://model-checking.github.io/kani/rfc/rfcs/0011-source-coverage.html) for more details.
+* Several improvements were made to the memory initialization checks. The current state is summarized in https://github.com/model-checking/kani/issues/3300. We welcome your feedback!
+
+### What's Changed
+* Update CBMC build instructions for Amazon Linux 2 by @tautschnig in https://github.com/model-checking/kani/pull/3431
+* Implement memory initialization state copy functionality by @artemagvanian in https://github.com/model-checking/kani/pull/3350
+* Make points-to analysis handle all intrinsics explicitly by @artemagvanian in https://github.com/model-checking/kani/pull/3452
+* Avoid corner-cases by grouping instrumentation into basic blocks and using backward iteration by @artemagvanian in https://github.com/model-checking/kani/pull/3438
+* Fix ICE due to mishandling of Aggregate rvalue for raw pointers to `str` by @celinval in https://github.com/model-checking/kani/pull/3448
+* Basic support for memory initialization checks for unions by @artemagvanian in https://github.com/model-checking/kani/pull/3444
+* Adopt Rust's source-based code coverage instrumentation by @adpaco-aws in https://github.com/model-checking/kani/pull/3119
+* Extra tests and bug fixes to the delayed UB instrumentation by @artemagvanian in https://github.com/model-checking/kani/pull/3419
+* Partially integrate uninit memory checks into `verify_std` by @artemagvanian in https://github.com/model-checking/kani/pull/3470
+* Rust toolchain upgraded to `nightly-2024-09-03` by @jaisnan @carolynzech 
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.54.0...kani-0.55.0
+
+## [0.54.0]
+
+### Major Changes
+* We added support for slices in the `#[kani::modifies(...)]` clauses when using function contracts.
+* We introduce an `#[safety_constraint(...)]` attribute helper for the `Arbitrary` and `Invariant` macros.
+* We enabled support for concrete playback for harness that contains stubs or function contracts.
+* We added support for log2*, log10*, powif*, fma*, and sqrt* intrisincs.
+
+### Breaking Changes
+* The `-Z ptr-to-ref-cast-checks` option has been removed, and pointer validity checks when casting raw pointers to references are now run by default.
+
+## What's Changed
+* Make Kani reject mutable pointer casts if padding is incompatible and memory initialization is checked by @artemagvanian in https://github.com/model-checking/kani/pull/3332
+* Fix visibility of some Kani intrinsics by @artemagvanian in https://github.com/model-checking/kani/pull/3323
+* Function Contracts: Modify Slices by @pi314mm in https://github.com/model-checking/kani/pull/3295
+* Support for disabling automatically generated pointer checks to avoid reinstrumentation by @artemagvanian in https://github.com/model-checking/kani/pull/3344
+* Add support for global transformations by @artemagvanian in https://github.com/model-checking/kani/pull/3348
+* Enable an `#[safety_constraint(...)]` attribute helper for the `Arbitrary` and `Invariant` macros by @adpaco-aws in https://github.com/model-checking/kani/pull/3283
+* Fix contract handling of promoted constants and constant static by @celinval in https://github.com/model-checking/kani/pull/3305
+* Bump CBMC Viewer to 3.9 by @tautschnig in https://github.com/model-checking/kani/pull/3373
+* Update to CBMC version 6.1.1 by @tautschnig in https://github.com/model-checking/kani/pull/2995
+* Define a struct-level `#[safety_constraint(...)]` attribute by @adpaco-aws in https://github.com/model-checking/kani/pull/3270
+* Enable concrete playback for contract and stubs by @celinval in https://github.com/model-checking/kani/pull/3389
+* Add code scanner tool by @celinval in https://github.com/model-checking/kani/pull/3120
+* Enable contracts in associated functions by @celinval in https://github.com/model-checking/kani/pull/3363
+* Enable log2*, log10* intrinsics by @tautschnig in https://github.com/model-checking/kani/pull/3001
+* Enable powif* intrinsics by @tautschnig in https://github.com/model-checking/kani/pull/2999
+* Enable fma* intrinsics by @tautschnig in https://github.com/model-checking/kani/pull/3002
+* Enable sqrt* intrinsics by @tautschnig in https://github.com/model-checking/kani/pull/3000
+* Remove assigns clause for ZST pointers by @carolynzech in https://github.com/model-checking/kani/pull/3417
+* Instrumentation for delayed UB stemming from uninitialized memory by @artemagvanian in https://github.com/model-checking/kani/pull/3374
+* Unify kani library and kani core logic by @jaisnan in https://github.com/model-checking/kani/pull/3333
+* Stabilize pointer-to-reference cast validity checks by @artemagvanian in https://github.com/model-checking/kani/pull/3426
+* Rust toolchain upgraded to `nightly-2024-08-07` by @jaisnan @qinheping @tautschnig @feliperodri
+
+## New Contributors
+* @carolynzech made their first contribution in https://github.com/model-checking/kani/pull/3387
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.53.0...kani-0.54.0
+
+## [0.53.0]
+
+### Major Changes
+* The `--visualize` option is being deprecated and will be removed in a future release. Consider using the `--concrete-playback` option instead.
+* The `-Z ptr-to-ref-cast-checks` option is being introduced to check pointer validity when casting raw pointers to references. The feature is currently behind an unstable flag but is expected to be stabilized in a future release once remaining performance issues have been resolved.
+* The `-Z uninit-checks` option is being introduced to check memory initialization. The feature is currently behind an unstable flag and also requires the `-Z ghost-state` option.
+
+### Breaking Changes
+* Remove support for the unstable argument `--function` by @celinval in https://github.com/model-checking/kani/pull/3278
+* Remove deprecated `--enable-stubbing` by @celinval in https://github.com/model-checking/kani/pull/3309
+
+### What's Changed
+
+* Change ensures into closures by @pi314mm in https://github.com/model-checking/kani/pull/3207
+* (Re)introduce `Invariant` trait by @adpaco-aws in https://github.com/model-checking/kani/pull/3190
+* Remove empty box creation from contracts impl by @celinval in https://github.com/model-checking/kani/pull/3233
+* Add a new verify-std subcommand to Kani by @celinval in https://github.com/model-checking/kani/pull/3231
+* Inject pointer validity check when casting raw pointers to references by @artemagvanian in https://github.com/model-checking/kani/pull/3221
+* Do not turn trivially diverging loops into assume(false) by @tautschnig in https://github.com/model-checking/kani/pull/3223
+* Fix "unused mut" warnings created by generated code. by @jsalzbergedu in https://github.com/model-checking/kani/pull/3247
+* Refactor stubbing so Kani compiler only invoke rustc once per crate by @celinval in https://github.com/model-checking/kani/pull/3245
+* Use cfg=kani_host for host crates by @tautschnig in https://github.com/model-checking/kani/pull/3244
+* Add intrinsics and Arbitrary support for no_core by @jaisnan in https://github.com/model-checking/kani/pull/3230
+* Contracts: Avoid attribute duplication and `const` function generation for constant function by @celinval in https://github.com/model-checking/kani/pull/3255
+* Fix contract of constant fn with effect feature by @celinval in https://github.com/model-checking/kani/pull/3259
+* Fix typed_swap for ZSTs by @tautschnig in https://github.com/model-checking/kani/pull/3256
+* Add a `#[derive(Invariant)]` macro by @adpaco-aws in https://github.com/model-checking/kani/pull/3250
+* Contracts: History Expressions via "old" monad by @pi314mm in https://github.com/model-checking/kani/pull/3232
+* Function Contracts: remove instances of _renamed by @pi314mm in https://github.com/model-checking/kani/pull/3274
+* Deprecate `--visualize` in favor of concrete playback by @celinval in https://github.com/model-checking/kani/pull/3281
+* Fix operand in fat pointer comparison by @pi314mm in https://github.com/model-checking/kani/pull/3297
+* Function Contracts: Closure Type Inference by @pi314mm in https://github.com/model-checking/kani/pull/3307
+* Add support for f16 and f128 for toolchain upgrade to 6/28 by @jaisnan in https://github.com/model-checking/kani/pull/3306
+* Towards Proving Memory Initialization by @artemagvanian in https://github.com/model-checking/kani/pull/3264
+* Rust toolchain upgraded to `nightly-2024-07-01` by @tautschnig @celinval @jaisnan @adpaco-aws
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.52.0...kani-0.53.0
+
 ## [0.52.0]
 
 ## What's Changed

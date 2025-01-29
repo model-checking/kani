@@ -5,20 +5,20 @@
 
 use crate::args::Arguments;
 use rustc_data_structures::sync::Lrc;
-use rustc_errors::emitter::Emitter;
 use rustc_errors::{
-    emitter::HumanReadableErrorType, fallback_fluent_bundle, json::JsonEmitter, ColorConfig,
-    DiagInner,
+    ColorConfig, DiagInner, emitter::Emitter, emitter::HumanReadableErrorType,
+    fallback_fluent_bundle, json::JsonEmitter, registry::Registry as ErrorRegistry,
 };
-use rustc_session::config::ErrorOutputType;
 use rustc_session::EarlyDiagCtxt;
+use rustc_session::config::ErrorOutputType;
 use rustc_span::source_map::FilePathMapping;
 use rustc_span::source_map::SourceMap;
 use std::io;
 use std::io::IsTerminal;
 use std::panic;
 use std::sync::LazyLock;
-use tracing_subscriber::{layer::SubscriberExt, EnvFilter, Registry};
+use tracing_subscriber::{EnvFilter, Registry, layer::SubscriberExt};
+use tracing_tree::HierarchicalLayer;
 
 /// Environment variable used to control this session log tracing.
 const LOG_ENV_VAR: &str = "KANI_LOG";
@@ -29,7 +29,7 @@ const BUG_REPORT_URL: &str =
 
 // Custom panic hook when running under user friendly message format.
 #[allow(clippy::type_complexity)]
-static PANIC_HOOK: LazyLock<Box<dyn Fn(&panic::PanicInfo<'_>) + Sync + Send + 'static>> =
+static PANIC_HOOK: LazyLock<Box<dyn Fn(&panic::PanicHookInfo<'_>) + Sync + Send + 'static>> =
     LazyLock::new(|| {
         let hook = panic::take_hook();
         panic::set_hook(Box::new(|info| {
@@ -46,7 +46,7 @@ static PANIC_HOOK: LazyLock<Box<dyn Fn(&panic::PanicInfo<'_>) + Sync + Send + 's
 
 // Custom panic hook when executing under json error format `--error-format=json`.
 #[allow(clippy::type_complexity)]
-static JSON_PANIC_HOOK: LazyLock<Box<dyn Fn(&panic::PanicInfo<'_>) + Sync + Send + 'static>> =
+static JSON_PANIC_HOOK: LazyLock<Box<dyn Fn(&panic::PanicHookInfo<'_>) + Sync + Send + 'static>> =
     LazyLock::new(|| {
         let hook = panic::take_hook();
         panic::set_hook(Box::new(|info| {
@@ -60,10 +60,12 @@ static JSON_PANIC_HOOK: LazyLock<Box<dyn Fn(&panic::PanicInfo<'_>) + Sync + Send
                 Lrc::new(SourceMap::new(FilePathMapping::empty())),
                 fallback_bundle,
                 false,
-                HumanReadableErrorType::Default(ColorConfig::Never),
+                HumanReadableErrorType::Default,
+                ColorConfig::Never,
             );
+            let registry = ErrorRegistry::new(&[]);
             let diagnostic = DiagInner::new(rustc_errors::Level::Bug, msg);
-            emitter.emit_diagnostic(diagnostic);
+            emitter.emit_diagnostic(diagnostic, &registry);
             (*JSON_PANIC_HOOK)(info);
         }));
         hook
@@ -114,10 +116,13 @@ fn hier_logs(args: &Arguments, filter: EnvFilter) {
     let use_colors = std::io::stdout().is_terminal() || args.color_output;
     let subscriber = Registry::default().with(filter);
     let subscriber = subscriber.with(
-        tracing_subscriber::fmt::layer()
+        HierarchicalLayer::default()
             .with_writer(std::io::stderr)
+            .with_indent_lines(true)
             .with_ansi(use_colors)
-            .with_target(true),
+            .with_targets(true)
+            .with_verbose_exit(true)
+            .with_indent_amount(4),
     );
     tracing::subscriber::set_global_default(subscriber).unwrap();
 }

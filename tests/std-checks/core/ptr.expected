@@ -1,4 +1,3 @@
 Summary:
-Verification failed for - ptr::verify::check_replace_unit
 Verification failed for - ptr::verify::check_as_ref_dangling
-Complete - 4 successfully verified harnesses, 2 failures, 6 total.
+Complete - 5 successfully verified harnesses, 1 failures, 6 total.

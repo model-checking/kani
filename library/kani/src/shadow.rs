@@ -10,7 +10,7 @@
 //!
 //! # Example
 //!
-//! ```
+//! ```no_run
 //! use kani::shadow::ShadowMem;
 //! use std::alloc::{alloc, Layout};
 //!

@@ -31,20 +31,20 @@ mod fields_based {
     use super::*;
 
     #[repr(simd)]
-    struct CustomSimd<T: SimdElement>(T, T);
+    struct CustomSimd<T: SimdElement>([T; 2]);
 
     fn check_fields<T: SimdElement + PartialEq, const LANES: usize>(
         simd: CustomSimd<T>,
         expected: [T; LANES],
     ) {
-        assert_eq!(simd.0, expected[0]);
-        assert_eq!(simd.1, expected[1])
+        assert_eq!(simd.0[0], expected[0]);
+        assert_eq!(simd.0[1], expected[1])
     }
 
     #[kani::proof]
     fn check_field_access() {
         let data: [u8; 16] = kani::any();
-        let vec = CustomSimd(data[0], data[1]);
+        let vec = CustomSimd([data[0], data[1]]);
         check_fields(vec, data);
     }
 }

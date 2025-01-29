@@ -10,8 +10,8 @@
 
 extern crate test;
 
-use crate::common::{output_base_dir, output_relative_path};
 use crate::common::{Config, Mode, TestPaths};
+use crate::common::{output_base_dir, output_relative_path};
 use crate::util::{logv, print_msg, top_level};
 use getopts::Options;
 use std::env;
@@ -21,8 +21,8 @@ use std::io::{self};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::{Duration, SystemTime};
-use test::test::TestTimeOptions;
 use test::ColorConfig;
+use test::test::TestTimeOptions;
 use tracing::*;
 use walkdir::WalkDir;
 
@@ -147,10 +147,9 @@ pub fn parse_config(args: Vec<String>) -> Config {
     let run_ignored = matches.opt_present("ignored");
     let mode = matches.opt_str("mode").unwrap().parse().expect("invalid mode");
     let timeout = matches.opt_str("timeout").map(|val| {
-        Duration::from_secs(
-            u64::from_str(&val)
-                .expect("Unexpected timeout format. Expected a positive number but found {val}"),
-        )
+        Duration::from_secs(u64::from_str(&val).expect(&format!(
+            "Unexpected timeout format. Expected a positive number but found {val}"
+        )))
     });
 
     Config {
@@ -349,7 +348,7 @@ fn collect_tests_from_dir(
     tests: &mut Vec<test::TestDescAndFn>,
 ) -> io::Result<()> {
     match config.mode {
-        Mode::CargoKani | Mode::CargoKaniTest => {
+        Mode::CargoCoverage | Mode::CargoKani | Mode::CargoKaniTest => {
             collect_expected_tests_from_dir(config, dir, relative_dir_path, inputs, tests)
         }
         Mode::Exec => collect_exec_tests_from_dir(config, dir, relative_dir_path, inputs, tests),
@@ -378,7 +377,11 @@ fn collect_expected_tests_from_dir(
     // output directory corresponding to each to avoid race conditions during
     // the testing phase. We immediately return after adding the tests to avoid
     // treating `*.rs` files as tests.
-    assert!(config.mode == Mode::CargoKani || config.mode == Mode::CargoKaniTest);
+    assert!(
+        config.mode == Mode::CargoCoverage
+            || config.mode == Mode::CargoKani
+            || config.mode == Mode::CargoKaniTest
+    );
 
     let has_cargo_toml = dir.join("Cargo.toml").exists();
     for file in fs::read_dir(dir)? {

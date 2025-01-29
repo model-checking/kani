@@ -19,6 +19,7 @@ pub enum Location {
         start_col: Option<u64>,
         end_line: u64,
         end_col: Option<u64>,
+        pragmas: &'static [&'static str], // CBMC `#pragma check` statements per location.
     },
     /// Location for Statements that use Property Class and Description - Assert, Assume, Cover etc.
     Property {
@@ -28,6 +29,7 @@ pub enum Location {
         col: Option<u64>,
         comment: InternedString,
         property_class: InternedString,
+        pragmas: &'static [&'static str], // CBMC `#pragma check` statements per location.
     },
     /// Covers cases where Location Details are unknown or set as None but Property Class is needed.
     PropertyUnknownLocation { comment: InternedString, property_class: InternedString },
@@ -99,6 +101,7 @@ impl Location {
         start_col: Option<T>,
         end_line: T,
         end_col: Option<T>,
+        pragmas: &'static [&'static str],
     ) -> Location
     where
         T: TryInto<u64>,
@@ -117,6 +120,7 @@ impl Location {
             start_col: start_col_into,
             end_line: end_line_into,
             end_col: end_col_into,
+            pragmas,
         }
     }
 
@@ -128,6 +132,7 @@ impl Location {
         col: Option<T>,
         comment: U,
         property_name: U,
+        pragmas: &'static [&'static str],
     ) -> Location
     where
         T: TryInto<u64>,
@@ -140,7 +145,7 @@ impl Location {
         let function = function.intern();
         let property_class = property_name.into();
         let comment = comment.into();
-        Location::Property { file, function, line, col, comment, property_class }
+        Location::Property { file, function, line, col, comment, property_class, pragmas }
     }
 
     /// Create a Property type Location from an already existing Location type
@@ -157,17 +162,25 @@ impl Location {
                 None,
                 comment.into(),
                 property_name.into(),
+                &[],
             ),
-            Location::Loc { file, function, start_line, start_col, end_line: _, end_col: _ } => {
-                Location::property_location(
-                    file.into(),
-                    function.intern(),
-                    start_line,
-                    start_col,
-                    comment.into(),
-                    property_name.into(),
-                )
-            }
+            Location::Loc {
+                file,
+                function,
+                start_line,
+                start_col,
+                end_line: _,
+                end_col: _,
+                pragmas,
+            } => Location::property_location(
+                file.into(),
+                function.intern(),
+                start_line,
+                start_col,
+                comment.into(),
+                property_name.into(),
+                pragmas,
+            ),
             Location::Property { .. } => location,
             Location::PropertyUnknownLocation { .. } => location,
             // This converts None type Locations to PropertyUnknownLocation type which inserts Property Class and Description

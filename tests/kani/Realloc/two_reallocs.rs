@@ -3,7 +3,7 @@
 
 // Perform two reallocs in a row and make sure the data is properly copied
 
-use std::alloc::{alloc, dealloc, realloc, Layout};
+use std::alloc::{Layout, alloc, dealloc, realloc};
 
 #[kani::proof]
 fn main() {

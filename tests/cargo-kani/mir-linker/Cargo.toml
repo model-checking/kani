@@ -8,6 +8,3 @@ description = "Ensures that the mir-linker works accross crates"
 
 [dependencies]
 semver = "1.0"
-
-[package.metadata.kani]
-flags = { mir-linker=true, enable-unstable=true }

@@ -1,0 +1,11 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+
+[package]
+name = "check_smol_str"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Make dependency fixed to ensure the test stays the same.
+smol_str = "=0.2.2"

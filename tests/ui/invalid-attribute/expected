@@ -5,7 +5,7 @@ attrs.rs
 | ^^^^^^^^^^^^^^^^^^^^^^^^^^\
 |
 
-error: attribute `kani::stub` takes two path arguments; found 0\
+error: attribute `kani::stub` takes two path arguments; found argument that is not a path\
 attrs.rs
 |\
 | #[kani::stub(invalid=opt)]\

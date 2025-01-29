@@ -1,6 +1,5 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-flags: --mir-linker --enable-unstable
 //! Check the basic coercion from using reference counter.
 //! Tests are broken down into different crates to ensure that the reachability works for each case.
 mod defs;

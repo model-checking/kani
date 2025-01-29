@@ -3,6 +3,7 @@
 name: Kani Format Check
 on:
   pull_request:
+  merge_group:
   push:
     # Not just any push, as that includes tags.
     # We don't want to re-trigger this workflow when tagging an existing commit.
@@ -46,7 +47,7 @@ jobs:
 
       - name: 'Run Clippy'
         run: |
-          cargo clippy --all -- -D warnings
+          cargo clippy --workspace -- -D warnings
 
       - name: 'Print Clippy Statistics'
         run: |

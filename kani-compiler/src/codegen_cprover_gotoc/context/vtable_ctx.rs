@@ -1,6 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+use crate::codegen_cprover_gotoc::GotocCtx;
 /// We can improve verification performance by conveying semantic information
 /// about function pointer calls down to the underlying solver. In particular,
 /// method calls through Rust dynamic trait objects use a vtable (virtual method
@@ -16,9 +17,8 @@
 /// For the current CBMC implementation of function restrictions, see:
 ///     http://cprover.diffblue.com/md__home_travis_build_diffblue_cbmc_doc_architectural_restrict-function-pointer.html
 use crate::codegen_cprover_gotoc::codegen::typ::pointee_type;
-use crate::codegen_cprover_gotoc::GotocCtx;
-use cbmc::goto_program::{Stmt, Type};
 use cbmc::InternedString;
+use cbmc::goto_program::{Stmt, Type};
 use kani_metadata::{CallSite, PossibleMethodEntry, TraitDefinedMethod, VtableCtxResults};
 use rustc_data_structures::fx::FxHashMap;
 use tracing::debug;
@@ -104,7 +104,7 @@ impl VtableCtx {
     }
 }
 
-impl<'tcx> GotocCtx<'tcx> {
+impl GotocCtx<'_> {
     /// Create a label to the virtual call site
     pub fn virtual_call_with_restricted_fn_ptr(
         &mut self,

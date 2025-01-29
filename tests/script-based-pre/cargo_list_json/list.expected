@@ -1,0 +1,52 @@
+{
+    "kani-version":
+    "file-version": "0.1",
+    "standard-harnesses": {
+        "src/standard_harnesses.rs": [
+        "standard_harnesses::example::verify::check_modify",
+        "standard_harnesses::example::verify::check_new"
+        ]
+    },
+    "contract-harnesses": {
+        "src/lib.rs": [
+            "example::verify::check_bar",
+            "example::verify::check_foo_u32",
+            "example::verify::check_foo_u64",
+            "example::verify::check_func"
+        ]
+    },
+    "contracts": [
+    {
+        "function": "example::implementation::bar",
+        "file": "src/lib.rs",
+        "harnesses": [
+        "example::verify::check_bar"
+        ]
+    },
+    {
+        "function": "example::implementation::foo",
+        "file": "src/lib.rs",
+        "harnesses": [
+        "example::verify::check_foo_u32",
+        "example::verify::check_foo_u64"
+        ]
+    },
+    {
+        "function": "example::implementation::func",
+        "file": "src/lib.rs",
+        "harnesses": [
+        "example::verify::check_func"
+        ]
+    },
+    {
+        "function": "example::prep::parse",
+        "file": "src/lib.rs",
+        "harnesses": []
+    }
+    ],
+    "totals": {
+    "standard-harnesses": 2,
+    "contract-harnesses": 4,
+    "functions-under-contract": 4
+    }
+}

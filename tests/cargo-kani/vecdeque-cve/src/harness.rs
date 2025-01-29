@@ -27,8 +27,8 @@ const MAX_CAPACITY: usize = usize::MAX >> 2;
 
 /// This module uses a version of VecDeque that includes the CVE fix.
 mod fixed_proofs {
-    use crate::fixed::VecDeque;
     use crate::MAX_CAPACITY;
+    use crate::fixed::VecDeque;
 
     /// Minimal example that we no longer expect to fail
     #[kani::proof]
@@ -98,8 +98,8 @@ mod fixed_proofs {
 
 mod cve_proofs {
     // Modified version of vec_deque with reserve issue.
-    use crate::cve::VecDeque;
     use crate::MAX_CAPACITY;
+    use crate::cve::VecDeque;
 
     /// Minimal example that we expect to fail
     #[kani::proof]

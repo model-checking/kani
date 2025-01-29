@@ -2,15 +2,15 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use self::DatatypeComponent::*;
 use self::Type::*;
-use super::super::utils::{aggr_tag, max_int, min_int};
 use super::super::MachineModel;
+use super::super::utils::{aggr_tag, max_int, min_int};
 use super::{Expr, SymbolTable};
 use crate::cbmc_string::InternedString;
 use std::collections::BTreeMap;
 use std::fmt::Debug;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
-/// Datatypes
+// Datatypes
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 /// Represents the different types that can be used in a goto-program.
@@ -41,6 +41,10 @@ pub enum Type {
     FlexibleArray { typ: Box<Type> },
     /// `float`
     Float,
+    /// `_Float16`
+    Float16,
+    /// `_Float128`
+    Float128,
     /// `struct x {}`
     IncompleteStruct { tag: InternedString },
     /// `union x {}`
@@ -108,7 +112,7 @@ pub struct Parameter {
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
-/// Implementations
+// Implementations
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 /// Getters
@@ -166,6 +170,8 @@ impl DatatypeComponent {
             | Double
             | FlexibleArray { .. }
             | Float
+            | Float16
+            | Float128
             | Integer
             | Pointer { .. }
             | Signedbv { .. }
@@ -363,6 +369,8 @@ impl Type {
             Double => st.machine_model().double_width,
             Empty => 0,
             FlexibleArray { .. } => 0,
+            Float16 => 16,
+            Float128 => 128,
             Float => st.machine_model().float_width,
             IncompleteStruct { .. } => unreachable!("IncompleteStruct doesn't have a sizeof"),
             IncompleteUnion { .. } => unreachable!("IncompleteUnion doesn't have a sizeof"),
@@ -532,6 +540,22 @@ impl Type {
         }
     }
 
+    pub fn is_float_16(&self) -> bool {
+        let concrete = self.unwrap_typedef();
+        match concrete {
+            Float16 => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_float_128(&self) -> bool {
+        let concrete = self.unwrap_typedef();
+        match concrete {
+            Float128 => true,
+            _ => false,
+        }
+    }
+
     pub fn is_float(&self) -> bool {
         let concrete = self.unwrap_typedef();
         match concrete {
@@ -543,7 +567,7 @@ impl Type {
     pub fn is_floating_point(&self) -> bool {
         let concrete = self.unwrap_typedef();
         match concrete {
-            Double | Float => true,
+            Double | Float | Float16 | Float128 => true,
             _ => false,
         }
     }
@@ -577,6 +601,8 @@ impl Type {
             | CInteger(_)
             | Double
             | Float
+            | Float16
+            | Float128
             | Integer
             | Pointer { .. }
             | Signedbv { .. }
@@ -632,6 +658,8 @@ impl Type {
             | Double
             | Empty
             | Float
+            | Float16
+            | Float128
             | Integer
             | Pointer { .. }
             | Signedbv { .. }
@@ -870,13 +898,9 @@ impl Type {
         } else if concrete_self.is_scalar() && concrete_other.is_scalar() {
             concrete_self == concrete_other
         } else if concrete_self.is_struct_like() && concrete_other.is_scalar() {
-            concrete_self
-                .unwrap_transparent_type(st)
-                .map_or(false, |wrapped| wrapped == *concrete_other)
+            concrete_self.unwrap_transparent_type(st) == Some(concrete_other.clone())
         } else if concrete_self.is_scalar() && concrete_other.is_struct_like() {
-            concrete_other
-                .unwrap_transparent_type(st)
-                .map_or(false, |wrapped| wrapped == *concrete_self)
+            concrete_other.unwrap_transparent_type(st) == Some(concrete_self.clone())
         } else if concrete_self.is_struct_like() && concrete_other.is_struct_like() {
             let self_components = concrete_self.get_non_empty_components(st).unwrap();
             let other_components = concrete_other.get_non_empty_components(st).unwrap();
@@ -918,6 +942,8 @@ impl Type {
             | CInteger(_)
             | Double
             | Float
+            | Float16
+            | Float128
             | Integer
             | Pointer { .. }
             | Signedbv { .. }
@@ -1040,6 +1066,14 @@ impl Type {
 
     pub fn flexible_array_of(self) -> Self {
         FlexibleArray { typ: Box::new(self) }
+    }
+
+    pub fn float16() -> Self {
+        Float16
+    }
+
+    pub fn float128() -> Self {
+        Float128
     }
 
     pub fn float() -> Self {
@@ -1275,6 +1309,10 @@ impl Type {
             Expr::c_true()
         } else if self.is_float() {
             Expr::float_constant(1.0)
+        } else if self.is_float_16() {
+            Expr::float16_constant(1.0)
+        } else if self.is_float_128() {
+            Expr::float128_constant(1.0)
         } else if self.is_double() {
             Expr::double_constant(1.0)
         } else {
@@ -1291,6 +1329,10 @@ impl Type {
             Expr::c_false()
         } else if self.is_float() {
             Expr::float_constant(0.0)
+        } else if self.is_float_16() {
+            Expr::float16_constant(0.0)
+        } else if self.is_float_128() {
+            Expr::float128_constant(0.0)
         } else if self.is_double() {
             Expr::double_constant(0.0)
         } else if self.is_pointer() {
@@ -1309,6 +1351,8 @@ impl Type {
             | CInteger(_)
             | Double
             | Float
+            | Float16
+            | Float128
             | Integer
             | Pointer { .. }
             | Signedbv { .. }
@@ -1413,6 +1457,8 @@ impl Type {
             Type::Empty => "empty".to_string(),
             Type::FlexibleArray { typ } => format!("flexarray_of_{}", typ.to_identifier()),
             Type::Float => "float".to_string(),
+            Type::Float16 => "float16".to_string(),
+            Type::Float128 => "float128".to_string(),
             Type::IncompleteStruct { tag } => tag.to_string(),
             Type::IncompleteUnion { tag } => tag.to_string(),
             Type::InfiniteArray { typ } => {
@@ -1512,6 +1558,8 @@ mod type_tests {
         assert_eq!(type_def.is_unsigned(&mm), src_type.is_unsigned(&mm));
         assert_eq!(type_def.is_scalar(), src_type.is_scalar());
         assert_eq!(type_def.is_float(), src_type.is_float());
+        assert_eq!(type_def.is_float_16(), src_type.is_float_16());
+        assert_eq!(type_def.is_float_128(), src_type.is_float_128());
         assert_eq!(type_def.is_floating_point(), src_type.is_floating_point());
         assert_eq!(type_def.width(), src_type.width());
         assert_eq!(type_def.can_be_lvalue(), src_type.can_be_lvalue());
@@ -1546,10 +1594,10 @@ mod type_tests {
     fn check_typedef_struct_properties() {
         // Create a struct with a random field.
         let struct_name: InternedString = "MyStruct".into();
-        let struct_type = Type::struct_type(
-            struct_name,
-            vec![DatatypeComponent::Field { name: "field".into(), typ: Double }],
-        );
+        let struct_type = Type::struct_type(struct_name, vec![DatatypeComponent::Field {
+            name: "field".into(),
+            typ: Double,
+        }]);
         // Insert a field to the sym table to represent the struct field.
         let mut sym_table = SymbolTable::new(machine_model_test_stub());
         sym_table.ensure(struct_type.type_name().unwrap(), |_, name| {

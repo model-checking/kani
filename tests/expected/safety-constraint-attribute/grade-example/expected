@@ -1,0 +1,11 @@
+Grade::check_percentage_safety.assertion.1\
+         - Status: SUCCESS\
+         - Description: "assertion failed: self.percentage <= 100"
+
+check_grade_safe.assertion.1\
+         - Status: SUCCESS\
+         - Description: "assertion failed: grade.is_safe()"
+
+VERIFICATION:- SUCCESSFUL
+
+Complete - 1 successfully verified harnesses, 0 failures, 1 total.

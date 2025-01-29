@@ -6,10 +6,10 @@ use cbmc::utils::aggr_tag;
 use cbmc::{InternString, InternedString};
 use rustc_ast::ast::Mutability;
 use rustc_index::IndexVec;
-use rustc_middle::ty::layout::LayoutOf;
-use rustc_middle::ty::print::with_no_trimmed_paths;
-use rustc_middle::ty::print::FmtPrinter;
 use rustc_middle::ty::GenericArgsRef;
+use rustc_middle::ty::layout::LayoutOf;
+use rustc_middle::ty::print::FmtPrinter;
+use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::{
     self, AdtDef, Const, CoroutineArgs, CoroutineArgsExt, FloatTy, Instance, IntTy, PolyFnSig, Ty,
     TyCtxt, TyKind, UintTy, VariantDef, VtblEntry,
@@ -18,12 +18,12 @@ use rustc_middle::ty::{List, TypeFoldable};
 use rustc_smir::rustc_internal;
 use rustc_span::def_id::DefId;
 use rustc_target::abi::{
-    Abi::Vector, FieldIdx, FieldsShape, Float, Integer, LayoutS, Primitive, Size, TagEncoding,
-    TyAndLayout, VariantIdx, Variants,
+    BackendRepr::Vector, FieldIdx, FieldsShape, Float, Integer, LayoutData, Primitive, Size,
+    TagEncoding, TyAndLayout, VariantIdx, Variants,
 };
 use stable_mir::abi::{ArgAbi, FnAbi, PassMode};
-use stable_mir::mir::mono::Instance as InstanceStable;
 use stable_mir::mir::Body;
+use stable_mir::mir::mono::Instance as InstanceStable;
 use tracing::{debug, trace, warn};
 
 /// Map the unit type to an empty struct
@@ -91,7 +91,7 @@ impl TypeExt for Type {
 }
 
 /// Function signatures
-impl<'tcx> GotocCtx<'tcx> {
+impl GotocCtx<'_> {
     /// This method prints the details of a GotoC type, for debugging purposes.
     #[allow(unused)]
     pub(crate) fn debug_print_type_recursively(&self, ty: &Type) -> String {
@@ -130,6 +130,8 @@ impl<'tcx> GotocCtx<'tcx> {
                 Type::Empty => todo!(),
                 Type::FlexibleArray { .. } => todo!(),
                 Type::Float => write!(out, "f32")?,
+                Type::Float16 => write!(out, "f16")?,
+                Type::Float128 => write!(out, "f128")?,
                 Type::IncompleteStruct { .. } => todo!(),
                 Type::IncompleteUnion { .. } => todo!(),
                 Type::InfiniteArray { .. } => todo!(),
@@ -227,7 +229,7 @@ impl<'tcx> GotocCtx<'tcx> {
         if let Some(current_fn) = &self.current_fn {
             current_fn.instance().instantiate_mir_and_normalize_erasing_regions(
                 self.tcx,
-                ty::ParamEnv::reveal_all(),
+                ty::TypingEnv::fully_monomorphized(),
                 ty::EarlyBinder::bind(value),
             )
         } else {
@@ -249,7 +251,7 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn is_unsized(&self, t: Ty<'tcx>) -> bool {
         !self
             .monomorphize(t)
-            .is_sized(*self.tcx.at(rustc_span::DUMMY_SP), ty::ParamEnv::reveal_all())
+            .is_sized(*self.tcx.at(rustc_span::DUMMY_SP), ty::TypingEnv::fully_monomorphized())
     }
 
     /// Generates the type for a single field for a dynamic vtable.
@@ -521,7 +523,8 @@ impl<'tcx> GotocCtx<'tcx> {
     ///      c.f. <https://rust-lang.github.io/unsafe-code-guidelines/introduction.html>
     pub fn codegen_ty(&mut self, ty: Ty<'tcx>) -> Type {
         // TODO: Remove all monomorphize calls
-        let normalized = self.tcx.normalize_erasing_regions(ty::ParamEnv::reveal_all(), ty);
+        let normalized =
+            self.tcx.normalize_erasing_regions(ty::TypingEnv::fully_monomorphized(), ty);
         let goto_typ = self.codegen_ty_inner(normalized);
         if let Some(tag) = goto_typ.tag() {
             self.type_map.entry(tag).or_insert_with(|| {
@@ -542,9 +545,8 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::Float(k) => match k {
                 FloatTy::F32 => Type::float(),
                 FloatTy::F64 => Type::double(),
-                // `F16` and `F128` are not yet handled.
-                // Tracked here: <https://github.com/model-checking/kani/issues/3069>
-                FloatTy::F16 | FloatTy::F128 => unimplemented!(),
+                FloatTy::F16 => Type::float16(),
+                FloatTy::F128 => Type::float128(),
             },
             ty::Adt(def, _) if def.repr().simd() => self.codegen_vector(ty),
             ty::Adt(def, subst) => {
@@ -572,15 +574,25 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::Str => Type::unsigned_int(8).flexible_array_of(),
             ty::Ref(_, t, _) | ty::RawPtr(t, _) => self.codegen_ty_ref(*t),
             ty::FnDef(def_id, args) => {
-                let instance =
-                    Instance::resolve(self.tcx, ty::ParamEnv::reveal_all(), *def_id, args)
-                        .unwrap()
-                        .unwrap();
+                let instance = Instance::try_resolve(
+                    self.tcx,
+                    ty::TypingEnv::fully_monomorphized(),
+                    *def_id,
+                    args,
+                )
+                .unwrap()
+                .unwrap();
                 self.codegen_fndef_type(instance)
             }
-            ty::FnPtr(sig) => self.codegen_function_sig(*sig).to_pointer(),
+            ty::FnPtr(sig_tys, hdr) => {
+                let sig = sig_tys.with(*hdr);
+                self.codegen_function_sig(sig).to_pointer()
+            }
             ty::Closure(_, subst) => self.codegen_ty_closure(ty, subst),
             ty::Coroutine(..) => self.codegen_ty_coroutine(ty),
+            ty::CoroutineClosure(..) => unimplemented!(
+                "Kani does not yet support coroutine closures. Please post your example at https://github.com/model-checking/kani/issues/3783"
+            ),
             ty::Never => self.ensure_struct(NEVER_TYPE_EMPTY_STRUCT_NAME, "!", |_, _| vec![]),
             ty::Tuple(ts) => {
                 if ts.is_empty() {
@@ -610,13 +622,12 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::Bound(_, _) | ty::Param(_) => unreachable!("monomorphization bug"),
 
             // type checking remnants which shouldn't be reachable
-            ty::CoroutineWitness(_, _)
-            | ty::CoroutineClosure(_, _)
-            | ty::Infer(_)
-            | ty::Placeholder(_)
-            | ty::Error(_) => {
+            ty::CoroutineWitness(_, _) | ty::Infer(_) | ty::Placeholder(_) | ty::Error(_) => {
                 unreachable!("remnants of type checking")
             }
+            ty::UnsafeBinder(_) => todo!(
+                "Implement support for UnsafeBinder https://github.com/rust-lang/rust/issues/130516"
+            ),
         }
     }
 
@@ -671,7 +682,7 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_alignment_padding(
         &self,
         size: Size,
-        layout: &LayoutS<FieldIdx, VariantIdx>,
+        layout: &LayoutData<FieldIdx, VariantIdx>,
         idx: usize,
     ) -> Option<DatatypeComponent> {
         let align = Size::from_bits(layout.align.abi.bits());
@@ -696,7 +707,7 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_struct_fields(
         &mut self,
         flds: Vec<(String, Ty<'tcx>)>,
-        layout: &LayoutS<FieldIdx, VariantIdx>,
+        layout: &LayoutData<FieldIdx, VariantIdx>,
         initial_offset: Size,
     ) -> Vec<DatatypeComponent> {
         match &layout.fields {
@@ -870,7 +881,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// Generates a struct for a variant of the coroutine.
     ///
-    /// The field `discriminant_field` should be `Some(idx)` when generating the variant for the direct (top-[evel) fields of the coroutine.
+    /// The field `discriminant_field` should be `Some(idx)` when generating the variant for the direct (top-level) fields of the coroutine.
     /// Then the field with the index `idx` will be treated as the discriminant and will be given a special name to work with the rest of the code.
     /// The field `discriminant_field` should be `None` when generating an actual variant of the coroutine because those don't contain the discriminant as a field.
     fn codegen_coroutine_variant_struct(
@@ -976,7 +987,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // Normalize pointee_type to remove projection and opaque types
         trace!(?pointee_type, "codegen_ty_ref");
         let pointee_type =
-            self.tcx.normalize_erasing_regions(ty::ParamEnv::reveal_all(), pointee_type);
+            self.tcx.normalize_erasing_regions(ty::TypingEnv::fully_monomorphized(), pointee_type);
 
         if !self.use_thin_pointer(pointee_type) {
             return self.codegen_fat_ptr(pointee_type);
@@ -1013,7 +1024,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
             // These types were blocking stdlib. Doing the default thing to unblock.
             // https://github.com/model-checking/kani/issues/214
-            ty::FnPtr(_) => self.codegen_ty(pointee_type).to_pointer(),
+            ty::FnPtr(_, _) => self.codegen_ty(pointee_type).to_pointer(),
 
             // These types have no regression tests for them.
             // For soundness, hold off on generating them till we have test-cases.
@@ -1024,6 +1035,9 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::Infer(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
             ty::Param(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
             ty::Placeholder(_) => todo!("{:?} {:?}", pointee_type, pointee_type.kind()),
+            ty::UnsafeBinder(_) => todo!(
+                "Implement support for UnsafeBinder https://github.com/rust-lang/rust/issues/130516"
+            ),
         }
     }
 
@@ -1072,7 +1086,9 @@ impl<'tcx> GotocCtx<'tcx> {
     /// one can only apply this function to a monomorphized signature
     pub fn codegen_function_sig(&mut self, sig: PolyFnSig<'tcx>) -> Type {
         let sig = self.monomorphize(sig);
-        let sig = self.tcx.normalize_erasing_late_bound_regions(ty::ParamEnv::reveal_all(), sig);
+        let sig = self
+            .tcx
+            .normalize_erasing_late_bound_regions(ty::TypingEnv::fully_monomorphized(), sig);
         self.codegen_function_sig_stable(rustc_internal::stable(sig))
     }
 
@@ -1108,7 +1124,7 @@ impl<'tcx> GotocCtx<'tcx> {
         &mut self,
         variant: &VariantDef,
         subst: &'tcx GenericArgsRef<'tcx>,
-        layout: &LayoutS<FieldIdx, VariantIdx>,
+        layout: &LayoutData<FieldIdx, VariantIdx>,
         initial_offset: Size,
     ) -> Vec<DatatypeComponent> {
         let flds: Vec<_> =
@@ -1139,7 +1155,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// Mapping enums to CBMC types is rather complicated. There are a few cases to consider:
     /// 1. When there is only 0 or 1 variant, this is straightforward as the code shows
-    /// 2. When there are more variants, rust might decides to apply the typical encoding which
+    /// 2. When there are more variants, rust might decide to apply the typical encoding which
     ///    regard enums as tagged union, or an optimized form, called niche encoding.
     ///
     /// The direct encoding is straightforward. Enums are just mapped to C as a struct of union of structs.
@@ -1181,12 +1197,17 @@ impl<'tcx> GotocCtx<'tcx> {
         let layout = self.layout_of(ty);
         // variants appearing in mir code
         match &layout.variants {
+            Variants::Empty => {
+                // an empty enum with no variants (its value cannot be instantiated)
+                self.ensure_struct(self.ty_mangled_name(ty), pretty_name, |_, _| vec![])
+            }
             Variants::Single { index } => {
                 self.ensure_struct(self.ty_mangled_name(ty), pretty_name, |gcx, _| {
                     match source_variants.get(*index) {
                         None => {
-                            // an empty enum with no variants (its value cannot be instantiated)
-                            vec![]
+                            unreachable!(
+                                "Enum with no variants must be represented as Variants::Empty"
+                            );
                         }
                         Some(variant) => {
                             // a single enum is pretty much like a struct
@@ -1241,6 +1262,23 @@ impl<'tcx> GotocCtx<'tcx> {
                                     )
                                 }),
                             ));
+                            // Check if any padding is needed for alignment. This is needed for
+                            // https://github.com/model-checking/kani/issues/2857 for example.
+                            // The logic for determining the maximum variant size is taken from:
+                            // https://github.com/rust-lang/rust/blob/e60ebb2f2c1facba87e7971798f3cbdfd309cd23/compiler/rustc_session/src/code_stats.rs#L166
+                            let max_variant_size = variants
+                                .iter()
+                                .map(|l: &LayoutData<FieldIdx, VariantIdx>| l.size)
+                                .max()
+                                .unwrap();
+                            let max_variant_size = std::cmp::max(max_variant_size, discr_offset);
+                            if let Some(padding) = gcx.codegen_alignment_padding(
+                                max_variant_size,
+                                &layout,
+                                fields.len(),
+                            ) {
+                                fields.push(padding);
+                            }
                             fields
                         })
                     }
@@ -1277,7 +1315,7 @@ impl<'tcx> GotocCtx<'tcx> {
         ty: Ty<'tcx>,
         adtdef: &'tcx AdtDef,
         subst: &'tcx GenericArgsRef<'tcx>,
-        variants: &IndexVec<VariantIdx, LayoutS<FieldIdx, VariantIdx>>,
+        variants: &IndexVec<VariantIdx, LayoutData<FieldIdx, VariantIdx>>,
     ) -> Type {
         let non_zst_count = variants.iter().filter(|layout| layout.size.bytes() > 0).count();
         let mangled_name = self.ty_mangled_name(ty);
@@ -1296,7 +1334,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     pub(crate) fn variant_min_offset(
         &self,
-        variants: &IndexVec<VariantIdx, LayoutS<FieldIdx, VariantIdx>>,
+        variants: &IndexVec<VariantIdx, LayoutData<FieldIdx, VariantIdx>>,
     ) -> Option<Size> {
         variants
             .iter()
@@ -1386,7 +1424,7 @@ impl<'tcx> GotocCtx<'tcx> {
         pretty_name: InternedString,
         def: &'tcx AdtDef,
         subst: &'tcx GenericArgsRef<'tcx>,
-        layouts: &IndexVec<VariantIdx, LayoutS<FieldIdx, VariantIdx>>,
+        layouts: &IndexVec<VariantIdx, LayoutData<FieldIdx, VariantIdx>>,
         initial_offset: Size,
     ) -> Vec<DatatypeComponent> {
         def.variants()
@@ -1418,7 +1456,7 @@ impl<'tcx> GotocCtx<'tcx> {
         pretty_name: InternedString,
         case: &VariantDef,
         subst: &'tcx GenericArgsRef<'tcx>,
-        variant: &LayoutS<FieldIdx, VariantIdx>,
+        variant: &LayoutData<FieldIdx, VariantIdx>,
         initial_offset: Size,
     ) -> Type {
         let case_name = format!("{name}::{}", case.name);
@@ -1430,7 +1468,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     fn codegen_vector(&mut self, ty: Ty<'tcx>) -> Type {
-        let layout = &self.layout_of(ty).layout.abi();
+        let layout = &self.layout_of(ty).layout.backend_repr();
         debug! {"handling simd with layout {:?}", layout};
 
         let (element, size) = match layout {
@@ -1550,14 +1588,11 @@ impl<'tcx> GotocCtx<'tcx> {
             return None;
         }
 
-        let mut typ = struct_type;
-        while let ty::Adt(adt_def, adt_args) = typ.kind() {
-            assert_eq!(adt_def.variants().len(), 1, "Expected a single-variant ADT. Found {typ:?}");
-            let fields = &adt_def.variants().get(VariantIdx::from_u32(0)).unwrap().fields;
-            let last_field = fields.last_index().expect("Trait should be the last element.");
-            typ = fields[last_field].ty(self.tcx, adt_args);
-        }
-        if typ.is_trait() { Some(typ) } else { None }
+        let ty = rustc_internal::stable(struct_type);
+        rustc_internal::internal(
+            self.tcx,
+            crate::kani_middle::abi::LayoutOf::new(ty).unsized_tail(),
+        )
     }
 
     /// This function provides an iterator that traverses the data path of a receiver type. I.e.:
@@ -1594,7 +1629,7 @@ impl<'tcx> GotocCtx<'tcx> {
             pub ctx: &'a GotocCtx<'tcx>,
         }
 
-        impl<'tcx, 'a> Iterator for ReceiverIter<'tcx, 'a> {
+        impl<'tcx> Iterator for ReceiverIter<'tcx, '_> {
             type Item = (String, Ty<'tcx>);
 
             fn next(&mut self) -> Option<Self::Item> {
@@ -1724,11 +1759,11 @@ impl<'tcx> GotocCtx<'tcx> {
     /// TODO: Should we use `std_pointee_type` here?
     /// <https://github.com/model-checking/kani/issues/1529>
     pub fn is_fat_pointer(&self, pointer_ty: Ty<'tcx>) -> bool {
-        pointee_type(pointer_ty).map_or(false, |pointee_ty| self.use_fat_pointer(pointee_ty))
+        pointee_type(pointer_ty).is_some_and(|pointee_ty| self.use_fat_pointer(pointee_ty))
     }
 
     /// Check if the mir type already is a vtable fat pointer.
     pub fn is_vtable_fat_pointer(&self, mir_type: Ty<'tcx>) -> bool {
-        pointee_type(mir_type).map_or(false, |pointee_ty| self.use_vtable_fat_pointer(pointee_ty))
+        pointee_type(mir_type).is_some_and(|pointee_ty| self.use_vtable_fat_pointer(pointee_ty))
     }
 }

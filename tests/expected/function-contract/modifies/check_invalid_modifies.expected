@@ -1,7 +1,2 @@
-error: `&str` doesn't implement `kani::Arbitrary`\
-   -->\
-|
-|     T::any()
-|     ^^^^^^^^
-|
+error: `&str` doesn't implement `kani::Arbitrary`.
 = help: All objects in the modifies clause must implement the Arbitrary. The return type must also implement the Arbitrary trait if you are checking recursion or using verified stub.

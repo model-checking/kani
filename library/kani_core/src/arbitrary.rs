@@ -7,10 +7,17 @@
 //! by an unconstrained symbolic value of their size (e.g., `u8`, `u16`, `u32`, etc.).
 //!
 //! TODO: Use this inside kani library so that we dont have to maintain two copies of the same proc macro for arbitrary.
+
+mod pointer;
+mod slice;
+
 #[macro_export]
+#[allow(clippy::crate_in_macro_def)]
 macro_rules! generate_arbitrary {
     ($core:path) => {
         use core_path::marker::{PhantomData, PhantomPinned};
+        use core_path::mem::MaybeUninit;
+        use core_path::ptr::{self, addr_of_mut};
         use $core as core_path;
 
         pub trait Arbitrary
@@ -18,13 +25,7 @@ macro_rules! generate_arbitrary {
             Self: Sized,
         {
             fn any() -> Self;
-            #[cfg(kani_sysroot)]
-            fn any_array<const MAX_ARRAY_LENGTH: usize>() -> [Self; MAX_ARRAY_LENGTH]
-            // the requirement defined in the where clause must appear on the `impl`'s method `any_array`
-            // but also on the corresponding trait's method
-            where
-                [(); core_path::mem::size_of::<[Self; MAX_ARRAY_LENGTH]>()]:,
-            {
+            fn any_array<const MAX_ARRAY_LENGTH: usize>() -> [Self; MAX_ARRAY_LENGTH] {
                 [(); MAX_ARRAY_LENGTH].map(|_| Self::any())
             }
         }
@@ -36,22 +37,10 @@ macro_rules! generate_arbitrary {
                     #[inline(always)]
                     fn any() -> Self {
                         // This size_of call does not use generic_const_exprs feature. It's inside a macro, and Self isn't generic.
-                        unsafe { any_raw_internal::<Self, { core_path::mem::size_of::<Self>() }>() }
+                        unsafe { crate::kani::any_raw_internal::<Self>() }
                     }
-                    // Disable this for standard library since we cannot enable generic constant expr.
-                    #[cfg(kani_sysroot)]
-                    fn any_array<const MAX_ARRAY_LENGTH: usize>() -> [Self; MAX_ARRAY_LENGTH]
-                    where
-                        // `generic_const_exprs` requires all potential errors to be reflected in the signature/header.
-                        // We must repeat the expression in the header, to make sure that if the body can fail the header will also fail.
-                        [(); { core_path::mem::size_of::<[$type; MAX_ARRAY_LENGTH]>() }]:,
-                    {
-                        unsafe {
-                            any_raw_internal::<
-                                [Self; MAX_ARRAY_LENGTH],
-                                { core_path::mem::size_of::<[Self; MAX_ARRAY_LENGTH]>() },
-                            >()
-                        }
+                    fn any_array<const MAX_ARRAY_LENGTH: usize>() -> [Self; MAX_ARRAY_LENGTH] {
+                        unsafe { crate::kani::any_raw_array::<Self, MAX_ARRAY_LENGTH>() }
                     }
                 }
             };
@@ -87,6 +76,15 @@ macro_rules! generate_arbitrary {
         trivial_arbitrary!(i64);
         trivial_arbitrary!(i128);
         trivial_arbitrary!(isize);
+
+        // We do not constrain floating points values per type spec. Users must add assumptions to their
+        // verification code if they want to eliminate NaN, infinite, or subnormal.
+        trivial_arbitrary!(f32);
+        trivial_arbitrary!(f64);
+
+        // Similarly, we do not constraint values for non-standard floating types.
+        trivial_arbitrary!(f16);
+        trivial_arbitrary!(f128);
 
         nonzero_arbitrary!(NonZeroU8, u8);
         nonzero_arbitrary!(NonZeroU16, u16);
@@ -125,6 +123,15 @@ macro_rules! generate_arbitrary {
             }
         }
 
+        impl<T, const N: usize> Arbitrary for [T; N]
+        where
+            T: Arbitrary,
+        {
+            fn any() -> Self {
+                T::any_array::<N>()
+            }
+        }
+
         impl<T> Arbitrary for Option<T>
         where
             T: Arbitrary,
@@ -156,15 +163,119 @@ macro_rules! generate_arbitrary {
             }
         }
 
-        #[cfg(kani_sysroot)]
-        impl<T, const N: usize> Arbitrary for [T; N]
+        impl<T> Arbitrary for MaybeUninit<T>
         where
             T: Arbitrary,
-            [(); core_path::mem::size_of::<[T; N]>()]:,
         {
             fn any() -> Self {
-                T::any_array()
+                if crate::kani::any() { MaybeUninit::new(T::any()) } else { MaybeUninit::uninit() }
+            }
+        }
+
+        arbitrary_tuple!(A);
+        arbitrary_tuple!(A, B);
+        arbitrary_tuple!(A, B, C);
+        arbitrary_tuple!(A, B, C, D);
+        arbitrary_tuple!(A, B, C, D, E);
+        arbitrary_tuple!(A, B, C, D, E, F);
+        arbitrary_tuple!(A, B, C, D, E, F, G);
+        arbitrary_tuple!(A, B, C, D, E, F, G, H);
+        arbitrary_tuple!(A, B, C, D, E, F, G, H, I);
+        arbitrary_tuple!(A, B, C, D, E, F, G, H, I, J);
+        arbitrary_tuple!(A, B, C, D, E, F, G, H, I, J, K);
+        arbitrary_tuple!(A, B, C, D, E, F, G, H, I, J, K, L);
+
+        pub use self::arbitrary_ptr::*;
+        mod arbitrary_ptr {
+            kani_core::ptr_generator!();
+        }
+
+        pub mod slice {
+            kani_core::slice_generator!();
+        }
+
+        mod range_structures {
+            use super::{
+                Arbitrary,
+                core_path::{
+                    mem,
+                    ops::{Bound, Range, RangeFrom, RangeInclusive, RangeTo, RangeToInclusive},
+                },
+            };
+
+            impl<T> Arbitrary for Bound<T>
+            where
+                T: Arbitrary,
+            {
+                fn any() -> Self {
+                    match u8::any() {
+                        0 => Bound::Included(T::any()),
+                        1 => Bound::Excluded(T::any()),
+                        _ => Bound::Unbounded,
+                    }
+                }
+            }
+
+            impl<T> Arbitrary for Range<T>
+            where
+                T: Arbitrary,
+            {
+                fn any() -> Self {
+                    T::any()..T::any()
+                }
+            }
+
+            impl<T> Arbitrary for RangeFrom<T>
+            where
+                T: Arbitrary,
+            {
+                fn any() -> Self {
+                    T::any()..
+                }
+            }
+
+            impl<T> Arbitrary for RangeInclusive<T>
+            where
+                T: Arbitrary,
+            {
+                fn any() -> Self {
+                    T::any()..=T::any()
+                }
+            }
+
+            impl<T> Arbitrary for RangeTo<T>
+            where
+                T: Arbitrary,
+            {
+                fn any() -> Self {
+                    ..T::any()
+                }
+            }
+
+            impl<T> Arbitrary for RangeToInclusive<T>
+            where
+                T: Arbitrary,
+            {
+                fn any() -> Self {
+                    ..=T::any()
+                }
             }
         }
     };
+}
+
+/// This macro implements `kani::Arbitrary` on a tuple whose elements
+/// already implement `kani::Arbitrary` by running `kani::any()` on
+/// each index of the tuple.
+#[allow(clippy::crate_in_macro_def)]
+#[macro_export]
+macro_rules! arbitrary_tuple {
+    ($($type:ident),*) => {
+        impl<$($type : Arbitrary),*>  Arbitrary for ($($type,)*) {
+            #[inline(always)]
+            fn any() -> Self {
+                ($(crate::kani::any::<$type>(),)*)
+            }
+        }
+    }
 }

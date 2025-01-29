@@ -1,4 +1,0 @@
-error: failed to resolve `crate::mod_a::method_a::invalid`: expected module, found function `mod_a::method_a`\
-invalid.rs:\
-|\
-|     #[cfg_attr(kani, kani::stub(crate::mod_a::method_a::invalid, noop))]\

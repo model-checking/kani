@@ -10,19 +10,19 @@
 
 #[repr(simd)]
 #[derive(PartialEq, Eq, PartialOrd, kani::Arbitrary)]
-pub struct i64x2(i64, i64);
+pub struct i64x2([i64; 2]);
 
 #[kani::proof]
 fn check_diff() {
-    let x = i64x2(1, 2);
-    let y = i64x2(3, 4);
+    let x = i64x2([1, 2]);
+    let y = i64x2([3, 4]);
     assert!(x != y);
 }
 
 #[kani::proof]
 fn check_ge() {
     let x: i64x2 = kani::any();
-    kani::assume(x.0 > 0);
-    kani::assume(x.1 > 0);
-    assert!(x > i64x2(0, 0));
+    kani::assume(x.0[0] > 0);
+    kani::assume(x.0[1] > 0);
+    assert!(x > i64x2([0, 0]));
 }

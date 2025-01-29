@@ -1,0 +1,11 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+[package]
+name = "zerocopy"
+version = "0.0.1"
+edition = "2021"
+
+[dependencies]
+zerocopy = "=0.8.4"
+
+[workspace]

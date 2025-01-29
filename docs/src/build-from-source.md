@@ -12,14 +12,13 @@ In general, the following dependencies are required to build Kani from source.
 
 1. Cargo installed via [rustup](https://rustup.rs/)
 2. [CBMC](https://github.com/diffblue/cbmc) (latest release)
-3. [CBMC Viewer](https://github.com/awslabs/aws-viewer-for-cbmc) (latest release)
-4. [Kissat](https://github.com/arminbiere/kissat) (Release 3.1.1)
+3. [Kissat](https://github.com/arminbiere/kissat) (Release 4.0.1)
 
 Kani has been tested in [Ubuntu](#install-dependencies-on-ubuntu) and [macOS](##install-dependencies-on-macos) platforms.
 
 ### Install dependencies on Ubuntu
 
-Support is available for Ubuntu 18.04, 20.04 and 22.04.
+Support is available for Ubuntu 20.04, 22.04, and 24.04.
 The simplest way to install dependencies (especially if you're using a fresh VM)
 is following our CI scripts:
 
@@ -51,11 +50,16 @@ source $HOME/.cargo/env
 
 ## Build and test Kani
 
-Build the Kani package:
+Build the Kani package using:
 
+```
+cargo build-dev -- --release
+```
+to compile with optimizations turned on or using:
 ```
 cargo build-dev
 ```
+to compile in debug/development mode.
 
 Then, optionally, run the regression tests:
 

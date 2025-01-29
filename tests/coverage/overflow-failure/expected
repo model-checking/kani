@@ -1,0 +1,15 @@
+   1|     | // Copyright Kani Contributors\
+   2|     | // SPDX-License-Identifier: Apache-2.0 OR MIT\
+   3|     | \
+   4|     | //! Checks that Kani reports the correct coverage results in the case of an\
+   5|     | //! arithmetic overflow failure (caused by the second call to `cond_reduce`).\
+   6|     | \
+   7|    1| fn cond_reduce(thresh: u32, x: u32) -> u32 {\
+   8|    1|     if x > thresh { x - 50 } else { ```x''' }\
+   9|     | }\
+  10|     | \
+  11|     | #[kani::proof]\
+  12|    1| fn main() {\
+  13|    1|     cond_reduce(60, 70);\
+  14|    1|     cond_reduce(40, 42);\
+  15|     | }\

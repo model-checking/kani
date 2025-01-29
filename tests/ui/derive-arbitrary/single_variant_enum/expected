@@ -1,0 +1,16 @@
+Checking harness check_with_discriminant...
+SUCCESS\
+"assertion failed: disc == 42"
+
+Checking harness check_with_named_args...
+SUCCESS\
+"assertion failed: flag as u8 == 0 || flag as u8 == 1"
+2 of 2 cover properties satisfied
+
+Checking harness check_with_args...
+SUCCESS\
+"assertion failed: c <= char::MAX"
+2 of 2 cover properties satisfied
+
+Checking harness check_simple...
+1 of 1 cover properties satisfied

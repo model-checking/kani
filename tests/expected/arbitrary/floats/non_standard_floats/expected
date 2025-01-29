@@ -1,0 +1,31 @@
+Checking harness check_f128...
+
+Status: SATISFIED\
+Description: "This may be true"\
+in function check_f128
+
+Status: SATISFIED\
+Description: "This may also be true"\
+in function check_f128
+
+Status: SATISFIED\
+Description: "NaN should be valid float"\
+in function check_f128
+
+Checking harness check_f16...
+
+Status: SATISFIED\
+Description: "This may be true"\
+in function check_f16
+
+Status: SATISFIED\
+Description: "This may also be true"\
+in function check_f16
+
+Status: SATISFIED\
+Description: "NaN should be valid float"\
+in function check_f16
+
+VERIFICATION:- SUCCESSFUL
+
+Complete - 2 successfully verified harnesses, 0 failures, 2 total.

@@ -1,1 +1,1 @@
-Failed Checks: attempt to compute unsigned offset with negative distance
+Failed Checks: Expected non-negative distance between pointers

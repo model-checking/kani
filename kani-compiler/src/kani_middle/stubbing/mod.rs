@@ -12,11 +12,11 @@ use tracing::{debug, trace};
 use kani_metadata::HarnessMetadata;
 use rustc_hir::def_id::DefId;
 use rustc_middle::mir::Const;
-use rustc_middle::ty::{self, EarlyBinder, ParamEnv, TyCtxt, TypeFoldable};
+use rustc_middle::ty::{self, EarlyBinder, TyCtxt, TypeFoldable, TypingEnv};
 use rustc_smir::rustc_internal;
+use stable_mir::mir::ConstOperand;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::visit::{Location, MirVisitor};
-use stable_mir::mir::ConstOperand;
 use stable_mir::ty::{FnDef, RigidTy, TyKind};
 use stable_mir::{CrateDef, CrateItem};
 
@@ -35,24 +35,6 @@ pub fn harness_stub_map(
         update_stub_mapping(tcx, def_id.expect_local(), stubs, &mut stub_pairs);
     }
     stub_pairs
-}
-
-/// Retrieve the index of the host parameter if old definition has one, but not the new definition.
-///
-/// This is to allow constant functions to be stubbed by non-constant functions when the
-/// `effect` feature is on.
-///
-/// Note that the opposite is not supported today, but users should be able to change their stubs.
-///
-/// Note that this has no effect at runtime.
-pub fn contract_host_param(tcx: TyCtxt, old_def: FnDef, new_def: FnDef) -> Option<usize> {
-    let old_generics = tcx.generics_of(rustc_internal::internal(tcx, old_def.def_id()));
-    let new_generics = tcx.generics_of(rustc_internal::internal(tcx, new_def.def_id()));
-    if old_generics.host_effect_index.is_some() && new_generics.host_effect_index.is_none() {
-        old_generics.host_effect_index
-    } else {
-        None
-    }
 }
 
 /// Checks whether the stub is compatible with the original function/method: do
@@ -81,15 +63,12 @@ pub fn check_compatibility(tcx: TyCtxt, old_def: FnDef, new_def: FnDef) -> Resul
     let new_def_id = rustc_internal::internal(tcx, new_def.def_id());
     let old_ty = rustc_internal::stable(tcx.type_of(old_def_id)).value;
     let new_ty = rustc_internal::stable(tcx.type_of(new_def_id)).value;
-    let TyKind::RigidTy(RigidTy::FnDef(_, mut old_args)) = old_ty.kind() else {
+    let TyKind::RigidTy(RigidTy::FnDef(_, old_args)) = old_ty.kind() else {
         unreachable!("Expected function, but found {old_ty}")
     };
     let TyKind::RigidTy(RigidTy::FnDef(_, new_args)) = new_ty.kind() else {
         unreachable!("Expected function, but found {new_ty}")
     };
-    if let Some(idx) = contract_host_param(tcx, old_def, new_def) {
-        old_args.0.remove(idx);
-    }
 
     // TODO: We should check for the parameter type too or replacement will fail.
     if old_args.0.len() != new_args.0.len() {
@@ -173,7 +152,7 @@ impl<'tcx> StubConstChecker<'tcx> {
         trace!(instance=?self.instance, ?value, "monomorphize");
         self.instance.instantiate_mir_and_normalize_erasing_regions(
             self.tcx,
-            ParamEnv::reveal_all(),
+            TypingEnv::fully_monomorphized(),
             EarlyBinder::bind(value),
         )
     }
@@ -183,7 +162,7 @@ impl<'tcx> StubConstChecker<'tcx> {
     }
 }
 
-impl<'tcx> MirVisitor for StubConstChecker<'tcx> {
+impl MirVisitor for StubConstChecker<'_> {
     /// Collect constants that are represented as static variables.
     fn visit_const_operand(&mut self, constant: &ConstOperand, location: Location) {
         let const_ = self.monomorphize(rustc_internal::internal(self.tcx, &constant.const_));
@@ -192,7 +171,11 @@ impl<'tcx> MirVisitor for StubConstChecker<'tcx> {
             Const::Val(..) | Const::Ty(..) => {}
             Const::Unevaluated(un_eval, _) => {
                 // Thread local fall into this category.
-                if self.tcx.const_eval_resolve(ParamEnv::reveal_all(), un_eval, DUMMY_SP).is_err() {
+                if self
+                    .tcx
+                    .const_eval_resolve(TypingEnv::fully_monomorphized(), un_eval, DUMMY_SP)
+                    .is_err()
+                {
                     // The `monomorphize` call should have evaluated that constant already.
                     let tcx = self.tcx;
                     let mono_const = &un_eval;

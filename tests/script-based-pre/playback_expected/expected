@@ -1,0 +1,8 @@
+[TEST] Generate test for playback_contract.rs...
+Verification failed for - check_modify_slice
+Result for playback_contract.rs: test result: FAILED. 1 passed; 1 failed
+
+[TEST] Generate test for playback_stubs.rs...
+Verification failed for - check_lt_0
+Verification failed for - check_bad_stub
+Result for playback_stubs.rs: test result: FAILED. 1 passed; 1 failed

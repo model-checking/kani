@@ -1,0 +1,1 @@
+cannot assign to `*_x`, as `Fn` closures cannot mutate their captured variables

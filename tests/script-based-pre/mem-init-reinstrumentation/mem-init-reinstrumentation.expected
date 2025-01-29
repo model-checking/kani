@@ -1,0 +1,1 @@
+success: no pointer checks are detected in initialized memory instrumentaiton

@@ -1,0 +1,35 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+#
+# This workflow will try to update the verify std branch.
+
+name: Update "features/verify-rust-std"
+on:
+  schedule:
+    - cron: "30 3 * * *" # Run this every day at 03:30 UTC
+  workflow_dispatch:     # Allow manual dispatching.
+
+env:
+  RUST_BACKTRACE: 1
+
+jobs:
+  # First ensure the HEAD is compatible with the `verify-rust-std` repository.
+  verify-std:
+    name: Verify Std
+    permissions: { }
+    uses: ./.github/workflows/verify-std-check.yml
+
+  # Push changes to the features branch.
+  update-branch:
+    needs: verify-std
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Kani
+        uses: actions/checkout@v4
+
+      - name: Update feature branch
+        run: |
+          git push origin HEAD:features/verify-rust-std
+

@@ -1,0 +1,10 @@
+Source-based code coverage results:
+
+src/pair.rs (pair::Pair::new)\
+ * 6:5 - 8:6 COVERED
+
+src/pair.rs (pair::Pair::sum)\
+ * 9:5 - 11:6 COVERED
+
+src/pair.rs (pair::kani_tests::test_one_plus_two)\
+ * 29:5 - 32:6 COVERED

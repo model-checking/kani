@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use std::path::Path;
 use tracing::{debug, trace};
 
@@ -96,6 +96,7 @@ pub fn merge_kani_metadata(files: Vec<KaniMetadata>) -> KaniMetadata {
         proof_harnesses: vec![],
         unsupported_features: vec![],
         test_harnesses: vec![],
+        contracted_functions: vec![],
     };
     for md in files {
         // Note that we're taking ownership of the original vec, and so we can move the data into the new data structure.
@@ -104,6 +105,7 @@ pub fn merge_kani_metadata(files: Vec<KaniMetadata>) -> KaniMetadata {
         // https://github.com/model-checking/kani/issues/1758
         result.unsupported_features.extend(md.unsupported_features);
         result.test_harnesses.extend(md.test_harnesses);
+        result.contracted_functions.extend(md.contracted_functions);
     }
     result
 }
@@ -200,7 +202,7 @@ fn find_proof_harnesses<'a>(
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use kani_metadata::HarnessAttributes;
+    use kani_metadata::{HarnessAttributes, HarnessKind};
     use std::path::PathBuf;
 
     pub fn mock_proof_harness(
@@ -209,6 +211,8 @@ pub mod tests {
         krate: Option<&str>,
         model_file: Option<PathBuf>,
     ) -> HarnessMetadata {
+        let mut attributes = HarnessAttributes::new(HarnessKind::Proof);
+        attributes.unwind_value = unwind_value;
         HarnessMetadata {
             pretty_name: name.into(),
             mangled_name: name.into(),
@@ -216,9 +220,10 @@ pub mod tests {
             original_file: "<unknown>".into(),
             original_start_line: 0,
             original_end_line: 0,
-            attributes: HarnessAttributes { unwind_value, proof: true, ..Default::default() },
+            attributes,
             goto_file: model_file,
             contract: Default::default(),
+            has_loop_contracts: false,
         }
     }
 
@@ -236,7 +241,7 @@ pub mod tests {
             find_proof_harnesses(
                 &BTreeSet::from([&"check_three".to_string()]),
                 &ref_harnesses,
-                false
+                false,
             )
             .len(),
             1
@@ -245,7 +250,7 @@ pub mod tests {
             find_proof_harnesses(
                 &BTreeSet::from([&"check_two".to_string()]),
                 &ref_harnesses,
-                false
+                false,
             )
             .first()
             .unwrap()
@@ -256,7 +261,7 @@ pub mod tests {
             find_proof_harnesses(
                 &BTreeSet::from([&"check_one".to_string()]),
                 &ref_harnesses,
-                false
+                false,
             )
             .first()
             .unwrap()
@@ -280,7 +285,7 @@ pub mod tests {
             find_proof_harnesses(
                 &BTreeSet::from([&"check_three".to_string()]),
                 &ref_harnesses,
-                true
+                true,
             )
             .is_empty()
         );
@@ -299,7 +304,7 @@ pub mod tests {
             find_proof_harnesses(
                 &BTreeSet::from([&"module::not_check_three".to_string()]),
                 &ref_harnesses,
-                true
+                true,
             )
             .first()
             .unwrap()

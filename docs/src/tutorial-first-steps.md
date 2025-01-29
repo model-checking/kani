@@ -53,40 +53,11 @@ Kani has immediately found a failure.
 Notably, we haven't had to write explicit assertions in our proof harness: by default, Kani will find a host of erroneous conditions which include a reachable call to `panic` or a failing `assert`.
 If Kani had run successfully on this harness, this amounts to a mathematical proof that there is no input that could cause a panic in `estimate_size`.
 
-### Getting a trace
+> By default, Kani only reports failures, not how the failure happened.
+> In this example, it would be nice to get a concrete example of a value of `x` that triggers the failure.
+> Kani offers an (experimental) [concrete playback](reference/experimental/concrete-playback.md) feature that serves this purpose.
+> As an exercise, try applying concrete playback to this example and see what Kani outputs.
 
-By default, Kani only reports failures, not how the failure happened.
-In this running example, it seems obvious what we're interested in (the value of `x` that caused the failure) because we just have one unknown input at the start (similar to the property test), but that's kind of a special case.
-In general, understanding how a failure happened requires exploring a full (potentially large) _execution trace_.
-
-An execution trace is a record of exactly how a failure can occur.
-Nondeterminism (like a call to `kani::any()`, which could return any value) can appear in the middle of its execution.
-A trace is a record of exactly how execution proceeded, including concrete choices (like `1023`) for all of these nondeterministic values.
-
-To get a trace for a failing check in Kani, run:
-
-```
-cargo kani --visualize --enable-unstable
-```
-
-This command runs Kani and generates an HTML report that includes a trace.
-Open the report with your preferred browser.
-Under the "Errors" heading, click on the "trace" link to find the trace for this failure.
-
-From this trace report, we can filter through it to find relevant lines.
-A good rule of thumb is to search for either `kani::any()` or assignments to variables you're interested in.
-At present time, an unfortunate amount of generated code is present in the trace.
-This code isn't a part of the Rust code you wrote, but is an internal implementation detail of how Kani runs proof harnesses.
-Still, searching for `kani::any()` quickly finds us these lines:
-
-```
-let x: u32 = kani::any();
-x = 1023u
-```
-
-Here we're seeing the line of code and the value assigned in this particular trace.
-Like property testing, this is just one **example** of a failure.
-To proceed, we recommend fixing the code to avoid this particular issue and then re-running Kani to see if you find more issues.
 
 ### Exercise: Try other failures
 
@@ -193,25 +164,6 @@ Here's a revised example of the proof harness, one that now succeeds:
 {{#include tutorial/first-steps-v2/src/lib.rs:kani}}
 ```
 
-But now we must wonder if we've really fully tested our function.
-What if we revise the function, but forget to update the assumption in our proof harness to cover the new range of inputs?
-
-Fortunately, Kani is able to report a coverage metric for each proof harness.
-Try running:
-
-```
-cargo kani --visualize --harness verify_success
-```
-
-The beginning of the report includes coverage information.
-Clicking through to the file will show fully-covered lines in green.
-Lines not covered by our proof harness will show in red.
-
-Try changing the assumption in the proof harness to `x < 2048`.
-Now the harness won't be testing all possible cases.
-Rerun `cargo kani --visualize`.
-Look at the report: you'll see we no longer have 100% coverage of the function.
-
 ## Summary
 
 In this section:
@@ -219,6 +171,4 @@ In this section:
 1. We saw Kani find panics, assertion failures, and even some other failures like unsafe dereferencing of null pointers.
 2. We saw Kani find failures that testing could not easily find.
 3. We saw how to write a proof harness and use `kani::any()`.
-4. We saw how to get a failing **trace** using `kani --visualize`
-5. We saw how proof harnesses are used to set up preconditions with `kani::assume()`.
-6. We saw how to obtain **coverage** metrics and use them to ensure our proofs are covering as much as they should be.
+4. We saw how proof harnesses are used to set up preconditions with `kani::assume()`.

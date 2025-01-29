@@ -43,6 +43,8 @@ No further explanation is needed.
 
 ## Software Design
 
+**We recommend that you leave the Software Design section empty for the first version of your RFC**.
+
 This is the beginning of the technical portion of the RFC.
 From now on, your main audience is Kani developers, so it's OK to assume readers know Kani architecture.
 
@@ -52,8 +54,6 @@ Please provide a high level description your design.
 - Will there be changes to the components interface?
 - Any changes to how these components communicate?
 - What corner cases do you anticipate?
-
-**We recommend you to leave this empty for the first version of your RFC**.
 
 ## Rationale and alternatives
 

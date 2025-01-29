@@ -5,9 +5,9 @@
 
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::Location;
-use stable_mir::mir::mono::Instance;
-use stable_mir::mir::Body;
 use stable_mir::CrateDef;
+use stable_mir::mir::Body;
+use stable_mir::mir::mono::Instance;
 use std::cell::RefCell;
 use std::panic;
 use std::sync::LazyLock;
@@ -25,7 +25,7 @@ pub fn init() {
 
 /// Custom panic hook to add more information when panic occurs during goto-c codegen.
 #[allow(clippy::type_complexity)]
-static DEFAULT_HOOK: LazyLock<Box<dyn Fn(&panic::PanicInfo<'_>) + Sync + Send + 'static>> =
+static DEFAULT_HOOK: LazyLock<Box<dyn Fn(&panic::PanicHookInfo<'_>) + Sync + Send + 'static>> =
     LazyLock::new(|| {
         let hook = panic::take_hook();
         panic::set_hook(Box::new(|info| {

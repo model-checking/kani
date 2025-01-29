@@ -3,7 +3,7 @@
 
 // Calling realloc with a size of zero fails
 
-use std::alloc::{alloc, realloc, Layout};
+use std::alloc::{Layout, alloc, realloc};
 
 #[kani::proof]
 fn main() {

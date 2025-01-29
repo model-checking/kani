@@ -1,0 +1,4 @@
+check_misaligned_ptr_cast_fail.safety_check\
+Status: FAILURE\
+Description: "misaligned pointer to reference cast: address must be a multiple of its type's alignment"\
+in function check_misaligned_ptr_cast_fail

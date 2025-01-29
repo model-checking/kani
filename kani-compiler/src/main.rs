@@ -13,6 +13,10 @@
 #![feature(more_qualified_paths)]
 #![feature(iter_intersperse)]
 #![feature(let_chains)]
+#![feature(f128)]
+#![feature(f16)]
+#![feature(non_exhaustive_omitted_patterns_lint)]
+#![feature(try_blocks)]
 extern crate rustc_abi;
 extern crate rustc_ast;
 extern crate rustc_ast_pretty;
@@ -21,10 +25,12 @@ extern crate rustc_data_structures;
 extern crate rustc_driver;
 extern crate rustc_errors;
 extern crate rustc_hir;
+extern crate rustc_hir_pretty;
 extern crate rustc_index;
 extern crate rustc_interface;
 extern crate rustc_metadata;
 extern crate rustc_middle;
+extern crate rustc_mir_dataflow;
 extern crate rustc_session;
 extern crate rustc_smir;
 extern crate rustc_span;
@@ -34,8 +40,11 @@ extern crate stable_mir;
 extern crate tempfile;
 
 mod args;
+#[cfg(feature = "llbc")]
+mod codegen_aeneas_llbc;
 #[cfg(feature = "cprover")]
 mod codegen_cprover_gotoc;
+mod intrinsics;
 mod kani_compiler;
 mod kani_middle;
 mod kani_queries;
@@ -43,20 +52,19 @@ mod session;
 
 use rustc_driver::{RunCompiler, TimePassesCallbacks};
 use std::env;
-use std::process::ExitCode;
 
 /// Main function. Configure arguments and run the compiler.
-fn main() -> ExitCode {
+fn main() {
     session::init_panic_hook();
     let (kani_compiler, rustc_args) = is_kani_compiler(env::args().collect());
 
     // Configure and run compiler.
     if kani_compiler {
-        kani_compiler::run(rustc_args)
+        kani_compiler::run(rustc_args);
     } else {
         let mut callbacks = TimePassesCallbacks::default();
         let compiler = RunCompiler::new(&rustc_args, &mut callbacks);
-        if compiler.run().is_err() { ExitCode::FAILURE } else { ExitCode::SUCCESS }
+        compiler.run();
     }
 }
 

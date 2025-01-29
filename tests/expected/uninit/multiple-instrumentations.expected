@@ -1,0 +1,20 @@
+multiple_instrumentations_different_vars.assertion.3\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u128`"
+
+multiple_instrumentations_different_vars.assertion.4\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u64`"
+
+multiple_instrumentations.assertion.2\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u128`"
+
+multiple_instrumentations.assertion.3\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u128`"
+
+Summary:
+Verification failed for - multiple_instrumentations_different_vars
+Verification failed for - multiple_instrumentations
+Complete - 0 successfully verified harnesses, 2 failures, 2 total.

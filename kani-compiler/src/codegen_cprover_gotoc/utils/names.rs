@@ -10,7 +10,7 @@ use rustc_middle::mir::mono::CodegenUnitNameBuilder;
 use rustc_middle::ty::TyCtxt;
 use stable_mir::mir::Local;
 
-impl<'tcx> GotocCtx<'tcx> {
+impl GotocCtx<'_> {
     /// The full crate name including versioning info
     pub fn full_crate_name(&self) -> &str {
         &self.full_crate_name
@@ -43,10 +43,6 @@ impl<'tcx> GotocCtx<'tcx> {
         let base_name = format!("spread{l:?}");
         let name = format!("{fname}::1::{base_name}");
         (name, base_name)
-    }
-
-    pub fn initializer_fn_name(var_name: &str) -> String {
-        format!("{var_name}_init")
     }
 
     /// The name for a tuple field

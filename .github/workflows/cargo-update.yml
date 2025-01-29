@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout Kani
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
@@ -37,7 +37,7 @@ jobs:
             git diff
           fi
       - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v6
+        uses: peter-evans/create-pull-request@v7
         with:
           commit-message: Upgrade cargo dependencies to ${{ env.today }}
           branch: cargo-update-${{ env.today }}

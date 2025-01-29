@@ -6,7 +6,7 @@
 // Original copyright tokio contributors.
 // origin: tokio/tests/support
 
-use parking_lot::{const_mutex, Mutex};
+use parking_lot::{Mutex, const_mutex};
 use std::panic;
 use std::sync::Arc;
 

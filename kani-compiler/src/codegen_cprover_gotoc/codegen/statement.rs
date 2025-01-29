@@ -1,25 +1,26 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-use super::typ::TypeExt;
 use super::typ::FN_RETURN_VOID_VAR_NAME;
-use super::{bb_label, PropertyClass};
+use super::typ::TypeExt;
+use super::{PropertyClass, bb_label};
+use crate::codegen_cprover_gotoc::codegen::function::rustc_smir::region_from_coverage_opaque;
 use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
 use cbmc::goto_program::{Expr, Location, Stmt, Type};
 use rustc_middle::ty::layout::LayoutOf;
-use rustc_middle::ty::{List, ParamEnv};
+use rustc_middle::ty::{List, TypingEnv};
 use rustc_smir::rustc_internal;
 use rustc_target::abi::{FieldsShape, Primitive, TagEncoding, Variants};
 use stable_mir::abi::{ArgAbi, FnAbi, PassMode};
 use stable_mir::mir::mono::{Instance, InstanceKind};
 use stable_mir::mir::{
     AssertMessage, BasicBlockIdx, CopyNonOverlapping, NonDivergingIntrinsic, Operand, Place,
-    Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind, RETURN_LOCAL,
+    RETURN_LOCAL, Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind,
 };
 use stable_mir::ty::{Abi, RigidTy, Span, Ty, TyKind, VariantIdx};
 use tracing::{debug, debug_span, trace};
 
-impl<'tcx> GotocCtx<'tcx> {
+impl GotocCtx<'_> {
     /// Generate Goto-C for MIR [Statement]s.
     /// This does not cover all possible "statements" because MIR distinguishes between ordinary
     /// statements and [Terminator]s, which can exclusively appear at the end of a basic block.
@@ -75,18 +76,68 @@ impl<'tcx> GotocCtx<'tcx> {
                 .goto_expr;
                 self.codegen_set_discriminant(dest_ty, dest_expr, *variant_index, location)
             }
+            // StorageLive and StorageDead are modelled via CBMC's internal means of detecting
+            // accesses to dangling pointers, which uses demonic non-determinism. That is, CBMC
+            // non-deterministically chooses a single object's address to be tracked in a
+            // pointer-typed global instrumentation variable __CPROVER_dead_object. Any dereference
+            // entails a check that the pointer being dereferenced is not equal to the pointer held
+            // in __CPROVER_dead_object. We use this to bridge the difference between Rust and MIR
+            // semantics as follows:
+            //
+            // 1. (At the time of writing) MIR declares all function-local variables at function
+            //    scope, irrespective of the scope/block that Rust code originally used.
+            // 2. In MIR, StorageLive and StorageDead markers are inserted at the beginning and end
+            //    of the Rust block to record the Rust-level lifetime of the object.
+            // 3. We translate MIR declarations into GOTO declarations, implying that we will have
+            //    a single object per function for a local variable, even when Rust had a variable
+            //    declared in a sub-scope of the function where said scope was entered multiple
+            //    times (e.g., a loop body).
+            // 4. To enable detection of use of dangling pointers, we now use
+            //    __CPROVER_dead_object, unless the address of the local object is never taken
+            //    (implying that there cannot be a use of a dangling pointer with respect to said
+            //    object). We update __CPROVER_dead_object as follows:
+            //    * StorageLive is set to NULL when __CPROVER_dead_object pointed to the object
+            //    (re-)entering scope, or else is left unchanged.
+            //    * StorageDead non-deterministically updates (or leaves unchanged)
+            //    __CPROVER_dead_object to point to the object going out of scope. (This is the
+            //    same update approach as used within CBMC.)
+            //
+            // This approach will also work when there are multiple occurrences of StorageLive (or
+            // StorageDead) on a path, or across control-flow branches, and even when StorageDead
+            // occurs without a preceding StorageLive.
             StatementKind::StorageLive(var_id) => {
-                if self.queries.args().ignore_storage_markers {
+                if !self.current_fn().is_address_taken_local(*var_id) {
                     Stmt::skip(location)
                 } else {
-                    Stmt::decl(self.codegen_local(*var_id, location), None, location)
+                    let global_dead_object = cbmc::global_dead_object(&self.symbol_table);
+                    Stmt::assign(
+                        global_dead_object.clone(),
+                        global_dead_object
+                            .clone()
+                            .eq(self
+                                .codegen_local(*var_id, location)
+                                .address_of()
+                                .cast_to(global_dead_object.typ().clone()))
+                            .ternary(global_dead_object.typ().null(), global_dead_object),
+                        location,
+                    )
                 }
             }
             StatementKind::StorageDead(var_id) => {
-                if self.queries.args().ignore_storage_markers {
+                if !self.current_fn().is_address_taken_local(*var_id) {
                     Stmt::skip(location)
                 } else {
-                    Stmt::dead(self.codegen_local(*var_id, location), location)
+                    let global_dead_object = cbmc::global_dead_object(&self.symbol_table);
+                    Stmt::assign(
+                        global_dead_object.clone(),
+                        Type::bool().nondet().ternary(
+                            self.codegen_local(*var_id, location)
+                                .address_of()
+                                .cast_to(global_dead_object.typ().clone()),
+                            global_dead_object,
+                        ),
+                        location,
+                    )
                 }
             }
             StatementKind::Intrinsic(NonDivergingIntrinsic::CopyNonOverlapping(
@@ -108,12 +159,28 @@ impl<'tcx> GotocCtx<'tcx> {
                     location,
                 )
             }
+            StatementKind::Coverage(coverage_opaque) => {
+                let function_name = self.current_fn().readable_name();
+                let instance = self.current_fn().instance_stable();
+                let counter_data = format!("{coverage_opaque:?} ${function_name}$");
+                let maybe_source_region =
+                    region_from_coverage_opaque(self.tcx, &coverage_opaque, instance);
+                if let Some((source_region, file_name)) = maybe_source_region {
+                    let coverage_stmt =
+                        self.codegen_coverage(&counter_data, stmt.span, source_region, &file_name);
+                    // TODO: Avoid single-statement blocks when conversion of
+                    // standalone statements to the irep format is fixed.
+                    // More details in <https://github.com/model-checking/kani/issues/3012>
+                    Stmt::block(vec![coverage_stmt], location)
+                } else {
+                    Stmt::skip(location)
+                }
+            }
             StatementKind::PlaceMention(_) => todo!(),
             StatementKind::FakeRead(..)
             | StatementKind::Retag(_, _)
             | StatementKind::AscribeUserType { .. }
             | StatementKind::Nop
-            | StatementKind::Coverage { .. }
             | StatementKind::ConstEvalCounter => Stmt::skip(location),
         }
         .with_location(location)
@@ -238,7 +305,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let variant_index_internal = rustc_internal::internal(self.tcx, variant_index);
         let layout = self.layout_of(dest_ty_internal);
         match &layout.variants {
-            Variants::Single { .. } => Stmt::skip(location),
+            Variants::Empty | Variants::Single { .. } => Stmt::skip(location),
             Variants::Multiple { tag, tag_encoding, .. } => match tag_encoding {
                 TagEncoding::Direct => {
                     let discr = dest_ty_internal
@@ -317,9 +384,8 @@ impl<'tcx> GotocCtx<'tcx> {
     fn codegen_ret_unit(&mut self, loc: Location) -> Stmt {
         let is_file_local = false;
         let ty = self.codegen_ty_unit();
-        let var =
-            self.ensure_global_var(FN_RETURN_VOID_VAR_NAME, is_file_local, ty, loc, |_, _| None);
-        Stmt::ret(Some(var), loc)
+        let var = self.ensure_global_var(FN_RETURN_VOID_VAR_NAME, is_file_local, ty, loc);
+        Stmt::ret(Some(var.to_expr()), loc)
     }
 
     /// Generates Goto-C for MIR [TerminatorKind::Drop] calls. We only handle code _after_ Rust's "drop elaboration"
@@ -425,6 +491,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 .branches()
                 .map(|(c, bb)| {
                     Expr::int_constant(c, switch_ty.clone())
+                        .with_location(loc)
                         .switch_case(Stmt::goto(bb_label(bb), loc))
                 })
                 .collect();
@@ -596,7 +663,8 @@ impl<'tcx> GotocCtx<'tcx> {
                 let fn_ptr_abi = rustc_internal::stable(
                     self.tcx
                         .fn_abi_of_fn_ptr(
-                            ParamEnv::reveal_all().and((fn_sig_internal, &List::empty())),
+                            TypingEnv::fully_monomorphized()
+                                .as_query_input((fn_sig_internal, &List::empty())),
                         )
                         .unwrap(),
                 );

@@ -16,28 +16,31 @@
 //! this structure as input.
 use super::current_fn::CurrentFnCtx;
 use super::vtable_ctx::VtableCtx;
-use crate::codegen_cprover_gotoc::overrides::{fn_hooks, GotocHooks};
-use crate::codegen_cprover_gotoc::utils::full_crate_name;
 use crate::codegen_cprover_gotoc::UnsupportedConstructs;
+use crate::codegen_cprover_gotoc::overrides::{GotocHooks, fn_hooks};
+use crate::codegen_cprover_gotoc::utils::full_crate_name;
 use crate::kani_middle::transform::BodyTransformation;
 use crate::kani_queries::QueryDb;
-use cbmc::goto_program::{DatatypeComponent, Expr, Location, Stmt, Symbol, SymbolTable, Type};
+use cbmc::goto_program::{
+    DatatypeComponent, Expr, Location, Stmt, Symbol, SymbolTable, SymbolValues, Type,
+};
 use cbmc::utils::aggr_tag;
 use cbmc::{InternedString, MachineModel};
 use rustc_data_structures::fx::FxHashMap;
 use rustc_middle::span_bug;
 use rustc_middle::ty::layout::{
-    FnAbiError, FnAbiOfHelpers, FnAbiRequest, HasParamEnv, HasTyCtxt, LayoutError, LayoutOfHelpers,
-    TyAndLayout,
+    FnAbiError, FnAbiOfHelpers, FnAbiRequest, HasTyCtxt, HasTypingEnv, LayoutError,
+    LayoutOfHelpers, TyAndLayout,
 };
 use rustc_middle::ty::{self, Ty, TyCtxt};
-use rustc_span::source_map::respan;
 use rustc_span::Span;
+use rustc_span::source_map::respan;
 use rustc_target::abi::call::FnAbi;
 use rustc_target::abi::{HasDataLayout, TargetDataLayout};
-use stable_mir::mir::mono::Instance;
 use stable_mir::mir::Body;
+use stable_mir::mir::mono::Instance;
 use stable_mir::ty::Allocation;
+use std::fmt::Debug;
 
 pub struct GotocCtx<'tcx> {
     /// the typing context
@@ -71,6 +74,8 @@ pub struct GotocCtx<'tcx> {
     pub concurrent_constructs: UnsupportedConstructs,
     /// The body transformation agent.
     pub transformer: BodyTransformation,
+    /// If there exist some usage of loop contracts int context.
+    pub has_loop_contracts: bool,
 }
 
 /// Constructor
@@ -100,6 +105,7 @@ impl<'tcx> GotocCtx<'tcx> {
             unsupported_constructs: FxHashMap::default(),
             concurrent_constructs: FxHashMap::default(),
             transformer,
+            has_loop_contracts: false,
         }
     }
 }
@@ -116,7 +122,7 @@ impl<'tcx> GotocCtx<'tcx> {
 }
 
 /// Generate variables
-impl<'tcx> GotocCtx<'tcx> {
+impl GotocCtx<'_> {
     /// Declare a local variable.
     /// Handles the bookkeeping of:
     /// - creating the symbol
@@ -134,17 +140,6 @@ impl<'tcx> GotocCtx<'tcx> {
         self.symbol_table.insert(sym.clone());
         self.current_fn_mut().push_onto_block(Stmt::decl(sym.to_expr(), value, l));
         sym
-    }
-
-    // Generate a Symbol Expression representing a function variable from the MIR
-    pub fn gen_function_local_variable(
-        &mut self,
-        c: u64,
-        fname: &str,
-        t: Type,
-        loc: Location,
-    ) -> Symbol {
-        self.gen_stack_variable(c, fname, "var", t, loc)
     }
 
     /// Given a counter `c` a function name `fname, and a prefix `prefix`, generates a new function local variable
@@ -200,40 +195,63 @@ impl<'tcx> GotocCtx<'tcx> {
         self.symbol_table.lookup(name).unwrap()
     }
 
+    /// Ensures that a global variable `name` appears in the Symbol table and is initialized.
+    ///
+    /// This will add the symbol to the Symbol Table if not inserted yet.
+    /// This will register the initialization function if not initialized yet.
+    ///   - This case can happen for static variables, since they are declared first.
+    pub fn ensure_global_var_init<T, F>(
+        &mut self,
+        name: T,
+        is_file_local: bool,
+        is_const: bool,
+        t: Type,
+        loc: Location,
+        init: F,
+    ) -> &mut Symbol
+    where
+        T: Into<InternedString> + Clone + Debug,
+        F: Fn(&mut GotocCtx, Symbol) -> Expr,
+    {
+        let sym = self.ensure_global_var(name.clone(), is_file_local, t, loc);
+        sym.set_is_static_const(is_const);
+        if matches!(sym.value, SymbolValues::None) {
+            // Clone sym so we can use `&mut self`.
+            let sym = sym.clone();
+            let init_expr = SymbolValues::Expr(init(self, sym));
+            // Need to lookup again since symbol table might've changed.
+            let sym = self.symbol_table.lookup_mut(name).unwrap();
+            sym.value = init_expr;
+            sym
+        } else {
+            self.symbol_table.lookup_mut(name).unwrap()
+        }
+    }
+
     /// Ensures that a global variable `name` appears in the Symbol table.
-    /// If it doesn't, inserts it.
-    /// If `init_fn` returns `Some(body)`, creates an initializer for the variable using `body`.
-    /// Otherwise, leaves the variable uninitialized .
-    pub fn ensure_global_var<
-        F: FnOnce(&mut GotocCtx<'tcx>, Expr) -> Option<Stmt>,
-        T: Into<InternedString>,
-    >(
+    ///
+    /// This will add the symbol to the Symbol Table if not inserted yet.
+    pub fn ensure_global_var<T: Into<InternedString> + Clone>(
         &mut self,
         name: T,
         is_file_local: bool,
         t: Type,
         loc: Location,
-        init_fn: F,
-    ) -> Expr {
-        let name = name.into();
-        if !self.symbol_table.contains(name) {
-            tracing::debug!(?name, "Ensure global variable");
-            let sym = Symbol::static_variable(name, name, t, loc)
+    ) -> &mut Symbol {
+        let sym_name = name.clone().into();
+        if !self.symbol_table.contains(sym_name) {
+            tracing::debug!(?sym_name, "ensure_global_var insert");
+            let sym = Symbol::static_variable(sym_name, sym_name, t, loc)
                 .with_is_file_local(is_file_local)
                 .with_is_hidden(false);
-            let var = sym.to_expr();
-            self.symbol_table.insert(sym);
-            if let Some(body) = init_fn(self, var) {
-                self.register_initializer(&name.to_string(), body);
-            }
+            self.symbol_table.insert(sym.clone());
         }
-        self.symbol_table.lookup(name).unwrap().to_expr()
+        self.symbol_table.lookup_mut(sym_name).unwrap()
     }
 
     /// Ensures that a struct with name `struct_name` appears in the symbol table.
     /// If it doesn't, inserts it using `f`.
     /// Returns: a struct-tag referencing the inserted struct.
-
     pub fn ensure_struct<
         T: Into<InternedString>,
         U: Into<InternedString>,
@@ -284,27 +302,10 @@ impl<'tcx> GotocCtx<'tcx> {
         }
         Type::union_tag(union_name)
     }
-
-    /// Makes a `__attribute__((constructor)) fnname() {body}` initalizer function
-    pub fn register_initializer(&mut self, var_name: &str, body: Stmt) -> &Symbol {
-        let fn_name = Self::initializer_fn_name(var_name);
-        let pretty_name = format!("{var_name}::init");
-        let loc = *body.location();
-        self.ensure(&fn_name, |_tcx, _| {
-            Symbol::function(
-                &fn_name,
-                Type::code(vec![], Type::constructor()),
-                Some(Stmt::block(vec![body], loc)), //TODO is this block needed?
-                &pretty_name,
-                loc,
-            )
-            .with_is_file_local(true)
-        })
-    }
 }
 
 /// Mutators
-impl<'tcx> GotocCtx<'tcx> {
+impl GotocCtx<'_> {
     pub fn set_current_fn(&mut self, instance: Instance, body: &Body) {
         self.current_fn = Some(CurrentFnCtx::new(instance, self, body));
     }
@@ -336,9 +337,9 @@ impl<'tcx> LayoutOfHelpers<'tcx> for GotocCtx<'tcx> {
     }
 }
 
-impl<'tcx> HasParamEnv<'tcx> for GotocCtx<'tcx> {
-    fn param_env(&self) -> ty::ParamEnv<'tcx> {
-        ty::ParamEnv::reveal_all()
+impl<'tcx> HasTypingEnv<'tcx> for GotocCtx<'tcx> {
+    fn typing_env(&self) -> ty::TypingEnv<'tcx> {
+        ty::TypingEnv::fully_monomorphized()
     }
 }
 
@@ -348,7 +349,7 @@ impl<'tcx> HasTyCtxt<'tcx> for GotocCtx<'tcx> {
     }
 }
 
-impl<'tcx> HasDataLayout for GotocCtx<'tcx> {
+impl HasDataLayout for GotocCtx<'_> {
     fn data_layout(&self) -> &TargetDataLayout {
         self.tcx.data_layout()
     }

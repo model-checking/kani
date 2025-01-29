@@ -1,4 +1,4 @@
-gcd.assertion\
+.assertion\
 - Status: SUCCESS\
 - Description: "x != 0 && y != 0"
 

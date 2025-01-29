@@ -9,7 +9,7 @@
 
 use stable_mir::mir::mono::MonoItem;
 use stable_mir::mir::{
-    visit::Location, MirVisitor, Rvalue, Statement, StatementKind, Terminator, TerminatorKind,
+    MirVisitor, Rvalue, Statement, StatementKind, Terminator, TerminatorKind, visit::Location,
 };
 use std::collections::HashMap;
 use std::fmt::Display;

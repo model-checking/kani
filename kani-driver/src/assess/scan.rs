@@ -9,8 +9,8 @@ use std::time::Instant;
 use anyhow::Result;
 use cargo_metadata::Package;
 
-use crate::session::setup_cargo_command;
 use crate::session::KaniSession;
+use crate::session::setup_cargo_command;
 
 use super::metadata::AssessMetadata;
 use super::metadata::{aggregate_metadata, read_metadata};
@@ -179,7 +179,8 @@ fn invoke_assess(
     // TODO: -p likewise, probably fixed with a "CargoArgs" refactoring
     // Additionally, this should be `--manifest-path` but `cargo kani` doesn't support that yet.
     cmd.arg("-p").arg(package);
-    cmd.arg("--enable-unstable"); // This has to be after `-p` due to an argument parsing bug in kani-driver
+    // This has to be after `-p` due to an argument parsing bug in kani-driver
+    cmd.arg("-Zunstable-options");
     cmd.args(["assess", "--emit-metadata"])
         .arg(outfile)
         .current_dir(dir)
