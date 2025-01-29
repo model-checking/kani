@@ -7,7 +7,7 @@
 #![feature(core_intrinsics)]
 use std::intrinsics::transmute_unchecked;
 
-/// Reachability doesn't seem to work for unreachable statements.
+/// Kani reachability checks are not currently applied to `unreachable` statements.
 macro_rules! unreachable {
     ($msg:literal) => {
         assert!(false, $msg)
