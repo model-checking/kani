@@ -17,13 +17,13 @@ fn simple_loop() {
 
     while x > 1 {
         x = x - 1;
-    };
+    }
 
     assert!(x == 1);
 }
 ```
 
-In this program, the loop repeatedly decrements `x` until it equals `1`. Because we haven't specify an upper bound for `x`, to verify this function,
+In this program, the loop repeatedly decrements `x` until it equals `1`. Because we haven't specified an upper bound for `x`, to verify this function,
 Kani needs to unwind the loop for `u64::MAX` iterations, which is computationally expensive. Loop contracts allow us to abstract the loop behavior, significantly reducing the verification cost.
 
 With loop contracts, we can specify the loop’s behavior using invariants. For example:
@@ -38,7 +38,7 @@ fn simple_loop_with_loop_contracts() {
     #[kani::loop_invariant(x >= 1)]
     while x > 1 {
         x = x - 1;
-    };
+    }
 
     assert!(x == 1);
 }
