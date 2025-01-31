@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-//! Provide different static analysis to be performed in the crate under compilation
+//! Provide passes that perform intra-function analysis on the crate under compilation
 
 use crate::info;
 use csv::WriterBuilder;
@@ -251,11 +251,11 @@ macro_rules! fn_props {
         }
 
         impl $name {
-            pub const fn num_props() -> usize {
+            $vis const fn num_props() -> usize {
                 [$(stringify!($prop),)+].len()
             }
 
-            pub fn new(fn_name: String) -> Self {
+            $vis fn new(fn_name: String) -> Self {
                 Self { fn_name, $($prop: 0,)+}
             }
         }

@@ -14,11 +14,6 @@ pub fn generic<T: Default>() -> T {
     T::default()
 }
 
-pub fn blah() {
-    ok();
-    assert_eq!(u8::default(), 0);
-}
-
 pub struct RecursiveType {
     pub inner: Option<*const RecursiveType>,
 }
@@ -112,6 +107,7 @@ extern "C" {
     fn external_function();
 }
 
+/// Ensure scanner finds unsafe calls to external functions.
 pub fn call_external() {
     unsafe { external_function() };
 }

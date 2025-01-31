@@ -1,7 +1,11 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-//! Provide different static analysis to be performed in the call graph
+//! Provide passes that perform inter-function analysis on the crate under compilation.
+//!
+//! This module also includes a `CallGraph` structure to help the analysis.
+//! For now, we build the CallGraph as part of the pass, but as we add more analysis,
+//! the call-graph could be reused by different analysis.
 
 use crate::analysis::{FnCallVisitor, FnUnsafeOperations, OverallStats};
 use stable_mir::mir::{MirVisitor, Safety};
