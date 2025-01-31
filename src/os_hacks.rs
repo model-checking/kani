@@ -8,7 +8,7 @@
 use std::path::Path;
 use std::process::Command;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use os_info::Info;
 
 use crate::cmd::AutoRun;
@@ -81,8 +81,7 @@ fn setup_nixos_patchelf(kani_dir: &Path) -> Result<()> {
     for filename in &["kani-compiler", "kani-driver"] {
         patch_interp(&bin.join(filename))?;
     }
-    for filename in &["cbmc", "goto-analyzer", "goto-cc", "goto-instrument", "kissat", "symtab2gb"]
-    {
+    for filename in &["cbmc", "goto-analyzer", "goto-cc", "goto-instrument", "kissat"] {
         let file = bin.join(filename);
         patch_interp(&file)?;
         patch_rpath(&file)?;

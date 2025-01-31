@@ -2,13 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use crate::codegen_cprover_gotoc::GotocCtx;
-use cbmc::goto_program::Stmt;
 use cbmc::InternedString;
+use cbmc::goto_program::Stmt;
 use rustc_middle::ty::Instance as InstanceInternal;
 use rustc_smir::rustc_internal;
-use stable_mir::mir::mono::Instance;
-use stable_mir::mir::{visit::Location, visit::MirVisitor, Body, Local, LocalDecl, Rvalue};
 use stable_mir::CrateDef;
+use stable_mir::mir::mono::Instance;
+use stable_mir::mir::{Body, Local, LocalDecl, Rvalue, visit::Location, visit::MirVisitor};
 use std::collections::{HashMap, HashSet};
 
 /// This structure represents useful data about the function we are currently compiling.
@@ -84,7 +84,7 @@ impl<'tcx> CurrentFnCtx<'tcx> {
 }
 
 /// Setters
-impl<'tcx> CurrentFnCtx<'tcx> {
+impl CurrentFnCtx<'_> {
     /// Returns the current block, replacing it with an empty vector.
     pub fn extract_block(&mut self) -> Vec<Stmt> {
         std::mem::take(&mut self.block)

@@ -76,4 +76,15 @@ pub mod verify {
     unsafe fn add_one(inout: *mut [u32]) {
         inout.as_mut_unchecked().iter_mut().for_each(|e| *e += 1)
     }
+
+    /// Test that arbitrary pointer works as expected.
+    /// Disable it for uninit checks, since these checks do not support `MaybeUninit` which is used
+    /// by the pointer generator.
+    #[kani::proof]
+    #[cfg(not(uninit_checks))]
+    fn check_any_ptr() {
+        let mut generator = kani::PointerGenerator::<8>::new();
+        let ptr = generator.any_in_bounds::<i32>().ptr;
+        assert!(kani::mem::can_write_unaligned(ptr));
+    }
 }

@@ -2,16 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! this module handles intrinsics
 use super::typ;
-use super::{bb_label, PropertyClass};
+use super::{PropertyClass, bb_label};
 use crate::codegen_cprover_gotoc::codegen::ty_stable::pointee_type_stable;
-use crate::codegen_cprover_gotoc::{utils, GotocCtx};
+use crate::codegen_cprover_gotoc::{GotocCtx, utils};
 use crate::intrinsics::Intrinsic;
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
-use cbmc::goto_program::{
-    ArithmeticOverflowResult, BinaryOperator, BuiltinFn, Expr, Location, Stmt, Type,
-};
+use cbmc::goto_program::{BinaryOperator, BuiltinFn, Expr, Location, Stmt, Type};
+use rustc_middle::ty::TypingEnv;
 use rustc_middle::ty::layout::ValidityRequirement;
-use rustc_middle::ty::ParamEnv;
 use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{BasicBlockIdx, Operand, Place};
@@ -28,7 +26,7 @@ enum VTableInfo {
     Align,
 }
 
-impl<'tcx> GotocCtx<'tcx> {
+impl GotocCtx<'_> {
     fn binop<F: FnOnce(Expr, Expr) -> Expr>(
         &mut self,
         place: &Place,
@@ -215,17 +213,6 @@ impl<'tcx> GotocCtx<'tcx> {
             }};
         }
 
-        macro_rules! codegen_size_align {
-            ($which: ident) => {{
-                let args = instance_args(&instance);
-                // The type `T` that we'll compute the size or alignment.
-                let target_ty = args.0[0].expect_ty();
-                let arg = fargs.remove(0);
-                let size_align = self.size_and_align_of_dst(*target_ty, arg);
-                self.codegen_expr_to_place_stable(place, size_align.$which, loc)
-            }};
-        }
-
         // Most atomic intrinsics do:
         //   1. Perform an operation on a primary argument (e.g., addition)
         //   2. Return the previous value of the primary argument
@@ -296,9 +283,7 @@ impl<'tcx> GotocCtx<'tcx> {
             Intrinsic::AddWithOverflow => {
                 self.codegen_op_with_overflow(BinaryOperator::OverflowResultPlus, fargs, place, loc)
             }
-            Intrinsic::ArithOffset => {
-                self.codegen_offset(intrinsic_str, instance, fargs, place, loc)
-            }
+            Intrinsic::ArithOffset => self.codegen_arith_offset(fargs, place, loc),
             Intrinsic::AssertInhabited => {
                 self.codegen_assert_intrinsic(instance, intrinsic_str, span)
             }
@@ -386,6 +371,14 @@ impl<'tcx> GotocCtx<'tcx> {
                 let binop_stmt = codegen_intrinsic_binop!(div);
                 self.add_finite_args_checks(intrinsic_str, fargs_clone, binop_stmt, span)
             }
+            Intrinsic::FloatToIntUnchecked => self.codegen_float_to_int_unchecked(
+                intrinsic_str,
+                fargs.remove(0),
+                farg_types[0],
+                place,
+                ret_ty,
+                loc,
+            ),
             Intrinsic::FloorF32 => codegen_simple_intrinsic!(Floorf),
             Intrinsic::FloorF64 => codegen_simple_intrinsic!(Floor),
             Intrinsic::FmafF32 => codegen_simple_intrinsic!(Fmaf),
@@ -416,7 +409,6 @@ impl<'tcx> GotocCtx<'tcx> {
             Intrinsic::MaxNumF32 => codegen_simple_intrinsic!(Fmaxf),
             Intrinsic::MaxNumF64 => codegen_simple_intrinsic!(Fmax),
             Intrinsic::MinAlignOf => codegen_intrinsic_const!(),
-            Intrinsic::MinAlignOfVal => codegen_size_align!(align),
             Intrinsic::MinNumF32 => codegen_simple_intrinsic!(Fminf),
             Intrinsic::MinNumF64 => codegen_simple_intrinsic!(Fmin),
             Intrinsic::MulWithOverflow => {
@@ -431,10 +423,6 @@ impl<'tcx> GotocCtx<'tcx> {
             Intrinsic::PowIF64 => codegen_simple_intrinsic!(Powi),
             Intrinsic::PrefAlignOf => codegen_intrinsic_const!(),
             Intrinsic::PtrGuaranteedCmp => self.codegen_ptr_guaranteed_cmp(fargs, place, loc),
-            Intrinsic::PtrOffsetFrom => self.codegen_ptr_offset_from(fargs, place, loc),
-            Intrinsic::PtrOffsetFromUnsigned => {
-                self.codegen_ptr_offset_from_unsigned(fargs, place, loc)
-            }
             Intrinsic::RawEq => self.codegen_intrinsic_raw_eq(instance, fargs, place, loc),
             Intrinsic::RetagBoxToRaw => self.codegen_retag_box_to_raw(fargs, place, loc),
             Intrinsic::RintF32 => codegen_simple_intrinsic!(Rintf),
@@ -510,7 +498,6 @@ impl<'tcx> GotocCtx<'tcx> {
                 loc,
             ),
             Intrinsic::SimdXor => codegen_intrinsic_binop!(bitxor),
-            Intrinsic::SizeOfVal => codegen_size_align!(size),
             Intrinsic::SqrtF32 => codegen_simple_intrinsic!(Sqrtf),
             Intrinsic::SqrtF64 => codegen_simple_intrinsic!(Sqrt),
             Intrinsic::SubWithOverflow => self.codegen_op_with_overflow(
@@ -552,6 +539,12 @@ impl<'tcx> GotocCtx<'tcx> {
             Intrinsic::WriteBytes => {
                 assert!(self.place_ty_stable(place).kind().is_unit());
                 self.codegen_write_bytes(fargs, farg_types, loc)
+            }
+            Intrinsic::PtrOffsetFrom
+            | Intrinsic::PtrOffsetFromUnsigned
+            | Intrinsic::SizeOfVal
+            | Intrinsic::MinAlignOfVal => {
+                unreachable!("Intrinsic `{}` is handled before codegen", intrinsic_str)
             }
             // Unimplemented
             Intrinsic::Unimplemented { name, issue_link } => {
@@ -723,7 +716,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
         // For all intrinsics we first check `is_uninhabited` to give a more
         // precise error message
-        if layout.abi.is_uninhabited() {
+        if layout.is_uninhabited() {
             return self.codegen_fatal_error(
                 PropertyClass::SafetyCheck,
                 &format!(
@@ -734,15 +727,15 @@ impl<'tcx> GotocCtx<'tcx> {
             );
         }
 
-        let param_env_and_type =
-            ParamEnv::reveal_all().and(rustc_internal::internal(self.tcx, target_ty));
+        let typing_env_and_type = TypingEnv::fully_monomorphized()
+            .as_query_input(rustc_internal::internal(self.tcx, target_ty));
 
         // Then we check if the type allows "raw" initialization for the cases
         // where memory is zero-initialized or entirely uninitialized
         if intrinsic == "assert_zero_valid"
             && !self
                 .tcx
-                .check_validity_requirement((ValidityRequirement::Zero, param_env_and_type))
+                .check_validity_requirement((ValidityRequirement::Zero, typing_env_and_type))
                 .unwrap()
         {
             return self.codegen_fatal_error(
@@ -760,7 +753,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 .tcx
                 .check_validity_requirement((
                     ValidityRequirement::UninitMitigated0x01Fill,
-                    param_env_and_type,
+                    typing_env_and_type,
                 ))
                 .unwrap()
         {
@@ -1017,122 +1010,16 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// Computes the offset from a pointer.
     ///
-    /// Note that this function handles code generation for:
-    ///  1. The `offset` intrinsic.
-    ///     <https://doc.rust-lang.org/std/intrinsics/fn.offset.html>
-    ///  2. The `arith_offset` intrinsic.
+    /// This function handles code generation for the `arith_offset` intrinsic.
     ///     <https://doc.rust-lang.org/std/intrinsics/fn.arith_offset.html>
-    ///
-    /// Note(std): We don't check that the starting or resulting pointer stay
-    /// within bounds of the object they point to. Doing so causes spurious
-    /// failures due to the usage of these intrinsics in the standard library.
-    /// See <https://github.com/model-checking/kani/issues/1233> for more details.
-    /// Also, note that this isn't a requirement for `arith_offset`, but it's
-    /// one of the safety conditions specified for `offset`:
-    /// <https://doc.rust-lang.org/std/primitive.pointer.html#safety-2>
-    fn codegen_offset(
-        &mut self,
-        intrinsic: &str,
-        instance: Instance,
-        mut fargs: Vec<Expr>,
-        p: &Place,
-        loc: Location,
-    ) -> Stmt {
+    /// According to the documentation, the operation is always safe.
+    fn codegen_arith_offset(&mut self, mut fargs: Vec<Expr>, p: &Place, loc: Location) -> Stmt {
         let src_ptr = fargs.remove(0);
         let offset = fargs.remove(0);
 
-        // Check that computing `offset` in bytes would not overflow
-        let args = instance_args(&instance);
-        let ty = args.0[0].expect_ty();
-        let (offset_bytes, bytes_overflow_check) =
-            self.count_in_bytes(offset.clone(), *ty, Type::ssize_t(), intrinsic, loc);
-
-        // Check that the computation would not overflow an `isize`
-        // These checks may allow a wrapping-around behavior in CBMC:
-        // https://github.com/model-checking/kani/issues/1150
-        let dst_ptr_of = src_ptr.clone().cast_to(Type::ssize_t()).add_overflow(offset_bytes);
-        let overflow_check = self.codegen_assert_assume(
-            dst_ptr_of.overflowed.not(),
-            PropertyClass::ArithmeticOverflow,
-            "attempt to compute offset which would overflow",
-            loc,
-        );
-
-        // Re-compute `dst_ptr` with standard addition to avoid conversion
+        // Compute `dst_ptr` with standard addition to avoid conversion
         let dst_ptr = src_ptr.plus(offset);
-        let expr_place = self.codegen_expr_to_place_stable(p, dst_ptr, loc);
-        Stmt::block(vec![bytes_overflow_check, overflow_check, expr_place], loc)
-    }
-
-    /// ptr_offset_from returns the offset between two pointers
-    /// <https://doc.rust-lang.org/std/intrinsics/fn.ptr_offset_from.html>
-    fn codegen_ptr_offset_from(&mut self, fargs: Vec<Expr>, p: &Place, loc: Location) -> Stmt {
-        let (offset_expr, offset_overflow) = self.codegen_ptr_offset_from_expr(fargs);
-
-        // Check that computing `offset` in bytes would not overflow an `isize`
-        // These checks may allow a wrapping-around behavior in CBMC:
-        // https://github.com/model-checking/kani/issues/1150
-        let overflow_check = self.codegen_assert_assume(
-            offset_overflow.overflowed.not(),
-            PropertyClass::ArithmeticOverflow,
-            "attempt to compute offset in bytes which would overflow an `isize`",
-            loc,
-        );
-
-        let offset_expr = self.codegen_expr_to_place_stable(p, offset_expr, loc);
-        Stmt::block(vec![overflow_check, offset_expr], loc)
-    }
-
-    /// `ptr_offset_from_unsigned` returns the offset between two pointers where the order is known.
-    /// The logic is similar to `ptr_offset_from` but the return value is a `usize`.
-    /// See <https://github.com/rust-lang/rust/issues/95892> for more details
-    fn codegen_ptr_offset_from_unsigned(
-        &mut self,
-        fargs: Vec<Expr>,
-        p: &Place,
-        loc: Location,
-    ) -> Stmt {
-        let (offset_expr, offset_overflow) = self.codegen_ptr_offset_from_expr(fargs);
-
-        // Check that computing `offset` in bytes would not overflow an `isize`
-        // These checks may allow a wrapping-around behavior in CBMC:
-        // https://github.com/model-checking/kani/issues/1150
-        let overflow_check = self.codegen_assert_assume(
-            offset_overflow.overflowed.not(),
-            PropertyClass::ArithmeticOverflow,
-            "attempt to compute offset in bytes which would overflow an `isize`",
-            loc,
-        );
-
-        let non_negative_check = self.codegen_assert_assume(
-            offset_overflow.result.is_non_negative(),
-            PropertyClass::SafetyCheck,
-            "attempt to compute unsigned offset with negative distance",
-            loc,
-        );
-
-        let offset_expr =
-            self.codegen_expr_to_place_stable(p, offset_expr.cast_to(Type::size_t()), loc);
-        Stmt::block(vec![overflow_check, non_negative_check, offset_expr], loc)
-    }
-
-    /// Both `ptr_offset_from` and `ptr_offset_from_unsigned` return the offset between two pointers.
-    /// This function implements the common logic between them.
-    fn codegen_ptr_offset_from_expr(
-        &mut self,
-        mut fargs: Vec<Expr>,
-    ) -> (Expr, ArithmeticOverflowResult) {
-        let dst_ptr = fargs.remove(0);
-        let src_ptr = fargs.remove(0);
-
-        // Compute the offset with standard substraction using `isize`
-        let cast_dst_ptr = dst_ptr.clone().cast_to(Type::ssize_t());
-        let cast_src_ptr = src_ptr.clone().cast_to(Type::ssize_t());
-        let offset_overflow = cast_dst_ptr.sub_overflow(cast_src_ptr);
-
-        // Re-compute the offset with standard substraction (no casts this time)
-        let ptr_offset_expr = dst_ptr.sub(src_ptr);
-        (ptr_offset_expr, offset_overflow)
+        self.codegen_expr_to_place_stable(p, dst_ptr, loc)
     }
 
     /// A transmute is a bitcast from the argument type to the return type.
@@ -1903,7 +1790,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// Swaps the memory contents pointed to by arguments `x` and `y`, respectively, which is
-    /// required for the `typed_swap` intrinsic.
+    /// required for the `typed_swap_nonoverlapping` intrinsic.
     ///
     /// The standard library API requires that `x` and `y` are readable and writable as their
     /// (common) type (which auto-generated checks for dereferencing will take care of), and the
@@ -1953,6 +1840,57 @@ impl<'tcx> GotocCtx<'tcx> {
 
             Stmt::block(vec![non_overlapping_stmt, assign_to_t, assign_to_y, assign_to_x], loc)
         }
+    }
+
+    /// Checks that the floating-point value is:
+    ///     1. Finite (i.e. neither infinite nor NaN)
+    ///     2. Its truncated value is in range of the target integer
+    /// then performs the cast to the target type
+    pub fn codegen_float_to_int_unchecked(
+        &mut self,
+        intrinsic: &str,
+        expr: Expr,
+        ty: Ty,
+        place: &Place,
+        res_ty: Ty,
+        loc: Location,
+    ) -> Stmt {
+        let finite_check = self.codegen_assert_assume(
+            expr.clone().is_finite(),
+            PropertyClass::ArithmeticOverflow,
+            format!("{intrinsic}: attempt to convert a non-finite value to an integer").as_str(),
+            loc,
+        );
+
+        assert!(res_ty.kind().is_integral());
+        assert!(ty.kind().is_float());
+        let TyKind::RigidTy(integral_ty) = res_ty.kind() else {
+            panic!(
+                "Expected intrinsic `{}` type to be `RigidTy`, but found: `{:?}`",
+                intrinsic, res_ty
+            );
+        };
+        let TyKind::RigidTy(RigidTy::Float(float_type)) = ty.kind() else {
+            panic!("Expected intrinsic `{}` type to be `Float`, but found: `{:?}`", intrinsic, ty);
+        };
+        let mm = self.symbol_table.machine_model();
+        let in_range = utils::codegen_in_range_expr(&expr, float_type, integral_ty, mm);
+
+        let range_check = self.codegen_assert_assume(
+            in_range,
+            PropertyClass::ArithmeticOverflow,
+            format!("{intrinsic}: attempt to convert a value out of range of the target integer")
+                .as_str(),
+            loc,
+        );
+
+        let int_type = self.codegen_ty_stable(res_ty);
+        let cast = expr.cast_to(int_type);
+
+        Stmt::block(
+            vec![finite_check, range_check, self.codegen_expr_to_place_stable(place, cast, loc)],
+            loc,
+        )
     }
 }
 

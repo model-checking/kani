@@ -3,8 +3,6 @@
 // kani-flags: -Zfunction-contracts -Zmem-predicates
 
 //! Test that it is sound to use memory predicates inside a contract pre-condition.
-//! We cannot validate post-condition yet. This can be done once we fix:
-//! <https://github.com/model-checking/kani/issues/2997>
 
 mod pre_condition {
     /// This contract should succeed only if the input is a valid pointer.
@@ -28,19 +26,16 @@ mod pre_condition {
     }
 
     #[kani::proof_for_contract(read_ptr)]
-    #[kani::should_panic]
     fn harness_invalid_ptr() {
         let ptr = std::ptr::NonNull::<i32>::dangling().as_ptr();
         assert_eq!(unsafe { read_ptr(ptr) }, -20);
     }
 }
 
-/// TODO: Enable once we fix: <https://github.com/model-checking/kani/issues/2997>
-#[cfg(not_supported)]
 mod post_condition {
 
     /// This contract should fail since we are creating a dangling pointer.
-    #[kani::ensures(kani::mem::can_dereference(result.0))]
+    #[kani::ensures(|result| kani::mem::can_dereference(result.0))]
     unsafe fn new_invalid_ptr() -> PtrWrapper<char> {
         let var = 'c';
         PtrWrapper(&var as *const _)

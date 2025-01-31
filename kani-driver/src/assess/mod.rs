@@ -1,8 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use self::metadata::{write_metadata, AssessMetadata};
-use anyhow::{bail, Result};
+use self::metadata::{AssessMetadata, write_metadata};
+use anyhow::{Result, bail};
 use kani_metadata::KaniMetadata;
 
 use crate::assess::table_builder::TableBuilder;
@@ -49,7 +49,7 @@ fn assess_project(mut session: KaniSession) -> Result<AssessMetadata> {
     session.codegen_tests = true;
     if session.args.jobs.is_none() {
         // assess will default to fully parallel instead of single-threaded.
-        // can be overridden with e.g. `cargo kani --enable-unstable -j 8 assess`
+        // can be overridden with e.g. `cargo kani -Z unstable-options -j 8 assess`
         session.args.jobs = Some(None); // -j, num_cpu
     }
 

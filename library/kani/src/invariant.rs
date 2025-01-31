@@ -39,6 +39,14 @@
 /// ```
 /// You can specify its safety invariant as:
 /// ```rust
+/// # #[derive(kani::Arbitrary)]
+/// # pub struct MyDate {
+/// #  day: u8,
+/// #  month: u8,
+/// #  year: i64,
+/// # }
+/// # fn days_in_month(_: i64, _: u8) -> u8 { 31 }
+///
 /// impl kani::Invariant for MyDate {
 ///   fn is_safe(&self) -> bool {
 ///     self.month > 0
@@ -49,12 +57,33 @@
 /// }
 /// ```
 /// And use it to check that your APIs are safe:
-/// ```rust
+/// ```no_run
+/// # use kani::Invariant;
+/// #
+/// # #[derive(kani::Arbitrary)]
+/// # pub struct MyDate {
+/// #  day: u8,
+/// #  month: u8,
+/// #  year: i64,
+/// # }
+/// #
+/// # fn days_in_month(_: i64, _: u8) -> u8 { todo!() }
+/// # fn increase_date(_: &mut MyDate, _: u8) { todo!() }
+/// #
+/// # impl Invariant for MyDate {
+/// #   fn is_safe(&self) -> bool {
+/// #     self.month > 0
+/// #       && self.month <= 12
+/// #       && self.day > 0
+/// #       && self.day <= days_in_month(self.year, self.month)
+/// #   }
+/// # }
+/// #
 /// #[kani::proof]
 /// fn check_increase_date() {
 ///   let mut date: MyDate = kani::any();
 ///   // Increase date by one day
-///   increase_date(date, 1);
+///   increase_date(&mut date, 1);
 ///   assert!(date.is_safe());
 /// }
 /// ```

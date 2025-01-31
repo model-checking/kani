@@ -7,7 +7,7 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::session::{lib_folder, KaniSession};
+use crate::session::{KaniSession, lib_folder};
 
 pub struct LibConfig {
     args: Vec<OsString>,
@@ -53,6 +53,9 @@ impl KaniSession {
     ) -> Result<()> {
         let mut kani_args = self.kani_compiler_flags();
         kani_args.push(format!("--reachability={}", self.reachability_mode()));
+        if self.args.common_args.unstable_features.contains(UnstableFeature::Lean) {
+            kani_args.push("--backend=llbc".into());
+        }
 
         let lib_path = lib_folder().unwrap();
         let mut rustc_args = self.kani_rustc_flags(LibConfig::new(lib_path));
@@ -90,9 +93,17 @@ impl KaniSession {
         Ok(())
     }
 
-    /// Create a compiler option that represents the reachability mod.
+    /// Create a compiler option that represents the reachability mode.
     pub fn reachability_arg(&self) -> String {
         to_rustc_arg(vec![format!("--reachability={}", self.reachability_mode())])
+    }
+
+    pub fn backend_arg(&self) -> Option<String> {
+        if self.args.common_args.unstable_features.contains(UnstableFeature::Lean) {
+            Some(to_rustc_arg(vec!["--backend=llbc".into()]))
+        } else {
+            None
+        }
     }
 
     /// These arguments are arguments passed to kani-compiler that are `kani` compiler specific.
@@ -118,11 +129,6 @@ impl KaniSession {
             flags.push("--ignore-global-asm".into());
         }
 
-        // Users activate it via the command line switch
-        if self.args.write_json_symtab {
-            flags.push("--write-json-symtab".into());
-        }
-
         if self.args.is_stubbing_enabled() {
             flags.push("--enable-stubbing".into());
         }
@@ -142,11 +148,15 @@ impl KaniSession {
             flags.push("--ub-check=uninit".into());
         }
 
-        flags.extend(self.args.common_args.unstable_features.as_arguments().map(str::to_string));
+        if self.args.print_llbc {
+            flags.push("--print-llbc".into());
+        }
 
-        // This argument will select the Kani flavour of the compiler. It will be removed before
-        // rustc driver is invoked.
-        flags.push("--goto-c".into());
+        if self.args.no_assert_contracts {
+            flags.push("--no-assert-contracts".into());
+        }
+
+        flags.extend(self.args.common_args.unstable_features.as_arguments().map(str::to_string));
 
         flags
     }
@@ -171,6 +181,8 @@ impl KaniSession {
                 "-Z",
                 "mir-enable-passes=-RemoveStorageMarkers",
                 "--check-cfg=cfg(kani)",
+                // Do not invoke the linker since the compiler will not generate real object files
+                "-Clinker=echo",
             ]
             .map(OsString::from),
         );

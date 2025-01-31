@@ -3,19 +3,19 @@
 
 //! This file contains functions related to codegenning MIR functions into gotoc
 
-use crate::codegen_cprover_gotoc::codegen::block::reverse_postorder;
 use crate::codegen_cprover_gotoc::GotocCtx;
-use cbmc::goto_program::{Expr, Stmt, Symbol};
+use crate::codegen_cprover_gotoc::codegen::block::reverse_postorder;
 use cbmc::InternString;
+use cbmc::goto_program::{Expr, Stmt, Symbol};
+use stable_mir::CrateDef;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{Body, Local};
 use stable_mir::ty::{RigidTy, TyKind};
-use stable_mir::CrateDef;
 use std::collections::BTreeMap;
 use tracing::{debug, debug_span};
 
 /// Codegen MIR functions into gotoc
-impl<'tcx> GotocCtx<'tcx> {
+impl GotocCtx<'_> {
     /// Declare variables according to their index.
     /// - Index 0 represents the return value.
     /// - Indices [1, N] represent the function parameters where N is the number of parameters.
@@ -218,13 +218,14 @@ impl<'tcx> GotocCtx<'tcx> {
 }
 
 pub mod rustc_smir {
+    use crate::codegen_cprover_gotoc::codegen::source_region::{SourceRegion, make_source_region};
     use crate::stable_mir::CrateDef;
     use rustc_middle::mir::coverage::CovTerm;
     use rustc_middle::mir::coverage::MappingKind::Code;
-    use rustc_middle::mir::coverage::SourceRegion;
     use rustc_middle::ty::TyCtxt;
+    use rustc_smir::rustc_internal;
     use stable_mir::mir::mono::Instance;
-    use stable_mir::Opaque;
+    use stable_mir::{Filename, Opaque};
 
     type CoverageOpaque = stable_mir::Opaque;
 
@@ -234,7 +235,7 @@ pub mod rustc_smir {
         tcx: TyCtxt,
         coverage_opaque: &CoverageOpaque,
         instance: Instance,
-    ) -> Option<SourceRegion> {
+    ) -> Option<(SourceRegion, Filename)> {
         let cov_term = parse_coverage_opaque(coverage_opaque);
         region_from_coverage(tcx, cov_term, instance)
     }
@@ -246,7 +247,7 @@ pub mod rustc_smir {
         tcx: TyCtxt<'_>,
         coverage: CovTerm,
         instance: Instance,
-    ) -> Option<SourceRegion> {
+    ) -> Option<(SourceRegion, Filename)> {
         // We need to pull the coverage info from the internal MIR instance.
         let instance_def = rustc_smir::rustc_internal::internal(tcx, instance.def.def_id());
         let body = tcx.instance_mir(rustc_middle::ty::InstanceKind::Item(instance_def));
@@ -257,8 +258,13 @@ pub mod rustc_smir {
             // Iterate over the coverage mappings and match with the coverage term.
             for mapping in &cov_info.mappings {
                 let Code(term) = mapping.kind else { unreachable!() };
+                let source_map = tcx.sess.source_map();
+                let file = source_map.lookup_source_file(cov_info.body_span.lo());
                 if term == coverage {
-                    return Some(mapping.source_region.clone());
+                    return Some((
+                        make_source_region(source_map, cov_info, &file, mapping.span).unwrap(),
+                        rustc_internal::stable(cov_info.body_span).get_filename(),
+                    ));
                 }
             }
         }

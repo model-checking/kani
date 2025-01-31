@@ -31,16 +31,13 @@ $ cargo kani --harness stretched_rectangle_can_hold_original --output-format ter
 VERIFICATION:- FAILED
 ```
 
-In order to view a trace (a step-by-step execution of the program) use the `--visualize` flag:
+In order to view a counterexample use the `--concrete-playback` flag:
 
 ```bash
-$ cargo kani --harness stretched_rectangle_can_hold_original --output-format terse --visualize
+$ cargo kani --harness stretched_rectangle_can_hold_original --output-format terse -Zconcrete-playback --concrete-playback=print
 # --snip--
 VERIFICATION:- FAILED
-# and generates a html report in target/report/html/index.html
 ```
-
-And open the report in a browser.
 
 After fixing the problem we can re-run Kani (on the proof harness `stretched_rectangle_can_hold_original_fixed`). This time we expect verification success:
 

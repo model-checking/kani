@@ -11,9 +11,9 @@
 //!
 //! Note: We don't cross-compile. Target is the same as the host.
 
-use crate::{cp, AutoRun};
-use anyhow::{bail, format_err, Result};
-use cargo_metadata::{Artifact, Message};
+use crate::{AutoRun, cp};
+use anyhow::{Result, bail, format_err};
+use cargo_metadata::{Artifact, Message, TargetKind};
 use std::ffi::OsStr;
 use std::fs;
 use std::io::BufReader;
@@ -194,9 +194,13 @@ fn copy_artifacts(artifacts: &[Artifact], sysroot_lib: &Path, copy_std: bool) ->
 /// Check if an artifact is a rust library that can be used by rustc on further crates compilations.
 /// This inspects the kind of targets that this artifact originates from.
 fn is_rust_lib(artifact: &Artifact) -> bool {
-    artifact.target.kind.iter().any(|kind| match kind.as_str() {
-        "lib" | "rlib" | "proc-macro" => true,
-        "bin" | "dylib" | "cdylib" | "staticlib" | "custom-build" => false,
+    artifact.target.kind.iter().any(|kind| match kind {
+        TargetKind::Lib | TargetKind::RLib | TargetKind::ProcMacro => true,
+        TargetKind::Bin
+        | TargetKind::DyLib
+        | TargetKind::CDyLib
+        | TargetKind::StaticLib
+        | TargetKind::CustomBuild => false,
         _ => unreachable!("Unknown crate type {kind}"),
     })
 }
@@ -277,4 +281,18 @@ pub fn build_bin<T: AsRef<OsStr>>(extra_args: &[T]) -> Result<PathBuf> {
         .run()
         .or(Err(format_err!("Failed to build binaries.")))?;
     Ok(out_dir)
+}
+
+/// Build tool binaries with the extra arguments provided.
+/// At present, the only tool we build for the bundle is `kani-cov`, but this
+/// could include other tools in the future.
+pub fn build_tools<T: AsRef<OsStr>>(extra_args: &[T]) -> Result<()> {
+    let args = ["-p", "kani-cov"];
+    Command::new("cargo")
+        .arg("build")
+        .args(extra_args)
+        .args(args)
+        .run()
+        .or(Err(format_err!("Failed to build tool binaries.")))?;
+    Ok(())
 }

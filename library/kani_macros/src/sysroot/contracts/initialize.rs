@@ -8,9 +8,9 @@ use proc_macro2::TokenStream as TokenStream2;
 use syn::ItemFn;
 
 use super::{
-    helpers::{chunks_by, is_token_stream_2_comma, matches_path},
     ContractConditionsData, ContractConditionsHandler, ContractConditionsType,
     ContractFunctionState,
+    helpers::{chunks_by, is_token_stream_2_comma, matches_path},
 };
 
 impl<'a> TryFrom<&'a syn::Attribute> for ContractFunctionState {
@@ -71,6 +71,7 @@ impl<'a> ContractConditionsHandler<'a> {
 
         let fn_name = &annotated_fn.sig.ident;
         let generate_name = |purpose| format!("__kani_{purpose}_{fn_name}");
+        let assert_name = generate_name("assert");
         let check_name = generate_name("check");
         let replace_name = generate_name("replace");
         let recursion_name = generate_name("recursion_check");
@@ -84,6 +85,7 @@ impl<'a> ContractConditionsHandler<'a> {
             check_name,
             replace_name,
             recursion_name,
+            assert_name,
             modify_name: modifies_name,
         })
     }

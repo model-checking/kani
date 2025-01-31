@@ -7,6 +7,7 @@
 //! other maintainers wanted to keep the conversions minimal. For more information, see
 //! https://github.com/rust-lang/rust/pull/127782
 
+use rustc_middle::mir::CoercionSource;
 use rustc_middle::ty::{self as rustc_ty, TyCtxt};
 use rustc_smir::rustc_internal::internal;
 use stable_mir::mir::{
@@ -51,6 +52,12 @@ impl RustcInternalMir for AggregateKind {
             }
             AggregateKind::Coroutine(coroutine_def, generic_args, _) => {
                 rustc_middle::mir::AggregateKind::Coroutine(
+                    internal(tcx, coroutine_def.0),
+                    internal(tcx, generic_args),
+                )
+            }
+            AggregateKind::CoroutineClosure(coroutine_def, generic_args) => {
+                rustc_middle::mir::AggregateKind::CoroutineClosure(
                     internal(tcx, coroutine_def.0),
                     internal(tcx, generic_args),
                 )
@@ -125,10 +132,17 @@ impl RustcInternalMir for CastKind {
             CastKind::PointerWithExposedProvenance => {
                 rustc_middle::mir::CastKind::PointerWithExposedProvenance
             }
+            // smir doesn't yet have CoercionSource information, so we just choose "Implicit"
             CastKind::PointerCoercion(ptr_coercion) => {
-                rustc_middle::mir::CastKind::PointerCoercion(ptr_coercion.internal_mir(tcx))
+                rustc_middle::mir::CastKind::PointerCoercion(
+                    ptr_coercion.internal_mir(tcx),
+                    CoercionSource::Implicit,
+                )
             }
-            CastKind::DynStar => rustc_middle::mir::CastKind::DynStar,
+            CastKind::DynStar => rustc_middle::mir::CastKind::PointerCoercion(
+                rustc_ty::adjustment::PointerCoercion::DynStar,
+                CoercionSource::Implicit,
+            ),
             CastKind::IntToInt => rustc_middle::mir::CastKind::IntToInt,
             CastKind::FloatToInt => rustc_middle::mir::CastKind::FloatToInt,
             CastKind::FloatToFloat => rustc_middle::mir::CastKind::FloatToFloat,
@@ -237,7 +251,10 @@ impl RustcInternalMir for Rvalue {
             Rvalue::Discriminant(place) => {
                 rustc_middle::mir::Rvalue::Discriminant(internal(tcx, place))
             }
-            Rvalue::Len(place) => rustc_middle::mir::Rvalue::Len(internal(tcx, place)),
+            Rvalue::Len(place) => rustc_middle::mir::Rvalue::UnaryOp(
+                rustc_middle::mir::UnOp::PtrMetadata,
+                rustc_middle::mir::Operand::Copy(internal(tcx, place)),
+            ),
             Rvalue::Ref(region, borrow_kind, place) => rustc_middle::mir::Rvalue::Ref(
                 internal(tcx, region),
                 borrow_kind.internal_mir(tcx),

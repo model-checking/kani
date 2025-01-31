@@ -2,30 +2,28 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! This module contains code for processing Rust attributes (like `kani::proof`).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 use kani_metadata::{CbmcSolver, HarnessAttributes, HarnessKind, Stub};
 use quote::ToTokens;
-use rustc_ast::{
-    attr, AttrArgs, AttrArgsEq, AttrKind, Attribute, ExprKind, LitKind, MetaItem, MetaItemKind,
-};
+use rustc_ast::{LitKind, MetaItem, MetaItemKind, attr};
 use rustc_errors::ErrorGuaranteed;
-use rustc_hir::{def::DefKind, def_id::DefId};
+use rustc_hir::{AttrArgs, AttrKind, Attribute, def::DefKind, def_id::DefId};
 use rustc_middle::ty::{Instance, TyCtxt, TyKind};
 use rustc_session::Session;
 use rustc_smir::rustc_internal;
 use rustc_span::{Span, Symbol};
+use stable_mir::crate_def::Attribute as AttributeStable;
 use stable_mir::mir::mono::Instance as InstanceStable;
-use stable_mir::{CrateDef, DefId as StableDefId};
+use stable_mir::{CrateDef, DefId as StableDefId, Symbol as SymbolStable};
 use std::str::FromStr;
 use strum_macros::{AsRefStr, EnumString};
 use syn::parse::Parser;
 use syn::punctuated::Punctuated;
-use syn::{PathSegment, TypePath};
+use syn::{Expr, ExprLit, Lit, PathSegment, TypePath};
 
+use super::resolve::{FnResolution, ResolveError, resolve_fn, resolve_fn_path};
 use tracing::{debug, trace};
-
-use super::resolve::{resolve_fn, resolve_fn_path, FnResolution, ResolveError};
 
 #[derive(Debug, Clone, Copy, AsRefStr, EnumString, PartialEq, Eq, PartialOrd, Ord)]
 #[strum(serialize_all = "snake_case")]
@@ -44,6 +42,9 @@ enum KaniAttributeKind {
     /// contract, e.g. the contract check is substituted for the target function
     /// before the the verification runs.
     ProofForContract,
+    /// Internal attribute of the contracts implementation. Identifies the
+    /// code implementing the function with its contract clauses asserted.
+    AssertedWith,
     /// Attribute on a function with a contract that identifies the code
     /// implementing the check for this contract.
     CheckedWith,
@@ -96,6 +97,7 @@ impl KaniAttributeKind {
             | KaniAttributeKind::RecursionCheck
             | KaniAttributeKind::CheckedWith
             | KaniAttributeKind::ModifiesWrapper
+            | KaniAttributeKind::AssertedWith
             | KaniAttributeKind::IsContractGenerated
             | KaniAttributeKind::DisableChecks => false,
         }
@@ -138,9 +140,11 @@ pub struct ContractAttributes {
     pub replaced_with: Symbol,
     /// The name of the inner check used to modify clauses.
     pub modifies_wrapper: Symbol,
+    /// The name of the contract assert closure
+    pub asserted_with: Symbol,
 }
 
-impl<'tcx> std::fmt::Debug for KaniAttributes<'tcx> {
+impl std::fmt::Debug for KaniAttributes<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("KaniAttributes")
             .field("item", &self.tcx.def_path_debug_str(self.item))
@@ -209,13 +213,20 @@ impl<'tcx> KaniAttributes<'tcx> {
                 let def = self
                     .resolve_from_mod(name.as_str())
                     .map_err(|e| {
-                        self.tcx.dcx().span_err(
+                        let mut err = self.tcx.dcx().struct_span_err(
                             attr.span,
                             format!(
                                 "Failed to resolve replacement function {}: {e}",
                                 name.as_str()
                             ),
-                        )
+                        );
+                        if let ResolveError::AmbiguousPartialPath { .. } = e {
+                            err = err.with_help(format!(
+                                "Replace {} with a specific implementation.",
+                                name.as_str()
+                            ));
+                        }
+                        err.emit();
                     })
                     .ok()?;
                 Some((name, def, attr.span))
@@ -238,13 +249,20 @@ impl<'tcx> KaniAttributes<'tcx> {
             self.resolve_from_mod(name.as_str())
                 .map(|ok| (name, ok, target.span))
                 .map_err(|resolve_err| {
-                    self.tcx.dcx().span_err(
+                    let mut err = self.tcx.dcx().struct_span_err(
                         target.span,
                         format!(
                             "Failed to resolve checking function {} because {resolve_err}",
                             name.as_str()
                         ),
-                    )
+                    );
+                    if let ResolveError::AmbiguousPartialPath { .. } = resolve_err {
+                        err = err.with_help(format!(
+                            "Replace {} with a specific implementation.",
+                            name.as_str()
+                        ));
+                    }
+                    err.emit();
                 })
                 .ok()
         })
@@ -266,17 +284,19 @@ impl<'tcx> KaniAttributes<'tcx> {
         let checked_with = self.attribute_value(KaniAttributeKind::CheckedWith);
         let replace_with = self.attribute_value(KaniAttributeKind::ReplacedWith);
         let modifies_wrapper = self.attribute_value(KaniAttributeKind::ModifiesWrapper);
+        let asserted_with = self.attribute_value(KaniAttributeKind::AssertedWith);
 
         let total = recursion_check
             .iter()
             .chain(&checked_with)
             .chain(&replace_with)
             .chain(&modifies_wrapper)
+            .chain(&asserted_with)
             .count();
-        if total != 0 && total != 4 {
+        if total != 0 && total != 5 {
             self.tcx.sess.dcx().err(format!(
                 "Failed to parse contract instrumentation tags in function `{}`.\
-                Expected `4` attributes, but was only able to process `{total}`",
+                Expected `5` attributes, but was only able to process `{total}`",
                 self.tcx.def_path_str(self.item)
             ));
         }
@@ -286,6 +306,7 @@ impl<'tcx> KaniAttributes<'tcx> {
             checked_with: checked_with?,
             replaced_with: replace_with?,
             modifies_wrapper: modifies_wrapper?,
+            asserted_with: asserted_with?,
         })
     }
 
@@ -373,12 +394,13 @@ impl<'tcx> KaniAttributes<'tcx> {
                     attrs.iter().for_each(|attr| self.check_proof_attribute(kind, attr))
                 }
                 KaniAttributeKind::StubVerified => {
-                    expect_single(self.tcx, kind, &attrs);
+                    self.check_stub_verified();
                 }
                 KaniAttributeKind::FnMarker
                 | KaniAttributeKind::CheckedWith
                 | KaniAttributeKind::ModifiesWrapper
                 | KaniAttributeKind::RecursionCheck
+                | KaniAttributeKind::AssertedWith
                 | KaniAttributeKind::ReplacedWith => {
                     self.attribute_value(kind);
                 }
@@ -474,6 +496,20 @@ impl<'tcx> KaniAttributes<'tcx> {
             || self.map.contains_key(&KaniAttributeKind::ProofForContract)
     }
 
+    /// Check that the function specified in the `proof_for_contract` attribute
+    /// is reachable and emit an error if it isn't
+    pub fn check_proof_for_contract(&self, reachable_functions: &HashSet<DefId>) {
+        if let Some((symbol, function, span)) = self.interpret_for_contract_attribute() {
+            if !reachable_functions.contains(&function) {
+                let err_msg = format!(
+                    "The function specified in the `proof_for_contract` attribute, `{symbol}`, was not found.\
+                    \nMake sure the function is reachable from the harness."
+                );
+                self.tcx.dcx().span_err(span, err_msg);
+            }
+        }
+    }
+
     /// Extract harness attributes for a given `def_id`.
     ///
     /// We only extract attributes for harnesses that are local to the current crate.
@@ -517,6 +553,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                 | KaniAttributeKind::ModifiesWrapper
                 | KaniAttributeKind::RecursionCheck
                 | KaniAttributeKind::RecursionTracker
+                | KaniAttributeKind::AssertedWith
                 | KaniAttributeKind::ReplacedWith => {
                     self.tcx.dcx().span_err(self.tcx.def_span(self.item), format!("Contracts are not supported on harnesses. (Found the kani-internal contract attribute `{}`)", kind.as_ref()));
                 }
@@ -554,15 +591,29 @@ impl<'tcx> KaniAttributes<'tcx> {
         }
     }
 
-    fn handle_stub_verified(&self, harness: &mut HarnessAttributes) {
+    fn check_stub_verified(&self) {
         let dcx = self.tcx.dcx();
+        let mut seen = HashSet::new();
         for (name, def_id, span) in self.interpret_stub_verified_attribute() {
+            if seen.contains(&name) {
+                dcx.struct_span_warn(
+                    span,
+                    format!("Multiple occurrences of `stub_verified({})`.", name),
+                )
+                .with_span_note(
+                    self.tcx.def_span(def_id),
+                    format!("Use a single `stub_verified({})` annotation.", name),
+                )
+                .emit();
+            } else {
+                seen.insert(name);
+            }
             if KaniAttributes::for_item(self.tcx, def_id).contract_attributes().is_none() {
                 dcx.struct_span_err(
                     span,
                     format!(
-                        "Failed to generate verified stub: Function `{}` has no contract.",
-                        self.item_name(),
+                        "Target function in `stub_verified({})` has no contract.",
+                        name,
                     ),
                 )
                     .with_span_note(
@@ -575,6 +626,16 @@ impl<'tcx> KaniAttributes<'tcx> {
                     .emit();
                 return;
             }
+        }
+    }
+
+    /// Adds the verified stub names to the `harness.verified_stubs`.
+    ///
+    /// This method must be called after `check_stub_verified`, to ensure that
+    /// the target names are known and have contracts, and there are no
+    /// duplicate target names.
+    fn handle_stub_verified(&self, harness: &mut HarnessAttributes) {
+        for (name, _, _) in self.interpret_stub_verified_attribute() {
             harness.verified_stubs.push(name.to_string())
         }
     }
@@ -608,8 +669,9 @@ impl<'tcx> KaniAttributes<'tcx> {
                 ),
             );
         } else {
-            let instance = Instance::mono(tcx, self.item);
-            if !super::fn_abi(tcx, instance).args.is_empty() {
+            let instance = rustc_internal::stable(Instance::mono(tcx, self.item));
+            let fn_abi = instance.fn_abi().unwrap();
+            if !fn_abi.args.is_empty() {
                 tcx.dcx().span_err(span, "functions used as harnesses cannot have any arguments");
             }
         }
@@ -658,31 +720,12 @@ fn expect_key_string_value(
     attr: &Attribute,
 ) -> Result<rustc_span::Symbol, ErrorGuaranteed> {
     let span = attr.span;
-    let AttrArgs::Eq(_, it) = &attr.get_normal_item().args else {
+    let AttrArgs::Eq { expr, .. } = &attr.get_normal_item().args else {
         return Err(sess
             .dcx()
             .span_err(span, "Expected attribute of the form #[attr = \"value\"]"));
     };
-    let maybe_str = match it {
-        AttrArgsEq::Ast(expr) => {
-            if let ExprKind::Lit(tok) = expr.kind {
-                match LitKind::from_token_lit(tok) {
-                    Ok(l) => l.str(),
-                    Err(err) => {
-                        return Err(sess.dcx().span_err(
-                            span,
-                            format!("Invalid string literal on right hand side of `=` {err:?}"),
-                        ));
-                    }
-                }
-            } else {
-                return Err(sess
-                    .dcx()
-                    .span_err(span, "Expected literal string as right hand side of `=`"));
-            }
-        }
-        AttrArgsEq::Hir(lit) => lit.kind.str(),
-    };
+    let maybe_str = expr.kind.str();
     if let Some(str) = maybe_str {
         Ok(str)
     } else {
@@ -726,7 +769,7 @@ struct UnstableAttrParseError<'a> {
     attr: &'a Attribute,
 }
 
-impl<'a> UnstableAttrParseError<'a> {
+impl UnstableAttrParseError<'_> {
     /// Report the error in a friendly format.
     fn report(&self, tcx: TyCtxt) -> ErrorGuaranteed {
         tcx.dcx()
@@ -826,7 +869,7 @@ fn parse_stubs(tcx: TyCtxt, harness: DefId, attributes: &[&Attribute]) -> Vec<St
     attributes
         .iter()
         .filter_map(|attr| {
-            let paths = parse_paths(attr).unwrap_or_else(|_| {
+            let paths = parse_paths(tcx, attr).unwrap_or_else(|_| {
                 tcx.dcx().span_err(
                     attr.span,
                     format!(
@@ -937,8 +980,8 @@ fn parse_integer(attr: &Attribute) -> Option<u128> {
 /// Extracts a vector with the path arguments of an attribute.
 ///
 /// Emits an error if it couldn't convert any of the arguments and return an empty vector.
-fn parse_paths(attr: &Attribute) -> Result<Vec<TypePath>, syn::Error> {
-    let syn_attr = syn_attr(attr);
+fn parse_paths(tcx: TyCtxt, attr: &Attribute) -> Result<Vec<TypePath>, syn::Error> {
+    let syn_attr = syn_attr(tcx, attr);
     let parser = Punctuated::<TypePath, syn::Token![,]>::parse_terminated;
     let paths = syn_attr.parse_args_with(parser)?;
     Ok(paths.into_iter().collect())
@@ -975,11 +1018,11 @@ fn parse_str_value(attr: &Attribute) -> Option<String> {
 fn attr_kind(tcx: TyCtxt, attr: &Attribute) -> Option<KaniAttributeKind> {
     match &attr.kind {
         AttrKind::Normal(normal) => {
-            let segments = &normal.item.path.segments;
-            if (!segments.is_empty()) && segments[0].ident.as_str() == "kanitool" {
+            let segments = &normal.path.segments;
+            if (!segments.is_empty()) && segments[0].as_str() == "kanitool" {
                 let ident_str = segments[1..]
                     .iter()
-                    .map(|segment| segment.ident.as_str())
+                    .map(|segment| segment.as_str())
                     .intersperse("::")
                     .collect::<String>();
                 KaniAttributeKind::try_from(ident_str.as_str())
@@ -996,24 +1039,19 @@ fn attr_kind(tcx: TyCtxt, attr: &Attribute) -> Option<KaniAttributeKind> {
     }
 }
 
-pub fn matches_diagnostic<T: CrateDef>(tcx: TyCtxt, def: T, attr_name: &str) -> bool {
-    let attr_sym = rustc_span::symbol::Symbol::intern(attr_name);
-    if let Some(attr_id) = tcx.all_diagnostic_items(()).name_to_id.get(&attr_sym) {
-        if rustc_internal::internal(tcx, def.def_id()) == *attr_id {
-            debug!("matched: {:?} {:?}", attr_id, attr_sym);
-            return true;
-        }
-    }
-    false
-}
-
 /// Parse an attribute using `syn`.
 ///
 /// This provides a user-friendly interface to manipulate than the internal compiler AST.
-fn syn_attr(attr: &Attribute) -> syn::Attribute {
-    let attr_str = rustc_ast_pretty::pprust::attribute_to_string(attr);
+fn syn_attr(tcx: TyCtxt, attr: &Attribute) -> syn::Attribute {
+    let attr_str = rustc_hir_pretty::attribute_to_string(&tcx, attr);
     let parser = syn::Attribute::parse_outer;
     parser.parse_str(&attr_str).unwrap().pop().unwrap()
+}
+
+/// Parse a stable attribute using `syn`.
+fn syn_attr_stable(attr: &AttributeStable) -> syn::Attribute {
+    let parser = syn::Attribute::parse_outer;
+    parser.parse_str(&attr.as_str()).unwrap().pop().unwrap()
 }
 
 /// Return a more user-friendly string for path by trying to remove unneeded whitespace.
@@ -1056,4 +1094,21 @@ fn pretty_type_path(path: &TypePath) -> String {
     } else {
         format!("{leading}{}", segments_str(&path.path.segments))
     }
+}
+
+/// Retrieve the value of the `fn_marker` attribute for the given definition if it has one.
+pub(crate) fn fn_marker<T: CrateDef>(def: T) -> Option<String> {
+    let fn_marker: [SymbolStable; 2] = ["kanitool".into(), "fn_marker".into()];
+    let marker = def.attrs_by_path(&fn_marker).pop()?;
+    let attribute = syn_attr_stable(&marker);
+    let meta_name = attribute.meta.require_name_value().unwrap_or_else(|_| {
+        panic!("Expected name value attribute for `kanitool::fn_marker`, but found: `{:?}`", marker)
+    });
+    let Expr::Lit(ExprLit { lit: Lit::Str(lit_str), .. }) = &meta_name.value else {
+        panic!(
+            "Expected string literal for `kanitool::fn_marker`, but found: `{:?}`",
+            meta_name.value
+        );
+    };
+    Some(lit_str.value())
 }

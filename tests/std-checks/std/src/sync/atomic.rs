@@ -3,7 +3,7 @@
 
 extern crate kani;
 
-use std::sync::atomic::{AtomicU16, AtomicU32, AtomicU64, AtomicU8, AtomicUsize};
+use std::sync::atomic::{AtomicU8, AtomicU16, AtomicU32, AtomicU64, AtomicUsize};
 
 /// Create wrapper functions to standard library functions that contains their contract.
 pub mod contracts {

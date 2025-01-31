@@ -94,12 +94,12 @@ impl Deref for ArtifactType {
 
 #[cfg(test)]
 mod test {
-    use super::{convert_type, ArtifactType::*};
+    use super::{ArtifactType::*, convert_type};
     use std::path::PathBuf;
 
     #[test]
     fn test_convert_ok() {
-        let path = PathBuf::from("/tmp/my_file.rs").with_extension(&SymTabGoto);
+        let path = PathBuf::from("/tmp/my_file.rs").with_extension(SymTabGoto);
         let goto = convert_type(&path, SymTabGoto, Goto);
         assert_eq!(goto.as_os_str(), "/tmp/my_file.out");
 
@@ -109,7 +109,7 @@ mod test {
 
     #[test]
     fn test_set_extension_ok() {
-        let path = PathBuf::from("/tmp/my_file.rs").with_extension(&SymTabGoto);
+        let path = PathBuf::from("/tmp/my_file.rs").with_extension(SymTabGoto);
         assert_eq!(path.as_os_str(), "/tmp/my_file.symtab.out");
     }
 }

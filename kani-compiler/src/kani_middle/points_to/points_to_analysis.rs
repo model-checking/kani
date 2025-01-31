@@ -38,12 +38,12 @@ use rustc_middle::{
         ProjectionElem, Rvalue, Statement, StatementKind, Terminator, TerminatorEdges,
         TerminatorKind,
     },
-    ty::{Instance, InstanceKind, List, ParamEnv, TyCtxt, TyKind},
+    ty::{Instance, InstanceKind, List, TyCtxt, TyKind, TypingEnv},
 };
-use rustc_mir_dataflow::{Analysis, AnalysisDomain, Forward, JoinSemiLattice};
+use rustc_mir_dataflow::{Analysis, Forward, JoinSemiLattice};
 use rustc_smir::rustc_internal;
-use rustc_span::{source_map::Spanned, DUMMY_SP};
-use stable_mir::mir::{mono::Instance as StableInstance, Body as StableBody};
+use rustc_span::{DUMMY_SP, source_map::Spanned};
+use stable_mir::mir::{Body as StableBody, mono::Instance as StableInstance};
 use std::collections::HashSet;
 
 /// Main points-to analysis object.
@@ -96,7 +96,7 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
         // and solves the dataflow problem, producing the cursor, which contains dataflow state for
         // each instruction in the body.
         let mut cursor =
-            analysis.into_engine(tcx, body).iterate_to_fixpoint().into_results_cursor(body);
+            analysis.iterate_to_fixpoint(tcx, body, Some(Self::NAME)).into_results_cursor(body);
         // We collect dataflow state at each `Return` terminator to determine the full aliasing
         // graph for the function. This is sound since those are the only places where the function
         // finishes, so the dataflow state at those places will be a union of dataflow states
@@ -114,7 +114,7 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
     }
 }
 
-impl<'a, 'tcx> AnalysisDomain<'tcx> for PointsToAnalysis<'a, 'tcx> {
+impl<'tcx> Analysis<'tcx> for PointsToAnalysis<'_, 'tcx> {
     /// Dataflow state at each instruction.
     type Domain = PointsToGraph<'tcx>;
 
@@ -133,12 +133,10 @@ impl<'a, 'tcx> AnalysisDomain<'tcx> for PointsToAnalysis<'a, 'tcx> {
     fn initialize_start_block(&self, _body: &Body<'tcx>, state: &mut Self::Domain) {
         state.join(&self.initial_graph.clone());
     }
-}
 
-impl<'a, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'tcx> {
     /// Update current dataflow state based on the information we can infer from the given
     /// statement.
-    fn apply_statement_effect(
+    fn apply_primary_statement_effect(
         &mut self,
         state: &mut Self::Domain,
         statement: &Statement<'tcx>,
@@ -181,11 +179,12 @@ impl<'a, 'tcx> Analysis<'tcx> for PointsToAnalysis<'a, 'tcx> {
             | StatementKind::AscribeUserType(..)
             | StatementKind::Coverage(..)
             | StatementKind::ConstEvalCounter
+            | StatementKind::BackwardIncompatibleDropHint { .. }
             | StatementKind::Nop => { /* This is a no-op with regard to aliasing. */ }
         }
     }
 
-    fn apply_terminator_effect<'mir>(
+    fn apply_primary_terminator_effect<'mir>(
         &mut self,
         state: &mut Self::Domain,
         terminator: &'mir Terminator<'tcx>,
@@ -358,7 +357,13 @@ fn try_resolve_instance<'tcx>(
         TyKind::FnDef(def, args) => {
             // Span here is used for error-reporting, which we don't expect to encounter anyway, so
             // it is ok to use a dummy.
-            Ok(Instance::expect_resolve(tcx, ParamEnv::reveal_all(), *def, &args, DUMMY_SP))
+            Ok(Instance::expect_resolve(
+                tcx,
+                TypingEnv::fully_monomorphized(),
+                *def,
+                &args,
+                DUMMY_SP,
+            ))
         }
         _ => Err(format!(
             "Kani was not able to resolve the instance of the function operand `{ty:?}`. Currently, memory initialization checks in presence of function pointers and vtable calls are not supported. For more information about planned support, see https://github.com/model-checking/kani/issues/3300."
@@ -366,7 +371,7 @@ fn try_resolve_instance<'tcx>(
     }
 }
 
-impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
+impl<'tcx> PointsToAnalysis<'_, 'tcx> {
     /// Update the analysis state according to the operation, which is semantically equivalent to `*to = *from`.
     fn apply_copy_effect(
         &self,
@@ -458,22 +463,19 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
             // Sanity check. The first argument is the closure itself and the second argument is the tupled arguments from the caller.
             assert!(args.len() == 2);
             // First, connect all upvars.
-            let lvalue_set = HashSet::from([MemLoc::new_stack_allocation(
-                instance,
-                Place { local: 1usize.into(), projection: List::empty() },
-            )]);
+            let lvalue_set = HashSet::from([MemLoc::new_stack_allocation(instance, Place {
+                local: 1usize.into(),
+                projection: List::empty(),
+            })]);
             let rvalue_set = self.successors_for_operand(state, args[0].node.clone());
             initial_graph.extend(&lvalue_set, &rvalue_set);
             // Then, connect the argument tuple to each of the spread arguments.
             let spread_arg_operand = args[1].node.clone();
             for i in 0..new_body.arg_count {
-                let lvalue_set = HashSet::from([MemLoc::new_stack_allocation(
-                    instance,
-                    Place {
-                        local: (i + 1).into(), // Since arguments in the callee are starting with 1, account for that.
-                        projection: List::empty(),
-                    },
-                )]);
+                let lvalue_set = HashSet::from([MemLoc::new_stack_allocation(instance, Place {
+                    local: (i + 1).into(), // Since arguments in the callee are starting with 1, account for that.
+                    projection: List::empty(),
+                })]);
                 // This conservatively assumes all arguments alias to all parameters.
                 let rvalue_set = self.successors_for_operand(state, spread_arg_operand.clone());
                 initial_graph.extend(&lvalue_set, &rvalue_set);
@@ -481,13 +483,10 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
         } else {
             // Otherwise, simply connect all arguments to parameters.
             for (i, arg) in args.iter().enumerate() {
-                let lvalue_set = HashSet::from([MemLoc::new_stack_allocation(
-                    instance,
-                    Place {
-                        local: (i + 1).into(), // Since arguments in the callee are starting with 1, account for that.
-                        projection: List::empty(),
-                    },
-                )]);
+                let lvalue_set = HashSet::from([MemLoc::new_stack_allocation(instance, Place {
+                    local: (i + 1).into(), // Since arguments in the callee are starting with 1, account for that.
+                    projection: List::empty(),
+                })]);
                 let rvalue_set = self.successors_for_operand(state, arg.node.clone());
                 initial_graph.extend(&lvalue_set, &rvalue_set);
             }
@@ -501,10 +500,10 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
 
         // Connect the return value to the return destination.
         let lvalue_set = state.resolve_place(*destination, self.instance);
-        let rvalue_set = HashSet::from([MemLoc::new_stack_allocation(
-            instance,
-            Place { local: 0usize.into(), projection: List::empty() },
-        )]);
+        let rvalue_set = HashSet::from([MemLoc::new_stack_allocation(instance, Place {
+            local: 0usize.into(),
+            projection: List::empty(),
+        })]);
         state.extend(&lvalue_set, &state.successors(&rvalue_set));
     }
 
@@ -576,7 +575,7 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
                 // The same story from BinOp applies here, too. Need to track those things.
                 self.successors_for_operand(state, operand)
             }
-            Rvalue::Len(..) | Rvalue::NullaryOp(..) | Rvalue::Discriminant(..) => {
+            Rvalue::NullaryOp(..) | Rvalue::Discriminant(..) | Rvalue::Len(_) => {
                 // All of those should yield a constant.
                 HashSet::new()
             }

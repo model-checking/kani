@@ -9,7 +9,7 @@ use crate::session::KaniSession;
 use crate::util::crate_name;
 use anyhow::{Context, Result};
 use kani_metadata::{
-    artifact::convert_type, ArtifactType, ArtifactType::*, HarnessMetadata, KaniMetadata,
+    ArtifactType, ArtifactType::*, HarnessMetadata, KaniMetadata, artifact::convert_type,
 };
 use std::env::current_dir;
 use std::fs;
@@ -32,6 +32,8 @@ pub struct Project {
     pub metadata: Vec<KaniMetadata>,
     /// The directory where all outputs should be directed to. This path represents the canonical
     /// version of outdir.
+    /// NOTE: This needs to be marked as dead_code even when it's clearly not
+    #[allow(dead_code)]
     pub outdir: PathBuf,
     /// The path to the input file the project was built from.
     /// Note that it will only be `Some(...)` if this was built from a standalone project.
@@ -74,7 +76,7 @@ impl Project {
         trace!(?harness.goto_file, ?expected_path, ?typ, "get_harness_artifact");
         self.artifacts.iter().find(|artifact| {
             artifact.has_type(typ)
-                && expected_path.as_ref().map_or(true, |goto_file| *goto_file == artifact.path)
+                && expected_path.as_ref().is_none_or(|goto_file| *goto_file == artifact.path)
         })
     }
 

@@ -7,7 +7,7 @@
 use std::ffi::OsString;
 use std::process::Command;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 
 /// Helper trait to fallibly run commands
 pub trait AutoRun {

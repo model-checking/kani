@@ -3,7 +3,7 @@
 //! This module contains code related to the MIR-to-MIR pass to enable contracts.
 use crate::kani_middle::attributes::KaniAttributes;
 use crate::kani_middle::codegen_units::CodegenUnit;
-use crate::kani_middle::find_fn_def;
+use crate::kani_middle::kani_functions::{KaniIntrinsic, KaniModel};
 use crate::kani_middle::transform::body::{InsertPosition, MutableBody, SourceInstruction};
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
@@ -12,12 +12,12 @@ use rustc_hir::def_id::DefId as InternalDefId;
 use rustc_middle::ty::TyCtxt;
 use rustc_smir::rustc_internal;
 use rustc_span::Symbol;
+use stable_mir::CrateDef;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{
     Body, ConstOperand, Operand, Rvalue, Terminator, TerminatorKind, VarDebugInfoContents,
 };
 use stable_mir::ty::{ClosureDef, FnDef, MirConst, RigidTy, TyKind, TypeAndMut, UintTy};
-use stable_mir::CrateDef;
 use std::collections::HashSet;
 use std::fmt::Debug;
 use tracing::{debug, trace};
@@ -77,13 +77,14 @@ impl TransformPass for AnyModifiesPass {
 
 impl AnyModifiesPass {
     /// Build the pass with non-extern function stubs.
-    pub fn new(tcx: TyCtxt, unit: &CodegenUnit) -> AnyModifiesPass {
-        let kani_any = find_fn_def(tcx, "KaniAny");
-        let kani_any_modifies = find_fn_def(tcx, "KaniAnyModifies");
-        let kani_write_any = find_fn_def(tcx, "KaniWriteAny");
-        let kani_write_any_slim = find_fn_def(tcx, "KaniWriteAnySlim");
-        let kani_write_any_slice = find_fn_def(tcx, "KaniWriteAnySlice");
-        let kani_write_any_str = find_fn_def(tcx, "KaniWriteAnyStr");
+    pub fn new(tcx: TyCtxt, queries: &QueryDb, unit: &CodegenUnit) -> AnyModifiesPass {
+        let kani_fns = queries.kani_functions();
+        let kani_any = kani_fns.get(&KaniModel::Any.into()).copied();
+        let kani_any_modifies = kani_fns.get(&KaniIntrinsic::AnyModifies.into()).copied();
+        let kani_write_any = kani_fns.get(&KaniIntrinsic::WriteAny.into()).copied();
+        let kani_write_any_slim = kani_fns.get(&KaniModel::WriteAnySlim.into()).copied();
+        let kani_write_any_slice = kani_fns.get(&KaniModel::WriteAnySlice.into()).copied();
+        let kani_write_any_str = kani_fns.get(&KaniModel::WriteAnyStr.into()).copied();
         let target_fn = if let Some(harness) = unit.harnesses.first() {
             let attributes = KaniAttributes::for_instance(tcx, *harness);
             let target_fn =
@@ -223,6 +224,7 @@ impl AnyModifiesPass {
 /// #[kanitool::recursion_check = "__kani_recursion_check_modify"]
 /// #[kanitool::checked_with = "__kani_check_modify"]
 /// #[kanitool::replaced_with = "__kani_replace_modify"]
+/// #[kanitool::asserted_with = "__kani_assert_modify"]
 /// #[kanitool::modifies_wrapper = "__kani_modifies_modify"]
 /// fn name_fn(ptr: &mut u32) {
 ///     #[kanitool::fn_marker = "kani_register_contract"]
@@ -246,6 +248,11 @@ impl AnyModifiesPass {
 ///             let mut __kani_check_name_fn = || { /* check body */ };
 ///             kani_register_contract(__kani_check_name_fn)
 ///         }
+///         kani::internal::ASSERT => {
+///             #[kanitool::is_contract_generated(assert)]
+///             let mut __kani_check_name_fn = || { /* assert body */ };
+///             kani_register_contract(__kani_assert_name_fn)
+///         }
 ///         _ => { /* original body */ }
 ///     }
 /// }
@@ -266,6 +273,8 @@ pub struct FunctionWithContractPass {
     check_fn: Option<InternalDefId>,
     /// Functions that should be stubbed by their contract.
     replace_fns: HashSet<InternalDefId>,
+    /// Should we interpret contracts as assertions? (true iff the no-assert-contracts option is not passed)
+    assert_contracts: bool,
     /// Functions annotated with contract attributes will contain contract closures even if they
     /// are not to be used in this harness.
     /// In order to avoid bringing unnecessary logic, we clear their body.
@@ -330,7 +339,7 @@ impl TransformPass for FunctionWithContractPass {
 impl FunctionWithContractPass {
     /// Build the pass by collecting which functions we are stubbing and which ones we are
     /// verifying.
-    pub fn new(tcx: TyCtxt, unit: &CodegenUnit) -> FunctionWithContractPass {
+    pub fn new(tcx: TyCtxt, queries: &QueryDb, unit: &CodegenUnit) -> FunctionWithContractPass {
         if let Some(harness) = unit.harnesses.first() {
             let attrs = KaniAttributes::for_instance(tcx, *harness);
             let check_fn = attrs.interpret_for_contract_attribute().map(|(_, def_id, _)| def_id);
@@ -339,11 +348,13 @@ impl FunctionWithContractPass {
                 .iter()
                 .map(|(_, def_id, _)| *def_id)
                 .collect();
-            let run_contract_fn = find_fn_def(tcx, "KaniRunContract");
+            let run_contract_fn =
+                queries.kani_functions().get(&KaniModel::RunContract.into()).copied();
             assert!(run_contract_fn.is_some(), "Failed to find Kani run contract function");
             FunctionWithContractPass {
                 check_fn,
                 replace_fns,
+                assert_contracts: !queries.args().no_assert_contracts,
                 unused_closures: Default::default(),
                 run_contract_fn,
             }
@@ -367,6 +378,9 @@ impl FunctionWithContractPass {
     ///            // same as above
     ///        }
     ///        kani::internal::SIMPLE_CHECK => {
+    ///            // same as above
+    ///        }
+    ///        kani::internal::ASSERT => {
     ///            // same as above
     ///        }
     ///        _ => { /* original code */}
@@ -420,15 +434,18 @@ impl FunctionWithContractPass {
             &mut mode_call,
             InsertPosition::Before,
         );
-        new_body.replace_terminator(
-            &mode_call,
-            Terminator { kind: TerminatorKind::Goto { target }, span },
-        );
+        new_body.replace_terminator(&mode_call, Terminator {
+            kind: TerminatorKind::Goto { target },
+            span,
+        });
 
         new_body.into()
     }
 
     /// Return which contract mode to use for this function if any.
+    /// Note that the Check and Replace modes take precedence over the Assert mode.
+    /// This precedence ensures that a given `target` of a proof_for_contract(target) or stub_verified(target)
+    /// use their Check or Replace closures, respectively, rather than the Assert closure.
     fn contract_mode(&self, tcx: TyCtxt, fn_def: FnDef) -> Option<ContractMode> {
         let kani_attributes = KaniAttributes::for_def_id(tcx, fn_def.def_id());
         kani_attributes.has_contract().then(|| {
@@ -441,6 +458,8 @@ impl FunctionWithContractPass {
                 }
             } else if self.replace_fns.contains(&fn_def_id) {
                 ContractMode::Replace
+            } else if self.assert_contracts {
+                ContractMode::Assert
             } else {
                 ContractMode::Original
             }
@@ -454,24 +473,34 @@ impl FunctionWithContractPass {
         let recursion_closure = find_closure(tcx, fn_def, &body, contract.recursion_check.as_str());
         let check_closure = find_closure(tcx, fn_def, &body, contract.checked_with.as_str());
         let replace_closure = find_closure(tcx, fn_def, &body, contract.replaced_with.as_str());
+        let assert_closure = find_closure(tcx, fn_def, &body, contract.asserted_with.as_str());
         match mode {
             ContractMode::Original => {
                 // No contract instrumentation needed. Add all closures to the list of unused.
                 self.unused_closures.insert(recursion_closure);
                 self.unused_closures.insert(check_closure);
                 self.unused_closures.insert(replace_closure);
+                self.unused_closures.insert(assert_closure);
             }
             ContractMode::RecursiveCheck => {
                 self.unused_closures.insert(replace_closure);
                 self.unused_closures.insert(check_closure);
+                self.unused_closures.insert(assert_closure);
             }
             ContractMode::SimpleCheck => {
                 self.unused_closures.insert(replace_closure);
                 self.unused_closures.insert(recursion_closure);
+                self.unused_closures.insert(assert_closure);
             }
             ContractMode::Replace => {
                 self.unused_closures.insert(recursion_closure);
                 self.unused_closures.insert(check_closure);
+                self.unused_closures.insert(assert_closure);
+            }
+            ContractMode::Assert => {
+                self.unused_closures.insert(recursion_closure);
+                self.unused_closures.insert(check_closure);
+                self.unused_closures.insert(replace_closure);
             }
         }
     }
@@ -486,6 +515,7 @@ enum ContractMode {
     RecursiveCheck = 1,
     SimpleCheck = 2,
     Replace = 3,
+    Assert = 4,
 }
 
 fn find_closure(tcx: TyCtxt, fn_def: FnDef, body: &Body, name: &str) -> ClosureDef {

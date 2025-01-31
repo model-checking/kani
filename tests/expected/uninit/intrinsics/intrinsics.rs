@@ -5,7 +5,7 @@
 
 #![feature(core_intrinsics)]
 
-use std::alloc::{alloc, alloc_zeroed, Layout};
+use std::alloc::{Layout, alloc, alloc_zeroed};
 use std::intrinsics::*;
 
 #[kani::proof]
@@ -131,23 +131,23 @@ fn check_volatile_store_and_load_safe() {
 }
 
 #[kani::proof]
-fn check_typed_swap() {
+fn check_typed_swap_nonoverlapping() {
     unsafe {
         let layout = Layout::from_size_align(16, 8).unwrap();
         let left: *mut u8 = alloc(layout);
         let right: *mut u8 = alloc(layout);
         // ~ERROR: Accessing `left` and `right` here, both of which are uninitialized.
-        typed_swap(left, right);
+        typed_swap_nonoverlapping(left, right);
     }
 }
 
 #[kani::proof]
-fn check_typed_swap_safe() {
+fn check_typed_swap_nonoverlapping_safe() {
     unsafe {
         let layout = Layout::from_size_align(16, 8).unwrap();
         let left: *mut u8 = alloc_zeroed(layout);
         let right: *mut u8 = alloc_zeroed(layout);
         // Both `left` and `right` are initialized here.
-        typed_swap(left, right);
+        typed_swap_nonoverlapping(left, right);
     }
 }

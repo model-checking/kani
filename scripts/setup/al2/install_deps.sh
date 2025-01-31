@@ -13,8 +13,6 @@ DEPS=(
   cmake3
   gcc10-c++
   git
-  openssl-devel
-  python3-pip
   wget
 )
 
@@ -24,14 +22,10 @@ sudo yum -y update
 sudo yum -y groupinstall "Development Tools"
 sudo yum -y install "${DEPS[@]}"
 
-# Add Python package dependencies
-python3 -m pip install autopep8
-
 # Get the directory containing this script
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
 ${SCRIPT_DIR}/install_cbmc.sh
-${SCRIPT_DIR}/install_viewer.sh
 # The Kissat installation script is platform-independent, so is placed one level up
 ${SCRIPT_DIR}/../install_kissat.sh
 ${SCRIPT_DIR}/../install_rustup.sh

@@ -3,7 +3,7 @@
 
 [package]
 name = "kani-driver"
-version = "0.55.0"
+version = "0.58.0"
 edition = "2021"
 description = "Build a project with Kani and run all proof harnesses"
 license = "MIT OR Apache-2.0"
@@ -13,13 +13,15 @@ publish = false
 
 [dependencies]
 kani_metadata = { path = "../kani_metadata" }
-cargo_metadata = "0.18.0"
+cargo_metadata = "0.19"
 anyhow = "1"
 console = "0.15.1"
 once_cell = "1.19.0"
+to_markdown_table = "0.1.0"
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde_json = { version = "1", features = ["preserve_order"] }
 clap = { version = "4.4.11", features = ["derive"] }
+colour = "2.1.0"
 glob = "0.3"
 toml = "0.8"
 regex = "1.6"
@@ -33,8 +35,10 @@ tempfile = "3"
 tracing = {version = "0.1", features = ["max_level_trace", "release_max_level_debug"]}
 tracing-subscriber = {version = "0.3.8", features = ["env-filter", "json", "fmt"]}
 rand = "0.8"
-which = "6"
+which = "7"
 time = {version = "0.3.36", features = ["formatting"]}
+tokio = { version = "1.40.0", features = ["io-util", "process", "rt", "time"] }
+
 
 # A good set of suggested dependencies can be found in rustup:
 # https://github.com/rust-lang/rustup/blob/master/Cargo.toml

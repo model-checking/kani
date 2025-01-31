@@ -1,0 +1,20 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+
+# Note: this file is intended only for testing the kani release bundle
+
+FROM ubuntu:24.04
+ENV DEBIAN_FRONTEND=noninteractive \
+    DEBCONF_NONINTERACTIVE_SEEN=true
+RUN apt-get update && \
+    apt-get install -y curl build-essential && \
+    curl -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+WORKDIR /tmp/kani
+COPY ./tests ./tests
+COPY ./kani-latest-x86_64-unknown-linux-gnu.tar.gz ./
+# Very awkward glob (not regex!) to get `kani-verifier-*` and not `kani-verifier-*.crate`
+COPY ./target/package/kani-verifier-*[^e] ./kani-verifier
+RUN cargo install --path ./kani-verifier
+RUN cargo-kani setup --use-local-bundle ./kani-latest-x86_64-unknown-linux-gnu.tar.gz

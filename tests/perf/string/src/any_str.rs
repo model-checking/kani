@@ -1,10 +1,5 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-//
-// kani-flags: --enable-unstable --mir-linker
-//
-//! This test is to check MIR linker state of the art.
-//! I.e.: Currently, this should fail with missing function definition.
 
 #[kani::proof]
 #[kani::unwind(4)]

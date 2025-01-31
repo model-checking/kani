@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! Define arguments that should be common to all subcommands in Kani.
-use crate::args::ValidateArgs;
+use crate::args::{ValidateArgs, print_deprecated};
 use clap::{error::Error, error::ErrorKind};
 pub use kani_metadata::{EnabledUnstableFeatures, UnstableFeature};
 
@@ -38,6 +38,30 @@ impl ValidateArgs for CommonArgs {
                 ErrorKind::ValueValidation,
                 "The `--dry-run` option is obsolete. Use --verbose instead.",
             ));
+        }
+        Ok(())
+    }
+}
+
+impl CommonArgs {
+    pub fn check_unstable(
+        &self,
+        enabled: bool,
+        argument: &str,
+        required: UnstableFeature,
+    ) -> Result<(), Error> {
+        if enabled && !self.unstable_features.contains(required) {
+            let z_feature = format!("-Z {required}");
+            if self.enable_unstable {
+                print_deprecated(self, "--enable-unstable", &z_feature);
+            } else {
+                return Err(Error::raw(
+                    ErrorKind::MissingRequiredArgument,
+                    format!(
+                        "The `{argument}` argument is unstable and requires `{z_feature}` to be used.",
+                    ),
+                ));
+            }
         }
         Ok(())
     }

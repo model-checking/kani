@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Z uninit-checks
 
-use std::alloc::{alloc, Layout};
+use std::alloc::{Layout, alloc};
 
 #[kani::proof]
 fn alloc_to_slice() {

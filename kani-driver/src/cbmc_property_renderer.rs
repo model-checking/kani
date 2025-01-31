@@ -22,127 +22,96 @@ static CBMC_ALT_DESCRIPTIONS: Lazy<CbmcAltDescriptions> = Lazy::new(|| {
     map.insert("error_label", vec![]);
     map.insert("division-by-zero", vec![("division by zero", None)]);
     map.insert("enum-range-check", vec![("enum range check", None)]);
-    map.insert(
-        "undefined-shift",
-        vec![
-            ("shift distance is negative", None),
-            ("shift distance too large", None),
-            ("shift operand is negative", None),
-            ("shift of non-integer type", None),
-        ],
-    );
-    map.insert(
-        "overflow",
-        vec![
-            ("result of signed mod is not representable", None),
-            ("arithmetic overflow on signed type conversion", None),
-            ("arithmetic overflow on signed division", None),
-            ("arithmetic overflow on signed unary minus", None),
-            ("arithmetic overflow on signed shl", None),
-            ("arithmetic overflow on unsigned unary minus", None),
-            ("arithmetic overflow on signed +", Some("arithmetic overflow on signed addition")),
-            ("arithmetic overflow on signed -", Some("arithmetic overflow on signed subtraction")),
-            (
-                "arithmetic overflow on signed *",
-                Some("arithmetic overflow on signed multiplication"),
-            ),
-            ("arithmetic overflow on unsigned +", Some("arithmetic overflow on unsigned addition")),
-            (
-                "arithmetic overflow on unsigned -",
-                Some("arithmetic overflow on unsigned subtraction"),
-            ),
-            (
-                "arithmetic overflow on unsigned *",
-                Some("arithmetic overflow on unsigned multiplication"),
-            ),
-            ("arithmetic overflow on floating-point typecast", None),
-            ("arithmetic overflow on floating-point division", None),
-            ("arithmetic overflow on floating-point addition", None),
-            ("arithmetic overflow on floating-point subtraction", None),
-            ("arithmetic overflow on floating-point multiplication", None),
-            ("arithmetic overflow on unsigned to signed type conversion", None),
-            ("arithmetic overflow on float to signed integer type conversion", None),
-            ("arithmetic overflow on signed to unsigned type conversion", None),
-            ("arithmetic overflow on unsigned to unsigned type conversion", None),
-            ("arithmetic overflow on float to unsigned integer type conversion", None),
-        ],
-    );
-    map.insert(
-        "NaN",
-        vec![
-            ("NaN on +", Some("NaN on addition")),
-            ("NaN on -", Some("NaN on subtraction")),
-            ("NaN on /", Some("NaN on division")),
-            ("NaN on *", Some("NaN on multiplication")),
-        ],
-    );
-    map.insert("pointer", vec![("same object violation", None)]);
-    map.insert(
-        "pointer_arithmetic",
-        vec![
-            ("pointer relation: deallocated dynamic object", None),
-            ("pointer relation: dead object", None),
-            ("pointer relation: pointer NULL", None),
-            ("pointer relation: pointer invalid", None),
-            ("pointer relation: pointer outside dynamic object bounds", None),
-            ("pointer relation: pointer outside object bounds", None),
-            ("pointer relation: invalid integer address", None),
-            ("pointer arithmetic: deallocated dynamic object", None),
-            ("pointer arithmetic: dead object", None),
-            ("pointer arithmetic: pointer NULL", None),
-            ("pointer arithmetic: pointer invalid", None),
-            ("pointer arithmetic: pointer outside dynamic object bounds", None),
-            ("pointer arithmetic: pointer outside object bounds", None),
-            ("pointer arithmetic: invalid integer address", None),
-        ],
-    );
-    map.insert(
-        "pointer_dereference",
-        vec![
-            (
-                "dereferenced function pointer must be",
-                Some("dereference failure: invalid function pointer"),
-            ),
-            ("dereference failure: pointer NULL", None),
-            ("dereference failure: pointer invalid", None),
-            ("dereference failure: deallocated dynamic object", None),
-            ("dereference failure: dead object", None),
-            ("dereference failure: pointer outside dynamic object bounds", None),
-            ("dereference failure: pointer outside object bounds", None),
-            ("dereference failure: invalid integer address", None),
-        ],
-    );
+    map.insert("undefined-shift", vec![
+        ("shift distance is negative", None),
+        ("shift distance too large", None),
+        ("shift operand is negative", None),
+        ("shift of non-integer type", None),
+    ]);
+    map.insert("overflow", vec![
+        ("result of signed mod is not representable", None),
+        ("arithmetic overflow on signed type conversion", None),
+        ("arithmetic overflow on signed division", None),
+        ("arithmetic overflow on signed unary minus", None),
+        ("arithmetic overflow on signed shl", None),
+        ("arithmetic overflow on unsigned unary minus", None),
+        ("arithmetic overflow on signed +", Some("arithmetic overflow on signed addition")),
+        ("arithmetic overflow on signed -", Some("arithmetic overflow on signed subtraction")),
+        ("arithmetic overflow on signed *", Some("arithmetic overflow on signed multiplication")),
+        ("arithmetic overflow on unsigned +", Some("arithmetic overflow on unsigned addition")),
+        ("arithmetic overflow on unsigned -", Some("arithmetic overflow on unsigned subtraction")),
+        (
+            "arithmetic overflow on unsigned *",
+            Some("arithmetic overflow on unsigned multiplication"),
+        ),
+        ("arithmetic overflow on floating-point typecast", None),
+        ("arithmetic overflow on floating-point division", None),
+        ("arithmetic overflow on floating-point addition", None),
+        ("arithmetic overflow on floating-point subtraction", None),
+        ("arithmetic overflow on floating-point multiplication", None),
+        ("arithmetic overflow on unsigned to signed type conversion", None),
+        ("arithmetic overflow on float to signed integer type conversion", None),
+        ("arithmetic overflow on signed to unsigned type conversion", None),
+        ("arithmetic overflow on unsigned to unsigned type conversion", None),
+        ("arithmetic overflow on float to unsigned integer type conversion", None),
+    ]);
+    map.insert("NaN", vec![
+        ("NaN on +", Some("NaN on addition")),
+        ("NaN on -", Some("NaN on subtraction")),
+        ("NaN on /", Some("NaN on division")),
+        ("NaN on *", Some("NaN on multiplication")),
+    ]);
+    map.insert("pointer_arithmetic", vec![
+        ("pointer relation: deallocated dynamic object", None),
+        ("pointer relation: dead object", None),
+        ("pointer relation: pointer NULL", None),
+        ("pointer relation: pointer invalid", None),
+        ("pointer relation: pointer outside dynamic object bounds", None),
+        ("pointer relation: pointer outside object bounds", None),
+        ("pointer relation: invalid integer address", None),
+        ("pointer arithmetic: deallocated dynamic object", None),
+        ("pointer arithmetic: dead object", None),
+        ("pointer arithmetic: pointer NULL", None),
+        ("pointer arithmetic: pointer invalid", None),
+        ("pointer arithmetic: pointer outside dynamic object bounds", None),
+        ("pointer arithmetic: pointer outside object bounds", None),
+        ("pointer arithmetic: invalid integer address", None),
+    ]);
+    map.insert("pointer_dereference", vec![
+        (
+            "dereferenced function pointer must be",
+            Some("dereference failure: invalid function pointer"),
+        ),
+        ("dereference failure: pointer NULL", None),
+        ("dereference failure: pointer invalid", None),
+        ("dereference failure: deallocated dynamic object", None),
+        ("dereference failure: dead object", None),
+        ("dereference failure: pointer outside dynamic object bounds", None),
+        ("dereference failure: pointer outside object bounds", None),
+        ("dereference failure: invalid integer address", None),
+    ]);
     // These are very hard to understand without more context.
-    map.insert(
-        "pointer_primitives",
-        vec![
-            ("pointer invalid", None),
-            ("deallocated dynamic object", Some("pointer to deallocated dynamic object")),
-            ("dead object", Some("pointer to dead object")),
-            ("pointer outside dynamic object bounds", None),
-            ("pointer outside object bounds", None),
-            ("invalid integer address", None),
-        ],
-    );
-    map.insert(
-        "array_bounds",
-        vec![
-            ("lower bound", Some("index out of bounds")),
-            // This one is redundant:
-            // ("dynamic object upper bound", Some("access out of bounds")),
-            (
-                "upper bound",
-                Some("index out of bounds: the length is less than or equal to the given index"),
-            ),
-        ],
-    );
-    map.insert(
-        "bit_count",
-        vec![
-            ("count trailing zeros is undefined for value zero", None),
-            ("count leading zeros is undefined for value zero", None),
-        ],
-    );
+    map.insert("pointer_primitives", vec![
+        ("pointer invalid", None),
+        ("deallocated dynamic object", Some("pointer to deallocated dynamic object")),
+        ("dead object", Some("pointer to dead object")),
+        ("pointer outside dynamic object bounds", None),
+        ("pointer outside object bounds", None),
+        ("invalid integer address", None),
+    ]);
+    map.insert("array_bounds", vec![
+        ("lower bound", Some("index out of bounds")),
+        // This one is redundant:
+        // ("dynamic object upper bound", Some("access out of bounds")),
+        (
+            "upper bound",
+            Some("index out of bounds: the length is less than or equal to the given index"),
+        ),
+    ]);
+    map.insert("bit_count", vec![
+        ("count trailing zeros is undefined for value zero", None),
+        ("count leading zeros is undefined for value zero", None),
+    ]);
     map.insert("memory-leak", vec![("dynamically allocated memory never freed", None)]);
     // These pre-conditions should not print temporary variables since they are embedded in the libc implementation.
     // They are added via `__CPROVER_precondition`.
@@ -487,7 +456,7 @@ fn postprocess_error_message(message: ParserItem) -> ParserItem {
     {
         ParserItem::Message {
             message_text: message_text
-                .replace("--object-bits ", "--enable-unstable --cbmc-args --object-bits "),
+                .replace("--object-bits ", "-Z unstable-options --cbmc-args --object-bits "),
             message_type: String::from("ERROR"),
         }
     } else {
@@ -765,7 +734,7 @@ fn annotate_properties_with_reach_results(
     mut properties: Vec<Property>,
     reach_checks: Vec<Property>,
 ) -> Vec<Property> {
-    let mut reach_map: HashMap<String, CheckStatus> = HashMap::new();
+    let mut reach_map: HashMap<String, Vec<CheckStatus>> = HashMap::new();
     let reach_desc_pat = Regex::new("KANI_CHECK_ID_.*_([0-9])*").unwrap();
     // Collect data (ID, status) from reachability checks
     for reach_check in reach_checks {
@@ -776,13 +745,12 @@ fn annotate_properties_with_reach_results(
         let check_id_str = format!("[{check_id}]");
         // Get the status and insert into `reach_map`
         let status = reach_check.status;
-        let res_ins = reach_map.insert(check_id_str, status);
-        assert!(res_ins.is_none());
+        reach_map.entry(check_id_str).or_default().push(status);
     }
 
+    let check_marker_pat = Regex::new(r"\[KANI_CHECK_ID_([^\]]*)\]").unwrap();
     for prop in properties.iter_mut() {
         let description = &prop.description;
-        let check_marker_pat = Regex::new(r"\[KANI_CHECK_ID_([^\]]*)\]").unwrap();
         if check_marker_pat.is_match(description) {
             // Capture the ID in the property
             let prop_match_id =
@@ -791,7 +759,15 @@ fn annotate_properties_with_reach_results(
             let reach_status_opt = reach_map.get(prop_match_id);
             // Update the reachability status of the property
             if let Some(reach_status) = reach_status_opt {
-                prop.reach = Some(*reach_status);
+                for status in reach_status {
+                    // Report if any copy of `prop` is not success.
+                    if prop.reach.is_none()
+                        || prop.reach.unwrap() == CheckStatus::Satisfied
+                        || prop.reach.unwrap() == CheckStatus::Success
+                    {
+                        prop.reach = Some(*status);
+                    }
+                }
             }
         }
     }

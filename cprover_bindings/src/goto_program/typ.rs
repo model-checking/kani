@@ -2,15 +2,15 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use self::DatatypeComponent::*;
 use self::Type::*;
-use super::super::utils::{aggr_tag, max_int, min_int};
 use super::super::MachineModel;
+use super::super::utils::{aggr_tag, max_int, min_int};
 use super::{Expr, SymbolTable};
 use crate::cbmc_string::InternedString;
 use std::collections::BTreeMap;
 use std::fmt::Debug;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
-/// Datatypes
+// Datatypes
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 /// Represents the different types that can be used in a goto-program.
@@ -112,7 +112,7 @@ pub struct Parameter {
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
-/// Implementations
+// Implementations
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 /// Getters
@@ -898,13 +898,9 @@ impl Type {
         } else if concrete_self.is_scalar() && concrete_other.is_scalar() {
             concrete_self == concrete_other
         } else if concrete_self.is_struct_like() && concrete_other.is_scalar() {
-            concrete_self
-                .unwrap_transparent_type(st)
-                .map_or(false, |wrapped| wrapped == *concrete_other)
+            concrete_self.unwrap_transparent_type(st) == Some(concrete_other.clone())
         } else if concrete_self.is_scalar() && concrete_other.is_struct_like() {
-            concrete_other
-                .unwrap_transparent_type(st)
-                .map_or(false, |wrapped| wrapped == *concrete_self)
+            concrete_other.unwrap_transparent_type(st) == Some(concrete_self.clone())
         } else if concrete_self.is_struct_like() && concrete_other.is_struct_like() {
             let self_components = concrete_self.get_non_empty_components(st).unwrap();
             let other_components = concrete_other.get_non_empty_components(st).unwrap();
@@ -1598,10 +1594,10 @@ mod type_tests {
     fn check_typedef_struct_properties() {
         // Create a struct with a random field.
         let struct_name: InternedString = "MyStruct".into();
-        let struct_type = Type::struct_type(
-            struct_name,
-            vec![DatatypeComponent::Field { name: "field".into(), typ: Double }],
-        );
+        let struct_type = Type::struct_type(struct_name, vec![DatatypeComponent::Field {
+            name: "field".into(),
+            typ: Double,
+        }]);
         // Insert a field to the sym table to represent the struct field.
         let mut sym_table = SymbolTable::new(machine_model_test_stub());
         sym_table.ensure(struct_type.type_name().unwrap(), |_, name| {

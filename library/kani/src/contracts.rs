@@ -25,7 +25,7 @@
 //! simple division function `my_div`:
 //!
 //! ```
-//! fn my_div(dividend: u32, divisor: u32) -> u32 {
+//! fn my_div(dividend: usize, divisor: usize) -> usize {
 //!   dividend / divisor
 //! }
 //! ```
@@ -35,8 +35,12 @@
 //! allows us to declare constraints on what constitutes valid inputs to our
 //! function. In this case we would want to disallow a divisor that is `0`.
 //!
-//! ```ignore
+//! ```
+//! # use kani::requires;
 //! #[requires(divisor != 0)]
+//! # fn my_div(dividend: usize, divisor: usize) -> usize {
+//! #  dividend / divisor
+//! # }
 //! ```
 //!
 //! This is called a precondition, because it is enforced before (pre-) the
@@ -51,7 +55,11 @@
 //! approximation of the result of division for instance could be this:
 //!
 //! ```
-//! #[ensures(|result : &u32| *result <= dividend)]
+//! # use kani::ensures;
+//! #[ensures(|result : &usize| *result <= dividend)]
+//! # fn my_div(dividend: usize, divisor: usize) -> usize {
+//! #  dividend / divisor
+//! # }
 //! ```
 //!
 //! This is called a postcondition and it also has access to the arguments and
@@ -66,9 +74,11 @@
 //! order does not matter. In our example putting them together looks like this:
 //!
 //! ```
-//! #[kani::requires(divisor != 0)]
-//! #[kani::ensures(|result : &u32| *result <= dividend)]
-//! fn my_div(dividend: u32, divisor: u32) -> u32 {
+//! use kani::{requires, ensures};
+//!
+//! #[requires(divisor != 0)]
+//! #[ensures(|result : &usize| *result <= dividend)]
+//! fn my_div(dividend: usize, divisor: usize) -> usize {
 //!   dividend / divisor
 //! }
 //! ```
@@ -84,9 +94,18 @@
 //! function we want to check.
 //!
 //! ```
+//! # use kani::{requires, ensures};
+//! #
+//! # #[requires(divisor != 0)]
+//! # #[ensures(|result : &usize| *result <= dividend)]
+//! # fn my_div(dividend: usize, divisor: usize) -> usize {
+//! #   dividend / divisor
+//! # }
+//! #
 //! #[kani::proof_for_contract(my_div)]
 //! fn my_div_harness() {
-//!     my_div(kani::any(), kani::any()) }
+//!     my_div(kani::any(), kani::any());
+//! }
 //! ```
 //!
 //! The harness is checked like any other by running `cargo kani` and can be
@@ -104,10 +123,18 @@
 //! the contract will be used automatically.
 //!
 //! ```
+//! # use kani::{requires, ensures};
+//! #
+//! # #[requires(divisor != 0)]
+//! # #[ensures(|result : &usize| *result <= dividend)]
+//! # fn my_div(dividend: usize, divisor: usize) -> usize {
+//! #   dividend / divisor
+//! # }
+//! #
 //! #[kani::proof]
 //! #[kani::stub_verified(my_div)]
 //! fn use_div() {
-//!   let v = vec![...];
+//!   let v = kani::vec::any_vec::<char, 5>();
 //!   let some_idx = my_div(v.len() - 1, 3);
 //!   v[some_idx];
 //! }

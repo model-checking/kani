@@ -3,7 +3,7 @@
 // kani-flags: -Z stubbing
 //! Try to verify HashSet basic behavior.
 
-use std::collections::{hash_map::RandomState, HashSet};
+use std::collections::{HashSet, hash_map::RandomState};
 use std::mem::{size_of, size_of_val, transmute};
 
 #[allow(dead_code)]

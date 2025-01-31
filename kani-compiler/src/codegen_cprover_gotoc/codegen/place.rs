@@ -6,10 +6,10 @@
 //! in [GotocCtx::codegen_place] below.
 
 use super::typ::TypeExt;
+use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::codegen_cprover_gotoc::codegen::ty_stable::pointee_type;
 use crate::codegen_cprover_gotoc::codegen::typ::std_pointee_type;
 use crate::codegen_cprover_gotoc::utils::{dynamic_fat_ptr, slice_fat_ptr};
-use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::unwrap_or_return_codegen_unimplemented;
 use cbmc::goto_program::{Expr, ExprValue, Location, Stmt, Type};
 use rustc_middle::ty::layout::LayoutOf;
@@ -224,7 +224,7 @@ impl TypeOrVariant {
     }
 }
 
-impl<'tcx> GotocCtx<'tcx> {
+impl GotocCtx<'_> {
     /// Codegen field access for types that allow direct field projection.
     ///
     /// I.e.: Algebraic data types, closures, and coroutines.
@@ -282,6 +282,16 @@ impl<'tcx> GotocCtx<'tcx> {
                         Ok(parent_expr
                             .member("direct_fields", &self.symbol_table)
                             .member(field_name, &self.symbol_table))
+                    }
+                    TyKind::RigidTy(RigidTy::CoroutineClosure(def, args)) => {
+                        let typ = Ty::new_coroutine_closure(def, args);
+                        let goto_typ = self.codegen_ty_stable(typ);
+                        Err(UnimplementedData::new(
+                            "Coroutine closures",
+                            "https://github.com/model-checking/kani/issues/3783",
+                            goto_typ,
+                            *parent_expr.location(),
+                        ))
                     }
                     TyKind::RigidTy(RigidTy::Str)
                     | TyKind::RigidTy(RigidTy::Array(_, _))
@@ -456,7 +466,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     | TyKind::RigidTy(RigidTy::Dynamic(..)) => {
                         inner_goto_expr.member("data", &self.symbol_table)
                     }
-                    TyKind::RigidTy(RigidTy::Adt(..))
+                    TyKind::RigidTy(RigidTy::Adt(..)) | TyKind::RigidTy(RigidTy::Tuple(..))
                         if self.is_unsized(inner_mir_typ_internal) =>
                     {
                         // in tests/kani/Strings/os_str_reduced.rs, we see
@@ -601,7 +611,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 };
                 let layout = self.layout_of(rustc_internal::internal(self.tcx, ty));
                 let expr = match &layout.variants {
-                    Variants::Single { .. } => before.goto_expr,
+                    Variants::Empty | Variants::Single { .. } => before.goto_expr,
                     Variants::Multiple { tag_encoding, .. } => match tag_encoding {
                         TagEncoding::Direct => {
                             let cases = if ty_kind.is_coroutine() {

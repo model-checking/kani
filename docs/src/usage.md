@@ -28,8 +28,6 @@ Common to both `kani` and `cargo kani` are many command-line flags:
  If used with `print`, Kani will only print the unit test to stdout.
  If used with `inplace`, Kani will automatically add the unit test to the user's source code, next to the proof harness. For more detailed instructions, see the [concrete playback](./experimental/concrete-playback.md) section.
 
- * `--visualize`: _Experimental_, `--enable-unstable` feature that generates an HTML report providing traces (i.e., counterexamples) for each failure found by Kani.
-
  * `--tests`: Build in "[test mode](https://doc.rust-lang.org/rustc/tests/index.html)", i.e. with `cfg(test)` set and `dev-dependencies` available (when using `cargo kani`).
 
  * `--harness <name>`: By default, Kani checks all proof harnesses it finds.

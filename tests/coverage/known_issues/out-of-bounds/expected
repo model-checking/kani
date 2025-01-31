@@ -1,7 +1,15 @@
-Source-based code coverage results:
-
-test.rs (get)\
- * 8:1 - 10:2 COVERED
-
-test.rs (main)\
- * 13:1 - 15:2 COVERED
+   1|     | // Copyright Kani Contributors\
+   2|     | // SPDX-License-Identifier: Apache-2.0 OR MIT\
+   3|     | \
+   4|     | //! This test should check that the return in `get` is `UNCOVERED`. However, the\
+   5|     | //! coverage results currently report that the whole function is `COVERED`,\
+   6|     | //! likely due to <https://github.com/model-checking/kani/issues/3441>\
+   7|     | \
+   8|    1| fn get(s: &[i16], index: usize) -> i16 {\
+   9|    1|     s[index]\
+  10|     | }\
+  11|     | \
+  12|     | #[kani::proof]\
+  13|    1| fn main() {\
+  14|    1|     get(&[7, -83, 19], 15);\
+  15|     | }\

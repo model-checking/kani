@@ -1,4 +1,15 @@
-Source-based code coverage results:
-
-main.rs (check_assume_assert)\
- * 11:1 - 15:2 COVERED
+   1|     | // Copyright Kani Contributors\
+   2|     | // SPDX-License-Identifier: Apache-2.0 OR MIT\
+   3|     | \
+   4|     | //! This test should check that the region after `kani::assume(false)` is\
+   5|     | //! `UNCOVERED`. However, due to a technical limitation in `rustc`'s coverage\
+   6|     | //! instrumentation, only one `COVERED` region is reported for the whole\
+   7|     | //! function. More details in\
+   8|     | //! <https://github.com/model-checking/kani/issues/3441>.\
+   9|     | \
+  10|     | #[kani::proof]\
+  11|    1| fn check_assume_assert() {\
+  12|    1|     let a: u8 = kani::any();\
+  13|    1|     kani::assume(false);\
+  14|    1|     assert!(a < 5);\
+  15|     | }\

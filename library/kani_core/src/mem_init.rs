@@ -1,19 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-//! This module provides instrumentation for tracking memory initialization of raw pointers.
-//!
-//! Currently, memory initialization is tracked on per-byte basis, so each byte of memory pointed to
-//! by raw pointers could be either initialized or uninitialized. Padding bytes are always
-//! considered uninitialized when read as data bytes. Each type has a type layout to specify which
-//! bytes are considered to be data and which -- padding. This is determined at compile time and
-//! statically injected into the program (see `Layout`).
-//!
-//! Compiler automatically inserts calls to `is_xxx_initialized` and `set_xxx_initialized` at
-//! appropriate locations to get or set the initialization status of the memory pointed to.
-//!
-//! Note that for each harness, tracked object and tracked offset are chosen non-deterministically,
-//! so calls to `is_xxx_initialized` should be only used in assertion contexts.
+// This module provides instrumentation for tracking memory initialization of raw pointers.
+// For full documentation, see the usage of `kani_core::kani_mem_init!(std);` in library/kani_core/src/lib.rs
 
 // Definitions in this module are not meant to be visible to the end user, only the compiler.
 #![allow(dead_code)]
@@ -200,7 +189,7 @@ macro_rules! kani_mem_init {
 
         /// Set tracked object and tracked offset to a non-deterministic value.
         #[kanitool::disable_checks(pointer)]
-        #[rustc_diagnostic_item = "KaniInitializeMemoryInitializationState"]
+        #[kanitool::fn_marker = "InitializeMemoryInitializationStateModel"]
         fn initialize_memory_initialization_state() {
             unsafe {
                 MEM_INIT_STATE.tracked_object_id = super::any();
@@ -211,7 +200,7 @@ macro_rules! kani_mem_init {
 
         /// Get initialization state of `num_elts` items laid out according to the `layout` starting at address `ptr`.
         #[kanitool::disable_checks(pointer)]
-        #[rustc_diagnostic_item = "KaniIsPtrInitialized"]
+        #[kanitool::fn_marker = "IsPtrInitializedModel"]
         fn is_ptr_initialized<const LAYOUT_SIZE: usize, T>(
             ptr: *const T,
             layout: Layout<LAYOUT_SIZE>,
@@ -225,7 +214,7 @@ macro_rules! kani_mem_init {
 
         /// Set initialization state to `value` for `num_elts` items laid out according to the `layout` starting at address `ptr`.
         #[kanitool::disable_checks(pointer)]
-        #[rustc_diagnostic_item = "KaniSetPtrInitialized"]
+        #[kanitool::fn_marker = "SetPtrInitializedModel"]
         fn set_ptr_initialized<const LAYOUT_SIZE: usize, T>(
             ptr: *const T,
             layout: Layout<LAYOUT_SIZE>,
@@ -242,7 +231,7 @@ macro_rules! kani_mem_init {
 
         /// Get initialization state of `num_elts` items laid out according to the `layout` starting at address `ptr`.
         #[kanitool::disable_checks(pointer)]
-        #[rustc_diagnostic_item = "KaniIsSliceChunkPtrInitialized"]
+        #[kanitool::fn_marker = "IsSliceChunkPtrInitializedModel"]
         fn is_slice_chunk_ptr_initialized<const LAYOUT_SIZE: usize, T>(
             ptr: *const T,
             layout: Layout<LAYOUT_SIZE>,
@@ -257,7 +246,7 @@ macro_rules! kani_mem_init {
 
         /// Set initialization state to `value` for `num_elts` items laid out according to the `layout` starting at address `ptr`.
         #[kanitool::disable_checks(pointer)]
-        #[rustc_diagnostic_item = "KaniSetSliceChunkPtrInitialized"]
+        #[kanitool::fn_marker = "SetSliceChunkPtrInitializedModel"]
         fn set_slice_chunk_ptr_initialized<const LAYOUT_SIZE: usize, T>(
             ptr: *const T,
             layout: Layout<LAYOUT_SIZE>,
@@ -275,7 +264,7 @@ macro_rules! kani_mem_init {
 
         /// Get initialization state of the slice, items of which are laid out according to the `layout` starting at address `ptr`.
         #[kanitool::disable_checks(pointer)]
-        #[rustc_diagnostic_item = "KaniIsSlicePtrInitialized"]
+        #[kanitool::fn_marker = "IsSlicePtrInitializedModel"]
         fn is_slice_ptr_initialized<const LAYOUT_SIZE: usize, T>(
             ptr: *const [T],
             layout: Layout<LAYOUT_SIZE>,
@@ -289,7 +278,7 @@ macro_rules! kani_mem_init {
 
         /// Set initialization state of the slice, items of which are laid out according to the `layout` starting at address `ptr` to `value`.
         #[kanitool::disable_checks(pointer)]
-        #[rustc_diagnostic_item = "KaniSetSlicePtrInitialized"]
+        #[kanitool::fn_marker = "SetSlicePtrInitializedModel"]
         fn set_slice_ptr_initialized<const LAYOUT_SIZE: usize, T>(
             ptr: *const [T],
             layout: Layout<LAYOUT_SIZE>,
@@ -306,7 +295,7 @@ macro_rules! kani_mem_init {
 
         /// Get initialization state of the string slice, items of which are laid out according to the `layout` starting at address `ptr`.
         #[kanitool::disable_checks(pointer)]
-        #[rustc_diagnostic_item = "KaniIsStrPtrInitialized"]
+        #[kanitool::fn_marker = "IsStrPtrInitializedModel"]
         fn is_str_ptr_initialized<const LAYOUT_SIZE: usize>(
             ptr: *const str,
             layout: Layout<LAYOUT_SIZE>,
@@ -320,7 +309,7 @@ macro_rules! kani_mem_init {
 
         /// Set initialization state of the string slice, items of which are laid out according to the `layout` starting at address `ptr` to `value`.
         #[kanitool::disable_checks(pointer)]
-        #[rustc_diagnostic_item = "KaniSetStrPtrInitialized"]
+        #[kanitool::fn_marker = "SetStrPtrInitializedModel"]
         fn set_str_ptr_initialized<const LAYOUT_SIZE: usize>(
             ptr: *const str,
             layout: Layout<LAYOUT_SIZE>,
@@ -338,7 +327,7 @@ macro_rules! kani_mem_init {
         /// Copy initialization state of `size_of::<T> * num_elts` bytes from one pointer to the other. Note
         /// that in this case `LAYOUT_SIZE == size_of::<T>`.
         #[kanitool::disable_checks(pointer)]
-        #[rustc_diagnostic_item = "KaniCopyInitState"]
+        #[kanitool::fn_marker = "CopyInitStateModel"]
         fn copy_init_state<const LAYOUT_SIZE: usize, T>(
             from: *const T,
             to: *const T,
@@ -361,7 +350,7 @@ macro_rules! kani_mem_init {
         /// Copy initialization state of `size_of::<T>` bytes from one pointer to the other. Note that in
         /// this case `LAYOUT_SIZE == size_of::<T>`.
         #[kanitool::disable_checks(pointer)]
-        #[rustc_diagnostic_item = "KaniCopyInitStateSingle"]
+        #[kanitool::fn_marker = "CopyInitStateSingleModel"]
         fn copy_init_state_single<const LAYOUT_SIZE: usize, T>(from: *const T, to: *const T) {
             copy_init_state::<LAYOUT_SIZE, T>(from, to, 1);
         }
@@ -379,7 +368,7 @@ macro_rules! kani_mem_init {
         /// Non-deterministically store information about currently tracked argument in the argument
         /// buffer.
         #[kanitool::disable_checks(pointer)]
-        #[rustc_diagnostic_item = "KaniStoreArgument"]
+        #[kanitool::fn_marker = "StoreArgumentModel"]
         fn store_argument<const LAYOUT_SIZE: usize, T>(from: *const T, selected_argument: usize) {
             let (from_ptr, _) = from.to_raw_parts();
             let should_store: bool = super::any();
@@ -399,7 +388,7 @@ macro_rules! kani_mem_init {
         /// callee. Otherwise, mark that the argument as initialized, as it will be checked by
         /// another non-deterministic branch. Reset the argument buffer after loading from it.
         #[kanitool::disable_checks(pointer)]
-        #[rustc_diagnostic_item = "KaniLoadArgument"]
+        #[kanitool::fn_marker = "LoadArgumentModel"]
         fn load_argument<const LAYOUT_SIZE: usize, T>(to: *const T, selected_argument: usize) {
             let (to_ptr, _) = to.to_raw_parts();
             if let Some(buffer) = unsafe { ARGUMENT_BUFFER } {

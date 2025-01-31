@@ -6,11 +6,12 @@
 use proc_macro2::{Ident, Span, TokenStream as TokenStream2};
 use quote::quote;
 use std::mem;
-use syn::{parse_quote, Block, Expr, FnArg, Local, LocalInit, Pat, PatIdent, ReturnType, Stmt};
+use syn::{Block, Expr, FnArg, Local, LocalInit, Pat, PatIdent, ReturnType, Stmt, parse_quote};
 
 use super::{
-    helpers::*, shared::build_ensures, ClosureType, ContractConditionsData,
-    ContractConditionsHandler, INTERNAL_RESULT_IDENT,
+    ContractConditionsData, ContractConditionsHandler, ContractMode, INTERNAL_RESULT_IDENT,
+    helpers::*,
+    shared::{build_ensures, split_for_remembers},
 };
 
 const WRAPPER_ARG: &str = "_wrapper_arg";
@@ -40,7 +41,7 @@ impl<'a> ContractConditionsHandler<'a> {
                 let return_expr = body_stmts.pop();
 
                 let (assumes, rest_of_body) =
-                    split_for_remembers(&body_stmts[..], ClosureType::Check);
+                    split_for_remembers(&body_stmts[..], ContractMode::SimpleCheck);
 
                 quote!({
                     #(#assumes)*
@@ -84,9 +85,12 @@ impl<'a> ContractConditionsHandler<'a> {
         let wrapper_arg_ident = Ident::new(WRAPPER_ARG, Span::call_site());
         let return_type = return_type_to_type(&self.annotated_fn.sig.output);
         let mut_recv = self.has_mutable_receiver().then(|| quote!(core::ptr::addr_of!(self),));
-        let redefs = self.arg_redefinitions();
-        let modifies_closure =
-            self.modifies_closure(&self.annotated_fn.sig.output, &self.annotated_fn.block, redefs);
+        let redefs_mut_only = self.arg_redefinitions(true);
+        let modifies_closure = self.modifies_closure(
+            &self.annotated_fn.sig.output,
+            &self.annotated_fn.block,
+            redefs_mut_only,
+        );
         let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
         parse_quote!(
             let #wrapper_arg_ident = (#mut_recv);
@@ -172,17 +176,17 @@ impl<'a> ContractConditionsHandler<'a> {
             .unwrap_or(false)
     }
 
-    /// Generate argument re-definitions for mutable arguments.
+    /// Generate argument re-definitions for arguments.
     ///
-    /// This is used so Kani doesn't think that modifying a local argument value is a side effect.
-    fn arg_redefinitions(&self) -> TokenStream2 {
+    /// This is used so Kani doesn't think that modifying a local argument value is a side effect,
+    /// and avoid may-drop checks in const generic functions.
+    pub fn arg_redefinitions(&self, redefine_only_mut: bool) -> TokenStream2 {
         let mut result = TokenStream2::new();
         for (mutability, ident) in self.arg_bindings() {
             if mutability == MutBinding::Mut {
-                result.extend(quote!(let mut #ident = #ident;))
-            } else {
-                // This would make some replace some temporary variables from error messages.
-                //result.extend(quote!(let #ident = #ident; ))
+                result.extend(quote!(let mut #ident = #ident;));
+            } else if !redefine_only_mut {
+                result.extend(quote!(let #ident = #ident;));
             }
         }
         result

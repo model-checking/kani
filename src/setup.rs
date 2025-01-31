@@ -8,7 +8,7 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 
 use crate::cmd::AutoRun;
 use crate::os_hacks;
@@ -85,8 +85,6 @@ pub fn setup(
     setup_kani_bundle(&kani_dir, use_local_bundle)?;
 
     setup_rust_toolchain(&kani_dir, use_local_toolchain)?;
-
-    setup_python_deps(&kani_dir)?;
 
     os_hacks::setup_os_hacks(&kani_dir, &os)?;
 
@@ -181,23 +179,6 @@ fn setup_rust_toolchain(kani_dir: &Path, use_local_toolchain: Option<OsString>) 
     let toolchain = home::rustup_home()?.join("toolchains").join(&toolchain_version);
     symlink_rust_toolchain(&toolchain, kani_dir)?;
     Ok(toolchain_version)
-}
-
-/// Install into the pyroot the python dependencies we need
-fn setup_python_deps(kani_dir: &Path) -> Result<()> {
-    println!("[4/5] Installing Kani python dependencies...");
-    let pyroot = kani_dir.join("pyroot");
-
-    // TODO: this is a repetition of versions from kani/kani-dependencies
-    let pkg_versions = &["cbmc-viewer==3.9"];
-
-    Command::new("python3")
-        .args(["-m", "pip", "install", "--target"])
-        .arg(&pyroot)
-        .args(pkg_versions)
-        .run()?;
-
-    Ok(())
 }
 
 // This ends the setup steps above.

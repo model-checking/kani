@@ -61,7 +61,7 @@ popd
 
 echo "Starting assess scan..."
 
-time cargo kani --only-codegen --enable-unstable assess scan \
+time cargo kani --only-codegen -Z unstable-options assess scan \
   --filter-packages-file $NAME_FILE \
   --emit-metadata ./scan-results.json
 

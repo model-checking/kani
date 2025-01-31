@@ -5,13 +5,14 @@ use std::ffi::OsString;
 use std::process::ExitCode;
 
 use anyhow::Result;
-use time::{format_description, OffsetDateTime};
+use time::{OffsetDateTime, format_description};
 
-use args::{check_is_valid, CargoKaniSubcommand};
+use args::{CargoKaniSubcommand, check_is_valid};
 use args_toml::join_args;
 
 use crate::args::StandaloneSubcommand;
 use crate::concrete_playback::playback::{playback_cargo, playback_standalone};
+use crate::list::collect_metadata::{list_cargo, list_standalone};
 use crate::project::Project;
 use crate::session::KaniSession;
 use crate::version::print_kani_version;
@@ -23,7 +24,6 @@ mod args_toml;
 mod assess;
 mod call_cargo;
 mod call_cbmc;
-mod call_cbmc_viewer;
 mod call_goto_cc;
 mod call_goto_instrument;
 mod call_goto_synthesizer;
@@ -33,6 +33,7 @@ mod cbmc_property_renderer;
 mod concrete_playback;
 mod coverage;
 mod harness_runner;
+mod list;
 mod metadata;
 mod project;
 mod session;
@@ -67,6 +68,10 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
     let args = args::CargoKaniArgs::parse_from(&input_args);
     check_is_valid(&args);
 
+    if let Some(CargoKaniSubcommand::List(list_args)) = args.command {
+        return list_cargo(*list_args, args.verify_opts);
+    }
+
     let session = session::KaniSession::new(args.verify_opts)?;
 
     if !session.args.common_args.quiet {
@@ -80,6 +85,7 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
         Some(CargoKaniSubcommand::Playback(args)) => {
             return playback_cargo(*args);
         }
+        Some(CargoKaniSubcommand::List(_)) => unreachable!(),
         None => {}
     }
 
@@ -98,6 +104,9 @@ fn standalone_main() -> Result<()> {
 
     let (session, project) = match args.command {
         Some(StandaloneSubcommand::Playback(args)) => return playback_standalone(*args),
+        Some(StandaloneSubcommand::List(list_args)) => {
+            return list_standalone(*list_args, args.verify_opts);
+        }
         Some(StandaloneSubcommand::VerifyStd(args)) => {
             let session = KaniSession::new(args.verify_opts)?;
             if !session.args.common_args.quiet {

@@ -4,7 +4,7 @@
 // Use realloc to shrink the size of the allocated block and make sure
 // out-of-bound accesses result in verification failure
 
-use std::alloc::{alloc, dealloc, realloc, Layout};
+use std::alloc::{Layout, alloc, dealloc, realloc};
 
 #[kani::proof]
 fn main() {

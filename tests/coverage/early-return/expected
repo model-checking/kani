@@ -1,12 +1,19 @@
-Source-based code coverage results:
-
-main.rs (find_index)\
- * 4:1 - 4:59 COVERED\
- * 5:10 - 5:21 COVERED\
- * 7:20 - 7:31 COVERED\
- * 8:10 - 8:11 COVERED\
- * 10:5 - 10:9 UNCOVERED\
- * 11:1 - 11:2 COVERED
-
-main.rs (main)\
- * 14:1 - 19:2 COVERED
+   1|     | // Copyright Kani Contributors\
+   2|     | // SPDX-License-Identifier: Apache-2.0 OR MIT\
+   3|     | \
+   4|    1| fn find_index(nums: &[i32], target: i32) -> Option<usize> {\
+   5|    1|     for (index, &num) in nums.iter().enumerate() {\
+   6|     |         if num == target {\
+   7|    1|             return Some(index);\
+   8|    1|         } \
+   9|     |     }\
+  10|    0|     ```None'''\
+  11|     | }\
+  12|     | \
+  13|     | #[kani::proof]\
+  14|    1| fn main() {\
+  15|    1|     let numbers = [10, 20, 30, 40, 50];\
+  16|    1|     let target = 30;\
+  17|    1|     let result = find_index(&numbers, target);\
+  18|    1|     assert_eq!(result, Some(2));\
+  19|     | }\

@@ -1,26 +1,26 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-use super::typ::TypeExt;
 use super::typ::FN_RETURN_VOID_VAR_NAME;
-use super::{bb_label, PropertyClass};
+use super::typ::TypeExt;
+use super::{PropertyClass, bb_label};
 use crate::codegen_cprover_gotoc::codegen::function::rustc_smir::region_from_coverage_opaque;
 use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
 use cbmc::goto_program::{Expr, Location, Stmt, Type};
 use rustc_middle::ty::layout::LayoutOf;
-use rustc_middle::ty::{List, ParamEnv};
+use rustc_middle::ty::{List, TypingEnv};
 use rustc_smir::rustc_internal;
 use rustc_target::abi::{FieldsShape, Primitive, TagEncoding, Variants};
 use stable_mir::abi::{ArgAbi, FnAbi, PassMode};
 use stable_mir::mir::mono::{Instance, InstanceKind};
 use stable_mir::mir::{
     AssertMessage, BasicBlockIdx, CopyNonOverlapping, NonDivergingIntrinsic, Operand, Place,
-    Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind, RETURN_LOCAL,
+    RETURN_LOCAL, Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind,
 };
 use stable_mir::ty::{Abi, RigidTy, Span, Ty, TyKind, VariantIdx};
 use tracing::{debug, debug_span, trace};
 
-impl<'tcx> GotocCtx<'tcx> {
+impl GotocCtx<'_> {
     /// Generate Goto-C for MIR [Statement]s.
     /// This does not cover all possible "statements" because MIR distinguishes between ordinary
     /// statements and [Terminator]s, which can exclusively appear at the end of a basic block.
@@ -165,9 +165,9 @@ impl<'tcx> GotocCtx<'tcx> {
                 let counter_data = format!("{coverage_opaque:?} ${function_name}$");
                 let maybe_source_region =
                     region_from_coverage_opaque(self.tcx, &coverage_opaque, instance);
-                if let Some(source_region) = maybe_source_region {
+                if let Some((source_region, file_name)) = maybe_source_region {
                     let coverage_stmt =
-                        self.codegen_coverage(&counter_data, stmt.span, source_region);
+                        self.codegen_coverage(&counter_data, stmt.span, source_region, &file_name);
                     // TODO: Avoid single-statement blocks when conversion of
                     // standalone statements to the irep format is fixed.
                     // More details in <https://github.com/model-checking/kani/issues/3012>
@@ -305,7 +305,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let variant_index_internal = rustc_internal::internal(self.tcx, variant_index);
         let layout = self.layout_of(dest_ty_internal);
         match &layout.variants {
-            Variants::Single { .. } => Stmt::skip(location),
+            Variants::Empty | Variants::Single { .. } => Stmt::skip(location),
             Variants::Multiple { tag, tag_encoding, .. } => match tag_encoding {
                 TagEncoding::Direct => {
                     let discr = dest_ty_internal
@@ -663,7 +663,8 @@ impl<'tcx> GotocCtx<'tcx> {
                 let fn_ptr_abi = rustc_internal::stable(
                     self.tcx
                         .fn_abi_of_fn_ptr(
-                            ParamEnv::reveal_all().and((fn_sig_internal, &List::empty())),
+                            TypingEnv::fully_monomorphized()
+                                .as_query_input((fn_sig_internal, &List::empty())),
                         )
                         .unwrap(),
                 );

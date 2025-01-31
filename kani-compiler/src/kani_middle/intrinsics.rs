@@ -2,13 +2,16 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! This module contains a MIR pass that replaces some intrinsics by rust intrinsics models as
 //! well as validation logic that can only be added during monomorphization.
+//!
+//! TODO: Move this code to `[crate::kani_middle::transform::RustcIntrinsicsPass]` since we can do
+//! proper error handling after monomorphization.
 use rustc_index::IndexVec;
 use rustc_middle::mir::{Body, Const as mirConst, ConstValue, Operand, TerminatorKind};
 use rustc_middle::mir::{Local, LocalDecl};
 use rustc_middle::ty::{self, Ty, TyCtxt};
 use rustc_middle::ty::{Const, GenericArgsRef, IntrinsicDef};
 use rustc_span::source_map::Spanned;
-use rustc_span::symbol::{sym, Symbol};
+use rustc_span::symbol::{Symbol, sym};
 use tracing::{debug, trace};
 
 pub struct ModelIntrinsics<'tcx> {

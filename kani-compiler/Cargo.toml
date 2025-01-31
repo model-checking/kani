@@ -3,13 +3,14 @@
 
 [package]
 name = "kani-compiler"
-version = "0.55.0"
+version = "0.58.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 publish = false
 
 [dependencies]
 cbmc = { path = "../cprover_bindings", package = "cprover_bindings", optional = true }
+charon = { path = "../charon/charon", optional = true, default-features = false } 
 clap = { version = "4.4.11", features = ["derive", "cargo"] }
 home = "0.5"
 itertools = "0.13"
@@ -28,16 +29,11 @@ tracing = {version = "0.1", features = ["max_level_trace", "release_max_level_de
 tracing-subscriber = {version = "0.3.8", features = ["env-filter", "json", "fmt"]}
 tracing-tree = "0.4.0"
 
-[dependencies.object]
-version = "0.36.2"
-default-features = false
-features = ["elf", "macho", "pe", "xcoff", "write", "wasm"]
-
 # Future proofing: enable backend dependencies using feature.
 [features]
-default = ['cprover']
+default = ['cprover', 'llbc']
+llbc = ['charon']
 cprover = ['cbmc', 'num', 'serde']
-write_json_symtab = []
 
 [package.metadata.rust-analyzer]
 # This package uses rustc crates.

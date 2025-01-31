@@ -9,16 +9,16 @@ use crate::kani_middle::{
     transform::{
         body::{InsertPosition, MutableBody, SourceInstruction},
         check_uninit::{
-            relevant_instruction::{InitRelevantInstruction, MemoryInitOp},
             TargetFinder,
+            relevant_instruction::{InitRelevantInstruction, MemoryInitOp},
         },
     },
 };
 use rustc_middle::ty::TyCtxt;
 use stable_mir::mir::{
+    MirVisitor, Operand, Place, Rvalue, Statement, Terminator,
     mono::Instance,
     visit::{Location, PlaceContext},
-    MirVisitor, Operand, Place, Rvalue, Statement, Terminator,
 };
 use std::collections::HashSet;
 
@@ -35,7 +35,7 @@ pub struct InstrumentationVisitor<'a, 'tcx> {
     tcx: TyCtxt<'tcx>,
 }
 
-impl<'a, 'tcx> TargetFinder for InstrumentationVisitor<'a, 'tcx> {
+impl TargetFinder for InstrumentationVisitor<'_, '_> {
     fn find_all(mut self, body: &MutableBody) -> Vec<InitRelevantInstruction> {
         for (bb_idx, bb) in body.blocks().iter().enumerate() {
             self.current_target = InitRelevantInstruction {
@@ -75,7 +75,7 @@ impl<'a, 'tcx> InstrumentationVisitor<'a, 'tcx> {
     }
 }
 
-impl<'a, 'tcx> MirVisitor for InstrumentationVisitor<'a, 'tcx> {
+impl MirVisitor for InstrumentationVisitor<'_, '_> {
     fn visit_statement(&mut self, stmt: &Statement, location: Location) {
         self.super_statement(stmt, location);
         // Switch to the next statement.

@@ -20,8 +20,8 @@ impl MyType {
 
 mod my_mod {
     use self::inner_mod::magic_number42;
-    use super::magic_number13;
     use super::MyType;
+    use super::magic_number13;
 
     mod inner_mod {
         pub fn magic_number42() -> u32 {

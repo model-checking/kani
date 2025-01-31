@@ -16,9 +16,11 @@
 // Required for `rustc_diagnostic_item` and `core_intrinsics`
 #![allow(internal_features)]
 // Required for implementing memory predicates.
+#![feature(layout_for_ptr)]
 #![feature(ptr_metadata)]
 #![feature(f16)]
 #![feature(f128)]
+#![feature(convert_float_to_int)]
 
 // Allow us to use `kani::` to access crate features.
 extern crate self as kani;
@@ -29,7 +31,6 @@ mod concrete_playback;
 pub mod futures;
 pub mod invariant;
 pub mod shadow;
-pub mod slice;
 pub mod vec;
 
 mod models;
@@ -44,7 +45,7 @@ pub fn concrete_playback_run<F: Fn()>(_: Vec<Vec<u8>>, _: F) {
     unreachable!("Concrete playback does not work during verification")
 }
 
-pub use futures::{block_on, block_on_with_spawn, spawn, yield_now, RoundRobin};
+pub use futures::{RoundRobin, block_on, block_on_with_spawn, spawn, yield_now};
 
 // Kani proc macros must be in a separate crate
 pub use kani_macros::*;

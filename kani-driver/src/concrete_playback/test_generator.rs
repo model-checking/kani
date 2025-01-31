@@ -9,11 +9,11 @@ use crate::call_cbmc::VerificationResult;
 use crate::cbmc_output_parser::Property;
 use crate::session::KaniSession;
 use anyhow::{Context, Result};
-use concrete_vals_extractor::{extract_harness_values, ConcreteVal};
+use concrete_vals_extractor::{ConcreteVal, extract_harness_values};
 use kani_metadata::{HarnessKind, HarnessMetadata};
 use std::collections::hash_map::DefaultHasher;
 use std::ffi::OsString;
-use std::fs::{read_to_string, File};
+use std::fs::{File, read_to_string};
 use std::hash::{Hash, Hasher};
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
@@ -500,10 +500,11 @@ mod tests {
     /// Check that the generated unit tests have the right formatting and indentation
     #[test]
     fn format_two_concrete_vals() {
-        let concrete_vals = [
-            ConcreteVal { byte_arr: vec![0, 0], interp_val: "0".to_string() },
-            ConcreteVal { byte_arr: vec![0, 0, 0, 0, 0, 0, 0, 0], interp_val: "0l".to_string() },
-        ];
+        let concrete_vals =
+            [ConcreteVal { byte_arr: vec![0, 0], interp_val: "0".to_string() }, ConcreteVal {
+                byte_arr: vec![0, 0, 0, 0, 0, 0, 0, 0],
+                interp_val: "0l".to_string(),
+            }];
         let actual: Vec<_> = format_concrete_vals(&concrete_vals).collect();
         let expected = vec![
             format!("{:<8}// 0", " "),
@@ -597,10 +598,11 @@ mod tests {
 
     #[test]
     fn check_rustfmt_args_some_line_ranges() {
-        let file_line_ranges = [
-            FileLineRange { file: "file1".to_string(), line_range: None },
-            FileLineRange { file: "path/to/file2".to_string(), line_range: Some((1, 3)) },
-        ];
+        let file_line_ranges =
+            [FileLineRange { file: "file1".to_string(), line_range: None }, FileLineRange {
+                file: "path/to/file2".to_string(),
+                line_range: Some((1, 3)),
+            }];
         let args = rustfmt_args(&file_line_ranges);
         let expected: Vec<OsString> = [
             "--unstable-features",

@@ -12,9 +12,58 @@ use std::collections::HashMap;
 use proc_macro2::{Ident, Span, TokenStream as TokenStream2};
 use quote::quote;
 use std::hash::{DefaultHasher, Hash, Hasher};
-use syn::{spanned::Spanned, visit_mut::VisitMut, Expr, ExprCall, ExprClosure, ExprPath, Path};
+use syn::{
+    Expr, ExprCall, ExprClosure, ExprPath, Path, Stmt, spanned::Spanned, visit_mut::VisitMut,
+};
 
-use super::INTERNAL_RESULT_IDENT;
+use super::{ContractMode, INTERNAL_RESULT_IDENT};
+
+/// Splits `stmts` into (preconditions, rest).
+/// For example, ContractMode::SimpleCheck assumes preconditions, so given this sequence of statements:
+/// ```ignore
+/// kani::assume(.. precondition_1);
+/// kani::assume(.. precondition_2);
+/// let _wrapper_arg = (ptr as * const _,);
+/// ...
+/// ```
+/// This function would return the two kani::assume statements in the former slice
+/// and the remaining statements in the latter.
+/// The flow for ContractMode::Replace is the same, except preconditions are asserted rather than assumed.
+///
+/// The caller can use the returned tuple to insert remembers statements after `preconditions` and before `rest`.
+/// Inserting the remembers statements after `preconditions` ensures that they are bound by the preconditions.
+/// To understand why this is important, take the following example:
+/// ```ignore
+/// #[kani::requires(x < u32::MAX)]
+/// #[kani::ensures(|result| old(x + 1) == *result)]
+/// fn add_one(x: u32) -> u32 {...}
+/// ```
+/// If the `old(x + 1)` statement didn't respect the precondition's upper bound on `x`, Kani would encounter an integer overflow.
+///
+/// Inserting the remembers statements before `rest` ensures that they are declared before the original function executes,
+/// so that they will store historical, pre-computation values as intended.
+pub fn split_for_remembers(stmts: &[Stmt], contract_mode: ContractMode) -> (&[Stmt], &[Stmt]) {
+    let mut pos = 0;
+
+    let check_str = match contract_mode {
+        ContractMode::SimpleCheck => "assume",
+        ContractMode::Replace | ContractMode::Assert => "assert",
+    };
+
+    for stmt in stmts {
+        if let Stmt::Expr(Expr::Call(ExprCall { func, .. }), _) = stmt {
+            if let Expr::Path(ExprPath { path: Path { segments, .. }, .. }) = func.as_ref() {
+                let first_two_idents =
+                    segments.iter().take(2).map(|sgmt| sgmt.ident.to_string()).collect::<Vec<_>>();
+
+                if first_two_idents == vec!["kani", check_str] {
+                    pos += 1;
+                }
+            }
+        }
+    }
+    stmts.split_at(pos)
+}
 
 /// Used as the "single source of truth" for [`try_as_result_assign`] and [`try_as_result_assign_mut`]
 /// since we can't abstract over mutability. Input is the object to match on and the name of the

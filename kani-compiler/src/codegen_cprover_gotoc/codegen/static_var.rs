@@ -5,11 +5,11 @@
 
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::kani_middle::is_interior_mut;
-use stable_mir::mir::mono::{Instance, StaticDef};
 use stable_mir::CrateDef;
+use stable_mir::mir::mono::{Instance, StaticDef};
 use tracing::debug;
 
-impl<'tcx> GotocCtx<'tcx> {
+impl GotocCtx<'_> {
     /// Ensures a static variable is initialized.
     ///
     /// Note that each static variable have their own location in memory. Per Rust documentation:

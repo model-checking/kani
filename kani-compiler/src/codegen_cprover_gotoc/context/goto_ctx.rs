@@ -16,9 +16,9 @@
 //! this structure as input.
 use super::current_fn::CurrentFnCtx;
 use super::vtable_ctx::VtableCtx;
-use crate::codegen_cprover_gotoc::overrides::{fn_hooks, GotocHooks};
-use crate::codegen_cprover_gotoc::utils::full_crate_name;
 use crate::codegen_cprover_gotoc::UnsupportedConstructs;
+use crate::codegen_cprover_gotoc::overrides::{GotocHooks, fn_hooks};
+use crate::codegen_cprover_gotoc::utils::full_crate_name;
 use crate::kani_middle::transform::BodyTransformation;
 use crate::kani_queries::QueryDb;
 use cbmc::goto_program::{
@@ -29,16 +29,16 @@ use cbmc::{InternedString, MachineModel};
 use rustc_data_structures::fx::FxHashMap;
 use rustc_middle::span_bug;
 use rustc_middle::ty::layout::{
-    FnAbiError, FnAbiOfHelpers, FnAbiRequest, HasParamEnv, HasTyCtxt, LayoutError, LayoutOfHelpers,
-    TyAndLayout,
+    FnAbiError, FnAbiOfHelpers, FnAbiRequest, HasTyCtxt, HasTypingEnv, LayoutError,
+    LayoutOfHelpers, TyAndLayout,
 };
 use rustc_middle::ty::{self, Ty, TyCtxt};
-use rustc_span::source_map::respan;
 use rustc_span::Span;
+use rustc_span::source_map::respan;
 use rustc_target::abi::call::FnAbi;
 use rustc_target::abi::{HasDataLayout, TargetDataLayout};
-use stable_mir::mir::mono::Instance;
 use stable_mir::mir::Body;
+use stable_mir::mir::mono::Instance;
 use stable_mir::ty::Allocation;
 use std::fmt::Debug;
 
@@ -74,6 +74,8 @@ pub struct GotocCtx<'tcx> {
     pub concurrent_constructs: UnsupportedConstructs,
     /// The body transformation agent.
     pub transformer: BodyTransformation,
+    /// If there exist some usage of loop contracts int context.
+    pub has_loop_contracts: bool,
 }
 
 /// Constructor
@@ -103,6 +105,7 @@ impl<'tcx> GotocCtx<'tcx> {
             unsupported_constructs: FxHashMap::default(),
             concurrent_constructs: FxHashMap::default(),
             transformer,
+            has_loop_contracts: false,
         }
     }
 }
@@ -119,7 +122,7 @@ impl<'tcx> GotocCtx<'tcx> {
 }
 
 /// Generate variables
-impl<'tcx> GotocCtx<'tcx> {
+impl GotocCtx<'_> {
     /// Declare a local variable.
     /// Handles the bookkeeping of:
     /// - creating the symbol
@@ -249,7 +252,6 @@ impl<'tcx> GotocCtx<'tcx> {
     /// Ensures that a struct with name `struct_name` appears in the symbol table.
     /// If it doesn't, inserts it using `f`.
     /// Returns: a struct-tag referencing the inserted struct.
-
     pub fn ensure_struct<
         T: Into<InternedString>,
         U: Into<InternedString>,
@@ -303,7 +305,7 @@ impl<'tcx> GotocCtx<'tcx> {
 }
 
 /// Mutators
-impl<'tcx> GotocCtx<'tcx> {
+impl GotocCtx<'_> {
     pub fn set_current_fn(&mut self, instance: Instance, body: &Body) {
         self.current_fn = Some(CurrentFnCtx::new(instance, self, body));
     }
@@ -335,9 +337,9 @@ impl<'tcx> LayoutOfHelpers<'tcx> for GotocCtx<'tcx> {
     }
 }
 
-impl<'tcx> HasParamEnv<'tcx> for GotocCtx<'tcx> {
-    fn param_env(&self) -> ty::ParamEnv<'tcx> {
-        ty::ParamEnv::reveal_all()
+impl<'tcx> HasTypingEnv<'tcx> for GotocCtx<'tcx> {
+    fn typing_env(&self) -> ty::TypingEnv<'tcx> {
+        ty::TypingEnv::fully_monomorphized()
     }
 }
 
@@ -347,7 +349,7 @@ impl<'tcx> HasTyCtxt<'tcx> for GotocCtx<'tcx> {
     }
 }
 
-impl<'tcx> HasDataLayout for GotocCtx<'tcx> {
+impl HasDataLayout for GotocCtx<'_> {
     fn data_layout(&self) -> &TargetDataLayout {
         self.tcx.data_layout()
     }

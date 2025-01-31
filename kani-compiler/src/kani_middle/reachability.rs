@@ -24,14 +24,14 @@ use rustc_data_structures::stable_hasher::{HashStable, StableHasher};
 use rustc_middle::ty::{TyCtxt, VtblEntry};
 use rustc_session::config::OutputType;
 use rustc_smir::rustc_internal;
+use stable_mir::CrateItem;
 use stable_mir::mir::alloc::{AllocId, GlobalAlloc};
 use stable_mir::mir::mono::{Instance, InstanceKind, MonoItem, StaticDef};
 use stable_mir::mir::{
-    visit::Location, Body, CastKind, ConstOperand, MirVisitor, PointerCoercion, Rvalue, Terminator,
-    TerminatorKind,
+    Body, CastKind, ConstOperand, MirVisitor, PointerCoercion, Rvalue, Terminator, TerminatorKind,
+    visit::Location,
 };
 use stable_mir::ty::{Allocation, ClosureKind, ConstantKind, RigidTy, Ty, TyKind};
-use stable_mir::CrateItem;
 use stable_mir::{CrateDef, ItemKind};
 use std::fmt::{Display, Formatter};
 use std::{
@@ -84,16 +84,13 @@ where
         .iter()
         .filter_map(|item| {
             // Only collect monomorphic items.
-            // TODO: Remove the def_kind check once https://github.com/rust-lang/rust/pull/119135 has been released.
-            let def_id = rustc_internal::internal(tcx, item.def_id());
-            (matches!(tcx.def_kind(def_id), rustc_hir::def::DefKind::Ctor(..))
-                || matches!(item.kind(), ItemKind::Fn))
-            .then(|| {
-                Instance::try_from(*item)
-                    .ok()
-                    .and_then(|instance| predicate(tcx, instance).then_some(instance))
-            })
-            .flatten()
+            matches!(item.kind(), ItemKind::Fn)
+                .then(|| {
+                    Instance::try_from(*item)
+                        .ok()
+                        .and_then(|instance| predicate(tcx, instance).then_some(instance))
+                })
+                .flatten()
         })
         .collect::<Vec<_>>()
 }
@@ -245,7 +242,7 @@ struct MonoItemsFnCollector<'a, 'tcx> {
     body: &'a Body,
 }
 
-impl<'a, 'tcx> MonoItemsFnCollector<'a, 'tcx> {
+impl MonoItemsFnCollector<'_, '_> {
     /// Collect the implementation of all trait methods and its supertrait methods for the given
     /// concrete type.
     fn collect_vtable_methods(&mut self, concrete_ty: Ty, trait_ty: Ty) {
@@ -350,7 +347,7 @@ impl<'a, 'tcx> MonoItemsFnCollector<'a, 'tcx> {
 /// 6. Static Initialization
 ///
 /// Remark: This code has been mostly taken from `rustc_monomorphize::collector::MirNeighborCollector`.
-impl<'a, 'tcx> MirVisitor for MonoItemsFnCollector<'a, 'tcx> {
+impl MirVisitor for MonoItemsFnCollector<'_, '_> {
     /// Collect the following:
     /// - Trait implementations when casting from concrete to dyn Trait.
     /// - Functions / Closures that have their address taken.
@@ -472,6 +469,22 @@ impl<'a, 'tcx> MirVisitor for MonoItemsFnCollector<'a, 'tcx> {
         }
 
         self.super_terminator(terminator, location);
+    }
+
+    /// Collect any function definition that may occur as a type.
+    ///
+    /// The codegen stage will require the definition to be available.
+    /// This is a conservative approach, since there are cases where the function is never
+    /// actually used, so we don't need the body.
+    ///
+    /// Another alternative would be to lazily declare functions, but it would require a bigger
+    /// change to codegen.
+    fn visit_ty(&mut self, ty: &Ty, _: Location) {
+        if let TyKind::RigidTy(RigidTy::FnDef(def, args)) = ty.kind() {
+            let instance = Instance::resolve(def, &args).unwrap();
+            self.collect_instance(instance, true);
+        }
+        self.super_ty(ty);
     }
 }
 

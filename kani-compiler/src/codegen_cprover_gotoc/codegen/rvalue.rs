@@ -1,23 +1,24 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+use crate::codegen_cprover_gotoc::codegen::PropertyClass;
 use crate::codegen_cprover_gotoc::codegen::place::ProjectedPlace;
 use crate::codegen_cprover_gotoc::codegen::ty_stable::pointee_type_stable;
-use crate::codegen_cprover_gotoc::codegen::PropertyClass;
 use crate::codegen_cprover_gotoc::utils::{dynamic_fat_ptr, slice_fat_ptr};
 use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
+use crate::kani_middle::abi::LayoutOf;
 use crate::kani_middle::coercion::{
-    extract_unsize_casting_stable, CoerceUnsizedInfo, CoerceUnsizedIterator, CoercionBaseStable,
+    CoerceUnsizedInfo, CoerceUnsizedIterator, CoercionBaseStable, extract_unsize_casting_stable,
 };
 use crate::unwrap_or_return_codegen_unimplemented;
-use cbmc::goto_program::{
-    arithmetic_overflow_result_type, BinaryOperator, Expr, Location, Stmt, Type,
-    ARITH_OVERFLOW_OVERFLOWED_FIELD, ARITH_OVERFLOW_RESULT_FIELD,
-};
 use cbmc::MachineModel;
-use cbmc::{btree_string_map, InternString, InternedString};
+use cbmc::goto_program::{
+    ARITH_OVERFLOW_OVERFLOWED_FIELD, ARITH_OVERFLOW_RESULT_FIELD, BinaryOperator, Expr, Location,
+    Stmt, Type, arithmetic_overflow_result_type,
+};
+use cbmc::{InternString, InternedString, btree_string_map};
 use num::bigint::BigInt;
-use rustc_middle::ty::{ParamEnv, TyCtxt, VtblEntry};
+use rustc_middle::ty::{TyCtxt, TypingEnv, VtblEntry};
 use rustc_smir::rustc_internal;
 use rustc_target::abi::{FieldsShape, TagEncoding, Variants};
 use stable_mir::abi::{Primitive, Scalar, ValueAbi};
@@ -29,7 +30,7 @@ use stable_mir::ty::{ClosureKind, IntTy, RigidTy, Size, Ty, TyConst, TyKind, Uin
 use std::collections::BTreeMap;
 use tracing::{debug, trace, warn};
 
-impl<'tcx> GotocCtx<'tcx> {
+impl GotocCtx<'_> {
     fn codegen_comparison(&mut self, op: &BinOp, e1: &Operand, e2: &Operand) -> Expr {
         let left_op = self.codegen_operand_stable(e1);
         let right_op = self.codegen_operand_stable(e2);
@@ -355,7 +356,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     fn codegen_rvalue_binary_op(
         &mut self,
-        ty: Ty,
+        _ty: Ty,
         op: &BinOp,
         e1: &Operand,
         e2: &Operand,
@@ -404,35 +405,15 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             // https://doc.rust-lang.org/std/primitive.pointer.html#method.offset
             BinOp::Offset => {
+                // We don't need to check for UB since we handled user calls of offset already
+                // via rustc_intrinsic transformation pass.
+                //
+                // This operation may still be used by other Kani instrumentation which should
+                // ensure safety.
+                // We should consider adding sanity checks if `debug_assertions` are enabled.
                 let ce1 = self.codegen_operand_stable(e1);
                 let ce2 = self.codegen_operand_stable(e2);
-
-                // Check that computing `offset` in bytes would not overflow
-                let (offset_bytes, bytes_overflow_check) = self.count_in_bytes(
-                    ce2.clone().cast_to(Type::ssize_t()),
-                    ty,
-                    Type::ssize_t(),
-                    "offset",
-                    loc,
-                );
-
-                // Check that the computation would not overflow an `isize` which is UB:
-                // https://doc.rust-lang.org/std/primitive.pointer.html#method.offset
-                // These checks may allow a wrapping-around behavior in CBMC:
-                // https://github.com/model-checking/kani/issues/1150
-                let overflow_res = ce1.clone().cast_to(Type::ssize_t()).add_overflow(offset_bytes);
-                let overflow_check = self.codegen_assert_assume(
-                    overflow_res.overflowed.not(),
-                    PropertyClass::ArithmeticOverflow,
-                    "attempt to compute offset which would overflow",
-                    loc,
-                );
-                let res = ce1.clone().plus(ce2);
-                Expr::statement_expression(
-                    vec![bytes_overflow_check, overflow_check, res.as_stmt(loc)],
-                    ce1.typ().clone(),
-                    loc,
-                )
+                ce1.clone().plus(ce2)
             }
         }
     }
@@ -573,6 +554,9 @@ impl<'tcx> GotocCtx<'tcx> {
             let variant_expr = variant_proj.goto_expr.clone();
             let layout = self.layout_of_stable(res_ty);
             let fields = match &layout.variants {
+                Variants::Empty => {
+                    unreachable!("Aggregate expression for uninhabited enum with no variants")
+                }
                 Variants::Single { index } => {
                     if *index != rustc_internal::internal(self.tcx, variant_index) {
                         // This may occur if all variants except for the one pointed by
@@ -703,21 +687,43 @@ impl<'tcx> GotocCtx<'tcx> {
                         slice_fat_ptr(typ, data_cast, meta, &self.symbol_table)
                     }
                     TyKind::RigidTy(RigidTy::Adt(..)) => {
+                        let layout = LayoutOf::new(pointee_ty);
+                        let pointee_goto_typ = self.codegen_ty_stable(pointee_ty);
+                        let data_cast =
+                            data.cast_to(Type::Pointer { typ: Box::new(pointee_goto_typ) });
+                        layout.unsized_tail().map_or(data_cast.clone(), |tail| {
+                            let meta = self.codegen_operand_stable(&operands[1]);
+                            match tail.kind().rigid().unwrap() {
+                                RigidTy::Foreign(..) => data_cast,
+                                RigidTy::Slice(..) | RigidTy::Str => {
+                                    slice_fat_ptr(typ, data_cast, meta, &self.symbol_table)
+                                }
+                                RigidTy::Dynamic(..) => {
+                                    let vtable_expr = meta
+                                        .member("_vtable_ptr", &self.symbol_table)
+                                        .member("pointer", &self.symbol_table)
+                                        .cast_to(
+                                            typ.lookup_field_type("vtable", &self.symbol_table)
+                                                .unwrap(),
+                                        );
+                                    dynamic_fat_ptr(typ, data_cast, vtable_expr, &self.symbol_table)
+                                }
+                                _ => {
+                                    unreachable!("Unexpected unsized tail: {tail:?}");
+                                }
+                            }
+                        })
+                    }
+                    TyKind::RigidTy(RigidTy::Dynamic(..)) => {
                         let pointee_goto_typ = self.codegen_ty_stable(pointee_ty);
                         let data_cast =
                             data.cast_to(Type::Pointer { typ: Box::new(pointee_goto_typ) });
                         let meta = self.codegen_operand_stable(&operands[1]);
-                        if meta.typ().sizeof(&self.symbol_table) == 0 {
-                            data_cast
-                        } else {
-                            let vtable_expr = meta
-                                .member("_vtable_ptr", &self.symbol_table)
-                                .member("pointer", &self.symbol_table)
-                                .cast_to(
-                                    typ.lookup_field_type("vtable", &self.symbol_table).unwrap(),
-                                );
-                            dynamic_fat_ptr(typ, data_cast, vtable_expr, &self.symbol_table)
-                        }
+                        let vtable_expr = meta
+                            .member("_vtable_ptr", &self.symbol_table)
+                            .member("pointer", &self.symbol_table)
+                            .cast_to(typ.lookup_field_type("vtable", &self.symbol_table).unwrap());
+                        dynamic_fat_ptr(typ, data_cast, vtable_expr, &self.symbol_table)
                     }
                     _ => {
                         let pointee_goto_typ = self.codegen_ty_stable(pointee_ty);
@@ -726,6 +732,15 @@ impl<'tcx> GotocCtx<'tcx> {
                 }
             }
             AggregateKind::Coroutine(_, _, _) => self.codegen_rvalue_coroutine(&operands, res_ty),
+            AggregateKind::CoroutineClosure(_, _) => {
+                let ty = self.codegen_ty_stable(res_ty);
+                self.codegen_unimplemented_expr(
+                    "CoroutineClosure",
+                    ty,
+                    loc,
+                    "https://github.com/model-checking/kani/issues/3783",
+                )
+            }
         }
     }
 
@@ -786,8 +801,30 @@ impl<'tcx> GotocCtx<'tcx> {
                 self.codegen_pointer_cast(k, e, *t, loc)
             }
             Rvalue::Cast(CastKind::Transmute, operand, ty) => {
-                let goto_typ = self.codegen_ty_stable(*ty);
-                self.codegen_operand_stable(operand).transmute_to(goto_typ, &self.symbol_table)
+                let src_ty = operand.ty(self.current_fn().locals()).unwrap();
+                // Transmute requires sized types.
+                let src_sz = LayoutOf::new(src_ty).size_of().unwrap();
+                let dst_sz = LayoutOf::new(*ty).size_of().unwrap();
+                let dst_type = self.codegen_ty_stable(*ty);
+                if src_sz != dst_sz {
+                    Expr::statement_expression(
+                        vec![
+                            self.codegen_assert_assume_false(
+                                PropertyClass::SafetyCheck,
+                                &format!(
+                                    "Cannot transmute between types of different sizes. \
+                                Transmuting from `{src_sz}` to `{dst_sz}` bytes"
+                                ),
+                                loc,
+                            ),
+                            dst_type.nondet().as_stmt(loc),
+                        ],
+                        dst_type,
+                        loc,
+                    )
+                } else {
+                    self.codegen_operand_stable(operand).transmute_to(dst_type, &self.symbol_table)
+                }
             }
             Rvalue::BinaryOp(op, e1, e2) => self.codegen_rvalue_binary_op(res_ty, op, e1, e2, loc),
             Rvalue::CheckedBinaryOp(op, e1, e2) => {
@@ -802,7 +839,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     NullOp::OffsetOf(fields) => Expr::int_constant(
                         self.tcx
                             .offset_of_subfield(
-                                ParamEnv::reveal_all(),
+                                TypingEnv::fully_monomorphized(),
                                 layout,
                                 fields.iter().map(|(var_idx, field_idx)| {
                                     (
@@ -927,10 +964,10 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn codegen_discriminant_field(&self, place: Expr, ty: Ty) -> Expr {
         let layout = self.layout_of_stable(ty);
         assert!(
-            matches!(
-                &layout.variants,
-                Variants::Multiple { tag_encoding: TagEncoding::Direct, .. }
-            ),
+            matches!(&layout.variants, Variants::Multiple {
+                tag_encoding: TagEncoding::Direct,
+                ..
+            }),
             "discriminant field (`case`) only exists for multiple variants and direct encoding"
         );
         let expr = if ty.kind().is_coroutine() {
@@ -948,6 +985,7 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn codegen_get_discriminant(&mut self, e: Expr, ty: Ty, res_ty: Ty) -> Expr {
         let layout = self.layout_of_stable(ty);
         match &layout.variants {
+            Variants::Empty => unreachable!("Discriminant for uninhabited enum with no variants"),
             Variants::Single { index } => {
                 let discr_val = layout
                     .ty

@@ -4,9 +4,9 @@
 //! This tests whether we take into account use statements (`use XXX;`)
 //! referring to external code when resolving paths in `kani::stub` attributes.
 
+use other_crate::MyType;
 use other_crate::inner_mod::magic_number42;
 use other_crate::magic_number13;
-use other_crate::MyType;
 
 #[kani::proof]
 #[kani::stub(zero, magic_number13)]

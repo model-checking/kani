@@ -4,7 +4,7 @@
 //! Single source of truth about which intrinsics we support.
 
 use stable_mir::{
-    mir::{mono::Instance, Mutability},
+    mir::{Mutability, mono::Instance},
     ty::{FloatTy, IntTy, RigidTy, TyKind, UintTy},
 };
 
@@ -63,6 +63,7 @@ pub enum Intrinsic {
     FabsF64,
     FaddFast,
     FdivFast,
+    FloatToIntUnchecked,
     FloorF32,
     FloorF64,
     FmafF32,
@@ -283,6 +284,14 @@ impl Intrinsic {
                 assert_sig_matches!(sig, _, _ => _);
                 Self::FdivFast
             }
+            "float_to_int_unchecked" => {
+                assert_sig_matches!(sig, RigidTy::Float(_) => _);
+                assert!(matches!(
+                    sig.output().kind(),
+                    TyKind::RigidTy(RigidTy::Int(_)) | TyKind::RigidTy(RigidTy::Uint(_))
+                ));
+                Self::FloatToIntUnchecked
+            }
             "fmul_fast" => {
                 assert_sig_matches!(sig, _, _ => _);
                 Self::FmulFast
@@ -380,7 +389,7 @@ impl Intrinsic {
                 assert_sig_matches!(sig, => RigidTy::Ref(_, _, Mutability::Not));
                 Self::TypeName
             }
-            "typed_swap" => {
+            "typed_swap_nonoverlapping" => {
                 assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), RigidTy::RawPtr(_, Mutability::Mut) => RigidTy::Tuple(_));
                 Self::TypedSwap
             }

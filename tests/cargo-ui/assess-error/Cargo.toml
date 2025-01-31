@@ -9,4 +9,5 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [package.metadata.kani]
-flags = { assess=true, enable-unstable=true }
+flags = { assess = true }
+unstable = { unstable-options = true }

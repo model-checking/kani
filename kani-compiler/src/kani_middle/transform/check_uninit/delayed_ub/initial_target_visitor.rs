@@ -10,11 +10,11 @@ use crate::{
 };
 use stable_mir::{
     mir::{
+        Body, CastKind, LocalDecl, MirVisitor, NonDivergingIntrinsic, Operand, Place, Rvalue,
+        Statement, StatementKind, Terminator, TerminatorKind,
         alloc::GlobalAlloc,
         mono::{Instance, InstanceKind, StaticDef},
         visit::Location,
-        Body, CastKind, LocalDecl, MirVisitor, NonDivergingIntrinsic, Operand, Place, Rvalue,
-        Statement, StatementKind, Terminator, TerminatorKind,
     },
     ty::{ConstantKind, RigidTy, TyKind},
 };

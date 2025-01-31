@@ -6,11 +6,11 @@ std::ptr::write::<std::mem::MaybeUninit<u8>>.assertion.1\
 	 - Status: FAILURE\
 	 - Description: "Interaction between raw pointers and unions is not yet supported."\
 
-check_typed_swap.assertion.1\
+check_typed_swap_nonoverlapping.assertion.1\
 	 - Status: FAILURE\
 	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `*mut u8`"
 
-check_typed_swap.assertion.2\
+check_typed_swap_nonoverlapping.assertion.2\
 	 - Status: FAILURE\
 	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `*mut u8`"
 
@@ -35,8 +35,8 @@ std::ptr::read::<u8>.assertion.2\
 	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u8`"
 
 Summary:
-Verification failed for - check_typed_swap_safe
-Verification failed for - check_typed_swap
+Verification failed for - check_typed_swap_nonoverlapping_safe
+Verification failed for - check_typed_swap_nonoverlapping
 Verification failed for - check_volatile_load
 Verification failed for - check_compare_bytes
 Verification failed for - check_copy_read

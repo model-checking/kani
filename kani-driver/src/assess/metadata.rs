@@ -15,11 +15,11 @@ use std::path::Path;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
+use super::AssessArgs;
 use super::table_builder::TableBuilder;
 use super::table_failure_reasons::FailureReasonsTableRow;
 use super::table_promising_tests::PromisingTestsTableRow;
 use super::table_unsupported_features::UnsupportedFeaturesTableRow;
-use super::AssessArgs;
 
 /// The structure of `.kani-assess-metadata.json` files. This is a the structure for both
 /// assess (standard) and scan. It it meant to hold results for one or more packages.

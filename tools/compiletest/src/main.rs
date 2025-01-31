@@ -10,8 +10,8 @@
 
 extern crate test;
 
-use crate::common::{output_base_dir, output_relative_path};
 use crate::common::{Config, Mode, TestPaths};
+use crate::common::{output_base_dir, output_relative_path};
 use crate::util::{logv, print_msg, top_level};
 use getopts::Options;
 use std::env;
@@ -21,8 +21,8 @@ use std::io::{self};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::{Duration, SystemTime};
-use test::test::TestTimeOptions;
 use test::ColorConfig;
+use test::test::TestTimeOptions;
 use tracing::*;
 use walkdir::WalkDir;
 
@@ -147,10 +147,9 @@ pub fn parse_config(args: Vec<String>) -> Config {
     let run_ignored = matches.opt_present("ignored");
     let mode = matches.opt_str("mode").unwrap().parse().expect("invalid mode");
     let timeout = matches.opt_str("timeout").map(|val| {
-        Duration::from_secs(
-            u64::from_str(&val)
-                .expect("Unexpected timeout format. Expected a positive number but found {val}"),
-        )
+        Duration::from_secs(u64::from_str(&val).expect(&format!(
+            "Unexpected timeout format. Expected a positive number but found {val}"
+        )))
     });
 
     Config {

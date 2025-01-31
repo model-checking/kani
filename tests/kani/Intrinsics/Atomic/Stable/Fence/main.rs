@@ -4,7 +4,7 @@
 // Check that `atomic_fence` and other variants (stable version) can be
 // processed.
 
-use std::sync::atomic::{fence, Ordering};
+use std::sync::atomic::{Ordering, fence};
 
 #[kani::proof]
 fn main() {

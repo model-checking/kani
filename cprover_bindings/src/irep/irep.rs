@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! The actual `Irep` structure, and associated constructors, getters, and setters.
 
-use super::super::goto_program::{Location, Type};
 use super::super::MachineModel;
+use super::super::goto_program::{Location, Type};
 use super::{IrepId, ToIrep};
 use crate::cbmc_string::InternedString;
 use crate::linear_map;

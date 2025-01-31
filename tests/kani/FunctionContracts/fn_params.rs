@@ -21,8 +21,6 @@ struct MyStruct {
 #[kani::requires(val.u == tup_u)]
 #[kani::requires(Ok(val.c) == char::try_from(first))]
 #[kani::requires(val.c == tup_c)]
-/// We need this extra clause due to <https://github.com/model-checking/kani/issues/3370>.
-#[kani::requires(char::try_from(first).is_ok())]
 pub fn odd_parameters_eq(
     [first, second]: [u32; 2],
     (tup_c, tup_u): (char, u32),
@@ -41,8 +39,6 @@ pub fn odd_parameters_eq(
 #[kani::requires(val.u == tup_u)]
 #[kani::requires(Ok(val.c) == char::try_from(first))]
 // MISSING: #[kani::requires(val.c == tup_c)]
-// We need this extra clause due to <https://github.com/model-checking/kani/issues/3370>.
-#[kani::requires(char::try_from(first).is_ok())]
 pub fn odd_parameters_eq_wrong(
     [first, second]: [u32; 2],
     (tup_c, tup_u): (char, u32),
