@@ -1,0 +1,47 @@
+Checking harness panic_harness...
+panic.assertion\
+	 - Status: FAILURE\
+	 - Description: "explicit panic"
+
+Checking harness integer_overflow_harness...
+assertion\
+	 - Status: FAILURE\
+	 - Description: "attempt to add with overflow"
+
+Checking harness oob_unsafe_array_access_harness...
+oob_unsafe_array_access.pointer_dereference\
+	 - Status: FAILURE\
+
+Checking harness oob_safe_array_access_harness...
+
+<usize as std::slice::SliceIndex<[i32]>>::index.assertion\
+	 - Status: FAILURE\
+	 - Description: "index out of bounds: the length is less than or equal to the given index"
+
+
+Checking function panic against all possible inputs...
+
+Check 1: panic.assertion\
+	 - Status: FAILURE\
+	 - Description: "explicit panic"
+
+Checking function integer_overflow against all possible inputs...
+
+assertion\
+	 - Status: FAILURE
+	 - Description: "attempt to add with overflow"
+
+Checking function oob_unsafe_array_access against all possible inputs...
+
+oob_unsafe_array_access.pointer_dereference\
+	 - Status: FAILURE\
+	 - Description: "dereference failure: pointer outside object bounds"
+
+Checking function oob_safe_array_access against all possible inputs...
+
+<usize as std::slice::SliceIndex<[i32]>>::index.assertion\
+	 - Status: FAILURE\
+	 - Description: "index out of bounds: the length is less than or equal to the given index"
+
+Complete - 0 successfully verified harnesses, 8 failures, 8 total.
+

@@ -434,6 +434,12 @@ macro_rules! kani_intrinsics {
                 }
             }
 
+            /// Used to hold the bodies of automatically generated harnesses.
+            #[kanitool::fn_marker = "AutomaticHarnessIntrinsic"]
+            pub fn automatic_harness() {
+                super::kani_intrinsic()
+            }
+
             /// A way to break the ownerhip rules. Only used by contracts where we can
             /// guarantee it is done safely.
             #[inline(never)]

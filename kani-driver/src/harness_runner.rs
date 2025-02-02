@@ -167,13 +167,21 @@ impl KaniSession {
         harness: &HarnessMetadata,
     ) -> Result<VerificationResult> {
         let thread_index = rayon::current_thread_index().unwrap_or_default();
-        if !self.args.common_args.quiet {
-            if rayon::current_num_threads() > 1 {
-                println!("Thread {thread_index}: Checking harness {}...", harness.pretty_name);
-            } else {
-                println!("Checking harness {}...", harness.pretty_name);
-            }
+        // If the harness is automatically generated, pretty_name refers to the function under verification.
+        let mut msg = if harness.is_automatically_generated {
+            format!(
+                "Automatic verification: Checking function {} against all possible inputs...",
+                harness.pretty_name
+            )
+        } else {
+            format!("Checking harness {}...", harness.pretty_name)
+        };
+
+        if rayon::current_num_threads() > 1 {
+            msg = format!("Thread {thread_index}: {msg}");
         }
+
+        println!("{msg}");
 
         let mut result = self.with_timer(|| self.run_cbmc(binary, harness), "run_cbmc")?;
 

@@ -39,6 +39,7 @@ pub fn gen_proof_metadata(tcx: TyCtxt, instance: Instance, base_name: &Path) -> 
         goto_file: Some(model_file),
         contract: Default::default(),
         has_loop_contracts: false,
+        is_automatically_generated: false,
     }
 }
 
@@ -84,6 +85,42 @@ pub fn gen_contracts_metadata(tcx: TyCtxt) -> Vec<ContractedFunction> {
     fn_to_data.into_values().collect()
 }
 
+/// Generate metadata for automatically generated harnesses.
+/// For now, we just use the data from the function we are verifying; since we only generate one automatic harness per function,
+/// the metdata from that function uniquely identifies the harness.
+/// In future iterations of this feature, we will likely have multiple harnesses for a single function (e.g., for generic functions),
+/// in which case HarnessMetadata will need to change further to differentiate between those harnesses.
+/// TODO Instead of just generating HarnessKind::Proof, generate HarnessKind::ProofForContract if fn_to_verify has a contract.
+pub fn gen_automatic_proof_metadata(
+    _tcx: TyCtxt,
+    base_name: &Path,
+    fn_to_verify: &Instance,
+) -> HarnessMetadata {
+    let def = fn_to_verify.def;
+    let pretty_name = fn_to_verify.name();
+    let mangled_name = fn_to_verify.mangled_name();
+
+    // Leave the concrete playback instrumentation for now, but this feature does not actually support concrete playback.
+    let loc = SourceLocation::new(fn_to_verify.body().unwrap().span);
+    let file_stem = format!("{}_{mangled_name}", base_name.file_stem().unwrap().to_str().unwrap());
+    let model_file = base_name.with_file_name(file_stem).with_extension(ArtifactType::SymTabGoto);
+
+    HarnessMetadata {
+        pretty_name,
+        mangled_name,
+        crate_name: def.krate().name,
+        original_file: loc.filename,
+        original_start_line: loc.start_line,
+        original_end_line: loc.end_line,
+        attributes: HarnessAttributes::new(HarnessKind::Proof),
+        // TODO: This no longer needs to be an Option.
+        goto_file: Some(model_file),
+        contract: Default::default(),
+        has_loop_contracts: false,
+        is_automatically_generated: true,
+    }
+}
+
 /// Create the harness metadata for a test description.
 #[allow(dead_code)]
 pub fn gen_test_metadata(
@@ -110,5 +147,6 @@ pub fn gen_test_metadata(
         goto_file: Some(model_file),
         contract: Default::default(),
         has_loop_contracts: false,
+        is_automatically_generated: false,
     }
 }

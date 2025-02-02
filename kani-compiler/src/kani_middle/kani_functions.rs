@@ -48,6 +48,8 @@ pub enum KaniIntrinsic {
     CheckedAlignOf,
     #[strum(serialize = "CheckedSizeOfIntrinsic")]
     CheckedSizeOf,
+    #[strum(serialize = "AutomaticHarnessIntrinsic")]
+    AutomaticHarness,
     #[strum(serialize = "IsInitializedIntrinsic")]
     IsInitialized,
     #[strum(serialize = "ValidValueIntrinsic")]

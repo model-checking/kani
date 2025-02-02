@@ -28,6 +28,9 @@ pub struct KaniSession {
     /// The common command-line arguments
     pub args: VerificationArgs,
 
+    /// Automatically verify functions in the crate, in addition to running manual harnesses.
+    pub auto_verify: bool,
+
     /// Include all publicly-visible symbols in the generated goto binary, not just those reachable from
     /// a proof harness. Useful when attempting to verify things that were not annotated with kani
     /// proof attributes.
@@ -62,12 +65,17 @@ impl KaniSession {
 
         Ok(KaniSession {
             args,
+            auto_verify: false,
             codegen_tests: false,
             kani_compiler: install.kani_compiler()?,
             kani_lib_c: install.kani_lib_c()?,
             temporaries: Mutex::new(vec![]),
             runtime: tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap(),
         })
+    }
+
+    pub fn enable_autoverify(&mut self) {
+        self.auto_verify = true;
     }
 
     /// Record a temporary file so we can cleanup after ourselves at the end.
@@ -88,13 +96,20 @@ impl KaniSession {
     /// Determine which symbols Kani should codegen (i.e. by slicing away symbols
     /// that are considered unreachable.)
     pub fn reachability_mode(&self) -> ReachabilityMode {
-        if self.codegen_tests { ReachabilityMode::Tests } else { ReachabilityMode::ProofHarnesses }
+        if self.codegen_tests {
+            ReachabilityMode::Tests
+        } else if self.auto_verify {
+            ReachabilityMode::Automatic
+        } else {
+            ReachabilityMode::ProofHarnesses
+        }
     }
 }
 
 #[derive(Debug, Copy, Clone, Display)]
 #[strum(serialize_all = "snake_case")]
 pub enum ReachabilityMode {
+    Automatic,
     #[strum(to_string = "harnesses")]
     ProofHarnesses,
     Tests,

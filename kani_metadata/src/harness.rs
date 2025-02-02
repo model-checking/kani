@@ -38,6 +38,8 @@ pub struct HarnessMetadata {
     pub contract: Option<AssignsContract>,
     /// If the harness contains some usage of loop contracts.
     pub has_loop_contracts: bool,
+    /// If the harness was automatically generated or manually written.
+    pub is_automatically_generated: bool,
 }
 
 /// The attributes added by the user to control how a harness is executed.

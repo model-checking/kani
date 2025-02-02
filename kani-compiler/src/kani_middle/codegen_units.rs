@@ -9,7 +9,10 @@
 
 use crate::args::ReachabilityType;
 use crate::kani_middle::attributes::is_proof_harness;
-use crate::kani_middle::metadata::{gen_contracts_metadata, gen_proof_metadata};
+use crate::kani_middle::kani_functions::{KaniIntrinsic, KaniModel};
+use crate::kani_middle::metadata::{
+    gen_automatic_proof_metadata, gen_contracts_metadata, gen_proof_metadata,
+};
 use crate::kani_middle::reachability::filter_crate_items;
 use crate::kani_middle::resolve::expect_resolve_fn;
 use crate::kani_middle::stubbing::{check_compatibility, harness_stub_map};
@@ -20,8 +23,8 @@ use rustc_middle::ty::TyCtxt;
 use rustc_session::config::OutputType;
 use rustc_smir::rustc_internal;
 use stable_mir::CrateDef;
-use stable_mir::mir::mono::Instance;
-use stable_mir::ty::{FnDef, IndexedVal, RigidTy, TyKind};
+use stable_mir::mir::{TerminatorKind, mono::Instance};
+use stable_mir::ty::{FnDef, GenericArgKind, GenericArgs, IndexedVal, RigidTy, TyKind};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs::File;
 use std::io::BufWriter;
@@ -57,26 +60,42 @@ pub struct CodegenUnit {
 impl CodegenUnits {
     pub fn new(queries: &QueryDb, tcx: TyCtxt) -> Self {
         let crate_info = CrateInfo { name: stable_mir::local_crate().name.as_str().into() };
-        if queries.args().reachability_analysis == ReachabilityType::Harnesses {
-            let base_filepath = tcx.output_filenames(()).path(OutputType::Object);
-            let base_filename = base_filepath.as_path();
-            let harnesses = filter_crate_items(tcx, |_, instance| is_proof_harness(tcx, instance));
-            let all_harnesses = harnesses
-                .into_iter()
-                .map(|harness| {
-                    let metadata = gen_proof_metadata(tcx, harness, &base_filename);
-                    (harness, metadata)
-                })
-                .collect::<HashMap<_, _>>();
-
-            // Even if no_stubs is empty we still need to store rustc metadata.
-            let units = group_by_stubs(tcx, &all_harnesses);
-            validate_units(tcx, &units);
-            debug!(?units, "CodegenUnits::new");
-            CodegenUnits { units, harness_info: all_harnesses, crate_info }
-        } else {
-            // Leave other reachability type handling as is for now.
-            CodegenUnits { units: vec![], harness_info: HashMap::default(), crate_info }
+        let base_filepath = tcx.output_filenames(()).path(OutputType::Object);
+        let base_filename = base_filepath.as_path();
+        match queries.args().reachability_analysis {
+            ReachabilityType::Harnesses => {
+                let all_harnesses = get_all_manual_harnesses(tcx, base_filename);
+                // Even if no_stubs is empty we still need to store rustc metadata.
+                let units = group_by_stubs(tcx, &all_harnesses);
+                validate_units(tcx, &units);
+                debug!(?units, "CodegenUnits::new");
+                CodegenUnits { units, harness_info: all_harnesses, crate_info }
+            }
+            ReachabilityType::Automatic => {
+                let mut all_harnesses = get_all_manual_harnesses(tcx, base_filename);
+                let kani_fns = queries.kani_functions();
+                let any_inst = kani_fns.get(&KaniModel::Any.into()).unwrap();
+                let verifiable_fns = filter_crate_items(tcx, |_, instance: Instance| -> bool {
+                    is_eligible_for_automatic_harness(tcx, instance, *any_inst)
+                });
+                let kani_harness_intrinsic =
+                    kani_fns.get(&KaniIntrinsic::AutomaticHarness.into()).unwrap();
+                let automatic_harnesses = get_all_automatic_harnesses(
+                    tcx,
+                    verifiable_fns,
+                    *kani_harness_intrinsic,
+                    base_filename,
+                );
+                all_harnesses.extend(automatic_harnesses);
+                let units = group_by_stubs(tcx, &all_harnesses);
+                validate_units(tcx, &units);
+                debug!(?units, "CodegenUnits::new");
+                CodegenUnits { units, harness_info: all_harnesses, crate_info }
+            }
+            _ => {
+                // Leave other reachability type handling as is for now.
+                CodegenUnits { units: vec![], harness_info: HashMap::default(), crate_info }
+            }
         }
     }
 
@@ -251,4 +270,89 @@ fn apply_transitivity(tcx: TyCtxt, harness: Harness, stubs: Stubs) -> Stubs {
         new_stubs.insert(*orig, new_fn);
     }
     new_stubs
+}
+
+/// Fetch all manual harnesses (i.e., functions provided by the user) and generate their metadata
+fn get_all_manual_harnesses(
+    tcx: TyCtxt,
+    base_filename: &Path,
+) -> HashMap<Harness, HarnessMetadata> {
+    let harnesses = filter_crate_items(tcx, |_, instance| is_proof_harness(tcx, instance));
+    harnesses
+        .into_iter()
+        .map(|harness| {
+            let metadata = gen_proof_metadata(tcx, harness, &base_filename);
+            (harness, metadata)
+        })
+        .collect::<HashMap<_, _>>()
+}
+
+/// For each function eligible for automatic verification,
+/// generate a harness Instance for it, then generate its metadata.
+/// Note that the body of each harness instance is still the dummy body of `kani_harness_intrinsic`;
+/// the AutomaticHarnessPass will later transform the bodies of these instances to actually verify the function.
+fn get_all_automatic_harnesses(
+    tcx: TyCtxt,
+    verifiable_fns: Vec<Instance>,
+    kani_harness_intrinsic: FnDef,
+    base_filename: &Path,
+) -> HashMap<Harness, HarnessMetadata> {
+    verifiable_fns
+        .into_iter()
+        .map(|fn_to_verify| {
+            // Set the generic arguments of the harness to be the function it is verifying
+            // so that later, in AutomaticHarnessPass, we can retrieve the function to verify
+            // and generate the harness body accordingly.
+            let harness = Instance::resolve(
+                kani_harness_intrinsic,
+                &GenericArgs(vec![GenericArgKind::Type(fn_to_verify.ty())]),
+            )
+            .unwrap();
+            let metadata = gen_automatic_proof_metadata(tcx, &base_filename, &fn_to_verify);
+            (harness, metadata)
+        })
+        .collect::<HashMap<_, _>>()
+}
+
+/// Determine whether `instance` is eligible for automatic verification.
+/// `instance` is eligible iff:
+///   1. It is not a harness,
+///   2. It has a non-empty body,
+///   3. It is not an associated item of a Kani trait implementation (e.g., a kani::any implementation)
+///   4. All of its arguments implement Arbitrary
+fn is_eligible_for_automatic_harness(tcx: TyCtxt, instance: Instance, any_inst: FnDef) -> bool {
+    if is_proof_harness(tcx, instance) || !instance.has_body() {
+        return false;
+    }
+    // Don't generate a harness for functions with empty bodies.
+    let body = instance.body().unwrap();
+    if body.blocks.is_empty()
+        || (body.blocks[0].statements.is_empty()
+            && matches!(body.blocks[0].terminator.kind, TerminatorKind::Return))
+    {
+        return false;
+    }
+
+    // Don't generate harnesses for associated items of Kani trait implementations.
+    // FIXME -- find a less hardcoded way of doing this (perhaps upstream PR to StableMIR).
+    if instance.name().contains("kani::Arbitrary") || instance.name().contains("kani::Invariant") {
+        return false;
+    }
+
+    // Each non-generic argument of instance must implement Arbitrary.
+    // FIXME -- this will only find Arbitrary implementations for types whose Arbitrary
+    // implementations have an inner call to kani::any, which not all implementations (e.g. PhantomPinned) do.
+    body.arg_locals().iter().all(|arg| {
+        let kani_any_body =
+            Instance::resolve(any_inst, &GenericArgs(vec![GenericArgKind::Type(arg.ty)]))
+                .unwrap()
+                .body()
+                .unwrap();
+        if let TerminatorKind::Call { func, .. } = &kani_any_body.blocks[0].terminator.kind {
+            if let Some((def, args)) = func.ty(body.arg_locals()).unwrap().kind().fn_def() {
+                return Instance::resolve(def, &args).is_ok();
+            }
+        }
+        false
+    })
 }

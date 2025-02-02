@@ -3,6 +3,7 @@
 //! Module that define Kani's command line interface. This includes all subcommands.
 
 pub mod assess_args;
+pub mod autoverify_args;
 pub mod cargo;
 pub mod common;
 pub mod list_args;
@@ -145,6 +146,8 @@ pub enum StandaloneSubcommand {
     VerifyStd(Box<std_args::VerifyStdArgs>),
     /// List contracts and harnesses.
     List(Box<list_args::StandaloneListArgs>),
+    /// Scan the input file for functions eligible for automatic (i.e., harness-free) verification and verify them.
+    Autoverify(Box<autoverify_args::StandaloneAutoverifyArgs>),
 }
 
 #[derive(Debug, clap::Parser)]
@@ -173,6 +176,9 @@ pub enum CargoKaniSubcommand {
 
     /// List contracts and harnesses.
     List(Box<list_args::CargoListArgs>),
+
+    /// Scan the crate for functions eligible for automatic (i.e., harness-free) verification and verify them.
+    Autoverify(Box<autoverify_args::CargoAutoverifyArgs>),
 }
 
 // Common arguments for invoking Kani for verification purpose. This gets put into KaniContext,
@@ -483,6 +489,7 @@ impl ValidateArgs for StandaloneArgs {
         match &self.command {
             Some(StandaloneSubcommand::VerifyStd(args)) => args.validate()?,
             Some(StandaloneSubcommand::List(args)) => args.validate()?,
+            Some(StandaloneSubcommand::Autoverify(args)) => args.validate()?,
             // TODO: Invoke PlaybackArgs::validate()
             None | Some(StandaloneSubcommand::Playback(..)) => {}
         };
@@ -528,6 +535,7 @@ impl ValidateArgs for CargoKaniSubcommand {
         match self {
             // Assess doesn't implement validation yet.
             CargoKaniSubcommand::Assess(_) => Ok(()),
+            CargoKaniSubcommand::Autoverify(autoverify) => autoverify.validate(),
             CargoKaniSubcommand::Playback(playback) => playback.validate(),
             CargoKaniSubcommand::List(list) => list.validate(),
         }

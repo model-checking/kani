@@ -72,21 +72,25 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
         return list_cargo(*list_args, args.verify_opts);
     }
 
-    let session = session::KaniSession::new(args.verify_opts)?;
-
-    if !session.args.common_args.quiet {
-        print_kani_version(InvocationType::CargoKani(input_args));
-    }
-
-    match args.command {
-        Some(CargoKaniSubcommand::Assess(args)) => {
-            return assess::run_assess(session, *args);
+    let session = match args.command {
+        Some(CargoKaniSubcommand::Assess(assess_args)) => {
+            let sess = session::KaniSession::new(args.verify_opts)?;
+            return assess::run_assess(sess, *assess_args);
+        }
+        Some(CargoKaniSubcommand::Autoverify(args)) => {
+            let mut sess = session::KaniSession::new(args.verify_opts)?;
+            sess.enable_autoverify();
+            sess
         }
         Some(CargoKaniSubcommand::Playback(args)) => {
             return playback_cargo(*args);
         }
         Some(CargoKaniSubcommand::List(_)) => unreachable!(),
-        None => {}
+        None => session::KaniSession::new(args.verify_opts)?,
+    };
+
+    if !session.args.common_args.quiet {
+        print_kani_version(InvocationType::CargoKani(input_args));
     }
 
     if session.args.assess {
@@ -103,6 +107,17 @@ fn standalone_main() -> Result<()> {
     check_is_valid(&args);
 
     let (session, project) = match args.command {
+        Some(StandaloneSubcommand::Autoverify(args)) => {
+            let mut session = KaniSession::new(args.verify_opts)?;
+            session.enable_autoverify();
+
+            if !session.args.common_args.quiet {
+                print_kani_version(InvocationType::Standalone);
+            }
+
+            let project = project::standalone_project(&args.input, args.crate_name, &session)?;
+            (session, project)
+        }
         Some(StandaloneSubcommand::Playback(args)) => return playback_standalone(*args),
         Some(StandaloneSubcommand::List(list_args)) => {
             return list_standalone(*list_args, args.verify_opts);
