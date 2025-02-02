@@ -4,7 +4,7 @@
 use std::mem;
 
 extern crate kani;
-use kani::{kani_forall, kani_exists};
+use kani::{kani_exists, kani_forall};
 
 #[kani::proof]
 fn main() {
@@ -27,7 +27,7 @@ fn main() {
         for i in 0..len {
             *p.add(i) += 1;
             if i == 1 {
-              *p.add(i) = 0;
+                *p.add(i) = 0;
             }
         }
 
