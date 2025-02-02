@@ -1,28 +1,39 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-flags: -Zautomatic-harnesses
-
-#![feature(stmt_expr_attributes)]
-#![feature(proc_macro_hygiene)]
 
 // Test that automatic harnesses terminate on functions with loops.
 
 // Since foo()'s arguments implement Arbitrary, we will attempt to verify it,
 // and enter an infinite loop.
-// Instead, we should just skip this function, perhaps printing a message to the user that we skipped it.
+// Unclear what the best solution to this problem is; perhaps this is just a known limitation
+// and the user needs to specify some command line flag to skip this function,
+// or we can conservatively skip functions with loops that don't have loop contracts.
 fn infinite_loop() {
     loop {}
 }
 
-// Shouldn't skip this function -- it has a loop, but since it also has a loop contract,
-// we can generate a contract harness for it and be assured that the proof will terminate.
-fn has_loop_contract() {
-    let mut x: u8 = kani::any_where(|i| *i >= 2);
+/// Euclid's algorithm for calculating the GCD of two numbers
+#[kani::requires(x != 0 && y != 0)]
+#[kani::ensures(|result : &u8| *result != 0 && x % *result == 0 && y % *result == 0)]
+fn gcd(mut x: u8, mut y: u8) -> u8 {
+    (x, y) = (if x > y { x } else { y }, if x > y { y } else { x });
+    loop {
+        let res = x % y;
+        if res == 0 {
+            return y;
+        }
 
-    #[kani::loop_invariant(x >= 2)]
-    while x > 2 {
-        x = x - 1;
+        x = y;
+        y = res;
     }
+}
 
-    assert!(x == 2);
+// Since we can specify an unwinding bound in a manual harness,
+// the proof will terminate.
+// Automatic harnesses, however, do not support unwinding bounds,
+// so the proof does not terminate.
+#[kani::proof_for_contract(gcd)]
+#[kani::unwind(12)]
+fn gcd_harness() {
+    gcd(kani::any(), kani::any());
 }

@@ -8,7 +8,7 @@
 //! according to their stub configuration.
 
 use crate::args::ReachabilityType;
-use crate::kani_middle::attributes::is_proof_harness;
+use crate::kani_middle::attributes::{KaniAttributes, is_proof_harness};
 use crate::kani_middle::kani_functions::{KaniIntrinsic, KaniModel};
 use crate::kani_middle::metadata::{
     gen_automatic_proof_metadata, gen_contracts_metadata, gen_proof_metadata,
@@ -73,22 +73,35 @@ impl CodegenUnits {
             }
             ReachabilityType::Automatic => {
                 let mut all_harnesses = get_all_manual_harnesses(tcx, base_filename);
+                let mut units = group_by_stubs(tcx, &all_harnesses);
+                validate_units(tcx, &units);
+
                 let kani_fns = queries.kani_functions();
-                let any_inst = kani_fns.get(&KaniModel::Any.into()).unwrap();
-                let verifiable_fns = filter_crate_items(tcx, |_, instance: Instance| -> bool {
-                    is_eligible_for_automatic_harness(tcx, instance, *any_inst)
-                });
                 let kani_harness_intrinsic =
                     kani_fns.get(&KaniIntrinsic::AutomaticHarness.into()).unwrap();
+                let kani_any_inst = kani_fns.get(&KaniModel::Any.into()).unwrap();
+                let verifiable_fns = filter_crate_items(tcx, |_, instance: Instance| -> bool {
+                    is_eligible_for_automatic_harness(tcx, instance, *kani_any_inst)
+                });
                 let automatic_harnesses = get_all_automatic_harnesses(
                     tcx,
                     verifiable_fns,
                     *kani_harness_intrinsic,
                     base_filename,
                 );
+                // We generate one contract harness per function under contract, so each harness is in its own unit,
+                // and these harnesses have no stubs.
+                units.extend(
+                    automatic_harnesses
+                        .iter()
+                        .map(|(harness, _)| CodegenUnit {
+                            harnesses: vec![*harness],
+                            stubs: HashMap::default(),
+                        })
+                        .collect::<Vec<_>>(),
+                );
                 all_harnesses.extend(automatic_harnesses);
-                let units = group_by_stubs(tcx, &all_harnesses);
-                validate_units(tcx, &units);
+                // No need to validate the units again because validation only checks stubs, and we haven't added any stubs.
                 debug!(?units, "CodegenUnits::new");
                 CodegenUnits { units, harness_info: all_harnesses, crate_info }
             }
@@ -113,7 +126,15 @@ impl CodegenUnits {
     /// We flag that the harness contains usage of loop contracts.
     pub fn store_loop_contracts(&mut self, harnesses: &[Harness]) {
         for harness in harnesses {
-            self.harness_info.get_mut(harness).unwrap().has_loop_contracts = true;
+            let metadata = self.harness_info.get_mut(harness).unwrap();
+            metadata.has_loop_contracts = true;
+            // If we're generating this harness automatically and we encounter a loop contract,
+            // ensure that the HarnessKind is updated to be a contract harness
+            // targeting the function to verify.
+            if metadata.is_automatically_generated {
+                metadata.attributes.kind =
+                    HarnessKind::ProofForContract { target_fn: metadata.pretty_name.clone() }
+            }
         }
     }
 
@@ -315,16 +336,11 @@ fn get_all_automatic_harnesses(
 }
 
 /// Determine whether `instance` is eligible for automatic verification.
-/// `instance` is eligible iff:
-///   1. It is not a harness,
-///   2. It has a non-empty body,
-///   3. It is not an associated item of a Kani trait implementation (e.g., a kani::any implementation)
-///   4. All of its arguments implement Arbitrary
 fn is_eligible_for_automatic_harness(tcx: TyCtxt, instance: Instance, any_inst: FnDef) -> bool {
+    // `instance` is ineligble if it is a harness or has an nonexistent/empty body
     if is_proof_harness(tcx, instance) || !instance.has_body() {
         return false;
     }
-    // Don't generate a harness for functions with empty bodies.
     let body = instance.body().unwrap();
     if body.blocks.is_empty()
         || (body.blocks[0].statements.is_empty()
@@ -333,14 +349,20 @@ fn is_eligible_for_automatic_harness(tcx: TyCtxt, instance: Instance, any_inst: 
         return false;
     }
 
-    // Don't generate harnesses for associated items of Kani trait implementations.
-    // FIXME -- find a less hardcoded way of doing this (perhaps upstream PR to StableMIR).
-    if instance.name().contains("kani::Arbitrary") || instance.name().contains("kani::Invariant") {
+    // `instance` is ineligble if it is an associated item of a Kani trait implementation,
+    // or part of Kani contract instrumentation.
+    // FIXME -- find a less hardcoded way of checking the former condition (perhaps upstream PR to StableMIR).
+    if instance.name().contains("kani::Arbitrary")
+        || instance.name().contains("kani::Invariant")
+        || KaniAttributes::for_instance(tcx, instance)
+            .fn_marker()
+            .is_some_and(|m| m.as_str() == "kani_contract_mode")
+    {
         return false;
     }
 
-    // Each non-generic argument of instance must implement Arbitrary.
-    // FIXME -- this will only find Arbitrary implementations for types whose Arbitrary
+    // Each non-generic argument of `instance`` must implement Arbitrary.
+    // FIXME -- this is sound but not complete, since it will only work for types whose Arbitrary
     // implementations have an inner call to kani::any, which not all implementations (e.g. PhantomPinned) do.
     body.arg_locals().iter().all(|arg| {
         let kani_any_body =

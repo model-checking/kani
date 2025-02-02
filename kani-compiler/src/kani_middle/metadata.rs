@@ -90,9 +90,8 @@ pub fn gen_contracts_metadata(tcx: TyCtxt) -> Vec<ContractedFunction> {
 /// the metdata from that function uniquely identifies the harness.
 /// In future iterations of this feature, we will likely have multiple harnesses for a single function (e.g., for generic functions),
 /// in which case HarnessMetadata will need to change further to differentiate between those harnesses.
-/// TODO Instead of just generating HarnessKind::Proof, generate HarnessKind::ProofForContract if fn_to_verify has a contract.
 pub fn gen_automatic_proof_metadata(
-    _tcx: TyCtxt,
+    tcx: TyCtxt,
     base_name: &Path,
     fn_to_verify: &Instance,
 ) -> HarnessMetadata {
@@ -105,6 +104,13 @@ pub fn gen_automatic_proof_metadata(
     let file_stem = format!("{}_{mangled_name}", base_name.file_stem().unwrap().to_str().unwrap());
     let model_file = base_name.with_file_name(file_stem).with_extension(ArtifactType::SymTabGoto);
 
+    let kani_attributes = KaniAttributes::for_instance(tcx, *fn_to_verify);
+    let harness_kind = if kani_attributes.has_contract() {
+        HarnessKind::ProofForContract { target_fn: pretty_name.clone() }
+    } else {
+        HarnessKind::Proof
+    };
+
     HarnessMetadata {
         pretty_name,
         mangled_name,
@@ -112,7 +118,7 @@ pub fn gen_automatic_proof_metadata(
         original_file: loc.filename,
         original_start_line: loc.start_line,
         original_end_line: loc.end_line,
-        attributes: HarnessAttributes::new(HarnessKind::Proof),
+        attributes: HarnessAttributes::new(harness_kind),
         // TODO: This no longer needs to be an Option.
         goto_file: Some(model_file),
         contract: Default::default(),
