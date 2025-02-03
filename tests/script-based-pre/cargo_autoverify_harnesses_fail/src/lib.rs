@@ -1,6 +1,5 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-flags: -Zautomatic-harnesses
 
 // Test the bodies of the automatically generated harnesses:
 // do they catch the same failures as manual ones?
@@ -36,6 +35,11 @@ fn panic() {
     }
 }
 
+// Test that we can autoverify functions for unsafe functions
+unsafe fn unchecked_mul(left: u8, rhs: u8) -> u8 {
+    left.unchecked_mul(rhs)
+}
+
 #[kani::proof]
 fn oob_safe_array_access_harness() {
     oob_safe_array_access(kani::any());
@@ -54,4 +58,11 @@ fn integer_overflow_harness() {
 #[kani::proof]
 fn panic_harness() {
     panic();
+}
+
+#[kani::proof]
+fn unchecked_mul_harness() {
+    unsafe {
+        unchecked_mul(kani::any(), kani::any());
+    }
 }

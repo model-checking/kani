@@ -22,6 +22,7 @@ use tracing::debug;
 mod args;
 mod args_toml;
 mod assess;
+mod autoverify;
 mod call_cargo;
 mod call_cbmc;
 mod call_goto_cc;

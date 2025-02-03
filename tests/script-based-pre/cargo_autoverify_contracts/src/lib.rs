@@ -40,6 +40,12 @@ mod should_pass {
 
         assert!(x == 2);
     }
+
+    // Test that we can autoverify functions for unsafe functions with contracts
+    #[kani::requires(!left.overflowing_mul(rhs).1)]
+    unsafe fn unchecked_mul(left: u8, rhs: u8) -> u8 {
+        left.unchecked_mul(rhs)
+    }
 }
 
 mod should_fail {

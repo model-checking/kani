@@ -1,19 +1,28 @@
-Checking function should_fail::max against all possible inputs...
+Autoverify: Checking function should_fail::max's contract against all possible inputs...
 assertion\
 	 - Status: FAILURE\
 	 - Description: "|result : &u32| *result == x"
 
-Checking function should_pass::has_loop_contract against all possible inputs...
+Autoverify: Checking function should_pass::has_loop_contract's contract against all possible inputs...
 should_pass::has_loop_contract.assertion\
 	 - Status: SUCCESS\
 	 - Description: "assertion failed: x == 2"
 
-Checking function should_pass::has_recursion_gcd against all possible inputs...
+Autoverify: Checking function should_pass::has_recursion_gcd's contract against all possible inputs...
 assertion\
 	 - Status: SUCCESS\
 	 - Description: "|result : &u8| *result != 0 && x % *result == 0 && y % *result == 0"
 
-Checking function should_pass::div against all possible inputs...
+Autoverify: Checking function should_pass::div's contract against all possible inputs...
 
+Autoverify: Checking function should_pass::unchecked_mul's contract against all possible inputs...
+arithmetic_overflow\
+	 - Status: SUCCESS\
+	 - Description: "attempt to compute `unchecked_mul` which would overflow"
+
+Verification succeeded for - should_pass::unchecked_mul
+Verification succeeded for - should_pass::has_loop_contract
+Verification succeeded for - should_pass::has_recursion_gcd
+Verification succeeded for - should_pass::div
 Verification failed for - should_fail::max
-Complete - 3 successfully verified harnesses, 1 failures, 4 total.
+Complete - 4 successfully verified functions, 1 failures, 5 total.

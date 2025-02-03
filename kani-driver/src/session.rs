@@ -17,6 +17,9 @@ use tokio::process::Command as TokioCommand;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::{EnvFilter, Registry, layer::SubscriberExt};
 
+pub const BUG_REPORT_URL: &str =
+    "https://github.com/model-checking/kani/issues/new?labels=bug&template=bug_report.md";
+
 /// Environment variable used to control this session log tracing.
 /// This is the same variable used to control `kani-compiler` logs. Note that you can still control
 /// the driver logs separately, by using the logger directives to  select the kani-driver crate.
@@ -72,10 +75,6 @@ impl KaniSession {
             temporaries: Mutex::new(vec![]),
             runtime: tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap(),
         })
-    }
-
-    pub fn enable_autoverify(&mut self) {
-        self.auto_verify = true;
     }
 
     /// Record a temporary file so we can cleanup after ourselves at the end.
