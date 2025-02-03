@@ -1,6 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-//! Implements the subcommand handling of the list subcommand
+//! Implements the subcommand handling of the autoverify subcommand
 
 use std::path::PathBuf;
 
@@ -8,12 +8,35 @@ use crate::args::{ValidateArgs, VerificationArgs};
 use clap::{Error, Parser, error::ErrorKind};
 use kani_metadata::UnstableFeature;
 
-// TODO add --function option to only verify functions matching the substring
-// (akin to --harness).
+#[derive(Debug, Parser)]
+pub struct CommonAutoverifyArgs {
+    /// If specified, only autoverify functions that match this filter. This option can be provided
+    /// multiple times, which will verify all functions matching any of the filters.
+    /// Note that this filter will match against partial names, i.e., providing the name of a module will include all functions from that module.
+    /// Also note that if the function specified is unable to be automatically verified, this flag will have no effect.
+    #[arg(
+        long = "include-function",
+        num_args(1),
+        value_name = "FUNCTION",
+        conflicts_with = "exclude_function"
+    )]
+    pub include_function: Vec<String>,
+
+    /// If specified, only autoverify functions that do not match this filter. This option can be provided
+    /// multiple times, which will verify all functions that do not match any of the filters.
+    /// Note that this filter will match against partial names, i.e., providing the name of a module will exclude all functions from that module.
+    #[arg(long = "exclude-function", num_args(1), value_name = "FUNCTION")]
+    pub exclude_function: Vec<String>,
+    // TODO: It would be nice if we could borrow --exact here from VerificationArgs to differentiate between partial/exact matches,
+    // like --harnesses does. Sharing arguments with VerificationArgs doesn't work with our current structure, though.
+}
 
 /// Automatically verify functions in a crate.
 #[derive(Debug, Parser)]
 pub struct CargoAutoverifyArgs {
+    #[command(flatten)]
+    pub common_autoverify_args: CommonAutoverifyArgs,
+
     #[command(flatten)]
     pub verify_opts: VerificationArgs,
 }
@@ -27,6 +50,9 @@ pub struct StandaloneAutoverifyArgs {
 
     #[arg(long, hide = true)]
     pub crate_name: Option<String>,
+
+    #[command(flatten)]
+    pub common_autoverify_args: CommonAutoverifyArgs,
 
     #[command(flatten)]
     pub verify_opts: VerificationArgs,

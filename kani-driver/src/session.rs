@@ -34,6 +34,9 @@ pub struct KaniSession {
     /// Automatically verify functions in the crate, in addition to running manual harnesses.
     pub auto_verify: bool,
 
+    /// The arguments that will be passed to the target package, i.e. kani_compiler.
+    pub pkg_args: Vec<String>,
+
     /// Include all publicly-visible symbols in the generated goto binary, not just those reachable from
     /// a proof harness. Useful when attempting to verify things that were not annotated with kani
     /// proof attributes.
@@ -69,6 +72,7 @@ impl KaniSession {
         Ok(KaniSession {
             args,
             auto_verify: false,
+            pkg_args: vec!["--".to_string()],
             codegen_tests: false,
             kani_compiler: install.kani_compiler()?,
             kani_lib_c: install.kani_lib_c()?,

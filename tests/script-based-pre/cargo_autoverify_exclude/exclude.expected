@@ -1,0 +1,4 @@
+Autoverify: Checking function include::simple against all possible inputs...
+VERIFICATION:- SUCCESSFUL
+Verification succeeded for - include::simple
+Complete - 1 successfully verified functions, 0 failures, 1 total.

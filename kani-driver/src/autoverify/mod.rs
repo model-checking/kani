@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use crate::call_cbmc::VerificationStatus;
+use crate::call_single_file::to_rustc_arg;
 use crate::harness_runner::HarnessResult;
 use crate::session::KaniSession;
 use anyhow::Result;
@@ -10,6 +11,18 @@ impl KaniSession {
     /// Enable autoverify mode.
     pub fn enable_autoverify(&mut self) {
         self.auto_verify = true;
+    }
+
+    /// Add the compiler arguments specific to the `autoverify` subcommand.
+    pub fn add_auto_verify_args(&mut self, included: Vec<String>, excluded: Vec<String>) {
+        for func in included {
+            self.pkg_args
+                .push(to_rustc_arg(vec![format!("--autoverify-include-function {}", func)]));
+        }
+        for func in excluded {
+            self.pkg_args
+                .push(to_rustc_arg(vec![format!("--autoverify-exclude-function {}", func)]));
+        }
     }
 
     /// Prints the results from running the `autoverify` subcommand.

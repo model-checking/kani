@@ -73,7 +73,7 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
         return list_cargo(*list_args, args.verify_opts);
     }
 
-    let session = match args.command {
+    let mut session = match args.command {
         Some(CargoKaniSubcommand::Assess(assess_args)) => {
             let sess = session::KaniSession::new(args.verify_opts)?;
             return assess::run_assess(sess, *assess_args);
@@ -81,6 +81,11 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
         Some(CargoKaniSubcommand::Autoverify(args)) => {
             let mut sess = session::KaniSession::new(args.verify_opts)?;
             sess.enable_autoverify();
+            sess.add_auto_verify_args(
+                args.common_autoverify_args.include_function,
+                args.common_autoverify_args.exclude_function,
+            );
+
             sess
         }
         Some(CargoKaniSubcommand::Playback(args)) => {
@@ -98,7 +103,7 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
         return assess::run_assess(session, assess::AssessArgs::default());
     }
 
-    let project = project::cargo_project(&session, false)?;
+    let project = project::cargo_project(&mut session, false)?;
     if session.args.only_codegen { Ok(()) } else { verify_project(project, session) }
 }
 
@@ -111,6 +116,10 @@ fn standalone_main() -> Result<()> {
         Some(StandaloneSubcommand::Autoverify(args)) => {
             let mut session = KaniSession::new(args.verify_opts)?;
             session.enable_autoverify();
+            session.add_auto_verify_args(
+                args.common_autoverify_args.include_function,
+                args.common_autoverify_args.exclude_function,
+            );
 
             if !session.args.common_args.quiet {
                 print_kani_version(InvocationType::Standalone);

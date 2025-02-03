@@ -62,7 +62,8 @@ impl CodegenUnits {
         let crate_info = CrateInfo { name: stable_mir::local_crate().name.as_str().into() };
         let base_filepath = tcx.output_filenames(()).path(OutputType::Object);
         let base_filename = base_filepath.as_path();
-        match queries.args().reachability_analysis {
+        let args = queries.args();
+        match args.reachability_analysis {
             ReachabilityType::Harnesses => {
                 let all_harnesses = get_all_manual_harnesses(tcx, base_filename);
                 // Even if no_stubs is empty we still need to store rustc metadata.
@@ -80,8 +81,18 @@ impl CodegenUnits {
                 let kani_harness_intrinsic =
                     kani_fns.get(&KaniIntrinsic::AutomaticHarness.into()).unwrap();
                 let kani_any_inst = kani_fns.get(&KaniModel::Any.into()).unwrap();
+
                 let verifiable_fns = filter_crate_items(tcx, |_, instance: Instance| -> bool {
-                    is_eligible_for_automatic_harness(tcx, instance, *kani_any_inst)
+                    // If the user specified functions to include or exclude, only allow instances matching those filters.
+                    let user_included = if !args.autoverify_included_functions.is_empty() {
+                        fn_list_contains_instance(&instance, &args.autoverify_included_functions)
+                    } else if !args.autoverify_excluded_functions.is_empty() {
+                        !fn_list_contains_instance(&instance, &args.autoverify_excluded_functions)
+                    } else {
+                        true
+                    };
+                    user_included
+                        && is_eligible_for_automatic_harness(tcx, instance, *kani_any_inst)
                 });
                 let automatic_harnesses = get_all_automatic_harnesses(
                     tcx,
@@ -377,4 +388,12 @@ fn is_eligible_for_automatic_harness(tcx: TyCtxt, instance: Instance, any_inst: 
         }
         false
     })
+}
+
+/// Return whether the name of `instance` is included in `fn_list`.
+/// If `exact = true`, then `instance`'s exact, fully-qualified name must be in `fn_list`; otherwise, `fn_list`
+/// can have a substring of `instance`'s name.
+fn fn_list_contains_instance(instance: &Instance, fn_list: &[String]) -> bool {
+    let pretty_name = instance.name();
+    fn_list.contains(&pretty_name) || fn_list.iter().any(|fn_name| pretty_name.contains(fn_name))
 }
