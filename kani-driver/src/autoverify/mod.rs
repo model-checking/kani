@@ -58,8 +58,9 @@ impl KaniSession {
                 "Complete - {succeeding} successfully verified functions, {failing} failures, {total} total."
             );
         } else {
-            println!("
-                No functions were eligible for automatic verification. Functions can only be automatically verified if each of their arguments implement kani::Arbitrary.");
+            println!(
+                "No functions were eligible for automatic verification. Functions can only be automatically verified if each of their arguments implement kani::Arbitrary."
+            );
             println!(
                 "If you specified --include-function or --exclude-function, make sure that your filters were not overly restrictive."
             );
