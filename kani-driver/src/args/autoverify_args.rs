@@ -71,7 +71,7 @@ impl ValidateArgs for CargoAutoverifyArgs {
                 ErrorKind::MissingRequiredArgument,
                 format!(
                     "The `autoverify` subcommand is unstable and requires -Z {}",
-                    UnstableFeature::UnstableOptions.to_string()
+                    UnstableFeature::UnstableOptions
                 ),
             ));
         }
@@ -105,7 +105,7 @@ impl ValidateArgs for StandaloneAutoverifyArgs {
                 ErrorKind::MissingRequiredArgument,
                 format!(
                     "The `autoverify` subcommand is unstable and requires -Z {}",
-                    UnstableFeature::UnstableOptions.to_string()
+                    UnstableFeature::UnstableOptions
                 ),
             ));
         }

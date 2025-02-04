@@ -228,6 +228,7 @@ pub mod tests {
             goto_file: model_file,
             contract: Default::default(),
             has_loop_contracts: false,
+            is_automatically_generated: false,
         }
     }
 

@@ -104,8 +104,8 @@ impl CodegenUnits {
                 // and these harnesses have no stubs.
                 units.extend(
                     automatic_harnesses
-                        .iter()
-                        .map(|(harness, _)| CodegenUnit {
+                        .keys()
+                        .map(|harness| CodegenUnit {
                             harnesses: vec![*harness],
                             stubs: HashMap::default(),
                         })

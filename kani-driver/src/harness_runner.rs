@@ -167,28 +167,30 @@ impl KaniSession {
         harness: &HarnessMetadata,
     ) -> Result<VerificationResult> {
         let thread_index = rayon::current_thread_index().unwrap_or_default();
-        // If the harness is automatically generated, pretty_name refers to the function under verification.
-        let mut msg = if harness.is_automatically_generated {
-            if matches!(harness.attributes.kind, HarnessKind::Proof) {
-                format!(
-                    "Autoverify: Checking function {} against all possible inputs...",
-                    harness.pretty_name
-                )
+        if !self.args.common_args.quiet {
+            // If the harness is automatically generated, pretty_name refers to the function under verification.
+            let mut msg = if harness.is_automatically_generated {
+                if matches!(harness.attributes.kind, HarnessKind::Proof) {
+                    format!(
+                        "Autoverify: Checking function {} against all possible inputs...",
+                        harness.pretty_name
+                    )
+                } else {
+                    format!(
+                        "Autoverify: Checking function {}'s contract against all possible inputs...",
+                        harness.pretty_name
+                    )
+                }
             } else {
-                format!(
-                    "Autoverify: Checking function {}'s contract against all possible inputs...",
-                    harness.pretty_name
-                )
+                format!("Checking harness {}...", harness.pretty_name)
+            };
+
+            if rayon::current_num_threads() > 1 {
+                msg = format!("Thread {thread_index}: {msg}");
             }
-        } else {
-            format!("Checking harness {}...", harness.pretty_name)
-        };
 
-        if rayon::current_num_threads() > 1 {
-            msg = format!("Thread {thread_index}: {msg}");
+            println!("{msg}");
         }
-
-        println!("{msg}");
 
         let mut result = self.with_timer(|| self.run_cbmc(binary, harness), "run_cbmc")?;
 
