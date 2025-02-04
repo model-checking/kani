@@ -39,6 +39,7 @@ struct DoesntImplementArbitrary {
 
 mod yes_harness {
     use crate::{DerivesArbitrary, ManuallyImplementsArbitrary};
+    use std::marker::{PhantomData, PhantomPinned};
     use std::mem::MaybeUninit;
     use std::num::NonZero;
 
@@ -168,24 +169,20 @@ mod yes_harness {
     ) -> ManuallyImplementsArbitrary {
         x
     }
-}
 
-// These should have harnesses, but do not because we assume that every Arbitrary implementation
-// will have an internal call to kani::Arbitrary::any, which these implementations do not.
-mod fixme {
-    use std::marker::{PhantomData, PhantomPinned};
     fn f_phantom_data(x: PhantomData<u8>) -> PhantomData<u8> {
         x
     }
+
     fn f_phantom_pinned(x: PhantomPinned) -> PhantomPinned {
         x
     }
+
+    fn empty_body(_x: u8, _y: u16) {}
 }
 
 mod no_harness {
     use crate::{DerivesArbitrary, DoesntImplementArbitrary};
-
-    fn empty_body(_x: u8, _y: u16) {}
     fn unsupported_generic<T>(x: u32, _y: T) -> u32 {
         x
     }

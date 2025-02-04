@@ -353,12 +353,6 @@ fn is_eligible_for_automatic_harness(tcx: TyCtxt, instance: Instance, any_inst: 
         return false;
     }
     let body = instance.body().unwrap();
-    if body.blocks.is_empty()
-        || (body.blocks[0].statements.is_empty()
-            && matches!(body.blocks[0].terminator.kind, TerminatorKind::Return))
-    {
-        return false;
-    }
 
     // `instance` is ineligble if it is an associated item of a Kani trait implementation,
     // or part of Kani contract instrumentation.
@@ -373,8 +367,6 @@ fn is_eligible_for_automatic_harness(tcx: TyCtxt, instance: Instance, any_inst: 
     }
 
     // Each non-generic argument of `instance`` must implement Arbitrary.
-    // FIXME -- this is sound but not complete, since it will only work for types whose Arbitrary
-    // implementations have an inner call to kani::any, which not all implementations (e.g. PhantomPinned) do.
     body.arg_locals().iter().all(|arg| {
         let kani_any_body =
             Instance::resolve(any_inst, &GenericArgs(vec![GenericArgKind::Type(arg.ty)]))
