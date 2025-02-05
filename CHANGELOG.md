@@ -15,7 +15,7 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 * Fix crash if a function pointer is created but never used by @celinval in https://github.com/model-checking/kani/pull/3862
 * Fix transmute codegen when sizes are different by @celinval in https://github.com/model-checking/kani/pull/3861
 * Stub linker to avoid missing symbols errors by @celinval in https://github.com/model-checking/kani/pull/3858
-* Toolchain upgrade to nightly-2025-01-28 by @feliperodri in https://github.com/model-checking/kani/pull/3855
+* Toolchain upgrade to nightly-2025-01-28 by @feliperodri @tautschnig
 
 **Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.58.0...kani-0.59.0
 
