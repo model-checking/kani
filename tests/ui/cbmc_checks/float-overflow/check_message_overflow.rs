@@ -1,7 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
-// Check we don't print temporary variables as part of CBMC messages.
 // This test verifies that Kani does not report floating-point overflow by default
 // for operations that result in +/-Infinity.
 extern crate kani;
