@@ -172,12 +172,12 @@ impl KaniSession {
             let mut msg = if harness.is_automatically_generated {
                 if matches!(harness.attributes.kind, HarnessKind::Proof) {
                     format!(
-                        "Autoverify: Checking function {} against all possible inputs...",
+                        "Autoharness: Checking function {} against all possible inputs...",
                         harness.pretty_name
                     )
                 } else {
                     format!(
-                        "Autoverify: Checking function {}'s contract against all possible inputs...",
+                        "Autoharness: Checking function {}'s contract against all possible inputs...",
                         harness.pretty_name
                     )
                 }
@@ -212,8 +212,8 @@ impl KaniSession {
         let (automatic, manual): (Vec<_>, Vec<_>) =
             results.iter().partition(|r| r.harness.is_automatically_generated);
 
-        if self.auto_verify {
-            self.print_autoverify_summary(automatic)?;
+        if self.auto_harness {
+            self.print_autoharness_summary(automatic)?;
         }
 
         let (successes, failures): (Vec<_>, Vec<_>) =

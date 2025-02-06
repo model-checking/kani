@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// Test that the autoverify subcommand correctly verifies contracts,
+// Test that the autoharness subcommand correctly verifies contracts,
 // i.e., that it detects the presence of a contract and generates a contract
 // harness instead of a standard harness.
 
@@ -41,7 +41,7 @@ mod should_pass {
         assert!(x == 2);
     }
 
-    // Test that we can autoverify functions for unsafe functions with contracts
+    // Test that we can autoharness functions for unsafe functions with contracts
     #[kani::requires(!left.overflowing_mul(rhs).1)]
     unsafe fn unchecked_mul(left: u8, rhs: u8) -> u8 {
         left.unchecked_mul(rhs)

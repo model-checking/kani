@@ -35,7 +35,7 @@ fn panic() {
     }
 }
 
-// Test that we can autoverify functions for unsafe functions
+// Test that we can autoharness functions for unsafe functions
 unsafe fn unchecked_mul(left: u8, rhs: u8) -> u8 {
     left.unchecked_mul(rhs)
 }

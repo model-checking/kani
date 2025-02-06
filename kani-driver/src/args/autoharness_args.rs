@@ -1,6 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-//! Implements the subcommand handling of the autoverify subcommand
+//! Implements the subcommand handling of the autoharness subcommand
 
 use std::path::PathBuf;
 
@@ -9,8 +9,8 @@ use clap::{Error, Parser, error::ErrorKind};
 use kani_metadata::UnstableFeature;
 
 #[derive(Debug, Parser)]
-pub struct CommonAutoverifyArgs {
-    /// If specified, only autoverify functions that match this filter. This option can be provided
+pub struct CommonAutoharnessArgs {
+    /// If specified, only autoharness functions that match this filter. This option can be provided
     /// multiple times, which will verify all functions matching any of the filters.
     /// Note that this filter will match against partial names, i.e., providing the name of a module will include all functions from that module.
     /// Also note that if the function specified is unable to be automatically verified, this flag will have no effect.
@@ -22,7 +22,7 @@ pub struct CommonAutoverifyArgs {
     )]
     pub include_function: Vec<String>,
 
-    /// If specified, only autoverify functions that do not match this filter. This option can be provided
+    /// If specified, only autoharness functions that do not match this filter. This option can be provided
     /// multiple times, which will verify all functions that do not match any of the filters.
     /// Note that this filter will match against partial names, i.e., providing the name of a module will exclude all functions from that module.
     #[arg(long = "exclude-function", num_args(1), value_name = "FUNCTION")]
@@ -33,9 +33,9 @@ pub struct CommonAutoverifyArgs {
 
 /// Automatically verify functions in a crate.
 #[derive(Debug, Parser)]
-pub struct CargoAutoverifyArgs {
+pub struct CargoAutoharnessArgs {
     #[command(flatten)]
-    pub common_autoverify_args: CommonAutoverifyArgs,
+    pub common_autoharness_args: CommonAutoharnessArgs,
 
     #[command(flatten)]
     pub verify_opts: VerificationArgs,
@@ -43,7 +43,7 @@ pub struct CargoAutoverifyArgs {
 
 /// Automatically verify functions in a file.
 #[derive(Debug, Parser)]
-pub struct StandaloneAutoverifyArgs {
+pub struct StandaloneAutoharnessArgs {
     /// Rust crate's top file location.
     #[arg(required = true)]
     pub input: PathBuf,
@@ -52,13 +52,13 @@ pub struct StandaloneAutoverifyArgs {
     pub crate_name: Option<String>,
 
     #[command(flatten)]
-    pub common_autoverify_args: CommonAutoverifyArgs,
+    pub common_autoharness_args: CommonAutoharnessArgs,
 
     #[command(flatten)]
     pub verify_opts: VerificationArgs,
 }
 
-impl ValidateArgs for CargoAutoverifyArgs {
+impl ValidateArgs for CargoAutoharnessArgs {
     fn validate(&self) -> Result<(), Error> {
         self.verify_opts.validate()?;
         if !self
@@ -70,7 +70,7 @@ impl ValidateArgs for CargoAutoverifyArgs {
             return Err(Error::raw(
                 ErrorKind::MissingRequiredArgument,
                 format!(
-                    "The `autoverify` subcommand is unstable and requires -Z {}",
+                    "The `autoharness` subcommand is unstable and requires -Z {}",
                     UnstableFeature::UnstableOptions
                 ),
             ));
@@ -84,7 +84,7 @@ impl ValidateArgs for CargoAutoverifyArgs {
         {
             return Err(Error::raw(
                 ErrorKind::ArgumentConflict,
-                "The autoverify subcommand does not support concrete playback",
+                "The autoharness subcommand does not support concrete playback",
             ));
         }
 
@@ -92,7 +92,7 @@ impl ValidateArgs for CargoAutoverifyArgs {
     }
 }
 
-impl ValidateArgs for StandaloneAutoverifyArgs {
+impl ValidateArgs for StandaloneAutoharnessArgs {
     fn validate(&self) -> Result<(), Error> {
         self.verify_opts.validate()?;
         if !self
@@ -104,7 +104,7 @@ impl ValidateArgs for StandaloneAutoverifyArgs {
             return Err(Error::raw(
                 ErrorKind::MissingRequiredArgument,
                 format!(
-                    "The `autoverify` subcommand is unstable and requires -Z {}",
+                    "The `autoharness` subcommand is unstable and requires -Z {}",
                     UnstableFeature::UnstableOptions
                 ),
             ));
@@ -127,7 +127,7 @@ impl ValidateArgs for StandaloneAutoverifyArgs {
         {
             return Err(Error::raw(
                 ErrorKind::ArgumentConflict,
-                "The autoverify subcommand does not support concrete playback",
+                "The autoharness subcommand does not support concrete playback",
             ));
         }
 

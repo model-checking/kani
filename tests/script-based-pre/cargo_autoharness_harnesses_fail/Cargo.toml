@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
 [package]
-name = "cargo_autoverify_include"
+name = "cargo_autoharness_harnesses_fail"
 version = "0.1.0"
 edition = "2024"
 

@@ -8,25 +8,25 @@ use crate::session::KaniSession;
 use anyhow::Result;
 
 impl KaniSession {
-    /// Enable autoverify mode.
-    pub fn enable_autoverify(&mut self) {
-        self.auto_verify = true;
+    /// Enable autoharness mode.
+    pub fn enable_autoharness(&mut self) {
+        self.auto_harness = true;
     }
 
-    /// Add the compiler arguments specific to the `autoverify` subcommand.
-    pub fn add_auto_verify_args(&mut self, included: Vec<String>, excluded: Vec<String>) {
+    /// Add the compiler arguments specific to the `autoharness` subcommand.
+    pub fn add_auto_harness_args(&mut self, included: Vec<String>, excluded: Vec<String>) {
         for func in included {
             self.pkg_args
-                .push(to_rustc_arg(vec![format!("--autoverify-include-function {}", func)]));
+                .push(to_rustc_arg(vec![format!("--autoharness-include-function {}", func)]));
         }
         for func in excluded {
             self.pkg_args
-                .push(to_rustc_arg(vec![format!("--autoverify-exclude-function {}", func)]));
+                .push(to_rustc_arg(vec![format!("--autoharness-exclude-function {}", func)]));
         }
     }
 
-    /// Prints the results from running the `autoverify` subcommand.
-    pub fn print_autoverify_summary(&self, automatic: Vec<&HarnessResult<'_>>) -> Result<()> {
+    /// Prints the results from running the `autoharness` subcommand.
+    pub fn print_autoharness_summary(&self, automatic: Vec<&HarnessResult<'_>>) -> Result<()> {
         let (successes, failures): (Vec<_>, Vec<_>) =
             automatic.into_iter().partition(|r| r.result.status == VerificationStatus::Success);
 
@@ -36,9 +36,9 @@ impl KaniSession {
 
         // TODO: it would be nice if we had access to which functions the user included/excluded here
         // so that we could print a comparison for them of any of the included functions that we skipped.
-        println!("Autoverify Summary:");
+        println!("Autoharness Summary:");
         println!(
-            "Note that Kani will only autoverify a function if it determines that each of its arguments implement the Arbitrary trait."
+            "Note that Kani will only generate an automatic harness for a function if it determines that each of its arguments implement the Arbitrary trait."
         );
         println!(
             "Examine the summary closely to determine which functions were automatically verified."

@@ -32,7 +32,7 @@ pub struct KaniSession {
     pub args: VerificationArgs,
 
     /// Automatically verify functions in the crate, in addition to running manual harnesses.
-    pub auto_verify: bool,
+    pub auto_harness: bool,
 
     /// The arguments that will be passed to the target package, i.e. kani_compiler.
     pub pkg_args: Vec<String>,
@@ -71,7 +71,7 @@ impl KaniSession {
 
         Ok(KaniSession {
             args,
-            auto_verify: false,
+            auto_harness: false,
             pkg_args: vec!["--".to_string()],
             codegen_tests: false,
             kani_compiler: install.kani_compiler()?,
@@ -101,7 +101,7 @@ impl KaniSession {
     pub fn reachability_mode(&self) -> ReachabilityMode {
         if self.codegen_tests {
             ReachabilityMode::Tests
-        } else if self.auto_verify {
+        } else if self.auto_harness {
             ReachabilityMode::Automatic
         } else {
             ReachabilityMode::ProofHarnesses

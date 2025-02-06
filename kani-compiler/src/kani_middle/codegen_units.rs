@@ -84,10 +84,10 @@ impl CodegenUnits {
 
                 let verifiable_fns = filter_crate_items(tcx, |_, instance: Instance| -> bool {
                     // If the user specified functions to include or exclude, only allow instances matching those filters.
-                    let user_included = if !args.autoverify_included_functions.is_empty() {
-                        fn_list_contains_instance(&instance, &args.autoverify_included_functions)
-                    } else if !args.autoverify_excluded_functions.is_empty() {
-                        !fn_list_contains_instance(&instance, &args.autoverify_excluded_functions)
+                    let user_included = if !args.autoharness_included_functions.is_empty() {
+                        fn_list_contains_instance(&instance, &args.autoharness_included_functions)
+                    } else if !args.autoharness_excluded_functions.is_empty() {
+                        !fn_list_contains_instance(&instance, &args.autoharness_excluded_functions)
                     } else {
                         true
                     };

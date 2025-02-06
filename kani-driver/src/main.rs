@@ -22,7 +22,7 @@ use tracing::debug;
 mod args;
 mod args_toml;
 mod assess;
-mod autoverify;
+mod autoharness;
 mod call_cargo;
 mod call_cbmc;
 mod call_goto_cc;
@@ -78,12 +78,12 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
             let sess = session::KaniSession::new(args.verify_opts)?;
             return assess::run_assess(sess, *assess_args);
         }
-        Some(CargoKaniSubcommand::Autoverify(args)) => {
+        Some(CargoKaniSubcommand::Autoharness(args)) => {
             let mut sess = session::KaniSession::new(args.verify_opts)?;
-            sess.enable_autoverify();
-            sess.add_auto_verify_args(
-                args.common_autoverify_args.include_function,
-                args.common_autoverify_args.exclude_function,
+            sess.enable_autoharness();
+            sess.add_auto_harness_args(
+                args.common_autoharness_args.include_function,
+                args.common_autoharness_args.exclude_function,
             );
 
             sess
@@ -113,12 +113,12 @@ fn standalone_main() -> Result<()> {
     check_is_valid(&args);
 
     let (session, project) = match args.command {
-        Some(StandaloneSubcommand::Autoverify(args)) => {
+        Some(StandaloneSubcommand::Autoharness(args)) => {
             let mut session = KaniSession::new(args.verify_opts)?;
-            session.enable_autoverify();
-            session.add_auto_verify_args(
-                args.common_autoverify_args.include_function,
-                args.common_autoverify_args.exclude_function,
+            session.enable_autoharness();
+            session.add_auto_harness_args(
+                args.common_autoharness_args.include_function,
+                args.common_autoharness_args.exclude_function,
             );
 
             if !session.args.common_args.quiet {

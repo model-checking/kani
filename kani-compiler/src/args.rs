@@ -90,12 +90,12 @@ pub struct Arguments {
     /// Print the final LLBC file to stdout.
     #[clap(long)]
     pub print_llbc: bool,
-    /// If we are running the autoverify subcommand, the functions to autoverify
-    #[arg(long = "autoverify-include-function", num_args(1))]
-    pub autoverify_included_functions: Vec<String>,
-    /// If we are running the autoverify subcommand, the functions to exclude from autoverification
-    #[arg(long = "autoverify-exclude-function", num_args(1))]
-    pub autoverify_excluded_functions: Vec<String>,
+    /// If we are running the autoharness subcommand, the functions to autoharness
+    #[arg(long = "autoharness-include-function", num_args(1))]
+    pub autoharness_included_functions: Vec<String>,
+    /// If we are running the autoharness subcommand, the functions to exclude from autoverification
+    #[arg(long = "autoharness-exclude-function", num_args(1))]
+    pub autoharness_excluded_functions: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, AsRefStr, EnumString, VariantNames, PartialEq, Eq)]
