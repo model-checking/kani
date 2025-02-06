@@ -52,12 +52,21 @@ impl<'pr> HarnessRunner<'_, 'pr> {
             builder.build()?
         };
 
-        let results = pool.install(|| -> Result<Vec<HarnessResult<'pr>>> {
-            sorted_harnesses
+        pool.install(|| -> Result<Vec<HarnessResult<'pr>>> {
+            let (sender, receiver) = std::sync::mpsc::channel();
+            let error_flag = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+
+            let results: Vec<_> = sorted_harnesses
                 .par_iter()
-                .map(|harness| -> Result<HarnessResult<'pr>> {
-                    let goto_file =
-                        self.project.get_harness_artifact(&harness, ArtifactType::Goto).unwrap();
+                .map_with(sender, |s, harness| -> Result<Option<HarnessResult<'pr>>> {
+                    // Check if any verification has already failed
+                    if error_flag.load(std::sync::atomic::Ordering::Relaxed) {
+                        return Ok(None);
+                    }
+
+                    let goto_file = self.project
+                        .get_harness_artifact(&harness, ArtifactType::Goto)
+                        .unwrap();
 
                     self.sess.instrument_model(goto_file, goto_file, &self.project, &harness)?;
 
@@ -66,12 +75,28 @@ impl<'pr> HarnessRunner<'_, 'pr> {
                     }
 
                     let result = self.sess.check_harness(goto_file, harness)?;
-                    Ok(HarnessResult { harness, result })
-                })
-                .collect::<Result<Vec<_>>>()
-        })?;
 
-        Ok(results)
+                    // If verification failed, set the flag and send the result
+                    if result.status != VerificationStatus::Success {
+                        error_flag.store(true, std::sync::atomic::Ordering::Relaxed);
+                        let harness_result = HarnessResult { harness, result };
+                        s.send(harness_result).ok();
+                        return Ok(None);
+                    }
+
+                    Ok(Some(HarnessResult { harness, result }))
+                })
+                .filter_map(|r| r.ok().and_then(|x| x))
+                .collect();
+
+            // Check for any failed results from the channel
+            let mut final_results = results;
+            while let Ok(failed_result) = receiver.try_recv() {
+                final_results.push(failed_result);
+            }
+
+            Ok(final_results)
+        })
     }
 
     /// Return an error if the user is trying to verify a harness with stubs without enabling the

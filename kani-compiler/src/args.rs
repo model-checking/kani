@@ -88,6 +88,9 @@ pub struct Arguments {
     /// Print the final LLBC file to stdout.
     #[clap(long)]
     pub print_llbc: bool,
+    /// Stop verification if one of the checks fails.
+    #[clap(long)]
+    pub fail_fast: bool,
 }
 
 #[derive(Debug, Clone, Copy, AsRefStr, EnumString, VariantNames, PartialEq, Eq)]
