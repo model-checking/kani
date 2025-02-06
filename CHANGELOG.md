@@ -4,11 +4,13 @@ This file contains notable changes (e.g. breaking changes, major changes, etc.) 
 
 This file was introduced starting Kani 0.23.0, so it only contains changes from version 0.23.0 onwards.
 
-## Breaking Changes
+## [0.59.0]
+
+### Breaking Changes
 * Deprecate `--enable-unstable` and `--restrict-vtable` by @celinval in https://github.com/model-checking/kani/pull/3859
 * Do not report arithmetic overflow for floating point operations that produce +/-Inf by @rajath-mk in https://github.com/model-checking/kani/pull/3873
 
-## What's Changed
+### What's Changed
 * Fix validity checks for `char` by @celinval in https://github.com/model-checking/kani/pull/3853
 * Support verifying contracts/stubs for generic types with multiple inherent implementations by @carolynzech in https://github.com/model-checking/kani/pull/3829
 * Allow multiple stub_verified annotations, but check for duplicate targets by @remi-delmas-3000 in https://github.com/model-checking/kani/pull/3808
