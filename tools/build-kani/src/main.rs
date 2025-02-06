@@ -138,7 +138,6 @@ fn bundle_cbmc(dir: &Path) -> Result<()> {
     cp(&which::which("cbmc")?, &bin)?;
     cp(&which::which("goto-instrument")?, &bin)?;
     cp(&which::which("goto-cc")?, &bin)?;
-    cp(&which::which("symtab2gb")?, &bin)?;
     cp(&which::which("goto-analyzer")?, &bin)?;
 
     Ok(())
