@@ -28,8 +28,8 @@ use stable_mir::mir::mono::Instance;
 use stable_mir::mir::visit::{Location, PlaceContext, PlaceRef};
 use stable_mir::mir::{
     AggregateKind, BasicBlockIdx, BinOp, Body, CastKind, ConstOperand, FieldIdx, Local, LocalDecl,
-    MirVisitor, Mutability, NonDivergingIntrinsic, Operand, Place, ProjectionElem, Rvalue,
-    Statement, StatementKind, Terminator, TerminatorKind,
+    MirVisitor, Mutability, NonDivergingIntrinsic, Operand, Place, ProjectionElem, RawPtrKind,
+    Rvalue, Statement, StatementKind, Terminator, TerminatorKind,
 };
 use stable_mir::target::{MachineInfo, MachineSize};
 use stable_mir::ty::{AdtKind, IndexedVal, MirConst, RigidTy, Span, Ty, TyKind, UintTy};
@@ -86,7 +86,7 @@ impl ValidValuePass {
             match operation {
                 SourceOp::BytesValidity { ranges, target_ty, rvalue } => {
                     let value = body.insert_assignment(rvalue, &mut source, InsertPosition::Before);
-                    let rvalue_ptr = Rvalue::AddressOf(Mutability::Not, Place::from(value));
+                    let rvalue_ptr = Rvalue::AddressOf(RawPtrKind::Const, Place::from(value));
                     for range in ranges {
                         let result = build_limits(body, &range, rvalue_ptr.clone(), &mut source);
                         let msg =
