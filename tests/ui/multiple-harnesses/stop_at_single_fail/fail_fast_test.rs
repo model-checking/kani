@@ -15,41 +15,41 @@ mod tests {
 
     #[kani::proof]
     fn test_03_fail() {
-        assert!(false, "Should not run - third");
+        assert!(false, "Third failure");
     }
 
     #[kani::proof]
     fn test_04_fail() {
-        assert!(false, "Should not run - fourth");
+        assert!(false, "Fourth failure");
     }
 
     #[kani::proof]
     fn test_05_fail() {
-        assert!(false, "Should not run - fifth");
+        assert!(false, "Fifth failure");
     }
 
     #[kani::proof]
     fn test_06_fail() {
-        assert!(false, "Should not run - sixth");
+        assert!(false, "Sixth failure");
     }
 
     #[kani::proof]
     fn test_07_fail() {
-        assert!(false, "Should not run - seventh");
+        assert!(false, "Seventh failure");
     }
 
     #[kani::proof]
     fn test_08_fail() {
-        assert!(false, "Should not run - eighth");
+        assert!(false, "Eighth failure");
     }
 
     #[kani::proof]
     fn test_09_fail() {
-        assert!(false, "Should not run - ninth");
+        assert!(false, "Ninth failure");
     }
 
     #[kani::proof]
     fn test_10_fail() {
-        assert!(false, "Should not run - tenth");
+        assert!(false, "Tenth failure");
     }
 }

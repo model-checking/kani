@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use anyhow::{Result, bail};
+use anyhow::{Result, Error, bail};
 use kani_metadata::{ArtifactType, HarnessMetadata};
 use rayon::prelude::*;
 use std::fs::File;
@@ -29,9 +29,33 @@ pub(crate) struct HarnessRunner<'sess, 'pr> {
 
 /// The result of checking a single harness. This both hangs on to the harness metadata
 /// (as a means to identify which harness), and provides that harness's verification result.
+#[derive(Debug)]
 pub(crate) struct HarnessResult<'pr> {
     pub harness: &'pr HarnessMetadata,
     pub result: VerificationResult,
+}
+
+#[derive(Debug)]
+struct ErrorImpl {
+    pub index_to_failing_harness: usize,
+}
+
+impl std::error::Error for ErrorImpl {}
+
+impl std::fmt::Display for ErrorImpl {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "harness failed")
+    }
+}
+
+impl<'pr> std::error::Error for HarnessResult<'pr> {
+    
+}
+
+impl<'pr> std::fmt::Display for HarnessResult<'pr> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Harness {} failed", self.harness.pretty_name)
+    }
 }
 
 impl<'pr> HarnessRunner<'_, 'pr> {
@@ -52,21 +76,13 @@ impl<'pr> HarnessRunner<'_, 'pr> {
             builder.build()?
         };
 
-        pool.install(|| -> Result<Vec<HarnessResult<'pr>>> {
-            let (sender, receiver) = std::sync::mpsc::channel();
-            let error_flag = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-
-            let results: Vec<_> = sorted_harnesses
+        let results = pool.install(|| -> Result<Vec<HarnessResult<'pr>>> {
+            sorted_harnesses
                 .par_iter()
-                .map_with(sender, |s, harness| -> Result<Option<HarnessResult<'pr>>> {
-                    // Check if any verification has already failed
-                    if error_flag.load(std::sync::atomic::Ordering::Relaxed) {
-                        return Ok(None);
-                    }
-
-                    let goto_file = self.project
-                        .get_harness_artifact(&harness, ArtifactType::Goto)
-                        .unwrap();
+                .enumerate() 
+                .map(|(idx,harness)| -> Result<HarnessResult<'pr>> {
+                    let goto_file =
+                        self.project.get_harness_artifact(&harness, ArtifactType::Goto).unwrap();
 
                     self.sess.instrument_model(goto_file, goto_file, &self.project, &harness)?;
 
@@ -75,28 +91,36 @@ impl<'pr> HarnessRunner<'_, 'pr> {
                     }
 
                     let result = self.sess.check_harness(goto_file, harness)?;
-
-                    // If verification failed, set the flag and send the result
-                    if result.status != VerificationStatus::Success {
-                        error_flag.store(true, std::sync::atomic::Ordering::Relaxed);
-                        let harness_result = HarnessResult { harness, result };
-                        s.send(harness_result).ok();
-                        return Ok(None);
+                    if result.status == VerificationStatus::Failure {
+                        return Err(Error::new(ErrorImpl {index_to_failing_harness: idx}));
+                    } else {
+                    return Ok(HarnessResult { harness, result });
                     }
-
-                    Ok(Some(HarnessResult { harness, result }))
                 })
-                .filter_map(|r| r.ok().and_then(|x| x))
-                .collect();
-
-            // Check for any failed results from the channel
-            let mut final_results = results;
-            while let Ok(failed_result) = receiver.try_recv() {
-                final_results.push(failed_result);
+                .collect::<Result<Vec<_>>>()
+        });
+        match results {
+            Ok(results) => {
+                Ok(results)
+            } 
+            Err(err) => {
+                if err.is::<ErrorImpl>() {
+                    let failed =   err.downcast::<ErrorImpl>().unwrap();
+                    Ok(vec![HarnessResult { 
+                        harness: sorted_harnesses[failed.index_to_failing_harness], 
+                        result: self.sess.check_harness(
+                            self.project.get_harness_artifact(
+                                sorted_harnesses[failed.index_to_failing_harness], 
+                                ArtifactType::Goto
+                            ).unwrap(),
+                            sorted_harnesses[failed.index_to_failing_harness]
+                        )?}])
+                }
+                else {
+                    Err(err)
+                }
             }
-
-            Ok(final_results)
-        })
+        }
     }
 
     /// Return an error if the user is trying to verify a harness with stubs without enabling the
