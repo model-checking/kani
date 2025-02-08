@@ -1,6 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-flags: -Z unstable-options --jobs 4 --output-format=terse
+// kani-flags: --fail-fast -Z unstable-options --jobs 4 --output-format=terse
 
 mod tests {
     #[kani::proof]

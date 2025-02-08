@@ -92,7 +92,7 @@ impl<'pr> HarnessRunner<'_, 'pr> {
                     }
 
                     let result = self.sess.check_harness(goto_file, harness)?;
-                    if result.status == VerificationStatus::Failure {
+                    if self.sess.args.fail_fast && result.status == VerificationStatus::Failure {
                         return Err(Error::new(ErrorImpl {index_to_failing_harness: idx, result: result }));
                     } else {
                     return Ok(HarnessResult { harness, result });
