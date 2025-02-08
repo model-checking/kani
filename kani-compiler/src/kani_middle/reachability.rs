@@ -256,11 +256,11 @@ impl MonoItemsFnCollector<'_, '_> {
             // A trait object type can have multiple trait bounds but up to one non-auto-trait
             // bound. This non-auto-trait, named principal, is the only one that can have methods.
             // https://doc.rust-lang.org/reference/special-types-and-traits.html#auto-traits
-            let poly_trait_ref = principal.with_self_ty(concrete_ty);
+            let trait_ref = rustc_internal::internal(self.tcx, principal.with_self_ty(concrete_ty));
+            let trait_ref = self.tcx.instantiate_bound_regions_with_erased(trait_ref);
 
             // Walk all methods of the trait, including those of its supertraits
-            let entries =
-                self.tcx.vtable_entries(rustc_internal::internal(self.tcx, &poly_trait_ref));
+            let entries = self.tcx.vtable_entries(trait_ref);
             let methods = entries.iter().filter_map(|entry| match entry {
                 VtblEntry::MetadataAlign
                 | VtblEntry::MetadataDropInPlace

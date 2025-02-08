@@ -1505,8 +1505,10 @@ impl GotocCtx<'_> {
             |ctx, var| {
                 // Build the vtable, using Rust's vtable_entries to determine field order
                 let vtable_entries = if let Some(principal) = trait_type.kind().trait_principal() {
-                    let trait_ref_binder = principal.with_self_ty(src_mir_type);
-                    ctx.tcx.vtable_entries(rustc_internal::internal(ctx.tcx, trait_ref_binder))
+                    let trait_ref =
+                        rustc_internal::internal(ctx.tcx, principal.with_self_ty(src_mir_type));
+                    let trait_ref = ctx.tcx.instantiate_bound_regions_with_erased(trait_ref);
+                    ctx.tcx.vtable_entries(trait_ref)
                 } else {
                     TyCtxt::COMMON_VTABLE_ENTRIES
                 };

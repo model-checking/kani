@@ -558,6 +558,9 @@ impl RustcInternalMir for AssertMessage {
                     found: found.internal_mir(tcx),
                 }
             }
+            AssertMessage::NullPointerDereference => {
+                rustc_middle::mir::AssertMessage::NullPointerDereference
+            }
         }
     }
 }
