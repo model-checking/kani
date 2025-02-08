@@ -38,6 +38,7 @@ pub(crate) struct HarnessResult<'pr> {
 #[derive(Debug)]
 struct ErrorImpl {
     pub index_to_failing_harness: usize,
+    pub result: VerificationResult,
 }
 
 impl std::error::Error for ErrorImpl {}
@@ -92,7 +93,7 @@ impl<'pr> HarnessRunner<'_, 'pr> {
 
                     let result = self.sess.check_harness(goto_file, harness)?;
                     if result.status == VerificationStatus::Failure {
-                        return Err(Error::new(ErrorImpl {index_to_failing_harness: idx}));
+                        return Err(Error::new(ErrorImpl {index_to_failing_harness: idx, result: result }));
                     } else {
                     return Ok(HarnessResult { harness, result });
                     }
@@ -108,13 +109,7 @@ impl<'pr> HarnessRunner<'_, 'pr> {
                     let failed =   err.downcast::<ErrorImpl>().unwrap();
                     Ok(vec![HarnessResult { 
                         harness: sorted_harnesses[failed.index_to_failing_harness], 
-                        result: self.sess.check_harness(
-                            self.project.get_harness_artifact(
-                                sorted_harnesses[failed.index_to_failing_harness], 
-                                ArtifactType::Goto
-                            ).unwrap(),
-                            sorted_harnesses[failed.index_to_failing_harness]
-                        )?}])
+                        result: failed.result}])
                 }
                 else {
                     Err(err)
