@@ -58,11 +58,8 @@ pub fn gen_contracts_metadata(tcx: TyCtxt) -> Vec<ContractedFunction> {
         let attributes = KaniAttributes::for_def_id(tcx, item.def_id());
 
         if attributes.has_contract() {
-            fn_to_data.insert(item.def_id(), ContractedFunction {
-                function,
-                file,
-                harnesses: vec![],
-            });
+            fn_to_data
+                .insert(item.def_id(), ContractedFunction { function, file, harnesses: vec![] });
         } else if let Some((target_name, internal_def_id, _)) =
             attributes.interpret_for_contract_attribute()
         {
@@ -72,11 +69,14 @@ pub fn gen_contracts_metadata(tcx: TyCtxt) -> Vec<ContractedFunction> {
             if let Some(cf) = fn_to_data.get_mut(&target_def_id) {
                 cf.harnesses.push(function);
             } else {
-                fn_to_data.insert(target_def_id, ContractedFunction {
-                    function: target_name.to_string(),
-                    file,
-                    harnesses: vec![function],
-                });
+                fn_to_data.insert(
+                    target_def_id,
+                    ContractedFunction {
+                        function: target_name.to_string(),
+                        file,
+                        harnesses: vec![function],
+                    },
+                );
             }
         }
     }
