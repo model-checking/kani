@@ -552,7 +552,7 @@ impl GotocCtx<'_> {
                 let ty = self.operand_ty_stable(op);
                 if ty.kind().is_bool() {
                     Some(self.codegen_operand_stable(op).cast_to(Type::c_bool()))
-                } else if arg_abi.map_or(true, |abi| abi.mode != PassMode::Ignore) {
+                } else if arg_abi.is_none_or(|abi| abi.mode != PassMode::Ignore) {
                     Some(self.codegen_operand_stable(op))
                 } else {
                     None

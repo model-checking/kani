@@ -458,7 +458,7 @@ impl MirVisitor for MonoItemsFnCollector<'_, '_> {
                 // We don't support inline assembly. This shall be replaced by an unsupported
                 // construct during codegen.
             }
-            TerminatorKind::Abort { .. } | TerminatorKind::Assert { .. } => {
+            TerminatorKind::Abort | TerminatorKind::Assert { .. } => {
                 // We generate code for this without invoking any lang item.
             }
             TerminatorKind::Goto { .. }

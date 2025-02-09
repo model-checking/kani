@@ -261,7 +261,7 @@ fn insert_escapes(str: &str, markers: Vec<(ColumnNumber, bool)>, format: &Report
         escaped_str.insert_str(i + offset, b);
         // `offset` keeps track of the bytes we've already inserted so the original
         // index is shifted by the appropriate amount in subsequent insertions.
-        offset += b.bytes().len();
+        offset += b.len();
     }
     escaped_str
 }
