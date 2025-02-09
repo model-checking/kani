@@ -215,6 +215,7 @@ impl RustcInternalMir for NullOp {
                 ),
             ),
             NullOp::UbChecks => rustc_middle::mir::NullOp::UbChecks,
+            NullOp::ContractChecks => rustc_middle::mir::NullOp::ContractChecks,
         }
     }
 }
