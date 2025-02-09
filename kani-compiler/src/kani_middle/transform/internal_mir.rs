@@ -13,8 +13,8 @@ use rustc_smir::rustc_internal::internal;
 use stable_mir::mir::{
     AggregateKind, AssertMessage, Body, BorrowKind, CastKind, ConstOperand, CopyNonOverlapping,
     CoroutineDesugaring, CoroutineKind, CoroutineSource, FakeBorrowKind, FakeReadCause, LocalDecl,
-    MutBorrowKind, NonDivergingIntrinsic, NullOp, Operand, PointerCoercion, RawPtrKind, RetagKind,
-    Rvalue, Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind, UnwindAction,
+    MutBorrowKind, NonDivergingIntrinsic, NullOp, Operand, PointerCoercion, RetagKind, Rvalue,
+    Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind, UnwindAction,
     UserTypeProjection, Variance,
 };
 
@@ -225,10 +225,9 @@ impl RustcInternalMir for Rvalue {
 
     fn internal_mir<'tcx>(&self, tcx: TyCtxt<'tcx>) -> Self::T<'tcx> {
         match self {
-            Rvalue::AddressOf(raw_ptr_kind, place) => rustc_middle::mir::Rvalue::RawPtr(
-                raw_ptr_kind.internal_mir(tcx),
-                internal(tcx, place),
-            ),
+            Rvalue::AddressOf(raw_ptr_kind, place) => {
+                rustc_middle::mir::Rvalue::RawPtr(internal(tcx, raw_ptr_kind), internal(tcx, place))
+            }
             Rvalue::Aggregate(aggregate_kind, operands) => rustc_middle::mir::Rvalue::Aggregate(
                 Box::new(aggregate_kind.internal_mir(tcx)),
                 rustc_index::IndexVec::from_raw(
@@ -280,18 +279,6 @@ impl RustcInternalMir for Rvalue {
                 rustc_middle::mir::Rvalue::UnaryOp(internal(tcx, un_op), operand.internal_mir(tcx))
             }
             Rvalue::Use(operand) => rustc_middle::mir::Rvalue::Use(operand.internal_mir(tcx)),
-        }
-    }
-}
-
-impl RustcInternalMir for RawPtrKind {
-    type T<'tcx> = rustc_middle::mir::RawPtrKind;
-
-    fn internal_mir<'tcx>(&self, _tcx: TyCtxt<'tcx>) -> Self::T<'tcx> {
-        match self {
-            RawPtrKind::Mut => rustc_middle::mir::RawPtrKind::Mut,
-            RawPtrKind::Const => rustc_middle::mir::RawPtrKind::Const,
-            RawPtrKind::FakeForPtrMetadata => rustc_middle::mir::RawPtrKind::FakeForPtrMetadata,
         }
     }
 }
