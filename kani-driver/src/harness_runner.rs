@@ -36,14 +36,14 @@ pub(crate) struct HarnessResult<'pr> {
 }
 
 #[derive(Debug)]
-struct ErrorImpl {
+struct FailFastHarnessInfo {
     pub index_to_failing_harness: usize,
     pub result: VerificationResult,
 }
 
-impl std::error::Error for ErrorImpl {}
+impl std::error::Error for FailFastHarnessInfo {}
 
-impl std::fmt::Display for ErrorImpl {
+impl std::fmt::Display for FailFastHarnessInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "harness failed")
     }
@@ -83,7 +83,7 @@ impl<'pr> HarnessRunner<'_, 'pr> {
 
                     let result = self.sess.check_harness(goto_file, harness)?;
                     if self.sess.args.fail_fast && result.status == VerificationStatus::Failure {
-                        return Err(Error::new(ErrorImpl {
+                        return Err(Error::new(FailFastHarnessInfo {
                             index_to_failing_harness: idx,
                             result: result,
                         }));
@@ -96,8 +96,8 @@ impl<'pr> HarnessRunner<'_, 'pr> {
         match results {
             Ok(results) => Ok(results),
             Err(err) => {
-                if err.is::<ErrorImpl>() {
-                    let failed = err.downcast::<ErrorImpl>().unwrap();
+                if err.is::<FailFastHarnessInfo>() {
+                    let failed = err.downcast::<FailFastHarnessInfo>().unwrap();
                     Ok(vec![HarnessResult {
                         harness: sorted_harnesses[failed.index_to_failing_harness],
                         result: failed.result,
