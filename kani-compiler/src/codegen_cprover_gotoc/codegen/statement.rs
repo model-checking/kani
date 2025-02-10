@@ -7,10 +7,10 @@ use crate::codegen_cprover_gotoc::codegen::function::rustc_smir::region_from_cov
 use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
 use cbmc::goto_program::{Expr, Location, Stmt, Type};
+use rustc_abi::{FieldsShape, Primitive, TagEncoding, Variants};
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{List, TypingEnv};
 use rustc_smir::rustc_internal;
-use rustc_target::abi::{FieldsShape, Primitive, TagEncoding, Variants};
 use stable_mir::abi::{ArgAbi, FnAbi, PassMode};
 use stable_mir::mir::mono::{Instance, InstanceKind};
 use stable_mir::mir::{

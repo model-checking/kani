@@ -4,6 +4,10 @@ use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::{DatatypeComponent, Expr, Location, Parameter, Symbol, SymbolTable, Type};
 use cbmc::utils::aggr_tag;
 use cbmc::{InternString, InternedString};
+use rustc_abi::{
+    BackendRepr::Vector, FieldIdx, FieldsShape, Float, Integer, LayoutData, Primitive, Size,
+    TagEncoding, TyAndLayout, VariantIdx, Variants,
+};
 use rustc_ast::ast::Mutability;
 use rustc_index::IndexVec;
 use rustc_middle::ty::GenericArgsRef;
@@ -17,10 +21,6 @@ use rustc_middle::ty::{
 use rustc_middle::ty::{List, TypeFoldable};
 use rustc_smir::rustc_internal;
 use rustc_span::def_id::DefId;
-use rustc_target::abi::{
-    BackendRepr::Vector, FieldIdx, FieldsShape, Float, Integer, LayoutData, Primitive, Size,
-    TagEncoding, TyAndLayout, VariantIdx, Variants,
-};
 use stable_mir::abi::{ArgAbi, FnAbi, PassMode};
 use stable_mir::mir::Body;
 use stable_mir::mir::mono::Instance as InstanceStable;

@@ -42,7 +42,7 @@ impl RustcInternalMir for AggregateKind {
                 internal(tcx, generic_args),
                 maybe_user_type_annotation_index
                     .map(rustc_middle::ty::UserTypeAnnotationIndex::from_usize),
-                maybe_field_idx.map(rustc_target::abi::FieldIdx::from_usize),
+                maybe_field_idx.map(rustc_abi::FieldIdx::from_usize),
             ),
             AggregateKind::Closure(closure_def, generic_args) => {
                 rustc_middle::mir::AggregateKind::Closure(
@@ -207,7 +207,7 @@ impl RustcInternalMir for NullOp {
                         .map(|(variant_idx, field_idx)| {
                             (
                                 internal(tcx, variant_idx),
-                                rustc_target::abi::FieldIdx::from_usize(*field_idx),
+                                rustc_abi::FieldIdx::from_usize(*field_idx),
                             )
                         })
                         .collect::<Vec<_>>()

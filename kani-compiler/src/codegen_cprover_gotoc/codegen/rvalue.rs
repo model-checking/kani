@@ -18,9 +18,9 @@ use cbmc::goto_program::{
 };
 use cbmc::{InternString, InternedString, btree_string_map};
 use num::bigint::BigInt;
+use rustc_abi::{FieldsShape, TagEncoding, Variants};
 use rustc_middle::ty::{TyCtxt, TypingEnv, VtblEntry};
 use rustc_smir::rustc_internal;
-use rustc_target::abi::{FieldsShape, TagEncoding, Variants};
 use stable_mir::abi::{Primitive, Scalar, ValueAbi};
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{
