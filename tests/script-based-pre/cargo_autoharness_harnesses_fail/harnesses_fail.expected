@@ -1,5 +1,5 @@
 Autoharness: Checking function panic against all possible inputs...
-Check 1: panic.assertion\
+panic.assertion\
 	 - Status: FAILURE\
 	 - Description: "explicit panic"
 
