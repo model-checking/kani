@@ -62,7 +62,7 @@ impl TransformPass for AutomaticHarnessPass {
     where
         Self: Sized,
     {
-        matches!(query_db.args().reachability_analysis, ReachabilityType::Automatic)
+        matches!(query_db.args().reachability_analysis, ReachabilityType::AllFns)
     }
 
     fn transform(&mut self, _tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {

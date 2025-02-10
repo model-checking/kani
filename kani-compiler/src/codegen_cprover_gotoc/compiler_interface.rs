@@ -264,7 +264,7 @@ impl CodegenBackend for GotocCodegenBackend {
             let reachability = queries.args().reachability_analysis;
             let mut results = GotoCodegenResults::new(tcx, reachability);
             match reachability {
-                ReachabilityType::Automatic | ReachabilityType::Harnesses => {
+                ReachabilityType::AllFns | ReachabilityType::Harnesses => {
                     let mut units = CodegenUnits::new(&queries, tcx);
                     let mut modifies_instances = vec![];
                     let mut loop_contracts_instances = vec![];
@@ -376,7 +376,7 @@ impl CodegenBackend for GotocCodegenBackend {
                 results.print_report(tcx);
 
                 if reachability != ReachabilityType::Harnesses
-                    && reachability != ReachabilityType::Automatic
+                    && reachability != ReachabilityType::AllFns
                 {
                     // In a workspace, cargo seems to be using the same file prefix to build a crate that is
                     // a package lib and also a dependency of another package.

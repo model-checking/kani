@@ -346,7 +346,7 @@ impl FunctionWithContractPass {
                 let harness_generic_args = harness.args().0;
                 // Manual harnesses have no arguments, so if there are generic arguments,
                 // we know this is an automatic harness
-                if matches!(queries.args().reachability_analysis, ReachabilityType::Automatic)
+                if matches!(queries.args().reachability_analysis, ReachabilityType::AllFns)
                     && !harness_generic_args.is_empty()
                 {
                     let kind = harness.args().0[0].expect_ty().kind();

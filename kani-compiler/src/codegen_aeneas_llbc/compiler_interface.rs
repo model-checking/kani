@@ -253,7 +253,7 @@ impl CodegenBackend for LlbcCodegenBackend {
                     units.store_modifies(&modifies_instances);
                     units.write_metadata(&queries, tcx);
                 }
-                ReachabilityType::Tests | ReachabilityType::Automatic => todo!(),
+                ReachabilityType::Tests | ReachabilityType::AllFns => todo!(),
                 ReachabilityType::None => {}
                 ReachabilityType::PubFns => {
                     let unit = CodegenUnit::default();

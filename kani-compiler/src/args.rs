@@ -30,8 +30,9 @@ pub enum ReachabilityType {
     PubFns,
     /// Start the cross-crate reachability analysis from all *test* (i.e. `#[test]`) harnesses in the local crate.
     Tests,
-    /// Start the cross-crate reachability analysis from all functions in the local crate that can be automatically verified.
-    Automatic,
+    /// Start the cross-crate reachability analysis from all functions in the local crate.
+    /// Currently, this mode is only used for automatic harness generation.
+    AllFns,
 }
 
 /// Command line arguments that this instance of the compiler run was called

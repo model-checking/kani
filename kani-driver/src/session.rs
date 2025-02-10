@@ -102,7 +102,7 @@ impl KaniSession {
         if self.codegen_tests {
             ReachabilityMode::Tests
         } else if self.auto_harness {
-            ReachabilityMode::Automatic
+            ReachabilityMode::AllFns
         } else {
             ReachabilityMode::ProofHarnesses
         }
@@ -112,7 +112,7 @@ impl KaniSession {
 #[derive(Debug, Copy, Clone, Display)]
 #[strum(serialize_all = "snake_case")]
 pub enum ReachabilityMode {
-    Automatic,
+    AllFns,
     #[strum(to_string = "harnesses")]
     ProofHarnesses,
     Tests,

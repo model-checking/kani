@@ -72,7 +72,7 @@ impl CodegenUnits {
                 debug!(?units, "CodegenUnits::new");
                 CodegenUnits { units, harness_info: all_harnesses, crate_info }
             }
-            ReachabilityType::Automatic => {
+            ReachabilityType::AllFns => {
                 let mut all_harnesses = get_all_manual_harnesses(tcx, base_filename);
                 let mut units = group_by_stubs(tcx, &all_harnesses);
                 validate_units(tcx, &units);
