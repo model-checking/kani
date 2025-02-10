@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use anyhow::{Result, Error, bail};
+use anyhow::{Error, Result, bail};
 use kani_metadata::{ArtifactType, HarnessMetadata};
 use rayon::prelude::*;
 use std::fs::File;
@@ -70,7 +70,7 @@ impl<'pr> HarnessRunner<'_, 'pr> {
         let results = pool.install(|| -> Result<Vec<HarnessResult<'pr>>> {
             sorted_harnesses
                 .par_iter()
-                .enumerate() 
+                .enumerate()
                 .map(|(idx, harness)| -> Result<HarnessResult<'pr>> {
                     let goto_file =
                         self.project.get_harness_artifact(&harness, ArtifactType::Goto).unwrap();
@@ -83,25 +83,26 @@ impl<'pr> HarnessRunner<'_, 'pr> {
 
                     let result = self.sess.check_harness(goto_file, harness)?;
                     if self.sess.args.fail_fast && result.status == VerificationStatus::Failure {
-                        return Err(Error::new(ErrorImpl {index_to_failing_harness: idx, result: result }));
+                        return Err(Error::new(ErrorImpl {
+                            index_to_failing_harness: idx,
+                            result: result,
+                        }));
                     } else {
-                    return Ok(HarnessResult { harness, result });
+                        return Ok(HarnessResult { harness, result });
                     }
                 })
                 .collect::<Result<Vec<_>>>()
         });
         match results {
-            Ok(results) => {
-                Ok(results)
-            } 
+            Ok(results) => Ok(results),
             Err(err) => {
                 if err.is::<ErrorImpl>() {
-                    let failed =   err.downcast::<ErrorImpl>().unwrap();
-                    Ok(vec![HarnessResult { 
-                        harness: sorted_harnesses[failed.index_to_failing_harness], 
-                        result: failed.result}])
-                }
-                else {
+                    let failed = err.downcast::<ErrorImpl>().unwrap();
+                    Ok(vec![HarnessResult {
+                        harness: sorted_harnesses[failed.index_to_failing_harness],
+                        result: failed.result,
+                    }])
+                } else {
                     Err(err)
                 }
             }
