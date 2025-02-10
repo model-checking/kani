@@ -334,6 +334,7 @@ pub struct VerificationArgs {
     #[arg(long)]
     pub harness_timeout: Option<Timeout>,
 
+    /// Verification process will stop as soon as one of the harnesses fails.
     #[arg(long)]
     pub fail_fast: bool,
 

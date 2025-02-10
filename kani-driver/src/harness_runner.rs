@@ -29,7 +29,7 @@ pub(crate) struct HarnessRunner<'sess, 'pr> {
 
 /// The result of checking a single harness. This both hangs on to the harness metadata
 /// (as a means to identify which harness), and provides that harness's verification result.
-#[derive(Debug)]
+
 pub(crate) struct HarnessResult<'pr> {
     pub harness: &'pr HarnessMetadata,
     pub result: VerificationResult,
@@ -46,16 +46,6 @@ impl std::error::Error for ErrorImpl {}
 impl std::fmt::Display for ErrorImpl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "harness failed")
-    }
-}
-
-impl<'pr> std::error::Error for HarnessResult<'pr> {
-    
-}
-
-impl<'pr> std::fmt::Display for HarnessResult<'pr> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Harness {} failed", self.harness.pretty_name)
     }
 }
 
@@ -81,7 +71,7 @@ impl<'pr> HarnessRunner<'_, 'pr> {
             sorted_harnesses
                 .par_iter()
                 .enumerate() 
-                .map(|(idx,harness)| -> Result<HarnessResult<'pr>> {
+                .map(|(idx, harness)| -> Result<HarnessResult<'pr>> {
                     let goto_file =
                         self.project.get_harness_artifact(&harness, ArtifactType::Goto).unwrap();
 
