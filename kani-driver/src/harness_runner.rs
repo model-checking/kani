@@ -29,7 +29,6 @@ pub(crate) struct HarnessRunner<'sess, 'pr> {
 
 /// The result of checking a single harness. This both hangs on to the harness metadata
 /// (as a means to identify which harness), and provides that harness's verification result.
-
 pub(crate) struct HarnessResult<'pr> {
     pub harness: &'pr HarnessMetadata,
     pub result: VerificationResult,
@@ -83,12 +82,12 @@ impl<'pr> HarnessRunner<'_, 'pr> {
 
                     let result = self.sess.check_harness(goto_file, harness)?;
                     if self.sess.args.fail_fast && result.status == VerificationStatus::Failure {
-                        return Err(Error::new(FailFastHarnessInfo {
+                        Err(Error::new(FailFastHarnessInfo {
                             index_to_failing_harness: idx,
-                            result: result,
-                        }));
+                            result,
+                        }))
                     } else {
-                        return Ok(HarnessResult { harness, result });
+                        Ok(HarnessResult { harness, result })
                     }
                 })
                 .collect::<Result<Vec<_>>>()
