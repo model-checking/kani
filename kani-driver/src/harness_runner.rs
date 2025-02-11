@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use anyhow::{Result, bail};
+use anyhow::{Error, Result, bail};
 use kani_metadata::{ArtifactType, HarnessMetadata};
 use rayon::prelude::*;
 use std::fs::File;
@@ -34,6 +34,20 @@ pub(crate) struct HarnessResult<'pr> {
     pub result: VerificationResult,
 }
 
+#[derive(Debug)]
+struct FailFastHarnessInfo {
+    pub index_to_failing_harness: usize,
+    pub result: VerificationResult,
+}
+
+impl std::error::Error for FailFastHarnessInfo {}
+
+impl std::fmt::Display for FailFastHarnessInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "harness failed")
+    }
+}
+
 impl<'pr> HarnessRunner<'_, 'pr> {
     /// Given a [`HarnessRunner`] (to abstract over how these harnesses were generated), this runs
     /// the proof-checking process for each harness in `harnesses`.
@@ -55,7 +69,8 @@ impl<'pr> HarnessRunner<'_, 'pr> {
         let results = pool.install(|| -> Result<Vec<HarnessResult<'pr>>> {
             sorted_harnesses
                 .par_iter()
-                .map(|harness| -> Result<HarnessResult<'pr>> {
+                .enumerate()
+                .map(|(idx, harness)| -> Result<HarnessResult<'pr>> {
                     let goto_file =
                         self.project.get_harness_artifact(&harness, ArtifactType::Goto).unwrap();
 
@@ -66,12 +81,31 @@ impl<'pr> HarnessRunner<'_, 'pr> {
                     }
 
                     let result = self.sess.check_harness(goto_file, harness)?;
-                    Ok(HarnessResult { harness, result })
+                    if self.sess.args.fail_fast && result.status == VerificationStatus::Failure {
+                        Err(Error::new(FailFastHarnessInfo {
+                            index_to_failing_harness: idx,
+                            result,
+                        }))
+                    } else {
+                        Ok(HarnessResult { harness, result })
+                    }
                 })
                 .collect::<Result<Vec<_>>>()
-        })?;
-
-        Ok(results)
+        });
+        match results {
+            Ok(results) => Ok(results),
+            Err(err) => {
+                if err.is::<FailFastHarnessInfo>() {
+                    let failed = err.downcast::<FailFastHarnessInfo>().unwrap();
+                    Ok(vec![HarnessResult {
+                        harness: sorted_harnesses[failed.index_to_failing_harness],
+                        result: failed.result,
+                    }])
+                } else {
+                    Err(err)
+                }
+            }
+        }
     }
 
     /// Return an error if the user is trying to verify a harness with stubs without enabling the

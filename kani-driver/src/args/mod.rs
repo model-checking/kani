@@ -334,6 +334,10 @@ pub struct VerificationArgs {
     #[arg(long)]
     pub harness_timeout: Option<Timeout>,
 
+    /// Stop the verification process as soon as one of the harnesses fails.
+    #[arg(long)]
+    pub fail_fast: bool,
+
     /// Arguments to pass down to Cargo
     #[command(flatten)]
     pub cargo: CargoCommonArgs,
