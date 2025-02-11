@@ -26,6 +26,7 @@ use crate::kani_middle::transform::kani_intrinsics::IntrinsicGeneratorPass;
 use crate::kani_middle::transform::loop_contracts::LoopContractPass;
 use crate::kani_middle::transform::stubs::{ExternFnStubPass, FnStubPass};
 use crate::kani_queries::QueryDb;
+use automatic::AutomaticHarnessPass;
 use dump_mir_pass::DumpMirPass;
 use rustc_middle::ty::TyCtxt;
 use stable_mir::mir::Body;
@@ -36,6 +37,7 @@ use std::fmt::Debug;
 use crate::kani_middle::transform::rustc_intrinsics::RustcIntrinsicsPass;
 pub use internal_mir::RustcInternalMir;
 
+mod automatic;
 pub(crate) mod body;
 mod check_uninit;
 mod check_values;
@@ -71,6 +73,8 @@ impl BodyTransformation {
             cache: Default::default(),
         };
         let check_type = CheckType::new_assert_assume(queries);
+        // This has to come first, since creating harnesses affects later stubbing and contract passes.
+        transformer.add_pass(queries, AutomaticHarnessPass::new(unit, queries));
         transformer.add_pass(queries, FnStubPass::new(&unit.stubs));
         transformer.add_pass(queries, ExternFnStubPass::new(&unit.stubs));
         transformer.add_pass(queries, FunctionWithContractPass::new(tcx, queries, &unit));

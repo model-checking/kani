@@ -53,7 +53,7 @@ fn assess_project(mut session: KaniSession) -> Result<AssessMetadata> {
         session.args.jobs = Some(None); // -j, num_cpu
     }
 
-    let project = project::cargo_project(&session, true)?;
+    let project = project::cargo_project(&mut session, true)?;
     let cargo_metadata = project.cargo_metadata.as_ref().expect("built with cargo");
 
     let packages_metadata =
