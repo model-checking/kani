@@ -470,6 +470,22 @@ impl MirVisitor for MonoItemsFnCollector<'_, '_> {
 
         self.super_terminator(terminator, location);
     }
+
+    /// Collect any function definition that may occur as a type.
+    ///
+    /// The codegen stage will require the definition to be available.
+    /// This is a conservative approach, since there are cases where the function is never
+    /// actually used, so we don't need the body.
+    ///
+    /// Another alternative would be to lazily declare functions, but it would require a bigger
+    /// change to codegen.
+    fn visit_ty(&mut self, ty: &Ty, _: Location) {
+        if let TyKind::RigidTy(RigidTy::FnDef(def, args)) = ty.kind() {
+            let instance = Instance::resolve(def, &args).unwrap();
+            self.collect_instance(instance, true);
+        }
+        self.super_ty(ty);
+    }
 }
 
 fn extract_unsize_coercion(tcx: TyCtxt, orig_ty: Ty, dst_trait: Ty) -> (Ty, Ty) {

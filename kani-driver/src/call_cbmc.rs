@@ -233,7 +233,6 @@ impl KaniSession {
             args.push("--no-pointer-check".into());
         }
         if self.args.checks.overflow_on() {
-            args.push("--float-overflow-check".into());
             args.push("--nan-check".into());
 
             // TODO: Implement conversion checks as an optional check.

@@ -1,41 +1,9 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-//! This module contains functions useful for checking unsafe memory access.
-//!
-//! Given the following validity rules provided in the Rust documentation:
-//! <https://doc.rust-lang.org/std/ptr/index.html> (accessed Feb 6th, 2024)
-//!
-//! 1. A null pointer is never valid, not even for accesses of size zero.
-//! 2. For a pointer to be valid, it is necessary, but not always sufficient, that the pointer
-//!    be dereferenceable: the memory range of the given size starting at the pointer must all be
-//!    within the bounds of a single allocated object. Note that in Rust, every (stack-allocated)
-//!    variable is considered a separate allocated object.
-//!    ~~Even for operations of size zero, the pointer must not be pointing to deallocated memory,
-//!    i.e., deallocation makes pointers invalid even for zero-sized operations.~~
-//!    ZST access is not OK for any pointer.
-//!    See: <https://github.com/rust-lang/unsafe-code-guidelines/issues/472>
-//! 3. However, casting any non-zero integer literal to a pointer is valid for zero-sized
-//!    accesses, even if some memory happens to exist at that address and gets deallocated.
-//!    This corresponds to writing your own allocator: allocating zero-sized objects is not very
-//!    hard. The canonical way to obtain a pointer that is valid for zero-sized accesses is
-//!    `NonNull::dangling`.
-//! 4. All accesses performed by functions in this module are non-atomic in the sense of atomic
-//!    operations used to synchronize between threads.
-//!    This means it is undefined behavior to perform two concurrent accesses to the same location
-//!    from different threads unless both accesses only read from memory.
-//!    Notice that this explicitly includes `read_volatile` and `write_volatile`:
-//!    Volatile accesses cannot be used for inter-thread synchronization.
-//! 5. The result of casting a reference to a pointer is valid for as long as the underlying
-//!    object is live and no reference (just raw pointers) is used to access the same memory.
-//!    That is, reference and pointer accesses cannot be interleaved.
-//!
-//! Kani is able to verify #1 and #2 today.
-//!
-//! For #3, we are overly cautious, and Kani will only consider zero-sized pointer access safe if
-//! the address matches `NonNull::<()>::dangling()`.
-//! The way Kani tracks provenance is not enough to check if the address was the result of a cast
-//! from a non-zero integer literal.
-//!
+
+// This module contains functions useful for checking unsafe memory access.
+// For full documentation, see the usage of `kani_core::kani_mem!(std);` in library/kani_core/src/lib.rs
+
 // TODO: This module is currently tightly coupled with CBMC's memory model, and it needs some
 //       refactoring to be used with other backends.
 
