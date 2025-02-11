@@ -1,16 +1,16 @@
-multiple_instrumentations_different_vars.assertion.3\
+multiple_instrumentations_different_vars.assertion\
 	 - Status: FAILURE\
 	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u128`"
 
-multiple_instrumentations_different_vars.assertion.4\
+multiple_instrumentations_different_vars.assertion\
 	 - Status: FAILURE\
 	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u64`"
 
-multiple_instrumentations.assertion.2\
+multiple_instrumentations.assertion\
 	 - Status: FAILURE\
 	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u128`"
 
-multiple_instrumentations.assertion.3\
+multiple_instrumentations.assertion\
 	 - Status: FAILURE\
 	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u128`"
 
