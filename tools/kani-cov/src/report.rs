@@ -261,6 +261,7 @@ fn insert_escapes(str: &str, markers: Vec<(ColumnNumber, bool)>, format: &Report
         escaped_str.insert_str(i + offset, b);
         // `offset` keeps track of the bytes we've already inserted so the original
         // index is shifted by the appropriate amount in subsequent insertions.
+        // Note that b.len() returns the length of the string in bytes, c.f. https://doc.rust-lang.org/std/string/struct.String.html#method.len
         offset += b.len();
     }
     escaped_str
