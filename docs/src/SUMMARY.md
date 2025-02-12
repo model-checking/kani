@@ -22,6 +22,7 @@
     - [Coverage](./reference/experimental/coverage.md)
     - [Stubbing](./reference/experimental/stubbing.md)
     - [Contracts](./reference/experimental/contracts.md)
+    - [Loop Contracts](./reference/experimental/loop-contracts.md)
     - [Concrete Playback](./reference/experimental/concrete-playback.md)
 - [Application](./application.md)
   - [Comparison with other tools](./tool-comparison.md)
