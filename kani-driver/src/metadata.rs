@@ -176,6 +176,10 @@ fn find_proof_harnesses<'a>(
     debug!(?targets, "find_proof_harness");
     let mut result = vec![];
     for md in all_harnesses.iter() {
+        // --harnesses should not select automatic harnesses
+        if md.is_automatically_generated {
+            continue;
+        }
         if exact_filter {
             // Check for exact match only
             if targets.contains(&md.pretty_name) {
@@ -224,6 +228,7 @@ pub mod tests {
             goto_file: model_file,
             contract: Default::default(),
             has_loop_contracts: false,
+            is_automatically_generated: false,
         }
     }
 

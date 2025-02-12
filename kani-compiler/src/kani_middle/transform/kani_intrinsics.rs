@@ -74,8 +74,10 @@ impl TransformPass for IntrinsicGeneratorPass {
                 KaniIntrinsic::CheckedSizeOf => (true, self.checked_size_of(body, instance)),
                 KaniIntrinsic::IsInitialized => (true, self.is_initialized_body(body)),
                 KaniIntrinsic::ValidValue => (true, self.valid_value_body(body)),
-                // This is handled in contracts pass for now.
-                KaniIntrinsic::WriteAny | KaniIntrinsic::AnyModifies => (false, body),
+                // The former two are handled in contracts pass for now, while the latter is handled in the the automatic harness pass.
+                KaniIntrinsic::WriteAny
+                | KaniIntrinsic::AnyModifies
+                | KaniIntrinsic::AutomaticHarness => (false, body),
             }
         } else {
             (false, body)

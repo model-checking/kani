@@ -18,6 +18,7 @@
 - [Reference](./reference.md)
   - [Attributes](./reference/attributes.md)
   - [Experimental features](./reference/experimental/experimental-features.md)
+    - [Automatic Harness Generation](./reference/experimental/autoharness.md)
     - [Coverage](./reference/experimental/coverage.md)
     - [Stubbing](./reference/experimental/stubbing.md)
     - [Contracts](./reference/experimental/contracts.md)

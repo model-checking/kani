@@ -163,7 +163,8 @@ impl<'tcx> PointsToGraph<'tcx> {
                 | ProjectionElem::Subslice { .. }
                 | ProjectionElem::Downcast(..)
                 | ProjectionElem::OpaqueCast(..)
-                | ProjectionElem::Subtype(..) => {
+                | ProjectionElem::Subtype(..)
+                | ProjectionElem::UnwrapUnsafeBinder(..) => {
                     /* There operations are no-ops w.r.t aliasing since we are tracking it on per-object basis. */
                 }
             }
