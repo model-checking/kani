@@ -1,8 +1,8 @@
-std::ptr::read::<u64>.assertion.1\
+std::ptr::read::<u64>.safety_check.\
 	 - Status: FAILURE\
 	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `*const u64`"\
 
-std::ptr::read::<u64>.assertion.2\
+std::ptr::read::<u64>.safety_check.\
 	 - Status: FAILURE\
 	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u64`"\
 
