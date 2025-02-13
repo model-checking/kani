@@ -251,25 +251,37 @@ impl GotocCtx<'_> {
                     if *expected { r } else { Expr::not(r) }
                 };
 
-                let (msg, property_class) = if let AssertMessage::BoundsCheck { .. } = msg {
-                    // For bounds check the following panic message is generated at runtime:
-                    // "index out of bounds: the length is {len} but the index is {index}",
-                    // but CBMC only accepts static messages so we don't add values to the message.
-                    (
-                        "index out of bounds: the length is less than or equal to the given index",
-                        PropertyClass::Assertion,
-                    )
-                } else if let AssertMessage::MisalignedPointerDereference { .. } = msg {
-                    // Misaligned pointer dereference check messages is also a runtime messages.
-                    // Generate a generic one here.
-                    (
-                        "misaligned pointer dereference: address must be a multiple of its type's \
+                let (msg, property_class) = match msg {
+                    AssertMessage::BoundsCheck { .. } => {
+                        // For bounds check the following panic message is generated at runtime:
+                        // "index out of bounds: the length is {len} but the index is {index}",
+                        // but CBMC only accepts static messages so we don't add values to the message.
+                        (
+                            "index out of bounds: the length is less than or equal to the given index",
+                            PropertyClass::Assertion,
+                        )
+                    }
+                    AssertMessage::MisalignedPointerDereference { .. } => {
+                        // Misaligned pointer dereference check messages is also a runtime messages.
+                        // Generate a generic one here.
+                        (
+                            "misaligned pointer dereference: address must be a multiple of its type's \
                     alignment",
-                        PropertyClass::SafetyCheck,
-                    )
-                } else {
+                            PropertyClass::SafetyCheck,
+                        )
+                    }
                     // For all other assert kind we can get the static message.
-                    (msg.description().unwrap(), PropertyClass::Assertion)
+                    AssertMessage::NullPointerDereference { .. } => {
+                        (msg.description().unwrap(), PropertyClass::SafetyCheck)
+                    }
+                    AssertMessage::Overflow { .. }
+                    | AssertMessage::OverflowNeg { .. }
+                    | AssertMessage::DivisionByZero { .. }
+                    | AssertMessage::RemainderByZero { .. }
+                    | AssertMessage::ResumedAfterReturn { .. }
+                    | AssertMessage::ResumedAfterPanic { .. } => {
+                        (msg.description().unwrap(), PropertyClass::Assertion)
+                    }
                 };
 
                 let (msg_str, reach_stmt) =
