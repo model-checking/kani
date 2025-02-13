@@ -221,7 +221,7 @@ pub mod rustc_smir {
     use crate::codegen_cprover_gotoc::codegen::source_region::{SourceRegion, make_source_region};
     use crate::stable_mir::CrateDef;
     use rustc_middle::mir::coverage::MappingKind::Code;
-    use rustc_middle::mir::coverage::{BasicCoverageBlock};
+    use rustc_middle::mir::coverage::BasicCoverageBlock;
     use rustc_middle::ty::TyCtxt;
     use rustc_smir::rustc_internal;
     use stable_mir::mir::mono::Instance;
