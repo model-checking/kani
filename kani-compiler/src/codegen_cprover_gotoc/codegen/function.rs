@@ -220,8 +220,8 @@ impl GotocCtx<'_> {
 pub mod rustc_smir {
     use crate::codegen_cprover_gotoc::codegen::source_region::{SourceRegion, make_source_region};
     use crate::stable_mir::CrateDef;
-    use rustc_middle::mir::coverage::CovTerm;
     use rustc_middle::mir::coverage::MappingKind::Code;
+    use rustc_middle::mir::coverage::{BasicCoverageBlock};
     use rustc_middle::ty::TyCtxt;
     use rustc_smir::rustc_internal;
     use stable_mir::mir::mono::Instance;
@@ -236,8 +236,8 @@ pub mod rustc_smir {
         coverage_opaque: &CoverageOpaque,
         instance: Instance,
     ) -> Option<(SourceRegion, Filename)> {
-        let cov_term = parse_coverage_opaque(coverage_opaque);
-        region_from_coverage(tcx, cov_term, instance)
+        let bcb = parse_coverage_opaque(coverage_opaque);
+        region_from_coverage(tcx, bcb, instance)
     }
 
     /// Retrieves the `SourceRegion` associated with a `CovTerm` object.
@@ -245,28 +245,28 @@ pub mod rustc_smir {
     /// Note: This function could be in the internal `rustc` impl for `Coverage`.
     pub fn region_from_coverage(
         tcx: TyCtxt<'_>,
-        coverage: CovTerm,
+        coverage: BasicCoverageBlock,
         instance: Instance,
     ) -> Option<(SourceRegion, Filename)> {
         // We need to pull the coverage info from the internal MIR instance.
         let instance_def = rustc_smir::rustc_internal::internal(tcx, instance.def.def_id());
         let body = tcx.instance_mir(rustc_middle::ty::InstanceKind::Item(instance_def));
-        let instance_internal = rustc_smir::rustc_internal::internal(tcx, instance);
-        let cov_ids_info = tcx.coverage_ids_info(instance_internal.def).unwrap();
-        let bcb_to_covterm = cov_ids_info.term_for_bcb.clone();
+        //let instance_internal = rustc_smir::rustc_internal::internal(tcx, instance);
+        //let cov_ids_info = tcx.coverage_ids_info(instance_internal.def).unwrap();
+        //let bcb_to_covterm = cov_ids_info.term_for_bcb.clone();
         // Some functions, like `std` ones, may not have coverage info attached
         // to them because they have been compiled without coverage flags.
         if let Some(cov_info) = &body.function_coverage_info {
             // Iterate over the coverage mappings and match with the coverage term.
             for mapping in &cov_info.mappings {
                 let Code { bcb } = mapping.kind else { unreachable!() };
-                let term = match bcb_to_covterm[bcb] {
-                    Some(term) => term,
-                    _ => CovTerm::Zero,
-                };
+                //let term = match bcb_to_covterm[bcb] {
+                //    Some(term) => term,
+                //    _ => CovTerm::Zero,
+                //};
                 let source_map = tcx.sess.source_map();
                 let file = source_map.lookup_source_file(cov_info.body_span.lo());
-                if term == coverage {
+                if bcb == coverage {
                     return Some((
                         make_source_region(source_map, cov_info, &file, mapping.span).unwrap(),
                         rustc_internal::stable(cov_info.body_span).get_filename(),
@@ -284,18 +284,15 @@ pub mod rustc_smir {
     ///  - `CounterIncrement(<num>)`: A physical counter.
     ///  - `ExpressionUsed(<num>)`: An expression-based counter.
     ///  - `Zero`: A counter with a constant zero value.
-    fn parse_coverage_opaque(coverage_opaque: &Opaque) -> CovTerm {
+    fn parse_coverage_opaque(coverage_opaque: &Opaque) -> BasicCoverageBlock {
         let coverage_str = coverage_opaque.to_string();
-        if let Some(rest) = coverage_str.strip_prefix("CounterIncrement(") {
+        if let Some(rest) = coverage_str.strip_prefix("VirtualCounter(bcb") {
             let (num_str, _rest) = rest.split_once(')').unwrap();
             let num = num_str.parse::<u32>().unwrap();
-            CovTerm::Counter(num.into())
-        } else if let Some(rest) = coverage_str.strip_prefix("ExpressionUsed(") {
-            let (num_str, _rest) = rest.split_once(')').unwrap();
-            let num = num_str.parse::<u32>().unwrap();
-            CovTerm::Expression(num.into())
+            println!("cover {:?}", num);
+            BasicCoverageBlock::from_u32(num)
         } else {
-            CovTerm::Zero
+            unreachable!();
         }
     }
 }
