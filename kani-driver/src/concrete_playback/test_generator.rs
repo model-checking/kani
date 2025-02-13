@@ -425,7 +425,11 @@ mod concrete_vals_extractor {
     /// Extracts individual bytes from a TraceValue for a primitive type
     /// to produce a PrimitiveConcreteVal representing that value.
     fn extract_primitive_value(value: &TraceValue) -> Option<PrimitiveConcreteVal> {
-        assert!(value.elements.is_none());
+        assert!(
+            value.elements.is_none(),
+            "Expected no array elements for primitive value, but found: {:?}",
+            value.elements
+        );
         let (Some(width_u64), Some(bit_concrete_val), Some(interp_concrete_val)) =
             (value.width, &value.binary, &value.data)
         else {
