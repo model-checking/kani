@@ -205,7 +205,7 @@ impl MutableBody {
             Operand::Copy(Place::from(self.new_local(assert_fn.ty(), span, Mutability::Not)));
         let kind = TerminatorKind::Call {
             func: assert_op,
-            args: args,
+            args,
             destination: Place {
                 local: self.new_local(Ty::new_tuple(&[]), span, Mutability::Not),
                 projection: vec![],
