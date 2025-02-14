@@ -240,7 +240,7 @@ pub mod rustc_smir {
         region_from_coverage(tcx, bcb, instance)
     }
 
-    /// Retrieves the `SourceRegion` associated with a `CovTerm` object.
+    /// Retrieves the `SourceRegion` associated with a `BasicCoverageBlock` object.
     ///
     /// Note: This function could be in the internal `rustc` impl for `Coverage`.
     pub fn region_from_coverage(
@@ -268,13 +268,7 @@ pub mod rustc_smir {
         None
     }
 
-    /// Parse a `CoverageOpaque` item and return the corresponding `CovTerm`:
-    /// <https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/coverage/enum.CovTerm.html>
-    ///
-    /// At present, a `CovTerm` can be one of the following:
-    ///  - `CounterIncrement(<num>)`: A physical counter.
-    ///  - `ExpressionUsed(<num>)`: An expression-based counter.
-    ///  - `Zero`: A counter with a constant zero value.
+    /// Parse a `CoverageOpaque` item and return the corresponding `BasicCoverageBlock`:
     fn parse_coverage_opaque(coverage_opaque: &Opaque) -> BasicCoverageBlock {
         let coverage_str = coverage_opaque.to_string();
         if let Some(rest) = coverage_str.strip_prefix("VirtualCounter(bcb") {
@@ -282,6 +276,8 @@ pub mod rustc_smir {
             let num = num_str.parse::<u32>().unwrap();
             BasicCoverageBlock::from_u32(num)
         } else {
+            // When the coverage statement is injected into mir_body, it always has the form CoverageKind::VirtualCounter { bcb }
+            // https://github.com/rust-lang/rust/pull/136053/files#diff-c99ec9a281dce4a381fa7e11cf2d04f55dba5573d1d14389d47929fe0a154d24R209-R212
             unreachable!();
         }
     }

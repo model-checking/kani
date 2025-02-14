@@ -518,7 +518,7 @@ fn coverage_results_from_properties(properties: &[Property]) -> Option<CoverageR
             let span = captures["span"].to_string();
 
             let counter_id = counter_num.parse().unwrap();
-            let term = CoverageTerm::Counter(counter_id);
+            let term = CoverageTerm { counter_id };
             let region = CoverageRegion::from_str(span);
 
             let cov_check = CoverageCheck::new(function, term, region, status);
