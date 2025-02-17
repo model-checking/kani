@@ -384,9 +384,8 @@ fn is_eligible_for_automatic_harness(tcx: TyCtxt, instance: Instance, any_inst: 
     })
 }
 
-/// Return whether the name of `instance` is included in `fn_list`.
-/// If `exact = true`, then `instance`'s exact, fully-qualified name must be in `fn_list`; otherwise, `fn_list`
-/// can have a substring of `instance`'s name.
+/// Return whether the name of `instance` is included in `fn_list`,
+/// either as a substring or an exact match.
 fn fn_list_contains_instance(instance: &Instance, fn_list: &[String]) -> bool {
     let pretty_name = instance.name();
     fn_list.contains(&pretty_name) || fn_list.iter().any(|fn_name| pretty_name.contains(fn_name))
