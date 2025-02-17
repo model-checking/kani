@@ -366,7 +366,9 @@ fn is_eligible_for_automatic_harness(tcx: TyCtxt, instance: Instance, any_inst: 
         return false;
     }
 
-    // Each non-generic argument of `instance`` must implement Arbitrary.
+    // Each argument of `instance` must implement Arbitrary.
+    // Note that this function operates on StableMIR `Instance`s, which are eagerly monomorphized,
+    // so none of these arguments are generic.
     body.arg_locals().iter().all(|arg| {
         let kani_any_body =
             Instance::resolve(any_inst, &GenericArgs(vec![GenericArgKind::Type(arg.ty)]))
