@@ -8,18 +8,18 @@ Recall the harness for `estimate_size` that we wrote in [First Steps](../../tuto
 This harness first declares a local variable `x` using `kani::any()`, then calls `estimate_size` with argument `x`.
 Many proof harnesses follow this predictable format—to verify a function `foo`, we create arbitrary values for each of `foo`'s arguments, then call `foo` on those arguments.
 
-The `autoharness` subcommand leverages this observation to automatically generate and run harnesses.
+The `autoharness` subcommand leverages this observation to automatically generate harnesses and run Kani against them.
 Kani scans the crate for functions whose arguments all implement the `kani::Arbitrary` trait, generates harnesses for them, then runs them.
 These harnesses are internal to Kani--i.e., Kani does not make any changes to your source code.
 
 ## Usage
 Run either:
 ```
-# cargo kani autoharness -Z unstable-options
+# cargo kani autoharness -Z autoharness
 ```
 or
 ```
-# kani autoharness -Z unstable-options <FILE>
+# kani autoharness -Z autoharness <FILE>
 ```
 
 If Kani detects that all of a function `foo`'s arguments implement `kani::Arbitrary`, it will generate and run a `#[kani::proof]` harness, which prints:
@@ -42,11 +42,11 @@ These flags look for partial matches against the fully qualified name of a funct
 
 For example, if a module `my_module` has many functions, but we are only interested in `my_module::foo` and `my_module::bar`, we can run:
 ```
-cargo run autoharness -Z unstable-options --include-function foo include-function bar
+cargo run autoharness -Z autoharness --include-function foo --include-function bar
 ```
 To exclude `my_module` entirely, run:
 ```
-cargo run autoharness -Z unstable-options --exclude-function my_module
+cargo run autoharness -Z autoharness --exclude-function my_module
 ```
 
 ## Example
@@ -58,7 +58,7 @@ Using the `estimate_size` example from [First Steps](../../tutorial-first-steps.
 We get:
 
 ```
-# cargo kani autoharness -Z unstable-options
+# cargo kani autoharness -Z autoharness
 Autoharness: Checking function estimate_size against all possible inputs...
 RESULTS:
 Check 3: estimate_size.assertion.1
