@@ -24,4 +24,6 @@ cargo kani --concrete-playback inplace -Z concrete-playback
 check_playback -Z concrete-playback
 
 cargo clean
+# Undo adding the concrete playback test
+git restore src/lib.rs
 popd > /dev/null
