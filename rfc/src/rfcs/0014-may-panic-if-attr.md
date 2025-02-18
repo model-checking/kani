@@ -36,8 +36,9 @@ change Kani's verification behavior as follows:
 1. Kani will report successful verification when all properties hold and no
    panic can occur. (This behavior is unchanged.)
 2. Kani will also report successful verification when all properties hold, no
-   panic occurs when the condition given with `may_panic_if` holds, yet some
-   panic occurs when the condition does not hold.
+   panic occurs when the negation of the condition given with `may_panic_if`
+   holds, yet some panic occurs when the negation of the condition does not
+   hold.
 3. Else Kani reports verification failure. (This behavior is unchanged.)
 
 The following example describes what the overall contract for `unwrap` would
