@@ -8,7 +8,7 @@ CBMC and Kani use it, and what challenges arise as a consequence thereof.
 ## What is demonic non-determinism?
 
 When we seek to prove that a property holds for all possible values of some
-object then a counterexample demonstrates the existence of at least one such
+object, a counterexample demonstrates the existence of at least one such
 value that violates the property.
 Other properties range across all objects or expressions of a particular kind,
 e.g., we want to prove that for all dereference expressions the underlying
