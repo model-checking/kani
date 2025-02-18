@@ -1,6 +1,6 @@
 - **Feature Name:** Attribute to distinguish safety preconditions from panic freedom (`may-panic-if-attribute`)
 - **Feature Request Issue:** [#3567](https://github.com/model-checking/kani/issues/3567)
-- **RFC PR:** *Link to original PR*
+- **RFC PR:** [#3893](https://github.com/model-checking/kani/pull/3893)
 - **Status:** Under Review
 - **Version:** 0
 - **Proof-of-concept:** Not yet
@@ -36,7 +36,7 @@ change Kani's verification behavior as follows:
 1. Kani will report successful verification when all properties hold and no
    panic can occur. (This behavior is unchanged.)
 2. Kani will also report successful verification when all properties hold, no
-   panic occurs when the condition given with `may_pani_if` holds, yet some
+   panic occurs when the condition given with `may_panic_if` holds, yet some
    panic occurs when the condition does not hold.
 3. Else Kani reports verification failure. (This behavior is unchanged.)
 
@@ -56,7 +56,7 @@ Initial implementation suggestion: we will run Kani twice for any such harness
 (unless the condition is trivially `true` or `false`), once while assuming the
 condition (and then checking that no properties other than reachability checks
 fail); if that run succeeded we remove the assumptions and, similarly to
-`should_fail`, check that the only failing properties are panics and not safety
+`should_panic`, check that the only failing properties are panics and not safety
 checks.
 
 ## Rationale and alternatives
