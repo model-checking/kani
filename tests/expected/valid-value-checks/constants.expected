@@ -1,10 +1,7 @@
- ** 1 of 22 failed\
 Failed Checks: Undefined Behavior: Invalid value of type `[char; 2]`
 
- ** 1 of 15 failed\
 Failed Checks: Undefined Behavior: Invalid value of type `char`
 
- ** 1 of 3 failed\
 Failed Checks: Undefined Behavior: Invalid value of type `bool`
 
 Verification failed for - cast_to_invalid_offset
