@@ -1,4 +1,3 @@
- ** 2 of 40 failed\
 Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `*const u8`
 Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `*const u8`
 

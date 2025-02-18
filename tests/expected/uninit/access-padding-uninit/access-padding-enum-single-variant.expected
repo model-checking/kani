@@ -1,4 +1,3 @@
- ** 1 of 32 failed\
 Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `*const u8`
 
 Verification failed for - access_padding_uninit
