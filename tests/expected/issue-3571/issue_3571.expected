@@ -1,2 +1,9 @@
+Failed Checks: misaligned pointer dereference: address must be a multiple of its type's alignment
+
+Failed Checks: null pointer dereference occurred
+
 VERIFICATION:- FAILED (encountered failures other than panics, which were unexpected)
+
+Verification failed for - rust_ub_should_fail
+Verification failed for - rust_ub_fails
 Complete - 0 successfully verified harnesses, 2 failures, 2 total.
