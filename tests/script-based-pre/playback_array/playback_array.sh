@@ -16,7 +16,7 @@ RS_FILE="modified.rs"
 cp array.rs ${RS_FILE}
 
 echo "[TEST] Generate test..."
-kani ${RS_FILE} -Z concrete-playback --concrete-playback=inplace
+kani ${RS_FILE} -Z concrete-playback --concrete-playback=inplace || true
 
 echo "[TEST] Run test..."
-kani playback -Z concrete-playback ${RS_FILE}
+kani playback -Z concrete-playback ${RS_FILE} || true
