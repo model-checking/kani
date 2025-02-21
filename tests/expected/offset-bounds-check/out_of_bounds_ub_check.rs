@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! Check that Kani offset operations correctly detect out-of-bound access.
 
+#![feature(core_intrinsics)]
+use std::intrinsics::offset;
+
 /// Verification should fail because safety violation is not a regular panic.
 #[kani::proof]
 #[kani::should_panic]
@@ -23,4 +26,16 @@ fn check_ptr_end() {
     let end_ptr = unsafe { base_ptr.add(1) };
     // Safety: Pointers point to the same allocation
     assert_eq!(unsafe { end_ptr.offset_from(base_ptr) }, 1);
+}
+
+#[kani::proof]
+fn test_offset_overflow() {
+    let s: &str = "123";
+    let ptr: *const u8 = s.as_ptr();
+
+    unsafe {
+        // This should fail because adding `isize::MAX` to `ptr` would overflow
+        // `isize`
+        let _d = offset(ptr, isize::MAX);
+    }
 }
