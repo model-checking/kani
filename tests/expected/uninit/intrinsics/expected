@@ -1,36 +1,32 @@
-std::ptr::write::<std::mem::MaybeUninit<u8>>.assertion.1\
+std::ptr::read::<std::mem::MaybeUninit<u8>>.unsupported_construct.\
 	 - Status: FAILURE\
 	 - Description: "Interaction between raw pointers and unions is not yet supported."
 
-std::ptr::write::<std::mem::MaybeUninit<u8>>.assertion.1\
-	 - Status: FAILURE\
-	 - Description: "Interaction between raw pointers and unions is not yet supported."\
-
-check_typed_swap_nonoverlapping.assertion.1\
+check_typed_swap_nonoverlapping.safety_check.\
 	 - Status: FAILURE\
 	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `*mut u8`"
 
-check_typed_swap_nonoverlapping.assertion.2\
+check_typed_swap_nonoverlapping.safety_check.\
 	 - Status: FAILURE\
 	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `*mut u8`"
 
-check_volatile_load.assertion.1\
+check_volatile_load.safety_check.\
 	 - Status: FAILURE\
 	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `*const u8`"
 
-check_compare_bytes.assertion.1\
+check_compare_bytes.safety_check.\
 	 - Status: FAILURE\
 	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `*const u8`"
 
-check_compare_bytes.assertion.2\
+check_compare_bytes.safety_check.\
 	 - Status: FAILURE\
 	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `*const u8`"
 
-std::ptr::read::<u8>.assertion.1\
+std::ptr::read::<u8>.safety_check.\
 	 - Status: FAILURE\
 	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `*const u8`"
 
-std::ptr::read::<u8>.assertion.2\
+std::ptr::read::<u8>.safety_check.\
 	 - Status: FAILURE\
 	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u8`"
 
