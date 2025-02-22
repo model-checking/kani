@@ -430,8 +430,8 @@ fn resolve_relative(tcx: TyCtxt, current_module: LocalModDefId, name: &str) -> R
     debug!(?name, ?current_module, "resolve_relative");
 
     let mut glob_imports = vec![];
-    let result = tcx.hir().module_items(current_module).find_map(|item_id| {
-        let item = tcx.hir().item(item_id);
+    let result = tcx.hir_module_free_items(current_module).find_map(|item_id| {
+        let item = tcx.hir_item(item_id);
         if item.ident.as_str() == name {
             match item.kind {
                 ItemKind::Use(use_path, UseKind::Single) => use_path.res[0].opt_def_id(),
