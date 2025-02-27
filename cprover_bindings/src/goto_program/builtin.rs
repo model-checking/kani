@@ -6,7 +6,7 @@ use super::{Expr, Location, Symbol, Type};
 
 use std::fmt::Display;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BuiltinFn {
     Abort,
     Assert,
@@ -59,6 +59,8 @@ pub enum BuiltinFn {
     Rintf,
     Round,
     Roundf,
+    RoundToIntegralF,
+    RoundToIntegral,
     Sin,
     Sinf,
     Sqrt,
@@ -123,6 +125,9 @@ impl Display for BuiltinFn {
             Rintf => "rintf",
             Round => "round",
             Roundf => "roundf",
+            // TODO remove the sort_of prefix once we move up from CBMC 6.4.1
+            RoundToIntegralF => "__sort_of_CPROVER_round_to_integralf",
+            RoundToIntegral => "__sort_of_CPROVER_round_to_integral",
             Sin => "sin",
             Sinf => "sinf",
             Sqrt => "sqrt",
@@ -188,6 +193,8 @@ impl BuiltinFn {
             Rintf => vec![Type::float()],
             Round => vec![Type::double()],
             Roundf => vec![Type::float()],
+            RoundToIntegralF => vec![Type::c_int(), Type::float()],
+            RoundToIntegral => vec![Type::c_int(), Type::double()],
             Sin => vec![Type::double()],
             Sinf => vec![Type::float()],
             Sqrt => vec![Type::double()],
@@ -252,6 +259,8 @@ impl BuiltinFn {
             Rintf => Type::float(),
             Round => Type::double(),
             Roundf => Type::float(),
+            RoundToIntegralF => Type::float(),
+            RoundToIntegral => Type::double(),
             Sin => Type::double(),
             Sinf => Type::float(),
             Sqrt => Type::double(),
@@ -316,6 +325,8 @@ impl BuiltinFn {
             Rintf,
             Round,
             Roundf,
+            RoundToIntegralF,
+            RoundToIntegral,
             Sin,
             Sinf,
             Sqrt,
