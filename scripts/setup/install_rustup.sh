@@ -7,6 +7,8 @@ set -eux
 # Install Rust toolchain
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
   && source  ~/.cargo/env
+echo $PATH
+which rustup
 rustup --version
 cat rust-toolchain.toml
 rustup toolchain install
