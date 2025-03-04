@@ -31,7 +31,7 @@ jobs:
           ./scripts/run-autopep8.sh
 
   clippy-check:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout Kani
         uses: actions/checkout@v4
@@ -39,7 +39,7 @@ jobs:
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
         with:
-          os: ubuntu-20.04
+          os: ubuntu-24.04
 
       - name: 'Install jq for parsing.'
         run: |
