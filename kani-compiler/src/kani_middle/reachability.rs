@@ -85,7 +85,7 @@ where
         .filter_map(|item| {
             // avoid stable MIR panic
             // https://github.com/model-checking/kani/issues/3919
-            if let Some(instance) = Instance::try_from(*item).ok() {
+            if let Ok(instance) = Instance::try_from(*item) {
                 let int_def_id = rustc_internal::internal(tcx, instance.def.def_id());
                 if matches!(tcx.def_kind(int_def_id), rustc_hir::def::DefKind::GlobalAsm) {
                     return None;
