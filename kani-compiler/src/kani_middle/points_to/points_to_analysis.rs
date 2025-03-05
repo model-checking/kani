@@ -679,6 +679,8 @@ fn is_identity_aliasing_intrinsic(intrinsic: Intrinsic) -> bool {
         | Intrinsic::RotateRight
         | Intrinsic::RoundF32
         | Intrinsic::RoundF64
+        | Intrinsic::RoundTiesEvenF32
+        | Intrinsic::RoundTiesEvenF64
         | Intrinsic::SaturatingAdd
         | Intrinsic::SaturatingSub
         | Intrinsic::SinF32
