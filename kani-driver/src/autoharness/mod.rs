@@ -75,7 +75,7 @@ fn print_skipped_fns(metadata: Vec<KaniMetadata>) {
 
     if skipped_fns.is_empty() {
         println!(
-            "\nSkipped Functions: None. Kani generated automatic harnesses for all functions in the package."
+            "\nSkipped Functions: None. Kani generated automatic harnesses for all functions in the available crate(s)."
         );
         return;
     }

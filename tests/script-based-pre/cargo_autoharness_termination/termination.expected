@@ -39,4 +39,4 @@ Note that `kani autoharness` sets default --harness-timeout of 30s and --default
 If verification failed because of timing out or too low of an unwinding bound, try passing larger values for these arguments (or, if possible, writing a loop contract).
 Complete - 0 successfully verified functions, 3 failures, 3 total.
 
-Skipped Functions: None. Kani generated automatic harnesses for all functions in the package.
+Skipped Functions: None. Kani generated automatic harnesses for all functions in the available crate(s).

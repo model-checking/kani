@@ -11,4 +11,4 @@ Autoharness Summary:
 +-------------------+---------------------------+---------------------+
 Complete - 1 successfully verified functions, 0 failures, 1 total.
 
-Skipped Functions: None. Kani generated automatic harnesses for all functions in the package.
+Skipped Functions: None. Kani generated automatic harnesses for all functions in the available crate(s).
