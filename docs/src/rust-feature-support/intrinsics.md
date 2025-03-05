@@ -180,8 +180,6 @@ minnumf32 | Yes | |
 minnumf64 | Yes | |
 move_val_init | No | |
 mul_with_overflow | Yes | |
-nearbyintf32 | Yes | |
-nearbyintf64 | Yes | |
 needs_drop | Yes | |
 nontemporal_store | No | |
 offset | Partial | Doesn't check [all UB conditions](https://doc.rust-lang.org/std/primitive.pointer.html#safety-2) |
@@ -198,8 +196,10 @@ ptr_guaranteed_eq | Yes | |
 ptr_guaranteed_ne | Yes | |
 ptr_offset_from | Partial | Doesn't check [all UB conditions](https://doc.rust-lang.org/std/primitive.pointer.html#safety-4) |
 raw_eq | Partial | Cannot detect [uninitialized memory](#uninitialized-memory) |
-rintf32 | Yes | |
-rintf64 | Yes | |
+round_ties_even_f16 | No | |
+round_ties_even_f32 | Yes | |
+round_ties_even_f64 | Yes | |
+round_ties_even_f128 | No | |
 rotate_left | Yes | |
 rotate_right | Yes | |
 roundf32 | Yes | |

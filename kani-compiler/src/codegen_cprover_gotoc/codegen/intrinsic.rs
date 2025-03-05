@@ -414,8 +414,6 @@ impl GotocCtx<'_> {
             Intrinsic::MulWithOverflow => {
                 self.codegen_op_with_overflow(BinaryOperator::OverflowResultMult, fargs, place, loc)
             }
-            Intrinsic::NearbyIntF32 => codegen_simple_intrinsic!(Nearbyintf),
-            Intrinsic::NearbyIntF64 => codegen_simple_intrinsic!(Nearbyint),
             Intrinsic::NeedsDrop => codegen_intrinsic_const!(),
             Intrinsic::PowF32 => codegen_simple_intrinsic!(Powf),
             Intrinsic::PowF64 => codegen_simple_intrinsic!(Pow),
@@ -425,12 +423,24 @@ impl GotocCtx<'_> {
             Intrinsic::PtrGuaranteedCmp => self.codegen_ptr_guaranteed_cmp(fargs, place, loc),
             Intrinsic::RawEq => self.codegen_intrinsic_raw_eq(instance, fargs, place, loc),
             Intrinsic::RetagBoxToRaw => self.codegen_retag_box_to_raw(fargs, place, loc),
-            Intrinsic::RintF32 => codegen_simple_intrinsic!(Rintf),
-            Intrinsic::RintF64 => codegen_simple_intrinsic!(Rint),
             Intrinsic::RotateLeft => codegen_intrinsic_binop!(rol),
             Intrinsic::RotateRight => codegen_intrinsic_binop!(ror),
             Intrinsic::RoundF32 => codegen_simple_intrinsic!(Roundf),
             Intrinsic::RoundF64 => codegen_simple_intrinsic!(Round),
+            Intrinsic::RoundTiesEvenF32 => self.codegen_round_to_integral(
+                BuiltinFn::RoundToIntegralF,
+                cbmc::RoundingMode::ToNearest,
+                fargs,
+                place,
+                loc,
+            ),
+            Intrinsic::RoundTiesEvenF64 => self.codegen_round_to_integral(
+                BuiltinFn::RoundToIntegral,
+                cbmc::RoundingMode::ToNearest,
+                fargs,
+                place,
+                loc,
+            ),
             Intrinsic::SaturatingAdd => codegen_intrinsic_binop_with_mm!(saturating_add),
             Intrinsic::SaturatingSub => codegen_intrinsic_binop_with_mm!(saturating_sub),
             Intrinsic::SinF32 => codegen_simple_intrinsic!(Sinf),
@@ -636,6 +646,27 @@ impl GotocCtx<'_> {
         let divisor_is_minus_one =
             if btyp.is_signed(mm) { b.clone().eq(btyp.one().neg()) } else { Expr::bool_false() };
         dividend_is_int_min.and(divisor_is_minus_one).not()
+    }
+
+    // Builds a call to the round_to_integral CPROVER function with specified cbmc::RoundingMode.
+    fn codegen_round_to_integral(
+        &mut self,
+        function: BuiltinFn,
+        rounding_mode: cbmc::RoundingMode,
+        mut fargs: Vec<Expr>,
+        place: &Place,
+        loc: Location,
+    ) -> Stmt {
+        assert!(function == BuiltinFn::RoundToIntegralF || function == BuiltinFn::RoundToIntegral);
+        let mm = self.symbol_table.machine_model();
+        fargs.insert(0, Expr::int_constant(rounding_mode, Type::c_int()));
+        let casted_fargs = Expr::cast_arguments_to_target_equivalent_function_parameter_types(
+            &function.as_expr(),
+            fargs,
+            mm,
+        );
+        let expr = function.call(casted_fargs, loc);
+        self.codegen_expr_to_place_stable(place, expr, loc)
     }
 
     /// Intrinsics of the form *_with_overflow

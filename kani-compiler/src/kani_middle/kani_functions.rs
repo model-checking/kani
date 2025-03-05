@@ -87,8 +87,8 @@ pub enum KaniModel {
     Offset,
     #[strum(serialize = "PtrOffsetFromModel")]
     PtrOffsetFrom,
-    #[strum(serialize = "PtrSubPtrModel")]
-    PtrSubPtr,
+    #[strum(serialize = "PtrOffsetFromUnsignedModel")]
+    PtrOffsetFromUnsigned,
     #[strum(serialize = "RunContractModel")]
     RunContract,
     #[strum(serialize = "RunLoopContractModel")]
