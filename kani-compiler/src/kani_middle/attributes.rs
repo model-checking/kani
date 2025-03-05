@@ -1036,27 +1036,6 @@ fn attr_kind(tcx: TyCtxt, attr: &Attribute) -> Option<KaniAttributeKind> {
     } else {
         None
     }
-    // match &attr.kind {
-    //     AttrKind::Normal(normal) => {
-    //         let segments = &normal.path.segments;
-    //         if (!segments.is_empty()) && segments[0].as_str() == "kanitool" {
-    //             let ident_str = segments[1..]
-    //                 .iter()
-    //                 .map(|segment| segment.as_str())
-    //                 .intersperse("::")
-    //                 .collect::<String>();
-    //             KaniAttributeKind::try_from(ident_str.as_str())
-    //                 .inspect_err(|&err| {
-    //                     debug!(?err, "attr_kind_failed");
-    //                     tcx.dcx().span_err(attr.span(), format!("unknown attribute `{ident_str}`"));
-    //                 })
-    //                 .ok()
-    //         } else {
-    //             None
-    //         }
-    //     }
-    //     _ => None,
-    // }
 }
 
 /// Parse an attribute using `syn`.
