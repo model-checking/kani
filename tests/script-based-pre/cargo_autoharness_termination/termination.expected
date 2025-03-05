@@ -26,9 +26,17 @@ VERIFICATION:- FAILED
 [Kani] info: Verification output shows one or more unwinding failures.
 
 Autoharness Summary:
-Also note that Kani sets default --harness-timeout of 30s and --default-unwind of 20.
++--------------------------------+---------------------------+---------------------+
+| Selected Function              | Kind of Automatic Harness | Verification Result |
++==================================================================================+
+| timeout::check_harness_timeout | #[kani::proof]            | Failure             |
+|--------------------------------+---------------------------+---------------------|
+| unwind_bound::gcd_recursion    | #[kani::proof]            | Failure             |
+|--------------------------------+---------------------------+---------------------|
+| unwind_bound::infinite_loop    | #[kani::proof]            | Failure             |
++--------------------------------+---------------------------+---------------------+
+Note that `kani autoharness` sets default --harness-timeout of 30s and --default-unwind of 20.
 If verification failed because of timing out or too low of an unwinding bound, try passing larger values for these arguments (or, if possible, writing a loop contract).
-Verification failed for - timeout::check_harness_timeout
-Verification failed for - unwind_bound::gcd_recursion
-Verification failed for - unwind_bound::infinite_loop
 Complete - 0 successfully verified functions, 3 failures, 3 total.
+
+Skipped Functions: None. Kani generated automatic harnesses for all functions in the package.
