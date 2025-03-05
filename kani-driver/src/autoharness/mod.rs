@@ -1,11 +1,17 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+use std::str::FromStr;
+
+use crate::args::Timeout;
 use crate::call_cbmc::VerificationStatus;
 use crate::call_single_file::to_rustc_arg;
 use crate::harness_runner::HarnessResult;
 use crate::session::KaniSession;
 use anyhow::Result;
+
+const AUTOHARNESS_TIMEOUT: &str = "30s";
+const LOOP_UNWIND_DEFAULT: u32 = 20;
 
 impl KaniSession {
     /// Enable autoharness mode.
@@ -22,6 +28,18 @@ impl KaniSession {
         for func in excluded {
             self.pkg_args
                 .push(to_rustc_arg(vec![format!("--autoharness-exclude-function {}", func)]));
+        }
+    }
+
+    /// Add global harness timeout and loop unwinding bounds if not provided.
+    /// These prevent automatic harnesses from hanging.
+    pub fn add_default_bounds(&mut self) {
+        if self.args.harness_timeout.is_none() {
+            let timeout = Timeout::from_str(AUTOHARNESS_TIMEOUT).unwrap();
+            self.args.harness_timeout = Some(timeout);
+        }
+        if self.args.default_unwind.is_none() {
+            self.args.default_unwind = Some(LOOP_UNWIND_DEFAULT);
         }
     }
 
@@ -43,6 +61,14 @@ impl KaniSession {
         println!(
             "Examine the summary closely to determine which functions were automatically verified."
         );
+        if failing > 0 {
+            println!(
+                "Also note that Kani sets default --harness-timeout of {AUTOHARNESS_TIMEOUT} and --default-unwind of {LOOP_UNWIND_DEFAULT}."
+            );
+            println!(
+                "If verification failed because of timing out or too low of an unwinding bound, try passing larger values for these arguments (or, if possible, writing a loop contract)."
+            );
+        }
 
         // Since autoverification skips over some functions, print the successes to make it easier to see what we verified in one place.
         for success in successes {

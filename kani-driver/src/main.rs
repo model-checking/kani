@@ -81,6 +81,7 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
         Some(CargoKaniSubcommand::Autoharness(args)) => {
             let mut sess = session::KaniSession::new(args.verify_opts)?;
             sess.enable_autoharness();
+            sess.add_default_bounds();
             sess.add_auto_harness_args(
                 args.common_autoharness_args.include_function,
                 args.common_autoharness_args.exclude_function,
@@ -116,6 +117,7 @@ fn standalone_main() -> Result<()> {
         Some(StandaloneSubcommand::Autoharness(args)) => {
             let mut session = KaniSession::new(args.verify_opts)?;
             session.enable_autoharness();
+            session.add_default_bounds();
             session.add_auto_harness_args(
                 args.common_autoharness_args.include_function,
                 args.common_autoharness_args.exclude_function,
