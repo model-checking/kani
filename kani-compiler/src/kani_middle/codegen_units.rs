@@ -139,13 +139,6 @@ impl CodegenUnits {
         for harness in harnesses {
             let metadata = self.harness_info.get_mut(harness).unwrap();
             metadata.has_loop_contracts = true;
-            // If we're generating this harness automatically and we encounter a loop contract,
-            // ensure that the HarnessKind is updated to be a contract harness
-            // targeting the function to verify.
-            if metadata.is_automatically_generated {
-                metadata.attributes.kind =
-                    HarnessKind::ProofForContract { target_fn: metadata.pretty_name.clone() }
-            }
         }
     }
 

@@ -3,7 +3,7 @@ assertion\
 	 - Status: FAILURE\
 	 - Description: "|result : &u32| *result == x"
 
-Autoharness: Checking function should_pass::has_loop_contract's contract against all possible inputs...
+Autoharness: Checking function should_pass::has_loop_contract against all possible inputs...
 should_pass::has_loop_contract.assertion\
 	 - Status: SUCCESS\
 	 - Description: "assertion failed: x == 2"
