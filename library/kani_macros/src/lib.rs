@@ -10,6 +10,7 @@
 #![feature(proc_macro_diagnostic)]
 #![feature(proc_macro_span)]
 mod derive;
+mod derive_bounded;
 
 // proc_macro::quote is nightly-only, so we'll cobble things together instead
 use proc_macro::TokenStream;
@@ -205,6 +206,38 @@ pub fn unstable_feature(attr: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro_derive(Arbitrary, attributes(safety_constraint))]
 pub fn derive_arbitrary(item: TokenStream) -> TokenStream {
     derive::expand_derive_arbitrary(item)
+}
+
+/// Allow users to generate `BoundedArbitrary` implementations by using the
+/// `#[derive(BoundedArbitrary)]` macro.
+///
+/// ## Specifying bounded fields
+///
+/// By default, every field of a struct is required to derive `Arbitrary`, not
+/// `BoundedArbitrary`. This is because there is no general way to determine if a
+/// particular field should be bounded or not. You must annotate the fields you want
+/// to be bounded using the `#[bounded]` attribute.
+///
+/// For example, we only want the vector field in the following definition to be
+/// bounded.
+///
+/// ```rust
+/// #[derive(BoundedArbitrary)]
+/// struct MyVector<T> {
+///     #[bounded]
+///     vector: Vec<T>,
+///     capacity: usize
+/// }
+/// ```
+///
+/// ## Safety
+///
+/// Using `BoundedArbitrary` makes proofs incomplete. It is useful for increasing
+/// confidence that some code is correct, but does not prove that absolutely.
+#[proc_macro_error]
+#[proc_macro_derive(BoundedArbitrary, attributes(bounded))]
+pub fn derive_bounded_arbitrary(item: TokenStream) -> TokenStream {
+    derive_bounded::expand_derive_bounded_arbitrary(item)
 }
 
 /// Allow users to auto generate `Invariant` implementations by using

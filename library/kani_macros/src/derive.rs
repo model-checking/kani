@@ -19,23 +19,23 @@ use syn::{
 };
 
 #[cfg(feature = "no_core")]
-macro_rules! kani_path {
-    ($span:expr) => {
-        quote_spanned! { $span => core::kani }
-    };
-    () => {
-        quote! { core::kani }
-    };
+pub(crate) fn kani_path() -> TokenStream {
+    quote! { core::kani }
 }
 
 #[cfg(not(feature = "no_core"))]
-macro_rules! kani_path {
-    ($span:expr) => {
-        quote_spanned! { $span => kani }
-    };
-    () => {
-        quote! { kani }
-    };
+pub(crate) fn kani_path() -> TokenStream {
+    quote! { kani }
+}
+
+#[cfg(feature = "no_core")]
+pub(crate) fn kani_path_spanned(span: Span) -> TokenStream {
+    quote_spanned! { span=> core::kani }
+}
+
+#[cfg(not(feature = "no_core"))]
+pub(crate) fn kani_path_spanned(span: Span) -> TokenStream {
+    quote_spanned! { span=> kani }
 }
 
 /// Generate the Arbitrary implementation for the given type.
@@ -48,7 +48,7 @@ pub fn expand_derive_arbitrary(item: proc_macro::TokenStream) -> proc_macro::Tok
     let trait_name = "Arbitrary";
     let derive_item = parse_macro_input!(item as DeriveInput);
     let item_name = &derive_item.ident;
-    let kani_path = kani_path!();
+    let kani_path = kani_path();
 
     let body = fn_any_body(&item_name, &derive_item.data);
     // Get the safety constraints (if any) to produce type-safe values
@@ -87,7 +87,7 @@ pub fn expand_derive_arbitrary(item: proc_macro::TokenStream) -> proc_macro::Tok
 
 /// Add a bound `T: Arbitrary` to every type parameter T.
 fn add_trait_bound_arbitrary(mut generics: Generics) -> Generics {
-    let kani_path = kani_path!();
+    let kani_path = kani_path();
     generics.params.iter_mut().for_each(|param| {
         if let GenericParam::Type(type_param) = param {
             type_param.bounds.push(parse_quote!(#kani_path::Arbitrary));
@@ -251,7 +251,7 @@ fn init_symbolic_item(ident: &Ident, fields: &Fields) -> TokenStream {
             // Self(kani::any(), kani::any(), ..., kani::any());
             let init = fields.unnamed.iter().map(|field| {
                 let span = field.span();
-                let kani_path = kani_path!(span);
+                let kani_path = kani_path_spanned(span);
                 quote_spanned! {span=>
                     #kani_path::any()
                 }
@@ -385,7 +385,7 @@ fn fn_any_enum(ident: &Ident, data: &DataEnum) -> TokenStream {
             }
         });
 
-        let kani_path = kani_path!();
+        let kani_path = kani_path();
         quote! {
             match #kani_path::any() {
                 #(#arms)*
@@ -413,7 +413,7 @@ pub fn expand_derive_invariant(item: proc_macro::TokenStream) -> proc_macro::Tok
     let trait_name = "Invariant";
     let derive_item = parse_macro_input!(item as DeriveInput);
     let item_name = &derive_item.ident;
-    let kani_path = kani_path!();
+    let kani_path = kani_path();
 
     let safe_body = safe_body_with_calls(&item_name, &derive_item, trait_name);
     let field_refs = field_refs(&item_name, &derive_item.data);
@@ -501,7 +501,7 @@ fn has_field_safety_constraints_inner(_ident: &Ident, fields: &Fields) -> bool {
 
 /// Add a bound `T: Invariant` to every type parameter T.
 pub fn add_trait_bound_invariant(mut generics: Generics) -> Generics {
-    let kani_path = kani_path!();
+    let kani_path = kani_path();
     generics.params.iter_mut().for_each(|param| {
         if let GenericParam::Type(type_param) = param {
             type_param.bounds.push(parse_quote!(#kani_path::Invariant));
