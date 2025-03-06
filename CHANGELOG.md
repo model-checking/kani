@@ -7,8 +7,10 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 ## [0.60.0]
 
 ### Breaking Changes
-* Autoharness Subcommand by @carolynzech in https://github.com/model-checking/kani/pull/3874
 * Remove Ubuntu 20.04 CI usage by @tautschnig in https://github.com/model-checking/kani/pull/3918
+
+### Major Changes
+* Autoharness Subcommand by @carolynzech in https://github.com/model-checking/kani/pull/3874
 
 ### What's Changed
 * Fast fail option - Stop verification process as soon as one failure is observed by @rajath-mk in https://github.com/model-checking/kani/pull/3879
