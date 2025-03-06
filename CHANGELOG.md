@@ -10,10 +10,10 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 * Autoharness Subcommand by @carolynzech in https://github.com/model-checking/kani/pull/3874
 
 ### What's Changed
-* Fast fail feature - Stops verification process as soon as one failure is observed - Use case : CI speed up by @rajath-mk in https://github.com/model-checking/kani/pull/3879
-* Adjust PropertyClass of assertions to identify UB by @tautschnig in https://github.com/model-checking/kani/pull/3860
+* Fast fail option - Stop verification process as soon as one failure is observed by @rajath-mk in https://github.com/model-checking/kani/pull/3879
+* Fail verification for UB regardless of whether `#[should_panic]` is enabled by @tautschnig in https://github.com/model-checking/kani/pull/3860
 * Remove isize overflow check for zst offsets by @carolynzech in https://github.com/model-checking/kani/pull/3897
-* Convert raw URL to link by @flba-eb in https://github.com/model-checking/kani/pull/3907
+* Support concrete playback for arrays of length 65 or greater by @carolynzech in https://github.com/model-checking/kani/pull/3888
 * Update toolchain to 2025-03-02 by @remi-delmas-3000 @carolynzech @thanhnguyen-aws @zhassan-aws and @tautschnig
 
 **Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.59.0...kani-0.60.0
