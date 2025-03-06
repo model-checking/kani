@@ -26,6 +26,7 @@
 extern crate self as kani;
 
 pub mod arbitrary;
+pub mod bounded_arbitrary;
 #[cfg(feature = "concrete_playback")]
 mod concrete_playback;
 pub mod futures;
