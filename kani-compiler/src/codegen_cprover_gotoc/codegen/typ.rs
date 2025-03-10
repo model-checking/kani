@@ -5,7 +5,7 @@ use cbmc::goto_program::{DatatypeComponent, Expr, Location, Parameter, Symbol, S
 use cbmc::utils::aggr_tag;
 use cbmc::{InternString, InternedString};
 use rustc_abi::{
-    BackendRepr::Vector, FieldIdx, FieldsShape, Float, Integer, LayoutData, Primitive, Size,
+    BackendRepr::SimdVector, FieldIdx, FieldsShape, Float, Integer, LayoutData, Primitive, Size,
     TagEncoding, TyAndLayout, VariantIdx, Variants,
 };
 use rustc_ast::ast::Mutability;
@@ -1473,7 +1473,7 @@ impl<'tcx> GotocCtx<'tcx> {
         debug! {"handling simd with layout {:?}", layout};
 
         let (element, size) = match layout {
-            Vector { element, count } => (element, count),
+            SimdVector { element, count } => (element, count),
             _ => unreachable!(),
         };
 
