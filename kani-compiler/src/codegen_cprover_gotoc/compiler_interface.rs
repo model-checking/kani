@@ -420,7 +420,7 @@ impl CodegenBackend for GotocCodegenBackend {
         let requested_crate_types = &codegen_results.crate_info.crate_types.clone();
         let local_crate_name = codegen_results.crate_info.local_crate_name;
         // Create the rlib if one was requested.
-        if requested_crate_types.iter().any(|crate_type| *crate_type == CrateType::Rlib) {
+        if requested_crate_types.contains(&CrateType::Rlib) {
             link_binary(sess, &ArArchiveBuilderBuilder, codegen_results, outputs);
         }
 
