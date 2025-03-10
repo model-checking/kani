@@ -557,7 +557,7 @@ where
     R: Read,
 {
     /// Stream of bytes from which GOTO objects are read.
-    bytes: Bytes<R>,
+    bytes: Bytes<BufReader<R>>,
 
     /// Numbering for ireps
     numbering: IrepNumbering,
@@ -584,8 +584,9 @@ where
     /// Constructor. The reader is moved into this object and cannot be used
     /// afterwards.
     fn new(reader: R) -> Self {
+        let buffered_reader = BufReader::new(reader);
         GotoBinaryDeserializer {
-            bytes: reader.bytes(),
+            bytes: buffered_reader.bytes(),
             numbering: IrepNumbering::new(),
             string_count: Vec::new(),
             string_map: Vec::new(),
