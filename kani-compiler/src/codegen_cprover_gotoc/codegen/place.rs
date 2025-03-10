@@ -150,7 +150,7 @@ impl ProjectedPlace {
         goto_expr: Expr,
         ty: Ty,
         ctx: &mut GotocCtx,
-    ) -> Result<Self, UnimplementedData> {
+    ) -> Result<Self, Box<UnimplementedData>> {
         Self::try_new(goto_expr, TypeOrVariant::Type(ty), None, None, ctx)
     }
 
@@ -160,7 +160,7 @@ impl ProjectedPlace {
         fat_ptr_goto_expr: Option<Expr>,
         fat_ptr_mir_typ: Option<Ty>,
         ctx: &mut GotocCtx,
-    ) -> Result<Self, UnimplementedData> {
+    ) -> Result<Self, Box<UnimplementedData>> {
         if let Some(fat_ptr) = &fat_ptr_goto_expr {
             assert!(
                 fat_ptr.typ().is_rust_fat_ptr(&ctx.symbol_table),
@@ -183,12 +183,12 @@ impl ProjectedPlace {
             if !(expr_ty.is_integer() && ty_from_mir.is_struct_tag()) {
                 debug_assert!(false, "{}", msg);
             }
-            return Err(UnimplementedData::new(
+            return Err(Box::new(UnimplementedData::new(
                 "Projection mismatch",
                 "https://github.com/model-checking/kani/issues/277",
                 ty_from_mir,
                 *goto_expr.location(),
-            ));
+            )));
         }
 
         assert!(
@@ -236,7 +236,7 @@ impl GotocCtx<'_> {
         parent_ty_or_var: TypeOrVariant,
         field_idx: FieldIdx,
         field_ty_or_var: TypeOrVariant,
-    ) -> Result<Expr, UnimplementedData> {
+    ) -> Result<Expr, Box<UnimplementedData>> {
         match parent_ty_or_var {
             TypeOrVariant::Type(parent_ty) => {
                 match parent_ty.kind() {
@@ -286,12 +286,12 @@ impl GotocCtx<'_> {
                     TyKind::RigidTy(RigidTy::CoroutineClosure(def, args)) => {
                         let typ = Ty::new_coroutine_closure(def, args);
                         let goto_typ = self.codegen_ty_stable(typ);
-                        Err(UnimplementedData::new(
+                        Err(Box::new(UnimplementedData::new(
                             "Coroutine closures",
                             "https://github.com/model-checking/kani/issues/3783",
                             goto_typ,
                             *parent_expr.location(),
-                        ))
+                        )))
                     }
                     TyKind::RigidTy(RigidTy::Str)
                     | TyKind::RigidTy(RigidTy::Array(_, _))
@@ -414,10 +414,10 @@ impl GotocCtx<'_> {
     /// the return value is the expression after.
     fn codegen_projection(
         &mut self,
-        before: Result<ProjectedPlace, UnimplementedData>,
+        before: Result<ProjectedPlace, Box<UnimplementedData>>,
         proj: &ProjectionElem,
         loc: Location,
-    ) -> Result<ProjectedPlace, UnimplementedData> {
+    ) -> Result<ProjectedPlace, Box<UnimplementedData>> {
         let before = before?;
         trace!(?before, ?proj, "codegen_projection");
         match proj {
@@ -550,12 +550,12 @@ impl GotocCtx<'_> {
                         let typ = Ty::try_new_array(ty, subarray_len).unwrap();
                         let goto_typ = self.codegen_ty_stable(typ);
                         // unimplemented
-                        Err(UnimplementedData::new(
+                        Err(Box::new(UnimplementedData::new(
                             "Sub-array binding",
                             "https://github.com/model-checking/kani/issues/707",
                             goto_typ,
                             *before.goto_expr.location(),
-                        ))
+                        )))
                     }
                     TyKind::RigidTy(RigidTy::Slice(_)) => {
                         let len = if *from_end {
@@ -722,7 +722,7 @@ impl GotocCtx<'_> {
         &mut self,
         place: &Place,
         loc: Location,
-    ) -> Result<ProjectedPlace, UnimplementedData> {
+    ) -> Result<ProjectedPlace, Box<UnimplementedData>> {
         debug!(?place, "codegen_place");
         let initial_expr = self.codegen_local(place.local, loc);
         let initial_typ = TypeOrVariant::Type(self.local_ty_stable(place.local));
@@ -734,12 +734,12 @@ impl GotocCtx<'_> {
             .iter()
             .fold(initial_projection, |accum, proj| self.codegen_projection(accum, proj, loc));
         match result {
-            Err(data) => Err(UnimplementedData::new(
+            Err(data) => Err(Box::new(UnimplementedData::new(
                 &data.operation,
                 &data.bug_url,
                 self.codegen_ty_stable(self.place_ty_stable(place)),
                 data.loc,
-            )),
+            ))),
             _ => result,
         }
     }
@@ -770,7 +770,7 @@ impl GotocCtx<'_> {
         offset: u64,
         min_length: u64,
         from_end: bool,
-    ) -> Result<ProjectedPlace, UnimplementedData> {
+    ) -> Result<ProjectedPlace, Box<UnimplementedData>> {
         match before.mir_typ().kind() {
             //TODO, ask on zulip if we can ever have from_end here?
             TyKind::RigidTy(RigidTy::Array(elemt, length)) => {
