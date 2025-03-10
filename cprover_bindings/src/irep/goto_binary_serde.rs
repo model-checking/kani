@@ -84,7 +84,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::hash::Hash;
 use std::io::{self, BufReader};
-use std::io::{BufWriter, Bytes, Error, ErrorKind, Read, Write};
+use std::io::{BufWriter, Bytes, Error, Read, Write};
 use std::path::Path;
 
 /// Writes a symbol table to a file in goto binary format in version 6.
@@ -585,7 +585,7 @@ where
     /// afterwards.
     fn new(reader: R) -> Self {
         GotoBinaryDeserializer {
-            bytes: BufReader::new(reader).bytes(),
+            bytes: reader.bytes(),
             numbering: IrepNumbering::new(),
             string_count: Vec::new(),
             string_map: Vec::new(),
