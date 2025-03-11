@@ -14,7 +14,7 @@ use anyhow::Result;
 use comfy_table::Table as PrettyTable;
 use kani_metadata::{AutoHarnessSkipReason, KaniMetadata};
 
-const AUTOHARNESS_TIMEOUT: &str = "30s";
+const AUTOHARNESS_TIMEOUT: &str = "60s";
 const LOOP_UNWIND_DEFAULT: u32 = 20;
 
 pub fn autoharness_cargo(args: CargoAutoharnessArgs) -> Result<()> {
