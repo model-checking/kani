@@ -427,20 +427,12 @@ impl GotocCtx<'_> {
             Intrinsic::RotateRight => codegen_intrinsic_binop!(ror),
             Intrinsic::RoundF32 => codegen_simple_intrinsic!(Roundf),
             Intrinsic::RoundF64 => codegen_simple_intrinsic!(Round),
-            Intrinsic::RoundTiesEvenF32 => self.codegen_round_to_integral(
-                BuiltinFn::RoundToIntegralF,
-                cbmc::RoundingMode::ToNearest,
-                fargs,
-                place,
-                loc,
-            ),
-            Intrinsic::RoundTiesEvenF64 => self.codegen_round_to_integral(
-                BuiltinFn::RoundToIntegral,
-                cbmc::RoundingMode::ToNearest,
-                fargs,
-                place,
-                loc,
-            ),
+            Intrinsic::RoundTiesEvenF32 => {
+                self.codegen_round_to_integral(cbmc::RoundingMode::ToNearest, fargs, place, loc)
+            }
+            Intrinsic::RoundTiesEvenF64 => {
+                self.codegen_round_to_integral(cbmc::RoundingMode::ToNearest, fargs, place, loc)
+            }
             Intrinsic::SaturatingAdd => codegen_intrinsic_binop_with_mm!(saturating_add),
             Intrinsic::SaturatingSub => codegen_intrinsic_binop_with_mm!(saturating_sub),
             Intrinsic::SinF32 => codegen_simple_intrinsic!(Sinf),
@@ -648,24 +640,20 @@ impl GotocCtx<'_> {
         dividend_is_int_min.and(divisor_is_minus_one).not()
     }
 
-    // Builds a call to the round_to_integral CPROVER function with specified cbmc::RoundingMode.
+    // Builds a floatbv_round_to_integral expression with specified cbmc::RoundingMode.
     fn codegen_round_to_integral(
         &mut self,
-        function: BuiltinFn,
         rounding_mode: cbmc::RoundingMode,
         mut fargs: Vec<Expr>,
         place: &Place,
         loc: Location,
     ) -> Stmt {
-        assert!(function == BuiltinFn::RoundToIntegralF || function == BuiltinFn::RoundToIntegral);
-        let mm = self.symbol_table.machine_model();
-        fargs.insert(0, Expr::int_constant(rounding_mode, Type::c_int()));
-        let casted_fargs = Expr::cast_arguments_to_target_equivalent_function_parameter_types(
-            &function.as_expr(),
-            fargs,
-            mm,
-        );
-        let expr = function.call(casted_fargs, loc);
+        let place_ty = self.place_ty_stable(place);
+        let result_type = self.codegen_ty_stable(place_ty);
+        let f = fargs.remove(0);
+        assert!(fargs.is_empty());
+        let rm = Expr::int_constant(rounding_mode, Type::c_int());
+        let expr = Expr::floatbv_round_to_integral(f, rm, result_type);
         self.codegen_expr_to_place_stable(place, expr, loc)
     }
 

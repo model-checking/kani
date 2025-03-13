@@ -835,6 +835,7 @@ pub enum IrepId {
     VectorLe,
     VectorGt,
     VectorLt,
+    FloatbvRoundToIntegral,
 }
 
 impl IrepId {
@@ -1717,6 +1718,7 @@ impl Display for IrepId {
             IrepId::VectorLe => "vector-<=",
             IrepId::VectorGt => "vector->",
             IrepId::VectorLt => "vector-<",
+            IrepId::FloatbvRoundToIntegral => "floatbv_round_to_integral",
         };
         write!(f, "{s}")
     }
