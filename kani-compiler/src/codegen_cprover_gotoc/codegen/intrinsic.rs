@@ -427,10 +427,7 @@ impl GotocCtx<'_> {
             Intrinsic::RotateRight => codegen_intrinsic_binop!(ror),
             Intrinsic::RoundF32 => codegen_simple_intrinsic!(Roundf),
             Intrinsic::RoundF64 => codegen_simple_intrinsic!(Round),
-            Intrinsic::RoundTiesEvenF32 => {
-                self.codegen_round_to_integral(cbmc::RoundingMode::ToNearest, fargs, place, loc)
-            }
-            Intrinsic::RoundTiesEvenF64 => {
+            Intrinsic::RoundTiesEvenF32 | Intrinsic::RoundTiesEvenF64 => {
                 self.codegen_round_to_integral(cbmc::RoundingMode::ToNearest, fargs, place, loc)
             }
             Intrinsic::SaturatingAdd => codegen_intrinsic_binop_with_mm!(saturating_add),
