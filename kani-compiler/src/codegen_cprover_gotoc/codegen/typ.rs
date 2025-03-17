@@ -1400,11 +1400,10 @@ impl<'tcx> GotocCtx<'tcx> {
 
     pub fn codegen_float_type(&self, f: Float) -> Ty<'tcx> {
         match f {
+            Float::F16 => self.tcx.types.f16,
             Float::F32 => self.tcx.types.f32,
             Float::F64 => self.tcx.types.f64,
-            // `F16` and `F128` are not yet handled.
-            // Tracked here: <https://github.com/model-checking/kani/issues/3069>
-            Float::F16 | Float::F128 => unimplemented!(),
+            Float::F128 => self.tcx.types.f128,
         }
     }
 
