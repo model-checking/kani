@@ -101,7 +101,8 @@ pub fn gen_automatic_proof_metadata(
 
     // Leave the concrete playback instrumentation for now, but this feature does not actually support concrete playback.
     let loc = SourceLocation::new(fn_to_verify.body().unwrap().span);
-    let file_stem = format!("{}_{mangled_name}", base_name.file_stem().unwrap().to_str().unwrap());
+    let file_stem =
+        format!("{}_{mangled_name}_autoharness", base_name.file_stem().unwrap().to_str().unwrap());
     let model_file = base_name.with_file_name(file_stem).with_extension(ArtifactType::SymTabGoto);
 
     let kani_attributes = KaniAttributes::for_instance(tcx, *fn_to_verify);
