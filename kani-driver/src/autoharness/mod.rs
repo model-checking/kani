@@ -59,17 +59,26 @@ fn print_skipped_fns(metadata: Vec<KaniMetadata>) {
 
     for md in metadata {
         let skipped_md = md.autoharness_skipped_fns.unwrap();
-        skipped_fns.add_rows(skipped_md.into_iter().filter_map(|(func, reason)| match reason {
-            AutoHarnessSkipReason::MissingArbitraryImpl(ref args) => {
-                Some(vec![func, format!("{}: {}", reason, args.join(", "))])
+        skipped_fns.add_rows(skipped_md.into_iter().filter_map(|(func, reason)| {
+            match reason {
+                AutoHarnessSkipReason::MissingArbitraryImpl(ref args) => Some(vec![
+                    func,
+                    format!(
+                        "{reason} {}",
+                        args.iter()
+                            .map(|(name, typ)| format!("{}: {}", name, typ))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ),
+                ]),
+                AutoHarnessSkipReason::GenericFn
+                | AutoHarnessSkipReason::NoBody
+                | AutoHarnessSkipReason::UserFilter => Some(vec![func, reason.to_string()]),
+                // We don't report Kani implementations to the user to avoid exposing Kani functions we insert during instrumentation.
+                // For those we don't insert during instrumentation that are in this category (manual harnesses or Kani trait implementations),
+                // it should be obvious that we wouldn't generate harnesses, so reporting those functions as "skipped" is unlikely to be useful.
+                AutoHarnessSkipReason::KaniImpl => None,
             }
-            AutoHarnessSkipReason::GenericFn
-            | AutoHarnessSkipReason::NoBody
-            | AutoHarnessSkipReason::UserFilter => Some(vec![func, reason.to_string()]),
-            // We don't report Kani implementations to the user to avoid exposing Kani functions we insert during instrumentation.
-            // For those we don't insert during instrumentation that are in this category (manual harnesses or Kani trait implementations),
-            // it should be obvious that we wouldn't generate harnesses, so reporting those functions as "skipped" is unlikely to be useful.
-            AutoHarnessSkipReason::KaniImpl => None,
         }));
     }
 

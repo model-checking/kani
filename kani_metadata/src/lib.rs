@@ -51,9 +51,9 @@ pub enum AutoHarnessSkipReason {
     #[strum(serialize = "Kani implementation")]
     KaniImpl,
     /// At least one of the function's arguments does not implement kani::Arbitrary
-    /// (The Vec<String> contains the list of argument names that do not implement it)
+    /// (The Vec<(String, String)> contains the list of (name, type) tuples for each argument that does not implement it
     #[strum(serialize = "Missing Arbitrary implementation for argument(s)")]
-    MissingArbitraryImpl(Vec<String>),
+    MissingArbitraryImpl(Vec<(String, String)>),
     /// The function does not have a body.
     #[strum(serialize = "The function does not have a body")]
     NoBody,

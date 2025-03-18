@@ -432,7 +432,8 @@ fn automatic_harness_partition(
                         var.argument_index.is_some_and(|arg_idx| idx + 1 == usize::from(arg_idx))
                     })
                     .map_or("_".to_string(), |debug_info| debug_info.name.to_string());
-                problematic_args.push(arg_name)
+                let arg_type = format!("{}", arg.ty);
+                problematic_args.push((arg_name, arg_type))
             }
         }
         if !problematic_args.is_empty() {
