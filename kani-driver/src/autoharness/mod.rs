@@ -25,6 +25,9 @@ pub fn autoharness_cargo(args: CargoAutoharnessArgs) -> Result<()> {
         args.common_autoharness_args.include_function,
         args.common_autoharness_args.exclude_function,
     );
+    if !session.args.common_args.quiet {
+        print_kani_version(InvocationType::CargoKani(vec![]));
+    }
     let project = project::cargo_project(&mut session, false)?;
     if !session.args.common_args.quiet {
         print_metadata(project.metadata.clone());
