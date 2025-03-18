@@ -4,7 +4,7 @@
 
 use std::path::PathBuf;
 
-use crate::args::{CommonArgs, ValidateArgs};
+use crate::args::{CommonArgs, ValidateArgs, validate_std_path};
 use clap::{Error, Parser, ValueEnum, error::ErrorKind};
 use kani_metadata::UnstableFeature;
 
@@ -79,39 +79,7 @@ impl ValidateArgs for StandaloneListArgs {
         }
 
         if self.std {
-            if !self.input.exists() {
-                Err(Error::raw(
-                    ErrorKind::InvalidValue,
-                    format!(
-                        "Invalid argument: `<input>` argument `{}` does not exist",
-                        self.input.display()
-                    ),
-                ))
-            } else if !self.input.is_dir() {
-                Err(Error::raw(
-                    ErrorKind::InvalidValue,
-                    format!(
-                        "Invalid argument: `<input>` argument `{}` is not a directory",
-                        self.input.display()
-                    ),
-                ))
-            } else {
-                let full_path = self.input.canonicalize()?;
-                let dir = full_path.file_stem().unwrap();
-                if dir != "library" {
-                    Err(Error::raw(
-                        ErrorKind::InvalidValue,
-                        format!(
-                            "Invalid argument: Expected `<input>` to point to the `library` folder \
-                        containing the standard library crates.\n\
-                        Found `{}` folder instead",
-                            dir.to_string_lossy()
-                        ),
-                    ))
-                } else {
-                    Ok(())
-                }
-            }
+            validate_std_path(&self.input)
         } else if self.input.is_file() {
             Ok(())
         } else {

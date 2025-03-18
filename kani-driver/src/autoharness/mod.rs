@@ -8,6 +8,7 @@ use crate::args::autoharness_args::{CargoAutoharnessArgs, StandaloneAutoharnessA
 use crate::call_cbmc::VerificationStatus;
 use crate::call_single_file::to_rustc_arg;
 use crate::harness_runner::HarnessResult;
+use crate::project::{standalone_project, std_project};
 use crate::session::KaniSession;
 use crate::{InvocationType, print_kani_version, project, verify_project};
 use anyhow::Result;
@@ -48,7 +49,12 @@ pub fn autoharness_standalone(args: StandaloneAutoharnessArgs) -> Result<()> {
         print_kani_version(InvocationType::Standalone);
     }
 
-    let project = project::standalone_project(&args.input, args.crate_name, &session)?;
+    let project = if args.std {
+        std_project(&args.input, &session)?
+    } else {
+        standalone_project(&args.input, args.crate_name, &session)?
+    };
+
     if !session.args.common_args.quiet {
         print_metadata(project.metadata.clone());
     }
