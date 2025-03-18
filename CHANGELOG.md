@@ -4,6 +4,42 @@ This file contains notable changes (e.g. breaking changes, major changes, etc.) 
 
 This file was introduced starting Kani 0.23.0, so it only contains changes from version 0.23.0 onwards.
 
+## [0.60.0]
+
+### Breaking Changes
+* Remove Ubuntu 20.04 CI usage by @tautschnig in https://github.com/model-checking/kani/pull/3918
+
+### Major Changes
+* Autoharness Subcommand by @carolynzech in https://github.com/model-checking/kani/pull/3874
+
+### What's Changed
+* Fast fail option - Stop verification process as soon as one failure is observed by @rajath-mk in https://github.com/model-checking/kani/pull/3879
+* Fail verification for UB regardless of whether `#[should_panic]` is enabled by @tautschnig in https://github.com/model-checking/kani/pull/3860
+* Support concrete playback for arrays of length 65 or greater by @carolynzech in https://github.com/model-checking/kani/pull/3888
+* Remove isize overflow check for zst offsets by @carolynzech in https://github.com/model-checking/kani/pull/3897
+* Support concrete playback for arrays of length 65 or greater by @carolynzech in https://github.com/model-checking/kani/pull/3888
+* Autoharness Misc. Improvements by @carolynzech in https://github.com/model-checking/kani/pull/3922
+* Update toolchain to 2025-03-02 by @remi-delmas-3000 @carolynzech @thanhnguyen-aws @zhassan-aws and @tautschnig
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.59.0...kani-0.60.0
+
+## [0.59.0]
+
+### Breaking Changes
+* Deprecate `--enable-unstable` and `--restrict-vtable` by @celinval in https://github.com/model-checking/kani/pull/3859
+* Do not report arithmetic overflow for floating point operations that produce +/-Inf by @rajath-mk in https://github.com/model-checking/kani/pull/3873
+
+### What's Changed
+* Fix validity checks for `char` by @celinval in https://github.com/model-checking/kani/pull/3853
+* Support verifying contracts/stubs for generic types with multiple inherent implementations by @carolynzech in https://github.com/model-checking/kani/pull/3829
+* Allow multiple stub_verified annotations, but check for duplicate targets by @remi-delmas-3000 in https://github.com/model-checking/kani/pull/3808
+* Fix crash if a function pointer is created but never used by @celinval in https://github.com/model-checking/kani/pull/3862
+* Fix transmute codegen when sizes are different by @celinval in https://github.com/model-checking/kani/pull/3861
+* Stub linker to avoid missing symbols errors by @celinval in https://github.com/model-checking/kani/pull/3858
+* Toolchain upgrade to nightly-2025-01-28 by @feliperodri @tautschnig
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.58.0...kani-0.59.0
+
 ## [0.58.0]
 
 ### Major/Breaking Changes

@@ -1,0 +1,76 @@
+Autoharness: Checking function panic against all possible inputs...
+panic.assertion\
+	 - Status: FAILURE\
+	 - Description: "explicit panic"
+
+Autoharness: Checking function integer_overflow against all possible inputs...
+assertion\
+	 - Status: FAILURE
+	 - Description: "attempt to add with overflow"
+
+Autoharness: Checking function oob_unsafe_array_access against all possible inputs...
+oob_unsafe_array_access.pointer_dereference\
+	 - Status: FAILURE\
+	 - Description: "dereference failure: pointer outside object bounds"
+
+Autoharness: Checking function oob_safe_array_access against all possible inputs...
+assertion\
+	- Status: FAILURE\
+	- Description: "index out of bounds: the length is less than or equal to the given index"
+
+Autoharness: Checking function unchecked_mul against all possible inputs...
+arithmetic_overflow\
+	 - Status: FAILURE\
+	 - Description: "attempt to compute `unchecked_mul` which would overflow"
+
+Checking harness panic_harness...
+panic.assertion\
+	 - Status: FAILURE\
+	 - Description: "explicit panic"
+
+Checking harness integer_overflow_harness...
+assertion\
+	 - Status: FAILURE\
+	 - Description: "attempt to add with overflow"
+
+Checking harness oob_unsafe_array_access_harness...
+oob_unsafe_array_access.pointer_dereference\
+	 - Status: FAILURE\
+
+Checking harness oob_safe_array_access_harness...
+assertion\
+	 - Status: FAILURE\
+	 - Description: "index out of bounds: the length is less than or equal to the given index"
+
+Checking harness unchecked_mul_harness...
+arithmetic_overflow\
+	 - Status: FAILURE\
+	 - Description: "attempt to compute `unchecked_mul` which would overflow"
+
+Manual Harness Summary:
+Verification failed for - unchecked_mul_harness
+Verification failed for - panic_harness
+Verification failed for - integer_overflow_harness
+Verification failed for - oob_unsafe_array_access_harness
+Verification failed for - oob_safe_array_access_harness
+Complete - 0 successfully verified harnesses, 5 failures, 5 total.
+
+Autoharness Summary:
++-------------------------+---------------------------+---------------------+
+| Selected Function       | Kind of Automatic Harness | Verification Result |
++===========================================================================+
+| unchecked_mul           | #[kani::proof]            | Failure             |
+|-------------------------+---------------------------+---------------------|
+| panic                   | #[kani::proof]            | Failure             |
+|-------------------------+---------------------------+---------------------|
+| integer_overflow        | #[kani::proof]            | Failure             |
+|-------------------------+---------------------------+---------------------|
+| oob_unsafe_array_access | #[kani::proof]            | Failure             |
+|-------------------------+---------------------------+---------------------|
+| oob_safe_array_access   | #[kani::proof]            | Failure             |
++-------------------------+---------------------------+---------------------+
+Note that `kani autoharness` sets default --harness-timeout of 60s and --default-unwind of 20.
+If verification failed because of timing out or too low of an unwinding bound, try passing larger values for these arguments (or, if possible, writing a loop contract).
+Complete - 0 successfully verified functions, 5 failures, 5 total.
+
+Skipped Functions: None. Kani generated automatic harnesses for all functions in the available crate(s).

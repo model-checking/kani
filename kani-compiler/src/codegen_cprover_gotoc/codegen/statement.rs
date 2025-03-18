@@ -7,10 +7,11 @@ use crate::codegen_cprover_gotoc::codegen::function::rustc_smir::region_from_cov
 use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
 use cbmc::goto_program::{Expr, Location, Stmt, Type};
+use rustc_abi::Size;
+use rustc_abi::{FieldsShape, Primitive, TagEncoding, Variants};
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{List, TypingEnv};
 use rustc_smir::rustc_internal;
-use rustc_target::abi::{FieldsShape, Primitive, TagEncoding, Variants};
 use stable_mir::abi::{ArgAbi, FnAbi, PassMode};
 use stable_mir::mir::mono::{Instance, InstanceKind};
 use stable_mir::mir::{
@@ -251,19 +252,37 @@ impl GotocCtx<'_> {
                     if *expected { r } else { Expr::not(r) }
                 };
 
-                let msg = if let AssertMessage::BoundsCheck { .. } = msg {
-                    // For bounds check the following panic message is generated at runtime:
-                    // "index out of bounds: the length is {len} but the index is {index}",
-                    // but CBMC only accepts static messages so we don't add values to the message.
-                    "index out of bounds: the length is less than or equal to the given index"
-                } else if let AssertMessage::MisalignedPointerDereference { .. } = msg {
-                    // Misaligned pointer dereference check messages is also a runtime messages.
-                    // Generate a generic one here.
-                    "misaligned pointer dereference: address must be a multiple of its type's \
-                    alignment"
-                } else {
+                let (msg, property_class) = match msg {
+                    AssertMessage::BoundsCheck { .. } => {
+                        // For bounds check the following panic message is generated at runtime:
+                        // "index out of bounds: the length is {len} but the index is {index}",
+                        // but CBMC only accepts static messages so we don't add values to the message.
+                        (
+                            "index out of bounds: the length is less than or equal to the given index",
+                            PropertyClass::Assertion,
+                        )
+                    }
+                    AssertMessage::MisalignedPointerDereference { .. } => {
+                        // Misaligned pointer dereference check messages is also a runtime messages.
+                        // Generate a generic one here.
+                        (
+                            "misaligned pointer dereference: address must be a multiple of its type's \
+                    alignment",
+                            PropertyClass::SafetyCheck,
+                        )
+                    }
                     // For all other assert kind we can get the static message.
-                    msg.description().unwrap()
+                    AssertMessage::NullPointerDereference => {
+                        (msg.description().unwrap(), PropertyClass::SafetyCheck)
+                    }
+                    AssertMessage::Overflow { .. }
+                    | AssertMessage::OverflowNeg { .. }
+                    | AssertMessage::DivisionByZero { .. }
+                    | AssertMessage::RemainderByZero { .. }
+                    | AssertMessage::ResumedAfterReturn { .. }
+                    | AssertMessage::ResumedAfterPanic { .. } => {
+                        (msg.description().unwrap(), PropertyClass::Assertion)
+                    }
                 };
 
                 let (msg_str, reach_stmt) =
@@ -274,7 +293,7 @@ impl GotocCtx<'_> {
                         reach_stmt,
                         self.codegen_assert_assume(
                             cond.cast_to(Type::bool()),
-                            PropertyClass::Assertion,
+                            property_class,
                             &msg_str,
                             loc,
                         ),
@@ -332,8 +351,10 @@ impl GotocCtx<'_> {
                 }
                 TagEncoding::Niche { untagged_variant, niche_variants, niche_start } => {
                     if *untagged_variant != variant_index_internal {
-                        let offset = match &layout.fields {
-                            FieldsShape::Arbitrary { offsets, .. } => offsets[0usize.into()],
+                        let offset: Size = match &layout.fields {
+                            FieldsShape::Arbitrary { offsets, .. } => {
+                                offsets[rustc_abi::FieldIdx::from_usize(0)]
+                            }
                             _ => unreachable!("niche encoding must have arbitrary fields"),
                         };
                         let discr_ty = self.codegen_enum_discr_typ(dest_ty_internal);
@@ -552,7 +573,7 @@ impl GotocCtx<'_> {
                 let ty = self.operand_ty_stable(op);
                 if ty.kind().is_bool() {
                     Some(self.codegen_operand_stable(op).cast_to(Type::c_bool()))
-                } else if arg_abi.map_or(true, |abi| abi.mode != PassMode::Ignore) {
+                } else if arg_abi.is_none_or(|abi| abi.mode != PassMode::Ignore) {
                     Some(self.codegen_operand_stable(op))
                 } else {
                     None

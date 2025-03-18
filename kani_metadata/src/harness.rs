@@ -4,6 +4,7 @@
 use crate::CbmcSolver;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use strum_macros::Display;
 
 /// A CBMC-level `assigns` contract that needs to be enforced on a function.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -38,6 +39,8 @@ pub struct HarnessMetadata {
     pub contract: Option<AssignsContract>,
     /// If the harness contains some usage of loop contracts.
     pub has_loop_contracts: bool,
+    /// If the harness was automatically generated or manually written.
+    pub is_automatically_generated: bool,
 }
 
 /// The attributes added by the user to control how a harness is executed.
@@ -57,13 +60,16 @@ pub struct HarnessAttributes {
     pub verified_stubs: Vec<String>,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Display, Serialize, Deserialize)]
 pub enum HarnessKind {
     /// Function was annotated with `#[kani::proof]`.
+    #[strum(serialize = "#[kani::proof]")]
     Proof,
     /// Function was annotated with `#[kani::proof_for_contract(target_fn)]`.
+    #[strum(serialize = "#[kani::proof_for_contract]")]
     ProofForContract { target_fn: String },
     /// This is a test harness annotated with `#[test]`.
+    #[strum(serialize = "#[test]")]
     Test,
 }
 

@@ -23,6 +23,7 @@ use cbmc::{InternedString, MachineModel};
 use kani_metadata::artifact::convert_type;
 use kani_metadata::{ArtifactType, HarnessMetadata, KaniMetadata, UnsupportedFeature};
 use kani_metadata::{AssignsContract, CompilerArtifactStub};
+use rustc_abi::Endian;
 use rustc_codegen_ssa::back::archive::{
     ArArchiveBuilder, ArchiveBuilder, ArchiveBuilderBuilder, DEFAULT_OBJECT_READER,
 };
@@ -40,7 +41,6 @@ use rustc_session::Session;
 use rustc_session::config::{CrateType, OutputFilenames, OutputType};
 use rustc_session::output::out_filename;
 use rustc_smir::rustc_internal;
-use rustc_target::abi::Endian;
 use rustc_target::spec::PanicStrategy;
 use stable_mir::mir::mono::{Instance, MonoItem};
 use stable_mir::{CrateDef, DefId};
@@ -264,7 +264,7 @@ impl CodegenBackend for GotocCodegenBackend {
             let reachability = queries.args().reachability_analysis;
             let mut results = GotoCodegenResults::new(tcx, reachability);
             match reachability {
-                ReachabilityType::Harnesses => {
+                ReachabilityType::AllFns | ReachabilityType::Harnesses => {
                     let mut units = CodegenUnits::new(&queries, tcx);
                     let mut modifies_instances = vec![];
                     let mut loop_contracts_instances = vec![];
@@ -375,7 +375,9 @@ impl CodegenBackend for GotocCodegenBackend {
                 // Print compilation report.
                 results.print_report(tcx);
 
-                if reachability != ReachabilityType::Harnesses {
+                if reachability != ReachabilityType::Harnesses
+                    && reachability != ReachabilityType::AllFns
+                {
                     // In a workspace, cargo seems to be using the same file prefix to build a crate that is
                     // a package lib and also a dependency of another package.
                     // To avoid overriding the metadata for its verification, we skip this step when
@@ -418,7 +420,7 @@ impl CodegenBackend for GotocCodegenBackend {
         let requested_crate_types = &codegen_results.crate_info.crate_types.clone();
         let local_crate_name = codegen_results.crate_info.local_crate_name;
         // Create the rlib if one was requested.
-        if requested_crate_types.iter().any(|crate_type| *crate_type == CrateType::Rlib) {
+        if requested_crate_types.contains(&CrateType::Rlib) {
             link_binary(sess, &ArArchiveBuilderBuilder, codegen_results, outputs);
         }
 
@@ -611,6 +613,7 @@ impl GotoCodegenResults {
             // removes any contracts logic for ReachabilityType::Test or ReachabilityType::PubFns,
             // which are the two ReachabilityTypes under which the compiler calls this function.
             contracted_functions: vec![],
+            autoharness_skipped_fns: None,
         }
     }
 

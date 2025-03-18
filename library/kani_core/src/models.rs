@@ -89,8 +89,8 @@ macro_rules! generate_models {
                 }
             }
 
-            #[kanitool::fn_marker = "PtrSubPtrModel"]
-            pub unsafe fn ptr_sub_ptr<T>(ptr1: *const T, ptr2: *const T) -> usize {
+            #[kanitool::fn_marker = "PtrOffsetFromUnsignedModel"]
+            pub unsafe fn ptr_offset_from_unsigned<T>(ptr1: *const T, ptr2: *const T) -> usize {
                 let offset = ptr_offset_from(ptr1, ptr2);
                 kani::safety_check(offset >= 0, "Expected non-negative distance between pointers");
                 offset as usize
@@ -99,29 +99,35 @@ macro_rules! generate_models {
             /// An offset model that checks UB.
             #[kanitool::fn_marker = "OffsetModel"]
             pub fn offset<T, P: Ptr<T>, O: ToISize>(ptr: P, offset: O) -> P {
-                let offset = offset.to_isize();
                 let t_size = core::mem::size_of::<T>() as isize;
-                if offset == 0 || t_size == 0 {
-                    // It's always safe to perform an offset of length 0.
-                    ptr
-                } else {
-                    let (byte_offset, overflow) = offset.overflowing_mul(t_size);
-                    kani::safety_check(!overflow, "Offset in bytes overflows isize");
-                    let orig_ptr = ptr.to_const_ptr();
-                    // NOTE: For CBMC, using the pointer addition can have unexpected behavior
-                    // when the offset is higher than the object bits since it will wrap around.
-                    // See for more details: https://github.com/model-checking/kani/issues/1150
-                    //
-                    // However, when I tried implementing this using usize operation, we got some
-                    // unexpected failures that still require further debugging.
-                    // let new_ptr = orig_ptr.addr().wrapping_add_signed(byte_offset) as *const T;
-                    let new_ptr = orig_ptr.wrapping_byte_offset(byte_offset);
-                    kani::safety_check(
-                        kani::mem::same_allocation_internal(orig_ptr, new_ptr),
-                        "Offset result and original pointer must point to the same allocation",
-                    );
-                    P::from_const_ptr(new_ptr)
+                if t_size == 0 {
+                    // It's always safe to perform an offset on a ZST.
+                    return ptr;
                 }
+
+                // Note that this check must come after the t_size check, c.f. https://github.com/model-checking/kani/issues/3896
+                let offset = offset.to_isize();
+                if offset == 0 {
+                    // It's always safe to perform an offset of length 0.
+                    return ptr;
+                }
+
+                let (byte_offset, overflow) = offset.overflowing_mul(t_size);
+                kani::safety_check(!overflow, "Offset in bytes overflows isize");
+                let orig_ptr = ptr.to_const_ptr();
+                // NOTE: For CBMC, using the pointer addition can have unexpected behavior
+                // when the offset is higher than the object bits since it will wrap around.
+                // See for more details: https://github.com/model-checking/kani/issues/1150
+                //
+                // However, when I tried implementing this using usize operation, we got some
+                // unexpected failures that still require further debugging.
+                // let new_ptr = orig_ptr.addr().wrapping_add_signed(byte_offset) as *const T;
+                let new_ptr = orig_ptr.wrapping_byte_offset(byte_offset);
+                kani::safety_check(
+                    kani::mem::same_allocation_internal(orig_ptr, new_ptr),
+                    "Offset result and original pointer must point to the same allocation",
+                );
+                P::from_const_ptr(new_ptr)
             }
 
             pub trait Ptr<T> {

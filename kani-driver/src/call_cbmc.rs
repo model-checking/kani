@@ -12,6 +12,7 @@ use std::fmt::Write;
 use std::path::Path;
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
+use strum_macros::Display;
 use tokio::process::Command as TokioCommand;
 
 use crate::args::common::Verbosity;
@@ -29,7 +30,7 @@ use crate::util::render_command;
 /// Note: Kissat was marginally better, but it is an external solver which could be more unstable.
 static DEFAULT_SOLVER: CbmcSolver = CbmcSolver::Cadical;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Display, PartialEq, Eq)]
 pub enum VerificationStatus {
     Success,
     Failure,
@@ -233,7 +234,6 @@ impl KaniSession {
             args.push("--no-pointer-check".into());
         }
         if self.args.checks.overflow_on() {
-            args.push("--float-overflow-check".into());
             args.push("--nan-check".into());
 
             // TODO: Implement conversion checks as an optional check.
@@ -310,9 +310,9 @@ impl VerificationResult {
     ///
     /// NOTE: We actually ignore the CBMC exit status, in favor of two checks:
     ///   1. Examining the actual results of CBMC properties.
-    ///       (CBMC will regularly report "failure" but that's just our cover checks.)
+    ///      (CBMC will regularly report "failure" but that's just our cover checks.)
     ///   2. Positively checking for the presence of results.
-    ///       (Do not mistake lack of results for success: report it as failure.)
+    ///      (Do not mistake lack of results for success: report it as failure.)
     fn from(
         output: VerificationOutput,
         should_panic: bool,
@@ -502,7 +502,7 @@ fn coverage_results_from_properties(properties: &[Property]) -> Option<CoverageR
         static COUNTER_RE: OnceLock<Regex> = OnceLock::new();
         COUNTER_RE.get_or_init(|| {
             Regex::new(
-                r#"^(?<kind>CounterIncrement|ExpressionUsed)\((?<counter_num>[0-9]+)\) \$(?<func_name>[^\$]+)\$ - (?<span>.+)"#,
+                r#"^(?<kind>VirtualCounter\(bcb)(?<counter_num>[0-9]+)\) \$(?<func_name>[^\$]+)\$ - (?<span>.+)"#,
             )
             .unwrap()
         })
@@ -512,20 +512,14 @@ fn coverage_results_from_properties(properties: &[Property]) -> Option<CoverageR
 
     for prop in cov_properties {
         let mut prop_processed = false;
-
         if let Some(captures) = counter_re.captures(&prop.description) {
-            let kind = &captures["kind"];
             let counter_num = &captures["counter_num"];
             let function = demangle(&captures["func_name"]).to_string();
             let status = prop.status;
             let span = captures["span"].to_string();
 
             let counter_id = counter_num.parse().unwrap();
-            let term = match kind {
-                "CounterIncrement" => CoverageTerm::Counter(counter_id),
-                "ExpressionUsed" => CoverageTerm::Expression(counter_id),
-                _ => unreachable!("counter kind could not be recognized: {:?}", kind),
-            };
+            let term = CoverageTerm::Counter(counter_id);
             let region = CoverageRegion::from_str(span);
 
             let cov_check = CoverageCheck::new(function, term, region, status);

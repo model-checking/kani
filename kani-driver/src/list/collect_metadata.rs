@@ -78,12 +78,12 @@ fn process_metadata(metadata: Vec<KaniMetadata>) -> ListMetadata {
 pub fn list_cargo(args: CargoListArgs, mut verify_opts: VerificationArgs) -> Result<()> {
     let quiet = args.common_args.quiet;
     verify_opts.common_args = args.common_args;
-    let session = KaniSession::new(verify_opts)?;
+    let mut session = KaniSession::new(verify_opts)?;
     if !quiet {
         print_kani_version(InvocationType::CargoKani(vec![]));
     }
 
-    let project = cargo_project(&session, false)?;
+    let project = cargo_project(&mut session, false)?;
     let list_metadata = process_metadata(project.metadata);
 
     output_list_results(list_metadata, args.format, quiet)

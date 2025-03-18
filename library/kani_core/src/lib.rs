@@ -396,6 +396,18 @@ macro_rules! kani_intrinsics {
             assert!(cond, "Safety check failed: {msg}");
         }
 
+        #[doc(hidden)]
+        #[allow(dead_code)]
+        #[kanitool::fn_marker = "SafetyCheckNoAssumeHook"]
+        #[inline(never)]
+        pub(crate) fn safety_check_no_assume(cond: bool, msg: &'static str) {
+            #[cfg(not(feature = "concrete_playback"))]
+            return kani_intrinsic();
+
+            #[cfg(feature = "concrete_playback")]
+            assert!(cond, "Safety check failed: {msg}");
+        }
+
         /// This should indicate that Kani does not support a certain operation.
         #[doc(hidden)]
         #[allow(dead_code)]
@@ -470,6 +482,12 @@ macro_rules! kani_intrinsics {
                 unsafe fn assignable(self) -> *mut Self::Inner {
                     self
                 }
+            }
+
+            /// Used to hold the bodies of automatically generated harnesses.
+            #[kanitool::fn_marker = "AutomaticHarnessIntrinsic"]
+            pub fn automatic_harness() {
+                super::kani_intrinsic()
             }
 
             /// A way to break the ownerhip rules. Only used by contracts where we can

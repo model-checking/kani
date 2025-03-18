@@ -18,9 +18,9 @@ use cbmc::goto_program::{
 };
 use cbmc::{InternString, InternedString, btree_string_map};
 use num::bigint::BigInt;
+use rustc_abi::{FieldsShape, TagEncoding, Variants};
 use rustc_middle::ty::{TyCtxt, TypingEnv, VtblEntry};
 use rustc_smir::rustc_internal;
-use rustc_target::abi::{FieldsShape, TagEncoding, Variants};
 use stable_mir::abi::{Primitive, Scalar, ValueAbi};
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{
@@ -667,7 +667,7 @@ impl GotocCtx<'_> {
                 assert!(operands.len() == 2);
                 let typ = self.codegen_ty_stable(res_ty);
                 let layout = self.layout_of_stable(res_ty);
-                assert!(layout.ty.is_unsafe_ptr());
+                assert!(layout.ty.is_raw_ptr());
                 let data = self.codegen_operand_stable(&operands[0]);
                 match pointee_ty.kind() {
                     TyKind::RigidTy(RigidTy::Slice(inner_ty)) => {
@@ -851,7 +851,7 @@ impl GotocCtx<'_> {
                             .bytes(),
                         Type::size_t(),
                     ),
-                    NullOp::UbChecks => Expr::c_false(),
+                    NullOp::ContractChecks | NullOp::UbChecks => Expr::c_false(),
                 }
             }
             Rvalue::ShallowInitBox(ref operand, content_ty) => {
@@ -964,10 +964,10 @@ impl GotocCtx<'_> {
     pub fn codegen_discriminant_field(&self, place: Expr, ty: Ty) -> Expr {
         let layout = self.layout_of_stable(ty);
         assert!(
-            matches!(&layout.variants, Variants::Multiple {
-                tag_encoding: TagEncoding::Direct,
-                ..
-            }),
+            matches!(
+                &layout.variants,
+                Variants::Multiple { tag_encoding: TagEncoding::Direct, .. }
+            ),
             "discriminant field (`case`) only exists for multiple variants and direct encoding"
         );
         let expr = if ty.kind().is_coroutine() {
@@ -1002,8 +1002,10 @@ impl GotocCtx<'_> {
                     // https://github.com/rust-lang/rust/blob/fee75fbe11b1fad5d93c723234178b2a329a3c03/compiler/rustc_codegen_ssa/src/mir/place.rs#L247
                     // See also the cranelift backend:
                     // https://github.com/rust-lang/rust/blob/05d22212e89588e7c443cc6b9bc0e4e02fdfbc8d/compiler/rustc_codegen_cranelift/src/discriminant.rs#L116
-                    let offset = match &layout.fields {
-                        FieldsShape::Arbitrary { offsets, .. } => offsets[0usize.into()],
+                    let offset: rustc_abi::Size = match &layout.fields {
+                        FieldsShape::Arbitrary { offsets, .. } => {
+                            offsets[rustc_abi::FieldIdx::from_usize(0)]
+                        }
                         _ => unreachable!("niche encoding must have arbitrary fields"),
                     };
 
@@ -1505,8 +1507,10 @@ impl GotocCtx<'_> {
             |ctx, var| {
                 // Build the vtable, using Rust's vtable_entries to determine field order
                 let vtable_entries = if let Some(principal) = trait_type.kind().trait_principal() {
-                    let trait_ref_binder = principal.with_self_ty(src_mir_type);
-                    ctx.tcx.vtable_entries(rustc_internal::internal(ctx.tcx, trait_ref_binder))
+                    let trait_ref =
+                        rustc_internal::internal(ctx.tcx, principal.with_self_ty(src_mir_type));
+                    let trait_ref = ctx.tcx.instantiate_bound_regions_with_erased(trait_ref);
+                    ctx.tcx.vtable_entries(trait_ref)
                 } else {
                     TyCtxt::COMMON_VTABLE_ENTRIES
                 };
