@@ -1,3 +1,20 @@
+Kani generated automatic harnesses for 1 function(s):
++-----------------+
+| Chosen Function |
++=================+
+| include::simple |
++-----------------+
+
+Kani did not generate automatic harnesses for 2 function(s).
+If you believe that the provided reason is incorrect and Kani should have generated an automatic harness, please comment on this issue: https://github.com/model-checking/kani/issues/3832
++------------------+--------------------------------+
+| Skipped Function | Reason for Skipping            |
++===================================================+
+| excluded::simple | Did not match provided filters |
+|------------------+--------------------------------|
+| include::generic | Generic Function               |
++------------------+--------------------------------+
+
 Autoharness: Checking function include::simple against all possible inputs...
 VERIFICATION:- SUCCESSFUL
 
@@ -11,13 +28,3 @@ Autoharness Summary:
 | include::simple   | #[kani::proof]            | Success             |
 +-------------------+---------------------------+---------------------+
 Complete - 1 successfully verified functions, 0 failures, 1 total.
-
-Kani did not generate automatic harnesses for the following functions.
-If you believe that the provided reason is incorrect and Kani should have generated an automatic harness, please comment on this issue: https://github.com/model-checking/kani/issues/3832
-+------------------+--------------------------------+
-| Skipped Function | Reason for Skipping            |
-+===================================================+
-| excluded::simple | Did not match provided filters |
-|------------------+--------------------------------|
-| include::generic | Generic Function               |
-+------------------+--------------------------------+

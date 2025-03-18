@@ -26,10 +26,10 @@ pub fn autoharness_cargo(args: CargoAutoharnessArgs) -> Result<()> {
         args.common_autoharness_args.exclude_function,
     );
     let project = project::cargo_project(&mut session, false)?;
-    let metadata = project.metadata.clone();
-    let res = verify_project(project, session);
-    print_skipped_fns(metadata);
-    res
+    if !session.args.common_args.quiet {
+        print_metadata(project.metadata.clone());
+    }
+    if session.args.only_codegen { Ok(()) } else { verify_project(project, session) }
 }
 
 pub fn autoharness_standalone(args: StandaloneAutoharnessArgs) -> Result<()> {
@@ -46,20 +46,24 @@ pub fn autoharness_standalone(args: StandaloneAutoharnessArgs) -> Result<()> {
     }
 
     let project = project::standalone_project(&args.input, args.crate_name, &session)?;
-    let metadata = project.metadata.clone();
-    let res = verify_project(project, session);
-    print_skipped_fns(metadata);
-    res
+    if !session.args.common_args.quiet {
+        print_metadata(project.metadata.clone());
+    }
+    if session.args.only_codegen { Ok(()) } else { verify_project(project, session) }
 }
 
-/// Print a table of the functions that we skipped and why.
-fn print_skipped_fns(metadata: Vec<KaniMetadata>) {
-    let mut skipped_fns = PrettyTable::new();
-    skipped_fns.set_header(vec!["Skipped Function", "Reason for Skipping"]);
+/// Print automatic harness metadata to the terminal.
+fn print_metadata(metadata: Vec<KaniMetadata>) {
+    let mut chosen_table = PrettyTable::new();
+    chosen_table.set_header(vec!["Chosen Function"]);
+
+    let mut skipped_table = PrettyTable::new();
+    skipped_table.set_header(vec!["Skipped Function", "Reason for Skipping"]);
 
     for md in metadata {
-        let skipped = md.autoharness_md.unwrap().skipped;
-        skipped_fns.add_rows(skipped.into_iter().filter_map(|(func, reason)| {
+        let autoharness_md = md.autoharness_md.unwrap();
+        chosen_table.add_rows(autoharness_md.chosen.into_iter().map(|func| vec![func]));
+        skipped_table.add_rows(autoharness_md.skipped.into_iter().filter_map(|(func, reason)| {
             match reason {
                 AutoHarnessSkipReason::MissingArbitraryImpl(ref args) => Some(vec![
                     func,
@@ -82,21 +86,37 @@ fn print_skipped_fns(metadata: Vec<KaniMetadata>) {
         }));
     }
 
-    if skipped_fns.is_empty() {
+    print_chosen_table(&mut chosen_table);
+    print_skipped_table(&mut skipped_table);
+}
+
+/// Print the table of functions for which we generated automatic harnesses.
+fn print_chosen_table(table: &mut PrettyTable) {
+    if table.is_empty() {
+        println!(
+            "\nChosen Functions: None. Kani did not generate automatic harnesses for any functions in the available crate(s)."
+        );
+        return;
+    }
+
+    println!("\nKani generated automatic harnesses for {} function(s):", table.row_count());
+    println!("{table}");
+}
+
+/// Print the table of functions for which we did not generate automatic harnesses.
+fn print_skipped_table(table: &mut PrettyTable) {
+    if table.is_empty() {
         println!(
             "\nSkipped Functions: None. Kani generated automatic harnesses for all functions in the available crate(s)."
         );
         return;
     }
 
-    println!(
-        "\nKani did not generate automatic harnesses for {} functions.",
-        skipped_fns.row_count()
-    );
+    println!("\nKani did not generate automatic harnesses for {} function(s).", table.row_count());
     println!(
         "If you believe that the provided reason is incorrect and Kani should have generated an automatic harness, please comment on this issue: https://github.com/model-checking/kani/issues/3832"
     );
-    println!("{skipped_fns}");
+    println!("{table}");
 }
 
 impl KaniSession {
