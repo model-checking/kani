@@ -58,8 +58,8 @@ fn print_skipped_fns(metadata: Vec<KaniMetadata>) {
     skipped_fns.set_header(vec!["Skipped Function", "Reason for Skipping"]);
 
     for md in metadata {
-        let skipped_md = md.autoharness_skipped_fns.unwrap();
-        skipped_fns.add_rows(skipped_md.into_iter().filter_map(|(func, reason)| {
+        let skipped = md.autoharness_md.unwrap().skipped;
+        skipped_fns.add_rows(skipped.into_iter().filter_map(|(func, reason)| {
             match reason {
                 AutoHarnessSkipReason::MissingArbitraryImpl(ref args) => Some(vec![
                     func,
@@ -89,7 +89,10 @@ fn print_skipped_fns(metadata: Vec<KaniMetadata>) {
         return;
     }
 
-    println!("\nKani did not generate automatic harnesses for the following functions.");
+    println!(
+        "\nKani did not generate automatic harnesses for {} functions.",
+        skipped_fns.row_count()
+    );
     println!(
         "If you believe that the provided reason is incorrect and Kani should have generated an automatic harness, please comment on this issue: https://github.com/model-checking/kani/issues/3832"
     );
