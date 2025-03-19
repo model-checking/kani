@@ -425,14 +425,14 @@ fn automatic_harness_partition(
             if !implements_arbitrary {
                 // Find the name of the argument by referencing var_debug_info.
                 // Note that enumerate() starts at 0, while StableMIR argument_index starts at 1, hence the idx+1.
-                let arg_debug_info = body
+                let arg_name = body
                     .var_debug_info
                     .iter()
                     .find(|var| {
                         var.argument_index.is_some_and(|arg_idx| idx + 1 == usize::from(arg_idx))
                     })
-                    .expect("Arguments should have corresponding var debug info");
-                problematic_args.push(arg_debug_info.name.to_string())
+                    .map_or("_".to_string(), |debug_info| debug_info.name.to_string());
+                problematic_args.push(arg_name)
             }
         }
         if !problematic_args.is_empty() {
