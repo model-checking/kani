@@ -7,7 +7,6 @@
 use proc_macro::TokenStream;
 use proc_macro_error2::abort_call_site;
 use quote::{format_ident, quote};
-use syn::parse_macro_input;
 use syn::spanned::Spanned;
 use syn::token::AndAnd;
 use syn::{BinOp, Block, Expr, ExprBinary, Ident, Stmt, visit_mut::VisitMut};
