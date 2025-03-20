@@ -4,11 +4,13 @@
 use std::str::FromStr;
 
 use crate::args::Timeout;
-use crate::args::autoharness_args::{CargoAutoharnessArgs, StandaloneAutoharnessArgs};
+use crate::args::autoharness_args::{
+    CargoAutoharnessArgs, CommonAutoharnessArgs, StandaloneAutoharnessArgs,
+};
 use crate::call_cbmc::VerificationStatus;
 use crate::call_single_file::to_rustc_arg;
 use crate::harness_runner::HarnessResult;
-use crate::project::{standalone_project, std_project};
+use crate::project::{Project, standalone_project, std_project};
 use crate::session::KaniSession;
 use crate::{InvocationType, print_kani_version, project, verify_project};
 use anyhow::Result;
@@ -20,30 +22,18 @@ const LOOP_UNWIND_DEFAULT: u32 = 20;
 
 pub fn autoharness_cargo(args: CargoAutoharnessArgs) -> Result<()> {
     let mut session = KaniSession::new(args.verify_opts)?;
-    session.enable_autoharness();
-    session.add_default_bounds();
-    session.add_auto_harness_args(
-        args.common_autoharness_args.include_function,
-        args.common_autoharness_args.exclude_function,
-    );
+    setup_session(&mut session, &args.common_autoharness_args);
+
     if !session.args.common_args.quiet {
         print_kani_version(InvocationType::CargoKani(vec![]));
     }
     let project = project::cargo_project(&mut session, false)?;
-    if !session.args.common_args.quiet {
-        print_metadata(project.metadata.clone());
-    }
-    if session.args.only_codegen { Ok(()) } else { verify_project(project, session) }
+    postprocess_project(project, session)
 }
 
 pub fn autoharness_standalone(args: StandaloneAutoharnessArgs) -> Result<()> {
     let mut session = KaniSession::new(args.verify_opts)?;
-    session.enable_autoharness();
-    session.add_default_bounds();
-    session.add_auto_harness_args(
-        args.common_autoharness_args.include_function,
-        args.common_autoharness_args.exclude_function,
-    );
+    setup_session(&mut session, &args.common_autoharness_args);
 
     if !session.args.common_args.quiet {
         print_kani_version(InvocationType::Standalone);
@@ -55,14 +45,32 @@ pub fn autoharness_standalone(args: StandaloneAutoharnessArgs) -> Result<()> {
         standalone_project(&args.input, args.crate_name, &session)?
     };
 
+    postprocess_project(project, session)
+}
+
+/// Execute autoharness-specific KaniSession configuration.
+fn setup_session(session: &mut KaniSession, common_autoharness_args: &CommonAutoharnessArgs) {
+    session.enable_autoharness();
+    session.add_default_bounds();
+    session.add_auto_harness_args(
+        &common_autoharness_args.include_function,
+        &common_autoharness_args.exclude_function,
+    );
+}
+
+/// After generating the automatic harnesses, postprocess metadata and run verification.
+fn postprocess_project(
+    project: Project,
+    session: KaniSession,
+) -> Result<()> {
     if !session.args.common_args.quiet {
-        print_metadata(project.metadata.clone());
+        print_autoharness_metadata(project.metadata.clone());
     }
     if session.args.only_codegen { Ok(()) } else { verify_project(project, session) }
 }
 
 /// Print automatic harness metadata to the terminal.
-fn print_metadata(metadata: Vec<KaniMetadata>) {
+fn print_autoharness_metadata(metadata: Vec<KaniMetadata>) {
     let mut chosen_table = PrettyTable::new();
     chosen_table.set_header(vec!["Chosen Function"]);
 
@@ -135,7 +143,7 @@ impl KaniSession {
     }
 
     /// Add the compiler arguments specific to the `autoharness` subcommand.
-    pub fn add_auto_harness_args(&mut self, included: Vec<String>, excluded: Vec<String>) {
+    pub fn add_auto_harness_args(&mut self, included: &[String], excluded: &[String]) {
         for func in included {
             self.pkg_args
                 .push(to_rustc_arg(vec![format!("--autoharness-include-function {}", func)]));
