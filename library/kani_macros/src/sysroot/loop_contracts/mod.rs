@@ -99,14 +99,14 @@ fn transform_function_calls(
 
     // Generate declarations block
     let declarations: Vec<Stmt> =
-        newreplace.iter().map(|(call, var)| syn::parse_quote!(let mut #var = #call;)).collect();
+        newreplace.iter().map(|(call, var)| syn::parse_quote!(let mut #var = #call.clone();)).collect();
     let declarations_block: Block = syn::parse_quote!({
         #(#declarations)*
     });
 
     // Generate assignments block
     let assignments: Vec<Stmt> =
-        newreplace.into_iter().map(|(call, var)| syn::parse_quote!(#var = #call;)).collect();
+        newreplace.into_iter().map(|(call, var)| syn::parse_quote!(#var = #call.clone();)).collect();
     let assignments_block: Block = syn::parse_quote!({
         #(#assignments)*
     });
