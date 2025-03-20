@@ -64,6 +64,13 @@ impl ValidateArgs for CargoListArgs {
             ));
         }
 
+        if self.format == Format::Pretty && self.common_args.quiet {
+            return Err(Error::raw(
+                ErrorKind::ArgumentConflict,
+                "The `--quiet` flag is not compatible with the `pretty` format, since `pretty` prints to the terminal. Either specify a different format or don't pass `--quiet`.",
+            ));
+        }
+
         Ok(())
     }
 }
@@ -75,6 +82,13 @@ impl ValidateArgs for StandaloneListArgs {
             return Err(Error::raw(
                 ErrorKind::MissingRequiredArgument,
                 "The `list` subcommand is unstable and requires -Z list",
+            ));
+        }
+
+        if self.format == Format::Pretty && self.common_args.quiet {
+            return Err(Error::raw(
+                ErrorKind::ArgumentConflict,
+                "The `--quiet` flag is not compatible with the `pretty` format, since `pretty` prints to the terminal. Either specify a different format or don't pass `--quiet`.",
             ));
         }
 

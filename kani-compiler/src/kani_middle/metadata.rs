@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use crate::kani_middle::attributes::{KaniAttributes, test_harness_name};
+use crate::kani_middle::codegen_units::Harness;
 use crate::kani_middle::{SourceLocation, stable_fn_def};
 use kani_metadata::ContractedFunction;
 use kani_metadata::{ArtifactType, HarnessAttributes, HarnessKind, HarnessMetadata};
@@ -47,7 +48,10 @@ pub fn gen_proof_metadata(tcx: TyCtxt, instance: Instance, base_name: &Path) -> 
 ///
 /// For each function with contracts (or that is a target of a contract harness),
 /// construct a `ContractedFunction` object for it.
-pub fn gen_contracts_metadata(tcx: TyCtxt) -> Vec<ContractedFunction> {
+pub fn gen_contracts_metadata(
+    tcx: TyCtxt,
+    harness_info: &HashMap<Harness, HarnessMetadata>,
+) -> Vec<ContractedFunction> {
     // We work with `stable_mir::CrateItem` instead of `stable_mir::Instance` to include generic items
     let crate_items: CrateItems = stable_mir::all_local_items();
 
@@ -61,8 +65,8 @@ pub fn gen_contracts_metadata(tcx: TyCtxt) -> Vec<ContractedFunction> {
         if attributes.has_contract() {
             fn_to_data
                 .insert(item.def_id(), ContractedFunction { function, file, harnesses: vec![] });
-        } else if let Some((target_name, internal_def_id, _)) =
-            attributes.interpret_for_contract_attribute()
+        // This logic finds manual contract harnesses only (automatic harnesses are a Kani intrinsic, not crate items annotated with the proof_for_contract attribute).
+        } else if let Some((_, internal_def_id, _)) = attributes.interpret_for_contract_attribute()
         {
             let target_def_id = stable_fn_def(tcx, internal_def_id)
                 .expect("The target of a proof for contract should be a function definition")
@@ -73,12 +77,32 @@ pub fn gen_contracts_metadata(tcx: TyCtxt) -> Vec<ContractedFunction> {
                 fn_to_data.insert(
                     target_def_id,
                     ContractedFunction {
-                        function: target_name.to_string(),
+                        // Note that we use the item's fully qualified-name, rather than the target name specified in the attribute.
+                        // This is necessary for the automatic contract harness lookup, see below.
+                        function: item.name(),
                         file,
                         harnesses: vec![function],
                     },
                 );
             }
+        }
+    }
+
+    // Find automatically generated contract harnesses (if the `autoharness` subcommand is running)
+    for (harness, metadata) in harness_info {
+        if !metadata.is_automatically_generated {
+            continue;
+        }
+        if let HarnessKind::ProofForContract { target_fn } = &metadata.attributes.kind {
+            // FIXME: This is a bit hacky. We can't resolve the target_fn to a DefId because we need somewhere to start the name resolution from.
+            // For a manual harness, we could just start from the harness, but since automatic harnesses are Kani intrinsics, we can't resolve the target starting from them.
+            // Instead, we rely on the fact that the ContractedFunction objects store the function's fully qualified name,
+            // and that `gen_automatic_proof_metadata` uses the fully qualified name as well.
+            // Once we implement multiple automatic harnesses for a single function, we will have to revise the HarnessMetadata anyway,
+            // and then we can revisit the idea of storing the target_fn's DefId somewhere.
+            let (_, target_cf) =
+                fn_to_data.iter_mut().find(|(_, cf)| &cf.function == target_fn).unwrap();
+            target_cf.harnesses.push(harness.name());
         }
     }
 

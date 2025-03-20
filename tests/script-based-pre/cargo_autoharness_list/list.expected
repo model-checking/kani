@@ -1,0 +1,26 @@
+Kani generated automatic harnesses for 3 function(s):
++---------------------------+
+| Chosen Function           |
++===========================+
+| f_u8                      |
+|---------------------------|
+| has_recursion_gcd         |
+|---------------------------|
+| verify::has_recursion_gcd |
++---------------------------+
+
+Skipped Functions: None. Kani generated automatic harnesses for all functions in the available crate(s).
+
+Contracts:
++-------+---------------------------+-----------------------------------------------------------------------------+
+|       | Function                  | Contract Harnesses (#[kani::proof_for_contract])                            |
++=================================================================================================================+
+|       | has_recursion_gcd         | my_harness, my_harness_2, kani::internal::automatic_harness                 |
+|-------+---------------------------+-----------------------------------------------------------------------------|
+|       | verify::has_recursion_gcd | verify::my_harness, verify::my_harness_2, kani::internal::automatic_harness |
+|-------+---------------------------+-----------------------------------------------------------------------------|
+| Total | 2                         | 6                                                                           |
++-------+---------------------------+-----------------------------------------------------------------------------+
+
+Standard Harnesses (#[kani::proof]):
+1. f_u8
