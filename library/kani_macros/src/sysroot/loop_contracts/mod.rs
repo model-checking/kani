@@ -170,12 +170,21 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     // expr of the loop invariant
     let mut inv_expr: Expr = syn::parse(attr).unwrap();
-    // adding remember variables
-    let mut var_prefix: String = "__kani_remember_var".to_owned();
-    var_prefix.push_str(&loop_id);
+
+    // adding old variables
+    let mut old_var_prefix: String = "__kani_old_var".to_owned();
+    old_var_prefix.push_str(&loop_id);
+    let replace_old: TransformationResult =
+        transform_function_calls(inv_expr.clone(), "old", old_var_prefix);
+    inv_expr = replace_old.transformed_expr.clone();
+    let old_decl_stms = replace_old.declarations_block.stmts.clone();
+
+    // adding prev variables
+    let mut prev_var_prefix: String = "__kani_prev_var".to_owned();
+    prev_var_prefix.push_str(&loop_id);
     let transform_inv: TransformationResult =
-        transform_function_calls(inv_expr.clone(), "old", var_prefix);
-    let has_old = !transform_inv.declarations_block.stmts.is_empty();
+        transform_function_calls(inv_expr.clone(), "prev", prev_var_prefix);
+    let has_prev = !transform_inv.declarations_block.stmts.is_empty();
     let decl_stms = transform_inv.declarations_block.stmts.clone();
     let mut assign_stms = transform_inv.assignments_block.stmts.clone();
     let (mut loop_body, loop_guard) = match loop_stmt {
@@ -191,7 +200,7 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut loop_body_closure_name: String = "__kani_loop_body_closure".to_owned();
     loop_body_closure_name.push_str(&loop_id);
     let loop_body_closure = format_ident!("{}", loop_body_closure_name);
-    if has_old {
+    if has_prev {
         inv_expr = transform_inv.transformed_expr.clone();
         match loop_stmt {
             Stmt::Expr(ref mut e, _) => match e {
@@ -234,14 +243,16 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
         ),
     }
 
-    if has_old {
+    if has_prev {
         quote!(
         {
+        #(#old_decl_stms)*
         assert!(#loop_guard);
         #(#decl_stms)*
         let mut #loop_body_closure = ||
         #loop_body;
         #loop_body_closure ();
+        assert!(#inv_expr);
         // Dummy function used to force the compiler to capture the environment.
         // We cannot call closures inside constant functions.
         // This function gets replaced by `kani::internal::call_closure`.
@@ -256,6 +267,7 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
     } else {
         quote!(
         {
+        #(#old_decl_stms)*
         // Dummy function used to force the compiler to capture the environment.
         // We cannot call closures inside constant functions.
         // This function gets replaced by `kani::internal::call_closure`.

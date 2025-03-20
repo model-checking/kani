@@ -10,15 +10,15 @@
 
 #[kani::proof]
 pub fn loop_with_old() {
-    let mut i = 100;
-    let mut j = 100;
-    #[kani::loop_invariant((i >= 2) && (i <= 100) && (i % 2 == 0) && (j == 2*i-100) && (old(i) == i + 2) && (old(j) == j + 4) && (old(i-j) == i-j-2) )]
-    while i > 2 {
-        if i == 1 {
-            break;
+    let mut x: u8 = kani::any_where(|v| *v < 10);
+    let mut y: u8 = kani::any();
+    let mut i = 0;
+    #[kani::loop_invariant( (i<=5) && (x <= old(x) + i) && (old(x) + i == old(i) + x))]
+    while i < 5 {
+        if i == 0 {
+            y = x
         }
-        i = i - 2;
-        j = j - 4
+        x += 1;
+        i += 1;
     }
-    assert!(i == 2);
 }
