@@ -6,9 +6,9 @@ use kani_metadata::ContractedFunction;
 use std::collections::{BTreeMap, BTreeSet};
 
 pub mod collect_metadata;
-mod output;
+pub mod output;
 
-struct ListMetadata {
+pub struct ListMetadata {
     // Files mapped to their #[kani::proof] harnesses
     standard_harnesses: BTreeMap<String, BTreeSet<String>>,
     // Total number of #[kani::proof] harnesses

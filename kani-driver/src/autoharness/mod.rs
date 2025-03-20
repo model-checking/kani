@@ -10,6 +10,8 @@ use crate::args::autoharness_args::{
 use crate::call_cbmc::VerificationStatus;
 use crate::call_single_file::to_rustc_arg;
 use crate::harness_runner::HarnessResult;
+use crate::list::collect_metadata::process_metadata;
+use crate::list::output::output_list_results;
 use crate::project::{Project, standalone_project, std_project};
 use crate::session::KaniSession;
 use crate::{InvocationType, print_kani_version, project, verify_project};
@@ -28,7 +30,7 @@ pub fn autoharness_cargo(args: CargoAutoharnessArgs) -> Result<()> {
         print_kani_version(InvocationType::CargoKani(vec![]));
     }
     let project = project::cargo_project(&mut session, false)?;
-    postprocess_project(project, session)
+    postprocess_project(project, session, args.common_autoharness_args)
 }
 
 pub fn autoharness_standalone(args: StandaloneAutoharnessArgs) -> Result<()> {
@@ -45,7 +47,7 @@ pub fn autoharness_standalone(args: StandaloneAutoharnessArgs) -> Result<()> {
         standalone_project(&args.input, args.crate_name, &session)?
     };
 
-    postprocess_project(project, session)
+    postprocess_project(project, session, args.common_autoharness_args)
 }
 
 /// Execute autoharness-specific KaniSession configuration.
@@ -62,9 +64,18 @@ fn setup_session(session: &mut KaniSession, common_autoharness_args: &CommonAuto
 fn postprocess_project(
     project: Project,
     session: KaniSession,
+    common_autoharness_args: CommonAutoharnessArgs,
 ) -> Result<()> {
     if !session.args.common_args.quiet {
         print_autoharness_metadata(project.metadata.clone());
+    }
+    if common_autoharness_args.list {
+        let list_metadata = process_metadata(project.metadata.clone());
+        return output_list_results(
+            list_metadata,
+            common_autoharness_args.format,
+            session.args.common_args.quiet,
+        );
     }
     if session.args.only_codegen { Ok(()) } else { verify_project(project, session) }
 }

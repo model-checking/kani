@@ -4,6 +4,7 @@
 
 use std::path::PathBuf;
 
+use crate::args::list_args::Format;
 use crate::args::{ValidateArgs, VerificationArgs, validate_std_path};
 use clap::{Error, Parser, error::ErrorKind};
 use kani_metadata::UnstableFeature;
@@ -29,6 +30,13 @@ pub struct CommonAutoharnessArgs {
     pub exclude_function: Vec<String>,
     // TODO: It would be nice if we could borrow --exact here from VerificationArgs to differentiate between partial/exact matches,
     // like --harnesses does. Sharing arguments with VerificationArgs doesn't work with our current structure, though.
+    /// Run the `list` subcommand after generating the automatic harnesses. Requires -Z list. Note that this option implies --only-codegen.
+    #[arg(long)]
+    pub list: bool,
+
+    /// The format of the `list` output. Requires --list.
+    #[arg(long, default_value = "pretty", requires = "list")]
+    pub format: Format,
 }
 
 /// Automatically verify functions in a crate.
@@ -76,6 +84,24 @@ impl ValidateArgs for CargoAutoharnessArgs {
             ));
         }
 
+        if self.common_autoharness_args.list
+            && !self.verify_opts.common_args.unstable_features.contains(UnstableFeature::List)
+        {
+            return Err(Error::raw(
+                ErrorKind::MissingRequiredArgument,
+                format!("The `list` feature is unstable and requires -Z {}", UnstableFeature::List),
+            ));
+        }
+
+        if self.common_autoharness_args.format == Format::Pretty
+            && self.verify_opts.common_args.quiet
+        {
+            return Err(Error::raw(
+                ErrorKind::ArgumentConflict,
+                "The `--quiet` flag is not compatible with the `pretty` format, since `pretty` prints to the terminal. Either specify a different format or don't pass `--quiet`.",
+            ));
+        }
+
         if self
             .verify_opts
             .common_args
@@ -102,6 +128,24 @@ impl ValidateArgs for StandaloneAutoharnessArgs {
                     "The `autoharness` subcommand is unstable and requires -Z {}",
                     UnstableFeature::Autoharness
                 ),
+            ));
+        }
+
+        if self.common_autoharness_args.list
+            && !self.verify_opts.common_args.unstable_features.contains(UnstableFeature::List)
+        {
+            return Err(Error::raw(
+                ErrorKind::MissingRequiredArgument,
+                format!("The `list` feature is unstable and requires -Z {}", UnstableFeature::List),
+            ));
+        }
+
+        if self.common_autoharness_args.format == Format::Pretty
+            && self.verify_opts.common_args.quiet
+        {
+            return Err(Error::raw(
+                ErrorKind::ArgumentConflict,
+                "The `--quiet` flag is not compatible with the `pretty` format, since `pretty` prints to the terminal. Either specify a different format or don't pass `--quiet`.",
             ));
         }
 
