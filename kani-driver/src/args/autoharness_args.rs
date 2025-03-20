@@ -4,7 +4,7 @@
 
 use std::path::PathBuf;
 
-use crate::args::{ValidateArgs, VerificationArgs};
+use crate::args::{ValidateArgs, VerificationArgs, validate_std_path};
 use clap::{Error, Parser, error::ErrorKind};
 use kani_metadata::UnstableFeature;
 
@@ -54,6 +54,11 @@ pub struct StandaloneAutoharnessArgs {
     #[command(flatten)]
     pub common_autoharness_args: CommonAutoharnessArgs,
 
+    /// Pass this flag to run the `autoharness` subcommand on the standard library.
+    /// Ensure that the provided `input` is the `library` folder.
+    #[arg(long)]
+    pub std: bool,
+
     #[command(flatten)]
     pub verify_opts: VerificationArgs,
 }
@@ -99,7 +104,10 @@ impl ValidateArgs for StandaloneAutoharnessArgs {
                 ),
             ));
         }
-        if !self.input.is_file() {
+
+        if self.std {
+            validate_std_path(&self.input)?;
+        } else if !self.input.is_file() {
             return Err(Error::raw(
                 ErrorKind::InvalidValue,
                 format!(

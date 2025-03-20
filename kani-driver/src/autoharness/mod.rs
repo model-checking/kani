@@ -8,6 +8,7 @@ use crate::args::autoharness_args::{CargoAutoharnessArgs, StandaloneAutoharnessA
 use crate::call_cbmc::VerificationStatus;
 use crate::call_single_file::to_rustc_arg;
 use crate::harness_runner::HarnessResult;
+use crate::project::{standalone_project, std_project};
 use crate::session::KaniSession;
 use crate::{InvocationType, print_kani_version, project, verify_project};
 use anyhow::Result;
@@ -25,11 +26,14 @@ pub fn autoharness_cargo(args: CargoAutoharnessArgs) -> Result<()> {
         args.common_autoharness_args.include_function,
         args.common_autoharness_args.exclude_function,
     );
+    if !session.args.common_args.quiet {
+        print_kani_version(InvocationType::CargoKani(vec![]));
+    }
     let project = project::cargo_project(&mut session, false)?;
-    let metadata = project.metadata.clone();
-    let res = verify_project(project, session);
-    print_skipped_fns(metadata);
-    res
+    if !session.args.common_args.quiet {
+        print_metadata(project.metadata.clone());
+    }
+    if session.args.only_codegen { Ok(()) } else { verify_project(project, session) }
 }
 
 pub fn autoharness_standalone(args: StandaloneAutoharnessArgs) -> Result<()> {
@@ -45,46 +49,83 @@ pub fn autoharness_standalone(args: StandaloneAutoharnessArgs) -> Result<()> {
         print_kani_version(InvocationType::Standalone);
     }
 
-    let project = project::standalone_project(&args.input, args.crate_name, &session)?;
-    let metadata = project.metadata.clone();
-    let res = verify_project(project, session);
-    print_skipped_fns(metadata);
-    res
+    let project = if args.std {
+        std_project(&args.input, &session)?
+    } else {
+        standalone_project(&args.input, args.crate_name, &session)?
+    };
+
+    if !session.args.common_args.quiet {
+        print_metadata(project.metadata.clone());
+    }
+    if session.args.only_codegen { Ok(()) } else { verify_project(project, session) }
 }
 
-/// Print a table of the functions that we skipped and why.
-fn print_skipped_fns(metadata: Vec<KaniMetadata>) {
-    let mut skipped_fns = PrettyTable::new();
-    skipped_fns.set_header(vec!["Skipped Function", "Reason for Skipping"]);
+/// Print automatic harness metadata to the terminal.
+fn print_metadata(metadata: Vec<KaniMetadata>) {
+    let mut chosen_table = PrettyTable::new();
+    chosen_table.set_header(vec!["Chosen Function"]);
+
+    let mut skipped_table = PrettyTable::new();
+    skipped_table.set_header(vec!["Skipped Function", "Reason for Skipping"]);
 
     for md in metadata {
-        let skipped_md = md.autoharness_skipped_fns.unwrap();
-        skipped_fns.add_rows(skipped_md.into_iter().filter_map(|(func, reason)| match reason {
-            AutoHarnessSkipReason::MissingArbitraryImpl(ref args) => {
-                Some(vec![func, format!("{}: {}", reason, args.join(", "))])
+        let autoharness_md = md.autoharness_md.unwrap();
+        chosen_table.add_rows(autoharness_md.chosen.into_iter().map(|func| vec![func]));
+        skipped_table.add_rows(autoharness_md.skipped.into_iter().filter_map(|(func, reason)| {
+            match reason {
+                AutoHarnessSkipReason::MissingArbitraryImpl(ref args) => Some(vec![
+                    func,
+                    format!(
+                        "{reason} {}",
+                        args.iter()
+                            .map(|(name, typ)| format!("{}: {}", name, typ))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ),
+                ]),
+                AutoHarnessSkipReason::GenericFn
+                | AutoHarnessSkipReason::NoBody
+                | AutoHarnessSkipReason::UserFilter => Some(vec![func, reason.to_string()]),
+                // We don't report Kani implementations to the user to avoid exposing Kani functions we insert during instrumentation.
+                // For those we don't insert during instrumentation that are in this category (manual harnesses or Kani trait implementations),
+                // it should be obvious that we wouldn't generate harnesses, so reporting those functions as "skipped" is unlikely to be useful.
+                AutoHarnessSkipReason::KaniImpl => None,
             }
-            AutoHarnessSkipReason::GenericFn
-            | AutoHarnessSkipReason::NoBody
-            | AutoHarnessSkipReason::UserFilter => Some(vec![func, reason.to_string()]),
-            // We don't report Kani implementations to the user to avoid exposing Kani functions we insert during instrumentation.
-            // For those we don't insert during instrumentation that are in this category (manual harnesses or Kani trait implementations),
-            // it should be obvious that we wouldn't generate harnesses, so reporting those functions as "skipped" is unlikely to be useful.
-            AutoHarnessSkipReason::KaniImpl => None,
         }));
     }
 
-    if skipped_fns.is_empty() {
+    print_chosen_table(&mut chosen_table);
+    print_skipped_table(&mut skipped_table);
+}
+
+/// Print the table of functions for which we generated automatic harnesses.
+fn print_chosen_table(table: &mut PrettyTable) {
+    if table.is_empty() {
+        println!(
+            "\nChosen Functions: None. Kani did not generate automatic harnesses for any functions in the available crate(s)."
+        );
+        return;
+    }
+
+    println!("\nKani generated automatic harnesses for {} function(s):", table.row_count());
+    println!("{table}");
+}
+
+/// Print the table of functions for which we did not generate automatic harnesses.
+fn print_skipped_table(table: &mut PrettyTable) {
+    if table.is_empty() {
         println!(
             "\nSkipped Functions: None. Kani generated automatic harnesses for all functions in the available crate(s)."
         );
         return;
     }
 
-    println!("\nKani did not generate automatic harnesses for the following functions.");
+    println!("\nKani did not generate automatic harnesses for {} function(s).", table.row_count());
     println!(
         "If you believe that the provided reason is incorrect and Kani should have generated an automatic harness, please comment on this issue: https://github.com/model-checking/kani/issues/3832"
     );
-    println!("{skipped_fns}");
+    println!("{table}");
 }
 
 impl KaniSession {

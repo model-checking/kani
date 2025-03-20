@@ -1,3 +1,20 @@
+Kani generated automatic harnesses for 5 function(s):
++--------------------------------+
+| Chosen Function                |
++================================+
+| should_pass::div               |
+|--------------------------------|
+| should_pass::has_recursion_gcd |
+|--------------------------------|
+| should_pass::has_loop_contract |
+|--------------------------------|
+| should_pass::unchecked_mul     |
+|--------------------------------|
+| should_fail::max               |
++--------------------------------+
+
+Skipped Functions: None. Kani generated automatic harnesses for all functions in the available crate(s).
+
 Autoharness: Checking function should_fail::max's contract against all possible inputs...
 assertion\
 	 - Status: FAILURE\
@@ -40,5 +57,3 @@ Autoharness Summary:
 Note that `kani autoharness` sets default --harness-timeout of 60s and --default-unwind of 20.
 If verification failed because of timing out or too low of an unwinding bound, try passing larger values for these arguments (or, if possible, writing a loop contract).
 Complete - 4 successfully verified functions, 1 failures, 5 total.
-
-Skipped Functions: None. Kani generated automatic harnesses for all functions in the available crate(s).
