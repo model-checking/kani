@@ -36,7 +36,7 @@ use std::sync::OnceLock;
 use tracing::debug;
 
 /// An identifier for the harness function.
-type Harness = Instance;
+pub type Harness = Instance;
 
 /// A set of stubs.
 pub type Stubs = HashMap<FnDef, FnDef>;
@@ -166,7 +166,7 @@ impl CodegenUnits {
             proof_harnesses,
             unsupported_features: vec![],
             test_harnesses,
-            contracted_functions: gen_contracts_metadata(tcx),
+            contracted_functions: gen_contracts_metadata(tcx, &self.harness_info),
             autoharness_md: AUTOHARNESS_MD.get().cloned(),
         }
     }
