@@ -381,7 +381,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 if anonymous {
                     let alloc = def.eval_initializer().unwrap();
                     let name = format!("{}::{alloc_id:?}", self.full_crate_name());
-                    self.codegen_const_allocation(&alloc, Some(name), loc)
+                    self.codegen_nested_static_allocation(&alloc, Some(name), loc)
                 } else {
                     self.codegen_static_pointer(def)
                 }
@@ -501,6 +501,19 @@ impl<'tcx> GotocCtx<'tcx> {
 
         let mem_place = self.symbol_table.lookup(alloc_name).unwrap().to_expr();
         mem_place.address_of()
+    }
+
+    /// Generate an expression that represents the address of a nested static allocation.
+    fn codegen_nested_static_allocation(
+        &mut self,
+        alloc: &Allocation,
+        name: Option<String>,
+        loc: Location,
+    ) -> Expr {
+        // The memory behind this allocation isn't constant, but codegen_alloc_in_memory (which codegen_const_allocation calls)
+        // uses alloc's mutability field to set the const-ness of the allocation in CBMC's symbol table,
+        // so we can reuse the code and without worrying that the allocation is set as immutable.
+        self.codegen_const_allocation(alloc, name, loc)
     }
 
     /// Insert an allocation into the goto symbol table, and generate an init value.
