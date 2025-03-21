@@ -372,7 +372,20 @@ impl<'tcx> GotocCtx<'tcx> {
                 // We want to return the function pointer (not to be confused with function item)
                 self.codegen_func_expr(instance, loc).address_of()
             }
-            GlobalAlloc::Static(def) => self.codegen_static_pointer(def),
+            GlobalAlloc::Static(def) => {
+                let int_def_id = rustc_internal::internal(self.tcx, def.def_id());
+                let anonymous = match self.tcx.def_kind(int_def_id) {
+                    rustc_hir::def::DefKind::Static { nested, .. } => nested,
+                    _ => false,
+                };
+                if anonymous {
+                    let alloc = def.eval_initializer().unwrap();
+                    let name = format!("{}::{alloc_id:?}", self.full_crate_name());
+                    self.codegen_const_allocation(&alloc, Some(name), loc)
+                } else {
+                    self.codegen_static_pointer(def)
+                }
+            }
             GlobalAlloc::Memory(alloc) => {
                 // Full (mangled) crate name added so that allocations from different
                 // crates do not conflict. The name alone is insufficient because Rust

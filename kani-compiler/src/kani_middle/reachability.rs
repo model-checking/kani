@@ -219,20 +219,30 @@ impl<'tcx, 'a> MonoItemsCollector<'tcx, 'a> {
         let _guard = debug_span!("visit_static", ?def).entered();
         let mut next_items = vec![];
 
-        // Collect drop function.
-        let static_ty = def.ty();
-        let instance = Instance::resolve_drop_in_place(static_ty);
-        next_items
-            .push(CollectedItem { item: instance.into(), reason: CollectionReason::StaticDrop });
+        // Collect drop function, unless it's an anonymous static.
+        let int_def_id = rustc_internal::internal(self.tcx, def.def_id());
+        let anonymous = match self.tcx.def_kind(int_def_id) {
+            rustc_hir::def::DefKind::Static { nested, .. } => nested,
+            _ => false,
+        };
+        if !anonymous {
+            let static_ty = def.ty();
+            let instance = Instance::resolve_drop_in_place(static_ty);
+            next_items.push(CollectedItem {
+                item: instance.into(),
+                reason: CollectionReason::StaticDrop,
+            });
 
-        // Collect initialization.
-        let alloc = def.eval_initializer().unwrap();
-        for (_, prov) in alloc.provenance.ptrs {
-            next_items.extend(
-                collect_alloc_items(prov.0)
-                    .into_iter()
-                    .map(|item| CollectedItem { item, reason: CollectionReason::Static }),
-            );
+            // Collect initialization.
+            let alloc = def.eval_initializer().unwrap();
+            debug!(?alloc, "visit_static: initializer");
+            for (_, prov) in alloc.provenance.ptrs {
+                next_items.extend(
+                    collect_alloc_items(self.tcx, prov.0)
+                        .into_iter()
+                        .map(|item| CollectedItem { item, reason: CollectionReason::Static }),
+                );
+            }
         }
 
         next_items
@@ -331,7 +341,7 @@ impl MonoItemsFnCollector<'_, '_> {
         debug!(?alloc, "collect_allocation");
         for (_, id) in &alloc.provenance.ptrs {
             self.collected.extend(
-                collect_alloc_items(id.0)
+                collect_alloc_items(self.tcx, id.0)
                     .into_iter()
                     .map(|item| CollectedItem { item, reason: CollectionReason::Static }),
             )
@@ -520,27 +530,43 @@ fn should_codegen_locally(instance: &Instance) -> bool {
     !instance.is_foreign_item()
 }
 
-fn collect_alloc_items(alloc_id: AllocId) -> Vec<MonoItem> {
+fn collect_alloc_items(tcx: TyCtxt, alloc_id: AllocId) -> Vec<MonoItem> {
     trace!(?alloc_id, "collect_alloc_items");
     let mut items = vec![];
     match GlobalAlloc::from(alloc_id) {
         GlobalAlloc::Static(def) => {
-            // This differ from rustc's collector since rustc does not include static from
-            // upstream crates.
-            let instance = Instance::try_from(CrateItem::from(def)).unwrap();
-            should_codegen_locally(&instance).then(|| items.push(MonoItem::from(def)));
+            let int_def_id = rustc_internal::internal(tcx, def.def_id());
+            let anonymous = match tcx.def_kind(int_def_id) {
+                rustc_hir::def::DefKind::Static { nested, .. } => nested,
+                _ => false,
+            };
+            if anonymous {
+                let alloc = def.eval_initializer().unwrap();
+                items.extend(
+                    alloc
+                        .provenance
+                        .ptrs
+                        .iter()
+                        .flat_map(|(_, prov)| collect_alloc_items(tcx, prov.0)),
+                );
+            } else {
+                // This differ from rustc's collector since rustc does not include static from
+                // upstream crates.
+                let instance = Instance::try_from(CrateItem::from(def)).unwrap();
+                should_codegen_locally(&instance).then(|| items.push(MonoItem::from(def)));
+            }
         }
         GlobalAlloc::Function(instance) => {
             should_codegen_locally(&instance).then(|| items.push(MonoItem::from(instance)));
         }
         GlobalAlloc::Memory(alloc) => {
             items.extend(
-                alloc.provenance.ptrs.iter().flat_map(|(_, prov)| collect_alloc_items(prov.0)),
+                alloc.provenance.ptrs.iter().flat_map(|(_, prov)| collect_alloc_items(tcx, prov.0)),
             );
         }
         vtable_alloc @ GlobalAlloc::VTable(..) => {
             let vtable_id = vtable_alloc.vtable_allocation().unwrap();
-            items = collect_alloc_items(vtable_id);
+            items = collect_alloc_items(tcx, vtable_id);
         }
     };
     items
