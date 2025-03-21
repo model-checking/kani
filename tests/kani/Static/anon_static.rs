@@ -6,6 +6,7 @@
 
 mod example_1 {
     // FOO contains a pointer to the anonymous nested static alloc2.
+    // The MIR is:
     // alloc1 (static: FOO, size: 8, align: 8) {
     //     ╾───────alloc2────────╼                         │ ╾──────╼
     // }
@@ -25,32 +26,32 @@ mod example_1 {
 
 mod example_2 {
     // FOO and BAR both point to the anonymous nested static alloc2.
-    // Test taken from https://github.com/rust-lang/rust/issues/71212#issuecomment-738666248
-    // alloc3 (static: BAR, size: 16, align: 8) {
-    //     ╾───────alloc2────────╼ 01 00 00 00 00 00 00 00 │ ╾──────╼........
+    // The MIR is:
+    // alloc3 (static: BAR, size: 8, align: 8) {
+    //     ╾───────alloc2────────╼                         │ ╾──────╼
     // }
 
     // alloc2 (static: FOO::{constant#0}, size: 4, align: 4) {
     //     2a 00 00 00                                     │ *...
     // }
 
-    // alloc1 (static: FOO, size: 16, align: 8) {
-    //     ╾───────alloc2────────╼ 01 00 00 00 00 00 00 00 │ ╾──────╼........
+    // alloc1 (static: FOO, size: 8, align: 8) {
+    //     ╾───────alloc2────────╼                         │ ╾──────╼
     // }
-    pub mod a {
-        #[no_mangle]
-        pub static mut FOO: &mut [i32] = &mut [42];
-    }
 
-    pub mod b {
-        #[no_mangle]
-        pub static mut BAR: &mut [i32] = unsafe { &mut *crate::example_2::a::FOO };
-    }
+    static mut FOO: &mut i32 = &mut 12;
+    static mut BAR: *mut i32 = unsafe { FOO as *mut _ };
 
     #[kani::proof]
     fn main() {
         unsafe {
-            assert_eq!(a::FOO.as_ptr(), b::BAR.as_ptr());
+            // check that we see the same initial value from all aliases
+            assert_eq!(*FOO, 12);
+            assert_eq!(*BAR, 12);
+            *FOO = 13;
+            // check that we see the same mutated value from all aliases
+            assert_eq!(*FOO, 13);
+            assert_eq!(*BAR, 13);
         }
     }
 }
