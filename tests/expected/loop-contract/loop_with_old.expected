@@ -1,1 +1,6 @@
+Check 10: loop_with_old.loop_invariant_base.1
+	 - Status: SUCCESS
+	 - Description: "Check invariant before entry for loop loop_with_old.0"
+	 - Location: src/loop_with_old.rs:16:5 in function loop_with_old
+
 VERIFICATION:- SUCCESSFUL

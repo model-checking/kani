@@ -3,7 +3,7 @@
 
 // kani-flags: -Z loop-contracts
 
-//! Check if loop contracts is correctly applied.
+//! Check the use of "prev" in loop invariant
 
 #![feature(stmt_expr_attributes)]
 #![feature(proc_macro_hygiene)]

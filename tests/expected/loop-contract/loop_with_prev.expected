@@ -1,1 +1,6 @@
+Check 33: loop_with_prev.loop_invariant_step.1
+	 - Status: SUCCESS
+	 - Description: "Check invariant after step for loop loop_with_prev.0"
+	 - Location: src/loop_with_prev.rs:15:5 in function loop_with_prev
+
 VERIFICATION:- SUCCESSFUL
