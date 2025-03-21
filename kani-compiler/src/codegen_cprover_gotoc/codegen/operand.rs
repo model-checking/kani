@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::codegen_cprover_gotoc::utils::slice_fat_ptr;
+use crate::kani_middle::is_anon_static;
 use crate::unwrap_or_return_codegen_unimplemented;
 use cbmc::goto_program::{DatatypeComponent, Expr, ExprValue, Location, Symbol, Type};
 use rustc_middle::ty::Const as ConstInternal;
@@ -373,12 +374,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 self.codegen_func_expr(instance, loc).address_of()
             }
             GlobalAlloc::Static(def) => {
-                let int_def_id = rustc_internal::internal(self.tcx, def.def_id());
-                let anonymous = match self.tcx.def_kind(int_def_id) {
-                    rustc_hir::def::DefKind::Static { nested, .. } => nested,
-                    _ => false,
-                };
-                if anonymous {
+                if is_anon_static(self.tcx, def.def_id()) {
                     let alloc = def.eval_initializer().unwrap();
                     let name = format!("{}::{alloc_id:?}", self.full_crate_name());
                     self.codegen_nested_static_allocation(&alloc, Some(name), loc)

@@ -42,6 +42,7 @@ use std::{
 
 use crate::kani_middle::coercion;
 use crate::kani_middle::coercion::CoercionBase;
+use crate::kani_middle::is_anon_static;
 use crate::kani_middle::transform::BodyTransformation;
 
 /// Collect all reachable items starting from the given starting points.
@@ -220,12 +221,7 @@ impl<'tcx, 'a> MonoItemsCollector<'tcx, 'a> {
         let mut next_items = vec![];
 
         // Collect drop function, unless it's an anonymous static.
-        let int_def_id = rustc_internal::internal(self.tcx, def.def_id());
-        let anonymous = match self.tcx.def_kind(int_def_id) {
-            rustc_hir::def::DefKind::Static { nested, .. } => nested,
-            _ => false,
-        };
-        if !anonymous {
+        if !is_anon_static(self.tcx, def.def_id()) {
             let static_ty = def.ty();
             let instance = Instance::resolve_drop_in_place(static_ty);
             next_items.push(CollectedItem {
@@ -535,12 +531,7 @@ fn collect_alloc_items(tcx: TyCtxt, alloc_id: AllocId) -> Vec<MonoItem> {
     let mut items = vec![];
     match GlobalAlloc::from(alloc_id) {
         GlobalAlloc::Static(def) => {
-            let int_def_id = rustc_internal::internal(tcx, def.def_id());
-            let anonymous = match tcx.def_kind(int_def_id) {
-                rustc_hir::def::DefKind::Static { nested, .. } => nested,
-                _ => false,
-            };
-            if anonymous {
+            if is_anon_static(tcx, def.def_id()) {
                 let alloc = def.eval_initializer().unwrap();
                 items.extend(
                     alloc
