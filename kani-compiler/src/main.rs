@@ -50,7 +50,7 @@ mod kani_middle;
 mod kani_queries;
 mod session;
 
-use rustc_driver::{TimePassesCallbacks, run_compiler};
+use rustc_driver::{RunCompiler, TimePassesCallbacks};
 use std::env;
 
 /// Main function. Configure arguments and run the compiler.
@@ -63,7 +63,8 @@ fn main() {
         kani_compiler::run(rustc_args);
     } else {
         let mut callbacks = TimePassesCallbacks::default();
-        run_compiler(&rustc_args, &mut callbacks);
+        let compiler = RunCompiler::new(&rustc_args, &mut callbacks);
+        compiler.run();
     }
 }
 

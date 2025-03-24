@@ -3,7 +3,7 @@
 
 //! This module defines all compiler extensions that form the Kani compiler.
 //!
-//! The [KaniCompiler] can be used across multiple rustc driver runs ([`rustc_driver::run_compiler`]),
+//! The [KaniCompiler] can be used across multiple rustc driver runs ([RunCompiler::run()]),
 //! which is used to implement stubs.
 //!
 //! In the first run, [KaniCompiler::config] will implement the compiler configuration and it will
@@ -25,7 +25,7 @@ use crate::kani_queries::QueryDb;
 use crate::session::init_session;
 use clap::Parser;
 use rustc_codegen_ssa::traits::CodegenBackend;
-use rustc_driver::{Callbacks, Compilation, run_compiler};
+use rustc_driver::{Callbacks, Compilation, RunCompiler};
 use rustc_interface::Config;
 use rustc_middle::ty::TyCtxt;
 use rustc_session::config::ErrorOutputType;
@@ -34,7 +34,7 @@ use std::sync::{Arc, Mutex};
 use tracing::debug;
 
 /// Run the Kani flavour of the compiler.
-/// This may require multiple runs of the rustc driver ([`rustc_driver::run_compiler`]).
+/// This may require multiple runs of the rustc driver ([RunCompiler::run]).
 pub fn run(args: Vec<String>) {
     let mut kani_compiler = KaniCompiler::new();
     kani_compiler.run(args);
@@ -96,7 +96,10 @@ impl KaniCompiler {
     /// actually invoke the rust compiler multiple times.
     pub fn run(&mut self, args: Vec<String>) {
         debug!(?args, "run_compilation_session");
-        run_compiler(&args, self);
+        let queries = self.queries.clone();
+        let mut compiler = RunCompiler::new(&args, self);
+        compiler.set_make_codegen_backend(Some(Box::new(move |_cfg| backend(queries))));
+        compiler.run();
     }
 }
 
@@ -105,10 +108,6 @@ impl Callbacks for KaniCompiler {
     /// Configure the [KaniCompiler] `self` object during the [CompilationStage::Init].
     fn config(&mut self, config: &mut Config) {
         let mut args = vec!["kani-compiler".to_string()];
-        config.make_codegen_backend = Some(Box::new({
-            let queries = self.queries.clone();
-            move |_cfg| backend(queries)
-        }));
         args.extend(config.opts.cg.llvm_args.iter().cloned());
         let args = Arguments::parse_from(args);
         init_session(&args, matches!(config.opts.error_format, ErrorOutputType::Json { .. }));
