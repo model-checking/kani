@@ -18,7 +18,7 @@ use crate::kani_middle::resolve::expect_resolve_fn;
 use crate::kani_middle::stubbing::{check_compatibility, harness_stub_map};
 use crate::kani_queries::QueryDb;
 use kani_metadata::{
-    ArtifactType, AssignsContract, AutoHarnessSkipReason, AutoHarnessSkippedFns, HarnessKind,
+    ArtifactType, AssignsContract, AutoHarnessMetadata, AutoHarnessSkipReason, HarnessKind,
     HarnessMetadata, KaniMetadata,
 };
 use rustc_hir::def_id::DefId;
@@ -32,13 +32,16 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs::File;
 use std::io::BufWriter;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 use tracing::debug;
 
 /// An identifier for the harness function.
-type Harness = Instance;
+pub type Harness = Instance;
 
 /// A set of stubs.
 pub type Stubs = HashMap<FnDef, FnDef>;
+
+static AUTOHARNESS_MD: OnceLock<AutoHarnessMetadata> = OnceLock::new();
 
 /// Store some relevant information about the crate compilation.
 #[derive(Clone, Debug)]
@@ -49,7 +52,6 @@ struct CrateInfo {
 
 /// We group the harnesses that have the same stubs.
 pub struct CodegenUnits {
-    autoharness_skipped_fns: Option<AutoHarnessSkippedFns>,
     crate_info: CrateInfo,
     harness_info: HashMap<Harness, HarnessMetadata>,
     units: Vec<CodegenUnit>,
@@ -74,12 +76,7 @@ impl CodegenUnits {
                 let units = group_by_stubs(tcx, &all_harnesses);
                 validate_units(tcx, &units);
                 debug!(?units, "CodegenUnits::new");
-                CodegenUnits {
-                    units,
-                    harness_info: all_harnesses,
-                    crate_info,
-                    autoharness_skipped_fns: None,
-                }
+                CodegenUnits { units, harness_info: all_harnesses, crate_info }
             }
             ReachabilityType::AllFns => {
                 let mut all_harnesses = get_all_manual_harnesses(tcx, base_filename);
@@ -95,6 +92,10 @@ impl CodegenUnits {
                     args,
                     *kani_fns.get(&KaniModel::Any.into()).unwrap(),
                 );
+                let chosen_fn_names = chosen.iter().map(|func| func.name()).collect::<Vec<_>>();
+                AUTOHARNESS_MD
+                    .set(AutoHarnessMetadata { chosen: chosen_fn_names, skipped })
+                    .expect("Initializing the autoharness metdata failed");
 
                 let automatic_harnesses = get_all_automatic_harnesses(
                     tcx,
@@ -117,21 +118,11 @@ impl CodegenUnits {
 
                 // No need to validate the units again because validation only checks stubs, and we haven't added any stubs.
                 debug!(?units, "CodegenUnits::new");
-                CodegenUnits {
-                    units,
-                    harness_info: all_harnesses,
-                    crate_info,
-                    autoharness_skipped_fns: Some(skipped),
-                }
+                CodegenUnits { units, harness_info: all_harnesses, crate_info }
             }
             _ => {
                 // Leave other reachability type handling as is for now.
-                CodegenUnits {
-                    units: vec![],
-                    harness_info: HashMap::default(),
-                    crate_info,
-                    autoharness_skipped_fns: None,
-                }
+                CodegenUnits { units: vec![], harness_info: HashMap::default(), crate_info }
             }
         }
     }
@@ -175,8 +166,8 @@ impl CodegenUnits {
             proof_harnesses,
             unsupported_features: vec![],
             test_harnesses,
-            contracted_functions: gen_contracts_metadata(tcx),
-            autoharness_skipped_fns: self.autoharness_skipped_fns.clone(),
+            contracted_functions: gen_contracts_metadata(tcx, &self.harness_info),
+            autoharness_md: AUTOHARNESS_MD.get().cloned(),
         }
     }
 }
@@ -432,7 +423,8 @@ fn automatic_harness_partition(
                         var.argument_index.is_some_and(|arg_idx| idx + 1 == usize::from(arg_idx))
                     })
                     .map_or("_".to_string(), |debug_info| debug_info.name.to_string());
-                problematic_args.push(arg_name)
+                let arg_type = format!("{}", arg.ty);
+                problematic_args.push((arg_name, arg_type))
             }
         }
         if !problematic_args.is_empty() {

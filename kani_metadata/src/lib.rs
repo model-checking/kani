@@ -38,7 +38,18 @@ pub struct KaniMetadata {
     /// The functions with contracts in this crate
     pub contracted_functions: Vec<ContractedFunction>,
     /// Metadata for the `autoharness` subcommand
-    pub autoharness_skipped_fns: Option<AutoHarnessSkippedFns>,
+    pub autoharness_md: Option<AutoHarnessMetadata>,
+}
+
+/// For the autoharness subcommand, all of the user-defined functions we found,
+/// which are "chosen" if we generated an automatic harness for them, and "skipped" otherwise.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AutoHarnessMetadata {
+    /// Functions we generated automatic harnesses for.
+    pub chosen: Vec<String>,
+    /// Map function names to the reason why we did not generate an automatic harness for that function.
+    /// We use an ordered map so that when we print the data, it is ordered alphabetically by function name.
+    pub skipped: BTreeMap<String, AutoHarnessSkipReason>,
 }
 
 /// Reasons that Kani does not generate an automatic harness for a function.
@@ -51,9 +62,9 @@ pub enum AutoHarnessSkipReason {
     #[strum(serialize = "Kani implementation")]
     KaniImpl,
     /// At least one of the function's arguments does not implement kani::Arbitrary
-    /// (The Vec<String> contains the list of argument names that do not implement it)
+    /// (The Vec<(String, String)> contains the list of (name, type) tuples for each argument that does not implement it
     #[strum(serialize = "Missing Arbitrary implementation for argument(s)")]
-    MissingArbitraryImpl(Vec<String>),
+    MissingArbitraryImpl(Vec<(String, String)>),
     /// The function does not have a body.
     #[strum(serialize = "The function does not have a body")]
     NoBody,
@@ -61,11 +72,6 @@ pub enum AutoHarnessSkipReason {
     #[strum(serialize = "Did not match provided filters")]
     UserFilter,
 }
-
-/// For the autoharness subcommand: map function names to the reason why we did not generate an automatic harness for that function.
-/// We use an ordered map so that when we print the data, it is ordered alphabetically by function name.
-pub type AutoHarnessSkippedFns = BTreeMap<String, AutoHarnessSkipReason>;
-
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord)]
 pub struct ContractedFunction {
     /// The fully qualified name the user gave to the function (i.e. includes the module path).

@@ -9,10 +9,10 @@ use crate::kani_queries::QueryDb;
 use rustc_hir::{def::DefKind, def_id::DefId as InternalDefId, def_id::LOCAL_CRATE};
 use rustc_middle::ty::TyCtxt;
 use rustc_smir::rustc_internal;
-use stable_mir::CrateDef;
 use stable_mir::mir::mono::MonoItem;
 use stable_mir::ty::{FnDef, RigidTy, Span as SpanStable, Ty, TyKind};
 use stable_mir::visitor::{Visitable, Visitor as TyVisitor};
+use stable_mir::{CrateDef, DefId};
 use std::ops::ControlFlow;
 
 use self::attributes::KaniAttributes;
@@ -143,6 +143,15 @@ impl SourceLocation {
         let end_line = loc.end_line;
         let end_col = loc.end_col;
         SourceLocation { filename, start_line, start_col, end_line, end_col }
+    }
+}
+
+/// Return whether `def_id` refers to a nested static allocation.
+pub fn is_anon_static(tcx: TyCtxt, def_id: DefId) -> bool {
+    let int_def_id = rustc_internal::internal(tcx, def_id);
+    match tcx.def_kind(int_def_id) {
+        rustc_hir::def::DefKind::Static { nested, .. } => nested,
+        _ => false,
     }
 }
 

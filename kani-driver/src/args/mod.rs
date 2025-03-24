@@ -20,7 +20,7 @@ use clap::builder::{PossibleValue, TypedValueParser};
 use clap::{ValueEnum, error::ContextKind, error::ContextValue, error::Error, error::ErrorKind};
 use kani_metadata::CbmcSolver;
 use std::ffi::OsString;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::Duration;
 use strum::VariantNames;
@@ -786,6 +786,42 @@ impl ValidateArgs for VerificationArgs {
         }
 
         Ok(())
+    }
+}
+
+pub(crate) fn validate_std_path(std_path: &Path) -> Result<(), Error> {
+    if !std_path.exists() {
+        Err(Error::raw(
+            ErrorKind::InvalidValue,
+            format!(
+                "Invalid argument: `<STD_PATH>` argument `{}` does not exist",
+                std_path.display()
+            ),
+        ))
+    } else if !std_path.is_dir() {
+        Err(Error::raw(
+            ErrorKind::InvalidValue,
+            format!(
+                "Invalid argument: `<STD_PATH>` argument `{}` is not a directory",
+                std_path.display()
+            ),
+        ))
+    } else {
+        let full_path = std_path.canonicalize()?;
+        let dir = full_path.file_stem().unwrap();
+        if dir != "library" {
+            Err(Error::raw(
+                ErrorKind::InvalidValue,
+                format!(
+                    "Invalid argument: Expected `<STD_PATH>` to point to the `library` folder \
+                containing the standard library crates.\n\
+                Found `{}` folder instead",
+                    dir.to_string_lossy()
+                ),
+            ))
+        } else {
+            Ok(())
+        }
     }
 }
 

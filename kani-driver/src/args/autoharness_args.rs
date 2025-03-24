@@ -4,7 +4,8 @@
 
 use std::path::PathBuf;
 
-use crate::args::{ValidateArgs, VerificationArgs};
+use crate::args::list_args::Format;
+use crate::args::{ValidateArgs, VerificationArgs, validate_std_path};
 use clap::{Error, Parser, error::ErrorKind};
 use kani_metadata::UnstableFeature;
 
@@ -29,6 +30,13 @@ pub struct CommonAutoharnessArgs {
     pub exclude_function: Vec<String>,
     // TODO: It would be nice if we could borrow --exact here from VerificationArgs to differentiate between partial/exact matches,
     // like --harnesses does. Sharing arguments with VerificationArgs doesn't work with our current structure, though.
+    /// Run the `list` subcommand after generating the automatic harnesses. Requires -Z list. Note that this option implies --only-codegen.
+    #[arg(long)]
+    pub list: bool,
+
+    /// The format of the `list` output. Requires --list.
+    #[arg(long, default_value = "pretty", requires = "list")]
+    pub format: Format,
 }
 
 /// Automatically verify functions in a crate.
@@ -54,6 +62,11 @@ pub struct StandaloneAutoharnessArgs {
     #[command(flatten)]
     pub common_autoharness_args: CommonAutoharnessArgs,
 
+    /// Pass this flag to run the `autoharness` subcommand on the standard library.
+    /// Ensure that the provided `input` is the `library` folder.
+    #[arg(long)]
+    pub std: bool,
+
     #[command(flatten)]
     pub verify_opts: VerificationArgs,
 }
@@ -68,6 +81,24 @@ impl ValidateArgs for CargoAutoharnessArgs {
                     "The `autoharness` subcommand is unstable and requires -Z {}",
                     UnstableFeature::Autoharness
                 ),
+            ));
+        }
+
+        if self.common_autoharness_args.list
+            && !self.verify_opts.common_args.unstable_features.contains(UnstableFeature::List)
+        {
+            return Err(Error::raw(
+                ErrorKind::MissingRequiredArgument,
+                format!("The `list` feature is unstable and requires -Z {}", UnstableFeature::List),
+            ));
+        }
+
+        if self.common_autoharness_args.format == Format::Pretty
+            && self.verify_opts.common_args.quiet
+        {
+            return Err(Error::raw(
+                ErrorKind::ArgumentConflict,
+                "The `--quiet` flag is not compatible with the `pretty` format, since `pretty` prints to the terminal. Either specify a different format or don't pass `--quiet`.",
             ));
         }
 
@@ -99,7 +130,28 @@ impl ValidateArgs for StandaloneAutoharnessArgs {
                 ),
             ));
         }
-        if !self.input.is_file() {
+
+        if self.common_autoharness_args.list
+            && !self.verify_opts.common_args.unstable_features.contains(UnstableFeature::List)
+        {
+            return Err(Error::raw(
+                ErrorKind::MissingRequiredArgument,
+                format!("The `list` feature is unstable and requires -Z {}", UnstableFeature::List),
+            ));
+        }
+
+        if self.common_autoharness_args.format == Format::Pretty
+            && self.verify_opts.common_args.quiet
+        {
+            return Err(Error::raw(
+                ErrorKind::ArgumentConflict,
+                "The `--quiet` flag is not compatible with the `pretty` format, since `pretty` prints to the terminal. Either specify a different format or don't pass `--quiet`.",
+            ));
+        }
+
+        if self.std {
+            validate_std_path(&self.input)?;
+        } else if !self.input.is_file() {
             return Err(Error::raw(
                 ErrorKind::InvalidValue,
                 format!(
