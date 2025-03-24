@@ -45,7 +45,6 @@ pub enum RoundingMode {
     Downward = 1,
     Upward = 2,
     TowardsZero = 3,
-    ToAway = 4,
 }
 
 impl From<RoundingMode> for BigInt {

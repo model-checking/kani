@@ -18,6 +18,6 @@ fn offset_non_power_two() {
         let offset = kani::any_where(|o: &usize| *o <= v.len());
         let begin = v.as_mut_ptr();
         let end = begin.add(offset);
-        assert_eq!(end.offset_from_unsigned(begin), offset);
+        assert_eq!(end.sub_ptr(begin), offset);
     }
 }

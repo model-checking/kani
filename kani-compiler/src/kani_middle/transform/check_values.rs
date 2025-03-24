@@ -213,6 +213,7 @@ impl ValidValueReq {
                 }
                 ValueAbi::Scalar(_)
                 | ValueAbi::ScalarPair(_, _)
+                | ValueAbi::Uninhabited
                 | ValueAbi::Vector { .. }
                 | ValueAbi::Aggregate { .. } => None,
             }

@@ -89,8 +89,8 @@ macro_rules! generate_models {
                 }
             }
 
-            #[kanitool::fn_marker = "PtrOffsetFromUnsignedModel"]
-            pub unsafe fn ptr_offset_from_unsigned<T>(ptr1: *const T, ptr2: *const T) -> usize {
+            #[kanitool::fn_marker = "PtrSubPtrModel"]
+            pub unsafe fn ptr_sub_ptr<T>(ptr1: *const T, ptr2: *const T) -> usize {
                 let offset = ptr_offset_from(ptr1, ptr2);
                 kani::safety_check(offset >= 0, "Expected non-negative distance between pointers");
                 offset as usize

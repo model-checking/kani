@@ -414,6 +414,8 @@ impl GotocCtx<'_> {
             Intrinsic::MulWithOverflow => {
                 self.codegen_op_with_overflow(BinaryOperator::OverflowResultMult, fargs, place, loc)
             }
+            Intrinsic::NearbyIntF32 => codegen_simple_intrinsic!(Nearbyintf),
+            Intrinsic::NearbyIntF64 => codegen_simple_intrinsic!(Nearbyint),
             Intrinsic::NeedsDrop => codegen_intrinsic_const!(),
             Intrinsic::PowF32 => codegen_simple_intrinsic!(Powf),
             Intrinsic::PowF64 => codegen_simple_intrinsic!(Pow),
@@ -423,6 +425,8 @@ impl GotocCtx<'_> {
             Intrinsic::PtrGuaranteedCmp => self.codegen_ptr_guaranteed_cmp(fargs, place, loc),
             Intrinsic::RawEq => self.codegen_intrinsic_raw_eq(instance, fargs, place, loc),
             Intrinsic::RetagBoxToRaw => self.codegen_retag_box_to_raw(fargs, place, loc),
+            Intrinsic::RintF32 => codegen_simple_intrinsic!(Rintf),
+            Intrinsic::RintF64 => codegen_simple_intrinsic!(Rint),
             Intrinsic::RotateLeft => codegen_intrinsic_binop!(rol),
             Intrinsic::RotateRight => codegen_intrinsic_binop!(ror),
             Intrinsic::RoundF32 => codegen_simple_intrinsic!(Roundf),

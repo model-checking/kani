@@ -8,7 +8,7 @@ use kani_metadata::{CbmcSolver, HarnessAttributes, HarnessKind, Stub};
 use quote::ToTokens;
 use rustc_ast::{LitKind, MetaItem, MetaItemKind, attr};
 use rustc_errors::ErrorGuaranteed;
-use rustc_hir::{AttrArgs, Attribute, def::DefKind, def_id::DefId};
+use rustc_hir::{AttrArgs, AttrKind, Attribute, def::DefKind, def_id::DefId};
 use rustc_middle::ty::{Instance, TyCtxt, TyKind};
 use rustc_session::Session;
 use rustc_smir::rustc_internal;
@@ -214,7 +214,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                     .resolve_from_mod(name.as_str())
                     .map_err(|e| {
                         let mut err = self.tcx.dcx().struct_span_err(
-                            attr.span(),
+                            attr.span,
                             format!(
                                 "Failed to resolve replacement function {}: {e}",
                                 name.as_str()
@@ -229,7 +229,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                         err.emit();
                     })
                     .ok()?;
-                Some((name, def, attr.span()))
+                Some((name, def, attr.span))
             })
             .collect()
     }
@@ -247,10 +247,10 @@ impl<'tcx> KaniAttributes<'tcx> {
         self.expect_maybe_one(KaniAttributeKind::ProofForContract).and_then(|target| {
             let name = expect_key_string_value(self.tcx.sess, target).ok()?;
             self.resolve_from_mod(name.as_str())
-                .map(|ok| (name, ok, target.span()))
+                .map(|ok| (name, ok, target.span))
                 .map_err(|resolve_err| {
                     let mut err = self.tcx.dcx().struct_span_err(
-                        target.span(),
+                        target.span,
                         format!(
                             "Failed to resolve checking function {} because {resolve_err}",
                             name.as_str()
@@ -347,7 +347,7 @@ impl<'tcx> KaniAttributes<'tcx> {
         // Check that all attributes are correctly used and well formed.
         let is_harness = self.is_proof_harness();
         for (&kind, attrs) in self.map.iter() {
-            let local_error = |msg| self.tcx.dcx().span_err(attrs[0].span(), msg);
+            let local_error = |msg| self.tcx.dcx().span_err(attrs[0].span, msg);
 
             if !is_harness && kind.is_harness_only() {
                 local_error(format!(
@@ -462,7 +462,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                     kind.as_ref()
                 );
                 if let Some(attr) = self.map.get(&kind).unwrap().first() {
-                    self.tcx.dcx().span_err(attr.span(), msg);
+                    self.tcx.dcx().span_err(attr.span, msg);
                 } else {
                     self.tcx.dcx().err(msg);
                 }
@@ -657,7 +657,7 @@ impl<'tcx> KaniAttributes<'tcx> {
 
     /// Check that if this item is tagged with a proof_attribute, it is a valid harness.
     fn check_proof_attribute(&self, kind: KaniAttributeKind, proof_attribute: &Attribute) {
-        let span = proof_attribute.span();
+        let span = proof_attribute.span;
         let tcx = self.tcx;
         if let KaniAttributeKind::Proof = kind {
             expect_no_args(tcx, kind, proof_attribute);
@@ -730,7 +730,7 @@ fn expect_key_string_value(
     sess: &Session,
     attr: &Attribute,
 ) -> Result<rustc_span::Symbol, ErrorGuaranteed> {
-    let span = attr.span();
+    let span = attr.span;
     let AttrArgs::Eq { expr, .. } = &attr.get_normal_item().args else {
         return Err(sess
             .dcx()
@@ -754,7 +754,7 @@ fn expect_single<'a>(
         .expect(&format!("expected at least one attribute {} in {attributes:?}", kind.as_ref()));
     if attributes.len() > 1 {
         tcx.dcx().span_err(
-            attr.span(),
+            attr.span,
             format!("only one '#[kani::{}]' attribute is allowed per harness", kind.as_ref()),
         );
     }
@@ -785,7 +785,7 @@ impl UnstableAttrParseError<'_> {
     fn report(&self, tcx: TyCtxt) -> ErrorGuaranteed {
         tcx.dcx()
             .struct_span_err(
-                self.attr.span(),
+                self.attr.span,
                 format!("failed to parse `#[kani::unstable_feature]`: {}", self.reason),
             )
             .with_note(format!(
@@ -828,7 +828,7 @@ impl<'a> TryFrom<&'a Attribute> for UnstableAttribute {
 fn expect_no_args(tcx: TyCtxt, kind: KaniAttributeKind, attr: &Attribute) {
     if !attr.is_word() {
         tcx.dcx()
-            .struct_span_err(attr.span(), format!("unexpected argument for `{}`", kind.as_ref()))
+            .struct_span_err(attr.span, format!("unexpected argument for `{}`", kind.as_ref()))
             .with_help("remove the extra argument")
             .emit();
     }
@@ -841,7 +841,7 @@ fn parse_unwind(tcx: TyCtxt, attr: &Attribute) -> Option<u32> {
         None => {
             // There are no integers or too many arguments given to the attribute
             tcx.dcx().span_err(
-                attr.span(),
+                attr.span,
                 "invalid argument for `unwind` attribute, expected an integer",
             );
             None
@@ -850,7 +850,7 @@ fn parse_unwind(tcx: TyCtxt, attr: &Attribute) -> Option<u32> {
             if let Ok(val) = unwind_integer_value.try_into() {
                 Some(val)
             } else {
-                tcx.dcx().span_err(attr.span(), "value above maximum permitted value - u32::MAX");
+                tcx.dcx().span_err(attr.span, "value above maximum permitted value - u32::MAX");
                 None
             }
         }
@@ -865,13 +865,13 @@ fn parse_stubs(tcx: TyCtxt, harness: DefId, attributes: &[&Attribute]) -> Vec<St
             Ok(FnResolution::Fn(_)) => { /* no-op */ }
             Ok(FnResolution::FnImpl { .. }) => {
                 tcx.dcx().span_err(
-                    attr.span(),
+                    attr.span,
                     "Kani currently does not support stubbing trait implementations.",
                 );
             }
             Err(err) => {
                 tcx.dcx().span_err(
-                    attr.span(),
+                    attr.span,
                     format!("failed to resolve `{}`: {err}", pretty_type_path(path)),
                 );
             }
@@ -882,7 +882,7 @@ fn parse_stubs(tcx: TyCtxt, harness: DefId, attributes: &[&Attribute]) -> Vec<St
         .filter_map(|attr| {
             let paths = parse_paths(tcx, attr).unwrap_or_else(|_| {
                 tcx.dcx().span_err(
-                    attr.span(),
+                    attr.span,
                     format!(
                     "attribute `kani::{}` takes two path arguments; found argument that is not a path",
                     KaniAttributeKind::Stub.as_ref())
@@ -904,7 +904,7 @@ fn parse_stubs(tcx: TyCtxt, harness: DefId, attributes: &[&Attribute]) -> Vec<St
                 }
                 _ => {
                     tcx.dcx().span_err(
-                        attr.span(),
+                        attr.span,
                         format!(
                             "attribute `kani::stub` takes two path arguments; found {}",
                             paths.len()
@@ -923,7 +923,7 @@ fn parse_solver(tcx: TyCtxt, attr: &Attribute) -> Option<CbmcSolver> {
     const ATTRIBUTE: &str = "#[kani::solver]";
     let invalid_arg_err = |attr: &Attribute| {
         tcx.dcx().span_err(
-            attr.span(),
+            attr.span,
             format!("invalid argument for `{ATTRIBUTE}` attribute, expected one of the supported solvers (e.g. `kissat`) or a SAT solver binary (e.g. `bin=\"<SAT_SOLVER_BINARY>\"`)"),
         )
     };
@@ -931,7 +931,7 @@ fn parse_solver(tcx: TyCtxt, attr: &Attribute) -> Option<CbmcSolver> {
     let attr_args = attr.meta_item_list().unwrap();
     if attr_args.len() != 1 {
         tcx.dcx().span_err(
-            attr.span(),
+            attr.span,
             format!(
                 "the `{ATTRIBUTE}` attribute expects a single argument. Got {} arguments.",
                 attr_args.len()
@@ -954,7 +954,7 @@ fn parse_solver(tcx: TyCtxt, attr: &Attribute) -> Option<CbmcSolver> {
             match solver {
                 Ok(solver) => Some(solver),
                 Err(_) => {
-                    tcx.dcx().span_err(attr.span(), format!("unknown solver `{ident_str}`"));
+                    tcx.dcx().span_err(attr.span, format!("unknown solver `{ident_str}`"));
                     None
                 }
             }
@@ -1027,25 +1027,26 @@ fn parse_str_value(attr: &Attribute) -> Option<String> {
 
 /// If the attribute is named `kanitool::name`, this extracts `name`
 fn attr_kind(tcx: TyCtxt, attr: &Attribute) -> Option<KaniAttributeKind> {
-    if let Attribute::Unparsed(normal) = attr {
-        let segments = &normal.path.segments;
-        if (!segments.is_empty()) && segments[0].as_str() == "kanitool" {
-            let ident_str = segments[1..]
-                .iter()
-                .map(|segment| segment.as_str())
-                .intersperse("::")
-                .collect::<String>();
-            KaniAttributeKind::try_from(ident_str.as_str())
-                .inspect_err(|&err| {
-                    debug!(?err, "attr_kind_failed");
-                    tcx.dcx().span_err(attr.span(), format!("unknown attribute `{ident_str}`"));
-                })
-                .ok()
-        } else {
-            None
+    match &attr.kind {
+        AttrKind::Normal(normal) => {
+            let segments = &normal.path.segments;
+            if (!segments.is_empty()) && segments[0].as_str() == "kanitool" {
+                let ident_str = segments[1..]
+                    .iter()
+                    .map(|segment| segment.as_str())
+                    .intersperse("::")
+                    .collect::<String>();
+                KaniAttributeKind::try_from(ident_str.as_str())
+                    .inspect_err(|&err| {
+                        debug!(?err, "attr_kind_failed");
+                        tcx.dcx().span_err(attr.span, format!("unknown attribute `{ident_str}`"));
+                    })
+                    .ok()
+            } else {
+                None
+            }
         }
-    } else {
-        None
+        _ => None,
     }
 }
 
@@ -1109,7 +1110,7 @@ fn pretty_type_path(path: &TypePath) -> String {
 /// Retrieve the value of the `fn_marker` attribute for the given definition if it has one.
 pub(crate) fn fn_marker<T: CrateDef>(def: T) -> Option<String> {
     let fn_marker: [SymbolStable; 2] = ["kanitool".into(), "fn_marker".into()];
-    let marker = def.tool_attrs(&fn_marker).pop()?;
+    let marker = def.attrs_by_path(&fn_marker).pop()?;
     let attribute = syn_attr_stable(&marker);
     let meta_name = attribute.meta.require_name_value().unwrap_or_else(|_| {
         panic!("Expected name value attribute for `kanitool::fn_marker`, but found: `{:?}`", marker)

@@ -1002,10 +1002,8 @@ impl GotocCtx<'_> {
                     // https://github.com/rust-lang/rust/blob/fee75fbe11b1fad5d93c723234178b2a329a3c03/compiler/rustc_codegen_ssa/src/mir/place.rs#L247
                     // See also the cranelift backend:
                     // https://github.com/rust-lang/rust/blob/05d22212e89588e7c443cc6b9bc0e4e02fdfbc8d/compiler/rustc_codegen_cranelift/src/discriminant.rs#L116
-                    let offset: rustc_abi::Size = match &layout.fields {
-                        FieldsShape::Arbitrary { offsets, .. } => {
-                            offsets[rustc_abi::FieldIdx::from_usize(0)]
-                        }
+                    let offset = match &layout.fields {
+                        FieldsShape::Arbitrary { offsets, .. } => offsets[0usize.into()],
                         _ => unreachable!("niche encoding must have arbitrary fields"),
                     };
 

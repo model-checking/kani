@@ -7,7 +7,6 @@ use crate::codegen_cprover_gotoc::codegen::function::rustc_smir::region_from_cov
 use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
 use cbmc::goto_program::{Expr, Location, Stmt, Type};
-use rustc_abi::Size;
 use rustc_abi::{FieldsShape, Primitive, TagEncoding, Variants};
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{List, TypingEnv};
@@ -351,10 +350,8 @@ impl GotocCtx<'_> {
                 }
                 TagEncoding::Niche { untagged_variant, niche_variants, niche_start } => {
                     if *untagged_variant != variant_index_internal {
-                        let offset: Size = match &layout.fields {
-                            FieldsShape::Arbitrary { offsets, .. } => {
-                                offsets[rustc_abi::FieldIdx::from_usize(0)]
-                            }
+                        let offset = match &layout.fields {
+                            FieldsShape::Arbitrary { offsets, .. } => offsets[0usize.into()],
                             _ => unreachable!("niche encoding must have arbitrary fields"),
                         };
                         let discr_ty = self.codegen_enum_discr_typ(dest_ty_internal);
