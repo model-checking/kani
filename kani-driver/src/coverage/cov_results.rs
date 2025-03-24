@@ -64,6 +64,7 @@ impl CoverageCheck {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum CoverageTerm {
     Counter(u32),
+    Expression(u32),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Ord, Serialize, Deserialize)]
