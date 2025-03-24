@@ -468,7 +468,7 @@ impl MirVisitor for CheckUninitVisitor {
                         && !ptx.is_mutating()
                     {
                         let contains_deref_projection =
-                            { place.projection.contains(&ProjectionElem::Deref) };
+                            { place.projection.iter().any(|elem| *elem == ProjectionElem::Deref) };
                         if contains_deref_projection {
                             // We do not currently support having a deref projection in the same
                             // place as union field access.
