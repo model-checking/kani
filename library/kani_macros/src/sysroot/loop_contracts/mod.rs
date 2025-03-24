@@ -11,6 +11,80 @@ use syn::spanned::Spanned;
 use syn::token::AndAnd;
 use syn::{BinOp, Block, Expr, ExprBinary, Ident, Stmt, visit_mut::VisitMut};
 
+/*
+Transform the loop to support on_entry(expr) : the value of expr before entering the loop
+1. For each on_entry(expr) in the loop variant, replace it with a newly generated "memory" variable old_k
+2. Add the declaration of i before the loop: let old_k = expr
+For example:
+#[kani::loop_invariant(on_entry(x+y) = x + y -1)]
+while(....)
+
+is transformed into
+let old_1 = x + y
+#[kani::loop_invariant(old_1 = x + y -1)]
+while(....)
+
+Then the loop_invartiant is transformed
+
+*/
+
+/*
+Transform the loop to support prev(expr) : the value of expr at the end of the previous iteration
+If there is a prev(expr) in the loop_invariant:
+1. Firstly, Add an assertion of the loop_quard: the loop must run at least once, otherwise prev(expr) is undefined.
+1. For each prev(expr) in the loop variant, replace it with a newly generated "memory" variable prev_k
+2. Add the declaration of i before the loop: let mut prev_k = expr
+3. Define a mut closure whose body is exactly the loop body, but replace all break and continue statements with return statements
+4. Call the closure (the same as run the loop once)
+5. Add the assertion for the loop_invariant (not includes the loop_quard): check if the loop_invariant holds after the first iteration.
+6. Add the loop
+6. Add the assignment statements (exactly the same as the declarations without the "let mut") on the top of the loop body to update the "memory" variables
+For example:
+#[kani::loop_invariant(prev(x+y) = x + y -1 && ...)]
+while(loop_guard)
+{
+    loop_body
+}
+
+is transformed into
+
+assert!(loop_guard);
+let mut prev_1 = x + y;
+let mut loop_body_closure = || {
+    loop_body_replaced //replace breaks/continues in loop_body with returns
+};
+loop_body_closure();
+assert!(prev_1 = x + y -1 && ...);
+#[kani::loop_invariant(prev_1  = x + y -1)]
+while(loop_guard)
+{
+    prev_1 = x + y;
+    loop_body
+}
+
+*/
+
+/// After that:
+/// Expand loop contracts macros.
+///
+/// A while loop of the form
+/// ``` rust
+///  while guard {
+///      body
+///  }
+/// ```
+/// will be annotated as
+/// ``` rust
+/// #[inline(never)]
+/// #[kanitool::fn_marker = "kani_register_loop_contract"]
+/// const fn kani_register_loop_contract_id<T, F: FnOnce() -> T>(f: F) -> T {
+///     unreachable!()
+/// }
+///  while kani_register_loop_contract_id(|| -> bool {inv};) && guard {
+///      body
+///  }
+/// ```
+
 struct TransformationResult {
     transformed_expr: Expr,
     declarations_block: Block,
@@ -24,6 +98,7 @@ struct CallReplacer {
     var_prefix: String,
 }
 
+// This impl replaces any function call of a function name : old_name with a newly generated variable.
 impl CallReplacer {
     fn new(old_name: &str, var_prefix: String) -> Self {
         Self {
@@ -40,14 +115,8 @@ impl CallReplacer {
         var_name
     }
 
+    //Check if the function name is old_name
     fn should_replace(&self, expr_path: &syn::ExprPath) -> bool {
-        // Check both simple and qualified paths
-        if let Some(last_segment) = expr_path.path.segments.last() {
-            if last_segment.ident == self.old_name {
-                return true;
-            }
-        }
-
         let full_path = expr_path
             .path
             .segments
@@ -56,7 +125,7 @@ impl CallReplacer {
             .collect::<Vec<_>>()
             .join("::");
 
-        full_path.ends_with(&self.old_name)
+        full_path == self.old_name
     }
 }
 
@@ -77,6 +146,7 @@ impl VisitMut for CallReplacer {
     }
 }
 
+// The main function to replace the function call with the variables
 fn transform_function_calls(
     expr: Expr,
     function_name: &str,
@@ -97,7 +167,7 @@ fn transform_function_calls(
         }
     }
 
-    // Generate declarations block
+    // Generate declarations block of the newly generated variables (will added before the loop)
     let declarations: Vec<Stmt> = newreplace
         .iter()
         .map(|(call, var)| syn::parse_quote!(let mut #var = #call.clone();))
@@ -106,7 +176,7 @@ fn transform_function_calls(
         #(#declarations)*
     });
 
-    // Generate assignments block
+    // Generate declarations block of the newly generated variables (will be added on the loop of the loop body)
     let assignments: Vec<Stmt> = newreplace
         .into_iter()
         .map(|(call, var)| syn::parse_quote!(#var = #call.clone();))
@@ -138,30 +208,12 @@ impl VisitMut for BreakContinueReplacer {
     }
 }
 
+// This function replace the break/continue statements inside a loop body with return statements
 fn transform_break_continue(block: &mut Block) {
     let mut replacer = BreakContinueReplacer;
     replacer.visit_block_mut(block);
 }
 
-/// Expand loop contracts macros.
-///
-/// A while loop of the form
-/// ``` rust
-///  while guard {
-///      body
-///  }
-/// ```
-/// will be annotated as
-/// ``` rust
-/// #[inline(never)]
-/// #[kanitool::fn_marker = "kani_register_loop_contract"]
-/// const fn kani_register_loop_contract_id<T, F: FnOnce() -> T>(f: F) -> T {
-///     unreachable!()
-/// }
-///  while kani_register_loop_contract_id(|| -> bool {inv};) && guard {
-///      body
-///  }
-/// ```
 pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
     // parse the stmt of the loop
     let mut loop_stmt: Stmt = syn::parse(item.clone()).unwrap();
