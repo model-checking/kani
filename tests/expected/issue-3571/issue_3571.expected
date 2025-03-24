@@ -1,6 +1,6 @@
 Failed Checks: misaligned pointer dereference: address must be a multiple of its type's alignment
 
-Failed Checks: null pointer dereference occurred
+Failed Checks: dereference failure: pointer invalid
 
 VERIFICATION:- FAILED (encountered failures other than panics, which were unexpected)
 

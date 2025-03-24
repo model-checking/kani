@@ -1,0 +1,1945 @@
+Kani Rust Verifier 0.60.0 (standalone)
+Checking harness post_condition::harness...
+CBMC 6.5.0 (cbmc-6.5.0)
+CBMC version 6.5.0 (cbmc-6.5.0) 64-bit x86_64 linux
+Reading GOTO program from file /home/ubuntu/git/kani/tests/expected/function-contract/valid_ptr__RNvNtCsbBkWKZuatX0_9valid_ptr14post_condition7harness.out
+Generating GOTO Program
+Adding CPROVER library (x86_64)
+Removal of function pointers and virtual functions
+Generic Property Instrumentation
+Running with 16 object bits, 48 offset bits (user-specified)
+Starting Bounded Model Checking
+aborting path on assume(false) at file /home/ubuntu/git/kani/library/kani/src/lib.rs line 54 column 1 function kani::mem::is_inbounds::<char> thread 0
+Runtime Symex: 0.0432339s
+size of program expression: 1535 steps
+slicing removed 927 assignments
+Generated 39 VCC(s), 10 remaining after simplification
+Runtime Postprocess Equation: 0.000237305s
+Passing problem to propositional reduction
+converting SSA
+Runtime Convert SSA: 0.00320391s
+Running propositional reduction
+Post-processing
+Runtime Post-process: 6.53e-06s
+Solving with CaDiCaL 2.0.0
+3385 variables, 3574 clauses
+SAT checker: instance is SATISFIABLE
+Runtime Solver: 0.000383548s
+Runtime decision procedure: 0.00372084s
+Running propositional reduction
+Solving with CaDiCaL 2.0.0
+3386 variables, 3575 clauses
+SAT checker: instance is SATISFIABLE
+Runtime Solver: 0.000125812s
+Runtime decision procedure: 0.000177564s
+Running propositional reduction
+Solving with CaDiCaL 2.0.0
+3387 variables, 3576 clauses
+SAT checker: instance is SATISFIABLE
+Runtime Solver: 0.000100662s
+Runtime decision procedure: 0.000151523s
+Running propositional reduction
+Solving with CaDiCaL 2.0.0
+3388 variables, 3577 clauses
+SAT checker: instance is UNSATISFIABLE
+Runtime Solver: 2.6061e-05s
+Runtime decision procedure: 5.3201e-05s
+
+RESULTS:
+Check 1: __CPROVER_contracts_write_set_record_deallocated.unwind.1
+	 - Status: SUCCESS
+	 - Description: "unwinding assertion loop 0"
+	 - Location: <builtin-library-__CPROVER_contracts_library>:740 in function __CPROVER_contracts_write_set_record_deallocated
+
+Check 2: post_condition::new_invalid_ptr::{closure#0}.unreachable.1
+	 - Status: SUCCESS
+	 - Description: "unreachable code"
+	 - Location: valid_ptr.rs:38:5 in function post_condition::new_invalid_ptr::{closure#0}
+
+Check 3: free.frees.1
+	 - Status: SUCCESS
+	 - Description: "Check that ptr is freeable"
+	 - Location: <builtin-library-free>:43 in function free
+
+Check 4: post_condition::new_invalid_ptr::{closure#2}.assertion.1
+	 - Status: FAILURE
+	 - Description: "|result| kani::mem::can_dereference(result.0)"
+	 - Location: valid_ptr.rs:38:5 in function post_condition::new_invalid_ptr::{closure#2}
+
+Check 5: post_condition::new_invalid_ptr::{closure#1}.unreachable.1
+	 - Status: SUCCESS
+	 - Description: "unreachable code"
+	 - Location: valid_ptr.rs:38:5 in function post_condition::new_invalid_ptr::{closure#1}
+
+Check 6: valid_ptr::post_condition::new_invalid_ptr::{closure#2}::{closure#1}.single_top_level_call.1
+	 - Status: SUCCESS
+	 - Description: "Only a single top-level call to function _RNCNCNvNtCsbBkWKZuatX0_9valid_ptr14post_condition15new_invalid_ptrs0_0s_0B7_ when checking contract _RNCNCNvNtCsbBkWKZuatX0_9valid_ptr14post_condition15new_invalid_ptrs0_0s_0B7_"
+	 - Location: valid_ptr.rs:38:5 in function valid_ptr::post_condition::new_invalid_ptr::{closure#2}::{closure#1}
+
+Check 7: valid_ptr::post_condition::new_invalid_ptr::{closure#2}::{closure#1}.no_alloc_dealloc_in_requires.1
+	 - Status: SUCCESS
+	 - Description: "Check that requires do not allocate or deallocate memory"
+	 - Location: valid_ptr.rs:38:5 in function valid_ptr::post_condition::new_invalid_ptr::{closure#2}::{closure#1}
+
+Check 8: valid_ptr::post_condition::new_invalid_ptr::{closure#2}::{closure#1}.no_alloc_dealloc_in_ensures.1
+	 - Status: SUCCESS
+	 - Description: "Check that ensures do not allocate or deallocate memory"
+	 - Location: valid_ptr.rs:38:5 in function valid_ptr::post_condition::new_invalid_ptr::{closure#2}::{closure#1}
+
+Check 9: valid_ptr::post_condition::new_invalid_ptr::{closure#2}::{closure#1}.no_recursive_call.1
+	 - Status: SUCCESS
+	 - Description: "No recursive call to function _RNCNCNvNtCsbBkWKZuatX0_9valid_ptr14post_condition15new_invalid_ptrs0_0s_0B7_ when checking contract _RNCNCNvNtCsbBkWKZuatX0_9valid_ptr14post_condition15new_invalid_ptrs0_0s_0B7_"
+	 - Location: valid_ptr.rs:38:5 in function valid_ptr::post_condition::new_invalid_ptr::{closure#2}::{closure#1}
+
+Check 10: post_condition::new_invalid_ptr::{closure#3}.unreachable.1
+	 - Status: SUCCESS
+	 - Description: "unreachable code"
+	 - Location: valid_ptr.rs:38:5 in function post_condition::new_invalid_ptr::{closure#3}
+
+Check 11: kani::mem::is_ptr_aligned::<char>.unreachable.1
+	 - Status: SUCCESS
+	 - Description: "unreachable code"
+	 - Location: ../../../library/kani_core/src/mem.rs:192:9 in function kani::mem::is_ptr_aligned::<char>
+
+Check 12: kani::mem::is_ptr_aligned::<char>.assertion.1
+	 - Status: SUCCESS
+	 - Description: "attempt to subtract with overflow"
+	 - Location: ../../../library/kani_core/src/mem.rs:195:38 in function kani::mem::is_ptr_aligned::<char>
+
+Check 13: kani::mem::is_ptr_aligned::<char>.assertion.2
+	 - Status: SUCCESS
+	 - Description: "attempt to subtract with overflow"
+	 - Location: ../../../library/kani_core/src/mem.rs:197:45 in function kani::mem::is_ptr_aligned::<char>
+
+Check 14: kani::mem::is_inbounds::<char>.unreachable.1
+	 - Status: SUCCESS
+	 - Description: "unreachable code"
+	 - Location: ../../../library/kani_core/src/mem.rs:169:9 in function kani::mem::is_inbounds::<char>
+
+Check 15: kani::mem::is_inbounds::<char>.unsupported_construct.1
+	 - Status: FAILURE
+	 - Description: "Kani does not support reasoning about pointer to unallocated memory"
+	 - Location: ../../../library/kani/src/lib.rs:54:1 in function kani::mem::is_inbounds::<char>
+
+Check 16: kani::mem::assert_is_initialized::<char>.assertion.1
+	 - Status: SUCCESS
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer"
+	 - Location: ../../../library/kani/src/lib.rs:54:1 in function kani::mem::assert_is_initialized::<char>
+
+Check 17: __CPROVER_contracts_make_invalid_pointer.pointer_dereference.1
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: <builtin-library-__CPROVER_contracts_library>:1186 in function __CPROVER_contracts_make_invalid_pointer
+
+Check 18: __CPROVER_contracts_make_invalid_pointer.pointer_dereference.2
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: <builtin-library-__CPROVER_contracts_library>:1186 in function __CPROVER_contracts_make_invalid_pointer
+
+Check 19: __CPROVER_contracts_make_invalid_pointer.pointer_dereference.3
+	 - Status: SUCCESS
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: <builtin-library-__CPROVER_contracts_library>:1186 in function __CPROVER_contracts_make_invalid_pointer
+
+Check 20: __CPROVER_contracts_make_invalid_pointer.pointer_dereference.4
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: <builtin-library-__CPROVER_contracts_library>:1186 in function __CPROVER_contracts_make_invalid_pointer
+
+Check 21: __CPROVER_contracts_make_invalid_pointer.pointer_dereference.5
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: <builtin-library-__CPROVER_contracts_library>:1186 in function __CPROVER_contracts_make_invalid_pointer
+
+Check 22: __CPROVER_contracts_make_invalid_pointer.pointer_dereference.6
+	 - Status: SUCCESS
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: <builtin-library-__CPROVER_contracts_library>:1186 in function __CPROVER_contracts_make_invalid_pointer
+
+Check 23: __CPROVER_contracts_obj_set_create_indexed_by_object_id.bit_count.1
+	 - Status: SUCCESS
+	 - Description: "count leading zeros is undefined for value zero"
+	 - Location: <builtin-library-__CPROVER_contracts_library>:264 in function __CPROVER_contracts_obj_set_create_indexed_by_object_id
+
+Check 24: __CPROVER_contracts_obj_set_create_indexed_by_object_id.bit_count.2
+	 - Status: SUCCESS
+	 - Description: "count leading zeros is undefined for value zero"
+	 - Location: <builtin-library-__CPROVER_contracts_library>:264 in function __CPROVER_contracts_obj_set_create_indexed_by_object_id
+
+Check 25: __CPROVER_contracts_obj_set_create_indexed_by_object_id.bit_count.3
+	 - Status: SUCCESS
+	 - Description: "count leading zeros is undefined for value zero"
+	 - Location: <builtin-library-__CPROVER_contracts_library>:264 in function __CPROVER_contracts_obj_set_create_indexed_by_object_id
+
+Check 26: post_condition::harness.precondition_instance.1
+	 - Status: SUCCESS
+	 - Description: "free argument must be NULL or valid pointer"
+	 - Location: valid_ptr.rs:44:5 in function post_condition::harness
+
+Check 27: post_condition::harness.precondition_instance.2
+	 - Status: SUCCESS
+	 - Description: "free argument must be dynamic object"
+	 - Location: valid_ptr.rs:44:5 in function post_condition::harness
+
+Check 28: post_condition::harness.precondition_instance.3
+	 - Status: SUCCESS
+	 - Description: "free argument has offset zero"
+	 - Location: valid_ptr.rs:44:5 in function post_condition::harness
+
+Check 29: post_condition::harness.precondition_instance.4
+	 - Status: SUCCESS
+	 - Description: "double free"
+	 - Location: valid_ptr.rs:44:5 in function post_condition::harness
+
+Check 30: post_condition::harness.precondition_instance.5
+	 - Status: SUCCESS
+	 - Description: "free called for new[] object"
+	 - Location: valid_ptr.rs:44:5 in function post_condition::harness
+
+Check 31: post_condition::harness.precondition_instance.6
+	 - Status: SUCCESS
+	 - Description: "free called for stack-allocated object"
+	 - Location: valid_ptr.rs:44:5 in function post_condition::harness
+
+Check 32: post_condition::new_invalid_ptr::{closure#2}::{closure#0}.pointer_dereference.1
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: valid_ptr.rs:38:57 in function post_condition::new_invalid_ptr::{closure#2}::{closure#0}
+
+Check 33: post_condition::new_invalid_ptr::{closure#2}::{closure#0}.pointer_dereference.2
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: valid_ptr.rs:38:57 in function post_condition::new_invalid_ptr::{closure#2}::{closure#0}
+
+Check 34: post_condition::new_invalid_ptr::{closure#2}::{closure#0}.pointer_dereference.3
+	 - Status: SUCCESS
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: valid_ptr.rs:38:57 in function post_condition::new_invalid_ptr::{closure#2}::{closure#0}
+
+Check 35: post_condition::new_invalid_ptr::{closure#2}::{closure#0}.pointer_dereference.4
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: valid_ptr.rs:38:57 in function post_condition::new_invalid_ptr::{closure#2}::{closure#0}
+
+Check 36: post_condition::new_invalid_ptr::{closure#2}::{closure#0}.pointer_dereference.5
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: valid_ptr.rs:38:57 in function post_condition::new_invalid_ptr::{closure#2}::{closure#0}
+
+Check 37: post_condition::new_invalid_ptr::{closure#2}::{closure#0}.pointer_dereference.6
+	 - Status: SUCCESS
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: valid_ptr.rs:38:57 in function post_condition::new_invalid_ptr::{closure#2}::{closure#0}
+
+Check 38: kani::mem::has_valid_value::<char>.pointer_dereference.1
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: ../../../library/kani_core/src/mem.rs:226:9 in function kani::mem::has_valid_value::<char>
+
+Check 39: kani::mem::has_valid_value::<char>.pointer_dereference.2
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: ../../../library/kani_core/src/mem.rs:226:9 in function kani::mem::has_valid_value::<char>
+
+Check 40: kani::mem::has_valid_value::<char>.pointer_dereference.3
+	 - Status: SUCCESS
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: ../../../library/kani_core/src/mem.rs:226:9 in function kani::mem::has_valid_value::<char>
+
+Check 41: kani::mem::has_valid_value::<char>.pointer_dereference.4
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: ../../../library/kani_core/src/mem.rs:226:9 in function kani::mem::has_valid_value::<char>
+
+Check 42: kani::mem::has_valid_value::<char>.pointer_dereference.5
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: ../../../library/kani_core/src/mem.rs:226:9 in function kani::mem::has_valid_value::<char>
+
+Check 43: kani::mem::has_valid_value::<char>.pointer_dereference.6
+	 - Status: SUCCESS
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: ../../../library/kani_core/src/mem.rs:226:9 in function kani::mem::has_valid_value::<char>
+
+
+SUMMARY:
+ ** 2 of 43 failed
+Failed Checks: |result| kani::mem::can_dereference(result.0)
+ File: "valid_ptr.rs", line 38, in post_condition::new_invalid_ptr::{closure#2}
+Failed Checks: Kani does not support reasoning about pointer to unallocated memory
+ File: "/home/ubuntu/git/kani/library/kani/src/lib.rs", line 54, in kani::mem::is_inbounds::<char>
+
+VERIFICATION:- FAILED
+Verification Time: 0.23739576s
+
+Checking harness pre_condition::harness_invalid_ptr...
+CBMC 6.5.0 (cbmc-6.5.0)
+CBMC version 6.5.0 (cbmc-6.5.0) 64-bit x86_64 linux
+Reading GOTO program from file /home/ubuntu/git/kani/tests/expected/function-contract/valid_ptr__RNvNtCsbBkWKZuatX0_9valid_ptr13pre_condition19harness_invalid_ptr.out
+Generating GOTO Program
+Adding CPROVER library (x86_64)
+Removal of function pointers and virtual functions
+Generic Property Instrumentation
+Running with 16 object bits, 48 offset bits (user-specified)
+Starting Bounded Model Checking
+aborting path on assume(false) at file /home/ubuntu/git/kani/library/kani/src/lib.rs line 54 column 1 function kani::mem::is_inbounds::<i32> thread 0
+Runtime Symex: 0.0431765s
+size of program expression: 1581 steps
+slicing removed 996 assignments
+Generated 65 VCC(s), 14 remaining after simplification
+Runtime Postprocess Equation: 0.000164444s
+Passing problem to propositional reduction
+converting SSA
+Runtime Convert SSA: 0.00255703s
+Running propositional reduction
+Post-processing
+Runtime Post-process: 0.00133182s
+Solving with CaDiCaL 2.0.0
+2339 variables, 2443 clauses
+SAT checker: instance is SATISFIABLE
+Runtime Solver: 0.00144046s
+Runtime decision procedure: 0.00411955s
+Running propositional reduction
+Solving with CaDiCaL 2.0.0
+2340 variables, 2444 clauses
+SAT checker: instance is UNSATISFIABLE
+Runtime Solver: 2.21e-05s
+Runtime decision procedure: 6.7432e-05s
+
+RESULTS:
+Check 1: __CPROVER_contracts_write_set_record_deallocated.unwind.1
+	 - Status: SUCCESS
+	 - Description: "unwinding assertion loop 0"
+	 - Location: <builtin-library-__CPROVER_contracts_library>:740 in function __CPROVER_contracts_write_set_record_deallocated
+
+Check 2: free.frees.1
+	 - Status: SUCCESS
+	 - Description: "Check that ptr is freeable"
+	 - Location: <builtin-library-free>:43 in function free
+
+Check 3: core::panicking::panic_nounwind_fmt::runtime.unsupported_construct.1
+	 - Status: SUCCESS
+	 - Description: "call to foreign "Rust" function `rust_begin_unwind` is not currently supported by Kani. Please post your example at https://github.com/model-checking/kani/issues/new/choose"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/panicking.rs:105:17 in function core::panicking::panic_nounwind_fmt::runtime
+
+Check 4: std::panic::Location::<'_>::caller.unsupported_construct.1
+	 - Status: SUCCESS
+	 - Description: "caller_location is not currently supported by Kani. Please post your example at https://github.com/model-checking/kani/issues/374"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/panic/location.rs:89:9 in function std::panic::Location::<'_>::caller
+
+Check 5: __CPROVER_contracts_write_set_check_assignment.assertion.1
+	 - Status: SUCCESS
+	 - Description: "ptr NULL or writable up to size"
+	 - Location: <builtin-library-__CPROVER_contracts_library>:805 in function __CPROVER_contracts_write_set_check_assignment
+
+Check 6: __CPROVER_contracts_write_set_check_assignment.assertion.2
+	 - Status: SUCCESS
+	 - Description: "CAR size is less than __CPROVER_max_malloc_size"
+	 - Location: <builtin-library-__CPROVER_contracts_library>:822 in function __CPROVER_contracts_write_set_check_assignment
+
+Check 7: __CPROVER_contracts_write_set_check_assignment.assertion.3
+	 - Status: SUCCESS
+	 - Description: "no offset bits overflow on CAR upper bound computation"
+	 - Location: <builtin-library-__CPROVER_contracts_library>:828 in function __CPROVER_contracts_write_set_check_assignment
+
+Check 8: __CPROVER_contracts_write_set_check_assignment.unwind.1
+	 - Status: SUCCESS
+	 - Description: "unwinding assertion loop 0"
+	 - Location: <builtin-library-__CPROVER_contracts_library>:837 in function __CPROVER_contracts_write_set_check_assignment
+
+Check 9: pre_condition::harness_invalid_ptr.assertion.1
+	 - Status: UNREACHABLE
+	 - Description: "assertion failed: unsafe { read_ptr(ptr) } == -20"
+	 - Location: valid_ptr.rs:31:9 in function pre_condition::harness_invalid_ptr
+
+Check 10: pre_condition::read_ptr::{closure#2}::{closure#0}.safety_check.1
+	 - Status: UNREACHABLE
+	 - Description: "misaligned pointer dereference: address must be a multiple of its type's alignment"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 11: valid_ptr::pre_condition::read_ptr::{closure#2}::{closure#0}.single_top_level_call.1
+	 - Status: SUCCESS
+	 - Description: "Only a single top-level call to function _RNCNCNvNtCsbBkWKZuatX0_9valid_ptr13pre_condition8read_ptrs0_00B7_ when checking contract _RNCNCNvNtCsbBkWKZuatX0_9valid_ptr13pre_condition8read_ptrs0_00B7_"
+	 - Location: valid_ptr.rs:9:5 in function valid_ptr::pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 12: valid_ptr::pre_condition::read_ptr::{closure#2}::{closure#0}.no_alloc_dealloc_in_requires.1
+	 - Status: SUCCESS
+	 - Description: "Check that requires do not allocate or deallocate memory"
+	 - Location: valid_ptr.rs:9:5 in function valid_ptr::pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 13: valid_ptr::pre_condition::read_ptr::{closure#2}::{closure#0}.no_alloc_dealloc_in_ensures.1
+	 - Status: SUCCESS
+	 - Description: "Check that ensures do not allocate or deallocate memory"
+	 - Location: valid_ptr.rs:9:5 in function valid_ptr::pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 14: valid_ptr::pre_condition::read_ptr::{closure#2}::{closure#0}.no_recursive_call.1
+	 - Status: SUCCESS
+	 - Description: "No recursive call to function _RNCNCNvNtCsbBkWKZuatX0_9valid_ptr13pre_condition8read_ptrs0_00B7_ when checking contract _RNCNCNvNtCsbBkWKZuatX0_9valid_ptr13pre_condition8read_ptrs0_00B7_"
+	 - Location: valid_ptr.rs:9:5 in function valid_ptr::pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 15: pre_condition::read_ptr::{closure#3}.unreachable.1
+	 - Status: SUCCESS
+	 - Description: "unreachable code"
+	 - Location: valid_ptr.rs:9:5 in function pre_condition::read_ptr::{closure#3}
+
+Check 16: kani::mem::assert_is_initialized::<i32>.assertion.1
+	 - Status: UNREACHABLE
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer"
+	 - Location: ../../../library/kani/src/lib.rs:54:1 in function kani::mem::assert_is_initialized::<i32>
+
+Check 17: std::fmt::Arguments::<'_>::new_const::<1>.assigns.1
+	 - Status: SUCCESS
+	 - Description: "Check that *((unsigned char **)&temp_0) is assignable"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/fmt/mod.rs:593:34 in function std::fmt::Arguments::<'_>::new_const::<1>
+
+Check 18: pre_condition::read_ptr.safety_check.1
+	 - Status: UNREACHABLE
+	 - Description: "misaligned pointer dereference: address must be a multiple of its type's alignment"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr
+
+Check 19: kani::mem::is_inbounds::<i32>.unreachable.1
+	 - Status: SUCCESS
+	 - Description: "unreachable code"
+	 - Location: ../../../library/kani_core/src/mem.rs:169:9 in function kani::mem::is_inbounds::<i32>
+
+Check 20: kani::mem::is_inbounds::<i32>.unsupported_construct.1
+	 - Status: FAILURE
+	 - Description: "Kani does not support reasoning about pointer to unallocated memory"
+	 - Location: ../../../library/kani/src/lib.rs:54:1 in function kani::mem::is_inbounds::<i32>
+
+Check 21: pre_condition::read_ptr::{closure#0}.unreachable.1
+	 - Status: SUCCESS
+	 - Description: "unreachable code"
+	 - Location: valid_ptr.rs:9:5 in function pre_condition::read_ptr::{closure#0}
+
+Check 22: pre_condition::read_ptr::{closure#1}.unreachable.1
+	 - Status: SUCCESS
+	 - Description: "unreachable code"
+	 - Location: valid_ptr.rs:9:5 in function pre_condition::read_ptr::{closure#1}
+
+Check 23: kani::mem::is_ptr_aligned::<i32>.unreachable.1
+	 - Status: SUCCESS
+	 - Description: "unreachable code"
+	 - Location: ../../../library/kani_core/src/mem.rs:192:9 in function kani::mem::is_ptr_aligned::<i32>
+
+Check 24: kani::mem::is_ptr_aligned::<i32>.assertion.1
+	 - Status: SUCCESS
+	 - Description: "attempt to subtract with overflow"
+	 - Location: ../../../library/kani_core/src/mem.rs:195:38 in function kani::mem::is_ptr_aligned::<i32>
+
+Check 25: kani::mem::is_ptr_aligned::<i32>.assertion.2
+	 - Status: SUCCESS
+	 - Description: "attempt to subtract with overflow"
+	 - Location: ../../../library/kani_core/src/mem.rs:197:45 in function kani::mem::is_ptr_aligned::<i32>
+
+Check 26: __CPROVER_contracts_make_invalid_pointer.pointer_dereference.1
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: <builtin-library-__CPROVER_contracts_library>:1186 in function __CPROVER_contracts_make_invalid_pointer
+
+Check 27: __CPROVER_contracts_make_invalid_pointer.pointer_dereference.2
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: <builtin-library-__CPROVER_contracts_library>:1186 in function __CPROVER_contracts_make_invalid_pointer
+
+Check 28: __CPROVER_contracts_make_invalid_pointer.pointer_dereference.3
+	 - Status: SUCCESS
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: <builtin-library-__CPROVER_contracts_library>:1186 in function __CPROVER_contracts_make_invalid_pointer
+
+Check 29: __CPROVER_contracts_make_invalid_pointer.pointer_dereference.4
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: <builtin-library-__CPROVER_contracts_library>:1186 in function __CPROVER_contracts_make_invalid_pointer
+
+Check 30: __CPROVER_contracts_make_invalid_pointer.pointer_dereference.5
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: <builtin-library-__CPROVER_contracts_library>:1186 in function __CPROVER_contracts_make_invalid_pointer
+
+Check 31: __CPROVER_contracts_make_invalid_pointer.pointer_dereference.6
+	 - Status: SUCCESS
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: <builtin-library-__CPROVER_contracts_library>:1186 in function __CPROVER_contracts_make_invalid_pointer
+
+Check 32: __CPROVER_contracts_obj_set_create_indexed_by_object_id.bit_count.1
+	 - Status: SUCCESS
+	 - Description: "count leading zeros is undefined for value zero"
+	 - Location: <builtin-library-__CPROVER_contracts_library>:264 in function __CPROVER_contracts_obj_set_create_indexed_by_object_id
+
+Check 33: __CPROVER_contracts_obj_set_create_indexed_by_object_id.bit_count.2
+	 - Status: SUCCESS
+	 - Description: "count leading zeros is undefined for value zero"
+	 - Location: <builtin-library-__CPROVER_contracts_library>:264 in function __CPROVER_contracts_obj_set_create_indexed_by_object_id
+
+Check 34: __CPROVER_contracts_obj_set_create_indexed_by_object_id.bit_count.3
+	 - Status: SUCCESS
+	 - Description: "count leading zeros is undefined for value zero"
+	 - Location: <builtin-library-__CPROVER_contracts_library>:264 in function __CPROVER_contracts_obj_set_create_indexed_by_object_id
+
+Check 35: pre_condition::read_ptr::{closure#2}.pointer_dereference.1
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: valid_ptr.rs:9:49 in function pre_condition::read_ptr::{closure#2}
+
+Check 36: pre_condition::read_ptr::{closure#2}.pointer_dereference.2
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: valid_ptr.rs:9:49 in function pre_condition::read_ptr::{closure#2}
+
+Check 37: pre_condition::read_ptr::{closure#2}.pointer_dereference.3
+	 - Status: SUCCESS
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: valid_ptr.rs:9:49 in function pre_condition::read_ptr::{closure#2}
+
+Check 38: pre_condition::read_ptr::{closure#2}.pointer_dereference.4
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: valid_ptr.rs:9:49 in function pre_condition::read_ptr::{closure#2}
+
+Check 39: pre_condition::read_ptr::{closure#2}.pointer_dereference.5
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: valid_ptr.rs:9:49 in function pre_condition::read_ptr::{closure#2}
+
+Check 40: pre_condition::read_ptr::{closure#2}.pointer_dereference.6
+	 - Status: SUCCESS
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: valid_ptr.rs:9:49 in function pre_condition::read_ptr::{closure#2}
+
+Check 41: pre_condition::read_ptr::{closure#2}.pointer_dereference.7
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: valid_ptr.rs:9:49 in function pre_condition::read_ptr::{closure#2}
+
+Check 42: pre_condition::read_ptr::{closure#2}.pointer_dereference.8
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: valid_ptr.rs:9:49 in function pre_condition::read_ptr::{closure#2}
+
+Check 43: pre_condition::read_ptr::{closure#2}.pointer_dereference.9
+	 - Status: SUCCESS
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: valid_ptr.rs:9:49 in function pre_condition::read_ptr::{closure#2}
+
+Check 44: pre_condition::read_ptr::{closure#2}.pointer_dereference.10
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: valid_ptr.rs:9:49 in function pre_condition::read_ptr::{closure#2}
+
+Check 45: pre_condition::read_ptr::{closure#2}.pointer_dereference.11
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: valid_ptr.rs:9:49 in function pre_condition::read_ptr::{closure#2}
+
+Check 46: pre_condition::read_ptr::{closure#2}.pointer_dereference.12
+	 - Status: SUCCESS
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: valid_ptr.rs:9:49 in function pre_condition::read_ptr::{closure#2}
+
+Check 47: pre_condition::read_ptr::{closure#2}.pointer_dereference.13
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: valid_ptr.rs:9:5 in function pre_condition::read_ptr::{closure#2}
+
+Check 48: pre_condition::read_ptr::{closure#2}.pointer_dereference.14
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: valid_ptr.rs:9:5 in function pre_condition::read_ptr::{closure#2}
+
+Check 49: pre_condition::read_ptr::{closure#2}.pointer_dereference.15
+	 - Status: SUCCESS
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: valid_ptr.rs:9:5 in function pre_condition::read_ptr::{closure#2}
+
+Check 50: pre_condition::read_ptr::{closure#2}.pointer_dereference.16
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: valid_ptr.rs:9:5 in function pre_condition::read_ptr::{closure#2}
+
+Check 51: pre_condition::read_ptr::{closure#2}.pointer_dereference.17
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: valid_ptr.rs:9:5 in function pre_condition::read_ptr::{closure#2}
+
+Check 52: pre_condition::read_ptr::{closure#2}.pointer_dereference.18
+	 - Status: SUCCESS
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: valid_ptr.rs:9:5 in function pre_condition::read_ptr::{closure#2}
+
+Check 53: std::fmt::Arguments::<'_>::new_const::<1>.pointer_dereference.1
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/fmt/mod.rs:593:34 in function std::fmt::Arguments::<'_>::new_const::<1>
+
+Check 54: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.1
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 55: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.2
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 56: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.3
+	 - Status: SUCCESS
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 57: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.4
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 58: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.5
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 59: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.6
+	 - Status: SUCCESS
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 60: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.7
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 61: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.8
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 62: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.9
+	 - Status: SUCCESS
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 63: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.10
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 64: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.11
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 65: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.12
+	 - Status: SUCCESS
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 66: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.13
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 67: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.14
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 68: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.15
+	 - Status: SUCCESS
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 69: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.16
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 70: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.17
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 71: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.18
+	 - Status: SUCCESS
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 72: pre_condition::harness_invalid_ptr.precondition_instance.1
+	 - Status: SUCCESS
+	 - Description: "free argument must be NULL or valid pointer"
+	 - Location: valid_ptr.rs:28:5 in function pre_condition::harness_invalid_ptr
+
+Check 73: pre_condition::harness_invalid_ptr.precondition_instance.2
+	 - Status: SUCCESS
+	 - Description: "free argument must be dynamic object"
+	 - Location: valid_ptr.rs:28:5 in function pre_condition::harness_invalid_ptr
+
+Check 74: pre_condition::harness_invalid_ptr.precondition_instance.3
+	 - Status: SUCCESS
+	 - Description: "free argument has offset zero"
+	 - Location: valid_ptr.rs:28:5 in function pre_condition::harness_invalid_ptr
+
+Check 75: pre_condition::harness_invalid_ptr.precondition_instance.4
+	 - Status: SUCCESS
+	 - Description: "double free"
+	 - Location: valid_ptr.rs:28:5 in function pre_condition::harness_invalid_ptr
+
+Check 76: pre_condition::harness_invalid_ptr.precondition_instance.5
+	 - Status: SUCCESS
+	 - Description: "free called for new[] object"
+	 - Location: valid_ptr.rs:28:5 in function pre_condition::harness_invalid_ptr
+
+Check 77: pre_condition::harness_invalid_ptr.precondition_instance.6
+	 - Status: SUCCESS
+	 - Description: "free called for stack-allocated object"
+	 - Location: valid_ptr.rs:28:5 in function pre_condition::harness_invalid_ptr
+
+Check 78: pre_condition::read_ptr.pointer_dereference.1
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr
+
+Check 79: pre_condition::read_ptr.pointer_dereference.2
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr
+
+Check 80: pre_condition::read_ptr.pointer_dereference.3
+	 - Status: SUCCESS
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr
+
+Check 81: pre_condition::read_ptr.pointer_dereference.4
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr
+
+Check 82: pre_condition::read_ptr.pointer_dereference.5
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr
+
+Check 83: pre_condition::read_ptr.pointer_dereference.6
+	 - Status: SUCCESS
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr
+
+
+SUMMARY:
+ ** 1 of 83 failed (4 unreachable)
+Failed Checks: Kani does not support reasoning about pointer to unallocated memory
+ File: "/home/ubuntu/git/kani/library/kani/src/lib.rs", line 54, in kani::mem::is_inbounds::<i32>
+
+VERIFICATION:- FAILED
+Verification Time: 0.2182275s
+
+Checking harness pre_condition::harness_stack_ptr...
+CBMC 6.5.0 (cbmc-6.5.0)
+CBMC version 6.5.0 (cbmc-6.5.0) 64-bit x86_64 linux
+Reading GOTO program from file /home/ubuntu/git/kani/tests/expected/function-contract/valid_ptr__RNvNtCsbBkWKZuatX0_9valid_ptr13pre_condition17harness_stack_ptr.out
+Generating GOTO Program
+Adding CPROVER library (x86_64)
+Removal of function pointers and virtual functions
+Generic Property Instrumentation
+Running with 16 object bits, 48 offset bits (user-specified)
+Starting Bounded Model Checking
+Runtime Symex: 0.0401044s
+size of program expression: 1480 steps
+slicing removed 939 assignments
+Generated 64 VCC(s), 6 remaining after simplification
+Runtime Postprocess Equation: 0.000148573s
+Passing problem to propositional reduction
+converting SSA
+Runtime Convert SSA: 0.00216989s
+Running propositional reduction
+Post-processing
+Runtime Post-process: 8.16e-06s
+Solving with CaDiCaL 2.0.0
+2684 variables, 2711 clauses
+SAT checker: instance is SATISFIABLE
+Runtime Solver: 7.1602e-05s
+Runtime decision procedure: 0.00236569s
+Running propositional reduction
+Solving with CaDiCaL 2.0.0
+2685 variables, 2712 clauses
+SAT checker: instance is UNSATISFIABLE
+Runtime Solver: 2.231e-05s
+Runtime decision procedure: 4.9571e-05s
+
+RESULTS:
+Check 1: pre_condition::read_ptr::{closure#1}.unreachable.1
+	 - Status: SUCCESS
+	 - Description: "unreachable code"
+	 - Location: valid_ptr.rs:9:5 in function pre_condition::read_ptr::{closure#1}
+
+Check 2: free.frees.1
+	 - Status: SUCCESS
+	 - Description: "Check that ptr is freeable"
+	 - Location: <builtin-library-free>:43 in function free
+
+Check 3: valid_ptr::pre_condition::read_ptr::{closure#2}::{closure#0}.single_top_level_call.1
+	 - Status: SUCCESS
+	 - Description: "Only a single top-level call to function _RNCNCNvNtCsbBkWKZuatX0_9valid_ptr13pre_condition8read_ptrs0_00B7_ when checking contract _RNCNCNvNtCsbBkWKZuatX0_9valid_ptr13pre_condition8read_ptrs0_00B7_"
+	 - Location: valid_ptr.rs:9:5 in function valid_ptr::pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 4: valid_ptr::pre_condition::read_ptr::{closure#2}::{closure#0}.no_alloc_dealloc_in_requires.1
+	 - Status: SUCCESS
+	 - Description: "Check that requires do not allocate or deallocate memory"
+	 - Location: valid_ptr.rs:9:5 in function valid_ptr::pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 5: valid_ptr::pre_condition::read_ptr::{closure#2}::{closure#0}.no_alloc_dealloc_in_ensures.1
+	 - Status: SUCCESS
+	 - Description: "Check that ensures do not allocate or deallocate memory"
+	 - Location: valid_ptr.rs:9:5 in function valid_ptr::pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 6: valid_ptr::pre_condition::read_ptr::{closure#2}::{closure#0}.no_recursive_call.1
+	 - Status: SUCCESS
+	 - Description: "No recursive call to function _RNCNCNvNtCsbBkWKZuatX0_9valid_ptr13pre_condition8read_ptrs0_00B7_ when checking contract _RNCNCNvNtCsbBkWKZuatX0_9valid_ptr13pre_condition8read_ptrs0_00B7_"
+	 - Location: valid_ptr.rs:9:5 in function valid_ptr::pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 7: __CPROVER_contracts_write_set_record_deallocated.unwind.1
+	 - Status: SUCCESS
+	 - Description: "unwinding assertion loop 0"
+	 - Location: <builtin-library-__CPROVER_contracts_library>:740 in function __CPROVER_contracts_write_set_record_deallocated
+
+Check 8: pre_condition::read_ptr::{closure#3}.unreachable.1
+	 - Status: SUCCESS
+	 - Description: "unreachable code"
+	 - Location: valid_ptr.rs:9:5 in function pre_condition::read_ptr::{closure#3}
+
+Check 9: pre_condition::harness_stack_ptr.assertion.1
+	 - Status: SUCCESS
+	 - Description: "assertion failed: unsafe { read_ptr(&val) } == -20"
+	 - Location: valid_ptr.rs:25:9 in function pre_condition::harness_stack_ptr
+
+Check 10: kani::mem::is_ptr_aligned::<i32>.unreachable.1
+	 - Status: SUCCESS
+	 - Description: "unreachable code"
+	 - Location: ../../../library/kani_core/src/mem.rs:192:9 in function kani::mem::is_ptr_aligned::<i32>
+
+Check 11: kani::mem::is_ptr_aligned::<i32>.assertion.1
+	 - Status: SUCCESS
+	 - Description: "attempt to subtract with overflow"
+	 - Location: ../../../library/kani_core/src/mem.rs:195:38 in function kani::mem::is_ptr_aligned::<i32>
+
+Check 12: kani::mem::is_ptr_aligned::<i32>.assertion.2
+	 - Status: SUCCESS
+	 - Description: "attempt to subtract with overflow"
+	 - Location: ../../../library/kani_core/src/mem.rs:197:45 in function kani::mem::is_ptr_aligned::<i32>
+
+Check 13: kani::mem::is_inbounds::<i32>.unreachable.1
+	 - Status: SUCCESS
+	 - Description: "unreachable code"
+	 - Location: ../../../library/kani_core/src/mem.rs:169:9 in function kani::mem::is_inbounds::<i32>
+
+Check 14: kani::mem::is_inbounds::<i32>.unsupported_construct.1
+	 - Status: SUCCESS
+	 - Description: "Kani does not support reasoning about pointer to unallocated memory"
+	 - Location: ../../../library/kani/src/lib.rs:54:1 in function kani::mem::is_inbounds::<i32>
+
+Check 15: pre_condition::read_ptr.safety_check.1
+	 - Status: UNREACHABLE
+	 - Description: "misaligned pointer dereference: address must be a multiple of its type's alignment"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr
+
+Check 16: pre_condition::read_ptr::{closure#2}::{closure#0}.safety_check.1
+	 - Status: SUCCESS
+	 - Description: "misaligned pointer dereference: address must be a multiple of its type's alignment"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 17: pre_condition::read_ptr::{closure#0}.unreachable.1
+	 - Status: SUCCESS
+	 - Description: "unreachable code"
+	 - Location: valid_ptr.rs:9:5 in function pre_condition::read_ptr::{closure#0}
+
+Check 18: kani::mem::assert_is_initialized::<i32>.assertion.1
+	 - Status: SUCCESS
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer"
+	 - Location: ../../../library/kani/src/lib.rs:54:1 in function kani::mem::assert_is_initialized::<i32>
+
+Check 19: __CPROVER_contracts_obj_set_create_indexed_by_object_id.bit_count.1
+	 - Status: SUCCESS
+	 - Description: "count leading zeros is undefined for value zero"
+	 - Location: <builtin-library-__CPROVER_contracts_library>:264 in function __CPROVER_contracts_obj_set_create_indexed_by_object_id
+
+Check 20: __CPROVER_contracts_obj_set_create_indexed_by_object_id.bit_count.2
+	 - Status: SUCCESS
+	 - Description: "count leading zeros is undefined for value zero"
+	 - Location: <builtin-library-__CPROVER_contracts_library>:264 in function __CPROVER_contracts_obj_set_create_indexed_by_object_id
+
+Check 21: __CPROVER_contracts_obj_set_create_indexed_by_object_id.bit_count.3
+	 - Status: SUCCESS
+	 - Description: "count leading zeros is undefined for value zero"
+	 - Location: <builtin-library-__CPROVER_contracts_library>:264 in function __CPROVER_contracts_obj_set_create_indexed_by_object_id
+
+Check 22: __CPROVER_contracts_make_invalid_pointer.pointer_dereference.1
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: <builtin-library-__CPROVER_contracts_library>:1186 in function __CPROVER_contracts_make_invalid_pointer
+
+Check 23: __CPROVER_contracts_make_invalid_pointer.pointer_dereference.2
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: <builtin-library-__CPROVER_contracts_library>:1186 in function __CPROVER_contracts_make_invalid_pointer
+
+Check 24: __CPROVER_contracts_make_invalid_pointer.pointer_dereference.3
+	 - Status: SUCCESS
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: <builtin-library-__CPROVER_contracts_library>:1186 in function __CPROVER_contracts_make_invalid_pointer
+
+Check 25: __CPROVER_contracts_make_invalid_pointer.pointer_dereference.4
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: <builtin-library-__CPROVER_contracts_library>:1186 in function __CPROVER_contracts_make_invalid_pointer
+
+Check 26: __CPROVER_contracts_make_invalid_pointer.pointer_dereference.5
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: <builtin-library-__CPROVER_contracts_library>:1186 in function __CPROVER_contracts_make_invalid_pointer
+
+Check 27: __CPROVER_contracts_make_invalid_pointer.pointer_dereference.6
+	 - Status: SUCCESS
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: <builtin-library-__CPROVER_contracts_library>:1186 in function __CPROVER_contracts_make_invalid_pointer
+
+Check 28: pre_condition::harness_stack_ptr.precondition_instance.1
+	 - Status: SUCCESS
+	 - Description: "free argument must be NULL or valid pointer"
+	 - Location: valid_ptr.rs:22:5 in function pre_condition::harness_stack_ptr
+
+Check 29: pre_condition::harness_stack_ptr.precondition_instance.2
+	 - Status: SUCCESS
+	 - Description: "free argument must be dynamic object"
+	 - Location: valid_ptr.rs:22:5 in function pre_condition::harness_stack_ptr
+
+Check 30: pre_condition::harness_stack_ptr.precondition_instance.3
+	 - Status: SUCCESS
+	 - Description: "free argument has offset zero"
+	 - Location: valid_ptr.rs:22:5 in function pre_condition::harness_stack_ptr
+
+Check 31: pre_condition::harness_stack_ptr.precondition_instance.4
+	 - Status: SUCCESS
+	 - Description: "double free"
+	 - Location: valid_ptr.rs:22:5 in function pre_condition::harness_stack_ptr
+
+Check 32: pre_condition::harness_stack_ptr.precondition_instance.5
+	 - Status: SUCCESS
+	 - Description: "free called for new[] object"
+	 - Location: valid_ptr.rs:22:5 in function pre_condition::harness_stack_ptr
+
+Check 33: pre_condition::harness_stack_ptr.precondition_instance.6
+	 - Status: SUCCESS
+	 - Description: "free called for stack-allocated object"
+	 - Location: valid_ptr.rs:22:5 in function pre_condition::harness_stack_ptr
+
+Check 34: pre_condition::read_ptr.pointer_dereference.1
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr
+
+Check 35: pre_condition::read_ptr.pointer_dereference.2
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr
+
+Check 36: pre_condition::read_ptr.pointer_dereference.3
+	 - Status: SUCCESS
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr
+
+Check 37: pre_condition::read_ptr.pointer_dereference.4
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr
+
+Check 38: pre_condition::read_ptr.pointer_dereference.5
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr
+
+Check 39: pre_condition::read_ptr.pointer_dereference.6
+	 - Status: SUCCESS
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr
+
+Check 40: pre_condition::read_ptr::{closure#2}.pointer_dereference.1
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: valid_ptr.rs:9:49 in function pre_condition::read_ptr::{closure#2}
+
+Check 41: pre_condition::read_ptr::{closure#2}.pointer_dereference.2
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: valid_ptr.rs:9:49 in function pre_condition::read_ptr::{closure#2}
+
+Check 42: pre_condition::read_ptr::{closure#2}.pointer_dereference.3
+	 - Status: SUCCESS
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: valid_ptr.rs:9:49 in function pre_condition::read_ptr::{closure#2}
+
+Check 43: pre_condition::read_ptr::{closure#2}.pointer_dereference.4
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: valid_ptr.rs:9:49 in function pre_condition::read_ptr::{closure#2}
+
+Check 44: pre_condition::read_ptr::{closure#2}.pointer_dereference.5
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: valid_ptr.rs:9:49 in function pre_condition::read_ptr::{closure#2}
+
+Check 45: pre_condition::read_ptr::{closure#2}.pointer_dereference.6
+	 - Status: SUCCESS
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: valid_ptr.rs:9:49 in function pre_condition::read_ptr::{closure#2}
+
+Check 46: pre_condition::read_ptr::{closure#2}.pointer_dereference.7
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: valid_ptr.rs:9:49 in function pre_condition::read_ptr::{closure#2}
+
+Check 47: pre_condition::read_ptr::{closure#2}.pointer_dereference.8
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: valid_ptr.rs:9:49 in function pre_condition::read_ptr::{closure#2}
+
+Check 48: pre_condition::read_ptr::{closure#2}.pointer_dereference.9
+	 - Status: SUCCESS
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: valid_ptr.rs:9:49 in function pre_condition::read_ptr::{closure#2}
+
+Check 49: pre_condition::read_ptr::{closure#2}.pointer_dereference.10
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: valid_ptr.rs:9:49 in function pre_condition::read_ptr::{closure#2}
+
+Check 50: pre_condition::read_ptr::{closure#2}.pointer_dereference.11
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: valid_ptr.rs:9:49 in function pre_condition::read_ptr::{closure#2}
+
+Check 51: pre_condition::read_ptr::{closure#2}.pointer_dereference.12
+	 - Status: SUCCESS
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: valid_ptr.rs:9:49 in function pre_condition::read_ptr::{closure#2}
+
+Check 52: pre_condition::read_ptr::{closure#2}.pointer_dereference.13
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: valid_ptr.rs:9:5 in function pre_condition::read_ptr::{closure#2}
+
+Check 53: pre_condition::read_ptr::{closure#2}.pointer_dereference.14
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: valid_ptr.rs:9:5 in function pre_condition::read_ptr::{closure#2}
+
+Check 54: pre_condition::read_ptr::{closure#2}.pointer_dereference.15
+	 - Status: SUCCESS
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: valid_ptr.rs:9:5 in function pre_condition::read_ptr::{closure#2}
+
+Check 55: pre_condition::read_ptr::{closure#2}.pointer_dereference.16
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: valid_ptr.rs:9:5 in function pre_condition::read_ptr::{closure#2}
+
+Check 56: pre_condition::read_ptr::{closure#2}.pointer_dereference.17
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: valid_ptr.rs:9:5 in function pre_condition::read_ptr::{closure#2}
+
+Check 57: pre_condition::read_ptr::{closure#2}.pointer_dereference.18
+	 - Status: SUCCESS
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: valid_ptr.rs:9:5 in function pre_condition::read_ptr::{closure#2}
+
+Check 58: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.1
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 59: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.2
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 60: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.3
+	 - Status: SUCCESS
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 61: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.4
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 62: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.5
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 63: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.6
+	 - Status: SUCCESS
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 64: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.7
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 65: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.8
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 66: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.9
+	 - Status: SUCCESS
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 67: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.10
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 68: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.11
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 69: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.12
+	 - Status: SUCCESS
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 70: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.13
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 71: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.14
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 72: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.15
+	 - Status: SUCCESS
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 73: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.16
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 74: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.17
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 75: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.18
+	 - Status: SUCCESS
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+
+SUMMARY:
+ ** 0 of 75 failed (1 unreachable)
+
+VERIFICATION:- SUCCESSFUL
+Verification Time: 0.20222476s
+
+Checking harness pre_condition::harness_head_ptr...
+CBMC 6.5.0 (cbmc-6.5.0)
+CBMC version 6.5.0 (cbmc-6.5.0) 64-bit x86_64 linux
+Reading GOTO program from file /home/ubuntu/git/kani/tests/expected/function-contract/valid_ptr__RNvNtCsbBkWKZuatX0_9valid_ptr13pre_condition16harness_head_ptr.out
+Generating GOTO Program
+Adding CPROVER library (x86_64)
+Removal of function pointers and virtual functions
+Generic Property Instrumentation
+Running with 16 object bits, 48 offset bits (user-specified)
+Starting Bounded Model Checking
+aborting path on assume(false) at file /home/ubuntu/git/kani/library/kani/src/lib.rs line 54 column 1 function kani::mem::is_inbounds::<i32> thread 0
+Runtime Symex: 0.0928893s
+size of program expression: 3625 steps
+slicing removed 2311 assignments
+Generated 128 VCC(s), 32 remaining after simplification
+Runtime Postprocess Equation: 0.000674525s
+Passing problem to propositional reduction
+converting SSA
+Runtime Convert SSA: 0.00651514s
+Running propositional reduction
+Post-processing
+Runtime Post-process: 6.96e-06s
+Solving with CaDiCaL 2.0.0
+6197 variables, 8300 clauses
+SAT checker: instance is SATISFIABLE
+Runtime Solver: 0.000296816s
+Runtime decision procedure: 0.0070822s
+Running propositional reduction
+Solving with CaDiCaL 2.0.0
+6198 variables, 8301 clauses
+SAT checker: instance is UNSATISFIABLE
+Runtime Solver: 0.000107843s
+Runtime decision procedure: 0.000156784s
+
+RESULTS:
+Check 1: __CPROVER_contracts_write_set_check_assignment.assertion.1
+	 - Status: SUCCESS
+	 - Description: "ptr NULL or writable up to size"
+	 - Location: <builtin-library-__CPROVER_contracts_library>:805 in function __CPROVER_contracts_write_set_check_assignment
+
+Check 2: __CPROVER_contracts_write_set_check_assignment.assertion.2
+	 - Status: SUCCESS
+	 - Description: "CAR size is less than __CPROVER_max_malloc_size"
+	 - Location: <builtin-library-__CPROVER_contracts_library>:822 in function __CPROVER_contracts_write_set_check_assignment
+
+Check 3: __CPROVER_contracts_write_set_check_assignment.assertion.3
+	 - Status: SUCCESS
+	 - Description: "no offset bits overflow on CAR upper bound computation"
+	 - Location: <builtin-library-__CPROVER_contracts_library>:828 in function __CPROVER_contracts_write_set_check_assignment
+
+Check 4: __CPROVER_contracts_write_set_check_assignment.unwind.1
+	 - Status: SUCCESS
+	 - Description: "unwinding assertion loop 0"
+	 - Location: <builtin-library-__CPROVER_contracts_library>:837 in function __CPROVER_contracts_write_set_check_assignment
+
+Check 5: __CPROVER_contracts_write_set_add_allocated.assertion.1
+	 - Status: SUCCESS
+	 - Description: "dynamic allocation is allowed"
+	 - Location: <builtin-library-__CPROVER_contracts_library>:634 in function __CPROVER_contracts_write_set_add_allocated
+
+Check 6: malloc.assertion.1
+	 - Status: SUCCESS
+	 - Description: "max allocation size exceeded"
+	 - Location: <builtin-library-malloc>:31 in function malloc
+
+Check 7: malloc.assertion.2
+	 - Status: SUCCESS
+	 - Description: "max allocation may fail"
+	 - Location: <builtin-library-malloc>:36 in function malloc
+
+Check 8: __rust_dealloc.assertion.1
+	 - Status: SUCCESS
+	 - Description: "Alignment is power of two"
+	 - Location: ../../../library/kani/kani_lib.c:85 in function __rust_dealloc
+
+Check 9: __rust_dealloc.assertion.2
+	 - Status: SUCCESS
+	 - Description: "rust_dealloc must be called on an object whose allocated size matches its layout"
+	 - Location: ../../../library/kani/kani_lib.c:87 in function __rust_dealloc
+
+Check 10: std::alloc::Layout::is_size_align_valid.unreachable.1
+	 - Status: SUCCESS
+	 - Description: "unreachable code"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:78:5 in function std::alloc::Layout::is_size_align_valid
+
+Check 11: pre_condition::read_ptr::{closure#2}::{closure#0}.safety_check.1
+	 - Status: SUCCESS
+	 - Description: "misaligned pointer dereference: address must be a multiple of its type's alignment"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 12: kani::rustc_intrinsics::size_of_val_raw::<i32>.unreachable.1
+	 - Status: SUCCESS
+	 - Description: "unreachable code"
+	 - Location: ../../../library/kani_core/src/models.rs:23:13 in function kani::rustc_intrinsics::size_of_val_raw::<i32>
+
+Check 13: kani::rustc_intrinsics::size_of_val_raw::<i32>.safety_check.1
+	 - Status: SUCCESS
+	 - Description: "failed to compute `size_of_val`"
+	 - Location: ../../../library/kani/src/lib.rs:54:1 in function kani::rustc_intrinsics::size_of_val_raw::<i32>
+
+Check 14: kani::rustc_intrinsics::size_of_val_raw::<i32>.assertion.1
+	 - Status: SUCCESS
+	 - Description: "cannot compute `size_of_val` for extern types"
+	 - Location: ../../../library/kani/src/lib.rs:54:1 in function kani::rustc_intrinsics::size_of_val_raw::<i32>
+
+Check 15: kani::mem::assert_is_initialized::<i32>.assertion.1
+	 - Status: SUCCESS
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer"
+	 - Location: ../../../library/kani/src/lib.rs:54:1 in function kani::mem::assert_is_initialized::<i32>
+
+Check 16: pre_condition::read_ptr.safety_check.1
+	 - Status: UNREACHABLE
+	 - Description: "misaligned pointer dereference: address must be a multiple of its type's alignment"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr
+
+Check 17: core::panicking::panic_nounwind_fmt::runtime.unsupported_construct.1
+	 - Status: SUCCESS
+	 - Description: "call to foreign "Rust" function `rust_begin_unwind` is not currently supported by Kani. Please post your example at https://github.com/model-checking/kani/issues/new/choose"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/panicking.rs:105:17 in function core::panicking::panic_nounwind_fmt::runtime
+
+Check 18: kani::mem::is_ptr_aligned::<i32>.unreachable.1
+	 - Status: SUCCESS
+	 - Description: "unreachable code"
+	 - Location: ../../../library/kani_core/src/mem.rs:192:9 in function kani::mem::is_ptr_aligned::<i32>
+
+Check 19: kani::mem::is_ptr_aligned::<i32>.assertion.1
+	 - Status: SUCCESS
+	 - Description: "attempt to subtract with overflow"
+	 - Location: ../../../library/kani_core/src/mem.rs:195:38 in function kani::mem::is_ptr_aligned::<i32>
+
+Check 20: kani::mem::is_ptr_aligned::<i32>.assertion.2
+	 - Status: SUCCESS
+	 - Description: "attempt to subtract with overflow"
+	 - Location: ../../../library/kani_core/src/mem.rs:197:45 in function kani::mem::is_ptr_aligned::<i32>
+
+Check 21: std::boxed::Box::<i32>::into_raw_with_allocator.safety_check.1
+	 - Status: SUCCESS
+	 - Description: "misaligned pointer to reference cast: address must be a multiple of its type's alignment"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/boxed.rs:1420:19 in function std::boxed::Box::<i32>::into_raw_with_allocator
+
+Check 22: std::boxed::Box::<i32>::into_raw_with_allocator.safety_check.2
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/boxed.rs:1420:19 in function std::boxed::Box::<i32>::into_raw_with_allocator
+
+Check 23: kani::rustc_intrinsics::align_of_val_raw::<i32>.unreachable.1
+	 - Status: SUCCESS
+	 - Description: "unreachable code"
+	 - Location: ../../../library/kani_core/src/models.rs:36:13 in function kani::rustc_intrinsics::align_of_val_raw::<i32>
+
+Check 24: kani::rustc_intrinsics::align_of_val_raw::<i32>.safety_check.1
+	 - Status: SUCCESS
+	 - Description: "failed to compute `align_of_val`"
+	 - Location: ../../../library/kani/src/lib.rs:54:1 in function kani::rustc_intrinsics::align_of_val_raw::<i32>
+
+Check 25: kani::rustc_intrinsics::align_of_val_raw::<i32>.assertion.1
+	 - Status: SUCCESS
+	 - Description: "cannot compute `align_of_val` for extern types"
+	 - Location: ../../../library/kani/src/lib.rs:54:1 in function kani::rustc_intrinsics::align_of_val_raw::<i32>
+
+Check 26: __CPROVER_contracts_write_set_record_deallocated.unwind.1
+	 - Status: SUCCESS
+	 - Description: "unwinding assertion loop 0"
+	 - Location: <builtin-library-__CPROVER_contracts_library>:740 in function __CPROVER_contracts_write_set_record_deallocated
+
+Check 27: std::alloc::Layout::max_size_for_align.assertion.1
+	 - Status: UNREACHABLE
+	 - Description: "attempt to add with overflow"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:105:32 in function std::alloc::Layout::max_size_for_align
+
+Check 28: std::alloc::Layout::max_size_for_align.arithmetic_overflow.1
+	 - Status: SUCCESS
+	 - Description: "attempt to compute `unchecked_sub` which would overflow"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:105:18 in function std::alloc::Layout::max_size_for_align
+
+Check 29: pre_condition::harness_head_ptr.assertion.1
+	 - Status: SUCCESS
+	 - Description: "assertion failed: unsafe { read_ptr(raw_ptr) } == 10"
+	 - Location: valid_ptr.rs:18:9 in function pre_condition::harness_head_ptr
+
+Check 30: std::boxed::Box::<i32>::into_raw.safety_check.1
+	 - Status: SUCCESS
+	 - Description: "misaligned pointer to reference cast: address must be a multiple of its type's alignment"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/boxed.rs:1301:28 in function std::boxed::Box::<i32>::into_raw
+
+Check 31: std::boxed::Box::<i32>::into_raw.safety_check.2
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/boxed.rs:1301:28 in function std::boxed::Box::<i32>::into_raw
+
+Check 32: std::fmt::Arguments::<'_>::new_const::<1>.assigns.1
+	 - Status: SUCCESS
+	 - Description: "Check that *((unsigned char **)&temp_0) is assignable"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/fmt/mod.rs:593:34 in function std::fmt::Arguments::<'_>::new_const::<1>
+
+Check 33: pre_condition::read_ptr::{closure#3}.unreachable.1
+	 - Status: SUCCESS
+	 - Description: "unreachable code"
+	 - Location: valid_ptr.rs:9:5 in function pre_condition::read_ptr::{closure#3}
+
+Check 34: pre_condition::read_ptr::{closure#0}.unreachable.1
+	 - Status: SUCCESS
+	 - Description: "unreachable code"
+	 - Location: valid_ptr.rs:9:5 in function pre_condition::read_ptr::{closure#0}
+
+Check 35: valid_ptr::pre_condition::read_ptr::{closure#2}::{closure#0}.single_top_level_call.1
+	 - Status: SUCCESS
+	 - Description: "Only a single top-level call to function _RNCNCNvNtCsbBkWKZuatX0_9valid_ptr13pre_condition8read_ptrs0_00B7_ when checking contract _RNCNCNvNtCsbBkWKZuatX0_9valid_ptr13pre_condition8read_ptrs0_00B7_"
+	 - Location: valid_ptr.rs:9:5 in function valid_ptr::pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 36: valid_ptr::pre_condition::read_ptr::{closure#2}::{closure#0}.no_alloc_dealloc_in_requires.1
+	 - Status: SUCCESS
+	 - Description: "Check that requires do not allocate or deallocate memory"
+	 - Location: valid_ptr.rs:9:5 in function valid_ptr::pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 37: valid_ptr::pre_condition::read_ptr::{closure#2}::{closure#0}.no_alloc_dealloc_in_ensures.1
+	 - Status: SUCCESS
+	 - Description: "Check that ensures do not allocate or deallocate memory"
+	 - Location: valid_ptr.rs:9:5 in function valid_ptr::pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 38: valid_ptr::pre_condition::read_ptr::{closure#2}::{closure#0}.no_recursive_call.1
+	 - Status: SUCCESS
+	 - Description: "No recursive call to function _RNCNCNvNtCsbBkWKZuatX0_9valid_ptr13pre_condition8read_ptrs0_00B7_ when checking contract _RNCNCNvNtCsbBkWKZuatX0_9valid_ptr13pre_condition8read_ptrs0_00B7_"
+	 - Location: valid_ptr.rs:9:5 in function valid_ptr::pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 39: pre_condition::read_ptr::{closure#1}.unreachable.1
+	 - Status: SUCCESS
+	 - Description: "unreachable code"
+	 - Location: valid_ptr.rs:9:5 in function pre_condition::read_ptr::{closure#1}
+
+Check 40: std::boxed::Box::<i32>::new.assigns.1
+	 - Status: SUCCESS
+	 - Description: "Check that *var_5 is assignable"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/boxed.rs:254:18 in function std::boxed::Box::<i32>::new
+
+Check 41: free.frees.1
+	 - Status: SUCCESS
+	 - Description: "Check that ptr is freeable"
+	 - Location: <builtin-library-free>:43 in function free
+
+Check 42: std::ptr::drop_in_place::<std::boxed::Box<i32>>.safety_check.1
+	 - Status: SUCCESS
+	 - Description: "misaligned pointer to reference cast: address must be a multiple of its type's alignment"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:523:1 in function std::ptr::drop_in_place::<std::boxed::Box<i32>>
+
+Check 43: std::ptr::drop_in_place::<std::boxed::Box<i32>>.safety_check.2
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:523:1 in function std::ptr::drop_in_place::<std::boxed::Box<i32>>
+
+Check 44: kani::mem::is_inbounds::<i32>.unreachable.1
+	 - Status: SUCCESS
+	 - Description: "unreachable code"
+	 - Location: ../../../library/kani_core/src/mem.rs:169:9 in function kani::mem::is_inbounds::<i32>
+
+Check 45: kani::mem::is_inbounds::<i32>.unsupported_construct.1
+	 - Status: SUCCESS
+	 - Description: "Kani does not support reasoning about pointer to unallocated memory"
+	 - Location: ../../../library/kani/src/lib.rs:54:1 in function kani::mem::is_inbounds::<i32>
+
+Check 46: std::ptr::Alignment::new.assigns.1
+	 - Status: SUCCESS
+	 - Description: "Check that *((unsigned long int *)&temp_1) is assignable"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/alignment.rs:61:13 in function std::ptr::Alignment::new
+
+Check 47: std::ptr::Alignment::as_usize.assume.1
+	 - Status: SUCCESS
+	 - Description: "assumption failed"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/alignment.rs:91:9 in function std::ptr::Alignment::as_usize
+
+Check 48: std::panic::Location::<'_>::caller.unsupported_construct.1
+	 - Status: SUCCESS
+	 - Description: "caller_location is not currently supported by Kani. Please post your example at https://github.com/model-checking/kani/issues/374"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/panic/location.rs:89:9 in function std::panic::Location::<'_>::caller
+
+Check 49: __CPROVER_contracts_obj_set_create_indexed_by_object_id.bit_count.1
+	 - Status: SUCCESS
+	 - Description: "count leading zeros is undefined for value zero"
+	 - Location: <builtin-library-__CPROVER_contracts_library>:264 in function __CPROVER_contracts_obj_set_create_indexed_by_object_id
+
+Check 50: __CPROVER_contracts_obj_set_create_indexed_by_object_id.bit_count.2
+	 - Status: SUCCESS
+	 - Description: "count leading zeros is undefined for value zero"
+	 - Location: <builtin-library-__CPROVER_contracts_library>:264 in function __CPROVER_contracts_obj_set_create_indexed_by_object_id
+
+Check 51: __CPROVER_contracts_obj_set_create_indexed_by_object_id.bit_count.3
+	 - Status: SUCCESS
+	 - Description: "count leading zeros is undefined for value zero"
+	 - Location: <builtin-library-__CPROVER_contracts_library>:264 in function __CPROVER_contracts_obj_set_create_indexed_by_object_id
+
+Check 52: __CPROVER_contracts_make_invalid_pointer.pointer_dereference.1
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: <builtin-library-__CPROVER_contracts_library>:1186 in function __CPROVER_contracts_make_invalid_pointer
+
+Check 53: __CPROVER_contracts_make_invalid_pointer.pointer_dereference.2
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: <builtin-library-__CPROVER_contracts_library>:1186 in function __CPROVER_contracts_make_invalid_pointer
+
+Check 54: __CPROVER_contracts_make_invalid_pointer.pointer_dereference.3
+	 - Status: SUCCESS
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: <builtin-library-__CPROVER_contracts_library>:1186 in function __CPROVER_contracts_make_invalid_pointer
+
+Check 55: __CPROVER_contracts_make_invalid_pointer.pointer_dereference.4
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: <builtin-library-__CPROVER_contracts_library>:1186 in function __CPROVER_contracts_make_invalid_pointer
+
+Check 56: __CPROVER_contracts_make_invalid_pointer.pointer_dereference.5
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: <builtin-library-__CPROVER_contracts_library>:1186 in function __CPROVER_contracts_make_invalid_pointer
+
+Check 57: __CPROVER_contracts_make_invalid_pointer.pointer_dereference.6
+	 - Status: SUCCESS
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: <builtin-library-__CPROVER_contracts_library>:1186 in function __CPROVER_contracts_make_invalid_pointer
+
+Check 58: std::ptr::Alignment::new.pointer_dereference.1
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/alignment.rs:61:13 in function std::ptr::Alignment::new
+
+Check 59: __rust_dealloc.precondition_instance.1
+	 - Status: SUCCESS
+	 - Description: "free argument must be NULL or valid pointer"
+	 - Location: ../../../library/kani/kani_lib.c:89 in function __rust_dealloc
+
+Check 60: __rust_dealloc.precondition_instance.2
+	 - Status: SUCCESS
+	 - Description: "free argument must be dynamic object"
+	 - Location: ../../../library/kani/kani_lib.c:89 in function __rust_dealloc
+
+Check 61: __rust_dealloc.precondition_instance.3
+	 - Status: SUCCESS
+	 - Description: "free argument has offset zero"
+	 - Location: ../../../library/kani/kani_lib.c:89 in function __rust_dealloc
+
+Check 62: __rust_dealloc.precondition_instance.4
+	 - Status: SUCCESS
+	 - Description: "double free"
+	 - Location: ../../../library/kani/kani_lib.c:89 in function __rust_dealloc
+
+Check 63: __rust_dealloc.precondition_instance.5
+	 - Status: SUCCESS
+	 - Description: "free called for new[] object"
+	 - Location: ../../../library/kani/kani_lib.c:89 in function __rust_dealloc
+
+Check 64: __rust_dealloc.precondition_instance.6
+	 - Status: SUCCESS
+	 - Description: "free called for stack-allocated object"
+	 - Location: ../../../library/kani/kani_lib.c:89 in function __rust_dealloc
+
+Check 65: pre_condition::harness_head_ptr.precondition_instance.1
+	 - Status: SUCCESS
+	 - Description: "free argument must be NULL or valid pointer"
+	 - Location: valid_ptr.rs:14:5 in function pre_condition::harness_head_ptr
+
+Check 66: pre_condition::harness_head_ptr.precondition_instance.2
+	 - Status: SUCCESS
+	 - Description: "free argument must be dynamic object"
+	 - Location: valid_ptr.rs:14:5 in function pre_condition::harness_head_ptr
+
+Check 67: pre_condition::harness_head_ptr.precondition_instance.3
+	 - Status: SUCCESS
+	 - Description: "free argument has offset zero"
+	 - Location: valid_ptr.rs:14:5 in function pre_condition::harness_head_ptr
+
+Check 68: pre_condition::harness_head_ptr.precondition_instance.4
+	 - Status: SUCCESS
+	 - Description: "double free"
+	 - Location: valid_ptr.rs:14:5 in function pre_condition::harness_head_ptr
+
+Check 69: pre_condition::harness_head_ptr.precondition_instance.5
+	 - Status: SUCCESS
+	 - Description: "free called for new[] object"
+	 - Location: valid_ptr.rs:14:5 in function pre_condition::harness_head_ptr
+
+Check 70: pre_condition::harness_head_ptr.precondition_instance.6
+	 - Status: SUCCESS
+	 - Description: "free called for stack-allocated object"
+	 - Location: valid_ptr.rs:14:5 in function pre_condition::harness_head_ptr
+
+Check 71: std::boxed::Box::<i32>::into_raw_with_allocator.pointer_dereference.1
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/boxed.rs:1420:19 in function std::boxed::Box::<i32>::into_raw_with_allocator
+
+Check 72: std::boxed::Box::<i32>::into_raw_with_allocator.pointer_dereference.2
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/boxed.rs:1420:19 in function std::boxed::Box::<i32>::into_raw_with_allocator
+
+Check 73: std::boxed::Box::<i32>::into_raw_with_allocator.pointer_dereference.3
+	 - Status: SUCCESS
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/boxed.rs:1420:19 in function std::boxed::Box::<i32>::into_raw_with_allocator
+
+Check 74: std::boxed::Box::<i32>::into_raw_with_allocator.pointer_dereference.4
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/boxed.rs:1420:19 in function std::boxed::Box::<i32>::into_raw_with_allocator
+
+Check 75: std::boxed::Box::<i32>::into_raw_with_allocator.pointer_dereference.5
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/boxed.rs:1420:19 in function std::boxed::Box::<i32>::into_raw_with_allocator
+
+Check 76: std::boxed::Box::<i32>::into_raw_with_allocator.pointer_dereference.6
+	 - Status: SUCCESS
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/boxed.rs:1420:19 in function std::boxed::Box::<i32>::into_raw_with_allocator
+
+Check 77: std::alloc::Layout::align.pointer_dereference.1
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:161:9 in function std::alloc::Layout::align
+
+Check 78: std::alloc::Layout::align.pointer_dereference.2
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:161:9 in function std::alloc::Layout::align
+
+Check 79: std::alloc::Layout::align.pointer_dereference.3
+	 - Status: SUCCESS
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:161:9 in function std::alloc::Layout::align
+
+Check 80: std::alloc::Layout::align.pointer_dereference.4
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:161:9 in function std::alloc::Layout::align
+
+Check 81: std::alloc::Layout::align.pointer_dereference.5
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:161:9 in function std::alloc::Layout::align
+
+Check 82: std::alloc::Layout::align.pointer_dereference.6
+	 - Status: SUCCESS
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:161:9 in function std::alloc::Layout::align
+
+Check 83: std::alloc::Layout::is_size_align_valid.pointer_dereference.1
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:79:27 in function std::alloc::Layout::is_size_align_valid
+
+Check 84: std::ptr::drop_in_place::<std::boxed::Box<i32>>.pointer_dereference.1
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:523:1 in function std::ptr::drop_in_place::<std::boxed::Box<i32>>
+
+Check 85: std::ptr::drop_in_place::<std::boxed::Box<i32>>.pointer_dereference.2
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:523:1 in function std::ptr::drop_in_place::<std::boxed::Box<i32>>
+
+Check 86: std::ptr::drop_in_place::<std::boxed::Box<i32>>.pointer_dereference.3
+	 - Status: SUCCESS
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:523:1 in function std::ptr::drop_in_place::<std::boxed::Box<i32>>
+
+Check 87: std::ptr::drop_in_place::<std::boxed::Box<i32>>.pointer_dereference.4
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:523:1 in function std::ptr::drop_in_place::<std::boxed::Box<i32>>
+
+Check 88: std::ptr::drop_in_place::<std::boxed::Box<i32>>.pointer_dereference.5
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:523:1 in function std::ptr::drop_in_place::<std::boxed::Box<i32>>
+
+Check 89: std::ptr::drop_in_place::<std::boxed::Box<i32>>.pointer_dereference.6
+	 - Status: SUCCESS
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:523:1 in function std::ptr::drop_in_place::<std::boxed::Box<i32>>
+
+Check 90: std::fmt::Arguments::<'_>::new_const::<1>.pointer_dereference.1
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/fmt/mod.rs:593:34 in function std::fmt::Arguments::<'_>::new_const::<1>
+
+Check 91: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.1
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 92: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.2
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 93: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.3
+	 - Status: SUCCESS
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 94: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.4
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 95: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.5
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 96: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.6
+	 - Status: SUCCESS
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 97: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.7
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 98: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.8
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 99: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.9
+	 - Status: SUCCESS
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 100: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.10
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 101: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.11
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 102: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.12
+	 - Status: SUCCESS
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 103: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.13
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 104: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.14
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 105: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.15
+	 - Status: SUCCESS
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 106: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.16
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 107: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.17
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 108: pre_condition::read_ptr::{closure#2}::{closure#0}.pointer_dereference.18
+	 - Status: SUCCESS
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr::{closure#2}::{closure#0}
+
+Check 109: pre_condition::read_ptr.pointer_dereference.1
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr
+
+Check 110: pre_condition::read_ptr.pointer_dereference.2
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr
+
+Check 111: pre_condition::read_ptr.pointer_dereference.3
+	 - Status: SUCCESS
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr
+
+Check 112: pre_condition::read_ptr.pointer_dereference.4
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr
+
+Check 113: pre_condition::read_ptr.pointer_dereference.5
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr
+
+Check 114: pre_condition::read_ptr.pointer_dereference.6
+	 - Status: SUCCESS
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: valid_ptr.rs:11:9 in function pre_condition::read_ptr
+
+Check 115: std::alloc::Layout::size.pointer_dereference.1
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:149:9 in function std::alloc::Layout::size
+
+Check 116: std::alloc::Layout::size.pointer_dereference.2
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:149:9 in function std::alloc::Layout::size
+
+Check 117: std::alloc::Layout::size.pointer_dereference.3
+	 - Status: SUCCESS
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:149:9 in function std::alloc::Layout::size
+
+Check 118: std::alloc::Layout::size.pointer_dereference.4
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:149:9 in function std::alloc::Layout::size
+
+Check 119: std::alloc::Layout::size.pointer_dereference.5
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:149:9 in function std::alloc::Layout::size
+
+Check 120: std::alloc::Layout::size.pointer_dereference.6
+	 - Status: SUCCESS
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/alloc/layout.rs:149:9 in function std::alloc::Layout::size
+
+Check 121: <std::boxed::Box<i32> as std::ops::Drop>::drop.pointer_dereference.1
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/boxed.rs:1696:19 in function <std::boxed::Box<i32> as std::ops::Drop>::drop
+
+Check 122: <std::boxed::Box<i32> as std::ops::Drop>::drop.pointer_dereference.2
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/boxed.rs:1696:19 in function <std::boxed::Box<i32> as std::ops::Drop>::drop
+
+Check 123: <std::boxed::Box<i32> as std::ops::Drop>::drop.pointer_dereference.3
+	 - Status: SUCCESS
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/boxed.rs:1696:19 in function <std::boxed::Box<i32> as std::ops::Drop>::drop
+
+Check 124: <std::boxed::Box<i32> as std::ops::Drop>::drop.pointer_dereference.4
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/boxed.rs:1696:19 in function <std::boxed::Box<i32> as std::ops::Drop>::drop
+
+Check 125: <std::boxed::Box<i32> as std::ops::Drop>::drop.pointer_dereference.5
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/boxed.rs:1696:19 in function <std::boxed::Box<i32> as std::ops::Drop>::drop
+
+Check 126: <std::boxed::Box<i32> as std::ops::Drop>::drop.pointer_dereference.6
+	 - Status: SUCCESS
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/boxed.rs:1696:19 in function <std::boxed::Box<i32> as std::ops::Drop>::drop
+
+Check 127: pre_condition::read_ptr::{closure#2}.pointer_dereference.1
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: valid_ptr.rs:9:49 in function pre_condition::read_ptr::{closure#2}
+
+Check 128: pre_condition::read_ptr::{closure#2}.pointer_dereference.2
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: valid_ptr.rs:9:49 in function pre_condition::read_ptr::{closure#2}
+
+Check 129: pre_condition::read_ptr::{closure#2}.pointer_dereference.3
+	 - Status: SUCCESS
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: valid_ptr.rs:9:49 in function pre_condition::read_ptr::{closure#2}
+
+Check 130: pre_condition::read_ptr::{closure#2}.pointer_dereference.4
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: valid_ptr.rs:9:49 in function pre_condition::read_ptr::{closure#2}
+
+Check 131: pre_condition::read_ptr::{closure#2}.pointer_dereference.5
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: valid_ptr.rs:9:49 in function pre_condition::read_ptr::{closure#2}
+
+Check 132: pre_condition::read_ptr::{closure#2}.pointer_dereference.6
+	 - Status: SUCCESS
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: valid_ptr.rs:9:49 in function pre_condition::read_ptr::{closure#2}
+
+Check 133: pre_condition::read_ptr::{closure#2}.pointer_dereference.7
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: valid_ptr.rs:9:49 in function pre_condition::read_ptr::{closure#2}
+
+Check 134: pre_condition::read_ptr::{closure#2}.pointer_dereference.8
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: valid_ptr.rs:9:49 in function pre_condition::read_ptr::{closure#2}
+
+Check 135: pre_condition::read_ptr::{closure#2}.pointer_dereference.9
+	 - Status: SUCCESS
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: valid_ptr.rs:9:49 in function pre_condition::read_ptr::{closure#2}
+
+Check 136: pre_condition::read_ptr::{closure#2}.pointer_dereference.10
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: valid_ptr.rs:9:49 in function pre_condition::read_ptr::{closure#2}
+
+Check 137: pre_condition::read_ptr::{closure#2}.pointer_dereference.11
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: valid_ptr.rs:9:49 in function pre_condition::read_ptr::{closure#2}
+
+Check 138: pre_condition::read_ptr::{closure#2}.pointer_dereference.12
+	 - Status: SUCCESS
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: valid_ptr.rs:9:49 in function pre_condition::read_ptr::{closure#2}
+
+Check 139: pre_condition::read_ptr::{closure#2}.pointer_dereference.13
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: valid_ptr.rs:9:5 in function pre_condition::read_ptr::{closure#2}
+
+Check 140: pre_condition::read_ptr::{closure#2}.pointer_dereference.14
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: valid_ptr.rs:9:5 in function pre_condition::read_ptr::{closure#2}
+
+Check 141: pre_condition::read_ptr::{closure#2}.pointer_dereference.15
+	 - Status: SUCCESS
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: valid_ptr.rs:9:5 in function pre_condition::read_ptr::{closure#2}
+
+Check 142: pre_condition::read_ptr::{closure#2}.pointer_dereference.16
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: valid_ptr.rs:9:5 in function pre_condition::read_ptr::{closure#2}
+
+Check 143: pre_condition::read_ptr::{closure#2}.pointer_dereference.17
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: valid_ptr.rs:9:5 in function pre_condition::read_ptr::{closure#2}
+
+Check 144: pre_condition::read_ptr::{closure#2}.pointer_dereference.18
+	 - Status: SUCCESS
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: valid_ptr.rs:9:5 in function pre_condition::read_ptr::{closure#2}
+
+Check 145: std::boxed::Box::<i32>::new.pointer_dereference.1
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer NULL"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/boxed.rs:254:18 in function std::boxed::Box::<i32>::new
+
+Check 146: std::boxed::Box::<i32>::new.pointer_dereference.2
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer invalid"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/boxed.rs:254:18 in function std::boxed::Box::<i32>::new
+
+Check 147: std::boxed::Box::<i32>::new.pointer_dereference.3
+	 - Status: SUCCESS
+	 - Description: "dereference failure: deallocated dynamic object"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/boxed.rs:254:18 in function std::boxed::Box::<i32>::new
+
+Check 148: std::boxed::Box::<i32>::new.pointer_dereference.4
+	 - Status: SUCCESS
+	 - Description: "dereference failure: dead object"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/boxed.rs:254:18 in function std::boxed::Box::<i32>::new
+
+Check 149: std::boxed::Box::<i32>::new.pointer_dereference.5
+	 - Status: SUCCESS
+	 - Description: "dereference failure: pointer outside object bounds"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/boxed.rs:254:18 in function std::boxed::Box::<i32>::new
+
+Check 150: std::boxed::Box::<i32>::new.pointer_dereference.6
+	 - Status: SUCCESS
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: ../../../../../.rustup/toolchains/1.85.0-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/boxed.rs:254:18 in function std::boxed::Box::<i32>::new
+
+
+SUMMARY:
+ ** 0 of 150 failed (2 unreachable)
+
+VERIFICATION:- SUCCESSFUL
+Verification Time: 1.7518818s
+
+Manual Harness Summary:
+Verification failed for - post_condition::harness
+Verification failed for - pre_condition::harness_invalid_ptr
+Complete - 2 successfully verified harnesses, 2 failures, 4 total.

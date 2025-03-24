@@ -2,11 +2,11 @@ delayed_ub_trigger_copy.safety_check.\
 	 - Status: FAILURE\
 	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u128`"\
 
-delayed_ub_slices.assertion.\
+delayed_ub_slices.safety_check.\
 	 - Status: FAILURE\
 	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `[u128; 4]`"
 
-delayed_ub_structs.assertion.\
+delayed_ub_structs.safety_check.\
 	 - Status: FAILURE\
 	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `U`"
 
