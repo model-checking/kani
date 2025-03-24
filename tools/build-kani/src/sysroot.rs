@@ -153,6 +153,7 @@ fn build_kani_lib(
     let mut cmd = Command::new("cargo")
         .env("CARGO_ENCODED_RUSTFLAGS", rustc_args.join("\x1f"))
         .env("RUSTC", compiler_path)
+        .env("RUSTC_BOOTSTRAP", "1")
         .args(args)
         .args(packages.iter().copied().flat_map(|pkg| ["-p", pkg]))
         .args(extra_cargo_args)
@@ -278,6 +279,7 @@ pub fn build_bin<T: AsRef<OsStr>>(extra_args: &[T]) -> Result<PathBuf> {
         .arg("build")
         .args(extra_args)
         .args(args)
+        .env("RUSTC_BOOTSTRAP", "1")
         .run()
         .or(Err(format_err!("Failed to build binaries.")))?;
     Ok(out_dir)
