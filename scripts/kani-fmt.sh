@@ -15,6 +15,8 @@ cd ${ROOT_FOLDER}
 # Verify crates.
 error=0
 
+export RUSTC_BOOTSTRAP=1
+
 # Check all crates. Only fail at the end.
 cargo fmt "$@" || error=1
 
@@ -27,11 +29,11 @@ for suite in "${TESTS[@]}"; do
     # Find uses breakline to split between files. This ensures that we can
     # handle files with space in their path.
     set -f; IFS=$'\n'
-    files=($(find "${suite}" -name "*.rs"))
+    files=($(find "${suite}" -name "*.rs" -not -path "*/perf/s2n-quic/*"))
     set +f; unset IFS
     # Note: We set the configuration file here because some submodules have
     # their own configuration file.
-    rustfmt --unstable-features "$@" --config-path rustfmt.toml "${files[@]}" || error=1
+    rustfmt "$@" --config-path rustfmt.toml "${files[@]}" || error=1
 done
 
 exit $error
