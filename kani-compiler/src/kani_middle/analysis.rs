@@ -149,7 +149,7 @@ impl From<&Terminator> for Key {
             TerminatorKind::Drop { .. } => Key("Drop"),
             TerminatorKind::Goto { .. } => Key("Goto"),
             TerminatorKind::InlineAsm { .. } => Key("InlineAsm"),
-            TerminatorKind::Resume => Key("Resume"),
+            TerminatorKind::Resume { .. } => Key("Resume"),
             TerminatorKind::Return => Key("Return"),
             TerminatorKind::SwitchInt { .. } => Key("SwitchInt"),
             TerminatorKind::Unreachable => Key("Unreachable"),

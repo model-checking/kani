@@ -2,7 +2,11 @@ delayed_ub_trigger_copy.safety_check.\
 	 - Status: FAILURE\
 	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u128`"\
 
-delayed_ub_structs.safety_check.\
+delayed_ub_slices.assertion.\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `[u128; 4]`"
+
+delayed_ub_structs.assertion.\
 	 - Status: FAILURE\
 	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `U`"
 
@@ -40,6 +44,7 @@ delayed_ub.safety_check.\
 
 Summary:
 Verification failed for - delayed_ub_trigger_copy
+Verification failed for - delayed_ub_slices
 Verification failed for - delayed_ub_structs
 Verification failed for - delayed_ub_double_copy
 Verification failed for - delayed_ub_copy
@@ -49,4 +54,4 @@ Verification failed for - delayed_ub_laundered
 Verification failed for - delayed_ub_static
 Verification failed for - delayed_ub_transmute
 Verification failed for - delayed_ub
-Complete - 0 successfully verified harnesses, 10 failures, 10 total.
+Complete - 0 successfully verified harnesses, 11 failures, 11 total.

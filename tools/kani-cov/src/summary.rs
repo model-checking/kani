@@ -165,9 +165,9 @@ pub fn line_coverage_results(
             }
         }
     } else {
-        line_status =
-            std::iter::repeat_n(Some((0, MarkerInfo::FullLine)), end_line - start_line + 1)
-                .collect();
+        line_status = std::iter::repeat(Some((0, MarkerInfo::FullLine)))
+            .take(end_line - start_line + 1)
+            .collect();
     }
     line_status
 }

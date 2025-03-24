@@ -698,10 +698,11 @@ mod tests {
 
     #[test]
     fn check_rustfmt_args_some_line_ranges() {
-        let file_line_ranges = [
-            FileLineRange { file: "file1".to_string(), line_range: None },
-            FileLineRange { file: "path/to/file2".to_string(), line_range: Some((1, 3)) },
-        ];
+        let file_line_ranges =
+            [FileLineRange { file: "file1".to_string(), line_range: None }, FileLineRange {
+                file: "path/to/file2".to_string(),
+                line_range: Some((1, 3)),
+            }];
         let args = rustfmt_args(&file_line_ranges);
         let expected: Vec<OsString> = [
             "--unstable-features",

@@ -42,7 +42,7 @@ impl RustcInternalMir for AggregateKind {
                 internal(tcx, generic_args),
                 maybe_user_type_annotation_index
                     .map(rustc_middle::ty::UserTypeAnnotationIndex::from_usize),
-                maybe_field_idx.map(rustc_abi::FieldIdx::from_usize),
+                maybe_field_idx.map(rustc_target::abi::FieldIdx::from_usize),
             ),
             AggregateKind::Closure(closure_def, generic_args) => {
                 rustc_middle::mir::AggregateKind::Closure(
@@ -207,7 +207,7 @@ impl RustcInternalMir for NullOp {
                         .map(|(variant_idx, field_idx)| {
                             (
                                 internal(tcx, variant_idx),
-                                rustc_abi::FieldIdx::from_usize(*field_idx),
+                                rustc_target::abi::FieldIdx::from_usize(*field_idx),
                             )
                         })
                         .collect::<Vec<_>>()
@@ -215,7 +215,6 @@ impl RustcInternalMir for NullOp {
                 ),
             ),
             NullOp::UbChecks => rustc_middle::mir::NullOp::UbChecks,
-            NullOp::ContractChecks => rustc_middle::mir::NullOp::ContractChecks,
         }
     }
 }
@@ -225,8 +224,8 @@ impl RustcInternalMir for Rvalue {
 
     fn internal_mir<'tcx>(&self, tcx: TyCtxt<'tcx>) -> Self::T<'tcx> {
         match self {
-            Rvalue::AddressOf(raw_ptr_kind, place) => {
-                rustc_middle::mir::Rvalue::RawPtr(internal(tcx, raw_ptr_kind), internal(tcx, place))
+            Rvalue::AddressOf(mutability, place) => {
+                rustc_middle::mir::Rvalue::RawPtr(internal(tcx, mutability), internal(tcx, place))
             }
             Rvalue::Aggregate(aggregate_kind, operands) => rustc_middle::mir::Rvalue::Aggregate(
                 Box::new(aggregate_kind.internal_mir(tcx)),
@@ -545,9 +544,6 @@ impl RustcInternalMir for AssertMessage {
                     required: required.internal_mir(tcx),
                     found: found.internal_mir(tcx),
                 }
-            }
-            AssertMessage::NullPointerDereference => {
-                rustc_middle::mir::AssertMessage::NullPointerDereference
             }
         }
     }

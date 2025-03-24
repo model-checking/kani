@@ -310,9 +310,9 @@ impl VerificationResult {
     ///
     /// NOTE: We actually ignore the CBMC exit status, in favor of two checks:
     ///   1. Examining the actual results of CBMC properties.
-    ///      (CBMC will regularly report "failure" but that's just our cover checks.)
+    ///       (CBMC will regularly report "failure" but that's just our cover checks.)
     ///   2. Positively checking for the presence of results.
-    ///      (Do not mistake lack of results for success: report it as failure.)
+    ///       (Do not mistake lack of results for success: report it as failure.)
     fn from(
         output: VerificationOutput,
         should_panic: bool,

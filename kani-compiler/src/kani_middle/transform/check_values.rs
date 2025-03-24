@@ -87,7 +87,7 @@ impl ValidValuePass {
             match operation {
                 SourceOp::BytesValidity { ranges, target_ty, rvalue } => {
                     let value = body.insert_assignment(rvalue, &mut source, InsertPosition::Before);
-                    let rvalue_ptr = Rvalue::AddressOf(RawPtrKind::Const, Place::from(value));
+                    let rvalue_ptr = Rvalue::AddressOf(Mutability::Not, Place::from(value));
                     for range in ranges {
                         let result = build_limits(body, &range, rvalue_ptr.clone(), &mut source);
                         let msg =

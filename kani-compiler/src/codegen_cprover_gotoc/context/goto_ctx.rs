@@ -26,7 +26,6 @@ use cbmc::goto_program::{
 };
 use cbmc::utils::aggr_tag;
 use cbmc::{InternedString, MachineModel};
-use rustc_abi::{HasDataLayout, TargetDataLayout};
 use rustc_data_structures::fx::FxHashMap;
 use rustc_middle::span_bug;
 use rustc_middle::ty::layout::{
@@ -36,7 +35,8 @@ use rustc_middle::ty::layout::{
 use rustc_middle::ty::{self, Ty, TyCtxt};
 use rustc_span::Span;
 use rustc_span::source_map::respan;
-use rustc_target::callconv::FnAbi;
+use rustc_target::abi::call::FnAbi;
+use rustc_target::abi::{HasDataLayout, TargetDataLayout};
 use stable_mir::mir::Body;
 use stable_mir::mir::mono::Instance;
 use stable_mir::ty::Allocation;

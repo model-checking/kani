@@ -18,9 +18,9 @@ use cbmc::goto_program::{
 };
 use cbmc::{InternString, InternedString, btree_string_map};
 use num::bigint::BigInt;
-use rustc_abi::{FieldsShape, TagEncoding, Variants};
 use rustc_middle::ty::{TyCtxt, TypingEnv, VtblEntry};
 use rustc_smir::rustc_internal;
+use rustc_target::abi::{FieldsShape, TagEncoding, Variants};
 use stable_mir::abi::{Primitive, Scalar, ValueAbi};
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{
@@ -851,7 +851,7 @@ impl GotocCtx<'_> {
                             .bytes(),
                         Type::size_t(),
                     ),
-                    NullOp::ContractChecks | NullOp::UbChecks => Expr::c_false(),
+                    NullOp::UbChecks => Expr::c_false(),
                 }
             }
             Rvalue::ShallowInitBox(ref operand, content_ty) => {
@@ -964,10 +964,10 @@ impl GotocCtx<'_> {
     pub fn codegen_discriminant_field(&self, place: Expr, ty: Ty) -> Expr {
         let layout = self.layout_of_stable(ty);
         assert!(
-            matches!(
-                &layout.variants,
-                Variants::Multiple { tag_encoding: TagEncoding::Direct, .. }
-            ),
+            matches!(&layout.variants, Variants::Multiple {
+                tag_encoding: TagEncoding::Direct,
+                ..
+            }),
             "discriminant field (`case`) only exists for multiple variants and direct encoding"
         );
         let expr = if ty.kind().is_coroutine() {
@@ -1505,10 +1505,8 @@ impl GotocCtx<'_> {
             |ctx, var| {
                 // Build the vtable, using Rust's vtable_entries to determine field order
                 let vtable_entries = if let Some(principal) = trait_type.kind().trait_principal() {
-                    let trait_ref =
-                        rustc_internal::internal(ctx.tcx, principal.with_self_ty(src_mir_type));
-                    let trait_ref = ctx.tcx.instantiate_bound_regions_with_erased(trait_ref);
-                    ctx.tcx.vtable_entries(trait_ref)
+                    let trait_ref_binder = principal.with_self_ty(src_mir_type);
+                    ctx.tcx.vtable_entries(rustc_internal::internal(ctx.tcx, trait_ref_binder))
                 } else {
                     TyCtxt::COMMON_VTABLE_ENTRIES
                 };

@@ -1,5 +1,0 @@
-delayed_ub_slices.assertion.\
-	 - Status: FAILURE\
-	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `[u128; 4]`"
-
-Verification failed for - delayed_ub_slices
