@@ -456,10 +456,10 @@ impl FunctionWithContractPass {
             &mut mode_call,
             InsertPosition::Before,
         );
-        new_body.replace_terminator(&mode_call, Terminator {
-            kind: TerminatorKind::Goto { target },
-            span,
-        });
+        new_body.replace_terminator(
+            &mode_call,
+            Terminator { kind: TerminatorKind::Goto { target }, span },
+        );
 
         new_body.into()
     }

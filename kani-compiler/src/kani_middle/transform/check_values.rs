@@ -28,8 +28,8 @@ use stable_mir::mir::mono::Instance;
 use stable_mir::mir::visit::{Location, PlaceContext, PlaceRef};
 use stable_mir::mir::{
     AggregateKind, BasicBlockIdx, BinOp, Body, CastKind, FieldIdx, Local, LocalDecl, MirVisitor,
-    Mutability, NonDivergingIntrinsic, Operand, Place, ProjectionElem, RawPtrKind, Rvalue,
-    Statement, StatementKind, Terminator, TerminatorKind,
+    Mutability, NonDivergingIntrinsic, Operand, Place, ProjectionElem, Rvalue, Statement,
+    StatementKind, Terminator, TerminatorKind,
 };
 use stable_mir::target::{MachineInfo, MachineSize};
 use stable_mir::ty::{AdtKind, IndexedVal, RigidTy, Span, Ty, TyKind, UintTy};

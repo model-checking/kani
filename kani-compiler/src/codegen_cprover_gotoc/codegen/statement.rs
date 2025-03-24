@@ -271,9 +271,6 @@ impl GotocCtx<'_> {
                         )
                     }
                     // For all other assert kind we can get the static message.
-                    AssertMessage::NullPointerDereference => {
-                        (msg.description().unwrap(), PropertyClass::SafetyCheck)
-                    }
                     AssertMessage::Overflow { .. }
                     | AssertMessage::OverflowNeg { .. }
                     | AssertMessage::DivisionByZero { .. }

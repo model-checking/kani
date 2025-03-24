@@ -84,6 +84,7 @@ impl KaniSession {
         let mut cmd = Command::new(&self.kani_compiler);
         let kani_compiler_args = to_rustc_arg(kani_args);
         cmd.arg(kani_compiler_args).args(rustc_args);
+        cmd.env("RUSTC_BOOTSTRAP", "1");
 
         if self.args.common_args.quiet {
             self.run_suppress(cmd)?;
