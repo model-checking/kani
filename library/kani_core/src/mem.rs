@@ -129,7 +129,10 @@ macro_rules! kani_mem {
 
         /// Compute the size of the val pointed to if it is safe to do so.
         ///
-        /// Return `None` if an overflow would occur, or if alignment is not power of two.
+        /// Returns `None` if:
+        /// - An overflow occurs during the size computation.
+        /// - The pointer’s alignment is not a power of two.
+        /// - The computed size exceeds `isize::MAX` (the maximum safe Rust allocation size).
         /// TODO: Optimize this if T is sized.
         #[kanitool::fn_marker = "CheckedSizeOfIntrinsic"]
         pub fn checked_size_of_raw<T: ?Sized>(ptr: *const T) -> Option<usize> {
@@ -164,8 +167,15 @@ macro_rules! kani_mem {
         }
 
         /// Checks that `ptr` points to an allocation that can hold data of size calculated from `T`.
-        ///
         /// This will panic if `ptr` points to an invalid `non_null`
+        /// Returns `false` if:
+        /// - The computed size overflows.
+        /// - The computed size exceeds `isize::MAX`.
+        /// - The pointer is null (except for zero-sized types).
+        /// - The pointer references unallocated memory.
+        ///
+        /// This function aligns with Rust's memory safety requirements, which restrict valid allocations
+        /// to sizes no larger than `isize::MAX`.
         fn is_inbounds<T: ?Sized>(ptr: *const T) -> bool {
             // If size overflows, then pointer cannot be inbounds.
             let Some(sz) = checked_size_of_raw(ptr) else { return false };
