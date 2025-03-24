@@ -98,15 +98,19 @@ fn transform_function_calls(
     }
 
     // Generate declarations block
-    let declarations: Vec<Stmt> =
-        newreplace.iter().map(|(call, var)| syn::parse_quote!(let mut #var = #call.clone();)).collect();
+    let declarations: Vec<Stmt> = newreplace
+        .iter()
+        .map(|(call, var)| syn::parse_quote!(let mut #var = #call.clone();))
+        .collect();
     let declarations_block: Block = syn::parse_quote!({
         #(#declarations)*
     });
 
     // Generate assignments block
-    let assignments: Vec<Stmt> =
-        newreplace.into_iter().map(|(call, var)| syn::parse_quote!(#var = #call.clone();)).collect();
+    let assignments: Vec<Stmt> = newreplace
+        .into_iter()
+        .map(|(call, var)| syn::parse_quote!(#var = #call.clone();))
+        .collect();
     let assignments_block: Block = syn::parse_quote!({
         #(#assignments)*
     });
@@ -175,7 +179,7 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut old_var_prefix: String = "__kani_old_var".to_owned();
     old_var_prefix.push_str(&loop_id);
     let replace_old: TransformationResult =
-        transform_function_calls(inv_expr.clone(), "old", old_var_prefix);
+        transform_function_calls(inv_expr.clone(), "on_entry", old_var_prefix);
     inv_expr = replace_old.transformed_expr.clone();
     let old_decl_stms = replace_old.declarations_block.stmts.clone();
 

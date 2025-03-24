@@ -1,7 +1,6 @@
-Check 24: loop_with_old_and_prev.loop_invariant_base.1
-	 - Status: SUCCESS
-	 - Description: "Check invariant before entry for loop loop_with_old_and_prev.0"
-	 - Location: src/loop_with_old_and_prev.rs:14:5 in function loop_with_old_and_prev
+loop_with_old_and_prev.loop_invariant_base.1\
+	 - Status: SUCCESS\
+	 - Description: "Check invariant before entry for loop loop_with_old_and_prev.0"\
 
 
 VERIFICATION:- SUCCESSFUL

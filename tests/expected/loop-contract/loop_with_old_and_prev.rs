@@ -11,7 +11,7 @@
 #[kani::proof]
 pub fn loop_with_old_and_prev() {
     let mut i = 100;
-    #[kani::loop_invariant((i >= 2) && (i <= 100) && (i % 2 == 0) && (old(i) == 100) && (prev(i) == i + 2))]
+    #[kani::loop_invariant((i >= 2) && (i <= 100) && (i % 2 == 0) && (on_entry(i) == 100) && (prev(i) == i + 2))]
     while i > 2 {
         if i == 1 {
             break;

@@ -13,7 +13,7 @@ pub fn loop_with_old() {
     let mut x: u8 = kani::any_where(|v| *v < 10);
     let mut y: u8 = kani::any();
     let mut i = 0;
-    #[kani::loop_invariant( (i<=5) && (x <= old(x) + i) && (old(x) + i == old(i) + x))]
+    #[kani::loop_invariant( (i<=5) && (x <= on_entry(x) + i) && (on_entry(x) + i == on_entry(i) + x))]
     while i < 5 {
         if i == 0 {
             y = x
