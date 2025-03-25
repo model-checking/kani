@@ -166,7 +166,12 @@ macro_rules! kani_mem {
         /// Checks that `ptr` points to an allocation that can hold data of size calculated from `T`.
         ///
         /// This will panic if `ptr` points to an invalid `non_null`
-        fn is_inbounds<T: ?Sized>(ptr: *const T) -> bool {
+        #[crate::kani::unstable_feature(
+            feature = "mem-predicates",
+            issue = 3946,
+            reason = "experimental memory predicate API"
+        )]
+        pub fn is_inbounds<T: ?Sized>(ptr: *const T) -> bool {
             // If size overflows, then pointer cannot be inbounds.
             let Some(sz) = checked_size_of_raw(ptr) else { return false };
             if sz == 0 {
