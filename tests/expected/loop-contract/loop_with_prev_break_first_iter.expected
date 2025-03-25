@@ -1,0 +1,4 @@
+Failed Checks: assertion failed: (i >= 2) && (i <= 100) && (__kani_prev_var_15_5_18_6_0 == i + 2)
+ File: "src/exptest.rs", line 14, in loop_with_prev
+
+VERIFICATION:- FAILED

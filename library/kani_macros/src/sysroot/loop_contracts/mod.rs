@@ -34,11 +34,13 @@ If there is a prev(expr) in the loop_invariant:
 1. Firstly, Add an assertion of the loop_quard: the loop must run at least once, otherwise prev(expr) is undefined.
 1. For each prev(expr) in the loop variant, replace it with a newly generated "memory" variable prev_k
 2. Add the declaration of i before the loop: let mut prev_k = expr
-3. Define a mut closure whose body is exactly the loop body, but replace all break and continue statements with return statements
-4. Call the closure (the same as run the loop once)
-5. Add the assertion for the loop_invariant (not includes the loop_quard): check if the loop_invariant holds after the first iteration.
-6. Add the loop
-6. Add the assignment statements (exactly the same as the declarations without the "let mut") on the top of the loop body to update the "memory" variables
+3. Define a mut closure whose body is exactly the loop body, but replace all continue/break statements with return true/false statements,
+        then add a final return true statement at the end of it
+4. Add an if statement with condition tobe the that closure's call (the same as run the loop once):
+    True block: add the loop with expanded macros (see next section) and inside the loop body:
+        add the assignment statements (exactly the same as the declarations without the "let mut") on the top to update the "memory" variables
+    Else block: Add the assertion for the loop_invariant (not includes the loop_quard): check if the loop_invariant holds after the first iteration.
+
 For example:
 #[kani::loop_invariant(prev(x+y) = x + y -1 && ...)]
 while(loop_guard)
@@ -53,14 +55,18 @@ let mut prev_1 = x + y;
 let mut loop_body_closure = || {
     loop_body_replaced //replace breaks/continues in loop_body with returns
 };
-loop_body_closure();
-assert!(prev_1 = x + y -1 && ...);
-#[kani::loop_invariant(prev_1  = x + y -1)]
-while(loop_guard)
-{
-    prev_1 = x + y;
-    loop_body
+if loop_body_closure(){
+    #[kani::loop_invariant(prev_1  = x + y -1)]
+    while(loop_guard)
+    {
+        prev_1 = x + y;
+        loop_body
+    }
 }
+else{
+    assert!(prev_1 = x + y -1 && ...);
+}
+
 
 */
 
@@ -198,10 +204,10 @@ impl VisitMut for BreakContinueReplacer {
         // Replace the expression
         *expr = match expr {
             Expr::Break(_) => {
-                syn::parse_quote!(return)
+                syn::parse_quote!(return false)
             }
             Expr::Continue(_) => {
-                syn::parse_quote!(return)
+                syn::parse_quote!(return true)
             }
             _ => return,
         };
@@ -212,6 +218,18 @@ impl VisitMut for BreakContinueReplacer {
 fn transform_break_continue(block: &mut Block) {
     let mut replacer = BreakContinueReplacer;
     replacer.visit_block_mut(block);
+    let return_stmt: Stmt = syn::parse_quote! {
+        return true;
+    };
+    // Add semicolon to the last statement if it's an expression without semicolon
+    if let Some(last_stmt) = block.stmts.last_mut() {
+        if let Stmt::Expr(expr, ref mut semi) = last_stmt {
+            if semi.is_none() {
+                *semi = Some(Default::default());
+            }
+        }
+    }
+    block.stmts.push(return_stmt);
 }
 
 pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -307,17 +325,20 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
         #(#decl_stms)*
         let mut #loop_body_closure = ||
         #loop_body;
-        #loop_body_closure ();
-        assert!(#inv_expr);
+        if #loop_body_closure () {
         // Dummy function used to force the compiler to capture the environment.
         // We cannot call closures inside constant functions.
         // This function gets replaced by `kani::internal::call_closure`.
-        #[inline(never)]
-        #[kanitool::fn_marker = "kani_register_loop_contract"]
-        const fn #register_ident<F: Fn() -> bool>(_f: &F, _transformed: usize) -> bool {
-            true
+            #[inline(never)]
+            #[kanitool::fn_marker = "kani_register_loop_contract"]
+            const fn #register_ident<F: Fn() -> bool>(_f: &F, _transformed: usize) -> bool {
+                true
+            }
+            #loop_stmt
         }
-        #loop_stmt
+        else {
+            assert!(#inv_expr);
+        };
         })
         .into()
     } else {
