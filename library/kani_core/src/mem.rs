@@ -167,7 +167,7 @@ macro_rules! kani_mem {
         }
 
         /// Checks that `ptr` points to an allocation that can hold data of size calculated from `T`.
-        /// 
+        ///
         /// This will panic if `ptr` points to an invalid `non_null`
         /// Returns `false` if:
         /// - The computed size overflows.
