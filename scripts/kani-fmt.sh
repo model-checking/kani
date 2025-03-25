@@ -15,8 +15,6 @@ cd ${ROOT_FOLDER}
 # Verify crates.
 error=0
 
-export RUSTC_BOOTSTRAP=1
-
 # Check all crates. Only fail at the end.
 cargo fmt "$@" || error=1
 

@@ -47,7 +47,7 @@ jobs:
 
       - name: 'Run Clippy'
         run: |
-          RUSTC_BOOTSTRAP=1 cargo clippy --workspace -- -D warnings
+          cargo clippy --workspace -- -D warnings
 
       - name: 'Print Clippy Statistics'
         run: |

@@ -33,8 +33,6 @@ ${SCRIPT_DIR}/kani-fmt.sh --check
 # Build kani
 cargo build-dev
 
-export RUSTC_BOOTSTRAP=1
-
 # Unit tests
 cargo test -p cprover_bindings
 cargo test -p kani-compiler
