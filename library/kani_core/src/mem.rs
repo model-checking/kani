@@ -177,11 +177,6 @@ macro_rules! kani_mem {
         ///
         /// This function aligns with Rust's memory safety requirements, which restrict valid allocations
         /// to sizes no larger than `isize::MAX`.
-        #[crate::kani::unstable_feature(
-            feature = "mem-predicates",
-            issue = 2690,
-            reason = "experimental memory predicate API"
-        )]
         pub fn is_inbounds<T: ?Sized>(ptr: *const T) -> bool {
             // If size overflows, then pointer cannot be inbounds.
             let Some(sz) = checked_size_of_raw(ptr) else { return false };
