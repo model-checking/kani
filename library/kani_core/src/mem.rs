@@ -167,6 +167,7 @@ macro_rules! kani_mem {
         }
 
         /// Checks that `ptr` points to an allocation that can hold data of size calculated from `T`.
+        /// 
         /// This will panic if `ptr` points to an invalid `non_null`
         /// Returns `false` if:
         /// - The computed size overflows.
@@ -176,7 +177,12 @@ macro_rules! kani_mem {
         ///
         /// This function aligns with Rust's memory safety requirements, which restrict valid allocations
         /// to sizes no larger than `isize::MAX`.
-        fn is_inbounds<T: ?Sized>(ptr: *const T) -> bool {
+        #[crate::kani::unstable_feature(
+            feature = "mem-predicates",
+            issue = 2690,
+            reason = "experimental memory predicate API"
+        )]
+        pub fn is_inbounds<T: ?Sized>(ptr: *const T) -> bool {
             // If size overflows, then pointer cannot be inbounds.
             let Some(sz) = checked_size_of_raw(ptr) else { return false };
             if sz == 0 {
