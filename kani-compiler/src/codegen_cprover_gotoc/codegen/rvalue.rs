@@ -942,10 +942,10 @@ impl GotocCtx<'_> {
     pub fn codegen_discriminant_field(&self, place: Expr, ty: Ty) -> Expr {
         let layout = self.layout_of_stable(ty);
         assert!(
-            matches!(&layout.variants, Variants::Multiple {
-                tag_encoding: TagEncoding::Direct,
-                ..
-            }),
+            matches!(
+                &layout.variants,
+                Variants::Multiple { tag_encoding: TagEncoding::Direct, .. }
+            ),
             "discriminant field (`case`) only exists for multiple variants and direct encoding"
         );
         let expr = if ty.kind().is_coroutine() {
