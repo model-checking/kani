@@ -5,7 +5,7 @@
 
 extern crate kani;
 
-mod size {    
+mod size {
     use super::*;
 
     #[kani::proof]
