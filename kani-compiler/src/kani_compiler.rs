@@ -41,6 +41,7 @@ pub fn run(args: Vec<String>) {
 }
 
 /// Configure the LLBC backend (Aeneas's IR).
+#[allow(unused)]
 fn llbc_backend(_queries: Arc<Mutex<QueryDb>>) -> Box<dyn CodegenBackend> {
     #[cfg(feature = "llbc")]
     return Box::new(LlbcCodegenBackend::new(_queries));
@@ -49,6 +50,7 @@ fn llbc_backend(_queries: Arc<Mutex<QueryDb>>) -> Box<dyn CodegenBackend> {
 }
 
 /// Configure the cprover backend that generates goto-programs.
+#[allow(unused)]
 fn cprover_backend(_queries: Arc<Mutex<QueryDb>>) -> Box<dyn CodegenBackend> {
     #[cfg(feature = "cprover")]
     return Box::new(GotocCodegenBackend::new(_queries));
