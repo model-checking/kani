@@ -19,19 +19,25 @@ error=0
 cargo fmt "$@" || error=1
 
 # Check test source files.
-# Note that this will respect the ignore section of rustfmt.toml. If you need to
-# skip any file / directory, add it there.
 TESTS=("tests" "docs/src/tutorial")
+# Add ignore patterns for code we don't want to format.
+IGNORE=("*/perf/s2n-quic/*")
+
+# Arguments for the find command for excluding the IGNORE paths
+IGNORE_ARGS=()
+for ignore in "${IGNORE[@]}"; do
+    IGNORE_ARGS+=(-not -path "$ignore")
+done
 
 for suite in "${TESTS[@]}"; do
     # Find uses breakline to split between files. This ensures that we can
     # handle files with space in their path.
     set -f; IFS=$'\n'
-    files=($(find "${suite}" -name "*.rs"))
+    files=($(find "${suite}" -name "*.rs" ${IGNORE_ARGS[@]}))
     set +f; unset IFS
     # Note: We set the configuration file here because some submodules have
     # their own configuration file.
-    rustfmt --unstable-features "$@" --config-path rustfmt.toml "${files[@]}" || error=1
+    rustfmt --config-path rustfmt.toml "${files[@]}" || error=1
 done
 
 exit $error

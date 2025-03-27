@@ -105,7 +105,12 @@ cargo clean --manifest-path "$FEATURES_MANIFEST_PATH"
 # Setting RUSTFLAGS like this always resets cargo's build cache resulting in
 # all tests to be re-run. I.e., cannot keep re-runing the regression from where
 # we stopped.
-RUSTFLAGS="-D warnings" cargo build --target-dir /tmp/kani_build_warnings
+# Only run with the `cprover` feature to avoid compiling the `charon` library
+# which is not our code and may have warnings. The downside is that we wouldn't
+# detect any warnings in the charon code path. TODO: Remove
+# `--no-default-features --features cprover` when the warnings in charon are
+# fixed and we advance the charon pin to that version
+RUSTFLAGS="-D warnings" cargo build --target-dir /tmp/kani_build_warnings --no-default-features --features cprover
 
 echo
 echo "All Kani regression tests completed successfully."
