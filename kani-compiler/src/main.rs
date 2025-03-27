@@ -16,7 +16,8 @@
 #![feature(f128)]
 #![feature(f16)]
 #![feature(non_exhaustive_omitted_patterns_lint)]
-#![feature(float_next_up_down)]
+#![feature(cfg_version)]
+#![cfg_attr(not(version("1.86")), feature(float_next_up_down))]
 #![feature(try_blocks)]
 extern crate rustc_abi;
 extern crate rustc_ast;

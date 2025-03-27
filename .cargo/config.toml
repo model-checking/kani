@@ -20,6 +20,7 @@ KANI_SYSROOT ={value = "target/kani", relative = true}
 KANI_BUILD_LIBS ={value = "target/build-libs", relative = true}
 # Build Kani library without `build-std`.
 KANI_LEGACY_LIBS ={value = "target/legacy-libs", relative = true}
+# This is only required for stable but is a no-op for nightly channels
 RUSTC_BOOTSTRAP = "1"
 
 [target.'cfg(all())']
