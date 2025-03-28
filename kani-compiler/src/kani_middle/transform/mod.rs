@@ -83,11 +83,14 @@ impl BodyTransformation {
         // would also make sense to check that the values are initialized before checking their
         // validity. In the future, it would be nice to have a mechanism to skip automatically
         // generated code for future instrumentation passes.
-        transformer.add_pass(queries, UninitPass {
-            // Since this uses demonic non-determinism under the hood, should not assume the assertion.
-            check_type: CheckType::new_assert(queries),
-            mem_init_fn_cache: queries.kani_functions().clone(),
-        });
+        transformer.add_pass(
+            queries,
+            UninitPass {
+                // Since this uses demonic non-determinism under the hood, should not assume the assertion.
+                check_type: CheckType::new_assert(queries),
+                mem_init_fn_cache: queries.kani_functions().clone(),
+            },
+        );
         transformer.add_pass(queries, IntrinsicGeneratorPass::new(check_type, &queries));
         transformer.add_pass(queries, LoopContractPass::new(tcx, queries, &unit));
         transformer.add_pass(queries, RustcIntrinsicsPass::new(&queries));

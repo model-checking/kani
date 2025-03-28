@@ -207,6 +207,8 @@ crate-type = ["lib"]
                     // Use CARGO_ENCODED_RUSTFLAGS instead of RUSTFLAGS is preferred. See
                     // https://doc.rust-lang.org/cargo/reference/environment-variables.html
                     .env("CARGO_ENCODED_RUSTFLAGS", rustc_args.join(OsStr::new("\x1f")))
+                    // This is only required for stable but is a no-op for nightly channels
+                    .env("RUSTC_BOOTSTRAP", "1")
                     .env("CARGO_TERM_PROGRESS_WHEN", "never");
 
                 match self.run_build_target(cmd, verification_target.target()) {
