@@ -16,7 +16,7 @@ use rustc_middle::ty::TyCtxt;
 use rustc_span::Symbol;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{
-    AggregateKind, BasicBlock, BasicBlockIdx, Body, ConstOperand, Operand, Place, Rvalue,
+    AggregateKind, BasicBlock, BasicBlockIdx, Body, ConstOperand, Operand, Rvalue,
     Statement, StatementKind, Terminator, TerminatorKind, VarDebugInfoContents,
 };
 use stable_mir::ty::{FnDef, MirConst, RigidTy, UintTy};
@@ -299,7 +299,7 @@ impl LoopContractPass {
                 // All user variables are support
                 supported_vars.extend(new_body.var_debug_info().iter().filter_map(|info| {
                     match &info.value {
-                        VarDebugInfoContents::Place(debug_place) => Some(debug_place.local.clone()),
+                        VarDebugInfoContents::Place(debug_place) => Some(debug_place.local),
                         _ => None,
                     }
                 }));
@@ -309,11 +309,10 @@ impl LoopContractPass {
                 // if it assigns to other places, we cache if the assigned places are supported.
                 for stmt in &new_body.blocks()[bb_idx].statements {
                     if let StatementKind::Assign(place, rvalue) = &stmt.kind {
-                        println!("stmt : {:?}", rvalue);
                         match rvalue {
                             Rvalue::Ref(_,_,rplace) => {
                                 if supported_vars.contains(&rplace.local) {
-                                    supported_vars.push(place.local.clone());
+                                    supported_vars.push(place.local);
                                 } }
                             Rvalue::Aggregate(AggregateKind::Closure(..), closure_args) => {
                                 if closure_args.iter().any(|arg| !matches!(arg, Operand::Copy(arg_place) | Operand::Move(arg_place) if supported_vars.contains(&arg_place.local))) {
@@ -325,7 +324,7 @@ impl LoopContractPass {
                             }
                             _ => {
                                 if self.is_supported_argument_of_closure(rvalue, new_body) {
-                                    supported_vars.push(place.local.clone());
+                                    supported_vars.push(place.local);
                                 }
                             }
                         }
