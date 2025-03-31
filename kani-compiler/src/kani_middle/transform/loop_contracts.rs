@@ -16,8 +16,8 @@ use rustc_middle::ty::TyCtxt;
 use rustc_span::Symbol;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{
-    AggregateKind, BasicBlock, BasicBlockIdx, Body, ConstOperand, Operand, Rvalue,
-    Statement, StatementKind, Terminator, TerminatorKind, VarDebugInfoContents,
+    AggregateKind, BasicBlock, BasicBlockIdx, Body, ConstOperand, Operand, Rvalue, Statement,
+    StatementKind, Terminator, TerminatorKind, VarDebugInfoContents,
 };
 use stable_mir::ty::{FnDef, MirConst, RigidTy, UintTy};
 use std::collections::{HashMap, HashSet, VecDeque};
