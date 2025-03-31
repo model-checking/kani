@@ -295,11 +295,11 @@ impl LoopContractPass {
 
                 // Collect supported vars assigned in the block.
                 // And check if all arguments of the closure is supported.
-                let mut supported_vars: Vec<Place> = Vec::new();
+                let mut supported_vars: Vec<usize> = Vec::new();
                 // All user variables are support
                 supported_vars.extend(new_body.var_debug_info().iter().filter_map(|info| {
                     match &info.value {
-                        VarDebugInfoContents::Place(debug_place) => Some(debug_place.clone()),
+                        VarDebugInfoContents::Place(debug_place) => Some(debug_place.local.clone()),
                         _ => None,
                     }
                 }));
@@ -309,9 +309,14 @@ impl LoopContractPass {
                 // if it assigns to other places, we cache if the assigned places are supported.
                 for stmt in &new_body.blocks()[bb_idx].statements {
                     if let StatementKind::Assign(place, rvalue) = &stmt.kind {
+                        println!("stmt : {:?}", rvalue);
                         match rvalue {
+                            Rvalue::Ref(_,_,rplace) => {
+                                if supported_vars.contains(&rplace.local) {
+                                    supported_vars.push(place.local.clone());
+                                } }
                             Rvalue::Aggregate(AggregateKind::Closure(..), closure_args) => {
-                                if closure_args.iter().any(|arg| !matches!(arg, Operand::Copy(arg_place) | Operand::Move(arg_place) if supported_vars.contains(arg_place))) {
+                                if closure_args.iter().any(|arg| !matches!(arg, Operand::Copy(arg_place) | Operand::Move(arg_place) if supported_vars.contains(&arg_place.local))) {
                                     unreachable!(
                                             "The loop invariant support only reference of user variables. The provided invariants contain unsupported dereference. \
                                             Please report github.com/model-checking/kani/issues/new?template=bug_report.md"
@@ -320,7 +325,7 @@ impl LoopContractPass {
                             }
                             _ => {
                                 if self.is_supported_argument_of_closure(rvalue, new_body) {
-                                    supported_vars.push(place.clone());
+                                    supported_vars.push(place.local.clone());
                                 }
                             }
                         }
