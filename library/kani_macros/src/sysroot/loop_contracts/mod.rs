@@ -31,12 +31,12 @@ Then the loop_invartiant is transformed
 /*
 Transform the loop to support prev(expr) : the value of expr at the end of the previous iteration
 If there is a prev(expr) in the loop_invariant:
-1. Firstly, Add an assertion of the loop_quard: the loop must run at least once, otherwise prev(expr) is undefined.
-1. For each prev(expr) in the loop variant, replace it with a newly generated "memory" variable prev_k
-2. Add the declaration of i before the loop: let mut prev_k = expr
-3. Define a mut closure whose body is exactly the loop body, but replace all continue/break statements with return true/false statements,
+1. Firstly, add an assertion of the loop_quard: the loop must run at least once, otherwise prev(expr) is undefined.
+2. For each prev(expr) in the loop variant, replace it with a newly generated "memory" variable prev_k
+3. Add the declaration of prev_k before the loop: let mut prev_k = expr
+4. Define a mut closure whose body is exactly the loop body, but replace all continue/break statements with return true/false statements,
         then add a final return true statement at the end of it
-4. Add an if statement with condition tobe the that closure's call (the same as run the loop once):
+5. Add an if statement with condition to be the that closure's call (the same as run the loop once):
     True block: add the loop with expanded macros (see next section) and inside the loop body:
         add the assignment statements (exactly the same as the declarations without the "let mut") on the top to update the "memory" variables
     Else block: Add the assertion for the loop_invariant (not includes the loop_quard): check if the loop_invariant holds after the first iteration.
