@@ -1,6 +1,6 @@
 Kani generated automatic harnesses for 5 function(s):
 +--------------------------------+
-| Chosen Function                |
+| Selected Function              |
 +================================+
 | should_pass::div               |
 |--------------------------------|

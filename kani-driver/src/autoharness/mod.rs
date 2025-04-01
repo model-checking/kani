@@ -83,7 +83,7 @@ fn postprocess_project(
 /// Print automatic harness metadata to the terminal.
 fn print_autoharness_metadata(metadata: Vec<KaniMetadata>) {
     let mut chosen_table = PrettyTable::new();
-    chosen_table.set_header(vec!["Chosen Function"]);
+    chosen_table.set_header(vec!["Selected Function"]);
 
     let mut skipped_table = PrettyTable::new();
     skipped_table.set_header(vec!["Skipped Function", "Reason for Skipping"]);
@@ -122,7 +122,7 @@ fn print_autoharness_metadata(metadata: Vec<KaniMetadata>) {
 fn print_chosen_table(table: &mut PrettyTable) {
     if table.is_empty() {
         println!(
-            "\nChosen Functions: None. Kani did not generate automatic harnesses for any functions in the available crate(s)."
+            "\nSelected Functions: None. Kani did not generate automatic harnesses for any functions in the available crate(s)."
         );
         return;
     }

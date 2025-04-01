@@ -1,9 +1,9 @@
 Kani generated automatic harnesses for 1 function(s):
-+-----------------+
-| Chosen Function |
-+=================+
-| yes_harness     |
-+-----------------+
++-------------------+
+| Selected Function |
++===================+
+| yes_harness       |
++-------------------+
 
 Skipped Functions: None. Kani generated automatic harnesses for all functions in the available crate(s).
 

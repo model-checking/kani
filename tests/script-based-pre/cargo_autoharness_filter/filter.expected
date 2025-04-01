@@ -1,6 +1,6 @@
 Kani generated automatic harnesses for 42 function(s):
 +----------------------------------------------+
-| Chosen Function                              |
+| Selected Function                            |
 +==============================================+
 | yes_harness::f_u8                            |
 |----------------------------------------------|

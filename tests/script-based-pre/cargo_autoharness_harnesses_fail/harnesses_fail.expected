@@ -1,6 +1,6 @@
 Kani generated automatic harnesses for 5 function(s):
 +-------------------------+
-| Chosen Function         |
+| Selected Function       |
 +=========================+
 | oob_safe_array_access   |
 |-------------------------|
