@@ -169,13 +169,12 @@ macro_rules! kani_mem {
         /// Checks that `ptr` points to an allocation that can hold data of size calculated from `T`.
         ///
         /// This function always returns `true` for ZSTs, since every pointer to a ZST is valid.
-        /// For non-ZSTs, this function will:
-        ///  - Panic if `ptr` does not point to allocated memory,
-        ///  - Return `false` if the size of the val pointed to exceeds `isize::MAX`,
-        ///  - Return `false` if the pointer is null.
-        ///
-        /// If none of the above conditions hold, it will return `true` if and only if
-        /// `ptr` points to allocated memory that can hold data of size calculated from `T`.
+        /// For non-ZSTs, this function will return `false` if `ptr` is null
+        /// or the size of the val pointed to exceeds `isize::MAX`.
+        /// Otherwise, it will return `true` if and only if `ptr` points to allocated memory
+        /// that can hold data of size calculated from `T`.
+        /// Note that Kani does not support reasoning about pointers to unallocated memory,
+        /// so if `ptr` does not point to allocated memory, verification will fail.
         #[crate::kani::unstable_feature(
             feature = "mem-predicates",
             issue = 3946,
