@@ -2,15 +2,15 @@ Kani generated automatic harnesses for 5 function(s):
 +--------------------------------+
 | Selected Function              |
 +================================+
-| should_pass::div               |
+| should_fail::max               |
 |--------------------------------|
-| should_pass::has_recursion_gcd |
+| should_pass::div               |
 |--------------------------------|
 | should_pass::has_loop_contract |
 |--------------------------------|
-| should_pass::unchecked_mul     |
+| should_pass::has_recursion_gcd |
 |--------------------------------|
-| should_fail::max               |
+| should_pass::unchecked_mul     |
 +--------------------------------+
 
 Skipped Functions: None. Kani generated automatic harnesses for all functions in the available crate(s).
@@ -44,13 +44,13 @@ Autoharness Summary:
 +--------------------------------+-----------------------------+---------------------+
 | Selected Function              | Kind of Automatic Harness   | Verification Result |
 +====================================================================================+
-| should_pass::unchecked_mul     | #[kani::proof_for_contract] | Success             |
+| should_pass::div               | #[kani::proof_for_contract] | Success             |
 |--------------------------------+-----------------------------+---------------------|
 | should_pass::has_loop_contract | #[kani::proof]              | Success             |
 |--------------------------------+-----------------------------+---------------------|
 | should_pass::has_recursion_gcd | #[kani::proof_for_contract] | Success             |
 |--------------------------------+-----------------------------+---------------------|
-| should_pass::div               | #[kani::proof_for_contract] | Success             |
+| should_pass::unchecked_mul     | #[kani::proof_for_contract] | Success             |
 |--------------------------------+-----------------------------+---------------------|
 | should_fail::max               | #[kani::proof_for_contract] | Failure             |
 +--------------------------------+-----------------------------+---------------------+

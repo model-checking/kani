@@ -5,7 +5,7 @@ extern crate clap;
 
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashSet},
     path::PathBuf,
 };
 use strum_macros::{Display, EnumString};
@@ -43,12 +43,12 @@ pub struct KaniMetadata {
 
 /// For the autoharness subcommand, all of the user-defined functions we found,
 /// which are "chosen" if we generated an automatic harness for them, and "skipped" otherwise.
+/// We use ordered data structures so that the metadata is in alphabetical order.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AutoHarnessMetadata {
     /// Functions we generated automatic harnesses for.
-    pub chosen: Vec<String>,
+    pub chosen: BTreeSet<String>,
     /// Map function names to the reason why we did not generate an automatic harness for that function.
-    /// We use an ordered map so that when we print the data, it is ordered alphabetically by function name.
     pub skipped: BTreeMap<String, AutoHarnessSkipReason>,
 }
 

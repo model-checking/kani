@@ -2,9 +2,9 @@ Kani generated automatic harnesses for 2 function(s):
 +-------------------+
 | Selected Function |
 +===================+
-| infinite_loop     |
-|-------------------|
 | gcd_recursion     |
+|-------------------|
+| infinite_loop     |
 +-------------------+
 
 Skipped Functions: None. Kani generated automatic harnesses for all functions in the available crate(s).
