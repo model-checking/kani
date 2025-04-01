@@ -23,6 +23,25 @@ use stable_mir::ty::{FnDef, MirConst, RigidTy, UintTy};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt::Debug;
 
+fn print_stable_mir(body: &Body) {
+    // Print basic blocks in order
+    for (bb_idx, bb) in body.blocks.iter().enumerate() {
+        println!("bb{bb_idx}:");
+        
+        // Print statements
+        for stmt in &bb.statements {
+            println!("    {stmt:?}");
+        }
+        
+        // Print terminator
+        let terminator = &bb.terminator;
+        println!("    terminator: {:?}", terminator.kind);
+            //println!("    span: {:?}", terminator.span);
+        
+    }
+}
+
+
 #[derive(Debug, Default)]
 pub struct LoopContractPass {
     /// Cache KaniRunContract function used to implement contracts.
@@ -133,7 +152,14 @@ impl TransformPass for LoopContractPass {
                             }
                         }
                     }
-                    (contain_loop_contracts, new_body.into())
+                    //println!("Loop contracts: {}", contain_loop_contracts);
+                    let nb : Body = new_body.into();
+                    if contain_loop_contracts {
+                        //println!("{:#?}", nb);
+                        print_stable_mir(&nb);
+                        assert!(1==0);
+                    }
+                    (contain_loop_contracts, nb)
                 }
             }
             _ => {
