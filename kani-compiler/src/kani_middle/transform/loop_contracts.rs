@@ -8,8 +8,8 @@ use super::TransformPass;
 use crate::kani_middle::KaniAttributes;
 use crate::kani_middle::codegen_units::CodegenUnit;
 use crate::kani_middle::kani_functions::KaniModel;
-use crate::kani_middle::transform::TransformationType;
 use crate::kani_middle::transform::body::{InsertPosition, MutableBody, SourceInstruction};
+use crate::kani_middle::transform::{TransformationType, body};
 use crate::kani_queries::QueryDb;
 use crate::stable_mir::CrateDef;
 use rustc_middle::ty::TyCtxt;
@@ -22,25 +22,6 @@ use stable_mir::mir::{
 use stable_mir::ty::{FnDef, MirConst, RigidTy, UintTy};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt::Debug;
-
-fn print_stable_mir(body: &Body) {
-    // Print basic blocks in order
-    for (bb_idx, bb) in body.blocks.iter().enumerate() {
-        println!("bb{bb_idx}:");
-        
-        // Print statements
-        for stmt in &bb.statements {
-            println!("    {stmt:?}");
-        }
-        
-        // Print terminator
-        let terminator = &bb.terminator;
-        println!("    terminator: {:?}", terminator.kind);
-            //println!("    span: {:?}", terminator.span);
-        
-    }
-}
-
 
 #[derive(Debug, Default)]
 pub struct LoopContractPass {
@@ -122,47 +103,13 @@ impl TransformPass for LoopContractPass {
                     let run = Instance::resolve(self.run_contract_fn.unwrap(), args).unwrap();
                     (true, run.body().unwrap())
                 } else {
-                    let mut new_body = MutableBody::from(body);
-                    let mut contain_loop_contracts: bool = false;
-
-                    // Visit basic blocks in control flow order (BFS).
-                    let mut visited: HashSet<BasicBlockIdx> = HashSet::new();
-                    let mut queue: VecDeque<BasicBlockIdx> = VecDeque::new();
-                    // Visit blocks in loops only when there is no blocks in queue.
-                    let mut loop_queue: VecDeque<BasicBlockIdx> = VecDeque::new();
-                    queue.push_back(0);
-
-                    while let Some(bb_idx) = queue.pop_front().or_else(|| loop_queue.pop_front()) {
-                        visited.insert(bb_idx);
-
-                        let terminator = new_body.blocks()[bb_idx].terminator.clone();
-
-                        let is_loop_head = self.transform_bb(tcx, &mut new_body, bb_idx);
-                        contain_loop_contracts |= is_loop_head;
-
-                        // Add successors of the current basic blocks to
-                        // the visiting queue.
-                        for to_visit in terminator.successors() {
-                            if !visited.contains(&to_visit) {
-                                if is_loop_head {
-                                    loop_queue.push_back(to_visit);
-                                } else {
-                                    queue.push_back(to_visit)
-                                };
-                            }
-                        }
-                    }
-                    //println!("Loop contracts: {}", contain_loop_contracts);
-                    let nb : Body = new_body.into();
-                    if contain_loop_contracts {
-                        //println!("{:#?}", nb);
-                        print_stable_mir(&nb);
-                        assert!(1==0);
-                    }
-                    (contain_loop_contracts, nb)
+                    self.transform_body_with_loop(tcx, body)
                 }
             }
+            RigidTy::Closure(_, _) => self.transform_body_with_loop(tcx, body),
             _ => {
+                println!("Instance defid: {:?}", instance.def.name());
+                println!("Instance ty: {:?}", instance.ty().kind().rigid().unwrap());
                 /* static variables case */
                 (false, body)
             }
@@ -218,6 +165,41 @@ impl LoopContractPass {
         var_debug_info.iter().any(|info|
             matches!(&info.value, VarDebugInfoContents::Place(debug_place) if *place == *debug_place)
         ))
+    }
+
+    fn transform_body_with_loop(&mut self, tcx: TyCtxt, body: Body) -> (bool, Body) {
+        let mut new_body = MutableBody::from(body);
+        let mut contain_loop_contracts: bool = false;
+
+        // Visit basic blocks in control flow order (BFS).
+        let mut visited: HashSet<BasicBlockIdx> = HashSet::new();
+        let mut queue: VecDeque<BasicBlockIdx> = VecDeque::new();
+        // Visit blocks in loops only when there is no blocks in queue.
+        let mut loop_queue: VecDeque<BasicBlockIdx> = VecDeque::new();
+        queue.push_back(0);
+
+        while let Some(bb_idx) = queue.pop_front().or_else(|| loop_queue.pop_front()) {
+            visited.insert(bb_idx);
+
+            let terminator = new_body.blocks()[bb_idx].terminator.clone();
+
+            let is_loop_head = self.transform_bb(tcx, &mut new_body, bb_idx);
+            contain_loop_contracts |= is_loop_head;
+
+            // Add successors of the current basic blocks to
+            // the visiting queue.
+            for to_visit in terminator.successors() {
+                if !visited.contains(&to_visit) {
+                    if is_loop_head {
+                        loop_queue.push_back(to_visit);
+                    } else {
+                        queue.push_back(to_visit)
+                    };
+                }
+            }
+        }
+
+        (contain_loop_contracts, new_body.into())
     }
 
     /// Transform loops with contracts from
@@ -336,7 +318,7 @@ impl LoopContractPass {
                 for stmt in &new_body.blocks()[bb_idx].statements {
                     if let StatementKind::Assign(place, rvalue) = &stmt.kind {
                         match rvalue {
-                            Rvalue::Ref(_,_,rplace) => {
+                            Rvalue::Ref(_,_,rplace) | Rvalue::CopyForDeref(rplace) => {
                                 if supported_vars.contains(&rplace.local) {
                                     supported_vars.push(place.local);
                                 } }
