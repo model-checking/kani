@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// kani-flags: -Z loop-contracts
+// kani-flags: -Z loop-contracts -Z function-contracts
 
 //! Calling a function that contains loops
 
