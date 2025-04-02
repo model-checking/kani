@@ -266,11 +266,11 @@ pub mod rustc_smir {
             for mapping in &cov_info.mappings {
                 let Code { bcb } = mapping.kind else { unreachable!() };
                 let source_map = tcx.sess.source_map();
-                let file = source_map.lookup_source_file(cov_info.body_span.lo());
+                let file = source_map.lookup_source_file(mapping.span.lo());
                 if bcb == coverage {
                     return Some((
-                        make_source_region(source_map, cov_info, &file, mapping.span).unwrap(),
-                        rustc_internal::stable(cov_info.body_span).get_filename(),
+                        make_source_region(source_map, &file, mapping.span).unwrap(),
+                        rustc_internal::stable(mapping.span).get_filename(),
                     ));
                 }
             }
