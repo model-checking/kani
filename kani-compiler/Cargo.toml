@@ -31,7 +31,7 @@ tracing-tree = "0.4.0"
 
 # Future proofing: enable backend dependencies using feature.
 [features]
-default = ['cprover', 'llbc']
+default = ['cprover']
 llbc = ['charon']
 cprover = ['cbmc', 'num', 'serde']
 
