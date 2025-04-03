@@ -27,8 +27,8 @@ rustc-demangle = "0.1.21"
 pathdiff = "0.2.1"
 rayon = "1.5.3"
 comfy-table = "7.0.1"
-strum = {version = "0.26"}
-strum_macros = {version = "0.26"}
+strum = {version = "0.27.1"}
+strum_macros = {version = "0.27.1"}
 tempfile = "3"
 tracing = {version = "0.1", features = ["max_level_trace", "release_max_level_debug"]}
 tracing-subscriber = {version = "0.3.8", features = ["env-filter", "json", "fmt"]}
