@@ -126,7 +126,7 @@ crate-type = ["lib"]
     }
 
     /// Calls `cargo_build` to generate `*.symtab.json` files in `target_dir`
-    pub fn cargo_build(&self, keep_going: bool) -> Result<CargoOutputs> {
+    pub fn cargo_build(&mut self, keep_going: bool) -> Result<CargoOutputs> {
         let build_target = env!("TARGET"); // see build.rs
         let metadata = self.cargo_metadata(build_target)?;
         let target_dir = self
@@ -183,13 +183,12 @@ crate-type = ["lib"]
         }
 
         // Arguments that will only be passed to the target package.
-        let mut pkg_args: Vec<String> = vec![];
-        pkg_args.extend(["--".to_string(), self.reachability_arg()]);
+        self.pkg_args.push(self.reachability_arg());
         if let Some(backend_arg) = self.backend_arg() {
-            pkg_args.push(backend_arg);
+            self.pkg_args.push(backend_arg);
         }
         if self.args.no_assert_contracts {
-            pkg_args.push("--no-assert-contracts".into());
+            self.pkg_args.push("--no-assert-contracts".into());
         }
 
         let mut found_target = false;
@@ -202,7 +201,7 @@ crate-type = ["lib"]
                 cmd.args(&cargo_args)
                     .args(vec!["-p", &package.id.to_string()])
                     .args(verification_target.to_args())
-                    .args(&pkg_args)
+                    .args(&self.pkg_args)
                     .env("RUSTC", &self.kani_compiler)
                     // Use CARGO_ENCODED_RUSTFLAGS instead of RUSTFLAGS is preferred. See
                     // https://doc.rust-lang.org/cargo/reference/environment-variables.html

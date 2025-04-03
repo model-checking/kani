@@ -65,7 +65,7 @@ mod intrinsics {
     /// Logic similar to `bitmask_len` from `portable_simd`.
     /// <https://github.com/rust-lang/portable-simd/blob/490b5cf/crates/core_simd/src/masks/to_bitmask.rs#L75-L79>
     pub(super) const fn mask_len(len: usize) -> usize {
-        (len + 7) / 8
+        len.div_ceil(8)
     }
 
     #[cfg(target_endian = "little")]

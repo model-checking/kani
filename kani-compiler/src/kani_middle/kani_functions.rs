@@ -48,6 +48,8 @@ pub enum KaniIntrinsic {
     CheckedAlignOf,
     #[strum(serialize = "CheckedSizeOfIntrinsic")]
     CheckedSizeOf,
+    #[strum(serialize = "AutomaticHarnessIntrinsic")]
+    AutomaticHarness,
     #[strum(serialize = "IsInitializedIntrinsic")]
     IsInitialized,
     #[strum(serialize = "ValidValueIntrinsic")]
@@ -146,6 +148,8 @@ pub enum KaniHook {
     PointerOffset,
     #[strum(serialize = "SafetyCheckHook")]
     SafetyCheck,
+    #[strum(serialize = "SafetyCheckNoAssumeHook")]
+    SafetyCheckNoAssume,
     #[strum(serialize = "UnsupportedCheckHook")]
     UnsupportedCheck,
     #[strum(serialize = "UntrackedDerefHook")]

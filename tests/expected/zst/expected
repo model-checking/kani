@@ -1,4 +1,4 @@
-Status: FAILURE\
-Description: "dereference failure: pointer NULL"
+- Status: FAILURE\
+- Description: "null pointer dereference occurred"
 
 VERIFICATION:- FAILED

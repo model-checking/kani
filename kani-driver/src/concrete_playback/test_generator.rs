@@ -9,7 +9,7 @@ use crate::call_cbmc::VerificationResult;
 use crate::cbmc_output_parser::Property;
 use crate::session::KaniSession;
 use anyhow::{Context, Result};
-use concrete_vals_extractor::{ConcreteVal, extract_harness_values};
+use concrete_vals_extractor::{ConcreteItem, PrimitiveConcreteVal, extract_harness_values};
 use kani_metadata::{HarnessKind, HarnessMetadata};
 use std::collections::hash_map::DefaultHasher;
 use std::ffi::OsString;
@@ -44,9 +44,9 @@ impl KaniSession {
             } else {
                 let mut unit_tests: Vec<UnitTest> = harness_values
                     .iter()
-                    .map(|(prop, concrete_vals)| {
+                    .map(|(prop, concrete_items)| {
                         let pretty_name = harness.get_harness_name_unqualified();
-                        format_unit_test(&pretty_name, &concrete_vals, gen_test_doc(harness, prop))
+                        format_unit_test(&pretty_name, &concrete_items, gen_test_doc(harness, prop))
                     })
                     .collect();
                 unit_tests.dedup_by(|a, b| a.name == b.name);
@@ -278,13 +278,13 @@ fn gen_test_doc(harness: &HarnessMetadata, property: &Property) -> String {
 /// Generate a formatted unit test from a list of concrete values.
 fn format_unit_test(
     harness_name: &str,
-    concrete_vals: &[ConcreteVal],
+    concrete_items: &[ConcreteItem],
     doc_str: String,
 ) -> UnitTest {
     // Hash the concrete values along with the proof harness name.
     let mut hasher = DefaultHasher::new();
     harness_name.hash(&mut hasher);
-    concrete_vals.hash(&mut hasher);
+    concrete_items.hash(&mut hasher);
     let hash = hasher.finish();
     let func_name = format!("kani_concrete_playback_{harness_name}_{hash}");
 
@@ -295,7 +295,7 @@ fn format_unit_test(
         format!("{:<4}let concrete_vals: Vec<Vec<u8>> = vec![", " "),
     ]
     .into_iter();
-    let formatted_concrete_vals = format_concrete_vals(concrete_vals);
+    let formatted_concrete_items = format_concrete_items(concrete_items);
     let func_after_concrete_vals = [
         format!("{:<4}];", " "),
         format!("{:<4}kani::concrete_playback_run(concrete_vals, {harness_name});", " "),
@@ -304,15 +304,33 @@ fn format_unit_test(
     .into_iter();
 
     let full_func: Vec<_> = func_before_concrete_vals
-        .chain(formatted_concrete_vals)
+        .chain(formatted_concrete_items)
         .chain(func_after_concrete_vals)
         .collect();
 
     UnitTest { code: full_func, name: func_name }
 }
 
+/// Format concrete items as strings--these make up the body of the concrete test.
+fn format_concrete_items(concrete_items: &[ConcreteItem]) -> impl Iterator<Item = String> + '_ {
+    // Note that ConcreteItem::Arrays are flattened, e.g., given: concrete_items = [ConcreteItem::Array(val1, val2), ConcreteItem::Primitive(val3)],
+    // we output the formatted strings for val1, val2, and val3, with no grouping of val1 and val2 in an outer vector.
+    // library::concrete_playback::any_raw_array relies on this formatting assumption.
+    // This is not a fundamental limitation -- we could group the byte arrays for an array in an outer vector,
+    // but that could cause confusion if we don't group byte arrays for other types, e.g., a struct with multiple fields.
+    // So, we leave it flattened for now.
+    // See the tracking issue for improving this output format at https://github.com/model-checking/kani/issues/1527.
+    concrete_items.iter().flat_map(|item| match item {
+        ConcreteItem::Array(vals) => format_concrete_vals(vals),
+        ConcreteItem::Primitive(val) => format_concrete_vals(std::slice::from_ref(val)),
+    })
+}
+
 /// Format an initializer expression for a number of concrete values.
-fn format_concrete_vals(concrete_vals: &[ConcreteVal]) -> impl Iterator<Item = String> + '_ {
+/// Each byte vector has a comment above it with its interpreted value, i.e., its decimal representation.
+fn format_concrete_vals(
+    concrete_vals: &[PrimitiveConcreteVal],
+) -> impl Iterator<Item = String> + '_ {
     /*
     Given a number of byte vectors, format them as:
     // interp_concrete_val_1
@@ -362,10 +380,18 @@ struct UnitTest {
 ///     ..., ] }
 /// ```
 mod concrete_vals_extractor {
-    use crate::cbmc_output_parser::{CheckStatus, Property, TraceItem};
+    use crate::cbmc_output_parser::{CheckStatus, Property, TraceItem, TraceValue};
 
     #[derive(Hash)]
-    pub struct ConcreteVal {
+    pub enum ConcreteItem {
+        Primitive(PrimitiveConcreteVal),
+        Array(Vec<PrimitiveConcreteVal>),
+    }
+
+    /// Represents the concrete value of a primitive type--its byte representation and the intepreted value.
+    /// E.g., a u16 with decimal value 65280 would be PrimitiveConcreteVal { byte_arr: vec![0, 255], interp_val: "65280" }.
+    #[derive(Hash)]
+    pub struct PrimitiveConcreteVal {
         pub byte_arr: Vec<u8>,
         pub interp_val: String,
     }
@@ -373,7 +399,9 @@ mod concrete_vals_extractor {
     /// Extract a set of concrete values that trigger one assertion
     /// failure. Each element of the outer vector corresponds to
     /// inputs triggering one assertion failure or cover statement.
-    pub fn extract_harness_values(result_items: &[Property]) -> Vec<(&Property, Vec<ConcreteVal>)> {
+    pub fn extract_harness_values(
+        result_items: &[Property],
+    ) -> Vec<(&Property, Vec<ConcreteItem>)> {
         result_items
             .iter()
             .filter(|prop| {
@@ -386,70 +414,109 @@ mod concrete_vals_extractor {
                     .trace
                     .as_ref()
                     .expect(&format!("Missing trace for {}", property.property_name()));
-                let concrete_vals: Vec<ConcreteVal> =
+                let concrete_items: Vec<ConcreteItem> =
                     trace.iter().filter_map(&extract_from_trace_item).collect();
 
-                (property, concrete_vals)
+                (property, concrete_items)
             })
             .collect()
     }
 
-    /// Extracts individual bytes returned by kani::any() calls.
-    fn extract_from_trace_item(trace_item: &TraceItem) -> Option<ConcreteVal> {
-        if let (Some(lhs), Some(source_location), Some(value)) =
-            (&trace_item.lhs, &trace_item.source_location, &trace_item.value)
-        {
-            if let (
-                Some(func),
-                Some(width_u64),
-                Some(bit_concrete_val),
-                Some(interp_concrete_val),
-            ) = (&source_location.function, value.width, &value.binary, &value.data)
-            {
-                if trace_item.step_type == "assignment"
-                    && lhs.starts_with("goto_symex$$return_value")
-                    && func.starts_with("kani::any_raw_")
-                {
-                    let declared_width = width_u64 as usize;
-                    let actual_width = bit_concrete_val.len();
-                    assert_eq!(
-                        declared_width, actual_width,
-                        "Declared width of {declared_width} doesn't equal actual width of {actual_width}"
-                    );
-                    let mut next_num: Vec<u8> = Vec::new();
+    /// Extracts individual bytes from a TraceValue for a primitive type
+    /// to produce a PrimitiveConcreteVal representing that value.
+    fn extract_primitive_value(value: &TraceValue) -> Option<PrimitiveConcreteVal> {
+        assert!(
+            value.elements.is_none(),
+            "Expected no array elements for primitive value, but found: {:?}",
+            value.elements
+        );
+        let (Some(width_u64), Some(bit_concrete_val), Some(interp_concrete_val)) =
+            (value.width, &value.binary, &value.data)
+        else {
+            return None;
+        };
 
-                    // Reverse because of endianess of CBMC trace.
-                    for i in (0..declared_width).step_by(8).rev() {
-                        let str_chunk = &bit_concrete_val[i..i + 8];
-                        let str_chunk_len = str_chunk.len();
-                        assert_eq!(
-                            str_chunk_len, 8,
-                            "Tried to read a chunk of 8 bits of actually read {str_chunk_len} bits"
-                        );
-                        let next_byte = u8::from_str_radix(str_chunk, 2).expect(&format!(
-                            "Couldn't convert the string chunk `{str_chunk}` to u8"
-                        ));
-                        next_num.push(next_byte);
-                    }
+        let declared_width = width_u64 as usize;
+        let actual_width = bit_concrete_val.len();
+        assert_eq!(
+            declared_width, actual_width,
+            "Declared width of {declared_width} doesn't equal actual width of {actual_width}"
+        );
+        let mut next_num: Vec<u8> = Vec::new();
 
-                    // In ARM64 Linux, CBMC will produce a character instead of a number for
-                    // interpreted values because the char type is unsigned in that platform.
-                    // For example, for the value `101` it will produce `'e'` instead of `101`.
-                    // To correct this, we check if the value starts and ends with `'`, and
-                    // convert the character into its ASCII value in that case.
-                    let interp_val = {
-                        let interp_val_str = interp_concrete_val.to_string();
-                        if interp_val_str.starts_with('\'') && interp_val_str.ends_with('\'') {
-                            let interp_num = interp_val_str.chars().nth(1).unwrap() as u8;
-                            interp_num.to_string()
-                        } else {
-                            interp_val_str
-                        }
-                    };
+        // Reverse because of endianess of CBMC trace.
+        for i in (0..declared_width).step_by(8).rev() {
+            let str_chunk = &bit_concrete_val[i..i + 8];
+            let str_chunk_len = str_chunk.len();
+            assert_eq!(
+                str_chunk_len, 8,
+                "Tried to read a chunk of 8 bits of actually read {str_chunk_len} bits"
+            );
+            let next_byte = u8::from_str_radix(str_chunk, 2)
+                .expect(&format!("Couldn't convert the string chunk `{str_chunk}` to u8"));
+            next_num.push(next_byte);
+        }
 
-                    return Some(ConcreteVal { byte_arr: next_num, interp_val });
-                }
+        // In ARM64 Linux, CBMC will produce a character instead of a number for
+        // interpreted values because the char type is unsigned in that platform.
+        // For example, for the value `101` it will produce `'e'` instead of `101`.
+        // To correct this, we check if the value starts and ends with `'`, and
+        // convert the character into its ASCII value in that case.
+        let interp_val = {
+            let interp_val_str = interp_concrete_val.to_string();
+            if interp_val_str.starts_with('\'') && interp_val_str.ends_with('\'') {
+                let interp_num = interp_val_str.chars().nth(1).unwrap() as u8;
+                interp_num.to_string()
+            } else {
+                interp_val_str
             }
+        };
+
+        Some(PrimitiveConcreteVal { byte_arr: next_num, interp_val })
+    }
+
+    /// Extracts individual bytes from a TraceItem corresponding to a kani::any() call
+    /// and returns a ConcreteItem representing it.
+    fn extract_from_trace_item(trace_item: &TraceItem) -> Option<ConcreteItem> {
+        let (Some(lhs), Some(source_location), Some(value)) =
+            (&trace_item.lhs, &trace_item.source_location, &trace_item.value)
+        else {
+            return None;
+        };
+
+        let Some(func) = &source_location.function else {
+            return None;
+        };
+
+        if !(trace_item.step_type == "assignment"
+            && lhs.starts_with("goto_symex$$return_value")
+            && func.starts_with("kani::any_raw_"))
+        {
+            return None;
+        }
+
+        if let Some(array_elements) = &value.elements {
+            let concrete_vals = array_elements
+                .iter()
+                .map(|array_value| {
+                    let element_val = extract_primitive_value(&array_value.value);
+                    if let Some(val) = element_val {
+                        val
+                    } else {
+                        // We expect that if we have an array, every value in the array is representable as a primitive type.
+                        // To avoid generating a test with a malformed (i.e., too short) array, we panic instead of returning None
+                        // if converting an element fails.
+                        panic!("Couldn't extract concrete value from {array_value:?}");
+                    }
+                })
+                .collect::<Vec<_>>();
+            return Some(ConcreteItem::Array(concrete_vals));
+        // At time of writing, if the array length is <= 64, CBMC's trace will include TraceItems for each primitive value of the array,
+        // as well as the `elements` field with the entire array (for arrays length > 65, it just has `elements`).
+        // So, filter out any instance of any_raw_array to avoid generating duplicate values for the primitive values that are separate from `elements`.
+        } else if !func.starts_with("kani::any_raw_array") {
+            let concrete_val = extract_primitive_value(value);
+            return concrete_val.map(ConcreteItem::Primitive);
         }
         None
     }
@@ -460,7 +527,8 @@ mod tests {
     use super::concrete_vals_extractor::*;
     use super::*;
     use crate::cbmc_output_parser::{
-        CheckStatus, Property, PropertyId, SourceLocation, TraceData, TraceItem, TraceValue,
+        CheckStatus, Property, PropertyId, SourceLocation, TraceArrayValue, TraceData, TraceItem,
+        TraceValue,
     };
 
     /// util function for unit tests taht generates the rustfmt args used for formatting specific lines inside specific files.
@@ -491,7 +559,7 @@ mod tests {
 
     #[test]
     fn format_zero_concrete_vals() {
-        let concrete_vals: [ConcreteVal; 0] = [];
+        let concrete_vals: [PrimitiveConcreteVal; 0] = [];
         let actual: Vec<_> = format_concrete_vals(&concrete_vals).collect();
         let expected: Vec<String> = Vec::new();
         assert_eq!(actual, expected);
@@ -501,8 +569,11 @@ mod tests {
     #[test]
     fn format_two_concrete_vals() {
         let concrete_vals = [
-            ConcreteVal { byte_arr: vec![0, 0], interp_val: "0".to_string() },
-            ConcreteVal { byte_arr: vec![0, 0, 0, 0, 0, 0, 0, 0], interp_val: "0l".to_string() },
+            PrimitiveConcreteVal { byte_arr: vec![0, 0], interp_val: "0".to_string() },
+            PrimitiveConcreteVal {
+                byte_arr: vec![0, 0, 0, 0, 0, 0, 0, 0],
+                interp_val: "0l".to_string(),
+            },
         ];
         let actual: Vec<_> = format_concrete_vals(&concrete_vals).collect();
         let expected = vec![
@@ -535,7 +606,10 @@ mod tests {
     fn format_unit_test_full_func() {
         let doc_str = "/// Test documentation";
         let harness_name = "test_proof_harness";
-        let concrete_vals = [ConcreteVal { byte_arr: vec![0, 0], interp_val: "0".to_string() }];
+        let concrete_vals = [ConcreteItem::Primitive(PrimitiveConcreteVal {
+            byte_arr: vec![0, 0],
+            interp_val: "0".to_string(),
+        })];
         let unit_test = format_unit_test(harness_name, &concrete_vals, doc_str.to_string());
         let full_func = unit_test.code;
         let split_unit_test_name = split_unit_test_name(&unit_test.name);
@@ -559,10 +633,10 @@ mod tests {
     }
 
     /// Generates a unit test and returns its hash.
-    fn extract_hash_from_unit_test(harness_name: &str, concrete_vals: &[ConcreteVal]) -> String {
+    fn extract_hash_from_unit_test(harness_name: &str, concrete_items: &[ConcreteItem]) -> String {
         let unit_test = format_unit_test(
             harness_name,
-            concrete_vals,
+            concrete_items,
             "/// Harness created for unit test".to_string(),
         );
         split_unit_test_name(&unit_test.name).hash
@@ -573,14 +647,41 @@ mod tests {
     fn check_hashes_are_unique() {
         let harness_name_1 = "test_proof_harness1";
         let harness_name_2 = "test_proof_harness2";
-        let concrete_vals_1 = [ConcreteVal { byte_arr: vec![0, 0], interp_val: "0".to_string() }];
-        let concrete_vals_2 = [ConcreteVal { byte_arr: vec![1, 0], interp_val: "0".to_string() }];
-        let concrete_vals_3 = [ConcreteVal { byte_arr: vec![0, 0], interp_val: "1".to_string() }];
+        let concrete_items_1 = [
+            ConcreteItem::Primitive(PrimitiveConcreteVal {
+                byte_arr: vec![0, 0],
+                interp_val: "0".to_string(),
+            }),
+            ConcreteItem::Array(vec![PrimitiveConcreteVal {
+                byte_arr: vec![0, 0],
+                interp_val: "0".to_string(),
+            }]),
+        ];
+        let concrete_items_2 = [ConcreteItem::Primitive(PrimitiveConcreteVal {
+            byte_arr: vec![1, 0],
+            interp_val: "0".to_string(),
+        })];
+        let concrete_items_3 = [
+            ConcreteItem::Array(vec![PrimitiveConcreteVal {
+                byte_arr: vec![0, 0],
+                interp_val: "0".to_string(),
+            }]),
+            ConcreteItem::Primitive(PrimitiveConcreteVal {
+                byte_arr: vec![0, 0],
+                interp_val: "1".to_string(),
+            }),
+            ConcreteItem::Array(vec![
+                PrimitiveConcreteVal { byte_arr: vec![0, 0], interp_val: "0".to_string() },
+                PrimitiveConcreteVal { byte_arr: vec![1, 0], interp_val: "0".to_string() },
+                PrimitiveConcreteVal { byte_arr: vec![1, 0, 255], interp_val: "0".to_string() },
+            ]),
+        ];
 
-        let hash_base = extract_hash_from_unit_test(harness_name_1, &concrete_vals_1);
-        let hash_diff_harness_name = extract_hash_from_unit_test(harness_name_2, &concrete_vals_1);
-        let hash_diff_concrete_byte = extract_hash_from_unit_test(harness_name_1, &concrete_vals_2);
-        let hash_diff_interp_val = extract_hash_from_unit_test(harness_name_1, &concrete_vals_3);
+        let hash_base = extract_hash_from_unit_test(harness_name_1, &concrete_items_1);
+        let hash_diff_harness_name = extract_hash_from_unit_test(harness_name_2, &concrete_items_1);
+        let hash_diff_concrete_byte =
+            extract_hash_from_unit_test(harness_name_1, &concrete_items_2);
+        let hash_diff_interp_val = extract_hash_from_unit_test(harness_name_1, &concrete_items_3);
 
         assert_ne!(hash_base, hash_diff_harness_name);
         assert_ne!(hash_base, hash_diff_concrete_byte);
@@ -626,7 +727,7 @@ mod tests {
 
     /// Test util functions which extract the counter example values from a property.
     #[test]
-    fn check_concrete_vals_extractor() {
+    fn check_concrete_vals_extractor_primitive() {
         let processed_items = [Property {
             description: "".to_string(),
             property_id: PropertyId {
@@ -655,13 +756,173 @@ mod tests {
                     binary: Some("0000001100000001".to_string()),
                     data: Some(TraceData::NonBool("385".to_string())),
                     width: Some(16),
+                    elements: None,
                 }),
             }]),
         }];
-        let (_, concrete_vals) = extract_harness_values(&processed_items).pop().unwrap();
-        let concrete_val = &concrete_vals[0];
+        let (_, concrete_items) = extract_harness_values(&processed_items).pop().unwrap();
+        let concrete_item = &concrete_items[0];
 
-        assert_eq!(concrete_val.byte_arr, vec![1, 3]);
-        assert_eq!(concrete_val.interp_val, "385");
+        assert!(matches!(concrete_item, ConcreteItem::Primitive(_)));
+        if let ConcreteItem::Primitive(concrete_val) = concrete_item {
+            assert_eq!(concrete_val.byte_arr, vec![1, 3]);
+            assert_eq!(concrete_val.interp_val, "385");
+        }
+    }
+
+    /// Test util functions which extract the counter example values from a property for arrays.
+    #[test]
+    fn check_concrete_vals_extractor_array() {
+        let processed_items = [Property {
+            description: "".to_string(),
+            property_id: PropertyId {
+                fn_name: Some("".to_string()),
+                class: "assertion".to_string(),
+                id: 1,
+            },
+            status: CheckStatus::Failure,
+            reach: None,
+            source_location: SourceLocation {
+                column: None,
+                file: None,
+                function: None,
+                line: None,
+            },
+            trace: Some(vec![
+                TraceItem {
+                    step_type: "assignment".to_string(),
+                    lhs: Some("goto_symex$$return_value".to_string()),
+                    source_location: Some(SourceLocation {
+                        column: None,
+                        file: None,
+                        function: Some("kani::any_raw_array::<u16; 4>".to_string()),
+                        line: None,
+                    }),
+                    value: Some(TraceValue {
+                        binary: None,
+                        data: None,
+                        width: None,
+                        elements: Some(vec![
+                            TraceArrayValue {
+                                value: TraceValue {
+                                    binary: Some("11111111111111111111111111111111".to_string()),
+                                    data: Some(TraceData::NonBool("4294967295".to_string())),
+                                    width: Some(32),
+                                    elements: None,
+                                },
+                            },
+                            TraceArrayValue {
+                                value: TraceValue {
+                                    binary: Some("10000000000000000000000000000000".to_string()),
+                                    data: Some(TraceData::NonBool("2147483648".to_string())),
+                                    width: Some(32),
+                                    elements: None,
+                                },
+                            },
+                            TraceArrayValue {
+                                value: TraceValue {
+                                    binary: Some("11111111111111111111111111111111".to_string()),
+                                    data: Some(TraceData::NonBool("4294967295".to_string())),
+                                    width: Some(32),
+                                    elements: None,
+                                },
+                            },
+                            TraceArrayValue {
+                                value: TraceValue {
+                                    binary: Some("00000000000000000000000000000111".to_string()),
+                                    data: Some(TraceData::NonBool("7".to_string())),
+                                    width: Some(32),
+                                    elements: None,
+                                },
+                            },
+                        ]),
+                    }),
+                },
+                // Since the array is of size 4, there are also TraceItems for each element of the array, which extract_harness_value should ignore.
+                TraceItem {
+                    step_type: "assignment".to_string(),
+                    lhs: Some("goto_symex$$return_value".to_string()),
+                    source_location: Some(SourceLocation {
+                        column: None,
+                        file: None,
+                        function: Some("kani::any_raw_array::<u16; 4>".to_string()),
+                        line: None,
+                    }),
+                    value: Some(TraceValue {
+                        binary: Some("11111111111111111111111111111111".to_string()),
+                        data: Some(TraceData::NonBool("4294967295".to_string())),
+                        width: Some(32),
+                        elements: None,
+                    }),
+                },
+                TraceItem {
+                    step_type: "assignment".to_string(),
+                    lhs: Some("goto_symex$$return_value".to_string()),
+                    source_location: Some(SourceLocation {
+                        column: None,
+                        file: None,
+                        function: Some("kani::any_raw_array::<u16; 4>".to_string()),
+                        line: None,
+                    }),
+                    value: Some(TraceValue {
+                        binary: Some("10000000000000000000000000000000".to_string()),
+                        data: Some(TraceData::NonBool("2147483648".to_string())),
+                        width: Some(32),
+                        elements: None,
+                    }),
+                },
+                TraceItem {
+                    step_type: "assignment".to_string(),
+                    lhs: Some("goto_symex$$return_value".to_string()),
+                    source_location: Some(SourceLocation {
+                        column: None,
+                        file: None,
+                        function: Some("kani::any_raw_array::<u16; 4>".to_string()),
+                        line: None,
+                    }),
+                    value: Some(TraceValue {
+                        binary: Some("11111111111111111111111111111111".to_string()),
+                        data: Some(TraceData::NonBool("4294967295".to_string())),
+                        width: Some(32),
+                        elements: None,
+                    }),
+                },
+                TraceItem {
+                    step_type: "assignment".to_string(),
+                    lhs: Some("goto_symex$$return_value".to_string()),
+                    source_location: Some(SourceLocation {
+                        column: None,
+                        file: None,
+                        function: Some("kani::any_raw_array::<u16; 4>".to_string()),
+                        line: None,
+                    }),
+                    value: Some(TraceValue {
+                        binary: Some("00000000000000000000000000000111".to_string()),
+                        data: Some(TraceData::NonBool("7".to_string())),
+                        width: Some(32),
+                        elements: None,
+                    }),
+                },
+            ]),
+        }];
+        let (_, concrete_items) = extract_harness_values(&processed_items).pop().unwrap();
+        let concrete_item = &concrete_items[0];
+
+        assert!(matches!(concrete_item, ConcreteItem::Array(_)));
+        if let ConcreteItem::Array(concrete_vals) = concrete_item {
+            assert_eq!(concrete_vals.len(), 4);
+            let first_val = &concrete_vals[0];
+            assert_eq!(first_val.byte_arr, vec![255, 255, 255, 255]);
+            assert_eq!(first_val.interp_val, "4294967295");
+            let second_val = &concrete_vals[1];
+            assert_eq!(second_val.byte_arr, vec![0, 0, 0, 128]);
+            assert_eq!(second_val.interp_val, "2147483648");
+            let third_val = &concrete_vals[2];
+            assert_eq!(third_val.byte_arr, vec![255, 255, 255, 255]);
+            assert_eq!(third_val.interp_val, "4294967295");
+            let fourth_val = &concrete_vals[3];
+            assert_eq!(fourth_val.byte_arr, vec![7, 0, 0, 0]);
+            assert_eq!(fourth_val.interp_val, "7");
+        }
     }
 }

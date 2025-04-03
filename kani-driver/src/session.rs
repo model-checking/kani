@@ -17,6 +17,9 @@ use tokio::process::Command as TokioCommand;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::{EnvFilter, Registry, layer::SubscriberExt};
 
+pub const BUG_REPORT_URL: &str =
+    "https://github.com/model-checking/kani/issues/new?labels=bug&template=bug_report.md";
+
 /// Environment variable used to control this session log tracing.
 /// This is the same variable used to control `kani-compiler` logs. Note that you can still control
 /// the driver logs separately, by using the logger directives to  select the kani-driver crate.
@@ -27,6 +30,12 @@ const LOG_ENV_VAR: &str = "KANI_LOG";
 pub struct KaniSession {
     /// The common command-line arguments
     pub args: VerificationArgs,
+
+    /// Automatically verify functions in the crate, in addition to running manual harnesses.
+    pub auto_harness: bool,
+
+    /// The arguments that will be passed to the target package, i.e. kani_compiler.
+    pub pkg_args: Vec<String>,
 
     /// Include all publicly-visible symbols in the generated goto binary, not just those reachable from
     /// a proof harness. Useful when attempting to verify things that were not annotated with kani
@@ -62,6 +71,8 @@ impl KaniSession {
 
         Ok(KaniSession {
             args,
+            auto_harness: false,
+            pkg_args: vec!["--".to_string()],
             codegen_tests: false,
             kani_compiler: install.kani_compiler()?,
             kani_lib_c: install.kani_lib_c()?,
@@ -88,13 +99,20 @@ impl KaniSession {
     /// Determine which symbols Kani should codegen (i.e. by slicing away symbols
     /// that are considered unreachable.)
     pub fn reachability_mode(&self) -> ReachabilityMode {
-        if self.codegen_tests { ReachabilityMode::Tests } else { ReachabilityMode::ProofHarnesses }
+        if self.codegen_tests {
+            ReachabilityMode::Tests
+        } else if self.auto_harness {
+            ReachabilityMode::AllFns
+        } else {
+            ReachabilityMode::ProofHarnesses
+        }
     }
 }
 
 #[derive(Debug, Copy, Clone, Display)]
 #[strum(serialize_all = "snake_case")]
 pub enum ReachabilityMode {
+    AllFns,
     #[strum(to_string = "harnesses")]
     ProofHarnesses,
     Tests,

@@ -525,7 +525,8 @@ impl<'tcx> PointsToAnalysis<'_, 'tcx> {
             Rvalue::Use(operand)
             | Rvalue::ShallowInitBox(operand, _)
             | Rvalue::Cast(_, operand, _)
-            | Rvalue::Repeat(operand, ..) => self.successors_for_operand(state, operand),
+            | Rvalue::Repeat(operand, ..)
+            | Rvalue::WrapUnsafeBinder(operand, _) => self.successors_for_operand(state, operand),
             Rvalue::Ref(_, _, ref_place) | Rvalue::RawPtr(_, ref_place) => {
                 // Here, a reference to a place is created, which leaves the place
                 // unchanged.
