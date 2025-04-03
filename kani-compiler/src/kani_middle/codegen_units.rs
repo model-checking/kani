@@ -92,9 +92,11 @@ impl CodegenUnits {
                     args,
                     *kani_fns.get(&KaniModel::Any.into()).unwrap(),
                 );
-                let chosen_fn_names = chosen.iter().map(|func| func.name()).collect::<Vec<_>>();
                 AUTOHARNESS_MD
-                    .set(AutoHarnessMetadata { chosen: chosen_fn_names, skipped })
+                    .set(AutoHarnessMetadata {
+                        chosen: chosen.iter().map(|func| func.name()).collect::<BTreeSet<_>>(),
+                        skipped,
+                    })
                     .expect("Initializing the autoharness metdata failed");
 
                 let automatic_harnesses = get_all_automatic_harnesses(

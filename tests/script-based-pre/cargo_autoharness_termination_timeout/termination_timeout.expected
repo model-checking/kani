@@ -1,0 +1,24 @@
+Kani generated automatic harnesses for 1 function(s):
++-----------------------+
+| Selected Function     |
++=======================+
+| check_harness_timeout |
++-----------------------+
+
+Skipped Functions: None. Kani generated automatic harnesses for all functions in the available crate(s).
+Autoharness: Checking function check_harness_timeout against all possible inputs...
+CBMC failed
+VERIFICATION:- FAILED
+CBMC timed out. You may want to rerun your proof with a larger timeout or use stubbing to reduce the size of the code the verifier reasons about.
+
+Manual Harness Summary:
+No proof harnesses (functions with #[kani::proof]) were found to verify.
+
+Autoharness Summary:
++-----------------------+---------------------------+---------------------+
+| Selected Function     | Kind of Automatic Harness | Verification Result |
++=========================================================================+
+| check_harness_timeout | #[kani::proof]            | Failure             |
++-----------------------+---------------------------+---------------------+
+Note that `kani autoharness` sets default --harness-timeout of 60s and --default-unwind of 20.
+If verification failed because of timing out or too low of an unwinding bound, try passing larger values for these arguments (or, if possible, writing a loop contract).
