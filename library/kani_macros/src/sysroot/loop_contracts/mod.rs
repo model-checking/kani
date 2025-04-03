@@ -30,8 +30,12 @@ Then the loop_invartiant is transformed
 
 /*
 Transform the loop to support prev(expr) : the value of expr at the end of the previous iteration
+Semantic: If the loop has at least 1 iteration: prev(expr) is the value of expr at the end of the previous iteration. Otherwise, just remove the loop (without check for the invariant too).
+
+Transformation: basically, if the loop has at least 1 iteration (loop_quard is satisfied at the beginning), we unfold the loop once, declare the variables for prev values and update them at the beginning of the loop body.
+Otherwise, we remove the loop.
 If there is a prev(expr) in the loop_invariant:
-1. Firstly, add an assertion of the loop_quard: the loop must run at least once, otherwise prev(expr) is undefined.
+1. Firstly, add an if block whose condition is the loop_quard, inside its body add/do the followings:
 2. For each prev(expr) in the loop variant, replace it with a newly generated "memory" variable prev_k
 3. Add the declaration of prev_k before the loop: let mut prev_k = expr
 4. Define a mut closure whose body is exactly the loop body, but replace all continue/break statements with return true/false statements,
@@ -259,7 +263,7 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
     let transform_inv: TransformationResult =
         transform_function_calls(inv_expr.clone(), "prev", prev_var_prefix);
     let has_prev = !transform_inv.declarations_block.stmts.is_empty();
-    let decl_stms = transform_inv.declarations_block.stmts.clone();
+    let prev_decl_stms = transform_inv.declarations_block.stmts.clone();
     let mut assign_stms = transform_inv.assignments_block.stmts.clone();
     let (mut loop_body, loop_guard) = match loop_stmt {
         Stmt::Expr(ref mut e, _) => match e {
@@ -320,9 +324,9 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
     if has_prev {
         quote!(
         {
+        if (#loop_guard) {
         #(#old_decl_stms)*
-        assert!(#loop_guard);
-        #(#decl_stms)*
+        #(#prev_decl_stms)*
         let mut #loop_body_closure = ||
         #loop_body;
         if #loop_body_closure () {
@@ -339,6 +343,7 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
         else {
             assert!(#inv_expr);
         };
+        }
         })
         .into()
     } else {
