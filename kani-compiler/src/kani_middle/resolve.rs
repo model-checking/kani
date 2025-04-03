@@ -432,10 +432,10 @@ fn resolve_relative(tcx: TyCtxt, current_module: LocalModDefId, name: &str) -> R
     let mut glob_imports = vec![];
     let result = tcx.hir_module_free_items(current_module).find_map(|item_id| {
         let item = tcx.hir_item(item_id);
-        if item.ident.as_str() == name {
+        if item.kind.ident().is_some_and(|ident| ident.as_str() == name) {
             match item.kind {
-                ItemKind::Use(use_path, UseKind::Single) => use_path.res[0].opt_def_id(),
-                ItemKind::ExternCrate(orig_name) => resolve_external(
+                ItemKind::Use(use_path, UseKind::Single(_)) => use_path.res[0].opt_def_id(),
+                ItemKind::ExternCrate(orig_name, _) => resolve_external(
                     tcx,
                     orig_name.as_ref().map(|sym| sym.as_str()).unwrap_or(name),
                 ),
