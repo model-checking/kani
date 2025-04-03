@@ -154,6 +154,8 @@ impl KaniSession {
     }
 
     /// Add the compiler arguments specific to the `autoharness` subcommand.
+    /// TODO: this should really be appending onto the `kani_compiler_flags()` output instead of `pkg_args`.
+    /// It doesn't affect functionality since autoharness doesn't examine dependencies, but would still be better practice.
     pub fn add_auto_harness_args(&mut self, included: &[String], excluded: &[String]) {
         for func in included {
             self.pkg_args
