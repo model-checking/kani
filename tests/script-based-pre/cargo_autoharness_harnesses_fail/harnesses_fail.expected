@@ -1,12 +1,12 @@
 Kani generated automatic harnesses for 5 function(s):
 +-------------------------+
-| Chosen Function         |
+| Selected Function       |
 +=========================+
+| integer_overflow        |
+|-------------------------|
 | oob_safe_array_access   |
 |-------------------------|
 | oob_unsafe_array_access |
-|-------------------------|
-| integer_overflow        |
 |-------------------------|
 | panic                   |
 |-------------------------|
@@ -76,15 +76,15 @@ Autoharness Summary:
 +-------------------------+---------------------------+---------------------+
 | Selected Function       | Kind of Automatic Harness | Verification Result |
 +===========================================================================+
-| unchecked_mul           | #[kani::proof]            | Failure             |
-|-------------------------+---------------------------+---------------------|
-| panic                   | #[kani::proof]            | Failure             |
-|-------------------------+---------------------------+---------------------|
 | integer_overflow        | #[kani::proof]            | Failure             |
+|-------------------------+---------------------------+---------------------|
+| oob_safe_array_access   | #[kani::proof]            | Failure             |
 |-------------------------+---------------------------+---------------------|
 | oob_unsafe_array_access | #[kani::proof]            | Failure             |
 |-------------------------+---------------------------+---------------------|
-| oob_safe_array_access   | #[kani::proof]            | Failure             |
+| panic                   | #[kani::proof]            | Failure             |
+|-------------------------+---------------------------+---------------------|
+| unchecked_mul           | #[kani::proof]            | Failure             |
 +-------------------------+---------------------------+---------------------+
 Note that `kani autoharness` sets default --harness-timeout of 60s and --default-unwind of 20.
 If verification failed because of timing out or too low of an unwinding bound, try passing larger values for these arguments (or, if possible, writing a loop contract).
