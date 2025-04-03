@@ -667,7 +667,7 @@ impl GotocCtx<'_> {
                 assert!(operands.len() == 2);
                 let typ = self.codegen_ty_stable(res_ty);
                 let layout = self.layout_of_stable(res_ty);
-                assert!(layout.ty.is_unsafe_ptr());
+                assert!(layout.ty.is_raw_ptr());
                 let data = self.codegen_operand_stable(&operands[0]);
                 match pointee_ty.kind() {
                     TyKind::RigidTy(RigidTy::Slice(inner_ty)) => {
