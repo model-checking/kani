@@ -442,3 +442,11 @@ pub fn setup_cargo_command() -> Result<Command> {
 
     Ok(cmd)
 }
+
+pub fn bundled_cargo_path() -> Result<Option<PathBuf>> {
+    if let InstallType::Release(kani_dir) = InstallType::new()? {
+        Ok(Some(kani_dir.join("toolchain").join("bin").join("cargo")))
+    } else {
+        Ok(None)
+    }
+}
