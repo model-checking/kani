@@ -83,7 +83,7 @@ fn postprocess_project(
 /// Print automatic harness metadata to the terminal.
 fn print_autoharness_metadata(metadata: Vec<KaniMetadata>) {
     let mut chosen_table = PrettyTable::new();
-    chosen_table.set_header(vec!["Chosen Function"]);
+    chosen_table.set_header(vec!["Selected Function"]);
 
     let mut skipped_table = PrettyTable::new();
     skipped_table.set_header(vec!["Skipped Function", "Reason for Skipping"]);
@@ -122,7 +122,7 @@ fn print_autoharness_metadata(metadata: Vec<KaniMetadata>) {
 fn print_chosen_table(table: &mut PrettyTable) {
     if table.is_empty() {
         println!(
-            "\nChosen Functions: None. Kani did not generate automatic harnesses for any functions in the available crate(s)."
+            "\nSelected Functions: None. Kani did not generate automatic harnesses for any functions in the available crate(s)."
         );
         return;
     }
@@ -154,6 +154,8 @@ impl KaniSession {
     }
 
     /// Add the compiler arguments specific to the `autoharness` subcommand.
+    /// TODO: this should really be appending onto the `kani_compiler_flags()` output instead of `pkg_args`.
+    /// It doesn't affect functionality since autoharness doesn't examine dependencies, but would still be better practice.
     pub fn add_auto_harness_args(&mut self, included: &[String], excluded: &[String]) {
         for func in included {
             self.pkg_args
@@ -178,7 +180,8 @@ impl KaniSession {
     }
 
     /// Prints the results from running the `autoharness` subcommand.
-    pub fn print_autoharness_summary(&self, automatic: Vec<&HarnessResult<'_>>) -> Result<()> {
+    pub fn print_autoharness_summary(&self, mut automatic: Vec<&HarnessResult<'_>>) -> Result<()> {
+        automatic.sort_by(|a, b| a.harness.pretty_name.cmp(&b.harness.pretty_name));
         let (successes, failures): (Vec<_>, Vec<_>) =
             automatic.into_iter().partition(|r| r.result.status == VerificationStatus::Success);
 
