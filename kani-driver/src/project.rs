@@ -175,7 +175,7 @@ impl Artifact {
 /// Generate a project using `cargo`.
 /// Accept a boolean to build as many targets as possible. The number of failures in that case can
 /// be collected from the project.
-pub fn cargo_project(session: &KaniSession, keep_going: bool) -> Result<Project> {
+pub fn cargo_project(session: &mut KaniSession, keep_going: bool) -> Result<Project> {
     let outputs = session.cargo_build(keep_going)?;
     let outdir = outputs.outdir.canonicalize()?;
     // For the MIR Linker we know there is only one metadata per crate. Use that in our favor.

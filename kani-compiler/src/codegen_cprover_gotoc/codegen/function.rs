@@ -220,7 +220,7 @@ impl GotocCtx<'_> {
 pub mod rustc_smir {
     use crate::codegen_cprover_gotoc::codegen::source_region::{SourceRegion, make_source_region};
     use crate::stable_mir::CrateDef;
-    use rustc_middle::mir::coverage::CovTerm;
+    use rustc_middle::mir::coverage::BasicCoverageBlock;
     use rustc_middle::mir::coverage::MappingKind::Code;
     use rustc_middle::ty::TyCtxt;
     use rustc_smir::rustc_internal;
@@ -236,16 +236,16 @@ pub mod rustc_smir {
         coverage_opaque: &CoverageOpaque,
         instance: Instance,
     ) -> Option<(SourceRegion, Filename)> {
-        let cov_term = parse_coverage_opaque(coverage_opaque);
-        region_from_coverage(tcx, cov_term, instance)
+        let bcb = parse_coverage_opaque(coverage_opaque);
+        region_from_coverage(tcx, bcb, instance)
     }
 
-    /// Retrieves the `SourceRegion` associated with a `CovTerm` object.
+    /// Retrieves the `SourceRegion` associated with a `BasicCoverageBlock` object.
     ///
     /// Note: This function could be in the internal `rustc` impl for `Coverage`.
     pub fn region_from_coverage(
         tcx: TyCtxt<'_>,
-        coverage: CovTerm,
+        coverage: BasicCoverageBlock,
         instance: Instance,
     ) -> Option<(SourceRegion, Filename)> {
         // We need to pull the coverage info from the internal MIR instance.
@@ -257,10 +257,10 @@ pub mod rustc_smir {
         if let Some(cov_info) = &body.function_coverage_info {
             // Iterate over the coverage mappings and match with the coverage term.
             for mapping in &cov_info.mappings {
-                let Code(term) = mapping.kind else { unreachable!() };
+                let Code { bcb } = mapping.kind else { unreachable!() };
                 let source_map = tcx.sess.source_map();
                 let file = source_map.lookup_source_file(cov_info.body_span.lo());
-                if term == coverage {
+                if bcb == coverage {
                     return Some((
                         make_source_region(source_map, cov_info, &file, mapping.span).unwrap(),
                         rustc_internal::stable(cov_info.body_span).get_filename(),
@@ -271,25 +271,17 @@ pub mod rustc_smir {
         None
     }
 
-    /// Parse a `CoverageOpaque` item and return the corresponding `CovTerm`:
-    /// <https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/coverage/enum.CovTerm.html>
-    ///
-    /// At present, a `CovTerm` can be one of the following:
-    ///  - `CounterIncrement(<num>)`: A physical counter.
-    ///  - `ExpressionUsed(<num>)`: An expression-based counter.
-    ///  - `Zero`: A counter with a constant zero value.
-    fn parse_coverage_opaque(coverage_opaque: &Opaque) -> CovTerm {
+    /// Parse a `CoverageOpaque` item and return the corresponding `BasicCoverageBlock`:
+    fn parse_coverage_opaque(coverage_opaque: &Opaque) -> BasicCoverageBlock {
         let coverage_str = coverage_opaque.to_string();
-        if let Some(rest) = coverage_str.strip_prefix("CounterIncrement(") {
+        if let Some(rest) = coverage_str.strip_prefix("VirtualCounter(bcb") {
             let (num_str, _rest) = rest.split_once(')').unwrap();
             let num = num_str.parse::<u32>().unwrap();
-            CovTerm::Counter(num.into())
-        } else if let Some(rest) = coverage_str.strip_prefix("ExpressionUsed(") {
-            let (num_str, _rest) = rest.split_once(')').unwrap();
-            let num = num_str.parse::<u32>().unwrap();
-            CovTerm::Expression(num.into())
+            BasicCoverageBlock::from_u32(num)
         } else {
-            CovTerm::Zero
+            // When the coverage statement is injected into mir_body, it always has the form CoverageKind::VirtualCounter { bcb }
+            // https://github.com/rust-lang/rust/pull/136053/files#diff-c99ec9a281dce4a381fa7e11cf2d04f55dba5573d1d14389d47929fe0a154d24R209-R212
+            unreachable!();
         }
     }
 }

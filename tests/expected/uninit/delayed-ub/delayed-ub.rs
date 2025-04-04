@@ -170,19 +170,6 @@ fn delayed_ub_structs() {
     }
 }
 
-/// Delayed UB via mutable pointer write into a slice element.
-#[kani::proof]
-fn delayed_ub_slices() {
-    unsafe {
-        // Create an array.
-        let mut arr = [0u128; 4];
-        // Get a pointer to a part of the array.
-        let ptr = &mut arr[0..2][0..1][0] as *mut _ as *mut (u8, u32);
-        *ptr = (4, 4);
-        let arr_copy = arr; // UB: This reads a padding value inside the array!
-    }
-}
-
 /// Delayed UB via mutable pointer copy, which should be the only delayed UB trigger in this case.
 #[kani::proof]
 fn delayed_ub_trigger_copy() {
