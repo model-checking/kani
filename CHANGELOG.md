@@ -14,7 +14,7 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 * Add support for struct field access in loop contracts by @thanhnguyen-aws in https://github.com/model-checking/kani/pull/3970
 * Autoharness: Don't panic on `_` argument by @carolynzech in https://github.com/model-checking/kani/pull/3942
 * Autoharness: improve metdata printed to terminal and enable standard library application by @carolynzech in https://github.com/model-checking/kani/pull/3948, https://github.com/model-checking/kani/pull/3952, https://github.com/model-checking/kani/pull/3971
-* Upgrade toolchain to nightly-2025-04-02 by @qinheping, @tautschnig, @zhassan-aws, @carolynzech in https://github.com/model-checking/kani/pull/3983
+* Upgrade toolchain to nightly-2025-04-03 by @qinheping, @tautschnig, @zhassan-aws, @carolynzech in https://github.com/model-checking/kani/pull/3988
 * Update CBMC dependency to 6.5.0 by @tautschnig in https://github.com/model-checking/kani/pull/3936
 
 **Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.60.0...kani-0.61.0
