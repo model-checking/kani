@@ -4,6 +4,21 @@ This file contains notable changes (e.g. breaking changes, major changes, etc.) 
 
 This file was introduced starting Kani 0.23.0, so it only contains changes from version 0.23.0 onwards.
 
+## [0.61.0]
+
+### What's Changed
+* Make `is_inbounds` public by @rajath-mk in https://github.com/model-checking/kani/pull/3958
+* Finish adding support for `f16` and `f128` by @carolynzech in https://github.com/model-checking/kani/pull/3943
+* Support user overrides of Rust built-ins by @tautschnig in https://github.com/model-checking/kani/pull/3945
+* Add support for anonymous nested statics by @carolynzech in https://github.com/model-checking/kani/pull/3953
+* Add support for struct field access in loop contracts by @thanhnguyen-aws in https://github.com/model-checking/kani/pull/3970
+* Autoharness: Don't panic on `_` argument by @carolynzech in https://github.com/model-checking/kani/pull/3942
+* Autoharness: improve metdata printed to terminal and enable standard library application by @carolynzech in https://github.com/model-checking/kani/pull/3948, https://github.com/model-checking/kani/pull/3952, https://github.com/model-checking/kani/pull/3971
+* Upgrade toolchain to nightly-2025-04-03 by @qinheping, @tautschnig, @zhassan-aws, @carolynzech in https://github.com/model-checking/kani/pull/3988
+* Update CBMC dependency to 6.5.0 by @tautschnig in https://github.com/model-checking/kani/pull/3936
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.60.0...kani-0.61.0
+
 ## [0.60.0]
 
 ### Breaking Changes
