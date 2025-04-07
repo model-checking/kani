@@ -10,13 +10,18 @@ use std::collections::BTreeMap;
 #[derive(Clone, Debug)]
 pub struct SymbolTable {
     symbol_table: BTreeMap<InternedString, Symbol>,
+    parameters_map: BTreeMap<InternedString, Vec<InternedString>>,
     machine_model: MachineModel,
 }
 
 /// Constructors
 impl SymbolTable {
     pub fn new(machine_model: MachineModel) -> SymbolTable {
-        let mut symtab = SymbolTable { machine_model, symbol_table: BTreeMap::new() };
+        let mut symtab = SymbolTable {
+            machine_model,
+            symbol_table: BTreeMap::new(),
+            parameters_map: BTreeMap::new(),
+        };
         env::machine_model_symbols(symtab.machine_model())
             .into_iter()
             .for_each(|s| symtab.insert(s));
@@ -52,6 +57,19 @@ impl SymbolTable {
             &symbol
         );
         self.symbol_table.insert(symbol.name, symbol);
+    }
+
+    /// Inserts a parameter into the parameters map for a given function symbol.
+    /// If the function does not exist in the parameters map, it initializes it with an empty vector.
+    pub fn insert_parameter<T: Into<InternedString>, P: Into<InternedString>>(
+        &mut self,
+        function_name: T,
+        parameter: P,
+    ) {
+        let function_name = function_name.into();
+        let parameter = parameter.into();
+
+        self.parameters_map.entry(function_name).or_insert_with(Vec::new).push(parameter);
     }
 
     /// Validates the previous value of the symbol using the validator function, then replaces it.
@@ -102,6 +120,10 @@ impl SymbolTable {
         self.symbol_table.iter()
     }
 
+    pub fn iter_mut(&mut self) -> std::collections::btree_map::IterMut<'_, InternedString, Symbol> {
+        self.symbol_table.iter_mut()
+    }
+
     pub fn lookup<T: Into<InternedString>>(&self, name: T) -> Option<&Symbol> {
         let name = name.into();
         self.symbol_table.get(&name)
@@ -110,6 +132,14 @@ impl SymbolTable {
     pub fn lookup_mut<T: Into<InternedString>>(&mut self, name: T) -> Option<&mut Symbol> {
         let name = name.into();
         self.symbol_table.get_mut(&name)
+    }
+
+    pub fn lookup_parameters<T: Into<InternedString>>(
+        &self,
+        name: T,
+    ) -> Option<&Vec<InternedString>> {
+        let name = name.into();
+        self.parameters_map.get(&name)
     }
 
     pub fn machine_model(&self) -> &MachineModel {

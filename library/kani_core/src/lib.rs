@@ -203,20 +203,28 @@ macro_rules! kani_intrinsics {
         #[macro_export]
         macro_rules! forall {
             (|$i:ident in ($lower_bound:expr, $upper_bound:expr)| $predicate:expr) => {{
-                let lower_bound: usize = $lower_bound;
-                let upper_bound: usize = $upper_bound;
+                let lower_bound: isize = $lower_bound;
+                let upper_bound: isize = $upper_bound;
                 let predicate = |$i| $predicate;
                 kani_forall(lower_bound, upper_bound, predicate)
+            }};
+            (|$i:ident | $predicate:expr) => {{
+                let predicate = |$i| $predicate;
+                kani_forall(isize::MIN, isize::MAX, predicate)
             }};
         }
 
         #[macro_export]
         macro_rules! exists {
             (|$i:ident in ($lower_bound:expr, $upper_bound:expr)| $predicate:expr) => {{
-                let lower_bound: usize = $lower_bound;
-                let upper_bound: usize = $upper_bound;
+                let lower_bound: isize = $lower_bound;
+                let upper_bound: isize = $upper_bound;
                 let predicate = |$i| $predicate;
                 kani_exists(lower_bound, upper_bound, predicate)
+            }};
+            (|$i:ident | $predicate:expr) => {{
+                let predicate = |$i| $predicate;
+                kani_exists(isize::MIN, isize::MAX, predicate)
             }};
         }
 

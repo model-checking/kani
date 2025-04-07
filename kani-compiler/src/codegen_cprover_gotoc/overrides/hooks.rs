@@ -27,8 +27,6 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use tracing::debug;
 
-use cbmc::goto_program::ExprValue;
-
 pub trait GotocHook {
     /// if the hook applies, it means the codegen would do something special to it
     fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool;
@@ -823,32 +821,39 @@ fn handle_quantifier(
     let target = target.unwrap();
     let lower_bound = &fargs[0];
     let upper_bound = &fargs[1];
-    let predicate = &fargs[2];
-
     let closure_call_expr = find_closure_call_expr(&instance, gcx, loc)
         .unwrap_or_else(|| unreachable!("Failed to find closure call expression"));
 
-    let new_variable_expr = if let ExprValue::Symbol { identifier } = lower_bound.value() {
-        let new_identifier = format!("{}_kani", identifier);
-        let new_symbol = GotoSymbol::variable(
-            new_identifier.clone(),
-            new_identifier.clone(),
-            lower_bound.typ().clone(),
-            loc,
-        );
+    let predicate = if fargs.len() == 3 {
+        Expr::address_of(fargs[2].clone())
+    } else {
+        Expr::symbol_expression(
+            "dummy",
+            closure_call_expr.typ().parameters().unwrap().first().unwrap().typ().clone(),
+        )
+    };
+
+    // Quantified variable.
+    let base_name = format!("kani_quantified_var");
+    let mut counter = 0;
+    let mut unique_name = format!("{}_{}", base_name, counter);
+    // Ensure the name is not already in the symbol table
+    while gcx.symbol_table.lookup(&unique_name).is_some() {
+        counter += 1;
+        unique_name = format!("{}_{}", base_name, counter);
+    }
+    let new_variable_expr = {
+        let new_symbol =
+            GotoSymbol::variable(unique_name.clone(), unique_name, lower_bound.typ().clone(), loc);
         gcx.symbol_table.insert(new_symbol.clone());
         new_symbol.to_expr()
-    } else {
-        unreachable!("Variable is not a symbol");
     };
 
     let lower_bound_comparison = lower_bound.clone().le(new_variable_expr.clone());
     let upper_bound_comparison = new_variable_expr.clone().lt(upper_bound.clone());
-    let new_range = lower_bound_comparison.and(upper_bound_comparison);
-
-    let new_predicate = closure_call_expr
-        .call(vec![Expr::address_of(predicate.clone()), new_variable_expr.clone()]);
-    let domain = new_range.implies(new_predicate.clone());
+    let range = lower_bound_comparison.and(upper_bound_comparison);
+    let domain =
+        range.implies(closure_call_expr.call(vec![predicate.clone(), new_variable_expr.clone()]));
 
     let quantifier_expr = match quantifier_kind {
         QuantifierKind::ForAll => Expr::forall_expr(Type::Bool, new_variable_expr, domain),
