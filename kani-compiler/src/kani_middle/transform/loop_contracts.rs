@@ -108,8 +108,6 @@ impl TransformPass for LoopContractPass {
             }
             RigidTy::Closure(_, _) => self.transform_body_with_loop(tcx, body),
             _ => {
-                println!("Instance defid: {:?}", instance.def.name());
-                println!("Instance ty: {:?}", instance.ty().kind().rigid().unwrap());
                 /* static variables case */
                 (false, body)
             }
