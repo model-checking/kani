@@ -3,7 +3,7 @@
 
 // kani-flags: -Z loop-contracts -Z function-contracts
 
-//! Proving contract for function with loop
+//! Test that we can prove a function contract and a loop contract in tandem.
 
 #![feature(proc_macro_hygiene)]
 #![feature(stmt_expr_attributes)]
