@@ -182,6 +182,11 @@ impl KaniSession {
             .map(OsString::from),
         );
 
+        if self.args.no_codegen {
+            flags.push("-Z".into());
+            flags.push("no-codegen".into());
+        }
+
         if let Some(seed_opt) = self.args.randomize_layout {
             flags.push("-Z".into());
             flags.push("randomize-layout".into());
