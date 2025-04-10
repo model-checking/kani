@@ -249,7 +249,7 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
     // expr of the loop invariant
     let mut inv_expr: Expr = syn::parse(attr).unwrap();
 
-    // adding old variables
+    // adding on_entry variables
     let mut old_var_prefix: String = "__kani_old_var".to_owned();
     old_var_prefix.push_str(&loop_id);
     let replace_old: TransformationResult =
