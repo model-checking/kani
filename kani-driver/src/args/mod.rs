@@ -242,6 +242,11 @@ pub struct VerificationArgs {
     #[arg(long, hide_short_help = true)]
     pub only_codegen: bool,
 
+    /// Run Kani without codegen. Useful for quick feedback on whether the code would compile successfully (similar to `cargo check`).
+    /// This feature is unstable and requires `-Z unstable-options` to be used
+    #[arg(long, hide_short_help = true)]
+    pub no_codegen: bool,
+
     /// Specify the value used for loop unwinding in CBMC
     #[arg(long)]
     pub default_unwind: Option<u32>,
@@ -657,6 +662,12 @@ impl ValidateArgs for VerificationArgs {
         self.common_args.check_unstable(
             !self.cbmc_args.is_empty(),
             "--cbmc-args",
+            UnstableFeature::UnstableOptions,
+        )?;
+
+        self.common_args.check_unstable(
+            self.no_codegen,
+            "--no-codegen",
             UnstableFeature::UnstableOptions,
         )?;
 
