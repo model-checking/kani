@@ -208,22 +208,29 @@ impl VisitMut for BreakContinueReplacer {
         // Replace the expression
         *expr = match expr {
             Expr::Break(_) => {
-                syn::parse_quote!(return false)
+                syn::parse_quote!(return (false, None))
             }
             Expr::Continue(_) => {
-                syn::parse_quote!(return true)
+                syn::parse_quote!(return (true, None))
+            }
+            Expr::Return(rexpr) => {
+                match rexpr.expr.clone() {
+                    Some(ret) => syn::parse_quote!(return (false, Some(#ret))),
+                    _ => syn::parse_quote!(return (false, Some(())))
+                }
             }
             _ => return,
         };
     }
 }
 
+
 // This function replace the break/continue statements inside a loop body with return statements
 fn transform_break_continue(block: &mut Block) {
     let mut replacer = BreakContinueReplacer;
     replacer.visit_block_mut(block);
     let return_stmt: Stmt = syn::parse_quote! {
-        return true;
+        return (true, None);
     };
     // Add semicolon to the last statement if it's an expression without semicolon
     if let Some(last_stmt) = block.stmts.last_mut() {
@@ -235,6 +242,8 @@ fn transform_break_continue(block: &mut Block) {
     }
     block.stmts.push(return_stmt);
 }
+
+
 
 pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
     // parse the stmt of the loop
@@ -250,12 +259,12 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut inv_expr: Expr = syn::parse(attr).unwrap();
 
     // adding on_entry variables
-    let mut old_var_prefix: String = "__kani_old_var".to_owned();
-    old_var_prefix.push_str(&loop_id);
-    let replace_old: TransformationResult =
-        transform_function_calls(inv_expr.clone(), "on_entry", old_var_prefix);
-    inv_expr = replace_old.transformed_expr.clone();
-    let old_decl_stms = replace_old.declarations_block.stmts.clone();
+    let mut onentry_var_prefix: String = "__kani_onentry_var".to_owned();
+    onentry_var_prefix.push_str(&loop_id);
+    let replace_onentry: TransformationResult =
+        transform_function_calls(inv_expr.clone(), "on_entry", onentry_var_prefix);
+    inv_expr = replace_onentry.transformed_expr.clone();
+    let onentry_decl_stms = replace_onentry.declarations_block.stmts.clone();
 
     // adding prev variables
     let mut prev_var_prefix: String = "__kani_prev_var".to_owned();
@@ -278,6 +287,12 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut loop_body_closure_name: String = "__kani_loop_body_closure".to_owned();
     loop_body_closure_name.push_str(&loop_id);
     let loop_body_closure = format_ident!("{}", loop_body_closure_name);
+    let mut loop_body_closure_ret_1_name: String = "__kani_loop_body_closure_ret_1".to_owned();
+    loop_body_closure_ret_1_name.push_str(&loop_id);
+    let loop_body_closure_ret_1 = format_ident!("{}", loop_body_closure_ret_1_name);
+    let mut loop_body_closure_ret_2_name: String = "__kani_loop_body_closure_ret_2".to_owned();
+    loop_body_closure_ret_2_name.push_str(&loop_id);
+    let loop_body_closure_ret_2 = format_ident!("{}", loop_body_closure_ret_2_name);
     if has_prev {
         inv_expr = transform_inv.transformed_expr.clone();
         match loop_stmt {
@@ -325,11 +340,15 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
         quote!(
         {
         if (#loop_guard) {
-        #(#old_decl_stms)*
+        #(#onentry_decl_stms)*
         #(#prev_decl_stms)*
         let mut #loop_body_closure = ||
         #loop_body;
-        if #loop_body_closure () {
+        let (#loop_body_closure_ret_1, #loop_body_closure_ret_2) = #loop_body_closure ();
+        if #loop_body_closure_ret_2.is_some() {
+            return #loop_body_closure_ret_2.unwrap();
+        }
+        if #loop_body_closure_ret_1 {
         // Dummy function used to force the compiler to capture the environment.
         // We cannot call closures inside constant functions.
         // This function gets replaced by `kani::internal::call_closure`.
@@ -345,11 +364,11 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
         };
         }
         })
-        .into()
+        .into();
     } else {
         quote!(
         {
-        #(#old_decl_stms)*
+        #(#onentry_decl_stms)*
         // Dummy function used to force the compiler to capture the environment.
         // We cannot call closures inside constant functions.
         // This function gets replaced by `kani::internal::call_closure`.
