@@ -180,7 +180,7 @@ pub fn cargo_project(session: &mut KaniSession, keep_going: bool) -> Result<Proj
     if session.args.no_codegen {
         info_operation(
             "info",
-            "Skipping codegen. Rerun without `--no-codegen` to perform codegen.",
+            "Compilation succeeded up until codegen. Skipping codegen because of `--no-codegen` option. Rerun without `--no-codegen` to perform codegen.",
         );
         return Ok(Project::default());
     }

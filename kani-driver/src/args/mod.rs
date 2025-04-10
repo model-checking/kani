@@ -242,7 +242,7 @@ pub struct VerificationArgs {
     #[arg(long, hide_short_help = true)]
     pub only_codegen: bool,
 
-    /// Run Kani without codegen. Useful for checking compilation errors (similar to `cargo check`).
+    /// Run Kani without codegen. Useful for quick feedback on whether the code would compile successfully (similar to `cargo check`).
     /// This feature is unstable and requires `-Z unstable-options` to be used
     #[arg(long, hide_short_help = true)]
     pub no_codegen: bool,
