@@ -22,8 +22,8 @@ use crate::codegen_cprover_gotoc::utils::full_crate_name;
 use crate::kani_middle::transform::BodyTransformation;
 use crate::kani_queries::QueryDb;
 use cbmc::goto_program::{
-    CIntType, DatatypeComponent, Expr, ExprValue, Location, Stmt, StmtBody, Symbol, SymbolTable,
-    SymbolValues, Type,
+    CIntType, DatatypeComponent, Expr, ExprValue, Location, Stmt, StmtBody, SwitchCase, Symbol,
+    SymbolTable, SymbolValues, Type,
 };
 use cbmc::utils::aggr_tag;
 use cbmc::{InternedString, MachineModel};
@@ -476,7 +476,24 @@ impl GotocCtx<'_> {
                 e.clone().map(|s| self.append_suffix_to_stmt(&s, suffix)),
                 stmt.location().clone(),
             ),
-            StmtBody::While { .. } | StmtBody::For { .. } | StmtBody::Switch { .. } => {
+            StmtBody::Switch { control, cases, default } => {
+                // Append the suffix to each case
+                let new_cases: Vec<_> = cases
+                    .iter()
+                    .map(|case| {
+                        let new_body = self.append_suffix_to_stmt(case.body(), suffix);
+                        SwitchCase::new(case.case().clone(), new_body)
+                    })
+                    .collect();
+
+                // Append the suffix to the default case, if it exists
+                let new_default =
+                    default.as_ref().map(|stmt| self.append_suffix_to_stmt(stmt, suffix));
+
+                // Construct the new switch statement
+                Stmt::switch(control.clone(), new_cases, new_default, stmt.location().clone())
+            }
+            StmtBody::While { .. } | StmtBody::For { .. } => {
                 unimplemented!()
             }
             _ => stmt.clone(),
@@ -504,6 +521,8 @@ impl GotocCtx<'_> {
                             _ => None,
                         })
                     {
+                        println!("{:?}", function_body.location());
+                        println!("{:?}\n", function_body);
                         // For function calls to foo(args) where the definition of foo is
                         // fn foo(params) {
                         //      body;
@@ -536,14 +555,6 @@ impl GotocCtx<'_> {
 
                         // Substitute parameters with arguments in the function body.
                         if let Some(parameters) = self.symbol_table.lookup_parameters(*identifier) {
-                            assert!(
-                                parameters.len() == arguments.len(),
-                                "Mismatch between parameters and arguments for function {}: parameters = {}, arguments = {}",
-                                identifier,
-                                parameters.len(),
-                                arguments.len()
-                            );
-
                             // Create decl statements of parameters.
                             let mut param_decls: Vec<Stmt> = parameters
                                 .iter()
@@ -706,7 +717,42 @@ impl GotocCtx<'_> {
                     Some(inlined_body) => Some(inlined_body.with_label(label.clone())),
                 }
             }
-            StmtBody::While { .. } | StmtBody::For { .. } | StmtBody::Switch { .. } => {
+            StmtBody::Switch { control, cases, default } => {
+                // Inline function calls in the discriminant expression
+                let inlined_control = self
+                    .inline_function_calls_in_expr(control, visited_func_symbols, suffix_count)
+                    .unwrap_or_else(|| control.clone());
+
+                // Inline function calls in each case
+                let inlined_cases: Vec<_> = cases
+                    .iter()
+                    .map(|sc| {
+                        let inlined_stmt = self
+                            .inline_function_calls_in_stmt(
+                                sc.body(),
+                                visited_func_symbols,
+                                suffix_count,
+                            )
+                            .unwrap_or_else(|| sc.body().clone());
+                        SwitchCase::new(sc.case().clone(), inlined_stmt)
+                    })
+                    .collect();
+
+                // Inline function calls in the default case, if it exists
+                let inlined_default = default.as_ref().map(|stmt| {
+                    self.inline_function_calls_in_stmt(stmt, visited_func_symbols, suffix_count)
+                        .unwrap_or_else(|| stmt.clone())
+                });
+
+                // Construct the new switch statement
+                Some(Stmt::switch(
+                    inlined_control,
+                    inlined_cases,
+                    inlined_default,
+                    stmt.location().clone(),
+                ))
+            }
+            StmtBody::While { .. } | StmtBody::For { .. } => {
                 unimplemented!()
             }
             _ => Some(stmt.clone()),
