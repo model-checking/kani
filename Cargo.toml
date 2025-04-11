@@ -3,7 +3,7 @@
 
 [package]
 name = "kani-verifier"
-version = "0.60.0"
+version = "0.61.0"
 edition = "2021"
 description = "A bit-precise model checker for Rust."
 readme = "README.md"
@@ -73,6 +73,8 @@ exclude = [
   "tests/script-based-pre/build-cache-dirty/target/new_dep",
   "tests/script-based-pre/verify_std_cmd/tmp_dir/target/kani_verify_std",
   "tests/script-based-pre/kani_lib_dep",
+  "tests/script-based-pre/no_codegen",
+  "tests/script-based-pre/no_codegen_error",
 ]
 
 [workspace.lints.clippy]

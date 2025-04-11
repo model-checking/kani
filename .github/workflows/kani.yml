@@ -70,6 +70,23 @@ jobs:
         env:
           RUST_TEST_THREADS: 1
 
+  llbc-regression:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Kani
+        uses: actions/checkout@v4
+
+      - name: Setup Kani Dependencies
+        uses: ./.github/actions/setup
+        with:
+          os: ubuntu-24.04
+
+      - name: Build Kani with Charon
+        run: cargo build-dev -- --features cprover --features llbc
+
+      - name: Run tests
+        run: ./scripts/kani-llbc-regression.sh
+
   documentation:
     runs-on: ubuntu-24.04
     permissions:

@@ -1,9 +1,9 @@
 # Copyright Kani Contributors
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
-# Docker image for Kani GitHub Package release ubuntu-20-04.
+# Docker image for Kani GitHub Package release ubuntu-24-04.
 
-FROM ubuntu:20.04
+FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive \
     DEBCONF_NONINTERACTIVE_SEEN=true \
     PATH="/root/.cargo/bin:${PATH}"

@@ -53,9 +53,6 @@ impl KaniSession {
     ) -> Result<()> {
         let mut kani_args = self.kani_compiler_flags();
         kani_args.push(format!("--reachability={}", self.reachability_mode()));
-        if self.args.common_args.unstable_features.contains(UnstableFeature::Lean) {
-            kani_args.push("--backend=llbc".into());
-        }
 
         let lib_path = lib_folder().unwrap();
         let mut rustc_args = self.kani_rustc_flags(LibConfig::new(lib_path));
@@ -100,14 +97,6 @@ impl KaniSession {
         to_rustc_arg(vec![format!("--reachability={}", self.reachability_mode())])
     }
 
-    pub fn backend_arg(&self) -> Option<String> {
-        if self.args.common_args.unstable_features.contains(UnstableFeature::Lean) {
-            Some(to_rustc_arg(vec!["--backend=llbc".into()]))
-        } else {
-            None
-        }
-    }
-
     /// These arguments are arguments passed to kani-compiler that are `kani` compiler specific.
     pub fn kani_compiler_flags(&self) -> Vec<String> {
         let mut flags = vec![check_version()];
@@ -150,6 +139,10 @@ impl KaniSession {
             flags.push("--ub-check=uninit".into());
         }
 
+        if self.args.common_args.unstable_features.contains(UnstableFeature::Lean) {
+            flags.push("--backend=llbc".into());
+        }
+
         if self.args.print_llbc {
             flags.push("--print-llbc".into());
         }
@@ -188,6 +181,11 @@ impl KaniSession {
             ]
             .map(OsString::from),
         );
+
+        if self.args.no_codegen {
+            flags.push("-Z".into());
+            flags.push("no-codegen".into());
+        }
 
         if let Some(seed_opt) = self.args.randomize_layout {
             flags.push("-Z".into());

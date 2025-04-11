@@ -68,7 +68,7 @@ jobs:
             })
 
       - name: Create Issue
-        if: ${{ env.next_step == 'create_issue' }}
+        if: ${{ env.next_step == 'create_issue' && github.repository_owner == 'model-checking' }}
         uses: dacbd/create-issue-action@main
         with:
           token: ${{ github.token }}
