@@ -1,9 +1,9 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// kani-flags: -Z loop-contracts -Z function-contracts
+// kani-flags: -Z loop-contracts -Z function-contracts --no-assert-contracts
 
-//! Calling a function that contains loops and test that using a #[kani::proof] harness fails because the function's precondition gets asserted.
+//Call a function with loop without checking the contract.
 
 #![feature(proc_macro_hygiene)]
 #![feature(stmt_expr_attributes)]
@@ -19,7 +19,7 @@ pub fn has_loop(mut i: u16) -> u16 {
 }
 
 #[kani::proof]
-fn call_has_loop() {
+fn contract_proof() {
     let i: u16 = kani::any();
     let j = has_loop(i);
 }
