@@ -213,17 +213,14 @@ impl VisitMut for BreakContinueReplacer {
             Expr::Continue(_) => {
                 syn::parse_quote!(return (true, None))
             }
-            Expr::Return(rexpr) => {
-                match rexpr.expr.clone() {
-                    Some(ret) => syn::parse_quote!(return (false, Some(#ret))),
-                    _ => syn::parse_quote!(return (false, Some(())))
-                }
-            }
+            Expr::Return(rexpr) => match rexpr.expr.clone() {
+                Some(ret) => syn::parse_quote!(return (false, Some(#ret))),
+                _ => syn::parse_quote!(return (false, Some(()))),
+            },
             _ => return,
         };
     }
 }
-
 
 // This function replace the break/continue statements inside a loop body with return statements
 fn transform_break_continue(block: &mut Block) {
@@ -242,8 +239,6 @@ fn transform_break_continue(block: &mut Block) {
     }
     block.stmts.push(return_stmt);
 }
-
-
 
 pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
     // parse the stmt of the loop
