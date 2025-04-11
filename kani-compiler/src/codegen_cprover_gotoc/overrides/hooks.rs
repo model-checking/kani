@@ -855,11 +855,10 @@ fn handle_quantifier(
 
     let quantifier_expr = match quantifier_kind {
         QuantifierKind::ForAll => {
-            let domain = range.clone().implies(
-                closure_call_expr
-                    .call(vec![predicate.clone(), new_variable_expr.clone()])
-                    .and(range.not().implies(Expr::bool_true())),
-            );
+            let domain = range
+                .clone()
+                .implies(closure_call_expr.call(vec![predicate.clone(), new_variable_expr.clone()]))
+                .and(range.not().implies(Expr::bool_true()));
             Expr::forall_expr(Type::Bool, new_variable_expr, domain)
         }
         QuantifierKind::Exists => {
