@@ -151,12 +151,15 @@ impl GotocCtx<'_> {
                 let farg_types = operands.map(|op| self.operand_ty_stable(&op));
                 self.codegen_copy("copy_nonoverlapping", true, fargs, &farg_types, None, location)
             }
+            // https://doc.rust-lang.org/beta/nightly-rustc/rustc_middle/mir/enum.NonDivergingIntrinsic.html#variant.Assume
+            // Informs the optimizer that a condition is always true.
+            // If the condition is false, the behavior is undefined.
             StatementKind::Intrinsic(NonDivergingIntrinsic::Assume(ref op)) => {
                 let cond = self.codegen_operand_stable(op).cast_to(Type::bool());
                 self.codegen_assert_assume(
                     cond,
                     PropertyClass::Assume,
-                    "assumption failed",
+                    "Rust intrinsic assumption failed",
                     location,
                 )
             }
