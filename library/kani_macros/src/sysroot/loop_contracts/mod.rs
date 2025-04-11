@@ -9,7 +9,10 @@ use proc_macro_error2::abort_call_site;
 use quote::{format_ident, quote};
 use syn::spanned::Spanned;
 use syn::token::AndAnd;
-use syn::{BinOp, Block, Expr, ExprBinary, Ident, Stmt, visit_mut::VisitMut};
+use syn::{
+    BinOp, Block, Expr, ExprBinary, ExprLoop, ExprWhile, Ident, Stmt, parse_quote,
+    visit_mut::VisitMut,
+};
 
 /*
 Transform the loop to support on_entry(expr) : the value of expr before entering the loop
@@ -240,9 +243,30 @@ fn transform_break_continue(block: &mut Block) {
     block.stmts.push(return_stmt);
 }
 
+fn convert_loop_to_while(loop_expr: ExprLoop) -> Expr {
+    // Create a while expression with `true` as the condition
+    let while_expr = ExprWhile {
+        attrs: loop_expr.attrs, // Preserve any attributes
+        label: loop_expr.label, // Preserve any labels
+        while_token: Default::default(),
+        cond: Box::new(parse_quote!(true)), // Set condition to `true`
+        body: loop_expr.body,               // Use the same body
+    };
+
+    Expr::While(while_expr)
+}
+
 pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
     // parse the stmt of the loop
-    let mut loop_stmt: Stmt = syn::parse(item.clone()).unwrap();
+    let org_loop_stmt: Stmt = syn::parse(item.clone()).unwrap();
+    let mut loop_stmt = match org_loop_stmt {
+        Stmt::Expr(ref e, token) => match e {
+            Expr::While(_) => org_loop_stmt,
+            Expr::Loop(el) => Stmt::Expr(convert_loop_to_while(el.clone()), token),
+            _ => panic!(),
+        },
+        _ => panic!(),
+    };
 
     // name of the loop invariant as closure of the form
     // __kani_loop_invariant_#startline_#startcol_#endline_#endcol
