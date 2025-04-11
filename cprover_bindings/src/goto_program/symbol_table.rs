@@ -69,7 +69,7 @@ impl SymbolTable {
         let function_name = function_name.into();
         let parameter = parameter.into();
 
-        self.parameters_map.entry(function_name).or_insert_with(Vec::new).push(parameter);
+        self.parameters_map.entry(function_name).or_default().push(parameter);
     }
 
     /// Validates the previous value of the symbol using the validator function, then replaces it.
