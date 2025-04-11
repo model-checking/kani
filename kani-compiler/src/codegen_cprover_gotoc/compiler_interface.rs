@@ -198,6 +198,8 @@ impl GotocCodegenBackend {
             None
         };
 
+        gcx.handle_quantifiers();
+
         // No output should be generated if user selected no_codegen.
         if !tcx.sess.opts.unstable_opts.no_codegen && tcx.sess.opts.output_types.should_codegen() {
             let pretty = self.queries.lock().unwrap().args().output_pretty_json;

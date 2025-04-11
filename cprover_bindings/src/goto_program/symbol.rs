@@ -172,6 +172,10 @@ impl Symbol {
         }
     }
 
+    pub fn update(&mut self, value: SymbolValues) {
+        self.value = value;
+    }
+
     /// Add this contract to the symbol (symbol must be a function) or fold the
     /// conditions into an existing contract.
     pub fn attach_contract(&mut self, contract: FunctionContract) {
