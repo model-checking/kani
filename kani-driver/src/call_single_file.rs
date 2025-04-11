@@ -178,6 +178,7 @@ impl KaniSession {
                 "--check-cfg=cfg(kani)",
                 // Do not invoke the linker since the compiler will not generate real object files
                 "-Clinker=echo",
+                "-Ctarget-feature=+neon",
             ]
             .map(OsString::from),
         );
@@ -226,6 +227,8 @@ pub fn base_rustc_flags(lib_config: LibConfig) -> Vec<OsString> {
         "crate-attr=feature(register_tool)",
         "-Z",
         "crate-attr=register_tool(kanitool)",
+        "-C",
+        "target-feature=+neon",
     ]
     .map(OsString::from)
     .to_vec();

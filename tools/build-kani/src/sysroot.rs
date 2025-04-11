@@ -85,7 +85,11 @@ pub fn build_lib(bin_folder: &Path) -> Result<()> {
 fn build_verification_lib(compiler_path: &Path) -> Result<()> {
     let extra_args =
         ["-Z", "build-std=panic_abort,std,test", "--config", "profile.dev.panic=\"abort\""];
-    let compiler_args = ["--kani-compiler", "-Cllvm-args=--ignore-global-asm --build-std"];
+    let compiler_args = [
+        "--kani-compiler",
+        "-Cllvm-args=--ignore-global-asm --build-std",
+        "-Ctarget-feature=+neon",
+    ];
     let packages = ["std", "kani", "kani_macros"];
     let artifacts = build_kani_lib(compiler_path, &packages, &extra_args, &compiler_args)?;
     copy_artifacts(&artifacts, &kani_sysroot_lib(), true)
@@ -97,7 +101,8 @@ fn build_playback_lib(compiler_path: &Path) -> Result<()> {
     let extra_args =
         ["--features=std/concrete_playback,kani/concrete_playback", "-Z", "build-std=std,test"];
     let packages = ["std", "kani", "kani_macros"];
-    let artifacts = build_kani_lib(compiler_path, &packages, &extra_args, &[])?;
+    let artifacts =
+        build_kani_lib(compiler_path, &packages, &extra_args, &["-Ctarget-feature=+neon"])?;
     copy_artifacts(&artifacts, &kani_playback_lib(), true)
 }
 
@@ -278,6 +283,7 @@ pub fn build_bin<T: AsRef<OsStr>>(extra_args: &[T]) -> Result<PathBuf> {
         .arg("build")
         .args(extra_args)
         .args(args)
+        .env("CARGO_ENCODED_RUSTFLAGS", "-Ctarget-feature=+neon")
         .run()
         .or(Err(format_err!("Failed to build binaries.")))?;
     Ok(out_dir)
