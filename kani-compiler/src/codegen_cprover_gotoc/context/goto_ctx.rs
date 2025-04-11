@@ -414,7 +414,7 @@ impl GotocCtx<'_> {
     fn count_return_stmts(stmt: &Stmt) -> usize {
         match stmt.body() {
             StmtBody::Return(_) => 1,
-            StmtBody::Block(stmts) => stmts.iter().map(|s| Self::count_return_stmts(s)).sum(),
+            StmtBody::Block(stmts) => stmts.iter().map(Self::count_return_stmts).sum(),
             StmtBody::Label { label: _, body } => Self::count_return_stmts(body),
             _ => 0,
         }
@@ -430,8 +430,7 @@ impl GotocCtx<'_> {
         match stmt.body() {
             StmtBody::Return(Some(expr)) => {
                 if let ExprValue::Symbol { ref identifier } = expr.value() {
-                    *return_symbol =
-                        Some(Expr::symbol_expression(identifier.clone(), expr.typ().clone()));
+                    *return_symbol = Some(Expr::symbol_expression(*identifier, expr.typ().clone()));
                     Stmt::goto(*end_label, *stmt.location())
                 } else {
                     panic!("Expected symbol expression in return statement");
