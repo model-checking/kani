@@ -834,7 +834,7 @@ fn handle_quantifier(
     };
 
     // Quantified variable.
-    let base_name = format!("kani_quantified_var");
+    let base_name = "kani_quantified_var".to_string();
     let mut counter = 0;
     let mut unique_name = format!("{}_{}", base_name, counter);
     // Ensure the name is not already in the symbol table

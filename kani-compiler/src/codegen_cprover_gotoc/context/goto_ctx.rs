@@ -313,12 +313,9 @@ impl GotocCtx<'_> {
         // Store the found quantifiers and the inlined results.
         let mut to_modify: BTreeMap<InternedString, SymbolValues> = BTreeMap::new();
         for (key, symbol) in self.symbol_table.iter() {
-            match &symbol.value {
-                SymbolValues::Stmt(stmt) => {
-                    let new_stmt_val = SymbolValues::Stmt(self.handle_quantifiers_in_stmt(stmt));
-                    to_modify.insert(key.clone(), new_stmt_val);
-                }
-                _ => (),
+            if let SymbolValues::Stmt(stmt) = &symbol.value {
+                let new_stmt_val = SymbolValues::Stmt(self.handle_quantifiers_in_stmt(stmt));
+                to_modify.insert(*key, new_stmt_val);
             }
         }
 
@@ -351,7 +348,7 @@ impl GotocCtx<'_> {
                                     &mut suffix_count,
                                 )
                                 .unwrap(),
-                                domain.location().clone(),
+                                *domain.location(),
                             );
 
                             // Make the result a statement expression.
@@ -359,9 +356,9 @@ impl GotocCtx<'_> {
                                 Type::Bool,
                                 variable.clone(),
                                 Expr::statement_expression(
-                                    vec![Stmt::skip(domain.location().clone()), end_stmt],
+                                    vec![Stmt::skip(*domain.location()), end_stmt],
                                     Type::Bool,
-                                    domain.location().clone(),
+                                    *domain.location(),
                                 ),
                             );
                             res.cast_to(Type::CInteger(CIntType::Bool))
@@ -380,7 +377,7 @@ impl GotocCtx<'_> {
                                     &mut suffix_count,
                                 )
                                 .unwrap(),
-                                domain.location().clone(),
+                                *domain.location(),
                             );
 
                             // Make the result a statement expression.
@@ -388,9 +385,9 @@ impl GotocCtx<'_> {
                                 Type::Bool,
                                 variable.clone(),
                                 Expr::statement_expression(
-                                    vec![Stmt::skip(domain.location().clone()), end_stmt],
+                                    vec![Stmt::skip(*domain.location()), end_stmt],
                                     Type::Bool,
-                                    domain.location().clone(),
+                                    *domain.location(),
                                 ),
                             );
                             res.cast_to(Type::CInteger(CIntType::Bool))
@@ -399,12 +396,12 @@ impl GotocCtx<'_> {
                     },
                     _ => rhs.clone(),
                 };
-                Stmt::assign(lhs.clone(), new_rhs, stmt.location().clone())
+                Stmt::assign(lhs.clone(), new_rhs, *stmt.location())
             }
             // Recursively find quantifier expressions.
             StmtBody::Block(stmts) => Stmt::block(
                 stmts.iter().map(|stmt| self.handle_quantifiers_in_stmt(stmt)).collect(),
-                stmt.location().clone(),
+                *stmt.location(),
             ),
             StmtBody::Label { label, body } => {
                 self.handle_quantifiers_in_stmt(body).with_label(*label)
@@ -414,11 +411,11 @@ impl GotocCtx<'_> {
     }
 
     /// Count and return the number of return statements in `stmt`.
-    fn count_return_stmts(&self, stmt: &Stmt) -> usize {
+    fn count_return_stmts(stmt: &Stmt) -> usize {
         match stmt.body() {
             StmtBody::Return(_) => 1,
-            StmtBody::Block(stmts) => stmts.iter().map(|s| self.count_return_stmts(s)).sum(),
-            StmtBody::Label { label: _, body } => self.count_return_stmts(body),
+            StmtBody::Block(stmts) => stmts.iter().map(|s| Self::count_return_stmts(s)).sum(),
+            StmtBody::Label { label: _, body } => Self::count_return_stmts(body),
             _ => 0,
         }
     }
@@ -426,7 +423,6 @@ impl GotocCtx<'_> {
     /// Rewrite return statements in `stmt` with a goto statement to `end_label`.
     /// It also stores the return symbol in `return_symbol`.
     fn rewrite_return_stmt_with_goto(
-        &self,
         stmt: &Stmt,
         return_symbol: &mut Option<Expr>,
         end_label: &InternedString,
@@ -436,7 +432,7 @@ impl GotocCtx<'_> {
                 if let ExprValue::Symbol { ref identifier } = expr.value() {
                     *return_symbol =
                         Some(Expr::symbol_expression(identifier.clone(), expr.typ().clone()));
-                    Stmt::goto(*end_label, stmt.location().clone())
+                    Stmt::goto(*end_label, *stmt.location())
                 } else {
                     panic!("Expected symbol expression in return statement");
                 }
@@ -444,54 +440,55 @@ impl GotocCtx<'_> {
             StmtBody::Block(stmts) => Stmt::block(
                 stmts
                     .iter()
-                    .map(|s| self.rewrite_return_stmt_with_goto(s, return_symbol, end_label))
+                    .map(|s| Self::rewrite_return_stmt_with_goto(s, return_symbol, end_label))
                     .collect(),
-                stmt.location().clone(),
+                *stmt.location(),
             ),
-            StmtBody::Label { label, body } => self
-                .rewrite_return_stmt_with_goto(body, return_symbol, end_label)
-                .with_label(*label),
+            StmtBody::Label { label, body } => {
+                Self::rewrite_return_stmt_with_goto(body, return_symbol, end_label)
+                    .with_label(*label)
+            }
             _ => stmt.clone(),
         }
     }
 
     /// Append a given suffix to all labels and goto destinations in `stmt`.
-    fn append_suffix_to_stmt(&self, stmt: &Stmt, suffix: &str) -> Stmt {
+    fn append_suffix_to_stmt(stmt: &Stmt, suffix: &str) -> Stmt {
         match stmt.body() {
             StmtBody::Label { label, body } => {
                 let new_label = format!("{}{}", label, suffix);
-                self.append_suffix_to_stmt(body, suffix).with_label(new_label)
+                Self::append_suffix_to_stmt(body, suffix).with_label(new_label)
             }
             StmtBody::Goto { dest, .. } => {
                 let new_target = format!("{}{}", dest, suffix);
-                Stmt::goto(new_target, stmt.location().clone())
+                Stmt::goto(new_target, *stmt.location())
             }
             StmtBody::Block(stmts) => Stmt::block(
-                stmts.iter().map(|s| self.append_suffix_to_stmt(s, suffix)).collect(),
-                stmt.location().clone(),
+                stmts.iter().map(|s| Self::append_suffix_to_stmt(s, suffix)).collect(),
+                *stmt.location(),
             ),
             StmtBody::Ifthenelse { i, t, e } => Stmt::if_then_else(
                 i.clone(),
-                self.append_suffix_to_stmt(t, suffix),
-                e.clone().map(|s| self.append_suffix_to_stmt(&s, suffix)),
-                stmt.location().clone(),
+                Self::append_suffix_to_stmt(t, suffix),
+                e.clone().map(|s| Self::append_suffix_to_stmt(&s, suffix)),
+                *stmt.location(),
             ),
             StmtBody::Switch { control, cases, default } => {
                 // Append the suffix to each case
                 let new_cases: Vec<_> = cases
                     .iter()
                     .map(|case| {
-                        let new_body = self.append_suffix_to_stmt(case.body(), suffix);
+                        let new_body = Self::append_suffix_to_stmt(case.body(), suffix);
                         SwitchCase::new(case.case().clone(), new_body)
                     })
                     .collect();
 
                 // Append the suffix to the default case, if it exists
                 let new_default =
-                    default.as_ref().map(|stmt| self.append_suffix_to_stmt(stmt, suffix));
+                    default.as_ref().map(|stmt| Self::append_suffix_to_stmt(stmt, suffix));
 
                 // Construct the new switch statement
-                Stmt::switch(control.clone(), new_cases, new_default, stmt.location().clone())
+                Stmt::switch(control.clone(), new_cases, new_default, *stmt.location())
             }
             StmtBody::While { .. } | StmtBody::For { .. } => {
                 unimplemented!()
@@ -559,9 +556,9 @@ impl GotocCtx<'_> {
                                 .zip(arguments.iter())
                                 .map(|(param, arg)| {
                                     Stmt::decl(
-                                        Expr::symbol_expression(param.clone(), arg.typ().clone()),
+                                        Expr::symbol_expression(*param, arg.typ().clone()),
                                         None,
-                                        arg.location().clone(),
+                                        *arg.location(),
                                     )
                                 })
                                 .collect();
@@ -572,9 +569,9 @@ impl GotocCtx<'_> {
                                 .zip(arguments.iter())
                                 .map(|(param, arg)| {
                                     Stmt::assign(
-                                        Expr::symbol_expression(param.clone(), arg.typ().clone()),
+                                        Expr::symbol_expression(*param, arg.typ().clone()),
                                         arg.clone(),
-                                        arg.location().clone(),
+                                        *arg.location(),
                                     )
                                 })
                                 .collect();
@@ -588,7 +585,7 @@ impl GotocCtx<'_> {
                         let count_return: usize = stmts_of_inlined_body
                             .clone()
                             .iter()
-                            .map(|stmt: &Stmt| self.count_return_stmts(stmt))
+                            .map(|stmt: &Stmt| Self::count_return_stmts(stmt))
                             .sum();
                         // The function is a void function, we safely ignore it.
                         if count_return == 0 {
@@ -601,7 +598,7 @@ impl GotocCtx<'_> {
                         let suffix = format!("_{}", suffix_count);
                         stmts_of_inlined_body = stmts_of_inlined_body
                             .iter()
-                            .map(|stmt| self.append_suffix_to_stmt(stmt, &suffix))
+                            .map(|stmt| Self::append_suffix_to_stmt(stmt, &suffix))
                             .collect();
 
                         // Replace all return stmts with symbol expressions.
@@ -611,22 +608,20 @@ impl GotocCtx<'_> {
                         stmts_of_inlined_body = stmts_of_inlined_body
                             .iter()
                             .map(|stmt| {
-                                self.rewrite_return_stmt_with_goto(stmt, &mut end_stmt, &end_label)
+                                Self::rewrite_return_stmt_with_goto(stmt, &mut end_stmt, &end_label)
                             })
                             .collect();
                         stmts_of_inlined_body
-                            .push(Stmt::skip(expr.location().clone()).with_label(end_label));
-                        stmts_of_inlined_body.push(Stmt::code_expression(
-                            end_stmt.unwrap(),
-                            expr.location().clone(),
-                        ));
+                            .push(Stmt::skip(*expr.location()).with_label(end_label));
+                        stmts_of_inlined_body
+                            .push(Stmt::code_expression(end_stmt.unwrap(), *expr.location()));
 
                         // Recursively inline function calls in the function body.
                         let res = self.inline_function_calls_in_expr(
                             &Expr::statement_expression(
                                 stmts_of_inlined_body,
                                 expr.typ().clone(),
-                                expr.location().clone(),
+                                *expr.location(),
                             ),
                             visited_func_symbols,
                             suffix_count,
@@ -666,7 +661,7 @@ impl GotocCtx<'_> {
                 return Some(Expr::statement_expression(
                     inlined_stmts,
                     expr.typ().clone(),
-                    expr.location().clone(),
+                    *expr.location(),
                 ));
             }
             _ => {}
@@ -684,22 +679,12 @@ impl GotocCtx<'_> {
         suffix_count: &mut u16,
     ) -> Option<Stmt> {
         match stmt.body() {
-            StmtBody::Expression(expr) => {
-                match self.inline_function_calls_in_expr(expr, visited_func_symbols, suffix_count) {
-                    None => None,
-                    Some(inlined_expr) => {
-                        Some(Stmt::code_expression(inlined_expr, expr.location().clone()))
-                    }
-                }
-            }
-            StmtBody::Assign { lhs, rhs } => {
-                match self.inline_function_calls_in_expr(rhs, visited_func_symbols, suffix_count) {
-                    None => None,
-                    Some(inlined_rhs) => {
-                        Some(Stmt::assign(lhs.clone(), inlined_rhs, stmt.location().clone()))
-                    }
-                }
-            }
+            StmtBody::Expression(expr) => self
+                .inline_function_calls_in_expr(expr, visited_func_symbols, suffix_count)
+                .map(|inlined_expr| Stmt::code_expression(inlined_expr, *expr.location())),
+            StmtBody::Assign { lhs, rhs } => self
+                .inline_function_calls_in_expr(rhs, visited_func_symbols, suffix_count)
+                .map(|inlined_rhs| Stmt::assign(lhs.clone(), inlined_rhs, *stmt.location())),
             StmtBody::Block(stmts) => {
                 let inlined_block = stmts
                     .iter()
@@ -707,12 +692,12 @@ impl GotocCtx<'_> {
                         self.inline_function_calls_in_stmt(s, visited_func_symbols, suffix_count)
                     })
                     .collect();
-                Some(Stmt::block(inlined_block, stmt.location().clone()))
+                Some(Stmt::block(inlined_block, *stmt.location()))
             }
             StmtBody::Label { label, body } => {
                 match self.inline_function_calls_in_stmt(body, visited_func_symbols, suffix_count) {
-                    None => Some(Stmt::skip(stmt.location().clone()).with_label(label.clone())),
-                    Some(inlined_body) => Some(inlined_body.with_label(label.clone())),
+                    None => Some(Stmt::skip(*stmt.location()).with_label(*label)),
+                    Some(inlined_body) => Some(inlined_body.with_label(*label)),
                 }
             }
             StmtBody::Switch { control, cases, default } => {
@@ -747,7 +732,7 @@ impl GotocCtx<'_> {
                     inlined_control,
                     inlined_cases,
                     inlined_default,
-                    stmt.location().clone(),
+                    *stmt.location(),
                 ))
             }
             StmtBody::While { .. } | StmtBody::For { .. } => {
