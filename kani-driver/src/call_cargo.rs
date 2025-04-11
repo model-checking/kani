@@ -466,6 +466,7 @@ pub fn cargo_config_args() -> Vec<OsString> {
         // Propagate `--cfg=kani_host` to build scripts.
         "-Zhost-config",
         "-Ztarget-applies-to-host",
+        "-Ctarget-feature=+neon",
         "--config=host.rustflags=[\"--cfg=kani_host\"]",
     ]
     .map(OsString::from)
