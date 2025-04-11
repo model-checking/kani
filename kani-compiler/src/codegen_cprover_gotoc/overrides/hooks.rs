@@ -852,12 +852,21 @@ fn handle_quantifier(
     let lower_bound_comparison = lower_bound.clone().le(new_variable_expr.clone());
     let upper_bound_comparison = new_variable_expr.clone().lt(upper_bound.clone());
     let range = lower_bound_comparison.and(upper_bound_comparison);
-    let domain =
-        range.implies(closure_call_expr.call(vec![predicate.clone(), new_variable_expr.clone()]));
 
     let quantifier_expr = match quantifier_kind {
-        QuantifierKind::ForAll => Expr::forall_expr(Type::Bool, new_variable_expr, domain),
-        QuantifierKind::Exists => Expr::exists_expr(Type::Bool, new_variable_expr, domain),
+        QuantifierKind::ForAll => {
+            let domain = range.implies(
+                closure_call_expr.call(vec![predicate.clone(), new_variable_expr.clone()]),
+            );
+            Expr::forall_expr(Type::Bool, new_variable_expr, domain)
+        }
+        QuantifierKind::Exists => {
+            let domain = range
+                .clone()
+                .and(closure_call_expr.call(vec![predicate.clone(), new_variable_expr.clone()]))
+                .and(range.not().implies(Expr::bool_false()));
+            Expr::exists_expr(Type::Bool, new_variable_expr, domain)
+        }
     };
 
     Stmt::block(
