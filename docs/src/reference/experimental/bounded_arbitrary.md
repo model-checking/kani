@@ -20,25 +20,26 @@ We can use `BoundedAny` to write a proof harness:
 
 ```rust
 #[kani::proof]
+#[kani::unwind(17)]
 fn check_reverse_is_its_own_inverse() {
     // We use BoundedAny to construct a vector that has at most length 16
-    let input: BoundedAny<Vec<bool>, 16> = kani::any();
+    let input: Vec<bool> = kani::bounded_any::<_, 16>();
 
-    let double_reversed = reverse_vector(reverse_vector(input.clone().into_inner()));
+    let double_reversed = reverse_vector(reverse_vector(input.clone()));
 
     // we assert that every value in the input is the same as the value in the
     // doubly reversed list
     for i in 0..input.len() {
-        assert!(input[i] == double_reversed[i])
+        assert_eq!(input[i], double_reversed[i])
     }
 }
 ```
 
-Then, with `kani --harness check --unwind 17` we can prove that, for vectors up to size 16, our reverse function is indeed it's own inverse.
+Then, with `kani` we can prove that our reverse function is indeed its own inverse, for vectors up to size 16.
 
 ## Proof Incompleteness
 
-It's very important to note, that this is not a complete proof that this function is correct. To drive this point home, consider this bad implementation of `reverse_vector`:
+It's very important to note, that this is **not** a complete proof that this function is correct. To drive this point home, consider this bad implementation of `reverse_vector`:
 
 ```rust
 fn bad_reverse_vector<T: Default>(mut input: Vec<T>) -> Vec<T> {
@@ -77,4 +78,4 @@ You must specify which fields should be bounded using the `#[bounded]` attribute
 
 ### Limitations
 
-Currently you can only specify a single bound for the entire type, and all bounded fields use the same bound. If different bounds would be useful, let us know and we can probably lift this restriction.
+Currently you can only specify a single bound for the entire type, and all bounded fields use the same bound. If different bounds would be useful, let us know through [filing an issue](https://github.com/model-checking/kani/issues/new/choose) and we can probably lift this restriction.

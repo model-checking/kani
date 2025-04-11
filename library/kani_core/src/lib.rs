@@ -264,7 +264,6 @@ macro_rules! kani_intrinsics {
         /// implementing BoundedArbitrary decides exactly what size means for them.
         ///
         /// *Note*: Any proof using a bounded symbolic value is only valid up to that bound.
-        #[kanitool::fn_marker = "BoundedAnyModel"]
         #[inline(always)]
         pub fn bounded_any<T: BoundedArbitrary, const N: usize>() -> T {
             T::bounded_any::<N>()

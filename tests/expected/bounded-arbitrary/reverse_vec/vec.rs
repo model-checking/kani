@@ -1,10 +1,9 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-flags: --default-unwind 17
-//
-// Check that users can implement Arbitrary to a simple data struct with Vec<>.
+
+//! Check that users can use BoundedArbitrary to perform bounded verification of functions that use Vec.
+
 extern crate kani;
-use kani::BoundedAny;
 
 fn reverse_vector<T>(mut input: Vec<T>) -> Vec<T> {
     let mut reversed = vec![];
@@ -27,29 +26,30 @@ fn bad_reverse_vector<T: Default, const N: usize>(mut input: Vec<T>) -> Vec<T> {
 }
 
 #[kani::proof]
+#[kani::unwind(5)]
 fn check_reverse_is_its_own_inverse() {
-    let input: BoundedAny<Vec<bool>, 4> = kani::any();
-    let double_reversed = reverse_vector(reverse_vector(input.clone().into_inner()));
+    let input: Vec<bool> = kani::bounded_any::<_, 4>();
+    let double_reversed = reverse_vector(reverse_vector(input.clone()));
     for i in 0..input.len() {
-        assert!(input[i] == double_reversed[i])
+        assert_eq!(input[i], double_reversed[i])
     }
 }
 
 #[kani::proof]
+#[kani::unwind(17)]
 fn check_reverse_is_its_own_inverse_incomplete() {
-    let input: BoundedAny<Vec<bool>, 16> = kani::any();
-    let double_reversed =
-        bad_reverse_vector::<_, 16>(bad_reverse_vector::<_, 16>(input.clone().into_inner()));
+    let input: Vec<bool> = kani::bounded_any::<_, 16>();
+    let double_reversed = bad_reverse_vector::<_, 16>(bad_reverse_vector::<_, 16>(input.clone()));
     for i in 0..input.len() {
-        assert!(input[i] == double_reversed[i])
+        assert_eq!(input[i], double_reversed[i])
     }
 }
 
 #[kani::proof]
+#[kani::unwind(5)]
 fn check_reverse_is_its_own_inverse_should_fail() {
-    let input: BoundedAny<Vec<bool>, 5> = kani::any();
-    let double_reversed =
-        bad_reverse_vector::<_, 4>(bad_reverse_vector::<_, 4>(input.clone().into_inner()));
+    let input: Vec<bool> = kani::bounded_any::<_, 5>();
+    let double_reversed = bad_reverse_vector::<_, 4>(bad_reverse_vector::<_, 4>(input.clone()));
     for i in 0..input.len() {
         kani::cover!(input[i] == double_reversed[i], "This may be equal")
     }
