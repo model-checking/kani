@@ -521,8 +521,6 @@ impl GotocCtx<'_> {
                             _ => None,
                         })
                     {
-                        println!("{:?}", function_body.location());
-                        println!("{:?}\n", function_body);
                         // For function calls to foo(args) where the definition of foo is
                         // fn foo(params) {
                         //      body;
