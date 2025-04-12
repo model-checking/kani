@@ -112,12 +112,13 @@ pub fn gen_contracts_metadata(
 /// Generate metadata for automatically generated harnesses.
 /// For now, we just use the data from the function we are verifying; since we only generate one automatic harness per function,
 /// the metdata from that function uniquely identifies the harness.
-/// In future iterations of this feature, we will likely have multiple harnesses for a single function (e.g., for generic functions),
+/// TODO: In future iterations of this feature, we will likely have multiple harnesses for a single function (e.g., for generic functions),
 /// in which case HarnessMetadata will need to change further to differentiate between those harnesses.
 pub fn gen_automatic_proof_metadata(
     tcx: TyCtxt,
     base_name: &Path,
     fn_to_verify: &Instance,
+    harness_mangled_name: String,
 ) -> HarnessMetadata {
     let def = fn_to_verify.def;
     let pretty_name = fn_to_verify.name();
@@ -137,8 +138,10 @@ pub fn gen_automatic_proof_metadata(
     };
 
     HarnessMetadata {
+        // pretty_name is what gets displayed to the user, and that should be the name of the function being verified, hence using fn_to_verify name
         pretty_name,
-        mangled_name,
+        // We pass --function mangled_name to CBMC to select the entry point, which should be the mangled name of the automatic harness intrinsic
+        mangled_name: harness_mangled_name,
         crate_name: def.krate().name,
         original_file: loc.filename,
         original_start_line: loc.start_line,

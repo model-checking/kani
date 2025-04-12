@@ -344,7 +344,12 @@ fn get_all_automatic_harnesses(
                 &GenericArgs(vec![GenericArgKind::Type(fn_to_verify.ty())]),
             )
             .unwrap();
-            let metadata = gen_automatic_proof_metadata(tcx, &base_filename, &fn_to_verify);
+            let metadata = gen_automatic_proof_metadata(
+                tcx,
+                &base_filename,
+                &fn_to_verify,
+                harness.mangled_name(),
+            );
             (harness, metadata)
         })
         .collect::<HashMap<_, _>>()
