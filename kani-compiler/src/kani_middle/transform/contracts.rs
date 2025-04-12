@@ -350,12 +350,11 @@ impl FunctionWithContractPass {
                     && !harness_generic_args.is_empty()
                 {
                     let kind = harness.args().0[0].expect_ty().kind();
-                    let (def, args) = kind.fn_def().unwrap();
-                    let fn_to_verify = Instance::resolve(def, &args).unwrap();
+                    let (fn_to_verify_def, _) = kind.fn_def().unwrap();
                     // For automatic harnesses, the target is the function to verify,
                     // and stubs are empty.
                     (
-                        Some(rustc_internal::internal(tcx, fn_to_verify.def.def_id())),
+                        Some(rustc_internal::internal(tcx, fn_to_verify_def.def_id())),
                         HashSet::default(),
                     )
                 } else {
