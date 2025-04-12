@@ -97,7 +97,7 @@ impl CodegenUnits {
                         chosen: chosen.iter().map(|func| func.name()).collect::<BTreeSet<_>>(),
                         skipped,
                     })
-                    .expect("Initializing the autoharness metdata failed");
+                    .expect("Initializing the autoharness metadata failed");
 
                 let automatic_harnesses = get_all_automatic_harnesses(
                     tcx,
