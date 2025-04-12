@@ -133,6 +133,10 @@ impl CodegenUnits {
         self.units.iter()
     }
 
+    pub fn is_automatic_harness(&self, harness: &Harness) -> bool {
+        self.harness_info.get(harness).is_some_and(|md| md.is_automatically_generated)
+    }
+
     /// We store which instance of modifies was generated.
     pub fn store_modifies(&mut self, harness_modifies: &[(Harness, AssignsContract)]) {
         for (harness, modifies) in harness_modifies {

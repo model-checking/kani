@@ -42,8 +42,8 @@ use rustc_session::config::{CrateType, OutputFilenames, OutputType};
 use rustc_session::output::out_filename;
 use rustc_smir::rustc_internal;
 use rustc_target::spec::PanicStrategy;
+use stable_mir::CrateDef;
 use stable_mir::mir::mono::{Instance, MonoItem};
-use stable_mir::{CrateDef, DefId};
 use std::any::Any;
 use std::collections::BTreeMap;
 use std::fmt::Write;
@@ -212,6 +212,27 @@ impl GotocCodegenBackend {
 
         (gcx, items, contract_info)
     }
+
+    /// Given a contract harness, get the DefId of its target.
+    /// For manual harnesses, extract it from the #[proof_for_contract] attribute.
+    /// For automatic harnesses, extract the target from the harness's GenericArgs.
+    fn target_def_id_for_harness(
+        &self,
+        tcx: TyCtxt,
+        harness: &Instance,
+        is_automatic_harness: bool,
+    ) -> Option<InternalDefId> {
+        if is_automatic_harness {
+            let kind = harness.args().0[0].expect_ty().kind();
+            let (fn_to_verify_def, _) = kind.fn_def().unwrap();
+            let def_id = fn_to_verify_def.def_id();
+            let attrs = KaniAttributes::for_def_id(tcx, def_id);
+            if attrs.has_contract() { Some(rustc_internal::internal(tcx, def_id)) } else { None }
+        } else {
+            let harness_attrs = KaniAttributes::for_def_id(tcx, harness.def.def_id());
+            harness_attrs.interpret_for_contract_attribute().map(|(_, id, _)| id)
+        }
+    }
 }
 
 impl CodegenBackend for GotocCodegenBackend {
@@ -275,8 +296,9 @@ impl CodegenBackend for GotocCodegenBackend {
                         for harness in &unit.harnesses {
                             let transformer = BodyTransformation::new(&queries, tcx, &unit);
                             let model_path = units.harness_model_path(*harness).unwrap();
+                            let is_automatic_harness = units.is_automatic_harness(harness);
                             let contract_metadata =
-                                contract_metadata_for_harness(tcx, harness.def.def_id());
+                                self.target_def_id_for_harness(tcx, harness, is_automatic_harness);
                             let (gcx, items, contract_info) = self.codegen_items(
                                 tcx,
                                 &[MonoItem::Fn(*harness)],
@@ -451,11 +473,6 @@ impl ArchiveBuilderBuilder for ArArchiveBuilderBuilder {
     fn new_archive_builder<'a>(&self, sess: &'a Session) -> Box<dyn ArchiveBuilder + 'a> {
         Box::new(ArArchiveBuilder::new(sess, &DEFAULT_OBJECT_READER))
     }
-}
-
-fn contract_metadata_for_harness(tcx: TyCtxt, def_id: DefId) -> Option<InternalDefId> {
-    let attrs = KaniAttributes::for_def_id(tcx, def_id);
-    attrs.interpret_for_contract_attribute().map(|(_, id, _)| id)
 }
 
 fn check_target(session: &Session) {
