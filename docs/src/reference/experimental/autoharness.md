@@ -29,14 +29,20 @@ Autoharness: Checking function foo against all possible inputs...
 <VERIFICATION RESULTS>
 ```
 
-However, if Kani detects that `foo` has a [contract](./contracts.md), it will instead generate a `#[kani::proof_for_contract]` harness and verify the contract:
+However, if Kani detects that `foo` has a [function contract](./contracts.md), it will instead generate a `#[kani::proof_for_contract]` harness and verify the contract:
 ```
 Autoharness: Checking function foo's contract against all possible inputs...
 <VERIFICATION RESULTS>
 ```
 
+Similarly, Kani will detect the presence of [loop contracts](./loop-contracts.md) and verify them.
+
+Thus, `-Z autoharness` implies `-Z function-contracts` and `-Z loop-contracts`, i.e., opting into the experimental
+autoharness feature means that you are also opting into the function contracts and loop contracts features.
+
 Kani generates and runs these harnesses internally—the user only sees the verification results.
 
+### Options
 The `autoharness` subcommand has options `--include-function` and `--exclude-function` to include and exclude particular functions.
 These flags look for partial matches against the fully qualified name of a function.
 
@@ -112,8 +118,3 @@ Failed Checks: x and y are equal
 
 VERIFICATION:- FAILED
 ```
-
-### Loop Contracts
-If a function contains a loop with a loop contract, Kani will detect the presence of a loop contract and verify that contract.
-If, however, the loop does not have a contract, then there is currently no way to specify an unwinding bound for the function, meaning that Kani may hang as it tries to unwind the loop.
-We recommend using the `--exclude-function` option to exclude any functions that have this issue (or `--harness-timeout` to bail after attempting verification for some amount of time).
