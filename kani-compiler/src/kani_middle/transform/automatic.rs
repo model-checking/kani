@@ -7,21 +7,24 @@
 //! then transform its body to be a harness for that function.
 
 use crate::args::ReachabilityType;
+use crate::kani_middle::attributes::KaniAttributes;
 use crate::kani_middle::codegen_units::CodegenUnit;
-use crate::kani_middle::kani_functions::{KaniIntrinsic, KaniModel};
+use crate::kani_middle::kani_functions::{KaniHook, KaniIntrinsic, KaniModel};
 use crate::kani_middle::transform::body::{InsertPosition, MutableBody, SourceInstruction};
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
 use rustc_middle::ty::TyCtxt;
+use stable_mir::CrateDef;
 use stable_mir::mir::mono::Instance;
-use stable_mir::mir::{Body, Operand, Place, TerminatorKind};
-use stable_mir::ty::{FnDef, GenericArgKind, GenericArgs};
+use stable_mir::mir::{Body, Mutability, Operand, Place, TerminatorKind};
+use stable_mir::ty::{FnDef, GenericArgKind, GenericArgs, RigidTy, Ty};
 use tracing::debug;
 
 #[derive(Debug)]
 pub struct AutomaticHarnessPass {
     /// The FnDef of KaniModel::Any
     kani_any: FnDef,
+    init_contracts_hook: Instance,
     /// All of the automatic harness Instances that we generated in the CodegenUnits constructor
     automatic_harnesses: Vec<Instance>,
 }
@@ -37,6 +40,9 @@ impl AutomaticHarnessPass {
         let kani_fns = query_db.kani_functions();
         let harness_intrinsic = *kani_fns.get(&KaniIntrinsic::AutomaticHarness.into()).unwrap();
         let kani_any = *kani_fns.get(&KaniModel::Any.into()).unwrap();
+        let init_contracts_hook = *kani_fns.get(&KaniHook::InitContracts.into()).unwrap();
+        let init_contracts_hook =
+            Instance::resolve(init_contracts_hook, &GenericArgs(vec![])).unwrap();
         let automatic_harnesses = unit
             .harnesses
             .iter()
@@ -46,7 +52,7 @@ impl AutomaticHarnessPass {
                 def == harness_intrinsic
             })
             .collect::<Vec<_>>();
-        Self { kani_any, automatic_harnesses }
+        Self { kani_any, init_contracts_hook, automatic_harnesses }
     }
 }
 
@@ -65,7 +71,7 @@ impl TransformPass for AutomaticHarnessPass {
         matches!(query_db.args().reachability_analysis, ReachabilityType::AllFns)
     }
 
-    fn transform(&mut self, _tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
+    fn transform(&mut self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
         debug!(function=?instance.name(), "AutomaticHarnessPass::transform");
 
         if !self.automatic_harnesses.contains(&instance) {
@@ -82,6 +88,23 @@ impl TransformPass for AutomaticHarnessPass {
         let mut harness_body = MutableBody::from(body);
         harness_body.clear_body(TerminatorKind::Return);
         let mut source = SourceInstruction::Terminator { bb: 0 };
+
+        // Contract harnesses need a free(NULL) statement, c.f. kani_core::init_contracts().
+        let attrs = KaniAttributes::for_def_id(tcx, def.def_id());
+        if attrs.has_contract() {
+            let ret_local = harness_body.new_local(
+                Ty::from_rigid_kind(RigidTy::Tuple(vec![])),
+                source.span(harness_body.blocks()),
+                Mutability::Not,
+            );
+            harness_body.insert_call(
+                &self.init_contracts_hook,
+                &mut source,
+                InsertPosition::Before,
+                vec![],
+                Place::from(ret_local),
+            );
+        }
 
         let mut arg_locals = vec![];
 

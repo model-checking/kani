@@ -97,7 +97,7 @@ impl CodegenUnits {
                         chosen: chosen.iter().map(|func| func.name()).collect::<BTreeSet<_>>(),
                         skipped,
                     })
-                    .expect("Initializing the autoharness metdata failed");
+                    .expect("Initializing the autoharness metadata failed");
 
                 let automatic_harnesses = get_all_automatic_harnesses(
                     tcx,
@@ -131,6 +131,10 @@ impl CodegenUnits {
 
     pub fn iter(&self) -> impl Iterator<Item = &CodegenUnit> {
         self.units.iter()
+    }
+
+    pub fn is_automatic_harness(&self, harness: &Harness) -> bool {
+        self.harness_info.get(harness).is_some_and(|md| md.is_automatically_generated)
     }
 
     /// We store which instance of modifies was generated.
@@ -340,7 +344,12 @@ fn get_all_automatic_harnesses(
                 &GenericArgs(vec![GenericArgKind::Type(fn_to_verify.ty())]),
             )
             .unwrap();
-            let metadata = gen_automatic_proof_metadata(tcx, &base_filename, &fn_to_verify);
+            let metadata = gen_automatic_proof_metadata(
+                tcx,
+                &base_filename,
+                &fn_to_verify,
+                harness.mangled_name(),
+            );
             (harness, metadata)
         })
         .collect::<HashMap<_, _>>()

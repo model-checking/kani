@@ -1,0 +1,110 @@
+Kani generated automatic harnesses for 7 function(s):
++----------------------------+
+| Selected Function          |
++============================+
+| Duration::abs_diff         |
+|----------------------------|
+| Duration::checked_add      |
+|----------------------------|
+| Duration::checked_sub      |
+|----------------------------|
+| Duration::new              |
+|----------------------------|
+| Nanoseconds                |
+|----------------------------|
+| Nanoseconds::as_inner      |
+|----------------------------|
+| Nanoseconds::new_unchecked |
++----------------------------+
+
+Autoharness: Checking function Nanoseconds::new_unchecked's contract against all possible inputs...
+Nanoseconds::new_unchecked\
+	 - Status: SUCCESS\
+	 - Description: "|nano| nano.is_safe()"
+
+Autoharness: Checking function Duration::checked_sub's contract against all possible inputs...
+Duration::checked_sub\
+	 - Status: SUCCESS\
+	 - Description: "attempt to add with overflow"
+
+Duration::checked_sub\
+	 - Status: SUCCESS\
+	 - Description: "attempt to subtract with overflow"
+
+Nanoseconds::new_unchecked\
+	 - Status: SUCCESS\
+	 - Description: "val < NANOS_PER_SEC"
+
+Duration::checked_sub\
+	 - Status: SUCCESS\
+	 - Description: "|duration| duration.is_none() || duration.unwrap().is_safe()"
+
+Duration::new\
+	 - Status: SUCCESS\
+	 - Description: "|duration| duration.is_safe()"
+
+Autoharness: Checking function Duration::checked_add's contract against all possible inputs...
+Nanoseconds::new_unchecked\
+	 - Status: SUCCESS\
+	 - Description: "val < NANOS_PER_SEC"
+
+Duration::new\
+	 - Status: SUCCESS\
+	 - Description: "|duration| duration.is_safe()"
+
+Duration::checked_add\
+	 - Status: SUCCESS\
+	 - Description: "|duration| duration.is_none() || duration.unwrap().is_safe()"
+
+Duration::checked_add\
+	 - Status: SUCCESS\
+	 - Description: "attempt to add with overflow"
+
+Duration::checked_add\
+	 - Status: SUCCESS\
+	 - Description: "attempt to subtract with overflow"
+
+Autoharness: Checking function Duration::abs_diff against all possible inputs...
+Duration::checked_sub\
+	 - Status: SUCCESS\
+	 - Description: "attempt to subtract with overflow"
+
+Duration::checked_sub\
+	 - Status: SUCCESS\
+	 - Description: "attempt to subtract with overflow"
+
+Autoharness: Checking function Duration::new's contract against all possible inputs...
+Nanoseconds::new_unchecked\
+	 - Status: SUCCESS\
+	 - Description: "val < NANOS_PER_SEC"
+
+Duration::new\
+	 - Status: SUCCESS\
+	 - Description: "|duration| duration.is_safe()"
+
+std::option::expect_failed\
+	 - Status: FAILURE\
+	 - Description: "This is a placeholder message; Kani doesn't support message formatted at runtime"
+
+
+Autoharness Summary:
++----------------------------+-----------------------------+---------------------+
+| Selected Function          | Kind of Automatic Harness   | Verification Result |
++================================================================================+
+| Duration::abs_diff         | #[kani::proof]              | Success             |
+|----------------------------+-----------------------------+---------------------|
+| Duration::checked_add      | #[kani::proof_for_contract] | Success             |
+|----------------------------+-----------------------------+---------------------|
+| Duration::checked_sub      | #[kani::proof_for_contract] | Success             |
+|----------------------------+-----------------------------+---------------------|
+| Nanoseconds                | #[kani::proof]              | Success             |
+|----------------------------+-----------------------------+---------------------|
+| Nanoseconds::as_inner      | #[kani::proof]              | Success             |
+|----------------------------+-----------------------------+---------------------|
+| Nanoseconds::new_unchecked | #[kani::proof_for_contract] | Success             |
+|----------------------------+-----------------------------+---------------------|
+| Duration::new              | #[kani::proof_for_contract] | Failure             |
++----------------------------+-----------------------------+---------------------+
+Note that `kani autoharness` sets default --harness-timeout of 60s and --default-unwind of 20.
+If verification failed because of timing out or too low of an unwinding bound, try passing larger values for these arguments (or, if possible, writing a loop contract).
+Complete - 6 successfully verified functions, 1 failures, 7 total.
