@@ -299,7 +299,7 @@ impl GotocCtx<'_> {
             Intrinsic::Assume => self.codegen_assert_assume(
                 fargs.remove(0).cast_to(Type::bool()),
                 PropertyClass::Assume,
-                "assumption failed",
+                "Rust intrinsic assumption failed",
                 loc,
             ),
             Intrinsic::AtomicAnd(_) => codegen_atomic_binop!(bitand),
