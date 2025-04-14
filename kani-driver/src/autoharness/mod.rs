@@ -7,6 +7,7 @@ use crate::args::Timeout;
 use crate::args::autoharness_args::{
     CargoAutoharnessArgs, CommonAutoharnessArgs, StandaloneAutoharnessArgs,
 };
+use crate::args::common::UnstableFeature;
 use crate::call_cbmc::VerificationStatus;
 use crate::call_single_file::to_rustc_arg;
 use crate::harness_runner::HarnessResult;
@@ -151,6 +152,8 @@ impl KaniSession {
     /// Enable autoharness mode.
     pub fn enable_autoharness(&mut self) {
         self.auto_harness = true;
+        self.args.common_args.unstable_features.enable_feature(UnstableFeature::FunctionContracts);
+        self.args.common_args.unstable_features.enable_feature(UnstableFeature::LoopContracts);
     }
 
     /// Add the compiler arguments specific to the `autoharness` subcommand.

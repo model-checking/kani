@@ -146,7 +146,7 @@ pub enum StandaloneSubcommand {
     VerifyStd(Box<std_args::VerifyStdArgs>),
     /// List contracts and harnesses.
     List(Box<list_args::StandaloneListArgs>),
-    /// Scan the input file for functions eligible for automatic (i.e., harness-free) verification and verify them.
+    /// Create and run harnesses automatically for eligible functions. Implies -Z function-contracts and -Z loop-contracts.
     Autoharness(Box<autoharness_args::StandaloneAutoharnessArgs>),
 }
 
@@ -177,7 +177,7 @@ pub enum CargoKaniSubcommand {
     /// List contracts and harnesses.
     List(Box<list_args::CargoListArgs>),
 
-    /// Scan the crate for functions eligible for automatic (i.e., harness-free) verification and verify them.
+    /// Create and run harnesses automatically for eligible functions. Implies -Z function-contracts and -Z loop-contracts.
     Autoharness(Box<autoharness_args::CargoAutoharnessArgs>),
 }
 
