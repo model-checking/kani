@@ -12,7 +12,7 @@ use crate::kani_middle::transform::TransformationType;
 use crate::kani_middle::transform::body::{InsertPosition, MutableBody, SourceInstruction};
 use crate::kani_queries::QueryDb;
 use crate::stable_mir::CrateDef;
-use rustc_middle::ty::{TyCtxt, print};
+use rustc_middle::ty::TyCtxt;
 use rustc_span::Symbol;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{
@@ -293,7 +293,7 @@ impl LoopContractPass {
                 let GenericArgKind::Type(arg_ty) = genarg.0[2] else { return false };
                 let TyKind::RigidTy(RigidTy::Tuple(args)) = arg_ty.kind() else { return false };
                 //Check if the invariant involve any local variable
-                if args.len() > 0 {
+                if !args.is_empty() {
                     let ori_condition_bb_idx =
                         new_body.blocks()[terminator_target.unwrap()].terminator.successors()[1];
                     self.make_invariant_closure_alive(new_body, ori_condition_bb_idx);
