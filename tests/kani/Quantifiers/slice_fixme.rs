@@ -1,6 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+//! FIXME: <https://github.com/model-checking/kani/issues/4019>
+
 extern crate kani;
 use kani::kani_forall;
 
