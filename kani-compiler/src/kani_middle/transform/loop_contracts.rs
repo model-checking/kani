@@ -165,6 +165,8 @@ impl LoopContractPass {
         ))
     }
 
+    /// This function transform the function body as described in fn transform.
+    /// It is the core of fn transform, and is separated just to avoid code repetition.
     fn transform_body_with_loop(&mut self, tcx: TyCtxt, body: Body) -> (bool, Body) {
         let mut new_body = MutableBody::from(body);
         let mut contain_loop_contracts: bool = false;
