@@ -9,7 +9,6 @@ use crate::args::autoharness_args::{
 };
 use crate::args::common::UnstableFeature;
 use crate::call_cbmc::VerificationStatus;
-use crate::call_single_file::to_rustc_arg;
 use crate::harness_runner::HarnessResult;
 use crate::list::collect_metadata::process_metadata;
 use crate::list::output::output_list_results;
@@ -151,23 +150,21 @@ fn print_skipped_table(table: &mut PrettyTable) {
 impl KaniSession {
     /// Enable autoharness mode.
     pub fn enable_autoharness(&mut self) {
-        self.auto_harness = true;
+        self.autoharness_compiler_flags = Some(vec![]);
         self.args.common_args.unstable_features.enable_feature(UnstableFeature::FunctionContracts);
         self.args.common_args.unstable_features.enable_feature(UnstableFeature::LoopContracts);
     }
 
     /// Add the compiler arguments specific to the `autoharness` subcommand.
-    /// TODO: this should really be appending onto the `kani_compiler_flags()` output instead of `pkg_args`.
-    /// It doesn't affect functionality since autoharness doesn't examine dependencies, but would still be better practice.
     pub fn add_auto_harness_args(&mut self, included: &[String], excluded: &[String]) {
+        let mut args = vec![];
         for func in included {
-            self.pkg_args
-                .push(to_rustc_arg(vec![format!("--autoharness-include-function {}", func)]));
+            args.push(format!("--autoharness-include-function {}", func));
         }
         for func in excluded {
-            self.pkg_args
-                .push(to_rustc_arg(vec![format!("--autoharness-exclude-function {}", func)]));
+            args.push(format!("--autoharness-exclude-function {}", func));
         }
+        self.autoharness_compiler_flags = Some(args);
     }
 
     /// Add global harness timeout and loop unwinding bounds if not provided.
