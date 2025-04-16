@@ -292,7 +292,7 @@ impl LoopContractPass {
                 };
                 let GenericArgKind::Type(arg_ty) = genarg.0[2] else { return false };
                 let TyKind::RigidTy(RigidTy::Tuple(args)) = arg_ty.kind() else { return false };
-                //Check if the invariant involve any local variable
+                // Check if the invariant involves any local variable
                 if !args.is_empty() {
                     let ori_condition_bb_idx =
                         new_body.blocks()[terminator_target.unwrap()].terminator.successors()[1];
