@@ -83,17 +83,20 @@ fn postprocess_project(
 /// Print automatic harness metadata to the terminal.
 fn print_autoharness_metadata(metadata: Vec<KaniMetadata>) {
     let mut chosen_table = PrettyTable::new();
-    chosen_table.set_header(vec!["Selected Function"]);
+    chosen_table.set_header(vec!["Crate", "Selected Function"]);
 
     let mut skipped_table = PrettyTable::new();
-    skipped_table.set_header(vec!["Skipped Function", "Reason for Skipping"]);
+    skipped_table.set_header(vec!["Crate", "Skipped Function", "Reason for Skipping"]);
 
     for md in metadata {
         let autoharness_md = md.autoharness_md.unwrap();
-        chosen_table.add_rows(autoharness_md.chosen.into_iter().map(|func| vec![func]));
+        chosen_table.add_rows(
+            autoharness_md.chosen.into_iter().map(|func| vec![md.crate_name.clone(), func]),
+        );
         skipped_table.add_rows(autoharness_md.skipped.into_iter().filter_map(|(func, reason)| {
             match reason {
                 AutoHarnessSkipReason::MissingArbitraryImpl(ref args) => Some(vec![
+                    md.crate_name.clone(),
                     func,
                     format!(
                         "{reason} {}",
@@ -105,7 +108,9 @@ fn print_autoharness_metadata(metadata: Vec<KaniMetadata>) {
                 ]),
                 AutoHarnessSkipReason::GenericFn
                 | AutoHarnessSkipReason::NoBody
-                | AutoHarnessSkipReason::UserFilter => Some(vec![func, reason.to_string()]),
+                | AutoHarnessSkipReason::UserFilter => {
+                    Some(vec![md.crate_name.clone(), func, reason.to_string()])
+                }
                 // We don't report Kani implementations to the user to avoid exposing Kani functions we insert during instrumentation.
                 // For those we don't insert during instrumentation that are in this category (manual harnesses or Kani trait implementations),
                 // it should be obvious that we wouldn't generate harnesses, so reporting those functions as "skipped" is unlikely to be useful.
@@ -193,6 +198,7 @@ impl KaniSession {
 
         let mut verified_fns = PrettyTable::new();
         verified_fns.set_header(vec![
+            "Crate",
             "Selected Function",
             "Kind of Automatic Harness",
             "Verification Result",
@@ -200,6 +206,7 @@ impl KaniSession {
 
         for success in successes {
             verified_fns.add_row(vec![
+                success.harness.crate_name.clone(),
                 success.harness.pretty_name.clone(),
                 success.harness.attributes.kind.to_string(),
                 success.result.status.to_string(),
@@ -208,6 +215,7 @@ impl KaniSession {
 
         for failure in failures {
             verified_fns.add_row(vec![
+                failure.harness.crate_name.clone(),
                 failure.harness.pretty_name.clone(),
                 failure.harness.attributes.kind.to_string(),
                 failure.result.status.to_string(),
