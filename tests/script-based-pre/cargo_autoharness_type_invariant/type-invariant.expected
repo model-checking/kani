@@ -1,21 +1,21 @@
 Kani generated automatic harnesses for 7 function(s):
-+----------------------------+
-| Selected Function          |
-+============================+
-| Duration::abs_diff         |
-|----------------------------|
-| Duration::checked_add      |
-|----------------------------|
-| Duration::checked_sub      |
-|----------------------------|
-| Duration::new              |
-|----------------------------|
-| Nanoseconds                |
-|----------------------------|
-| Nanoseconds::as_inner      |
-|----------------------------|
-| Nanoseconds::new_unchecked |
-+----------------------------+
++----------------------------------+----------------------------+
+| Crate                            | Selected Function          |
++===============================================================+
+| cargo_autoharness_type_invariant | Duration::abs_diff         |
+|----------------------------------+----------------------------|
+| cargo_autoharness_type_invariant | Duration::checked_add      |
+|----------------------------------+----------------------------|
+| cargo_autoharness_type_invariant | Duration::checked_sub      |
+|----------------------------------+----------------------------|
+| cargo_autoharness_type_invariant | Duration::new              |
+|----------------------------------+----------------------------|
+| cargo_autoharness_type_invariant | Nanoseconds                |
+|----------------------------------+----------------------------|
+| cargo_autoharness_type_invariant | Nanoseconds::as_inner      |
+|----------------------------------+----------------------------|
+| cargo_autoharness_type_invariant | Nanoseconds::new_unchecked |
++----------------------------------+----------------------------+
 
 Autoharness: Checking function Nanoseconds::new_unchecked's contract against all possible inputs...
 Nanoseconds::new_unchecked\
@@ -88,23 +88,23 @@ std::option::expect_failed\
 
 
 Autoharness Summary:
-+----------------------------+-----------------------------+---------------------+
-| Selected Function          | Kind of Automatic Harness   | Verification Result |
-+================================================================================+
-| Duration::abs_diff         | #[kani::proof]              | Success             |
-|----------------------------+-----------------------------+---------------------|
-| Duration::checked_add      | #[kani::proof_for_contract] | Success             |
-|----------------------------+-----------------------------+---------------------|
-| Duration::checked_sub      | #[kani::proof_for_contract] | Success             |
-|----------------------------+-----------------------------+---------------------|
-| Nanoseconds                | #[kani::proof]              | Success             |
-|----------------------------+-----------------------------+---------------------|
-| Nanoseconds::as_inner      | #[kani::proof]              | Success             |
-|----------------------------+-----------------------------+---------------------|
-| Nanoseconds::new_unchecked | #[kani::proof_for_contract] | Success             |
-|----------------------------+-----------------------------+---------------------|
-| Duration::new              | #[kani::proof_for_contract] | Failure             |
-+----------------------------+-----------------------------+---------------------+
++----------------------------------+----------------------------+-----------------------------+---------------------+
+| Crate                            | Selected Function          | Kind of Automatic Harness   | Verification Result |
++===================================================================================================================+
+| cargo_autoharness_type_invariant | Duration::abs_diff         | #[kani::proof]              | Success             |
+|----------------------------------+----------------------------+-----------------------------+---------------------|
+| cargo_autoharness_type_invariant | Duration::checked_add      | #[kani::proof_for_contract] | Success             |
+|----------------------------------+----------------------------+-----------------------------+---------------------|
+| cargo_autoharness_type_invariant | Duration::checked_sub      | #[kani::proof_for_contract] | Success             |
+|----------------------------------+----------------------------+-----------------------------+---------------------|
+| cargo_autoharness_type_invariant | Nanoseconds                | #[kani::proof]              | Success             |
+|----------------------------------+----------------------------+-----------------------------+---------------------|
+| cargo_autoharness_type_invariant | Nanoseconds::as_inner      | #[kani::proof]              | Success             |
+|----------------------------------+----------------------------+-----------------------------+---------------------|
+| cargo_autoharness_type_invariant | Nanoseconds::new_unchecked | #[kani::proof_for_contract] | Success             |
+|----------------------------------+----------------------------+-----------------------------+---------------------|
+| cargo_autoharness_type_invariant | Duration::new              | #[kani::proof_for_contract] | Failure             |
++----------------------------------+----------------------------+-----------------------------+---------------------+
 Note that `kani autoharness` sets default --harness-timeout of 60s and --default-unwind of 20.
 If verification failed because of timing out or too low of an unwinding bound, try passing larger values for these arguments (or, if possible, writing a loop contract).
 Complete - 6 successfully verified functions, 1 failures, 7 total.

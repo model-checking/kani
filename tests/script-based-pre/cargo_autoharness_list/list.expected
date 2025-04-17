@@ -1,13 +1,13 @@
 Kani generated automatic harnesses for 3 function(s):
-+---------------------------+
-| Selected Function         |
-+===========================+
-| f_u8                      |
-|---------------------------|
-| has_recursion_gcd         |
-|---------------------------|
-| verify::has_recursion_gcd |
-+---------------------------+
++------------------------+---------------------------+
+| Crate                  | Selected Function         |
++====================================================+
+| cargo_autoharness_list | f_u8                      |
+|------------------------+---------------------------|
+| cargo_autoharness_list | has_recursion_gcd         |
+|------------------------+---------------------------|
+| cargo_autoharness_list | verify::has_recursion_gcd |
++------------------------+---------------------------+
 
 Skipped Functions: None. Kani generated automatic harnesses for all functions in the available crate(s).
 
