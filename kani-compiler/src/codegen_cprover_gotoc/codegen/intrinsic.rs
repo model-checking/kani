@@ -564,7 +564,7 @@ impl GotocCtx<'_> {
             self.intrinsics_typecheck_fail(span, "ctpop", "integer type", arg_rust_ty)
         } else {
             let loc = self.codegen_span_stable(span);
-            self.codegen_expr_to_place_stable(&target_place, arg.popcount(), loc)
+            self.codegen_expr_to_place_stable(target_place, arg.popcount(), loc)
         }
     }
 

@@ -9,10 +9,10 @@
 #![feature(proc_macro_hygiene)]
 
 #[kani::proof]
-fn main(){
+fn main() {
     let mut i = 100;
     #[kani::loop_invariant(true)]
     while i > 1 {
         i /= 2;
-    } 
+    }
 }

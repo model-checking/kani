@@ -953,7 +953,7 @@ pub fn ty_validity_per_offset(
             Ok(result)
         }
         FieldsShape::Arbitrary { ref offsets } => {
-            match ty.kind().rigid().expect(&format!("unexpected type: {ty:?}")) {
+            match ty.kind().rigid().unwrap_or_else(|| panic!("unexpected type: {ty:?}")) {
                 RigidTy::Adt(def, args) => {
                     match def.kind() {
                         AdtKind::Enum => {
@@ -967,7 +967,7 @@ pub fn ty_validity_per_offset(
                                     let mut fields_validity = vec![];
                                     for idx in layout.fields.fields_by_offset_order() {
                                         let field_offset = offsets[idx].bytes();
-                                        let field_ty = fields[idx].ty_with_args(&args);
+                                        let field_ty = fields[idx].ty_with_args(args);
                                         fields_validity.append(&mut ty_validity_per_offset(
                                             machine_info,
                                             field_ty,
@@ -989,7 +989,7 @@ pub fn ty_validity_per_offset(
                                         let fields = ty_variants[index].fields();
                                         for field_idx in variant.fields.fields_by_offset_order() {
                                             let field_offset = offsets[field_idx].bytes();
-                                            let field_ty = fields[field_idx].ty_with_args(&args);
+                                            let field_ty = fields[field_idx].ty_with_args(args);
                                             fields_validity.append(&mut ty_validity_per_offset(
                                                 machine_info,
                                                 field_ty,
@@ -1015,7 +1015,7 @@ pub fn ty_validity_per_offset(
                             let fields = def.variants_iter().next().unwrap().fields();
                             for idx in layout.fields.fields_by_offset_order() {
                                 let field_offset = offsets[idx].bytes();
-                                let field_ty = fields[idx].ty_with_args(&args);
+                                let field_ty = fields[idx].ty_with_args(args);
                                 struct_validity.append(&mut ty_validity_per_offset(
                                     machine_info,
                                     field_ty,

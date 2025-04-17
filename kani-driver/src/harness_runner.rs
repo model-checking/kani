@@ -72,12 +72,12 @@ impl<'pr> HarnessRunner<'_, 'pr> {
                 .enumerate()
                 .map(|(idx, harness)| -> Result<HarnessResult<'pr>> {
                     let goto_file =
-                        self.project.get_harness_artifact(&harness, ArtifactType::Goto).unwrap();
+                        self.project.get_harness_artifact(harness, ArtifactType::Goto).unwrap();
 
-                    self.sess.instrument_model(goto_file, goto_file, &self.project, &harness)?;
+                    self.sess.instrument_model(goto_file, goto_file, self.project, harness)?;
 
                     if self.sess.args.synthesize_loop_contracts {
-                        self.sess.synthesize_loop_contracts(goto_file, &goto_file, &harness)?;
+                        self.sess.synthesize_loop_contracts(goto_file, goto_file, harness)?;
                     }
 
                     let result = self.sess.check_harness(goto_file, harness)?;

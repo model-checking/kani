@@ -50,9 +50,9 @@ pub fn expand_derive_arbitrary(item: proc_macro::TokenStream) -> proc_macro::Tok
     let item_name = &derive_item.ident;
     let kani_path = kani_path!();
 
-    let body = fn_any_body(&item_name, &derive_item.data);
+    let body = fn_any_body(item_name, &derive_item.data);
     // Get the safety constraints (if any) to produce type-safe values
-    let safety_conds_opt = safety_conds_opt(&item_name, &derive_item, trait_name);
+    let safety_conds_opt = safety_conds_opt(item_name, &derive_item, trait_name);
 
     // Add a bound `T: Arbitrary` to every type parameter T.
     let generics = add_trait_bound_arbitrary(derive_item.generics);
@@ -60,7 +60,7 @@ pub fn expand_derive_arbitrary(item: proc_macro::TokenStream) -> proc_macro::Tok
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
     let expanded = if let Some(safety_conds) = safety_conds_opt {
-        let field_refs = field_refs(&item_name, &derive_item.data);
+        let field_refs = field_refs(item_name, &derive_item.data);
         quote! {
             // The generated implementation.
             impl #impl_generics #kani_path::Arbitrary for #item_name #ty_generics #where_clause {
@@ -399,8 +399,8 @@ fn safe_body_with_calls(
     derive_input: &DeriveInput,
     trait_name: &str,
 ) -> TokenStream {
-    let safety_conds_opt = safety_conds_opt(&item_name, &derive_input, trait_name);
-    let safe_body_default = safe_body_default(&item_name, &derive_input.data);
+    let safety_conds_opt = safety_conds_opt(item_name, derive_input, trait_name);
+    let safe_body_default = safe_body_default(item_name, &derive_input.data);
 
     if let Some(safety_conds) = safety_conds_opt {
         quote! { #safe_body_default && #safety_conds }
@@ -415,8 +415,8 @@ pub fn expand_derive_invariant(item: proc_macro::TokenStream) -> proc_macro::Tok
     let item_name = &derive_item.ident;
     let kani_path = kani_path!();
 
-    let safe_body = safe_body_with_calls(&item_name, &derive_item, trait_name);
-    let field_refs = field_refs(&item_name, &derive_item.data);
+    let safe_body = safe_body_with_calls(item_name, &derive_item, trait_name);
+    let field_refs = field_refs(item_name, &derive_item.data);
 
     // Add a bound `T: Invariant` to every type parameter T.
     let generics = add_trait_bound_invariant(derive_item.generics);
@@ -446,9 +446,9 @@ fn safety_conds_opt(
     trait_name: &str,
 ) -> Option<TokenStream> {
     let has_item_safety_constraint =
-        has_item_safety_constraint(&item_name, &derive_input, trait_name);
+        has_item_safety_constraint(item_name, derive_input, trait_name);
 
-    let has_field_safety_constraints = has_field_safety_constraints(&item_name, &derive_input.data);
+    let has_field_safety_constraints = has_field_safety_constraints(item_name, &derive_input.data);
 
     if has_item_safety_constraint && has_field_safety_constraints {
         abort!(Span::call_site(), "Cannot derive `{}` for `{}`", trait_name, item_name;
@@ -458,9 +458,9 @@ fn safety_conds_opt(
     }
 
     if has_item_safety_constraint {
-        Some(safe_body_from_struct_attr(&item_name, &derive_input, trait_name))
+        Some(safe_body_from_struct_attr(item_name, derive_input, trait_name))
     } else if has_field_safety_constraints {
-        Some(safe_body_from_fields_attr(&item_name, &derive_input.data, trait_name))
+        Some(safe_body_from_fields_attr(item_name, &derive_input.data, trait_name))
     } else {
         None
     }

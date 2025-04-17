@@ -222,7 +222,7 @@ impl OverallStats {
                 .map(|def| {
                     (
                         def.name(),
-                        if recursions.recursive_fns.contains(&def) { "recursive" } else { "" },
+                        if recursions.recursive_fns.contains(def) { "recursive" } else { "" },
                     )
                 })
                 .collect::<Vec<_>>(),
