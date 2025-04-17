@@ -317,7 +317,7 @@ fn get_all_manual_harnesses(
     harnesses
         .into_iter()
         .map(|harness| {
-            let metadata = gen_proof_metadata(tcx, harness, &base_filename);
+            let metadata = gen_proof_metadata(tcx, harness, base_filename);
             (harness, metadata)
         })
         .collect::<HashMap<_, _>>()
@@ -346,7 +346,7 @@ fn get_all_automatic_harnesses(
             .unwrap();
             let metadata = gen_automatic_proof_metadata(
                 tcx,
-                &base_filename,
+                base_filename,
                 &fn_to_verify,
                 harness.mangled_name(),
             );
@@ -416,7 +416,7 @@ fn automatic_harness_partition(
                 &kani_any_body.blocks[0].terminator.kind
             {
                 if let Some((def, args)) = func.ty(body.arg_locals()).unwrap().kind().fn_def() {
-                    Instance::resolve(def, &args).is_ok()
+                    Instance::resolve(def, args).is_ok()
                 } else {
                     false
                 }

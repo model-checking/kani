@@ -956,12 +956,12 @@ mod tests {
     }
 
     fn check(args: &str, feature: Option<UnstableFeature>, pred: fn(StandaloneArgs) -> bool) {
-        let mut res = parse_unstable_disabled(&args);
+        let mut res = parse_unstable_disabled(args);
         if let Some(unstable) = feature {
             // Should fail without -Z unstable-options.
             assert_eq!(res.unwrap_err().kind(), ErrorKind::MissingRequiredArgument);
             // Should succeed with -Z unstable-options.
-            res = parse_unstable_enabled(&args, unstable);
+            res = parse_unstable_enabled(args, unstable);
         }
         assert!(res.is_ok());
         assert!(pred(res.unwrap()));

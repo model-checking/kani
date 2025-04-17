@@ -731,7 +731,7 @@ impl GotocCtx<'_> {
                     }
                 }
             }
-            AggregateKind::Coroutine(_, _, _) => self.codegen_rvalue_coroutine(&operands, res_ty),
+            AggregateKind::Coroutine(_, _, _) => self.codegen_rvalue_coroutine(operands, res_ty),
             AggregateKind::CoroutineClosure(_, _) => {
                 let ty = self.codegen_ty_stable(res_ty);
                 self.codegen_unimplemented_expr(
@@ -751,10 +751,10 @@ impl GotocCtx<'_> {
             Rvalue::Use(p) => self.codegen_operand_stable(p),
             Rvalue::Repeat(op, sz) => self.codegen_rvalue_repeat(op, sz, loc),
             Rvalue::Ref(_, _, p) | Rvalue::AddressOf(_, p) => {
-                let place_ref = self.codegen_place_ref_stable(&p, loc);
+                let place_ref = self.codegen_place_ref_stable(p, loc);
                 let place_ref_type = place_ref.typ().clone();
                 match self.codegen_raw_ptr_deref_validity_check(
-                    &p,
+                    p,
                     place_ref.clone(),
                     self.place_ty_stable(p),
                     &loc,

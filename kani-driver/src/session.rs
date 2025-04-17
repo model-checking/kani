@@ -213,7 +213,7 @@ async fn run_terminal_timeout(
         cmd.stderr(std::process::Stdio::null());
     }
     if verbosity.verbose() {
-        println!("[Kani] Running: `{}`", render_command(&cmd.as_std()).to_string_lossy());
+        println!("[Kani] Running: `{}`", render_command(cmd.as_std()).to_string_lossy());
     }
     let program = cmd.as_std().get_program().to_string_lossy().to_string();
     let result = with_timer(

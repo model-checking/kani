@@ -59,10 +59,8 @@ impl GotocCtx<'_> {
                     let arg = parse_word(attr).expect(
                         "incorrect value passed to `disable_checks`, expected a single identifier",
                     );
-                    *PRAGMAS.get(arg.as_str()).expect(format!(
-                        "attempting to disable an unexisting check, the possible options are {:?}",
-                        PRAGMAS.keys()
-                    ).as_str())
+                    *PRAGMAS.get(arg.as_str()).unwrap_or_else(|| panic!("attempting to disable an unexisting check, the possible options are {:?}",
+                        PRAGMAS.keys()))
                 })
                 .collect::<Vec<_>>()
                 .leak() // This is to preserve `Location` being Copy, but could blow up the memory utilization of compiler. 

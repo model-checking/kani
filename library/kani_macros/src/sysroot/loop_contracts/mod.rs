@@ -105,12 +105,7 @@ struct CallReplacer {
 // This impl replaces any function call of a function name : old_name with a newly generated variable.
 impl CallReplacer {
     fn new(old_name: &str, var_prefix: String) -> Self {
-        Self {
-            old_name: old_name.to_string(),
-            replacements: Vec::new(),
-            counter: 0,
-            var_prefix: var_prefix,
-        }
+        Self { old_name: old_name.to_string(), replacements: Vec::new(), counter: 0, var_prefix }
     }
 
     fn generate_var_name(&mut self) -> proc_macro2::Ident {
@@ -162,12 +157,9 @@ fn transform_function_calls(
 
     let mut newreplace: Vec<(Expr, Ident)> = Vec::new();
     for (call, var) in replacer.replacements {
-        match call {
-            Expr::Call(call_expr) => {
-                let insideexpr = call_expr.args[0].clone();
-                newreplace.push((insideexpr, var.clone()));
-            }
-            _ => {}
+        if let Expr::Call(call_expr) = call {
+            let insideexpr = call_expr.args[0].clone();
+            newreplace.push((insideexpr, var.clone()));
         }
     }
 

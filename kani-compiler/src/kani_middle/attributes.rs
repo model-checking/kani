@@ -357,19 +357,19 @@ impl<'tcx> KaniAttributes<'tcx> {
             }
             match kind {
                 KaniAttributeKind::ShouldPanic => {
-                    expect_single(self.tcx, kind, &attrs);
+                    expect_single(self.tcx, kind, attrs);
                     attrs.iter().for_each(|attr| {
                         expect_no_args(self.tcx, kind, attr);
                     })
                 }
                 KaniAttributeKind::Recursion => {
-                    expect_single(self.tcx, kind, &attrs);
+                    expect_single(self.tcx, kind, attrs);
                     attrs.iter().for_each(|attr| {
                         expect_no_args(self.tcx, kind, attr);
                     })
                 }
                 KaniAttributeKind::Solver => {
-                    expect_single(self.tcx, kind, &attrs);
+                    expect_single(self.tcx, kind, attrs);
                     attrs.iter().for_each(|attr| {
                         parse_solver(self.tcx, attr);
                     })
@@ -378,7 +378,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                     parse_stubs(self.tcx, self.item, attrs);
                 }
                 KaniAttributeKind::Unwind => {
-                    expect_single(self.tcx, kind, &attrs);
+                    expect_single(self.tcx, kind, attrs);
                     attrs.iter().for_each(|attr| {
                         parse_unwind(self.tcx, attr);
                     })
@@ -389,7 +389,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                             "`proof` and `proof_for_contract` may not be used on the same function.".to_string(),
                         );
                     }
-                    expect_single(self.tcx, kind, &attrs);
+                    expect_single(self.tcx, kind, attrs);
                     attrs.iter().for_each(|attr| self.check_proof_attribute(kind, attr))
                 }
                 KaniAttributeKind::Unstable => attrs.iter().for_each(|attr| {
@@ -401,7 +401,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                             "`proof` and `proof_for_contract` may not be used on the same function.".to_string(),
                         );
                     }
-                    expect_single(self.tcx, kind, &attrs);
+                    expect_single(self.tcx, kind, attrs);
                     attrs.iter().for_each(|attr| self.check_proof_attribute(kind, attr))
                 }
                 KaniAttributeKind::StubVerified => {
@@ -721,7 +721,7 @@ pub fn test_harness_name(tcx: TyCtxt, def: &impl CrateDef) -> String {
     let def_id = rustc_internal::internal(tcx, def.def_id());
     let attrs = tcx.get_attrs_unchecked(def_id);
     let marker = attr::find_by_name(attrs, rustc_span::symbol::sym::rustc_test_marker).unwrap();
-    parse_str_value(&marker).unwrap()
+    parse_str_value(marker).unwrap()
 }
 
 /// Expect the contents of this attribute to be of the format #[attribute =
@@ -749,9 +749,9 @@ fn expect_single<'a>(
     kind: KaniAttributeKind,
     attributes: &'a Vec<&'a Attribute>,
 ) -> &'a Attribute {
-    let attr = attributes
-        .first()
-        .expect(&format!("expected at least one attribute {} in {attributes:?}", kind.as_ref()));
+    let attr = attributes.first().unwrap_or_else(|| {
+        panic!("expected at least one attribute {} in {attributes:?}", kind.as_ref())
+    });
     if attributes.len() > 1 {
         tcx.dcx().span_err(
             attr.span(),
@@ -1061,7 +1061,7 @@ fn syn_attr(tcx: TyCtxt, attr: &Attribute) -> syn::Attribute {
 /// Parse a stable attribute using `syn`.
 fn syn_attr_stable(attr: &AttributeStable) -> syn::Attribute {
     let parser = syn::Attribute::parse_outer;
-    parser.parse_str(&attr.as_str()).unwrap().pop().unwrap()
+    parser.parse_str(attr.as_str()).unwrap().pop().unwrap()
 }
 
 /// Return a more user-friendly string for path by trying to remove unneeded whitespace.

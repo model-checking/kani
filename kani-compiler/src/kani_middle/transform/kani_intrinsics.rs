@@ -240,7 +240,7 @@ impl IntrinsicGeneratorPass {
                             *pointee_info.ty(),
                         );
                         let layout_operand =
-                            mk_layout_operand(&mut new_body, &mut statements, &mut source, &layout);
+                            mk_layout_operand(&mut new_body, &mut statements, &mut source, layout);
 
                         let terminator = Terminator {
                             kind: TerminatorKind::Call {
@@ -283,7 +283,7 @@ impl IntrinsicGeneratorPass {
                             &mut new_body,
                             &mut statements,
                             &mut source,
-                            &element_layout,
+                            element_layout,
                         );
                         let terminator = Terminator {
                             kind: TerminatorKind::Call {
@@ -314,7 +314,7 @@ impl IntrinsicGeneratorPass {
                             &mut source,
                             InsertPosition::Before,
                             None,
-                            &reason,
+                            reason,
                         );
                     }
                     PointeeLayout::Union { .. } => {
@@ -326,7 +326,7 @@ impl IntrinsicGeneratorPass {
                             &mut source,
                             InsertPosition::Before,
                             None,
-                            &reason,
+                            reason,
                         );
                     }
                 };
@@ -565,7 +565,7 @@ impl IntrinsicGeneratorPass {
     fn return_model(
         &mut self,
         new_body: &mut MutableBody,
-        mut source: &mut SourceInstruction,
+        source: &mut SourceInstruction,
         model: KaniModel,
         args: &GenericArgs,
         operands: Vec<Operand>,
@@ -574,7 +574,7 @@ impl IntrinsicGeneratorPass {
         let size_of_dyn = Instance::resolve(*def, args).unwrap();
         new_body.insert_call(
             &size_of_dyn,
-            &mut source,
+            source,
             InsertPosition::Before,
             operands,
             Place::from(RETURN_LOCAL),
