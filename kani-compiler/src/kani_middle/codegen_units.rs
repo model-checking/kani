@@ -394,12 +394,34 @@ fn automatic_harness_partition(
             return Some(AutoHarnessSkipReason::KaniImpl);
         }
 
-        if (!args.autoharness_included_functions.is_empty()
-            && !filter_contains(&name, &args.autoharness_included_functions))
-            || (!args.autoharness_excluded_functions.is_empty()
-                && filter_contains(&name, &args.autoharness_excluded_functions))
-        {
-            return Some(AutoHarnessSkipReason::UserFilter);
+        match (
+            args.autoharness_included_patterns.is_empty(),
+            args.autoharness_excluded_patterns.is_empty(),
+        ) {
+            // If no filters were specified, then continue.
+            (true, true) => {}
+            // If only --exclude-pattern was provided, filter out the function if excluded_patterns contains its name.
+            (true, false) => {
+                if filter_contains(&name, &args.autoharness_excluded_patterns) {
+                    return Some(AutoHarnessSkipReason::UserFilter);
+                }
+            }
+            // If only --include-pattern was provided, filter out the function if included_patterns does not contain its name.
+            (false, true) => {
+                if !filter_contains(&name, &args.autoharness_included_patterns) {
+                    return Some(AutoHarnessSkipReason::UserFilter);
+                }
+            }
+            // If both are specified, filter out the function if included_patterns does not contain its name.
+            // Then, filter out any functions that excluded_patterns does match.
+            // This order is important, since it preserves the semantics described in kani_driver::autoharness_args where exclude takes precedence over include.
+            (false, false) => {
+                if !filter_contains(&name, &args.autoharness_included_patterns)
+                    || filter_contains(&name, &args.autoharness_excluded_patterns)
+                {
+                    return Some(AutoHarnessSkipReason::UserFilter);
+                }
+            }
         }
 
         // Each argument of `instance` must implement Arbitrary.

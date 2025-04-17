@@ -43,16 +43,16 @@ autoharness feature means that you are also opting into the function contracts a
 Kani generates and runs these harnesses internally—the user only sees the verification results.
 
 ### Options
-The `autoharness` subcommand has options `--include-function` and `--exclude-function` to include and exclude particular functions.
+The `autoharness` subcommand has options `--include-pattern` and `--exclude-pattern` to include and exclude particular functions.
 These flags look for partial matches against the fully qualified name of a function.
 
 For example, if a module `my_module` has many functions, but we are only interested in `my_module::foo` and `my_module::bar`, we can run:
 ```
-cargo run autoharness -Z autoharness --include-function foo --include-function bar
+cargo run autoharness -Z autoharness --include-pattern foo --include-pattern bar
 ```
 To exclude `my_module` entirely, run:
 ```
-cargo run autoharness -Z autoharness --exclude-function my_module
+cargo run autoharness -Z autoharness --exclude-pattern my_module
 ```
 
 ## Example

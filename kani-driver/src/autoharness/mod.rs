@@ -55,8 +55,8 @@ fn setup_session(session: &mut KaniSession, common_autoharness_args: &CommonAuto
     session.enable_autoharness();
     session.add_default_bounds();
     session.add_auto_harness_args(
-        &common_autoharness_args.include_function,
-        &common_autoharness_args.exclude_function,
+        &common_autoharness_args.include_pattern,
+        &common_autoharness_args.exclude_pattern,
     );
 }
 
@@ -163,11 +163,11 @@ impl KaniSession {
     /// Add the compiler arguments specific to the `autoharness` subcommand.
     pub fn add_auto_harness_args(&mut self, included: &[String], excluded: &[String]) {
         let mut args = vec![];
-        for func in included {
-            args.push(format!("--autoharness-include-function {}", func));
+        for pattern in included {
+            args.push(format!("--autoharness-include-pattern {}", pattern));
         }
-        for func in excluded {
-            args.push(format!("--autoharness-exclude-function {}", func));
+        for pattern in excluded {
+            args.push(format!("--autoharness-exclude-pattern {}", pattern));
         }
         self.autoharness_compiler_flags = Some(args);
     }
