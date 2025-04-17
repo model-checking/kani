@@ -12,88 +12,82 @@ use syn::token::AndAnd;
 use syn::{BinOp, Block, Expr, ExprBinary, Ident, Stmt, parse_quote, visit_mut::VisitMut};
 
 /*
-Transform the loop to support on_entry(expr) : the value of expr before entering the loop
-1. For each on_entry(expr) in the loop variant, replace it with a newly generated "memory" variable old_k
-2. Add the declaration of i before the loop: let old_k = expr
-For example:
-#[kani::loop_invariant(on_entry(x+y) = x + y -1)]
-while(....)
+    Transform the loop to support on_entry(expr) : the value of expr before entering the loop
+    1. For each on_entry(expr) in the loop variant, replace it with a newly generated "memory" variable old_k
+    2. Add the declaration of i before the loop: let old_k = expr
+    For example:
+    #[kani::loop_invariant(on_entry(x+y) = x + y -1)]
+    while(....)
 
-is transformed into
-let old_1 = x + y
-#[kani::loop_invariant(old_1 = x + y -1)]
-while(....)
+    is transformed into
+    let old_1 = x + y
+    #[kani::loop_invariant(old_1 = x + y -1)]
+    while(....)
 
-Then the loop_invartiant is transformed
+    Then the loop_invartiant is transformed.
 
-*/
+    Transform the loop to support prev(expr) : the value of expr at the end of the previous iteration
+    Semantic: If the loop has at least 1 iteration: prev(expr) is the value of expr at the end of the previous iteration. Otherwise, just remove the loop (without check for the invariant too).
 
-/*
-Transform the loop to support prev(expr) : the value of expr at the end of the previous iteration
-Semantic: If the loop has at least 1 iteration: prev(expr) is the value of expr at the end of the previous iteration. Otherwise, just remove the loop (without check for the invariant too).
+    Transformation: basically, if the loop has at least 1 iteration (loop_quard is satisfied at the beginning), we unfold the loop once, declare the variables for prev values and update them at the beginning of the loop body.
+    Otherwise, we remove the loop.
+    If there is a prev(expr) in the loop_invariant:
+    1. Firstly, add an if block whose condition is the loop_quard, inside its body add/do the followings:
+    2. For each prev(expr) in the loop variant, replace it with a newly generated "memory" variable prev_k
+    3. Add the declaration of prev_k before the loop: let mut prev_k = expr
+    4. Define a mut closure whose body is exactly the loop body, but replace all continue/break statements with return true/false statements,
+            then add a final return true statement at the end of it
+    5. Add an if statement with condition to be the that closure's call (the same as run the loop once):
+        True block: add the loop with expanded macros (see next section) and inside the loop body:
+            add the assignment statements (exactly the same as the declarations without the "let mut") on the top to update the "memory" variables
+        Else block: Add the assertion for the loop_invariant (not includes the loop_quard): check if the loop_invariant holds after the first iteration.
 
-Transformation: basically, if the loop has at least 1 iteration (loop_quard is satisfied at the beginning), we unfold the loop once, declare the variables for prev values and update them at the beginning of the loop body.
-Otherwise, we remove the loop.
-If there is a prev(expr) in the loop_invariant:
-1. Firstly, add an if block whose condition is the loop_quard, inside its body add/do the followings:
-2. For each prev(expr) in the loop variant, replace it with a newly generated "memory" variable prev_k
-3. Add the declaration of prev_k before the loop: let mut prev_k = expr
-4. Define a mut closure whose body is exactly the loop body, but replace all continue/break statements with return true/false statements,
-        then add a final return true statement at the end of it
-5. Add an if statement with condition to be the that closure's call (the same as run the loop once):
-    True block: add the loop with expanded macros (see next section) and inside the loop body:
-        add the assignment statements (exactly the same as the declarations without the "let mut") on the top to update the "memory" variables
-    Else block: Add the assertion for the loop_invariant (not includes the loop_quard): check if the loop_invariant holds after the first iteration.
-
-For example:
-#[kani::loop_invariant(prev(x+y) = x + y -1 && ...)]
-while(loop_guard)
-{
-    loop_body
-}
-
-is transformed into
-
-assert!(loop_guard);
-let mut prev_1 = x + y;
-let mut loop_body_closure = || {
-    loop_body_replaced //replace breaks/continues in loop_body with returns
-};
-if loop_body_closure(){
-    #[kani::loop_invariant(prev_1  = x + y -1)]
+    For example:
+    #[kani::loop_invariant(prev(x+y) = x + y -1 && ...)]
     while(loop_guard)
     {
-        prev_1 = x + y;
         loop_body
     }
-}
-else{
-    assert!(prev_1 = x + y -1 && ...);
-}
 
+    is transformed into
 
+    assert!(loop_guard);
+    let mut prev_1 = x + y;
+    let mut loop_body_closure = || {
+        loop_body_replaced //replace breaks/continues in loop_body with returns
+    };
+    if loop_body_closure(){
+        #[kani::loop_invariant(prev_1  = x + y -1)]
+        while(loop_guard)
+        {
+            prev_1 = x + y;
+            loop_body
+        }
+    }
+    else{
+        assert!(prev_1 = x + y -1 && ...);
+    }
+
+    Finally, expand the loop contract macro.
+
+    A while loop of the form
+    ``` rust
+     while guard {
+         body
+     }
+    ```
+    will be annotated as
+    ``` rust
+    #[inline(never)]
+    #[kanitool::fn_marker = "kani_register_loop_contract"]
+    const fn kani_register_loop_contract_id<T, F: FnOnce() -> T>(f: F) -> T {
+        unreachable!()
+    }
+     while kani_register_loop_contract_id(|| -> bool {inv};) && guard {
+         body
+     }
+    ```
 */
-
-/// After that:
-/// Expand loop contracts macros.
-///
-/// A while loop of the form
-/// ``` rust
-///  while guard {
-///      body
-///  }
-/// ```
-/// will be annotated as
-/// ``` rust
-/// #[inline(never)]
-/// #[kanitool::fn_marker = "kani_register_loop_contract"]
-/// const fn kani_register_loop_contract_id<T, F: FnOnce() -> T>(f: F) -> T {
-///     unreachable!()
-/// }
-///  while kani_register_loop_contract_id(|| -> bool {inv};) && guard {
-///      body
-///  }
-/// ```
 
 struct TransformationResult {
     transformed_expr: Expr,
@@ -230,11 +224,9 @@ fn transform_break_continue(block: &mut Block) {
         return (true, None);
     };
     // Add semicolon to the last statement if it's an expression without semicolon
-    if let Some(last_stmt) = block.stmts.last_mut() {
-        if let Stmt::Expr(expr, ref mut semi) = last_stmt {
-            if semi.is_none() {
-                *semi = Some(Default::default());
-            }
+    if let Some(Stmt::Expr(_, ref mut semi)) = block.stmts.last_mut() {
+        if semi.is_none() {
+            *semi = Some(Default::default());
         }
     }
     block.stmts.push(return_stmt);
