@@ -222,7 +222,9 @@ impl KaniSession {
             ]);
         }
 
-        println!("{verified_fns}");
+        if total > 0 {
+            println!("{verified_fns}");
+        }
 
         if failing > 0 {
             println!(
