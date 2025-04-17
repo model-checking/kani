@@ -90,6 +90,7 @@ impl CodegenUnits {
                 let (chosen, skipped) = automatic_harness_partition(
                     tcx,
                     args,
+                    &crate_info.name,
                     *kani_fns.get(&KaniModel::Any.into()).unwrap(),
                 );
                 AUTOHARNESS_MD
@@ -360,6 +361,7 @@ fn get_all_automatic_harnesses(
 fn automatic_harness_partition(
     tcx: TyCtxt,
     args: &Arguments,
+    crate_name: &str,
     kani_any_def: FnDef,
 ) -> (Vec<Instance>, BTreeMap<String, AutoHarnessSkipReason>) {
     // If `filter_list` contains `name`, either as an exact match or a substring.
@@ -384,7 +386,8 @@ fn automatic_harness_partition(
             return Some(AutoHarnessSkipReason::NoBody);
         }
 
-        let name = instance.name();
+        // Preprend the crate name so that users can filter out entire crates using the existing function filter flags.
+        let name = format!("{crate_name}::{}", instance.name());
         let body = instance.body().unwrap();
 
         if is_proof_harness(tcx, instance)
