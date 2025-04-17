@@ -298,11 +298,11 @@ impl KaniSession {
             self.show_coverage_summary()?;
         }
 
-        if self.auto_harness {
+        if self.autoharness_compiler_flags.is_some() {
             self.print_autoharness_summary(automatic)?;
         }
 
-        if failing > 0 && !self.auto_harness {
+        if failing > 0 && self.autoharness_compiler_flags.is_none() {
             // Failure exit code without additional error message
             drop(self);
             std::process::exit(1);

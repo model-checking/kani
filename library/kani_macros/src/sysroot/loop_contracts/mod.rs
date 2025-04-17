@@ -9,7 +9,7 @@ use proc_macro_error2::abort_call_site;
 use quote::{format_ident, quote};
 use syn::spanned::Spanned;
 use syn::token::AndAnd;
-use syn::{BinOp, Block, Expr, ExprBinary, Ident, Stmt, visit_mut::VisitMut};
+use syn::{BinOp, Block, Expr, ExprBinary, Ident, Stmt, parse_quote, visit_mut::VisitMut};
 
 /*
 Transform the loop to support on_entry(expr) : the value of expr before entering the loop
@@ -272,6 +272,7 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
     let (mut loop_body, loop_guard) = match loop_stmt {
         Stmt::Expr(ref mut e, _) => match e {
             Expr::While(ew) => (ew.body.clone(), ew.cond.clone()),
+            Expr::Loop(el) => (el.body.clone(), parse_quote!(true)),
             _ => panic!(),
         },
         _ => panic!(),
@@ -293,6 +294,7 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
         match loop_stmt {
             Stmt::Expr(ref mut e, _) => match e {
                 Expr::While(ew) => ew.body.stmts = assign_stms.clone(),
+                Expr::Loop(el) => el.body.stmts = assign_stms.clone(),
                 _ => panic!(),
             },
             _ => panic!(),
@@ -319,6 +321,14 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
                     op: BinOp::And(AndAnd::default()),
                     right: ew.cond.clone(),
                 });
+            }
+            Expr::Loop(ref mut el) => {
+                //let retexpr = get_return_statement(&el.body);
+                let invstmt: Stmt = syn::parse(quote!(if !(#register_ident(&||->bool{#inv_expr}, 0)) {assert!(false); unreachable!()};).into()).unwrap();
+                let mut new_stmts: Vec<Stmt> = Vec::new();
+                new_stmts.push(invstmt);
+                new_stmts.extend(el.body.stmts.clone());
+                el.body.stmts = new_stmts.clone();
             }
             _ => {
                 abort_call_site!("`#[kani::loop_invariant]` is now only supported for while-loops.";

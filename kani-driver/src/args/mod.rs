@@ -178,6 +178,7 @@ pub enum CargoKaniSubcommand {
     List(Box<list_args::CargoListArgs>),
 
     /// Create and run harnesses automatically for eligible functions. Implies -Z function-contracts and -Z loop-contracts.
+    /// See https://model-checking.github.io/kani/reference/experimental/autoharness.html for documentation.
     Autoharness(Box<autoharness_args::CargoAutoharnessArgs>),
 }
 
