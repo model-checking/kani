@@ -24,6 +24,7 @@
     - [Contracts](./reference/experimental/contracts.md)
     - [Loop Contracts](./reference/experimental/loop-contracts.md)
     - [Concrete Playback](./reference/experimental/concrete-playback.md)
+    - [Bounded Non-deterministic variables](./reference/experimental/bounded_arbitrary.md)
 - [Application](./application.md)
   - [Comparison with other tools](./tool-comparison.md)
   - [Where to start on real code](./tutorial-real-code.md)

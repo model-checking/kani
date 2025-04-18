@@ -21,6 +21,7 @@
 #![feature(f128)]
 
 mod arbitrary;
+mod bounded_arbitrary;
 mod float;
 mod mem;
 mod mem_init;
@@ -41,9 +42,12 @@ macro_rules! kani_lib {
         #[unstable(feature = "kani", issue = "none")]
         pub mod kani {
             // We need to list them all today because there is conflict with unstable.
+            use core as core_path;
             pub use kani_core::*;
-            kani_core::kani_intrinsics!(core);
-            kani_core::generate_arbitrary!(core);
+
+            kani_core::kani_intrinsics!();
+            kani_core::generate_arbitrary!();
+            kani_core::generate_bounded_arbitrary!();
             kani_core::generate_models!();
 
             pub mod float {
@@ -62,8 +66,11 @@ macro_rules! kani_lib {
 
     (kani) => {
         pub use kani_core::*;
-        kani_core::kani_intrinsics!(std);
-        kani_core::generate_arbitrary!(std);
+        use std as core_path;
+
+        kani_core::kani_intrinsics!();
+        kani_core::generate_arbitrary!();
+        kani_core::generate_bounded_arbitrary!();
         kani_core::generate_models!();
 
         pub mod float {
@@ -138,7 +145,7 @@ macro_rules! kani_lib {
 #[allow(clippy::crate_in_macro_def)]
 #[macro_export]
 macro_rules! kani_intrinsics {
-    ($core:tt) => {
+    () => {
         /// Creates an assumption that will be valid after this statement run. Note that the assumption
         /// will only be applied for paths that follow the assumption. If the assumption doesn't hold, the
         /// program will exit successfully.
@@ -251,6 +258,15 @@ macro_rules! kani_intrinsics {
         #[inline(always)]
         pub fn any<T: Arbitrary>() -> T {
             T::any()
+        }
+
+        /// Creates a symbolic value *bounded* by `N`. Bounded means `|T| <= N`. The type
+        /// implementing BoundedArbitrary decides exactly what size means for them.
+        ///
+        /// *Note*: Any proof using a bounded symbolic value is only valid up to that bound.
+        #[inline(always)]
+        pub fn bounded_any<T: BoundedArbitrary, const N: usize>() -> T {
+            T::bounded_any::<N>()
         }
 
         /// This function is only used for function contract instrumentation.
