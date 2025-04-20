@@ -1,5 +1,5 @@
 CARGO_ENCODED_RUSTFLAGS=
-cargo +
+cargo
 Running: `goto-cc
 Running: `goto-instrument
 Checking harness dummy_harness...
