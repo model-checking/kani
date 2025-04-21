@@ -36,12 +36,6 @@ struct FnStats {
     has_unsafe_ops: Option<bool>,
     has_unsupported_input: Option<bool>,
     has_loop_or_iterator: Option<bool>,
-    /// How many degrees of separation to unsafe code if any?
-    /// - `None` if this function is indeed safe.
-    /// - 0 if this function contains unsafe code (including invoking unsafe fns).
-    /// - 1 if this function calls a safe abstraction.
-    /// - 2+ if this function calls other functions that call safe abstractions.
-    unsafe_distance: Option<usize>,
 }
 
 impl FnStats {
@@ -52,7 +46,6 @@ impl FnStats {
             has_unsafe_ops: None,
             has_unsupported_input: None,
             has_loop_or_iterator: None,
-            unsafe_distance: None,
         }
     }
 }

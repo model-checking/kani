@@ -18,6 +18,11 @@ use std::path::PathBuf;
 
 impl OverallStats {
     /// Iterate over all functions defined in this crate and log any unsafe operation.
+    /// Distance indicates how many degrees of separation the function has to unsafe code, if any?
+    /// - `None` if this function is indeed safe.
+    /// - 0 if this function contains unsafe code (including invoking unsafe fns).
+    /// - 1 if this function calls a safe abstraction.
+    /// - 2+ if this function calls other functions that call safe abstractions.
     pub fn unsafe_distance(&mut self, filename: PathBuf) {
         let all_items = stable_mir::all_local_items();
         let mut queue =
