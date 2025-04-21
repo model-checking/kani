@@ -50,6 +50,12 @@ impl FnStats {
     }
 }
 
+impl Default for OverallStats {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl OverallStats {
     pub fn new() -> OverallStats {
         let all_items = stable_mir::all_local_items();
