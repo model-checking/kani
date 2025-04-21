@@ -441,10 +441,8 @@ impl MirVisitor for BodyVisitor<'_> {
                 let fn_sig = fn_def.fn_sig().skip_binder();
                 if fn_sig.safety == Safety::Unsafe {
                     self.props.unsafe_call += 1;
-                    if !matches!(
-                        fn_sig.abi,
-                        Abi::Rust | Abi::RustCold | Abi::RustCall | Abi::RustIntrinsic
-                    ) && !fn_def.has_body()
+                    if !matches!(fn_sig.abi, Abi::Rust | Abi::RustCold | Abi::RustCall)
+                        && !fn_def.has_body()
                     {
                         self.props.extern_call += 1;
                     }
