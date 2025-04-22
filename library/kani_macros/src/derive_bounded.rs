@@ -111,7 +111,7 @@ fn enum_constructor(ident: &syn::Ident, data_enum: &syn::DataEnum) -> TokenStrea
 fn union_constructor(ident: &syn::Ident, _data_union: &syn::DataUnion) -> TokenStream {
     abort!(Span::call_site(), "Cannot derive `BoundedArbitrary` for `{}` union", ident;
            note = ident.span() =>
-           "`#[derive(Arbitrary)]` cannot be used for unions such as `{}`", ident
+           "`#[derive(BoundedArbitrary)]` cannot be used for unions such as `{}`", ident
     )
 }
 
@@ -139,7 +139,7 @@ fn quote_generics(generics: &syn::Generics) -> (TokenStream, TokenStream) {
 }
 
 /// Generates a symbolic value based on whether the field has the `#[bounded]`
-/// attribute. If the field is bounded, generate `kani::any()` otherwise generate
+/// attribute. If the field is not bounded, generate `kani::any()` otherwise generate
 /// `kani::bounded_any()`.
 fn generate_any_call(field: &syn::Field) -> TokenStream {
     let ty = &field.ty;

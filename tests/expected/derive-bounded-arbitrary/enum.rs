@@ -21,19 +21,25 @@ fn check_enum() {
     let any_enum: Enum<bool> = kani::bounded_any::<_, 4>();
     match any_enum {
         Enum::A(s) => {
-            for i in 0..=4 {
-                kani::cover!(s.len() == i);
-            }
+            kani::cover!(s.len() == 0);
+            kani::cover!(s.len() == 1);
+            kani::cover!(s.len() == 2);
+            kani::cover!(s.len() == 3);
+            kani::cover!(s.len() == 4);
         }
         Enum::B(v, _) => {
-            for i in 0..=4 {
-                kani::cover!(v.len() == i);
-            }
+            kani::cover!(v.len() == 0);
+            kani::cover!(v.len() == 1);
+            kani::cover!(v.len() == 2);
+            kani::cover!(v.len() == 3);
+            kani::cover!(v.len() == 4);
         }
         Enum::C { x, y: _ } => {
-            for i in 0..=4 {
-                kani::cover!(x.len() == i);
-            }
+            kani::cover!(x.len() == 0);
+            kani::cover!(x.len() == 1);
+            kani::cover!(x.len() == 2);
+            kani::cover!(x.len() == 3);
+            kani::cover!(x.len() == 4);
         }
     }
 }

@@ -18,7 +18,9 @@ struct MyVector<T> {
 #[kani::unwind(6)]
 fn check_my_vec() {
     let my_vec: MyVector<bool> = kani::bounded_any::<_, 4>();
-    for i in 0..=4 {
-        kani::cover!(my_vec.vector.len() == i);
-    }
+    kani::cover!(my_vec.vector.len() == 0);
+    kani::cover!(my_vec.vector.len() == 1);
+    kani::cover!(my_vec.vector.len() == 2);
+    kani::cover!(my_vec.vector.len() == 3);
+    kani::cover!(my_vec.vector.len() == 4);
 }

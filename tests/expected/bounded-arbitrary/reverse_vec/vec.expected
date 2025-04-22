@@ -1,7 +1,5 @@
 Checking harness check_reverse_is_its_own_inverse_should_fail...\
 
-Failed Checks: unwinding assertion loop 0 \
-
 Checking harness check_reverse_is_its_own_inverse_incomplete...\
 
 Checking harness check_reverse_is_its_own_inverse...\

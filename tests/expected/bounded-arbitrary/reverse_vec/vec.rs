@@ -46,11 +46,11 @@ fn check_reverse_is_its_own_inverse_incomplete() {
 }
 
 #[kani::proof]
-#[kani::unwind(5)]
+#[kani::unwind(6)]
 fn check_reverse_is_its_own_inverse_should_fail() {
     let input: Vec<bool> = kani::bounded_any::<_, 5>();
     let double_reversed = bad_reverse_vector::<_, 4>(bad_reverse_vector::<_, 4>(input.clone()));
     for i in 0..input.len() {
-        kani::cover!(input[i] == double_reversed[i], "This may be equal")
+        assert_eq!(input[i], double_reversed[i])
     }
 }

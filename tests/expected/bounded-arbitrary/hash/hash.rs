@@ -1,6 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+//! This file tests whether we can generate a bounded Hashmap/Hashset that has any possible size between 0-BOUND
+
 #[kani::proof]
 #[kani::unwind(5)]
 fn check_hashmap() {
