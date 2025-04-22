@@ -125,9 +125,9 @@ pub fn parse_config(args: Vec<String>) -> Config {
         match m.opt_str(nm) {
             Some(s) => PathBuf::from(&s),
             None => {
-                let mut root_folder = top_level().expect(
-                    format!("Cannot find root directory. Please provide --{nm} option.").as_str(),
-                );
+                let mut root_folder = top_level().unwrap_or_else(|| {
+                    panic!("Cannot find root directory. Please provide --{nm} option.")
+                });
                 default.iter().for_each(|f| root_folder.push(f));
                 root_folder
             }
@@ -147,9 +147,9 @@ pub fn parse_config(args: Vec<String>) -> Config {
     let run_ignored = matches.opt_present("ignored");
     let mode = matches.opt_str("mode").unwrap().parse().expect("invalid mode");
     let timeout = matches.opt_str("timeout").map(|val| {
-        Duration::from_secs(u64::from_str(&val).expect(&format!(
-            "Unexpected timeout format. Expected a positive number but found {val}"
-        )))
+        Duration::from_secs(u64::from_str(&val).unwrap_or_else(|_| {
+            panic!("Unexpected timeout format. Expected a positive number but found {val}")
+        }))
     });
 
     Config {

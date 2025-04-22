@@ -1,11 +1,11 @@
 Kani generated automatic harnesses for 2 function(s):
-+-------------------+
-| Selected Function |
-+===================+
-| gcd_recursion     |
-|-------------------|
-| infinite_loop     |
-+-------------------+
++--------------------------------------+-------------------+
+| Crate                                | Selected Function |
++==========================================================+
+| cargo_autoharness_termination_unwind | gcd_recursion     |
+|--------------------------------------+-------------------|
+| cargo_autoharness_termination_unwind | infinite_loop     |
++--------------------------------------+-------------------+
 
 Skipped Functions: None. Kani generated automatic harnesses for all functions in the available crate(s).
 Autoharness: Checking function gcd_recursion against all possible inputs...
@@ -38,12 +38,12 @@ Manual Harness Summary:
 No proof harnesses (functions with #[kani::proof]) were found to verify.
 
 Autoharness Summary:
-+-------------------+---------------------------+---------------------+
-| Selected Function | Kind of Automatic Harness | Verification Result |
-+=====================================================================+
-| gcd_recursion     | #[kani::proof]            | Failure             |
-|-------------------+---------------------------+---------------------|
-| infinite_loop     | #[kani::proof]            | Failure             |
-+-------------------+---------------------------+---------------------+
++--------------------------------------+-------------------+---------------------------+---------------------+
+| Crate                                | Selected Function | Kind of Automatic Harness | Verification Result |
++============================================================================================================+
+| cargo_autoharness_termination_unwind | gcd_recursion     | #[kani::proof]            | Failure             |
+|--------------------------------------+-------------------+---------------------------+---------------------|
+| cargo_autoharness_termination_unwind | infinite_loop     | #[kani::proof]            | Failure             |
++--------------------------------------+-------------------+---------------------------+---------------------+
 Note that `kani autoharness` sets default --harness-timeout of 60s and --default-unwind of 20.
 If verification failed because of timing out or too low of an unwinding bound, try passing larger values for these arguments (or, if possible, writing a loop contract).

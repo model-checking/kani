@@ -210,7 +210,7 @@ fn data_bytes_for_ty(
             Ok(result)
         }
         FieldsShape::Arbitrary { ref offsets } => {
-            match ty.kind().rigid().expect(&format!("unexpected type: {ty:?}")) {
+            match ty.kind().rigid().unwrap_or_else(|| panic!("unexpected type: {ty:?}")) {
                 RigidTy::Adt(def, args) => {
                     match def.kind() {
                         AdtKind::Enum => {
@@ -224,7 +224,7 @@ fn data_bytes_for_ty(
                                     let mut fields_data_bytes = vec![];
                                     for idx in layout.fields.fields_by_offset_order() {
                                         let field_offset = offsets[idx].bytes();
-                                        let field_ty = fields[idx].ty_with_args(&args);
+                                        let field_ty = fields[idx].ty_with_args(args);
                                         fields_data_bytes.append(&mut data_bytes_for_ty(
                                             machine_info,
                                             field_ty,
@@ -241,7 +241,7 @@ fn data_bytes_for_ty(
                                     // Retrieve data bytes for the tag.
                                     let tag_size = match tag {
                                         Scalar::Initialized { value, .. } => {
-                                            value.size(&machine_info)
+                                            value.size(machine_info)
                                         }
                                         Scalar::Union { .. } => {
                                             unreachable!("Enum tag should not be a union.")
@@ -266,7 +266,7 @@ fn data_bytes_for_ty(
                                         };
                                         for field_idx in variant.fields.fields_by_offset_order() {
                                             let field_offset = field_offsets[field_idx].bytes();
-                                            let field_ty = fields[field_idx].ty_with_args(&args);
+                                            let field_ty = fields[field_idx].ty_with_args(args);
                                             field_data_bytes_for_variant.append(
                                                 &mut data_bytes_for_ty(
                                                     machine_info,
@@ -321,7 +321,7 @@ fn data_bytes_for_ty(
                             let fields = def.variants_iter().next().unwrap().fields();
                             for idx in layout.fields.fields_by_offset_order() {
                                 let field_offset = offsets[idx].bytes();
-                                let field_ty = fields[idx].ty_with_args(&args);
+                                let field_ty = fields[idx].ty_with_args(args);
                                 struct_data_bytes.append(&mut data_bytes_for_ty(
                                     machine_info,
                                     field_ty,

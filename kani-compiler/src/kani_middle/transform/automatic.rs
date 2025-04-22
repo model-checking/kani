@@ -82,7 +82,7 @@ impl TransformPass for AutomaticHarnessPass {
         // and then resolve `fn_to_verify`.
         let kind = instance.args().0[0].expect_ty().kind();
         let (def, args) = kind.fn_def().unwrap();
-        let fn_to_verify = Instance::resolve(def, &args).unwrap();
+        let fn_to_verify = Instance::resolve(def, args).unwrap();
         let fn_to_verify_body = fn_to_verify.body().unwrap();
 
         let mut harness_body = MutableBody::from(body);

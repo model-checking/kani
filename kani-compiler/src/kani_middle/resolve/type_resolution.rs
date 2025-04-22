@@ -76,7 +76,7 @@ pub fn resolve_ty<'tcx>(
             let elems = tuple
                 .elems
                 .iter()
-                .map(|elem| resolve_ty(tcx, current_module, &elem))
+                .map(|elem| resolve_ty(tcx, current_module, elem))
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(Ty::new_tuple(&elems))
         }

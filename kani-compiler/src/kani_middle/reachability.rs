@@ -443,7 +443,7 @@ impl MirVisitor for MonoItemsFnCollector<'_, '_> {
                 return;
             }
         };
-        self.collect_allocation(&allocation);
+        self.collect_allocation(allocation);
     }
 
     /// Collect function calls.

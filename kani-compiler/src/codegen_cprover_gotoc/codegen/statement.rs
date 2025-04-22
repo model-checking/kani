@@ -148,7 +148,7 @@ impl GotocCtx<'_> {
                 // Pack the operands and their types, then call `codegen_copy`
                 let fargs =
                     operands.iter().map(|op| self.codegen_operand_stable(op)).collect::<Vec<_>>();
-                let farg_types = operands.map(|op| self.operand_ty_stable(&op));
+                let farg_types = operands.map(|op| self.operand_ty_stable(op));
                 self.codegen_copy("copy_nonoverlapping", true, fargs, &farg_types, None, location)
             }
             // https://doc.rust-lang.org/beta/nightly-rustc/rustc_middle/mir/enum.NonDivergingIntrinsic.html#variant.Assume
@@ -168,7 +168,7 @@ impl GotocCtx<'_> {
                 let instance = self.current_fn().instance_stable();
                 let counter_data = format!("{coverage_opaque:?} ${function_name}$");
                 let maybe_source_region =
-                    region_from_coverage_opaque(self.tcx, &coverage_opaque, instance);
+                    region_from_coverage_opaque(self.tcx, coverage_opaque, instance);
                 if let Some((source_region, file_name)) = maybe_source_region {
                     let coverage_stmt =
                         self.codegen_coverage(&counter_data, stmt.span, source_region, &file_name);
@@ -621,8 +621,8 @@ impl GotocCtx<'_> {
             if def.as_intrinsic().unwrap().must_be_overridden() || !instance.has_body() {
                 return self.codegen_funcall_of_intrinsic(
                     instance,
-                    &args,
-                    &destination,
+                    args,
+                    destination,
                     target.map(|bb| bb),
                     span,
                 );
@@ -638,10 +638,10 @@ impl GotocCtx<'_> {
                 let mut fargs = if args.is_empty()
                     || fn_def.fn_sig().unwrap().value.abi != Abi::RustCall
                 {
-                    self.codegen_funcall_args(&fn_abi, &args)
+                    self.codegen_funcall_args(&fn_abi, args)
                 } else {
                     let (untupled, first_args) = args.split_last().unwrap();
-                    let mut fargs = self.codegen_funcall_args(&fn_abi, &first_args);
+                    let mut fargs = self.codegen_funcall_args(&fn_abi, first_args);
                     fargs.append(
                         &mut self.codegen_untupled_args(untupled, &fn_abi.args[first_args.len()..]),
                     );
@@ -688,11 +688,11 @@ impl GotocCtx<'_> {
                     self.tcx
                         .fn_abi_of_fn_ptr(
                             TypingEnv::fully_monomorphized()
-                                .as_query_input((fn_sig_internal, &List::empty())),
+                                .as_query_input((fn_sig_internal, List::empty())),
                         )
                         .unwrap(),
                 );
-                let fargs = self.codegen_funcall_args(&fn_ptr_abi, &args);
+                let fargs = self.codegen_funcall_args(&fn_ptr_abi, args);
                 let func_expr = self.codegen_operand_stable(func).dereference();
                 // Actually generate the function call and return.
                 Stmt::block(

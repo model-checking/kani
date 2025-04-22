@@ -59,14 +59,14 @@ pub fn resolve_fn_path<'tcx>(
     match &path.qself {
         // Qualified path for a trait method implementation, like `<Foo as Bar>::bar`.
         Some(QSelf { ty: syn_ty, position, .. }) if *position > 0 => {
-            let ty = type_resolution::resolve_ty(tcx, current_module, &syn_ty)?;
+            let ty = type_resolution::resolve_ty(tcx, current_module, syn_ty)?;
             let def_id = resolve_path(tcx, current_module, &path.path)?;
             validate_kind!(tcx, def_id, "function / method", DefKind::Fn | DefKind::AssocFn)?;
             Ok(FnResolution::FnImpl { def: stable_fn_def(tcx, def_id).unwrap(), ty })
         }
         // Qualified path for a primitive type, such as `<[u8]::sort>`.
         Some(QSelf { ty: syn_ty, .. }) if type_resolution::is_type_primitive(syn_ty) => {
-            let ty = type_resolution::resolve_ty(tcx, current_module, &syn_ty)?;
+            let ty = type_resolution::resolve_ty(tcx, current_module, syn_ty)?;
             let resolved = resolve_in_primitive(tcx, ty, path.path.segments.iter())?;
             if resolved.segments.is_empty() {
                 Ok(FnResolution::Fn(stable_fn_def(tcx, resolved.base).unwrap()))
@@ -76,7 +76,7 @@ pub fn resolve_fn_path<'tcx>(
         }
         // Qualified path for a non-primitive type, such as `<Bar>::foo>`.
         Some(QSelf { ty: syn_ty, .. }) => {
-            let ty = type_resolution::resolve_ty(tcx, current_module, &syn_ty)?;
+            let ty = type_resolution::resolve_ty(tcx, current_module, syn_ty)?;
             let def_id = resolve_in_user_type(tcx, ty, path.path.segments.iter())?;
             validate_kind!(tcx, def_id, "function / method", DefKind::Fn | DefKind::AssocFn)?;
             Ok(FnResolution::Fn(stable_fn_def(tcx, def_id).unwrap()))

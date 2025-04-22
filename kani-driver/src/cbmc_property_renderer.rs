@@ -557,8 +557,8 @@ fn has_check_failure(properties: &Vec<Property>, description: &str) -> bool {
 
 // Determines if there were unwinding assertion failures in a set of properties
 fn has_unwinding_assertion_failures(properties: &Vec<Property>) -> bool {
-    has_check_failure(&properties, UNWINDING_ASSERT_DESC)
-        || has_check_failure(&properties, UNWINDING_ASSERT_REC_DESC)
+    has_check_failure(properties, UNWINDING_ASSERT_DESC)
+        || has_check_failure(properties, UNWINDING_ASSERT_REC_DESC)
 }
 
 /// Replaces the description of all properties from functions with a missing
