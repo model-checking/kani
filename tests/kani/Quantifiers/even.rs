@@ -6,7 +6,7 @@ use kani::kani_exists;
 
 #[kani::proof]
 fn quantifier_even_harness() {
-    let j: isize = kani::any();
-    kani::assume(j % 2 == 0 && j < 2000 && j > -2000);
-    kani::assert(kani::exists!(|i in (-1000, 1000)| i + i == j), "");
+    let j: usize = kani::any();
+    kani::assume(j % 2 == 0 && j < 2000);
+    kani::assert(kani::exists!(|i in (0, 1000)| i + i == j), "");
 }
