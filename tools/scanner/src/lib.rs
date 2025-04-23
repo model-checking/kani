@@ -65,6 +65,8 @@ pub enum Analysis {
     FnLoops,
     /// Collect information about recursion via direct calls.
     Recursion,
+    /// Collect information about function visibility.
+    PublicFns,
 }
 
 fn info(msg: String) {
@@ -96,6 +98,7 @@ fn analyze_crate(tcx: TyCtxt, analyses: &[Analysis]) -> ControlFlow<()> {
             Analysis::UnsafeOps => crate_stats.unsafe_operations(out_path),
             Analysis::FnLoops => crate_stats.loops(out_path),
             Analysis::Recursion => crate_stats.recursion(out_path),
+            Analysis::PublicFns => crate_stats.public_fns(&tcx),
         }
     }
     crate_stats.store_csv(base_path, &file_stem);
