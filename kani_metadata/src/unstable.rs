@@ -142,4 +142,13 @@ impl EnabledUnstableFeatures {
     pub fn contains(&self, feature: UnstableFeature) -> bool {
         self.enabled_unstable_features.contains(&feature)
     }
+
+    /// Enable an additional unstable feature.
+    /// Note that this enables an unstable feature that the user did not pass on the command line, so this function should be called with caution.
+    /// At time of writing, the only use is to enable -Z function-contracts and -Z loop-contracts when the autoharness subcommand is running.
+    pub fn enable_feature(&mut self, feature: UnstableFeature) {
+        if !self.contains(feature) {
+            self.enabled_unstable_features.push(feature);
+        }
+    }
 }

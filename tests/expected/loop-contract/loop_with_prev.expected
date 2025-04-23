@@ -1,0 +1,5 @@
+loop_with_prev.loop_invariant_step.1\
+	 - Status: SUCCESS\
+	 - Description: "Check invariant after step for loop loop_with_prev.0"
+
+VERIFICATION:- SUCCESSFUL

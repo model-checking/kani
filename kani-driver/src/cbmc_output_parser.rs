@@ -773,8 +773,8 @@ mod tests {
                 }
             ]
         }"#;
-        let parser_item: Result<ParserItem, _> = serde_json::from_str(&data);
-        let result_struct: Result<ResultStruct, _> = serde_json::from_str(&data);
+        let parser_item: Result<ParserItem, _> = serde_json::from_str(data);
+        let result_struct: Result<ResultStruct, _> = serde_json::from_str(data);
         assert!(parser_item.is_ok());
         assert!(result_struct.is_ok());
     }

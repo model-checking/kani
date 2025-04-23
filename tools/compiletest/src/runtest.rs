@@ -476,8 +476,9 @@ impl TestCx<'_> {
             (None, _) => { /* Test passed. Do nothing*/ }
             (Some(_), true) => {
                 // Fix output but still fail the test so users know which ones were updated
-                fs::write(expected_path, output)
-                    .expect(&format!("Failed to update file {}", expected_path.display()));
+                fs::write(expected_path, output).unwrap_or_else(|_| {
+                    panic!("Failed to update file {}", expected_path.display())
+                });
                 self.fatal_proc_rec(
                     &format!("updated `{}` file, please review", expected_path.display()),
                     proc_res,

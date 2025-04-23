@@ -31,11 +31,9 @@ pub struct KaniSession {
     /// The common command-line arguments
     pub args: VerificationArgs,
 
-    /// Automatically verify functions in the crate, in addition to running manual harnesses.
-    pub auto_harness: bool,
-
-    /// The arguments that will be passed only to the target package, not its dependencies.
-    pub pkg_args: Vec<String>,
+    /// The autoharness-specific compiler arguments.
+    /// Invariant: this field is_some() iff the autoharness subcommand is enabled.
+    pub autoharness_compiler_flags: Option<Vec<String>>,
 
     /// Include all publicly-visible symbols in the generated goto binary, not just those reachable from
     /// a proof harness. Useful when attempting to verify things that were not annotated with kani
@@ -71,8 +69,7 @@ impl KaniSession {
 
         Ok(KaniSession {
             args,
-            auto_harness: false,
-            pkg_args: vec!["--".to_string()],
+            autoharness_compiler_flags: None,
             codegen_tests: false,
             kani_compiler: install.kani_compiler()?,
             kani_lib_c: install.kani_lib_c()?,
@@ -101,7 +98,7 @@ impl KaniSession {
     pub fn reachability_mode(&self) -> ReachabilityMode {
         if self.codegen_tests {
             ReachabilityMode::Tests
-        } else if self.auto_harness {
+        } else if self.autoharness_compiler_flags.is_some() {
             ReachabilityMode::AllFns
         } else {
             ReachabilityMode::ProofHarnesses
@@ -213,7 +210,7 @@ async fn run_terminal_timeout(
         cmd.stderr(std::process::Stdio::null());
     }
     if verbosity.verbose() {
-        println!("[Kani] Running: `{}`", render_command(&cmd.as_std()).to_string_lossy());
+        println!("[Kani] Running: `{}`", render_command(cmd.as_std()).to_string_lossy());
     }
     let program = cmd.as_std().get_program().to_string_lossy().to_string();
     let result = with_timer(

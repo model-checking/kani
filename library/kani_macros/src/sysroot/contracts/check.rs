@@ -123,9 +123,10 @@ impl<'a> ContractConditionsHandler<'a> {
     /// First find the modifies body and expand that. Then expand the rest of the body.
     pub fn expand_check(&self, closure: &mut Stmt) {
         let body = closure_body(closure);
-        self.expand_modifies(find_contract_closure(&mut body.block.stmts, "wrapper").expect(
-            &format!("Internal Failure: Expected to find `wrapper` closure, but found none"),
-        ));
+        self.expand_modifies(
+            find_contract_closure(&mut body.block.stmts, "wrapper")
+                .expect("Internal Failure: Expected to find `wrapper` closure, but found none"),
+        );
         *body = syn::parse2(self.make_check_body(mem::take(&mut body.block.stmts))).unwrap();
     }
 

@@ -7,13 +7,14 @@ use crate::args::Timeout;
 use crate::args::autoharness_args::{
     CargoAutoharnessArgs, CommonAutoharnessArgs, StandaloneAutoharnessArgs,
 };
+use crate::args::common::UnstableFeature;
 use crate::call_cbmc::VerificationStatus;
-use crate::call_single_file::to_rustc_arg;
 use crate::harness_runner::HarnessResult;
 use crate::list::collect_metadata::process_metadata;
 use crate::list::output::output_list_results;
 use crate::project::{Project, standalone_project, std_project};
 use crate::session::KaniSession;
+use crate::util::warning;
 use crate::{InvocationType, print_kani_version, project, verify_project};
 use anyhow::Result;
 use comfy_table::Table as PrettyTable;
@@ -55,8 +56,8 @@ fn setup_session(session: &mut KaniSession, common_autoharness_args: &CommonAuto
     session.enable_autoharness();
     session.add_default_bounds();
     session.add_auto_harness_args(
-        &common_autoharness_args.include_function,
-        &common_autoharness_args.exclude_function,
+        &common_autoharness_args.include_pattern,
+        &common_autoharness_args.exclude_pattern,
     );
 }
 
@@ -83,17 +84,20 @@ fn postprocess_project(
 /// Print automatic harness metadata to the terminal.
 fn print_autoharness_metadata(metadata: Vec<KaniMetadata>) {
     let mut chosen_table = PrettyTable::new();
-    chosen_table.set_header(vec!["Selected Function"]);
+    chosen_table.set_header(vec!["Crate", "Selected Function"]);
 
     let mut skipped_table = PrettyTable::new();
-    skipped_table.set_header(vec!["Skipped Function", "Reason for Skipping"]);
+    skipped_table.set_header(vec!["Crate", "Skipped Function", "Reason for Skipping"]);
 
     for md in metadata {
         let autoharness_md = md.autoharness_md.unwrap();
-        chosen_table.add_rows(autoharness_md.chosen.into_iter().map(|func| vec![func]));
+        chosen_table.add_rows(
+            autoharness_md.chosen.into_iter().map(|func| vec![md.crate_name.clone(), func]),
+        );
         skipped_table.add_rows(autoharness_md.skipped.into_iter().filter_map(|(func, reason)| {
             match reason {
                 AutoHarnessSkipReason::MissingArbitraryImpl(ref args) => Some(vec![
+                    md.crate_name.clone(),
                     func,
                     format!(
                         "{reason} {}",
@@ -105,7 +109,9 @@ fn print_autoharness_metadata(metadata: Vec<KaniMetadata>) {
                 ]),
                 AutoHarnessSkipReason::GenericFn
                 | AutoHarnessSkipReason::NoBody
-                | AutoHarnessSkipReason::UserFilter => Some(vec![func, reason.to_string()]),
+                | AutoHarnessSkipReason::UserFilter => {
+                    Some(vec![md.crate_name.clone(), func, reason.to_string()])
+                }
                 // We don't report Kani implementations to the user to avoid exposing Kani functions we insert during instrumentation.
                 // For those we don't insert during instrumentation that are in this category (manual harnesses or Kani trait implementations),
                 // it should be obvious that we wouldn't generate harnesses, so reporting those functions as "skipped" is unlikely to be useful.
@@ -150,21 +156,36 @@ fn print_skipped_table(table: &mut PrettyTable) {
 impl KaniSession {
     /// Enable autoharness mode.
     pub fn enable_autoharness(&mut self) {
-        self.auto_harness = true;
+        self.autoharness_compiler_flags = Some(vec![]);
+        self.args.common_args.unstable_features.enable_feature(UnstableFeature::FunctionContracts);
+        self.args.common_args.unstable_features.enable_feature(UnstableFeature::LoopContracts);
     }
 
     /// Add the compiler arguments specific to the `autoharness` subcommand.
-    /// TODO: this should really be appending onto the `kani_compiler_flags()` output instead of `pkg_args`.
-    /// It doesn't affect functionality since autoharness doesn't examine dependencies, but would still be better practice.
     pub fn add_auto_harness_args(&mut self, included: &[String], excluded: &[String]) {
-        for func in included {
-            self.pkg_args
-                .push(to_rustc_arg(vec![format!("--autoharness-include-function {}", func)]));
+        for include_pattern in included {
+            for exclude_pattern in excluded {
+                // Check if include pattern contains exclude pattern
+                // This catches cases like include="foo::bar" exclude="bar" or include="foo" exclude="foo"
+                if include_pattern.contains(exclude_pattern) {
+                    warning(&format!(
+                        "Include pattern '{}' contains exclude pattern '{}'. \
+                            This combination will never match any functions since all functions matching \
+                            the include pattern will also match the exclude pattern, and the exclude pattern takes precedence.",
+                        include_pattern, exclude_pattern
+                    ));
+                }
+            }
         }
-        for func in excluded {
-            self.pkg_args
-                .push(to_rustc_arg(vec![format!("--autoharness-exclude-function {}", func)]));
+
+        let mut args = vec![];
+        for pattern in included {
+            args.push(format!("--autoharness-include-pattern {}", pattern));
         }
+        for pattern in excluded {
+            args.push(format!("--autoharness-exclude-pattern {}", pattern));
+        }
+        self.autoharness_compiler_flags = Some(args);
     }
 
     /// Add global harness timeout and loop unwinding bounds if not provided.
@@ -193,6 +214,7 @@ impl KaniSession {
 
         let mut verified_fns = PrettyTable::new();
         verified_fns.set_header(vec![
+            "Crate",
             "Selected Function",
             "Kind of Automatic Harness",
             "Verification Result",
@@ -200,6 +222,7 @@ impl KaniSession {
 
         for success in successes {
             verified_fns.add_row(vec![
+                success.harness.crate_name.clone(),
                 success.harness.pretty_name.clone(),
                 success.harness.attributes.kind.to_string(),
                 success.result.status.to_string(),
@@ -208,13 +231,16 @@ impl KaniSession {
 
         for failure in failures {
             verified_fns.add_row(vec![
+                failure.harness.crate_name.clone(),
                 failure.harness.pretty_name.clone(),
                 failure.harness.attributes.kind.to_string(),
                 failure.result.status.to_string(),
             ]);
         }
 
-        println!("{verified_fns}");
+        if total > 0 {
+            println!("{verified_fns}");
+        }
 
         if failing > 0 {
             println!(

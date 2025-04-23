@@ -146,7 +146,7 @@ pub enum StandaloneSubcommand {
     VerifyStd(Box<std_args::VerifyStdArgs>),
     /// List contracts and harnesses.
     List(Box<list_args::StandaloneListArgs>),
-    /// Scan the input file for functions eligible for automatic (i.e., harness-free) verification and verify them.
+    /// Create and run harnesses automatically for eligible functions. Implies -Z function-contracts and -Z loop-contracts.
     Autoharness(Box<autoharness_args::StandaloneAutoharnessArgs>),
 }
 
@@ -177,7 +177,8 @@ pub enum CargoKaniSubcommand {
     /// List contracts and harnesses.
     List(Box<list_args::CargoListArgs>),
 
-    /// Scan the crate for functions eligible for automatic (i.e., harness-free) verification and verify them.
+    /// Create and run harnesses automatically for eligible functions. Implies -Z function-contracts and -Z loop-contracts.
+    /// See https://model-checking.github.io/kani/reference/experimental/autoharness.html for documentation.
     Autoharness(Box<autoharness_args::CargoAutoharnessArgs>),
 }
 
@@ -956,12 +957,12 @@ mod tests {
     }
 
     fn check(args: &str, feature: Option<UnstableFeature>, pred: fn(StandaloneArgs) -> bool) {
-        let mut res = parse_unstable_disabled(&args);
+        let mut res = parse_unstable_disabled(args);
         if let Some(unstable) = feature {
             // Should fail without -Z unstable-options.
             assert_eq!(res.unwrap_err().kind(), ErrorKind::MissingRequiredArgument);
             // Should succeed with -Z unstable-options.
-            res = parse_unstable_enabled(&args, unstable);
+            res = parse_unstable_enabled(args, unstable);
         }
         assert!(res.is_ok());
         assert!(pred(res.unwrap()));

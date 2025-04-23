@@ -46,7 +46,7 @@ impl KaniSession {
                     .iter()
                     .map(|(prop, concrete_items)| {
                         let pretty_name = harness.get_harness_name_unqualified();
-                        format_unit_test(&pretty_name, &concrete_items, gen_test_doc(harness, prop))
+                        format_unit_test(pretty_name, concrete_items, gen_test_doc(harness, prop))
                     })
                     .collect();
                 unit_tests.dedup_by(|a, b| a.name == b.name);
@@ -86,10 +86,12 @@ impl KaniSession {
                             harness.original_end_line,
                             unit_tests,
                         )
-                        .expect(&format!(
-                            "Failed to modify source code for the file `{}`",
-                            &harness.original_file
-                        ));
+                        .unwrap_or_else(|_| {
+                            panic!(
+                                "Failed to modify source code for the file `{}`",
+                                &harness.original_file
+                            )
+                        });
                     }
                 }
                 verification_result.generated_concrete_test = true;
@@ -413,7 +415,7 @@ mod concrete_vals_extractor {
                 let trace = property
                     .trace
                     .as_ref()
-                    .expect(&format!("Missing trace for {}", property.property_name()));
+                    .unwrap_or_else(|| panic!("Missing trace for {}", property.property_name()));
                 let concrete_items: Vec<ConcreteItem> =
                     trace.iter().filter_map(&extract_from_trace_item).collect();
 
@@ -452,8 +454,9 @@ mod concrete_vals_extractor {
                 str_chunk_len, 8,
                 "Tried to read a chunk of 8 bits of actually read {str_chunk_len} bits"
             );
-            let next_byte = u8::from_str_radix(str_chunk, 2)
-                .expect(&format!("Couldn't convert the string chunk `{str_chunk}` to u8"));
+            let next_byte = u8::from_str_radix(str_chunk, 2).unwrap_or_else(|_| {
+                panic!("Couldn't convert the string chunk `{str_chunk}` to u8")
+            });
             next_num.push(next_byte);
         }
 

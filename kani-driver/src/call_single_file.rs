@@ -151,6 +151,10 @@ impl KaniSession {
             flags.push("--no-assert-contracts".into());
         }
 
+        if let Some(args) = self.autoharness_compiler_flags.clone() {
+            flags.extend(args);
+        }
+
         flags.extend(self.args.common_args.unstable_features.as_arguments().map(str::to_string));
 
         flags
