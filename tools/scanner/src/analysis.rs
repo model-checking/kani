@@ -235,7 +235,6 @@ impl OverallStats {
 
     /// Iterate over all functions defined in this crate and log public vs private
     pub fn public_fns(&mut self, tcx: &TyCtxt) {
-        let effective_visibilities = tcx.effective_visibilities(());
         let all_items = stable_mir::all_local_items();
         let (public_fns, private_fns) = all_items
             .into_iter()
@@ -244,9 +243,8 @@ impl OverallStats {
                 if !kind.is_fn() {
                     return None;
                 };
-                let int_def_id = rustc_internal::internal(*tcx, item.def_id());
-                let is_public =
-                    effective_visibilities.is_directly_public(int_def_id.expect_local());
+                let is_public = tcx.visibility(item.def_id()).is_public()
+                    || tcx.visibility(item.def_id()).is_visible_locally();
                 self.fn_stats.get_mut(&item).unwrap().is_public = Some(is_public);
                 Some((item, is_public))
             })
