@@ -2,3 +2,4 @@
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 script: type-invariant.sh
 expected: type-invariant.expected
+exit_code: 1
