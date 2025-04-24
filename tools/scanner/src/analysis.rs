@@ -243,8 +243,9 @@ impl OverallStats {
                 if !kind.is_fn() {
                     return None;
                 };
-                let is_public = tcx.visibility(item.def_id()).is_public()
-                    || tcx.visibility(item.def_id()).is_visible_locally();
+                let int_def_id = rustc_internal::internal(*tcx, item.def_id());
+                let is_public = tcx.visibility(int_def_id).is_public()
+                    || tcx.visibility(int_def_id).is_visible_locally();
                 self.fn_stats.get_mut(&item).unwrap().is_public = Some(is_public);
                 Some((item, is_public))
             })
