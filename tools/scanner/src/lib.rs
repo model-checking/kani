@@ -69,7 +69,7 @@ pub enum Analysis {
 
 fn info(msg: String) {
     if VERBOSE.load(Ordering::Relaxed) {
-        eprintln!("[INFO] {}", msg);
+        eprintln!("[INFO] {msg}");
     }
 }
 

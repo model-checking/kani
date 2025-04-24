@@ -61,12 +61,12 @@ impl OverallStats {
     }
 
     pub fn store_csv(&self, base_path: PathBuf, file_stem: &str) {
-        let filename = format!("{}_overall", file_stem);
+        let filename = format!("{file_stem}_overall");
         let mut out_path = base_path.parent().map_or(PathBuf::default(), Path::to_path_buf);
         out_path.set_file_name(filename);
         dump_csv(out_path, &self.counters);
 
-        let filename = format!("{}_functions", file_stem);
+        let filename = format!("{file_stem}_functions");
         let mut out_path = base_path.parent().map_or(PathBuf::default(), Path::to_path_buf);
         out_path.set_file_name(filename);
         dump_csv(out_path, &self.fn_stats.values().collect::<Vec<_>>());
