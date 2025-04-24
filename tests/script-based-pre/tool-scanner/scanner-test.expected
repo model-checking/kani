@@ -1,6 +1,18 @@
 5 test_scan_fn_loops.csv
-19 test_scan_functions.csv
+20 test_scan_functions.csv
 5 test_scan_input_tys.csv
-18 test_scan_overall.csv
+19 test_scan_overall.csv
 3 test_scan_recursion.csv
-5 test_scan_unsafe_ops.csv
+9 test_scan_unsafe_distance.csv
+6 test_scan_unsafe_ops.csv
+
+Unsafe Distance Results
+call_external;0
+next_id;0
+external_function;0
+raw_to_ref;0
+with_for_loop;1
+check_outer_coercion;1
+with_iterator;2
+current_id;0
+generic;0
