@@ -1548,11 +1548,11 @@ impl<'tcx> GotocCtx<'tcx> {
                     // components as parameters with a special naming convention
                     // so that we can "retuple" them in the function prelude.
                     // See: compiler/rustc_codegen_llvm/src/gotoc/mod.rs:codegen_function_prelude
-                    if let Some(spread) = body.spread_arg() {
-                        if lc >= spread {
-                            let (name, _) = self.codegen_spread_arg_name(&lc);
-                            ident = name;
-                        }
+                    if let Some(spread) = body.spread_arg()
+                        && lc >= spread
+                    {
+                        let (name, _) = self.codegen_spread_arg_name(&lc);
+                        ident = name;
                     }
                     Some(
                         self.codegen_ty_stable(ty)

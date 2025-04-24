@@ -716,5 +716,5 @@ fn is_item_name_with_generic_args(
 ) -> bool {
     let item_path = tcx.def_path_str(item);
     let all_but_base_type = item_path.find("::").map_or("", |idx| &item_path[idx..]);
-    all_but_base_type == format!("{}::{}", generic_args, name)
+    all_but_base_type == format!("{generic_args}::{name}")
 }

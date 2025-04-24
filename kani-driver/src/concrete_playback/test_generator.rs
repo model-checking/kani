@@ -124,7 +124,7 @@ impl KaniSession {
                 line_range: Some((unit_test_start_line, unit_test_end_line)),
             }];
             self.run_rustfmt(&file_line_ranges, Some(&path))
-                .unwrap_or_else(|err| println!("WARNING: {}", err));
+                .unwrap_or_else(|err| println!("WARNING: {err}"));
         }
 
         Ok(())

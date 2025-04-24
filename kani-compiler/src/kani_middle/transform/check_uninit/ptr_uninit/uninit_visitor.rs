@@ -136,15 +136,14 @@ impl MirVisitor for CheckUninitVisitor {
                     for projection_elem in place_without_deref.projection.iter() {
                         // If the projection is Deref and the current type is raw pointer, check
                         // if it points to initialized memory.
-                        if *projection_elem == ProjectionElem::Deref {
-                            if let TyKind::RigidTy(RigidTy::RawPtr(..)) =
+                        if *projection_elem == ProjectionElem::Deref
+                            && let TyKind::RigidTy(RigidTy::RawPtr(..)) =
                                 place_to_add_projections.ty(&self.locals).unwrap().kind()
-                            {
-                                self.push_target(MemoryInitOp::Check {
-                                    operand: Operand::Copy(place_to_add_projections.clone()),
-                                });
-                            };
-                        }
+                        {
+                            self.push_target(MemoryInitOp::Check {
+                                operand: Operand::Copy(place_to_add_projections.clone()),
+                            });
+                        };
                         place_to_add_projections.projection.push(projection_elem.clone());
                     }
                     if place_without_deref.ty(&self.locals).unwrap().kind().is_raw_ptr() {
@@ -156,14 +155,14 @@ impl MirVisitor for CheckUninitVisitor {
                     }
                 }
                 // Check whether Rvalue creates a new initialized pointer previously not captured inside shadow memory.
-                if place.ty(&self.locals).unwrap().kind().is_raw_ptr() {
-                    if let Rvalue::AddressOf(..) = rvalue {
-                        self.push_target(MemoryInitOp::Set {
-                            operand: Operand::Copy(place.clone()),
-                            value: true,
-                            position: InsertPosition::After,
-                        });
-                    }
+                if place.ty(&self.locals).unwrap().kind().is_raw_ptr()
+                    && let Rvalue::AddressOf(..) = rvalue
+                {
+                    self.push_target(MemoryInitOp::Set {
+                        operand: Operand::Copy(place.clone()),
+                        value: true,
+                        position: InsertPosition::After,
+                    });
                 }
 
                 // TODO: add support for ADTs which could have unions as subfields. Currently,
@@ -496,20 +495,20 @@ impl MirVisitor for CheckUninitVisitor {
     }
 
     fn visit_operand(&mut self, operand: &Operand, location: Location) {
-        if let Operand::Constant(constant) = operand {
-            if let ConstantKind::Allocated(allocation) = constant.const_.kind() {
-                for (_, prov) in &allocation.provenance.ptrs {
-                    if let GlobalAlloc::Static(_) = GlobalAlloc::from(prov.0) {
-                        if constant.ty().kind().is_raw_ptr() {
-                            // If a static is a raw pointer, need to mark it as initialized.
-                            self.push_target(MemoryInitOp::Set {
-                                operand: Operand::Constant(constant.clone()),
-                                value: true,
-                                position: InsertPosition::Before,
-                            });
-                        }
-                    };
-                }
+        if let Operand::Constant(constant) = operand
+            && let ConstantKind::Allocated(allocation) = constant.const_.kind()
+        {
+            for (_, prov) in &allocation.provenance.ptrs {
+                if let GlobalAlloc::Static(_) = GlobalAlloc::from(prov.0)
+                    && constant.ty().kind().is_raw_ptr()
+                {
+                    // If a static is a raw pointer, need to mark it as initialized.
+                    self.push_target(MemoryInitOp::Set {
+                        operand: Operand::Constant(constant.clone()),
+                        value: true,
+                        position: InsertPosition::Before,
+                    });
+                };
             }
         }
         self.super_operand(operand, location);
@@ -519,12 +518,12 @@ impl MirVisitor for CheckUninitVisitor {
         if let Rvalue::Cast(cast_kind, operand, ty) = rvalue {
             match cast_kind {
                 CastKind::PointerCoercion(PointerCoercion::Unsize) => {
-                    if let TyKind::RigidTy(RigidTy::RawPtr(pointee_ty, _)) = ty.kind() {
-                        if pointee_ty.kind().is_trait() {
-                            self.push_target(MemoryInitOp::Unsupported {
+                    if let TyKind::RigidTy(RigidTy::RawPtr(pointee_ty, _)) = ty.kind()
+                        && pointee_ty.kind().is_trait()
+                    {
+                        self.push_target(MemoryInitOp::Unsupported {
                                 reason: "Kani does not support reasoning about memory initialization of unsized pointers.".to_string(),
                             });
-                        }
                     }
                 }
                 CastKind::Transmute => {

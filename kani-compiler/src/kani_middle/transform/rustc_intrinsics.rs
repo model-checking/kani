@@ -156,34 +156,30 @@ impl MutMirVisitor for ReplaceIntrinsicCallVisitor<'_> {
     /// Note that we only need to replace function calls since intrinsics must always be called
     /// directly. I.e., no need to handle function pointers.
     fn visit_terminator(&mut self, term: &mut Terminator) {
-        if let TerminatorKind::Call { func, .. } = &mut term.kind {
-            if let TyKind::RigidTy(RigidTy::FnDef(def, args)) =
+        if let TerminatorKind::Call { func, .. } = &mut term.kind
+            && let TyKind::RigidTy(RigidTy::FnDef(def, args)) =
                 func.ty(&self.locals).unwrap().kind()
-            {
-                if def.is_intrinsic() {
-                    let instance = Instance::resolve(def, &args).unwrap();
-                    let intrinsic = Intrinsic::from_instance(&instance);
-                    debug!(?intrinsic, "handle_terminator");
-                    let model = match intrinsic {
-                        Intrinsic::SizeOfVal => self.models[&KaniModel::SizeOfVal],
-                        Intrinsic::MinAlignOfVal => self.models[&KaniModel::AlignOfVal],
-                        Intrinsic::PtrOffsetFrom => self.models[&KaniModel::PtrOffsetFrom],
-                        Intrinsic::PtrOffsetFromUnsigned => {
-                            self.models[&KaniModel::PtrOffsetFromUnsigned]
-                        }
-                        // The rest is handled in codegen.
-                        _ => {
-                            return self.super_terminator(term);
-                        }
-                    };
-                    let new_instance = Instance::resolve(model, &args).unwrap();
-                    let literal = MirConst::try_new_zero_sized(new_instance.ty()).unwrap();
-                    let span = term.span;
-                    let new_func = ConstOperand { span, user_ty: None, const_: literal };
-                    *func = Operand::Constant(new_func);
-                    self.changed = true;
+            && def.is_intrinsic()
+        {
+            let instance = Instance::resolve(def, &args).unwrap();
+            let intrinsic = Intrinsic::from_instance(&instance);
+            debug!(?intrinsic, "handle_terminator");
+            let model = match intrinsic {
+                Intrinsic::SizeOfVal => self.models[&KaniModel::SizeOfVal],
+                Intrinsic::MinAlignOfVal => self.models[&KaniModel::AlignOfVal],
+                Intrinsic::PtrOffsetFrom => self.models[&KaniModel::PtrOffsetFrom],
+                Intrinsic::PtrOffsetFromUnsigned => self.models[&KaniModel::PtrOffsetFromUnsigned],
+                // The rest is handled in codegen.
+                _ => {
+                    return self.super_terminator(term);
                 }
-            }
+            };
+            let new_instance = Instance::resolve(model, &args).unwrap();
+            let literal = MirConst::try_new_zero_sized(new_instance.ty()).unwrap();
+            let span = term.span;
+            let new_func = ConstOperand { span, user_ty: None, const_: literal };
+            *func = Operand::Constant(new_func);
+            self.changed = true;
         }
         self.super_terminator(term);
     }

@@ -234,10 +234,10 @@ fn extract_contracts(
 ) -> BTreeSet<ContractUsage> {
     let def = harness.def;
     let mut result = BTreeSet::new();
-    if let HarnessKind::ProofForContract { target_fn } = &metadata.attributes.kind {
-        if let Ok(check_def) = expect_resolve_fn(tcx, def, target_fn, "proof_for_contract") {
-            result.insert(ContractUsage::Check(check_def.def_id().to_index()));
-        }
+    if let HarnessKind::ProofForContract { target_fn } = &metadata.attributes.kind
+        && let Ok(check_def) = expect_resolve_fn(tcx, def, target_fn, "proof_for_contract")
+    {
+        result.insert(ContractUsage::Check(check_def.def_id().to_index()));
     }
 
     for stub in &metadata.attributes.verified_stubs {

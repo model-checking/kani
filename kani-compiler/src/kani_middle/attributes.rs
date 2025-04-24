@@ -510,14 +510,14 @@ impl<'tcx> KaniAttributes<'tcx> {
     /// Check that the function specified in the `proof_for_contract` attribute
     /// is reachable and emit an error if it isn't
     pub fn check_proof_for_contract(&self, reachable_functions: &HashSet<DefId>) {
-        if let Some((symbol, function, span)) = self.interpret_for_contract_attribute() {
-            if !reachable_functions.contains(&function) {
-                let err_msg = format!(
-                    "The function specified in the `proof_for_contract` attribute, `{symbol}`, was not found.\
+        if let Some((symbol, function, span)) = self.interpret_for_contract_attribute()
+            && !reachable_functions.contains(&function)
+        {
+            let err_msg = format!(
+                "The function specified in the `proof_for_contract` attribute, `{symbol}`, was not found.\
                     \nMake sure the function is reachable from the harness."
-                );
-                self.tcx.dcx().span_err(span, err_msg);
-            }
+            );
+            self.tcx.dcx().span_err(span, err_msg);
         }
     }
 
@@ -609,11 +609,11 @@ impl<'tcx> KaniAttributes<'tcx> {
             if seen.contains(&name) {
                 dcx.struct_span_warn(
                     span,
-                    format!("Multiple occurrences of `stub_verified({})`.", name),
+                    format!("Multiple occurrences of `stub_verified({name})`."),
                 )
                 .with_span_note(
                     self.tcx.def_span(def_id),
-                    format!("Use a single `stub_verified({})` annotation.", name),
+                    format!("Use a single `stub_verified({name})` annotation."),
                 )
                 .emit();
             } else {
@@ -623,8 +623,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                 dcx.struct_span_err(
                     span,
                     format!(
-                        "Target function in `stub_verified({})` has no contract.",
-                        name,
+                        "Target function in `stub_verified({name})` has no contract.",
                     ),
                 )
                     .with_span_note(
@@ -1112,7 +1111,7 @@ pub(crate) fn fn_marker<T: CrateDef>(def: T) -> Option<String> {
     let marker = def.tool_attrs(&fn_marker).pop()?;
     let attribute = syn_attr_stable(&marker);
     let meta_name = attribute.meta.require_name_value().unwrap_or_else(|_| {
-        panic!("Expected name value attribute for `kanitool::fn_marker`, but found: `{:?}`", marker)
+        panic!("Expected name value attribute for `kanitool::fn_marker`, but found: `{marker:?}`")
     });
     let Expr::Lit(ExprLit { lit: Lit::Str(lit_str), .. }) = &meta_name.value else {
         panic!(
