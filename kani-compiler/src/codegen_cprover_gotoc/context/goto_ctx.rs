@@ -455,11 +455,11 @@ impl GotocCtx<'_> {
     fn append_suffix_to_stmt(stmt: &Stmt, suffix: &str) -> Stmt {
         match stmt.body() {
             StmtBody::Label { label, body } => {
-                let new_label = format!("{}{}", label, suffix);
+                let new_label = format!("{label}{suffix}");
                 Self::append_suffix_to_stmt(body, suffix).with_label(new_label)
             }
             StmtBody::Goto { dest, .. } => {
-                let new_target = format!("{}{}", dest, suffix);
+                let new_target = format!("{dest}{suffix}");
                 Stmt::goto(new_target, *stmt.location())
             }
             StmtBody::Block(stmts) => Stmt::block(
@@ -594,7 +594,7 @@ impl GotocCtx<'_> {
                         assert_eq!(count_return, 1);
 
                         // Make labels in the inlined body unique.
-                        let suffix = format!("_{}", suffix_count);
+                        let suffix = format!("_{suffix_count}");
                         stmts_of_inlined_body = stmts_of_inlined_body
                             .iter()
                             .map(|stmt| Self::append_suffix_to_stmt(stmt, &suffix))

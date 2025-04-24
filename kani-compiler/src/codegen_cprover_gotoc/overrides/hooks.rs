@@ -836,11 +836,11 @@ fn handle_quantifier(
     // Quantified variable.
     let base_name = "kani_quantified_var".to_string();
     let mut counter = 0;
-    let mut unique_name = format!("{}_{}", base_name, counter);
+    let mut unique_name = format!("{base_name}_{counter}");
     // Ensure the name is not already in the symbol table
     while gcx.symbol_table.lookup(&unique_name).is_some() {
         counter += 1;
-        unique_name = format!("{}_{}", base_name, counter);
+        unique_name = format!("{base_name}_{counter}");
     }
     let new_variable_expr = {
         let new_symbol =
