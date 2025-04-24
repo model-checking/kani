@@ -68,6 +68,8 @@ pub enum Analysis {
     Recursion,
     /// Collect information about transitive usage of unsafe.
     UnsafeDistance,
+    /// Collect information about function visibility.
+    PublicFns,
 }
 
 fn info(msg: String) {
@@ -103,6 +105,7 @@ fn analyze_crate(tcx: TyCtxt, analyses: &[Analysis]) -> ControlFlow<()> {
             Analysis::FnLoops => crate_stats.loops(out_path),
             Analysis::Recursion => crate_stats.recursion(out_path),
             Analysis::UnsafeDistance => crate_stats.unsafe_distance(out_path),
+            Analysis::PublicFns => crate_stats.public_fns(&tcx),
         }
     }
     crate_stats.store_csv(base_path, &file_stem);

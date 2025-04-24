@@ -7,6 +7,8 @@ use crate::info;
 use csv::WriterBuilder;
 use graph_cycles::Cycles;
 use petgraph::graph::Graph;
+use rustc_middle::ty::TyCtxt;
+use rustc_smir::rustc_internal;
 use serde::{Serialize, Serializer, ser::SerializeStruct};
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::visit::{Location, PlaceContext, PlaceRef};
@@ -36,6 +38,7 @@ struct FnStats {
     has_unsafe_ops: Option<bool>,
     has_unsupported_input: Option<bool>,
     has_loop_or_iterator: Option<bool>,
+    is_public: Option<bool>,
 }
 
 impl FnStats {
@@ -46,6 +49,7 @@ impl FnStats {
             has_unsafe_ops: None,
             has_unsupported_input: None,
             has_loop_or_iterator: None,
+            is_public: None,
         }
     }
 }
@@ -234,6 +238,29 @@ impl OverallStats {
                 })
                 .collect::<Vec<_>>(),
         );
+    }
+
+    /// Iterate over all functions defined in this crate and log public vs private
+    pub fn public_fns(&mut self, tcx: &TyCtxt) {
+        let all_items = stable_mir::all_local_items();
+        let (public_fns, private_fns) = all_items
+            .into_iter()
+            .filter_map(|item| {
+                let kind = item.ty().kind();
+                if !kind.is_fn() {
+                    return None;
+                };
+                let int_def_id = rustc_internal::internal(*tcx, item.def_id());
+                let is_public = tcx.visibility(int_def_id).is_public()
+                    || tcx.visibility(int_def_id).is_visible_locally();
+                self.fn_stats.get_mut(&item).unwrap().is_public = Some(is_public);
+                Some((item, is_public))
+            })
+            .partition::<Vec<(CrateItem, bool)>, _>(|(_, is_public)| *is_public);
+        self.counters.extend_from_slice(&[
+            ("public_fns", public_fns.len()),
+            ("private_fns", private_fns.len()),
+        ]);
     }
 }
 
