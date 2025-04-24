@@ -31,10 +31,10 @@ fn set_zero_harness() {
 
 #[kani::ensures(|ret| {
     unsafe{
-    let ptr_x = xs.as_ptr(); 
+    let ptr_x = xs.as_ptr();
     let ptr_y = ys.as_ptr(); kani::forall!(| k in (0, 8)| *ptr_x.wrapping_byte_offset(k as isize) == *ptr_y.wrapping_byte_offset(k as isize))}})]
 #[kani::modifies(ys)]
-pub fn copy(xs: &mut [u8; 8], ys: &mut [u8; 8])  {
+pub fn copy(xs: &mut [u8; 8], ys: &mut [u8; 8]) {
     let mut i = 0;
     while i < 8 {
         ys[i] = xs[i];
