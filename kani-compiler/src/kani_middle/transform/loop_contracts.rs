@@ -237,18 +237,16 @@ impl LoopContractPass {
         let mut contain_loop_contracts = false;
 
         // Redirect loop latches to the new latches.
-        if let TerminatorKind::Goto { target: terminator_target } = &terminator.kind {
-            if self.new_loop_latches.contains_key(terminator_target) {
-                new_body.replace_terminator(
-                    &SourceInstruction::Terminator { bb: bb_idx },
-                    Terminator {
-                        kind: TerminatorKind::Goto {
-                            target: self.new_loop_latches[terminator_target],
-                        },
-                        span: terminator.span,
-                    },
-                );
-            }
+        if let TerminatorKind::Goto { target: terminator_target } = &terminator.kind
+            && self.new_loop_latches.contains_key(terminator_target)
+        {
+            new_body.replace_terminator(
+                &SourceInstruction::Terminator { bb: bb_idx },
+                Terminator {
+                    kind: TerminatorKind::Goto { target: self.new_loop_latches[terminator_target] },
+                    span: terminator.span,
+                },
+            );
         }
 
         // Transform loop heads with loop contracts.

@@ -102,7 +102,7 @@ fn print_autoharness_metadata(metadata: Vec<KaniMetadata>) {
                     format!(
                         "{reason} {}",
                         args.iter()
-                            .map(|(name, typ)| format!("{}: {}", name, typ))
+                            .map(|(name, typ)| format!("{name}: {typ}"))
                             .collect::<Vec<_>>()
                             .join(", ")
                     ),
@@ -169,10 +169,9 @@ impl KaniSession {
                 // This catches cases like include="foo::bar" exclude="bar" or include="foo" exclude="foo"
                 if include_pattern.contains(exclude_pattern) {
                     warning(&format!(
-                        "Include pattern '{}' contains exclude pattern '{}'. \
+                        "Include pattern '{include_pattern}' contains exclude pattern '{exclude_pattern}'. \
                             This combination will never match any functions since all functions matching \
-                            the include pattern will also match the exclude pattern, and the exclude pattern takes precedence.",
-                        include_pattern, exclude_pattern
+                            the include pattern will also match the exclude pattern, and the exclude pattern takes precedence."
                     ));
                 }
             }
@@ -180,10 +179,10 @@ impl KaniSession {
 
         let mut args = vec![];
         for pattern in included {
-            args.push(format!("--autoharness-include-pattern {}", pattern));
+            args.push(format!("--autoharness-include-pattern {pattern}"));
         }
         for pattern in excluded {
-            args.push(format!("--autoharness-exclude-pattern {}", pattern));
+            args.push(format!("--autoharness-exclude-pattern {pattern}"));
         }
         self.autoharness_compiler_flags = Some(args);
     }

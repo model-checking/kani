@@ -180,7 +180,7 @@ impl KaniSession {
             file_output = format!("Thread {thread_index}:\n{file_output}");
         }
 
-        if let Err(e) = writeln!(file, "{}", file_output) {
+        if let Err(e) = writeln!(file, "{file_output}") {
             eprintln!(
                 "Failed to write to file {}: {}",
                 file_name.into_os_string().into_string().unwrap(),

@@ -82,8 +82,8 @@ fn construct_output<T: Display>(
 /// Print results to the terminal.
 fn pretty(list_metadata: BTreeSet<ListMetadata>) -> Result<()> {
     let (contract_output, standard_output) = construct_output(list_metadata, pretty_constructor)?;
-    println!("{}", contract_output);
-    println!("{}", standard_output);
+    println!("{contract_output}");
+    println!("{standard_output}");
 
     Ok(())
 }

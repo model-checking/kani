@@ -79,10 +79,10 @@ impl MirVisitor for InitialTargetVisitor {
                         RigidTy::RawPtr(ty, _) | RigidTy::Ref(_, ty, _) => Some(ty),
                         _ => None,
                     };
-                    if let (Some(from_ty), Some(to_ty)) = (from_ty, to_ty) {
-                        if !tys_layout_equal_to_size(from_ty, to_ty) {
-                            self.push_operand(operand);
-                        }
+                    if let (Some(from_ty), Some(to_ty)) = (from_ty, to_ty)
+                        && !tys_layout_equal_to_size(from_ty, to_ty)
+                    {
+                        self.push_operand(operand);
                     }
                 }
                 _ => {}

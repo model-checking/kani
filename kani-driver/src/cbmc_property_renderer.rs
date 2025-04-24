@@ -441,7 +441,7 @@ pub fn format_coverage(
     let verification_output =
         format_result(&non_coverage_checks, status, should_panic, failed_properties, show_checks);
     let cov_results_intro = "Source-based code coverage results:";
-    let result = format!("{}\n{}\n\n{}", verification_output, cov_results_intro, cov_results);
+    let result = format!("{verification_output}\n{cov_results_intro}\n\n{cov_results}");
 
     result
 }

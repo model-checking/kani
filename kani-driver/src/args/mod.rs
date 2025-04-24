@@ -485,7 +485,7 @@ fn check_no_cargo_opt(is_set: bool, name: &str) -> Result<(), Error> {
     if is_set {
         Err(Error::raw(
             ErrorKind::UnknownArgument,
-            format!("argument `{}` cannot be used with standalone Kani.", name),
+            format!("argument `{name}` cannot be used with standalone Kani."),
         ))
     } else {
         Ok(())
@@ -516,16 +516,16 @@ impl ValidateArgs for StandaloneArgs {
         check_no_cargo_opt(!self.verify_opts.cargo.exclude.is_empty(), "--exclude")?;
         check_no_cargo_opt(self.verify_opts.cargo.workspace, "--workspace")?;
         check_no_cargo_opt(self.verify_opts.cargo.manifest_path.is_some(), "--manifest-path")?;
-        if let Some(input) = &self.input {
-            if !input.is_file() {
-                return Err(Error::raw(
-                    ErrorKind::InvalidValue,
-                    format!(
-                        "Invalid argument: Input invalid. `{}` is not a regular file.",
-                        input.display()
-                    ),
-                ));
-            }
+        if let Some(input) = &self.input
+            && !input.is_file()
+        {
+            return Err(Error::raw(
+                ErrorKind::InvalidValue,
+                format!(
+                    "Invalid argument: Input invalid. `{}` is not a regular file.",
+                    input.display()
+                ),
+            ));
         }
         Ok(())
     }
@@ -634,16 +634,17 @@ impl ValidateArgs for VerificationArgs {
                 "Conflicting options: --jobs requires `--output-format=terse`",
             ));
         }
-        if let Some(out_dir) = &self.target_dir {
-            if out_dir.exists() && !out_dir.is_dir() {
-                return Err(Error::raw(
-                    ErrorKind::InvalidValue,
-                    format!(
-                        "Invalid argument: `--target-dir` argument `{}` is not a directory",
-                        out_dir.display()
-                    ),
-                ));
-            }
+        if let Some(out_dir) = &self.target_dir
+            && out_dir.exists()
+            && !out_dir.is_dir()
+        {
+            return Err(Error::raw(
+                ErrorKind::InvalidValue,
+                format!(
+                    "Invalid argument: `--target-dir` argument `{}` is not a directory",
+                    out_dir.display()
+                ),
+            ));
         }
 
         self.common_args.check_unstable(
@@ -1016,7 +1017,7 @@ mod tests {
         args: &str,
         unstable: UnstableFeature,
     ) -> Result<StandaloneArgs, Error> {
-        let args = format!("kani -Z {} file.rs {args}", unstable);
+        let args = format!("kani -Z {unstable} file.rs {args}");
         let parse_res = StandaloneArgs::try_parse_from(args.split(' '))?;
         parse_res.verify_opts.validate()?;
         Ok(parse_res)
