@@ -1,7 +1,7 @@
 Checking harness check_next_y...
 
 Status: SUCCESS\
-Description: "|result| result.y == old(self.y) + 1"\
+Description: "Panic: |result| result.y == old(self.y) + 1"\
 in function Point::next_y
 
 VERIFICATION:- SUCCESSFUL
@@ -9,7 +9,7 @@ VERIFICATION:- SUCCESSFUL
 Checking harness check_add_x...
 
 Status: SUCCESS\
-Description: "|_| val < 0 || self.x >= old(self.x)"\
+Description: "Panic: |_| val < 0 || self.x >= old(self.x)"\
 in function Point::add_x
 
 VERIFICATION:- SUCCESSFUL

@@ -1,6 +1,6 @@
 .assertion\
 - Status: SUCCESS\
-- Description: "equality"\
+- Description: "Panic: equality"\
 in function copy_replace
 
 VERIFICATION:- SUCCESSFUL

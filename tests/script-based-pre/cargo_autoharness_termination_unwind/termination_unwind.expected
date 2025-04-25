@@ -13,7 +13,7 @@ Not unwinding recursion gcd_recursion iteration 21
 
 gcd_recursion.assertion\
 	 - Status: FAILURE\
-	 - Description: "attempt to calculate the remainder with a divisor of zero"
+	 - Description: "Panic: attempt to calculate the remainder with a divisor of zero"
 
 gcd_recursion.recursion\
 	 - Status: FAILURE\

@@ -1,4 +1,4 @@
 Status: SUCCESS\
-Description: "assertion failed: C.x == 0"
+Description: "Panic: assertion failed: C.x == 0"
 
 VERIFICATION:- SUCCESSFUL

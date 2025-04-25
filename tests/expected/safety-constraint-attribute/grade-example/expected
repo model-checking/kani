@@ -1,10 +1,10 @@
 Grade::check_percentage_safety.assertion.1\
          - Status: SUCCESS\
-         - Description: "assertion failed: self.percentage <= 100"
+         - Description: "Panic: assertion failed: self.percentage <= 100"
 
 check_grade_safe.assertion.1\
          - Status: SUCCESS\
-         - Description: "assertion failed: grade.is_safe()"
+         - Description: "Panic: assertion failed: grade.is_safe()"
 
 VERIFICATION:- SUCCESSFUL
 

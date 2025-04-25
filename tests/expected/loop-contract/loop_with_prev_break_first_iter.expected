@@ -1,3 +1,3 @@
-Failed Checks: assertion failed: (i >= 2) && (i <= 100) && (__kani_prev_var_
+Failed Checks: Panic: assertion failed: (i >= 2) && (i <= 100) && (__kani_prev_var_
 
 VERIFICATION:- FAILED

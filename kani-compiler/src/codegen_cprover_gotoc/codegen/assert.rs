@@ -231,7 +231,7 @@ impl GotocCtx<'_> {
         // If there is one in the MIR, use it; otherwise, explain that we can't.
         assert!(!fargs.is_empty(), "Panic requires a string message");
         let msg = self.extract_const_message(&fargs[0]).unwrap_or(String::from(
-            "This is a placeholder message; Kani doesn't support message formatted at runtime",
+            "Panic: This is a placeholder message; Kani doesn't support message formatted at runtime",
         ));
         self.codegen_fatal_error(PropertyClass::Assertion, &msg, span)
     }

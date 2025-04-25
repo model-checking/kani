@@ -1,8 +1,8 @@
 main.assertion\
 - Status: FAILURE\
-- Description: "not havocked"\
+- Description: "Panic: not havocked"\
 in function main
 
-Failed Checks: not havocked
+Failed Checks: Panic: not havocked
 
 VERIFICATION:- FAILED

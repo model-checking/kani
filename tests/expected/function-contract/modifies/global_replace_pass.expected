@@ -1,6 +1,6 @@
 main.assertion\
 - Status: SUCCESS\
-- Description: "replaced"\
+- Description: "Panic: replaced"\
 in function main
 
 VERIFICATION:- SUCCESSFUL

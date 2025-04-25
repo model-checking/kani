@@ -1,16 +1,16 @@
 fixed::VecDeque::<u8>::handle_capacity_increase.assertion\
 Status: SUCCESS\
-Description: "assertion failed: self.head < self.cap()"\
+Description: "Panic: assertion failed: self.head < self.cap()"\
 Location: src/fixed.rs
 
 fixed::VecDeque::<u8>::handle_capacity_increase.assertion\
 Status: SUCCESS\
-Description: "assertion failed: self.tail < self.cap()"\
+Description: "Panic: assertion failed: self.tail < self.cap()"\
 Location: src/fixed.rs
 
 fixed::VecDeque::<u8>::handle_capacity_increase.assertion\
 Status: SUCCESS\
-Description: "assertion failed: self.cap().count_ones() == 1"\
+Description: "Panic: assertion failed: self.cap().count_ones() == 1"\
 Location: src/fixed.rs
 
 VERIFICATION:- SUCCESSFUL

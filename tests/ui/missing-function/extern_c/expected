@@ -1,5 +1,5 @@
 Status: UNDETERMINED\
-Description: "assertion failed: x == 5"
+Description: "Panic: assertion failed: x == 5"
 Status: FAILURE\
 Description: "Function `missing_function` with missing definition is unreachable"
 VERIFICATION:- FAILED

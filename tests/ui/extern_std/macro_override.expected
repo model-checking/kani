@@ -1,7 +1,7 @@
 Checking harness foo...
 
 Status: SUCCESS\
-Description: ""debug_assert""\
+Description: "Panic: "debug_assert""\
 macro_override.rs:
 
 Status: SUCCESS\

@@ -1,2 +1,2 @@
 Status: SUCCESS\
-Description: "assertion failed: x * y == 33"
+Description: "Panic: assertion failed: x * y == 33"

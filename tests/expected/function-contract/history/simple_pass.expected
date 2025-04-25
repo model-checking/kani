@@ -1,5 +1,5 @@
 assertion\
 - Status: SUCCESS\
-- Description: "|result| old(*ptr + 1) == *ptr"\
+- Description: "Panic: |result| old(*ptr + 1) == *ptr"\
 
 VERIFICATION:- SUCCESSFUL

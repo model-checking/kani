@@ -1,10 +1,10 @@
 SUCCESS\
-Description: "assertion failed: res == CoroutineState::Yielded(val)"
+Description: "Panic: assertion failed: res == CoroutineState::Yielded(val)"
 
 SUCCESS\
-Description: "assertion failed: res == CoroutineState::Complete(!val)"
+Description: "Panic: assertion failed: res == CoroutineState::Complete(!val)"
 
 UNREACHABLE\
-Description: "coroutine resumed after completion"
+Description: "Panic: coroutine resumed after completion"
 
 VERIFICATION:- SUCCESSFUL

@@ -1,13 +1,13 @@
 Status: SUCCESS\
-Description: "assertion failed: x > 3 == true"
+Description: "Panic: assertion failed: x > 3 == true"
 
 Status: SUCCESS\
-Description: "assertion failed: x == 1 == false"
+Description: "Panic: assertion failed: x == 1 == false"
 
 Status: SUCCESS\
-Description: "assertion failed: x < 10 != false"
+Description: "Panic: assertion failed: x < 10 != false"
 
 Status: FAILURE\
-Description: "assertion failed: x == 7 != false"
+Description: "Panic: assertion failed: x == 7 != false"
 
 VERIFICATION:- FAILED

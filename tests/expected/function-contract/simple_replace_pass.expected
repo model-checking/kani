@@ -1,9 +1,9 @@
 .assertion\
 - Status: SUCCESS\
-- Description: "divisor != 0"
+- Description: "Panic: divisor != 0"
 
 main.assertion\
 - Status: SUCCESS\
-- Description: ""contract guarantees smallness""
+- Description: "Panic: "contract guarantees smallness""
 
 VERIFICATION:- SUCCESSFUL

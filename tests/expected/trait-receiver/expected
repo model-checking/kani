@@ -1,16 +1,16 @@
 Checking harness check_box...
 
 Status: SUCCESS\
-Description: "assertion failed: boxed.ref_id() == id"\
+Description: "Panic: assertion failed: boxed.ref_id() == id"\
 in function check_box
 
 Status: SUCCESS\
-Description: "assertion failed: boxed.box_id() == id"\
+Description: "Panic: assertion failed: boxed.box_id() == id"\
 in function check_box
 
 
 Status: SUCCESS\
-Description: "assertion failed: self.as_ref().id == self.id"\
+Description: "Panic: assertion failed: self.as_ref().id == self.id"\
 in function <Concrete as Trait>::box_id
 
 VERIFICATION:- SUCCESSFUL
@@ -19,16 +19,16 @@ VERIFICATION:- SUCCESSFUL
 Checking harness check_rc...
 
 Status: SUCCESS\
-Description: "assertion failed: ref_count.ref_id() == id"\
+Description: "Panic: assertion failed: ref_count.ref_id() == id"\
 in function check_rc
 
 Status: SUCCESS\
-Description: "assertion failed: ref_count.rc_id() == id"\
+Description: "Panic: assertion failed: ref_count.rc_id() == id"\
 in function check_rc
 
 
 Status: SUCCESS\
-Description: "assertion failed: self.as_ref().id == self.id"\
+Description: "Panic: assertion failed: self.as_ref().id == self.id"\
 in function <Concrete as Trait>::rc_id
 
 VERIFICATION:- SUCCESSFUL
@@ -37,16 +37,16 @@ VERIFICATION:- SUCCESSFUL
 Checking harness check_arc...
 
 Status: SUCCESS\
-Description: "assertion failed: async_ref.ref_id() == id"\
+Description: "Panic: assertion failed: async_ref.ref_id() == id"\
 in function check_arc
 
 Status: SUCCESS\
-Description: "assertion failed: async_ref.arc_id() == id"\
+Description: "Panic: assertion failed: async_ref.arc_id() == id"\
 in function check_arc
 
 
 Status: SUCCESS\
-Description: "assertion failed: self.as_ref().id == self.id"\
+Description: "Panic: assertion failed: self.as_ref().id == self.id"\
 in function <Concrete as Trait>::arc_id
 
 VERIFICATION:- SUCCESSFUL
@@ -55,15 +55,15 @@ VERIFICATION:- SUCCESSFUL
 Checking harness check_pin...
 
 Status: SUCCESS\
-Description: "assertion failed: pin.ref_id() == id"\
+Description: "Panic: assertion failed: pin.ref_id() == id"\
 in function check_pin
 
 Status: SUCCESS\
-Description: "assertion failed: pin.pin_id() == id"\
+Description: "Panic: assertion failed: pin.pin_id() == id"\
 in function check_pin
 
 Status: SUCCESS\
-Description: "assertion failed: self.as_ref().id == self.id"\
+Description: "Panic: assertion failed: self.as_ref().id == self.id"\
 in function <Concrete as Trait>::pin_id
 
 
@@ -72,15 +72,15 @@ VERIFICATION:- SUCCESSFUL
 Checking harness check_pin_box...
 
 Status: SUCCESS\
-Description: "assertion failed: pin.ref_id() == id"\
+Description: "Panic: assertion failed: pin.ref_id() == id"\
 in function check_pin_box
 
 Status: SUCCESS\
-Description: "assertion failed: pin.pin_box_id() == id"\
+Description: "Panic: assertion failed: pin.pin_box_id() == id"\
 in function check_pin_box
 
 Status: SUCCESS\
-Description: "assertion failed: self.as_ref().id == self.id"\
+Description: "Panic: assertion failed: self.as_ref().id == self.id"\
 in function <Concrete as Trait>::pin_box_id
 
 VERIFICATION:- SUCCESSFUL
@@ -89,11 +89,11 @@ VERIFICATION:- SUCCESSFUL
 Checking harness check_mut...
 
 Status: SUCCESS\
-Description: "assertion failed: trt.replace_id(new_id) == initial_id"\
+Description: "Panic: assertion failed: trt.replace_id(new_id) == initial_id"\
 in function check_mut
 
 Status: SUCCESS\
-Description: "assertion failed: trt.ref_id() == new_id"\
+Description: "Panic: assertion failed: trt.ref_id() == new_id"\
 in function check_mut
 
 VERIFICATION:- SUCCESSFUL
@@ -102,7 +102,7 @@ VERIFICATION:- SUCCESSFUL
 Checking harness check_bound...
 
 Status: SUCCESS\
-Description: "assertion failed: obj.bound_value() == id"\
+Description: "Panic: assertion failed: obj.bound_value() == id"\
 in function check_bound::assert_value::<Concrete>
 
 VERIFICATION:- SUCCESSFUL

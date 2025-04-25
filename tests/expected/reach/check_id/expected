@@ -1,10 +1,10 @@
 Status: FAILURE\
-Description: "assertion failed: 3 + 3 == 5"
+Description: "Panic: assertion failed: 3 + 3 == 5"
 
 Status: UNREACHABLE\
-Description: "assertion failed: 2 + 2 == 4"
+Description: "Panic: assertion failed: 2 + 2 == 4"
 
 Status: SUCCESS\
-Description: "assertion failed: 1 + 1 == 2"
+Description: "Panic: assertion failed: 1 + 1 == 2"
 
 VERIFICATION:- FAILED

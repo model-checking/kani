@@ -1,2 +1,2 @@
 UNREACHABLE\
-Description: "assertion failed: y == 55"
+Description: "Panic: assertion failed: y == 55"

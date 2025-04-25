@@ -1,2 +1,2 @@
 UNDETERMINED\
-Description: "assertion failed: x == 0"
+Description: "Panic: assertion failed: x == 0"

@@ -1,9 +1,9 @@
-Failed Checks: attempt to add with overflow
-Failed Checks: attempt to subtract with overflow
-Failed Checks: attempt to multiply with overflow
-Failed Checks: attempt to divide by zero
-Failed Checks: attempt to calculate the remainder with a divisor of zero
-Failed Checks: attempt to shift left with overflow
-Failed Checks: attempt to shift right with overflow
-Failed Checks: attempt to negate with overflow
-Failed Checks: index out of bounds: the length is less than or equal to the given index
+Failed Checks: Panic: attempt to add with overflow
+Failed Checks: Panic: attempt to subtract with overflow
+Failed Checks: Panic: attempt to multiply with overflow
+Failed Checks: Panic: attempt to divide by zero
+Failed Checks: Panic: attempt to calculate the remainder with a divisor of zero
+Failed Checks: Panic: attempt to shift left with overflow
+Failed Checks: Panic: attempt to shift right with overflow
+Failed Checks: Panic: attempt to negate with overflow
+Failed Checks: Panic: index out of bounds: the length is less than or equal to the given index

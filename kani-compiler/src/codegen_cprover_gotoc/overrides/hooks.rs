@@ -137,7 +137,12 @@ impl GotocHook for Assert {
         Stmt::block(
             vec![
                 reach_stmt,
-                gcx.codegen_assert_assume(cond, PropertyClass::Assertion, &msg, caller_loc),
+                gcx.codegen_assert_assume(
+                    cond,
+                    PropertyClass::Assertion,
+                    &("Panic: ".to_owned() + &msg),
+                    caller_loc,
+                ),
                 Stmt::goto(bb_label(target), caller_loc),
             ],
             caller_loc,
@@ -272,7 +277,12 @@ impl GotocHook for Check {
         Stmt::block(
             vec![
                 reach_stmt,
-                gcx.codegen_assert(cond, PropertyClass::Assertion, &msg, caller_loc),
+                gcx.codegen_assert(
+                    cond,
+                    PropertyClass::Assertion,
+                    &("Panic: ".to_owned() + &msg),
+                    caller_loc,
+                ),
                 Stmt::goto(bb_label(target), caller_loc),
             ],
             caller_loc,

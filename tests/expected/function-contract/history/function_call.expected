@@ -1,5 +1,5 @@
 assertion\
 	 - Status: SUCCESS\
-	 - Description: "|result| old(add1(dereference(ptr))) == *ptr"\
+	 - Description: "Panic: |result| old(add1(dereference(ptr))) == *ptr"\
 
 VERIFICATION:- SUCCESSFUL

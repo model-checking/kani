@@ -1,5 +1,5 @@
 - Status: SUCCESS\
-Description: "assertion failed: 1 + 1 == 2"
+Description: "Panic: assertion failed: 1 + 1 == 2"
 - Status: FAILURE\
-- Description: "assertion failed: 2 + 2 == 3"
+- Description: "Panic: assertion failed: 2 + 2 == 3"
 VERIFICATION:- FAILED

@@ -1,2 +1,2 @@
 VERIFICATION RESULT:
-Failed Checks: assertion failed: 1 + 1 == 3
+Failed Checks: Panic: assertion failed: 1 + 1 == 3

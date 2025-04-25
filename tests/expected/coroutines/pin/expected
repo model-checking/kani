@@ -7,7 +7,7 @@ Description: "unexpected yield from resume"\
 in function main
 
 UNREACHABLE\
-Description: "coroutine resumed after completion"
+Description: "Panic: coroutine resumed after completion"
 in function main::{closure#0}
 
 VERIFICATION:- SUCCESSFUL
