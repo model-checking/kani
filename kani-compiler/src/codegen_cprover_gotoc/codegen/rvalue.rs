@@ -26,7 +26,10 @@ use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{
     AggregateKind, BinOp, CastKind, NullOp, Operand, Place, PointerCoercion, Rvalue, UnOp,
 };
-use stable_mir::ty::{ClosureKind, IntTy, RigidTy, Size, Ty, TyConst, TyKind, UintTy, VariantIdx};
+use stable_mir::ty::{
+    Binder, ClosureKind, ExistentialPredicate, IntTy, RigidTy, Size, Ty, TyConst, TyKind, UintTy,
+    VariantIdx,
+};
 use std::collections::BTreeMap;
 use tracing::{debug, trace, warn};
 
@@ -731,7 +734,7 @@ impl GotocCtx<'_> {
                     }
                 }
             }
-            AggregateKind::Coroutine(_, _, _) => self.codegen_rvalue_coroutine(&operands, res_ty),
+            AggregateKind::Coroutine(_, _, _) => self.codegen_rvalue_coroutine(operands, res_ty),
             AggregateKind::CoroutineClosure(_, _) => {
                 let ty = self.codegen_ty_stable(res_ty);
                 self.codegen_unimplemented_expr(
@@ -751,10 +754,10 @@ impl GotocCtx<'_> {
             Rvalue::Use(p) => self.codegen_operand_stable(p),
             Rvalue::Repeat(op, sz) => self.codegen_rvalue_repeat(op, sz, loc),
             Rvalue::Ref(_, _, p) | Rvalue::AddressOf(_, p) => {
-                let place_ref = self.codegen_place_ref_stable(&p, loc);
+                let place_ref = self.codegen_place_ref_stable(p, loc);
                 let place_ref_type = place_ref.typ().clone();
                 match self.codegen_raw_ptr_deref_validity_check(
-                    &p,
+                    p,
                     place_ref.clone(),
                     self.place_ty_stable(p),
                     &loc,
@@ -1528,9 +1531,26 @@ impl GotocCtx<'_> {
                         VtblEntry::MetadataSize => Some(vt_size.clone()),
                         VtblEntry::MetadataAlign => Some(vt_align.clone()),
                         VtblEntry::Vacant => None,
-                        // TODO: trait upcasting
-                        // https://github.com/model-checking/kani/issues/358
-                        VtblEntry::TraitVPtr(_trait_ref) => None,
+                        VtblEntry::TraitVPtr(trait_ref) => {
+                            let projections = match dst_mir_type.kind() {
+                                TyKind::RigidTy(RigidTy::Dynamic(predicates, ..)) => predicates
+                                    .iter()
+                                    .filter_map(|pred| match &pred.value {
+                                        ExistentialPredicate::Projection(proj) => {
+                                            Some(Binder::bind_with_vars(
+                                                proj.clone(),
+                                                pred.bound_vars.clone(),
+                                            ))
+                                        }
+                                        _ => None,
+                                    })
+                                    .collect(),
+                                _ => vec![],
+                            };
+
+                            let dyn_ref = ctx.trait_ref_to_dyn_trait(*trait_ref, projections);
+                            Some(ctx.codegen_vtable(src_mir_type, dyn_ref, loc).address_of())
+                        }
                         VtblEntry::Method(instance) => Some(ctx.codegen_vtable_method_field(
                             rustc_internal::stable(instance),
                             trait_type,
@@ -1593,8 +1613,15 @@ impl GotocCtx<'_> {
                 };
                 slice_fat_ptr(fat_ptr_type, dst_data_expr, dst_goto_len, &self.symbol_table)
             }
-            (TyKind::RigidTy(RigidTy::Dynamic(..)), TyKind::RigidTy(RigidTy::Dynamic(..))) => {
-                // Cast between fat pointers. Cast the data and the source
+            (
+                ref src_ty @ TyKind::RigidTy(RigidTy::Dynamic(.., ref src_dyn_kind)),
+                ref dst_ty @ TyKind::RigidTy(RigidTy::Dynamic(.., ref dst_dyn_kind)),
+            ) => {
+                assert_eq!(
+                    src_dyn_kind, dst_dyn_kind,
+                    "casting from `{src_dyn_kind:?}` to `{dst_dyn_kind:?}` is not supported"
+                );
+                // Cast between dyn pointers. Cast the data and the source
                 let src_data = src_goto_expr.to_owned().member("data", &self.symbol_table);
                 let dst_data = src_data.cast_to(dst_data_type);
 
@@ -1602,9 +1629,28 @@ impl GotocCtx<'_> {
                 let src_vtable = src_goto_expr.member("vtable", &self.symbol_table);
                 let vtable_name = self.vtable_name_stable(metadata_dst_type);
                 let vtable_ty = Type::struct_tag(vtable_name).to_pointer();
-                let dst_vtable = src_vtable.cast_to(vtable_ty);
 
-                // Construct a fat pointer with the same (casted) fields and new type
+                // Note: Logic based on upstream rustc_codegen_ssa:
+                // https://github.com/rust-lang/rust/blob/8bf5a8d/compiler/rustc_codegen_ssa/src/base.rs#L171
+                let dst_vtable = if src_ty.trait_principal() == dst_ty.trait_principal()
+                    || dst_ty.trait_principal().is_none()
+                {
+                    // If we're casting to the same dyn trait, we can reuse the old vtable
+                    src_vtable.cast_to(vtable_ty)
+                } else if let Some(vptr_entry_idx) = self.tcx.supertrait_vtable_slot((
+                    rustc_internal::internal(self.tcx, metadata_src_type),
+                    rustc_internal::internal(self.tcx, metadata_dst_type),
+                )) {
+                    // Otherwise, if the principals differ and our vtable contains a pointer to the supertrait vtable,
+                    // we can load that
+                    src_vtable
+                        .dereference()
+                        .member(vptr_entry_idx.to_string(), &self.symbol_table)
+                        .cast_to(vtable_ty)
+                } else {
+                    // Fallback to original vtable
+                    src_vtable.cast_to(vtable_ty)
+                };
                 dynamic_fat_ptr(fat_ptr_type, dst_data, dst_vtable, &self.symbol_table)
             }
             (_, TyKind::RigidTy(RigidTy::Dynamic(..))) => {

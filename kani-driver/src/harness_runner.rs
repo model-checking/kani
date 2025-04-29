@@ -72,12 +72,12 @@ impl<'pr> HarnessRunner<'_, 'pr> {
                 .enumerate()
                 .map(|(idx, harness)| -> Result<HarnessResult<'pr>> {
                     let goto_file =
-                        self.project.get_harness_artifact(&harness, ArtifactType::Goto).unwrap();
+                        self.project.get_harness_artifact(harness, ArtifactType::Goto).unwrap();
 
-                    self.sess.instrument_model(goto_file, goto_file, &self.project, &harness)?;
+                    self.sess.instrument_model(goto_file, goto_file, self.project, harness)?;
 
                     if self.sess.args.synthesize_loop_contracts {
-                        self.sess.synthesize_loop_contracts(goto_file, &goto_file, &harness)?;
+                        self.sess.synthesize_loop_contracts(goto_file, goto_file, harness)?;
                     }
 
                     let result = self.sess.check_harness(goto_file, harness)?;
@@ -180,7 +180,7 @@ impl KaniSession {
             file_output = format!("Thread {thread_index}:\n{file_output}");
         }
 
-        if let Err(e) = writeln!(file, "{}", file_output) {
+        if let Err(e) = writeln!(file, "{file_output}") {
             eprintln!(
                 "Failed to write to file {}: {}",
                 file_name.into_os_string().into_string().unwrap(),
@@ -298,11 +298,13 @@ impl KaniSession {
             self.show_coverage_summary()?;
         }
 
-        if self.auto_harness {
-            self.print_autoharness_summary(automatic)?;
-        }
+        let autoharness_failing = if self.autoharness_compiler_flags.is_some() {
+            self.print_autoharness_summary(automatic)?
+        } else {
+            0
+        };
 
-        if failing > 0 && !self.auto_harness {
+        if failing + autoharness_failing > 0 {
             // Failure exit code without additional error message
             drop(self);
             std::process::exit(1);

@@ -105,21 +105,21 @@ fn toml_to_args(tomldata: &str) -> Result<(Vec<OsString>, Vec<OsString>)> {
 
     for table in tables {
         if let Some(table) = get_table(&config, table) {
-            if let Some(entry) = table.get("flags") {
-                if let Some(val) = entry.as_table() {
-                    map.extend(val.iter().map(|(x, y)| (x.to_owned(), y.to_owned())));
-                }
+            if let Some(entry) = table.get("flags")
+                && let Some(val) = entry.as_table()
+            {
+                map.extend(val.iter().map(|(x, y)| (x.to_owned(), y.to_owned())));
             }
 
-            if let Some(entry) = table.get("unstable") {
-                if let Some(val) = entry.as_table() {
-                    args.append(
-                        &mut val
-                            .iter()
-                            .filter_map(|(k, v)| unstable_entry(k, v).transpose())
-                            .collect::<Result<Vec<_>>>()?,
-                    );
-                }
+            if let Some(entry) = table.get("unstable")
+                && let Some(val) = entry.as_table()
+            {
+                args.append(
+                    &mut val
+                        .iter()
+                        .filter_map(|(k, v)| unstable_entry(k, v).transpose())
+                        .collect::<Result<Vec<_>>>()?,
+                );
             }
         }
     }

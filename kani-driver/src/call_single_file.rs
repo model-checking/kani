@@ -151,6 +151,10 @@ impl KaniSession {
             flags.push("--no-assert-contracts".into());
         }
 
+        if let Some(args) = self.autoharness_compiler_flags.clone() {
+            flags.extend(args);
+        }
+
         flags.extend(self.args.common_args.unstable_features.as_arguments().map(str::to_string));
 
         flags
@@ -181,6 +185,11 @@ impl KaniSession {
             ]
             .map(OsString::from),
         );
+
+        if self.args.no_codegen {
+            flags.push("-Z".into());
+            flags.push("no-codegen".into());
+        }
 
         if let Some(seed_opt) = self.args.randomize_layout {
             flags.push("-Z".into());

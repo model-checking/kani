@@ -94,8 +94,9 @@ pub fn find_contract_closure<'a>(
 ///
 /// Panic if no closure was found.
 pub fn expect_closure<'a>(stmts: &'a mut [Stmt], name: &'static str) -> &'a mut Stmt {
-    find_contract_closure(stmts, name)
-        .expect(&format!("Internal Failure: Expected to find `{name}` closure, but found none"))
+    find_contract_closure(stmts, name).unwrap_or_else(|| {
+        panic!("Internal Failure: Expected to find `{name}` closure, but found none")
+    })
 }
 
 /// Find a closure inside a match block.
@@ -112,7 +113,9 @@ pub fn expect_closure_in_match<'a>(stmts: &'a mut [Stmt], name: &'static str) ->
             None
         }
     });
-    closure.expect(&format!("Internal Failure: Expected to find `{name}` closure, but found none"))
+    closure.unwrap_or_else(|| {
+        panic!("Internal Failure: Expected to find `{name}` closure, but found none")
+    })
 }
 
 /// Extract the body of a closure declaration.

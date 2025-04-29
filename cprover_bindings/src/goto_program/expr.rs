@@ -1035,11 +1035,12 @@ impl Expr {
             IeeeFloatEqual | IeeeFloatNotequal => lhs.typ == rhs.typ && lhs.typ.is_floating_point(),
             // Overflow flags
             OverflowMinus | OverflowResultMinus => {
-                (lhs.typ == rhs.typ && (lhs.typ.is_pointer() || lhs.typ.is_numeric()))
+                (lhs.typ == rhs.typ
+                    && (lhs.typ.is_pointer() || lhs.typ.is_numeric() || lhs.typ.is_vector()))
                     || (lhs.typ.is_pointer() && rhs.typ.is_integer())
             }
             OverflowMult | OverflowPlus | OverflowResultMult | OverflowResultPlus => {
-                (lhs.typ == rhs.typ && lhs.typ.is_integer())
+                (lhs.typ == rhs.typ && (lhs.typ.is_numeric() || lhs.typ.is_vector()))
                     || (lhs.typ.is_pointer() && rhs.typ.is_integer())
             }
             ROk => lhs.typ.is_pointer() && rhs.typ.is_c_size_t(),

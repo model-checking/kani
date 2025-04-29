@@ -119,8 +119,8 @@ pub fn try_as_result_assign(stmt: &syn::Stmt) -> Option<&syn::LocalInit> {
 pub fn build_ensures(data: &ExprClosure) -> (TokenStream2, Expr) {
     let mut remembers_exprs = HashMap::new();
     let mut vis = OldVisitor { t: OldLifter::new(), remembers_exprs: &mut remembers_exprs };
-    let mut expr = &mut data.clone();
-    vis.visit_expr_closure_mut(&mut expr);
+    let expr = &mut data.clone();
+    vis.visit_expr_closure_mut(expr);
 
     let remembers_stmts: TokenStream2 = remembers_exprs
         .iter()
@@ -174,7 +174,7 @@ impl<T: OldTrigger> syn::visit_mut::VisitMut for OldVisitor<'_, T> {
                     qself: None,
                     path: Path { leading_colon: None, segments },
                 }) if segments.len() == 1
-                    && segments.first().map_or(false, |sgm| sgm.ident == "old") =>
+                    && segments.first().is_some_and(|sgm| sgm.ident == "old") =>
                 {
                     let first_segment = segments.first().unwrap();
                     assert_spanned_err!(first_segment.arguments.is_empty(), first_segment);

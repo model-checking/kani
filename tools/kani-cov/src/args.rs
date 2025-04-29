@@ -131,9 +131,9 @@ pub fn validate_args(args: &Args) -> Result<()> {
     }
 
     match args.command.as_ref().unwrap() {
-        Subcommand::Merge(merge_args) => merge::validate_merge_args(&merge_args)?,
-        Subcommand::Summary(summary_args) => summary::validate_summary_args(&summary_args)?,
-        Subcommand::Report(report_args) => report::validate_report_args(&report_args)?,
+        Subcommand::Merge(merge_args) => merge::validate_merge_args(merge_args)?,
+        Subcommand::Summary(summary_args) => summary::validate_summary_args(summary_args)?,
+        Subcommand::Report(report_args) => report::validate_report_args(report_args)?,
     };
 
     Ok(())

@@ -90,6 +90,7 @@ impl CodegenUnits {
                 let (chosen, skipped) = automatic_harness_partition(
                     tcx,
                     args,
+                    &crate_info.name,
                     *kani_fns.get(&KaniModel::Any.into()).unwrap(),
                 );
                 AUTOHARNESS_MD
@@ -97,7 +98,7 @@ impl CodegenUnits {
                         chosen: chosen.iter().map(|func| func.name()).collect::<BTreeSet<_>>(),
                         skipped,
                     })
-                    .expect("Initializing the autoharness metdata failed");
+                    .expect("Initializing the autoharness metadata failed");
 
                 let automatic_harnesses = get_all_automatic_harnesses(
                     tcx,
@@ -131,6 +132,10 @@ impl CodegenUnits {
 
     pub fn iter(&self) -> impl Iterator<Item = &CodegenUnit> {
         self.units.iter()
+    }
+
+    pub fn is_automatic_harness(&self, harness: &Harness) -> bool {
+        self.harness_info.get(harness).is_some_and(|md| md.is_automatically_generated)
     }
 
     /// We store which instance of modifies was generated.
@@ -229,10 +234,10 @@ fn extract_contracts(
 ) -> BTreeSet<ContractUsage> {
     let def = harness.def;
     let mut result = BTreeSet::new();
-    if let HarnessKind::ProofForContract { target_fn } = &metadata.attributes.kind {
-        if let Ok(check_def) = expect_resolve_fn(tcx, def, target_fn, "proof_for_contract") {
-            result.insert(ContractUsage::Check(check_def.def_id().to_index()));
-        }
+    if let HarnessKind::ProofForContract { target_fn } = &metadata.attributes.kind
+        && let Ok(check_def) = expect_resolve_fn(tcx, def, target_fn, "proof_for_contract")
+    {
+        result.insert(ContractUsage::Check(check_def.def_id().to_index()));
     }
 
     for stub in &metadata.attributes.verified_stubs {
@@ -313,7 +318,7 @@ fn get_all_manual_harnesses(
     harnesses
         .into_iter()
         .map(|harness| {
-            let metadata = gen_proof_metadata(tcx, harness, &base_filename);
+            let metadata = gen_proof_metadata(tcx, harness, base_filename);
             (harness, metadata)
         })
         .collect::<HashMap<_, _>>()
@@ -340,7 +345,12 @@ fn get_all_automatic_harnesses(
                 &GenericArgs(vec![GenericArgKind::Type(fn_to_verify.ty())]),
             )
             .unwrap();
-            let metadata = gen_automatic_proof_metadata(tcx, &base_filename, &fn_to_verify);
+            let metadata = gen_automatic_proof_metadata(
+                tcx,
+                base_filename,
+                &fn_to_verify,
+                harness.mangled_name(),
+            );
             (harness, metadata)
         })
         .collect::<HashMap<_, _>>()
@@ -351,6 +361,7 @@ fn get_all_automatic_harnesses(
 fn automatic_harness_partition(
     tcx: TyCtxt,
     args: &Arguments,
+    crate_name: &str,
     kani_any_def: FnDef,
 ) -> (Vec<Instance>, BTreeMap<String, AutoHarnessSkipReason>) {
     // If `filter_list` contains `name`, either as an exact match or a substring.
@@ -375,7 +386,8 @@ fn automatic_harness_partition(
             return Some(AutoHarnessSkipReason::NoBody);
         }
 
-        let name = instance.name();
+        // Preprend the crate name so that users can filter out entire crates using the existing function filter flags.
+        let name = format!("{crate_name}::{}", instance.name());
         let body = instance.body().unwrap();
 
         if is_proof_harness(tcx, instance)
@@ -385,12 +397,34 @@ fn automatic_harness_partition(
             return Some(AutoHarnessSkipReason::KaniImpl);
         }
 
-        if (!args.autoharness_included_functions.is_empty()
-            && !filter_contains(&name, &args.autoharness_included_functions))
-            || (!args.autoharness_excluded_functions.is_empty()
-                && filter_contains(&name, &args.autoharness_excluded_functions))
-        {
-            return Some(AutoHarnessSkipReason::UserFilter);
+        match (
+            args.autoharness_included_patterns.is_empty(),
+            args.autoharness_excluded_patterns.is_empty(),
+        ) {
+            // If no filters were specified, then continue.
+            (true, true) => {}
+            // If only --exclude-pattern was provided, filter out the function if excluded_patterns contains its name.
+            (true, false) => {
+                if filter_contains(&name, &args.autoharness_excluded_patterns) {
+                    return Some(AutoHarnessSkipReason::UserFilter);
+                }
+            }
+            // If only --include-pattern was provided, filter out the function if included_patterns does not contain its name.
+            (false, true) => {
+                if !filter_contains(&name, &args.autoharness_included_patterns) {
+                    return Some(AutoHarnessSkipReason::UserFilter);
+                }
+            }
+            // If both are specified, filter out the function if included_patterns does not contain its name.
+            // Then, filter out any functions that excluded_patterns does match.
+            // This order is important, since it preserves the semantics described in kani_driver::autoharness_args where exclude takes precedence over include.
+            (false, false) => {
+                if !filter_contains(&name, &args.autoharness_included_patterns)
+                    || filter_contains(&name, &args.autoharness_excluded_patterns)
+                {
+                    return Some(AutoHarnessSkipReason::UserFilter);
+                }
+            }
         }
 
         // Each argument of `instance` must implement Arbitrary.
@@ -407,7 +441,7 @@ fn automatic_harness_partition(
                 &kani_any_body.blocks[0].terminator.kind
             {
                 if let Some((def, args)) = func.ty(body.arg_locals()).unwrap().kind().fn_def() {
-                    Instance::resolve(def, &args).is_ok()
+                    Instance::resolve(def, args).is_ok()
                 } else {
                     false
                 }

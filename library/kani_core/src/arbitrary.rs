@@ -14,11 +14,10 @@ mod slice;
 #[macro_export]
 #[allow(clippy::crate_in_macro_def)]
 macro_rules! generate_arbitrary {
-    ($core:path) => {
+    () => {
         use core_path::marker::{PhantomData, PhantomPinned};
         use core_path::mem::MaybeUninit;
         use core_path::ptr::{self, addr_of_mut};
-        use $core as core_path;
 
         pub trait Arbitrary
         where

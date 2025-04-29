@@ -10,7 +10,8 @@
 
 #![feature(rustc_private)]
 
-mod analysis;
+pub mod analysis;
+pub mod call_graph;
 
 extern crate rustc_driver;
 extern crate rustc_interface;
@@ -23,7 +24,7 @@ extern crate stable_mir;
 use crate::analysis::OverallStats;
 use rustc_middle::ty::TyCtxt;
 use rustc_session::config::OutputType;
-use rustc_smir::{run_with_tcx, rustc_internal};
+use rustc_smir::run_with_tcx;
 use stable_mir::CompilerError;
 use std::ops::ControlFlow;
 use std::path::{Path, PathBuf};
@@ -65,16 +66,23 @@ pub enum Analysis {
     FnLoops,
     /// Collect information about recursion via direct calls.
     Recursion,
+    /// Collect information about transitive usage of unsafe.
+    UnsafeDistance,
+    /// Collect information about function visibility.
+    PublicFns,
 }
 
 fn info(msg: String) {
     if VERBOSE.load(Ordering::Relaxed) {
-        eprintln!("[INFO] {}", msg);
+        eprintln!("[INFO] {msg}");
     }
 }
 
 /// This function invoke the required analyses in the given order.
 fn analyze_crate(tcx: TyCtxt, analyses: &[Analysis]) -> ControlFlow<()> {
+    if stable_mir::local_crate().name == "build_script_build" {
+        return ControlFlow::Continue(());
+    }
     let object_file = tcx.output_filenames(()).path(OutputType::Object);
     let base_path = object_file.as_path().to_path_buf();
     // Use name for now to make it more friendly. Change to base_path.file_stem() to avoid conflict.
@@ -96,6 +104,8 @@ fn analyze_crate(tcx: TyCtxt, analyses: &[Analysis]) -> ControlFlow<()> {
             Analysis::UnsafeOps => crate_stats.unsafe_operations(out_path),
             Analysis::FnLoops => crate_stats.loops(out_path),
             Analysis::Recursion => crate_stats.recursion(out_path),
+            Analysis::UnsafeDistance => crate_stats.unsafe_distance(out_path),
+            Analysis::PublicFns => crate_stats.public_fns(&tcx),
         }
     }
     crate_stats.store_csv(base_path, &file_stem);
