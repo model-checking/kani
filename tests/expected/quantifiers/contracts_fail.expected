@@ -1,0 +1,7 @@
+- Status: FAILURE\
+- Description: "|ret|
+{
+    unsafe{
+        let ptr_x = xs.as_ptr(); let ptr_y = ys.as_ptr();\
+
+VERIFICATION:- FAILED
