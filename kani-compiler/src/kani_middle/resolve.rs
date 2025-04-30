@@ -715,6 +715,17 @@ fn is_item_name_with_generic_args(
     name: &str,
 ) -> bool {
     let item_path = tcx.def_path_str(item);
-    let all_but_base_type = item_path.find("::").map_or("", |idx| &item_path[idx..]);
-    all_but_base_type == format!("{generic_args}::{name}")
+    let parts: Vec<&str> = item_path.split("::").collect();
+
+    if parts.len() < 2 {
+        return false;
+    }
+
+    let actual_last_two =
+        format!("{}{}{}{}", "::", parts[parts.len() - 2], "::", parts[parts.len() - 1]);
+
+    let last_two = format!("{}{}{}", generic_args, "::", name);
+
+    // The last two components of the item_path should be the same as ::{generic_args}::{name}
+    last_two == actual_last_two
 }
