@@ -824,14 +824,7 @@ fn handle_quantifier(
     let closure_call_expr = find_closure_call_expr(&instance, gcx, loc)
         .unwrap_or_else(|| unreachable!("Failed to find closure call expression"));
 
-    let predicate = if fargs.len() == 3 {
-        Expr::address_of(fargs[2].clone())
-    } else {
-        Expr::symbol_expression(
-            "dummy",
-            closure_call_expr.typ().parameters().unwrap().first().unwrap().typ().clone(),
-        )
-    };
+    let predicate = Expr::address_of(fargs[2].clone());
 
     // Quantified variable.
     let base_name = "kani_quantified_var".to_string();

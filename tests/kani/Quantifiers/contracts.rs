@@ -2,8 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Zfunction-contracts
 
-#![feature(proc_macro_hygiene)]
-#![feature(stmt_expr_attributes)]
 extern crate kani;
 use kani::kani_forall;
 

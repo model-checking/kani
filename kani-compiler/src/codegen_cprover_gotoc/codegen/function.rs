@@ -47,6 +47,8 @@ impl GotocCtx<'_> {
             let sym_e = sym.to_expr();
             self.symbol_table.insert(sym);
 
+            // Store the parameter symbols of the function, which will be used for function
+            // inlining.
             if lc > 0 && lc <= num_args {
                 self.symbol_table.insert_parameter(function_name, name);
             }

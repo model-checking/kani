@@ -309,6 +309,9 @@ impl<'tcx> GotocCtx<'tcx> {
 /// Quantifiers Related
 impl GotocCtx<'_> {
     /// Find all quantifier expressions and recursively inline functions in the quantifier bodies.
+    /// We inline all the function calls in quantifier expressions because CBMC accept only
+    /// statement expressiont without function calls in quantifier expressions:
+    /// see https://github.com/diffblue/cbmc/pull/8605 for detail.
     pub fn handle_quantifiers(&mut self) {
         // Store the found quantifiers and the inlined results.
         let mut to_modify: BTreeMap<InternedString, SymbolValues> = BTreeMap::new();
@@ -422,6 +425,22 @@ impl GotocCtx<'_> {
 
     /// Rewrite return statements in `stmt` with a goto statement to `end_label`.
     /// It also stores the return symbol in `return_symbol`.
+    /// When inlining the function body of some function foo
+    ///     fn foo(params) {
+    ///         body;
+    ///         return res; // ** rewrite this statement
+    ///     }
+    /// with the statement expression
+    ///     {
+    ///         DECL    params
+    ///         ASSIGN  params = args
+    ///         inline(body)
+    ///         GOTO    end_label // ** to this statement
+    ///         end_label:
+    ///         EXPRESSION  res
+    ///     },
+    /// this function rewrites all return statements
+    /// into a goto statement to `end_label`
     fn rewrite_return_stmt_with_goto(
         stmt: &Stmt,
         return_symbol: &mut Option<Expr>,
