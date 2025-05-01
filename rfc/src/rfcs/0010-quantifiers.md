@@ -105,9 +105,6 @@ This, however, might unnecessary increase the complexity of the verification pro
 ```rust
 use std::mem;
 
-extern crate kani;
-use kani::{kani_forall, kani_exists};
-
 #[kani::proof]
 fn main() {
     let original_v = vec![kani::any::<u32>(); 3];
@@ -153,9 +150,6 @@ The same principle applies if we want to use the existential quantifier.
 
 ```rust
 use std::mem;
-
-extern crate kani;
-use kani::{kani_forall, kani_exists};
 
 #[kani::proof]
 fn main() {
@@ -206,6 +200,7 @@ The usage of quantifiers should be valid in any part of the Rust code analysed b
 Kani should have the same support that CBMC has for quantifiers. For more details, see [Quantifiers](https://github.com/diffblue/cbmc/blob/0a69a64e4481473d62496f9975730d24f194884a/doc/cprover-manual/contracts-quantifiers.md).
 
 The implementation of quantifiers in Kani will be based on the following principle:
+
 - **Single expression without function calls**: CBMC's quantifiers only support
   single expressions without function calls. This means that the CBMC expressions generated
   from the quantifiers in Kani should be limited to a single expression without any
@@ -226,8 +221,7 @@ To achieve this, we will need to implement the function inlining pass in Kani. T
   interface is familiar to developers, but the code generation is tricky, as
   CBMC level quantifiers only allow certain kinds of expressions. This
   necessitates a rewrite of the `Fn` closure to a compliant expression.
-    - Which kind of expressions should be accepted as a "compliant expression"? 
-
+  - Which kind of expressions should be accepted as a "compliant expression"?
 
 ## Future possibilities
 

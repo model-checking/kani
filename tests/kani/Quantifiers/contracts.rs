@@ -2,9 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Zfunction-contracts
 
-extern crate kani;
-use kani::kani_forall;
-
 #[kani::requires(i==0)]
 #[kani::ensures(|ret| {
     unsafe{

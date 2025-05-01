@@ -12,8 +12,6 @@ Kani currently supports the following quantifiers:
    - Example:
 
 ```rust
-extern crate kani;
-use kani::kani_forall;
 #[kani::proof]
 fn test_forall() {
     let v = vec![10; 10];
@@ -27,8 +25,6 @@ fn test_forall() {
    - Example:
 
 ```rust
-extern crate kani;
-use kani::kani_exists;
 #[kani::proof]
 fn test_exists() {
     let v = vec![1, 2, 3, 4, 5];
@@ -43,8 +39,6 @@ fn test_exists() {
 The performance of quantifiers can be affected by the depth of call stacks in the quantified expressions. If the call stack is too deep, Kani may not be able to evaluate the quantifier effectively, leading to potential timeouts or running out of memory. Actually, array indexing in Rust leads to a deep call stack, which can cause issues with quantifiers. To mitigate this, consider using *unsafe* pointer dereferencing instead of array indexing when working with quantifiers. For example:
 
 ```rust
-extern crate kani;
-use kani::kani_forall;
 
 #[kani::proof]
 fn vec_assert_forall_harness() {

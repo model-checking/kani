@@ -5,9 +5,6 @@
 
 use std::mem;
 
-extern crate kani;
-use kani::{kani_exists, kani_forall};
-
 #[kani::proof]
 fn main() {
     let original_v = vec![kani::any::<u32>(); 3];

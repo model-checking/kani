@@ -207,34 +207,6 @@ macro_rules! kani_intrinsics {
             assert!(cond, "{}", msg);
         }
 
-        #[macro_export]
-        macro_rules! forall {
-            (|$i:ident in ($lower_bound:expr, $upper_bound:expr)| $predicate:expr) => {{
-                let lower_bound: usize = $lower_bound;
-                let upper_bound: usize = $upper_bound;
-                let predicate = |$i| $predicate;
-                kani_forall(lower_bound, upper_bound, predicate)
-            }};
-            (|$i:ident | $predicate:expr) => {{
-                let predicate = |$i| $predicate;
-                kani_forall(usize::MIN, usize::MAX, predicate)
-            }};
-        }
-
-        #[macro_export]
-        macro_rules! exists {
-            (|$i:ident in ($lower_bound:expr, $upper_bound:expr)| $predicate:expr) => {{
-                let lower_bound: usize = $lower_bound;
-                let upper_bound: usize = $upper_bound;
-                let predicate = |$i| $predicate;
-                kani_exists(lower_bound, upper_bound, predicate)
-            }};
-            (|$i:ident | $predicate:expr) => {{
-                let predicate = |$i| $predicate;
-                kani_exists(usize::MIN, usize::MAX, predicate)
-            }};
-        }
-
         #[inline(never)]
         #[kanitool::fn_marker = "ForallHook"]
         pub fn kani_forall<T, F>(lower_bound: T, upper_bound: T, predicate: F) -> bool
@@ -251,6 +223,34 @@ macro_rules! kani_intrinsics {
             F: Fn(T) -> bool,
         {
             predicate(lower_bound)
+        }
+
+        #[macro_export]
+        macro_rules! forall {
+            (|$i:ident in ($lower_bound:expr, $upper_bound:expr)| $predicate:expr) => {{
+                let lower_bound: usize = $lower_bound;
+                let upper_bound: usize = $upper_bound;
+                let predicate = |$i| $predicate;
+                kani::kani_forall(lower_bound, upper_bound, predicate)
+            }};
+            (|$i:ident | $predicate:expr) => {{
+                let predicate = |$i| $predicate;
+                kani::kani_forall(usize::MIN, usize::MAX, predicate)
+            }};
+        }
+
+        #[macro_export]
+        macro_rules! exists {
+            (|$i:ident in ($lower_bound:expr, $upper_bound:expr)| $predicate:expr) => {{
+                let lower_bound: usize = $lower_bound;
+                let upper_bound: usize = $upper_bound;
+                let predicate = |$i| $predicate;
+                kani::kani_exists(lower_bound, upper_bound, predicate)
+            }};
+            (|$i:ident | $predicate:expr) => {{
+                let predicate = |$i| $predicate;
+                kani::kani_exists(usize::MIN, usize::MAX, predicate)
+            }};
         }
 
         /// Creates a cover property with the specified condition and message.

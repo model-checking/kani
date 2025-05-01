@@ -2,9 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Zfunction-contracts
 
-extern crate kani;
-use kani::kani_forall;
-
 /// Copy only first 7 elements and left the last one unchanged.
 #[kani::ensures(|ret| { unsafe{
     let ptr_x = xs.as_ptr();

@@ -1,9 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-extern crate kani;
-use kani::kani_forall;
-
 #[kani::proof]
 fn vec_assert_forall_harness() {
     let v = vec![10 as u8; 128];
