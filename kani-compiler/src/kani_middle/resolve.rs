@@ -708,6 +708,8 @@ fn is_item_name(tcx: TyCtxt, item: DefId, name: &str) -> bool {
     last == name
 }
 
+/// Use this when we don't just care about the item name matching (c.f. is_item_name),
+/// but also if the generic arguments are the same, e.g. <u32>::unchecked_add.
 fn is_item_name_with_generic_args(
     tcx: TyCtxt,
     item: DefId,
@@ -715,6 +717,12 @@ fn is_item_name_with_generic_args(
     name: &str,
 ) -> bool {
     let item_path = tcx.def_path_str(item);
+    last_two_items_of_path_match(&item_path, generic_args, name)
+}
+
+// This is just a helper function for is_item_name_with_generic_args.
+// It's in a separate function so we can unit-test it without a mock TyCtxt or DefIds.
+fn last_two_items_of_path_match(item_path: &str, generic_args: &str, name: &str) -> bool {
     let parts: Vec<&str> = item_path.split("::").collect();
 
     if parts.len() < 2 {
@@ -728,4 +736,35 @@ fn is_item_name_with_generic_args(
 
     // The last two components of the item_path should be the same as ::{generic_args}::{name}
     last_two == actual_last_two
+}
+
+#[cfg(test)]
+mod tests {
+    mod simple_last_two_items_of_path_match {
+        use crate::kani_middle::resolve::last_two_items_of_path_match;
+
+        #[test]
+        fn length_one_item_prefix() {
+            let generic_args = "::<u32>";
+            let name = "unchecked_add";
+            let item_path = format!("NonZero{}::{}", generic_args, name);
+            assert!(last_two_items_of_path_match(&item_path, generic_args, name))
+        }
+
+        #[test]
+        fn length_three_item_prefix() {
+            let generic_args = "::<u32>";
+            let name = "unchecked_add";
+            let item_path = format!("core::num::NonZero{}::{}", generic_args, name);
+            assert!(last_two_items_of_path_match(&item_path, generic_args, name))
+        }
+
+        #[test]
+        fn wrong_generic_arg() {
+            let generic_args = "::<u64>";
+            let name = "unchecked_add";
+            let item_path = format!("core::num::NonZero{}::{}", "::<u32>", name);
+            assert!(!last_two_items_of_path_match(&item_path, generic_args, name))
+        }
+    }
 }
