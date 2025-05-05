@@ -549,6 +549,11 @@ impl RustcInternalMir for AssertMessage {
             AssertMessage::NullPointerDereference => {
                 rustc_middle::mir::AssertMessage::NullPointerDereference
             }
+            AssertMessage::ResumedAfterDrop(coroutine_kind) => {
+                rustc_middle::mir::AssertMessage::ResumedAfterDrop(
+                    coroutine_kind.internal_mir(tcx),
+                )
+            }
         }
     }
 }
@@ -579,6 +584,8 @@ impl RustcInternalMir for TerminatorKind {
                     target: rustc_middle::mir::BasicBlock::from_usize(*target),
                     unwind: unwind.internal_mir(tcx),
                     replace: false,
+                    drop: None,
+                    async_fut: None
                 }
             }
             TerminatorKind::Call { func, args, destination, target, unwind } => {
