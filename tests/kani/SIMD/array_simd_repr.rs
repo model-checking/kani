@@ -11,7 +11,7 @@ pub struct i64x2([i64; 2]);
 
 #[kani::proof]
 fn check_diff() {
-    #[target_feature(enable="sse")]
+    #[target_feature(enable = "sse")]
     let x = i64x2([1, 2]);
     let y = i64x2([3, 4]);
     assert!(x != y);
