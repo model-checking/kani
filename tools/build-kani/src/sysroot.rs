@@ -180,13 +180,13 @@ fn copy_artifacts(artifacts: &[Artifact], sysroot_lib: &Path, copy_std: bool) ->
     fs::create_dir_all(sysroot_lib)?;
 
     //  Copy Kani libraries into sysroot top folder.
-    copy_libs(&artifacts, &sysroot_lib, &is_kani_lib);
+    copy_libs(artifacts, sysroot_lib, &is_kani_lib);
 
     //  Copy standard libraries into rustlib/<target>/lib/ folder.
     if copy_std {
         let std_path = path_buf!(&sysroot_lib, "rustlib", build_target(), "lib");
-        fs::create_dir_all(&std_path).expect(&format!("Failed to create {std_path:?}"));
-        copy_libs(&artifacts, &std_path, &is_std_lib);
+        fs::create_dir_all(&std_path).unwrap_or_else(|_| panic!("Failed to create {std_path:?}"));
+        copy_libs(artifacts, &std_path, &is_std_lib);
     }
     Ok(())
 }

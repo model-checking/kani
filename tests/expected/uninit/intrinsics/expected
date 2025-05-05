@@ -1,7 +1,3 @@
-std::ptr::read::<std::mem::MaybeUninit<u8>>.unsupported_construct.\
-	 - Status: FAILURE\
-	 - Description: "Interaction between raw pointers and unions is not yet supported."
-
 check_typed_swap_nonoverlapping.safety_check.\
 	 - Status: FAILURE\
 	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `*mut u8`"

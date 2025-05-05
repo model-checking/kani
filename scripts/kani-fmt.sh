@@ -12,11 +12,20 @@ set -o nounset
 ROOT_FOLDER=$(git rev-parse --show-toplevel)
 cd ${ROOT_FOLDER}
 
+# Parse arguments to check for --check flag
+check_flag=""
+for arg in "$@"; do
+  if [ "$arg" = "--check" ]; then
+    check_flag="--check"
+    break
+  fi
+done
+
 # Verify crates.
 error=0
 
 # Check all crates. Only fail at the end.
-cargo fmt "$@" || error=1
+cargo fmt ${check_flag} || error=1
 
 # Check test source files.
 TESTS=("tests" "docs/src/tutorial")
@@ -37,7 +46,7 @@ for suite in "${TESTS[@]}"; do
     set +f; unset IFS
     # Note: We set the configuration file here because some submodules have
     # their own configuration file.
-    rustfmt --config-path rustfmt.toml "${files[@]}" || error=1
+    rustfmt --config-path rustfmt.toml ${check_flag} "${files[@]}" || error=1
 done
 
 exit $error

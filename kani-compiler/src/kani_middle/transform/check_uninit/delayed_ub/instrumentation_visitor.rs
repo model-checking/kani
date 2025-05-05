@@ -123,7 +123,7 @@ impl MirVisitor for InstrumentationVisitor<'_, '_> {
         let needs_get = {
             self.points_to
                 .resolve_place_stable(place.clone(), self.current_instance, self.tcx)
-                .intersection(&self.analysis_targets)
+                .intersection(self.analysis_targets)
                 .next()
                 .is_some()
         };

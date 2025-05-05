@@ -275,7 +275,7 @@ impl IrepNumbering {
             return self.inv_cache.index[*number];
         }
         // This is where the key gets its unique number assigned.
-        let number = self.inv_cache.add_key(&key);
+        let number = self.inv_cache.add_key(key);
         self.cache.insert(key.clone(), number);
         self.inv_cache.index[number]
     }
@@ -449,17 +449,17 @@ where
         self.write_usize_varenc(num);
 
         if self.is_first_write_irep(num) {
-            let id = &self.numbering.id(&irep);
+            let id = &self.numbering.id(irep);
             self.write_numbered_string_ref(id);
 
-            for sub_idx in 0..(self.numbering.nof_sub(&irep)) {
+            for sub_idx in 0..(self.numbering.nof_sub(irep)) {
                 self.write_u8(b'S');
-                self.write_numbered_irep_ref(&self.numbering.sub(&irep, sub_idx));
+                self.write_numbered_irep_ref(&self.numbering.sub(irep, sub_idx));
             }
 
-            for named_sub_idx in 0..(self.numbering.nof_named_sub(&irep)) {
+            for named_sub_idx in 0..(self.numbering.nof_named_sub(irep)) {
                 self.write_u8(b'N');
-                let (k, v) = self.numbering.named_sub(&irep, named_sub_idx);
+                let (k, v) = self.numbering.named_sub(irep, named_sub_idx);
                 self.write_numbered_string_ref(&k);
                 self.write_numbered_irep_ref(&v);
             }
@@ -1339,7 +1339,7 @@ mod tests {
             let mut writer = BufWriter::new(&mut vec);
             let mut serializer = GotoBinarySerializer::new(&mut writer);
             for string in strings.iter() {
-                serializer.write_string_ref(&string);
+                serializer.write_string_ref(string);
             }
             println!("Serializer stats {:?}", serializer.get_stats());
         }
@@ -1365,12 +1365,12 @@ mod tests {
             let mut serializer = GotoBinarySerializer::new(&mut writer);
 
             // Number an irep
-            let num1 = serializer.numbering.number_irep(&irep1);
+            let num1 = serializer.numbering.number_irep(irep1);
 
             // Number an structurally different irep
             let identifiers2 = vec!["foo", "bar", "baz", "different", "zab", "rab", "oof"];
             let irep2 = &fold_with_op(&identifiers2, IrepId::And);
-            let num2 = serializer.numbering.number_irep(&irep2);
+            let num2 = serializer.numbering.number_irep(irep2);
 
             // Check that they have the different numbers.
             assert_ne!(num1, num2);

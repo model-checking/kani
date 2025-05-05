@@ -232,7 +232,7 @@ impl<'a> StandaloneProjectBuilder<'a> {
         } else {
             input.canonicalize().unwrap().parent().unwrap().to_path_buf()
         };
-        let crate_name = if let Some(name) = krate_name { name } else { crate_name(&input) };
+        let crate_name = if let Some(name) = krate_name { name } else { crate_name(input) };
         let metadata = standalone_artifact(&outdir, &crate_name, Metadata);
         Ok(StandaloneProjectBuilder {
             outdir,

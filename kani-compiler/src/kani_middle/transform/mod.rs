@@ -78,10 +78,10 @@ impl BodyTransformation {
         transformer.add_pass(queries, AutomaticHarnessPass::new(unit, queries));
         transformer.add_pass(queries, FnStubPass::new(&unit.stubs));
         transformer.add_pass(queries, ExternFnStubPass::new(&unit.stubs));
-        transformer.add_pass(queries, FunctionWithContractPass::new(tcx, queries, &unit));
+        transformer.add_pass(queries, FunctionWithContractPass::new(tcx, queries, unit));
         // This has to come after the contract pass since we want this to only replace the closure
         // body that is relevant for this harness.
-        transformer.add_pass(queries, AnyModifiesPass::new(tcx, queries, &unit));
+        transformer.add_pass(queries, AnyModifiesPass::new(tcx, queries, unit));
         transformer.add_pass(
             queries,
             ValidValuePass {
@@ -103,10 +103,9 @@ impl BodyTransformation {
                 mem_init_fn_cache: queries.kani_functions().clone(),
             },
         );
-        transformer
-            .add_pass(queries, IntrinsicGeneratorPass::new(unsupported_check_type, &queries));
-        transformer.add_pass(queries, LoopContractPass::new(tcx, queries, &unit));
-        transformer.add_pass(queries, RustcIntrinsicsPass::new(&queries));
+        transformer.add_pass(queries, IntrinsicGeneratorPass::new(unsupported_check_type, queries));
+        transformer.add_pass(queries, LoopContractPass::new(tcx, queries, unit));
+        transformer.add_pass(queries, RustcIntrinsicsPass::new(queries));
         transformer
     }
 
@@ -140,7 +139,7 @@ impl BodyTransformation {
     }
 
     fn add_pass<P: TransformPass + 'static>(&mut self, query_db: &QueryDb, pass: P) {
-        if pass.is_enabled(&query_db) {
+        if pass.is_enabled(query_db) {
             match P::transformation_type() {
                 TransformationType::Instrumentation => self.inst_passes.push(Box::new(pass)),
                 TransformationType::Stubbing => self.stub_passes.push(Box::new(pass)),
@@ -220,7 +219,7 @@ impl GlobalPasses {
     }
 
     fn add_global_pass<P: GlobalPass + 'static>(&mut self, query_db: &QueryDb, pass: P) {
-        if pass.is_enabled(&query_db) {
+        if pass.is_enabled(query_db) {
             self.global_passes.push(Box::new(pass))
         }
     }

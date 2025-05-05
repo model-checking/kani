@@ -160,7 +160,7 @@ impl GotocCtx<'_> {
         };
 
         for ty in &modifies_tys {
-            assert!(ty.kind().is_any_ptr(), "Expected pointer, but found {}", ty);
+            assert!(ty.kind().is_any_ptr(), "Expected pointer, but found {ty}");
         }
 
         let assigns: Vec<_> = modifies_tys

@@ -19,7 +19,7 @@ use stable_mir::mir::{
     AggregateKind, BasicBlock, BasicBlockIdx, Body, ConstOperand, Operand, Rvalue, Statement,
     StatementKind, Terminator, TerminatorKind, VarDebugInfoContents,
 };
-use stable_mir::ty::{FnDef, MirConst, RigidTy, UintTy};
+use stable_mir::ty::{FnDef, GenericArgKind, MirConst, RigidTy, TyKind, UintTy};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt::Debug;
 
@@ -245,18 +245,16 @@ impl LoopContractPass {
         let mut contain_loop_contracts = false;
 
         // Redirect loop latches to the new latches.
-        if let TerminatorKind::Goto { target: terminator_target } = &terminator.kind {
-            if self.new_loop_latches.contains_key(terminator_target) {
-                new_body.replace_terminator(
-                    &SourceInstruction::Terminator { bb: bb_idx },
-                    Terminator {
-                        kind: TerminatorKind::Goto {
-                            target: self.new_loop_latches[terminator_target],
-                        },
-                        span: terminator.span,
-                    },
-                );
-            }
+        if let TerminatorKind::Goto { target: terminator_target } = &terminator.kind
+            && self.new_loop_latches.contains_key(terminator_target)
+        {
+            new_body.replace_terminator(
+                &SourceInstruction::Terminator { bb: bb_idx },
+                Terminator {
+                    kind: TerminatorKind::Goto { target: self.new_loop_latches[terminator_target] },
+                    span: terminator.span,
+                },
+            );
         }
 
         // Transform loop heads with loop contracts.
@@ -269,7 +267,7 @@ impl LoopContractPass {
         } = &terminator.kind
         {
             // Get the function signature of the terminator call.
-            let Some(RigidTy::FnDef(fn_def, ..)) = terminator_func
+            let Some(RigidTy::FnDef(fn_def, genarg)) = terminator_func
                 .ty(new_body.locals())
                 .ok()
                 .map(|fn_ty| fn_ty.kind().rigid().unwrap().clone())
@@ -294,10 +292,18 @@ impl LoopContractPass {
                     Please report github.com/model-checking/kani/issues/new?template=bug_report.md"
                     );
                 }
-
-                let ori_condition_bb_idx =
-                    new_body.blocks()[terminator_target.unwrap()].terminator.successors()[1];
-                self.make_invariant_closure_alive(new_body, ori_condition_bb_idx);
+                let GenericArgKind::Type(arg_ty) = genarg.0[0] else { return false };
+                let TyKind::RigidTy(RigidTy::Closure(_, genarg)) = arg_ty.kind() else {
+                    return false;
+                };
+                let GenericArgKind::Type(arg_ty) = genarg.0[2] else { return false };
+                let TyKind::RigidTy(RigidTy::Tuple(args)) = arg_ty.kind() else { return false };
+                // Check if the invariant involves any local variable
+                if !args.is_empty() {
+                    let ori_condition_bb_idx =
+                        new_body.blocks()[terminator_target.unwrap()].terminator.successors()[1];
+                    self.make_invariant_closure_alive(new_body, ori_condition_bb_idx);
+                }
 
                 contain_loop_contracts = true;
 

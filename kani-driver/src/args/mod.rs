@@ -146,7 +146,7 @@ pub enum StandaloneSubcommand {
     VerifyStd(Box<std_args::VerifyStdArgs>),
     /// List contracts and harnesses.
     List(Box<list_args::StandaloneListArgs>),
-    /// Scan the input file for functions eligible for automatic (i.e., harness-free) verification and verify them.
+    /// Create and run harnesses automatically for eligible functions. Implies -Z function-contracts and -Z loop-contracts.
     Autoharness(Box<autoharness_args::StandaloneAutoharnessArgs>),
 }
 
@@ -177,7 +177,8 @@ pub enum CargoKaniSubcommand {
     /// List contracts and harnesses.
     List(Box<list_args::CargoListArgs>),
 
-    /// Scan the crate for functions eligible for automatic (i.e., harness-free) verification and verify them.
+    /// Create and run harnesses automatically for eligible functions. Implies -Z function-contracts and -Z loop-contracts.
+    /// See https://model-checking.github.io/kani/reference/experimental/autoharness.html for documentation.
     Autoharness(Box<autoharness_args::CargoAutoharnessArgs>),
 }
 
@@ -484,7 +485,7 @@ fn check_no_cargo_opt(is_set: bool, name: &str) -> Result<(), Error> {
     if is_set {
         Err(Error::raw(
             ErrorKind::UnknownArgument,
-            format!("argument `{}` cannot be used with standalone Kani.", name),
+            format!("argument `{name}` cannot be used with standalone Kani."),
         ))
     } else {
         Ok(())
@@ -515,16 +516,16 @@ impl ValidateArgs for StandaloneArgs {
         check_no_cargo_opt(!self.verify_opts.cargo.exclude.is_empty(), "--exclude")?;
         check_no_cargo_opt(self.verify_opts.cargo.workspace, "--workspace")?;
         check_no_cargo_opt(self.verify_opts.cargo.manifest_path.is_some(), "--manifest-path")?;
-        if let Some(input) = &self.input {
-            if !input.is_file() {
-                return Err(Error::raw(
-                    ErrorKind::InvalidValue,
-                    format!(
-                        "Invalid argument: Input invalid. `{}` is not a regular file.",
-                        input.display()
-                    ),
-                ));
-            }
+        if let Some(input) = &self.input
+            && !input.is_file()
+        {
+            return Err(Error::raw(
+                ErrorKind::InvalidValue,
+                format!(
+                    "Invalid argument: Input invalid. `{}` is not a regular file.",
+                    input.display()
+                ),
+            ));
         }
         Ok(())
     }
@@ -633,16 +634,17 @@ impl ValidateArgs for VerificationArgs {
                 "Conflicting options: --jobs requires `--output-format=terse`",
             ));
         }
-        if let Some(out_dir) = &self.target_dir {
-            if out_dir.exists() && !out_dir.is_dir() {
-                return Err(Error::raw(
-                    ErrorKind::InvalidValue,
-                    format!(
-                        "Invalid argument: `--target-dir` argument `{}` is not a directory",
-                        out_dir.display()
-                    ),
-                ));
-            }
+        if let Some(out_dir) = &self.target_dir
+            && out_dir.exists()
+            && !out_dir.is_dir()
+        {
+            return Err(Error::raw(
+                ErrorKind::InvalidValue,
+                format!(
+                    "Invalid argument: `--target-dir` argument `{}` is not a directory",
+                    out_dir.display()
+                ),
+            ));
         }
 
         self.common_args.check_unstable(
@@ -956,12 +958,12 @@ mod tests {
     }
 
     fn check(args: &str, feature: Option<UnstableFeature>, pred: fn(StandaloneArgs) -> bool) {
-        let mut res = parse_unstable_disabled(&args);
+        let mut res = parse_unstable_disabled(args);
         if let Some(unstable) = feature {
             // Should fail without -Z unstable-options.
             assert_eq!(res.unwrap_err().kind(), ErrorKind::MissingRequiredArgument);
             // Should succeed with -Z unstable-options.
-            res = parse_unstable_enabled(&args, unstable);
+            res = parse_unstable_enabled(args, unstable);
         }
         assert!(res.is_ok());
         assert!(pred(res.unwrap()));
@@ -1015,7 +1017,7 @@ mod tests {
         args: &str,
         unstable: UnstableFeature,
     ) -> Result<StandaloneArgs, Error> {
-        let args = format!("kani -Z {} file.rs {args}", unstable);
+        let args = format!("kani -Z {unstable} file.rs {args}");
         let parse_res = StandaloneArgs::try_parse_from(args.split(' '))?;
         parse_res.verify_opts.validate()?;
         Ok(parse_res)

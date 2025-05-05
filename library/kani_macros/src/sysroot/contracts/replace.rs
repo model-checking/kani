@@ -24,7 +24,7 @@ impl<'a> ContractConditionsHandler<'a> {
         // https://github.com/model-checking/kani/issues/3667
         let redefs = self.arg_redefinitions(false);
         let redefs_block: Block = syn::parse_quote!({#redefs});
-        vec![
+        [
             vec![syn::parse_quote!(
                 let #result : #return_type = kani::any_modifies();
             )],
@@ -128,7 +128,7 @@ impl<'a> ContractConditionsHandler<'a> {
         let sig = &self.annotated_fn.sig;
         let output = &sig.output;
         let before = self.initial_replace_stmts();
-        let body = self.expand_replace_body(&before, &vec![]);
+        let body = self.expand_replace_body(&before, &[]);
 
         quote!(
             #[kanitool::is_contract_generated(replace)]

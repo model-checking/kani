@@ -44,7 +44,7 @@ impl<'a> ContractConditionsHandler<'a> {
     fn initial_assert_stmts(&self) -> Vec<Stmt> {
         let body_wrapper_ident = Ident::new("body_wrapper", Span::call_site());
         let output = &self.annotated_fn.sig.output;
-        let return_type = return_type_to_type(&output);
+        let return_type = return_type_to_type(output);
         let stmts = &self.annotated_fn.block.stmts;
         let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
 

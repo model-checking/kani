@@ -357,19 +357,19 @@ impl<'tcx> KaniAttributes<'tcx> {
             }
             match kind {
                 KaniAttributeKind::ShouldPanic => {
-                    expect_single(self.tcx, kind, &attrs);
+                    expect_single(self.tcx, kind, attrs);
                     attrs.iter().for_each(|attr| {
                         expect_no_args(self.tcx, kind, attr);
                     })
                 }
                 KaniAttributeKind::Recursion => {
-                    expect_single(self.tcx, kind, &attrs);
+                    expect_single(self.tcx, kind, attrs);
                     attrs.iter().for_each(|attr| {
                         expect_no_args(self.tcx, kind, attr);
                     })
                 }
                 KaniAttributeKind::Solver => {
-                    expect_single(self.tcx, kind, &attrs);
+                    expect_single(self.tcx, kind, attrs);
                     attrs.iter().for_each(|attr| {
                         parse_solver(self.tcx, attr);
                     })
@@ -378,7 +378,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                     parse_stubs(self.tcx, self.item, attrs);
                 }
                 KaniAttributeKind::Unwind => {
-                    expect_single(self.tcx, kind, &attrs);
+                    expect_single(self.tcx, kind, attrs);
                     attrs.iter().for_each(|attr| {
                         parse_unwind(self.tcx, attr);
                     })
@@ -389,7 +389,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                             "`proof` and `proof_for_contract` may not be used on the same function.".to_string(),
                         );
                     }
-                    expect_single(self.tcx, kind, &attrs);
+                    expect_single(self.tcx, kind, attrs);
                     attrs.iter().for_each(|attr| self.check_proof_attribute(kind, attr))
                 }
                 KaniAttributeKind::Unstable => attrs.iter().for_each(|attr| {
@@ -401,7 +401,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                             "`proof` and `proof_for_contract` may not be used on the same function.".to_string(),
                         );
                     }
-                    expect_single(self.tcx, kind, &attrs);
+                    expect_single(self.tcx, kind, attrs);
                     attrs.iter().for_each(|attr| self.check_proof_attribute(kind, attr))
                 }
                 KaniAttributeKind::StubVerified => {
@@ -510,14 +510,14 @@ impl<'tcx> KaniAttributes<'tcx> {
     /// Check that the function specified in the `proof_for_contract` attribute
     /// is reachable and emit an error if it isn't
     pub fn check_proof_for_contract(&self, reachable_functions: &HashSet<DefId>) {
-        if let Some((symbol, function, span)) = self.interpret_for_contract_attribute() {
-            if !reachable_functions.contains(&function) {
-                let err_msg = format!(
-                    "The function specified in the `proof_for_contract` attribute, `{symbol}`, was not found.\
+        if let Some((symbol, function, span)) = self.interpret_for_contract_attribute()
+            && !reachable_functions.contains(&function)
+        {
+            let err_msg = format!(
+                "The function specified in the `proof_for_contract` attribute, `{symbol}`, was not found.\
                     \nMake sure the function is reachable from the harness."
-                );
-                self.tcx.dcx().span_err(span, err_msg);
-            }
+            );
+            self.tcx.dcx().span_err(span, err_msg);
         }
     }
 
@@ -609,11 +609,11 @@ impl<'tcx> KaniAttributes<'tcx> {
             if seen.contains(&name) {
                 dcx.struct_span_warn(
                     span,
-                    format!("Multiple occurrences of `stub_verified({})`.", name),
+                    format!("Multiple occurrences of `stub_verified({name})`."),
                 )
                 .with_span_note(
                     self.tcx.def_span(def_id),
-                    format!("Use a single `stub_verified({})` annotation.", name),
+                    format!("Use a single `stub_verified({name})` annotation."),
                 )
                 .emit();
             } else {
@@ -623,8 +623,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                 dcx.struct_span_err(
                     span,
                     format!(
-                        "Target function in `stub_verified({})` has no contract.",
-                        name,
+                        "Target function in `stub_verified({name})` has no contract.",
                     ),
                 )
                     .with_span_note(
@@ -721,7 +720,7 @@ pub fn test_harness_name(tcx: TyCtxt, def: &impl CrateDef) -> String {
     let def_id = rustc_internal::internal(tcx, def.def_id());
     let attrs = tcx.get_attrs_unchecked(def_id);
     let marker = attr::find_by_name(attrs, rustc_span::symbol::sym::rustc_test_marker).unwrap();
-    parse_str_value(&marker).unwrap()
+    parse_str_value(marker).unwrap()
 }
 
 /// Expect the contents of this attribute to be of the format #[attribute =
@@ -749,9 +748,9 @@ fn expect_single<'a>(
     kind: KaniAttributeKind,
     attributes: &'a Vec<&'a Attribute>,
 ) -> &'a Attribute {
-    let attr = attributes
-        .first()
-        .expect(&format!("expected at least one attribute {} in {attributes:?}", kind.as_ref()));
+    let attr = attributes.first().unwrap_or_else(|| {
+        panic!("expected at least one attribute {} in {attributes:?}", kind.as_ref())
+    });
     if attributes.len() > 1 {
         tcx.dcx().span_err(
             attr.span(),
@@ -1061,7 +1060,7 @@ fn syn_attr(tcx: TyCtxt, attr: &Attribute) -> syn::Attribute {
 /// Parse a stable attribute using `syn`.
 fn syn_attr_stable(attr: &AttributeStable) -> syn::Attribute {
     let parser = syn::Attribute::parse_outer;
-    parser.parse_str(&attr.as_str()).unwrap().pop().unwrap()
+    parser.parse_str(attr.as_str()).unwrap().pop().unwrap()
 }
 
 /// Return a more user-friendly string for path by trying to remove unneeded whitespace.
@@ -1112,7 +1111,7 @@ pub(crate) fn fn_marker<T: CrateDef>(def: T) -> Option<String> {
     let marker = def.tool_attrs(&fn_marker).pop()?;
     let attribute = syn_attr_stable(&marker);
     let meta_name = attribute.meta.require_name_value().unwrap_or_else(|_| {
-        panic!("Expected name value attribute for `kanitool::fn_marker`, but found: `{:?}`", marker)
+        panic!("Expected name value attribute for `kanitool::fn_marker`, but found: `{marker:?}`")
     });
     let Expr::Lit(ExprLit { lit: Lit::Str(lit_str), .. }) = &meta_name.value else {
         panic!(
