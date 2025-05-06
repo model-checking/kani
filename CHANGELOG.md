@@ -4,6 +4,23 @@ This file contains notable changes (e.g. breaking changes, major changes, etc.) 
 
 This file was introduced starting Kani 0.23.0, so it only contains changes from version 0.23.0 onwards.
 
+## [0.62.0]
+
+### What's Changed
+* Introduce BoundedArbitrary trait and macro for bounded proofs by @sgpthomas in https://github.com/model-checking/kani/pull/4000
+* Add an option to skip codegen by @zhassan-aws in https://github.com/model-checking/kani/pull/4002
+* Avoid spurious action failures in forks by @tautschnig in https://github.com/model-checking/kani/pull/4005
+* Add support for loop loop-loops by @thanhnguyen-aws in https://github.com/model-checking/kani/pull/4011
+* Autoharness: enable function-contracts and loop-contracts features by default by @carolynzech in https://github.com/model-checking/kani/pull/4016
+* Autoharness: Harness Generation Improvements by @carolynzech in https://github.com/model-checking/kani/pull/4017
+* Analyze unsafe code reachability @carolynzech in https://github.com/model-checking/kani/pull/4037
+* Upgrade toolchain to nightly-2025-04-24 in https://github.com/model-checking/kani/pull/4042
+* Autoharness: exit code 1 upon harness failure by @carolynzech in https://github.com/model-checking/kani/pull/4043
+* Overflow operators can also be used with vectors by @tautschnig in https://github.com/model-checking/kani/pull/4049
+* Update CBMC dependency to 6.6.0 by @qinheping in https://github.com/model-checking/kani/pull/4050
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.61.0...kani-0.62.0
+
 ## [0.61.0]
 
 ### What's Changed
