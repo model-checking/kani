@@ -25,6 +25,7 @@ impl KaniSession {
 
         // TODO get goto-cc path from self
         let mut cmd = Command::new("goto-cc");
+        cmd.arg("-std=gnu17");
         cmd.args(args);
 
         self.run_suppress(cmd)?;
@@ -40,6 +41,7 @@ impl KaniSession {
         function: &str,
     ) -> Result<()> {
         let mut cmd = Command::new("goto-cc");
+        cmd.arg("-std=gnu17");
         cmd.arg(input).args(["--function", function, "-o"]).arg(output);
 
         self.run_suppress(cmd)?;
