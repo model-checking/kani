@@ -6,7 +6,7 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 
 ## [0.62.0]
 
-## What's Changed
+### What's Changed
 * Disable llbc feature by default by @zhassan-aws in https://github.com/model-checking/kani/pull/3980
 * Add an option to skip codegen by @zhassan-aws in https://github.com/model-checking/kani/pull/4002
 * Add support for loop-contract historic values by @thanhnguyen-aws in https://github.com/model-checking/kani/pull/3951
