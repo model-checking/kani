@@ -8,14 +8,9 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 
 ## What's Changed
 * Disable llbc feature by default by @zhassan-aws in https://github.com/model-checking/kani/pull/3980
-* Fix release schedule in docs by @carolynzech in https://github.com/model-checking/kani/pull/3994
-* Bump tests/perf/s2n-quic from `d0aff82` to `9f7e0a9` by @dependabot in https://github.com/model-checking/kani/pull/3995
-* Fix the package docker job in the release workflow by @zhassan-aws in https://github.com/model-checking/kani/pull/4003
-* Avoid spurious action failures in forks by @tautschnig in https://github.com/model-checking/kani/pull/4005
 * Add an option to skip codegen by @zhassan-aws in https://github.com/model-checking/kani/pull/4002
 * Add support for loop-contract historic values by @thanhnguyen-aws in https://github.com/model-checking/kani/pull/3951
 * Clarify Rust intrinsic assumption error message by @carolynzech in https://github.com/model-checking/kani/pull/4015
-* Bump tests/perf/s2n-quic from `9f7e0a9` to `0413d9a` by @dependabot in https://github.com/model-checking/kani/pull/4014
 * Autoharness: enable function-contracts and loop-contracts features by default by @carolynzech in https://github.com/model-checking/kani/pull/4016
 * Autoharness: Harness Generation Improvements by @carolynzech in https://github.com/model-checking/kani/pull/4017
 * Add support for Loop-loops by @thanhnguyen-aws in https://github.com/model-checking/kani/pull/4011
@@ -23,17 +18,14 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 * Fix the bug of while loop invariant contains no local variables by @thanhnguyen-aws in https://github.com/model-checking/kani/pull/4022
 * List Subcommand: include crate name by @carolynzech in https://github.com/model-checking/kani/pull/4024
 * Autoharness: Update Filtering Options by @carolynzech in https://github.com/model-checking/kani/pull/4025
-* CI Formatting Fixes by @carolynzech in https://github.com/model-checking/kani/pull/4028
-* Bump tests/perf/s2n-quic from `0413d9a` to `f42521d` by @dependabot in https://github.com/model-checking/kani/pull/4038
 * Introduce BoundedArbitrary trait and macro for bounded proofs by @sgpthomas in https://github.com/model-checking/kani/pull/4000
 * Support `trait_upcasting` by @clubby789 in https://github.com/model-checking/kani/pull/4001
 * Analyze unsafe code reachability by @carolynzech in https://github.com/model-checking/kani/pull/4037
 * Scanner: log crate-level visibility of functions by @tautschnig in https://github.com/model-checking/kani/pull/4041
 * Autoharness: exit code 1 upon harness failure by @carolynzech in https://github.com/model-checking/kani/pull/4043
-* Bump tests/perf/s2n-quic from `f42521d` to `29e5e15` by @dependabot in https://github.com/model-checking/kani/pull/4048
 * Overflow operators can also be used with vectors by @tautschnig in https://github.com/model-checking/kani/pull/4049
+* Remove bool typedef by @zhassan-aws in https://github.com/model-checking/kani/pull/4058
 * Update CBMC dependency to 6.6.0 by @qinheping in https://github.com/model-checking/kani/pull/4050
-* Bump tests/perf/s2n-quic from `29e5e15` to `6aa9975` by @dependabot in https://github.com/model-checking/kani/pull/4054
 * Automatic cargo update to 2025-05-05 by @github-actions in https://github.com/model-checking/kani/pull/4053
 * Automatic toolchain upgrade to nightly-2025-04-24 by @zhassan-aws in https://github.com/model-checking/kani/pull/4042
 
