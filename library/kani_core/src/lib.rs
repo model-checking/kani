@@ -207,35 +207,17 @@ macro_rules! kani_intrinsics {
             assert!(cond, "{}", msg);
         }
 
-        #[inline(never)]
-        #[kanitool::fn_marker = "ForallHook"]
-        pub fn kani_forall<T, F>(lower_bound: T, upper_bound: T, predicate: F) -> bool
-        where
-            F: Fn(T) -> bool,
-        {
-            predicate(lower_bound)
-        }
-
-        #[inline(never)]
-        #[kanitool::fn_marker = "ExistsHook"]
-        pub fn kani_exists<T, F>(lower_bound: T, upper_bound: T, predicate: F) -> bool
-        where
-            F: Fn(T) -> bool,
-        {
-            predicate(lower_bound)
-        }
-
         #[macro_export]
         macro_rules! forall {
             (|$i:ident in ($lower_bound:expr, $upper_bound:expr)| $predicate:expr) => {{
                 let lower_bound: usize = $lower_bound;
                 let upper_bound: usize = $upper_bound;
                 let predicate = |$i| $predicate;
-                kani::kani_forall(lower_bound, upper_bound, predicate)
+                kani::internal::kani_forall(lower_bound, upper_bound, predicate)
             }};
             (|$i:ident | $predicate:expr) => {{
                 let predicate = |$i| $predicate;
-                kani::kani_forall(usize::MIN, usize::MAX, predicate)
+                kani::internal::kani_forall(usize::MIN, usize::MAX, predicate)
             }};
         }
 
@@ -245,11 +227,11 @@ macro_rules! kani_intrinsics {
                 let lower_bound: usize = $lower_bound;
                 let upper_bound: usize = $upper_bound;
                 let predicate = |$i| $predicate;
-                kani::kani_exists(lower_bound, upper_bound, predicate)
+                kani::internal::kani_exists(lower_bound, upper_bound, predicate)
             }};
             (|$i:ident | $predicate:expr) => {{
                 let predicate = |$i| $predicate;
-                kani::kani_exists(usize::MIN, usize::MAX, predicate)
+                kani::internal::kani_exists(usize::MIN, usize::MAX, predicate)
             }};
         }
 
@@ -656,6 +638,24 @@ macro_rules! kani_intrinsics {
             #[kanitool::fn_marker = "CheckHook"]
             pub(crate) const fn check(cond: bool, msg: &'static str) {
                 assert!(cond, "{}", msg);
+            }
+
+            #[inline(never)]
+            #[kanitool::fn_marker = "ForallHook"]
+            pub fn kani_forall<T, F>(lower_bound: T, upper_bound: T, predicate: F) -> bool
+            where
+                F: Fn(T) -> bool,
+            {
+                predicate(lower_bound)
+            }
+
+            #[inline(never)]
+            #[kanitool::fn_marker = "ExistsHook"]
+            pub fn kani_exists<T, F>(lower_bound: T, upper_bound: T, predicate: F) -> bool
+            where
+                F: Fn(T) -> bool,
+            {
+                predicate(lower_bound)
             }
         }
     };
