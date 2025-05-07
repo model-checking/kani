@@ -10,8 +10,6 @@ void *memcpy(void *dst, const void *src, size_t n);
 void *calloc(size_t nmemb, size_t size);
 void *malloc(size_t size);
 
-typedef __CPROVER_bool bool;
-
 /// Mapping unit to `void` works for functions with no return type but not for
 /// variables with type unit. We treat both uniformly by declaring an empty
 /// struct type: `struct Unit {}` and a global variable `struct Unit VoidUnit`
@@ -22,13 +20,13 @@ extern struct Unit VoidUnit;
 // `assert` then `assume`
 #define __KANI_assert(cond, msg)            \
     do {                                    \
-        bool __KANI_temp = (cond);          \
+        __CPROVER_bool __KANI_temp = (cond);          \
         __CPROVER_assert(__KANI_temp, msg); \
         __CPROVER_assume(__KANI_temp);      \
     } while (0)
 
 // Check that the input is either a power of 2, or 0. Algorithm from Hackers Delight.
-bool __KANI_is_nonzero_power_of_two(size_t i) { return (i != 0) && (i & (i - 1)) == 0; }
+__CPROVER_bool __KANI_is_nonzero_power_of_two(size_t i) { return (i != 0) && (i & (i - 1)) == 0; }
 
 // This is a C implementation of the __rust_alloc function.
 // https://stdrs.dev/nightly/x86_64-unknown-linux-gnu/alloc/alloc/fn.__rust_alloc.html
