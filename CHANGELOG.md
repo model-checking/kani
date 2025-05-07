@@ -26,7 +26,6 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 * Overflow operators can also be used with vectors by @tautschnig in https://github.com/model-checking/kani/pull/4049
 * Remove bool typedef by @zhassan-aws in https://github.com/model-checking/kani/pull/4058
 * Update CBMC dependency to 6.6.0 by @qinheping in https://github.com/model-checking/kani/pull/4050
-* Automatic cargo update to 2025-05-05 by @github-actions in https://github.com/model-checking/kani/pull/4053
 * Automatic toolchain upgrade to nightly-2025-04-24 by @zhassan-aws in https://github.com/model-checking/kani/pull/4042
 
 ## New Contributors
