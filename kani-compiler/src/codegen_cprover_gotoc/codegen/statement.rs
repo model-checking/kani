@@ -283,6 +283,7 @@ impl GotocCtx<'_> {
                     | AssertMessage::DivisionByZero { .. }
                     | AssertMessage::RemainderByZero { .. }
                     | AssertMessage::ResumedAfterReturn { .. }
+                    | AssertMessage::ResumedAfterDrop { .. }
                     | AssertMessage::ResumedAfterPanic { .. } => {
                         (msg.description().unwrap(), PropertyClass::Assertion)
                     }

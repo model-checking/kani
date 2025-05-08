@@ -29,7 +29,7 @@ use rustc_codegen_ssa::back::archive::{
 };
 use rustc_codegen_ssa::back::link::link_binary;
 use rustc_codegen_ssa::traits::CodegenBackend;
-use rustc_codegen_ssa::{CodegenResults, CrateInfo};
+use rustc_codegen_ssa::{CodegenResults, CrateInfo, TargetConfig};
 use rustc_data_structures::fx::{FxHashMap, FxIndexMap};
 use rustc_errors::DEFAULT_LOCALE_RESOURCE;
 use rustc_hir::def_id::{DefId as InternalDefId, LOCAL_CRATE};
@@ -41,6 +41,7 @@ use rustc_session::Session;
 use rustc_session::config::{CrateType, OutputFilenames, OutputType};
 use rustc_session::output::out_filename;
 use rustc_smir::rustc_internal;
+use rustc_span::symbol::Symbol;
 use rustc_target::spec::PanicStrategy;
 use stable_mir::CrateDef;
 use stable_mir::mir::mono::{Instance, MonoItem};
@@ -247,6 +248,19 @@ impl CodegenBackend for GotocCodegenBackend {
     fn locale_resource(&self) -> &'static str {
         // We don't currently support multiple languages.
         DEFAULT_LOCALE_RESOURCE
+    }
+
+    fn target_config(&self, _sess: &Session) -> TargetConfig {
+        TargetConfig {
+            target_features: vec![],
+            unstable_target_features: vec![Symbol::intern("sse"), Symbol::intern("neon")],
+            // `true` is used as a default so backends need to acknowledge when they do not
+            // support the float types, rather than accidentally quietly skipping all tests.
+            has_reliable_f16: true,
+            has_reliable_f16_math: true,
+            has_reliable_f128: true,
+            has_reliable_f128_math: true,
+        }
     }
 
     fn codegen_crate(
