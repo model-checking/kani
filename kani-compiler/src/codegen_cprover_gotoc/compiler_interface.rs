@@ -41,6 +41,7 @@ use rustc_session::Session;
 use rustc_session::config::{CrateType, OutputFilenames, OutputType};
 use rustc_session::output::out_filename;
 use rustc_smir::rustc_internal;
+use rustc_span::symbol::Symbol;
 use rustc_target::spec::PanicStrategy;
 use stable_mir::CrateDef;
 use stable_mir::mir::mono::{Instance, MonoItem};
@@ -53,7 +54,6 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tracing::{debug, info};
-use rustc_span::symbol::Symbol;
 
 pub type UnsupportedConstructs = FxHashMap<InternedString, Vec<Location>>;
 
