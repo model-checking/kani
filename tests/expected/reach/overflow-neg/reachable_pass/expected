@@ -1,2 +1,2 @@
 SUCCESS\
-Description: "attempt to negate with overflow"
+Description: "Panic: attempt to negate with overflow"

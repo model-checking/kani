@@ -1,15 +1,15 @@
 Checking harness check_non_empty_raw...
 
 Status: SUCCESS\
-Description: "assertion failed: mem::size_of_val(raw) == 4"\
+Description: "Panic: assertion failed: mem::size_of_val(raw) == 4"\
 slice.rs:61:5 in function check_non_empty_raw
 
 Status: SUCCESS\
-Description: "assertion failed: raw.inner.len() == 4"\
+Description: "Panic: assertion failed: raw.inner.len() == 4"\
 slice.rs:62:5 in function check_non_empty_raw
 
 Status: SUCCESS\
-Description: "assertion failed: raw.inner[0] == 1"\
+Description: "Panic: assertion failed: raw.inner[0] == 1"\
 slice.rs:63:5 in function check_non_empty_raw
 
 VERIFICATION:- SUCCESSFUL
@@ -17,11 +17,11 @@ VERIFICATION:- SUCCESSFUL
 Checking harness check_empty_raw...
 
 Status: SUCCESS\
-Description: "assertion failed: mem::size_of_val(raw) == 0"\
+Description: "Panic: assertion failed: mem::size_of_val(raw) == 0"\
 slice.rs:70:5 in function check_empty_raw
 
 Status: SUCCESS\
-Description: "assertion failed: raw.inner.len() == 0"\
+Description: "Panic: assertion failed: raw.inner.len() == 0"\
 slice.rs:71:5 in function check_empty_raw
 
 VERIFICATION:- SUCCESSFUL
@@ -29,19 +29,19 @@ VERIFICATION:- SUCCESSFUL
 Checking harness check_non_empty_slice...
 
 Status: SUCCESS\
-Description: "assertion failed: mem::size_of_val(slice) == 2"\
+Description: "Panic: assertion failed: mem::size_of_val(slice) == 2"\
 slice.rs:78:5 in function check_non_empty_slice
 
 Status: SUCCESS\
-Description: "assertion failed: slice.others.len() == 1"\
+Description: "Panic: assertion failed: slice.others.len() == 1"\
 slice.rs:79:5 in function check_non_empty_slice
 
 Status: SUCCESS\
-Description: "assertion failed: slice.first == 1"\
+Description: "Panic: assertion failed: slice.first == 1"\
 slice.rs:80:5 in function check_non_empty_slice
 
 Status: SUCCESS\
-Description: "assertion failed: slice.others[0] == 5"\
+Description: "Panic: assertion failed: slice.others[0] == 5"\
 slice.rs:81:5 in function check_non_empty_slice
 
 VERIFICATION:- SUCCESSFUL
@@ -50,15 +50,15 @@ VERIFICATION:- SUCCESSFUL
 Checking harness check_naive_iterator_should_fail...
 
 Status: SUCCESS\
-Description: ""Naive new should have the wrong slice len""\
+Description: "Panic: "Naive new should have the wrong slice len""\
 slice.rs:94:5 in function check_naive_iterator_should_fail
 
 Status: SUCCESS\
-Description: "assertion failed: slice.first == first"\
+Description: "Panic: assertion failed: slice.first == first"\
 slice.rs:95:5 in function check_naive_iterator_should_fail
 
 Status: SUCCESS\
-Description: "assertion failed: slice.others[0] == second"\
+Description: "Panic: assertion failed: slice.others[0] == second"\
 slice.rs:96:5 in function check_naive_iterator_should_fail
 
 Status: FAILURE\

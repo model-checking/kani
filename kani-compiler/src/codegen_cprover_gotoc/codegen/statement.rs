@@ -261,7 +261,7 @@ impl GotocCtx<'_> {
                         // "index out of bounds: the length is {len} but the index is {index}",
                         // but CBMC only accepts static messages so we don't add values to the message.
                         (
-                            "index out of bounds: the length is less than or equal to the given index",
+                            "Panic: index out of bounds: the length is less than or equal to the given index".to_string(),
                             PropertyClass::Assertion,
                         )
                     }
@@ -270,22 +270,23 @@ impl GotocCtx<'_> {
                         // Generate a generic one here.
                         (
                             "misaligned pointer dereference: address must be a multiple of its type's \
-                    alignment",
+                    alignment".to_string(),
                             PropertyClass::SafetyCheck,
                         )
                     }
                     // For all other assert kind we can get the static message.
                     AssertMessage::NullPointerDereference => {
-                        (msg.description().unwrap(), PropertyClass::SafetyCheck)
+                        (msg.description().unwrap().to_string(), PropertyClass::SafetyCheck)
                     }
                     AssertMessage::Overflow { .. }
                     | AssertMessage::OverflowNeg { .. }
                     | AssertMessage::DivisionByZero { .. }
                     | AssertMessage::RemainderByZero { .. }
                     | AssertMessage::ResumedAfterReturn { .. }
-                    | AssertMessage::ResumedAfterPanic { .. } => {
-                        (msg.description().unwrap(), PropertyClass::Assertion)
-                    }
+                    | AssertMessage::ResumedAfterPanic { .. } => (
+                        "Panic: ".to_owned() + msg.description().unwrap(),
+                        PropertyClass::Assertion,
+                    ),
                 };
 
                 let (msg_str, reach_stmt) =

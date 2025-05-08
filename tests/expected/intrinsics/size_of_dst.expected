@@ -5,7 +5,7 @@ Status: FAILURE\
 Description: "failed to compute `size_of_val`"
 
 Status: SUCCESS\
-Description: "assertion failed: unsafe { size_of_val_raw(new_ptr) } == expected_size"
+Description: "Panic: assertion failed: unsafe { size_of_val_raw(new_ptr) } == expected_size"
 
 Failed Checks: failed to compute `size_of_val`
 VERIFICATION:- FAILED

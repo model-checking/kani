@@ -1,2 +1,2 @@
 SUCCESS\
-Description: "assertion failed: sum == 6"
+Description: "Panic: assertion failed: sum == 6"

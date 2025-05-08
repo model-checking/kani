@@ -1,2 +1,2 @@
 SUCCESS\
-Description: "assertion failed: x == 10"
+Description: "Panic: assertion failed: x == 10"

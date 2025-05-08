@@ -1,3 +1,3 @@
 assertion\
 - Status: FAILURE\
-- Description: "attempt to divide by zero"\
+- Description: "Panic: attempt to divide by zero"\

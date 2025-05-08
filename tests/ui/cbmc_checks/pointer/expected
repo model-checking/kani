@@ -1,2 +1,2 @@
 Failed Checks: misaligned pointer dereference: address must be a multiple of its type's alignment
-Failed Checks: assertion failed: unsafe { *p1 != 0 }
+Failed Checks: Panic: assertion failed: unsafe { *p1 != 0 }

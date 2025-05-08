@@ -1,2 +1,2 @@
          - Status: SUCCESS\
-         - Description: "assertion failed: point.is_safe()"
+         - Description: "Panic: assertion failed: point.is_safe()"

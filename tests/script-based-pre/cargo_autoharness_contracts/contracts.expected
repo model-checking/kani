@@ -21,17 +21,17 @@ Skipped Functions: None. Kani generated automatic harnesses for all functions in
 Autoharness: Checking function should_fail::max's contract against all possible inputs...
 assertion\
 	 - Status: FAILURE\
-	 - Description: "|result : &u32| *result == x"
+	 - Description: "Panic: |result : &u32| *result == x"
 
 Autoharness: Checking function should_pass::has_loop_contract against all possible inputs...
 should_pass::has_loop_contract.assertion\
 	 - Status: SUCCESS\
-	 - Description: "assertion failed: x == 2"
+	 - Description: "Panic: assertion failed: x == 2"
 
 Autoharness: Checking function should_pass::has_recursion_gcd's contract against all possible inputs...
 assertion\
 	 - Status: SUCCESS\
-	 - Description: "|result : &u8| *result != 0 && x % *result == 0 && y % *result == 0"
+	 - Description: "Panic: |result : &u8| *result != 0 && x % *result == 0 && y % *result == 0"
 
 Autoharness: Checking function should_pass::div's contract against all possible inputs...
 
@@ -48,7 +48,7 @@ should_pass::alignment::Alignment::as_usize\
 
 should_pass::alignment::Alignment::as_usize\
 	 - Status: SUCCESS\
-	 - Description: "|result| result.is_power_of_two()"
+	 - Description: "Panic: |result| result.is_power_of_two()"
 
 Manual Harness Summary:
 No proof harnesses (functions with #[kani::proof]) were found to verify.

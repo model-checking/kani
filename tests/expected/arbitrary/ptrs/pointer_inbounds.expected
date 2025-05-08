@@ -15,15 +15,15 @@ Description: "Smaller"
 Checking harness check_alignment...
 
 Status: SUCCESS\
-Description: ""Aligned""
+Description: "Panic: "Aligned""
 
 Status: SUCCESS\
-Description: ""Unaligned""
+Description: "Panic: "Unaligned""
 
 Checking harness check_inbounds_initialized...
 
 Status: SUCCESS\
-Description: ""ValidRead""
+Description: "Panic: "ValidRead""
 
 Checking harness check_inbounds...
 
@@ -34,6 +34,6 @@ Status: SATISFIED\
 Description: "Initialized"
 
 Status: SUCCESS\
-Description: ""ValidWrite""
+Description: "Panic: "ValidWrite""
 
 Complete - 4 successfully verified harnesses, 0 failures, 4 total.

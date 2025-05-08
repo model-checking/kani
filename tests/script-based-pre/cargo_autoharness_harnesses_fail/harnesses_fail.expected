@@ -23,7 +23,7 @@ panic.assertion\
 Autoharness: Checking function integer_overflow against all possible inputs...
 assertion\
 	 - Status: FAILURE
-	 - Description: "attempt to add with overflow"
+	 - Description: "Panic: attempt to add with overflow"
 
 Autoharness: Checking function oob_unsafe_array_access against all possible inputs...
 oob_unsafe_array_access.pointer_dereference\
@@ -33,7 +33,7 @@ oob_unsafe_array_access.pointer_dereference\
 Autoharness: Checking function oob_safe_array_access against all possible inputs...
 assertion\
 	- Status: FAILURE\
-	- Description: "index out of bounds: the length is less than or equal to the given index"
+	- Description: "Panic: index out of bounds: the length is less than or equal to the given index"
 
 Autoharness: Checking function unchecked_mul against all possible inputs...
 arithmetic_overflow\
@@ -48,7 +48,7 @@ panic.assertion\
 Checking harness integer_overflow_harness...
 assertion\
 	 - Status: FAILURE\
-	 - Description: "attempt to add with overflow"
+	 - Description: "Panic: attempt to add with overflow"
 
 Checking harness oob_unsafe_array_access_harness...
 oob_unsafe_array_access.pointer_dereference\
@@ -57,7 +57,7 @@ oob_unsafe_array_access.pointer_dereference\
 Checking harness oob_safe_array_access_harness...
 assertion\
 	 - Status: FAILURE\
-	 - Description: "index out of bounds: the length is less than or equal to the given index"
+	 - Description: "Panic: index out of bounds: the length is less than or equal to the given index"
 
 Checking harness unchecked_mul_harness...
 arithmetic_overflow\

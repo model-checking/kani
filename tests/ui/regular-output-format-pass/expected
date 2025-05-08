@@ -1,3 +1,3 @@
-Description: "assertion failed: 1 + 1 == 2"\
+Description: "Panic: assertion failed: 1 + 1 == 2"\
 Location:
 tests/ui/regular-output-format-pass/main.rs:7:5 in function main

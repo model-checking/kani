@@ -1,4 +1,4 @@
 Status: SUCCESS\
-Description: "assertion failed: result == &output"
+Description: "Panic: assertion failed: result == &output"
 
 VERIFICATION:- SUCCESSFUL

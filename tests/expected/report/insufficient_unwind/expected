@@ -1,4 +1,4 @@
 UNDETERMINED\
-Description: "assertion failed: sum == 6"
+Description: "Panic: assertion failed: sum == 6"
 [Kani] info: Verification output shows one or more unwinding failures.
 [Kani] tip: Consider increasing the unwinding value or disabling `--unwinding-assertions`.

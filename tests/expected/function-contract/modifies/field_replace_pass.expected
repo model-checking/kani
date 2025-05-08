@@ -1,9 +1,9 @@
 main.assertion\
 - Status: SUCCESS\
-- Description: "Increment"\
+- Description: "Panic: Increment"\
 
 main.assertion\
 - Status: SUCCESS\
-- Description: "Unchanged"
+- Description: "Panic: Unchanged"
 
 VERIFICATION:- SUCCESSFUL

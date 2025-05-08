@@ -1,5 +1,5 @@
 assertion\
 	 - Status: SUCCESS\
-	 - Description: "|result| old(ptr.clone()).0 + 1 == ptr.0"\
+	 - Description: "Panic: |result| old(ptr.clone()).0 + 1 == ptr.0"\
 
 VERIFICATION:- SUCCESSFUL

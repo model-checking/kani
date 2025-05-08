@@ -1,19 +1,19 @@
 Checking harness check_invalid_char_unit_wrapper_should_fail...
 - Status: UNREACHABLE\
-- Description: ""Unreachable code: Expected invalid char wrapper detection""
+- Description: "Panic: "Unreachable code: Expected invalid char wrapper detection""
 Failed Checks: Undefined Behavior: Invalid value of type `TwoFields<char, ()>`
 Failed Checks: Undefined Behavior: Invalid value of type `TwoFields<(), char>`
 VERIFICATION:- FAILED
 
 Checking harness check_invalid_char_nonzero_wrapper_should_fail...
 - Status: UNREACHABLE\
-- Description: ""Unreachable code: Expected invalid char / NonZero detection""
+- Description: "Panic: "Unreachable code: Expected invalid char / NonZero detection""
 Failed Checks: Undefined Behavior: Invalid value of type `TwoFields<char, std::num::NonZero<u32>>`
 VERIFICATION:- FAILED
 
 Checking harness check_invalid_char_should_fail...
 - Status: UNREACHABLE\
-- Description: ""Unreachable code: Expected invalid char detection""
+- Description: "Panic: "Unreachable code: Expected invalid char detection""
 Failed Checks: Undefined Behavior: Invalid value of type `char`
 VERIFICATION:- FAILED
 

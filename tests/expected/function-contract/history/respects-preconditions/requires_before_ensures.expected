@@ -1,5 +1,5 @@
 next\
      - Status: SUCCESS\
-	- Description: "attempt to add with overflow"
+	- Description: "Panic: attempt to add with overflow"
 
 VERIFICATION:- SUCCESSFUL

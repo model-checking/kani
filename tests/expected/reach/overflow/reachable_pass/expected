@@ -1,2 +1,2 @@
 SUCCESS\
-Description: "attempt to subtract with overflow"
+Description: "Panic: attempt to subtract with overflow"

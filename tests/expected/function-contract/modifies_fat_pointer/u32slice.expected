@@ -1,5 +1,5 @@
 assertion\
 - Status: SUCCESS\
-- Description: "|_| x.iter().map(|v| *v == 0).fold(true,|a,b|a&b)"\
+- Description: "Panic: |_| x.iter().map(|v| *v == 0).fold(true,|a,b|a&b)"\
 
 VERIFICATION:- SUCCESSFUL

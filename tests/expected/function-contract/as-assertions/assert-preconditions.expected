@@ -1,14 +1,14 @@
 assertion\
 	 - Status: FAILURE\
-	 - Description: "*ptr < 100"
+	 - Description: "Panic: *ptr < 100"
 
 assertion\
 	 - Status: FAILURE\
-	 - Description: "*ptr == 4"
+	 - Description: "Panic: *ptr == 4"
 
 assertion\
 	 - Status: FAILURE\
-	 - Description: "*ptr < 100"
+	 - Description: "Panic: *ptr < 100"
 
 Summary:
 Verification failed for - prove_add_one

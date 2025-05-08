@@ -1,5 +1,5 @@
 - Status: SUCCESS\
-- Description: "|result : &u32| (*result == x) | (*result == y)"\
+- Description: "Panic: |result : &u32| (*result == x) | (*result == y)"\
 in function max
 
 VERIFICATION:- SUCCESSFUL

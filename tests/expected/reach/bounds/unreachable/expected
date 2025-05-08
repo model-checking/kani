@@ -1,2 +1,2 @@
 UNREACHABLE\
-Description: "index out of bounds: the length is less than or equal to the given index"
+Description: "Panic: index out of bounds: the length is less than or equal to the given index"

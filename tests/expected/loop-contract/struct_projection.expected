@@ -8,7 +8,7 @@ struct_projection.loop_invariant_step.2\
 
 struct_projection.assertion.3\
 	 - Status: SUCCESS\
-	 - Description: "assertion failed: s.b == 2"
+	 - Description: "Panic: assertion failed: s.b == 2"
 
 
 VERIFICATION:- SUCCESSFUL

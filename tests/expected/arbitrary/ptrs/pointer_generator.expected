@@ -1,21 +1,21 @@
 Checking harness check_arbitrary_ptr...
 
 Status: SUCCESS\
-Description: ""OutOfBounds""
+Description: "Panic: "OutOfBounds""
 
 Status: SUCCESS\
-Description: ""InBounds""
+Description: "Panic: "InBounds""
 
 Status: SUCCESS\
-Description: ""NullPtr""
+Description: "Panic: "NullPtr""
 
 Status: FAILURE\
-Description: ""DeadObject""
+Description: "Panic: "DeadObject""
 
 Status: SATISFIED\
 Description: "Dangling"
 
 Status: UNREACHABLE\
-Description: ""Dangling write""
+Description: "Panic: "Dangling write""
 
 Verification failed for - check_arbitrary_ptr

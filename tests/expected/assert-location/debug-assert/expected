@@ -1,2 +1,2 @@
-line 13 "This should fail and stop the execution": FAILURE
-line 14 "This should be unreachable": SUCCESS
+line 13 Panic: "This should fail and stop the execution": FAILURE
+line 14 Panic: "This should be unreachable": SUCCESS

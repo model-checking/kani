@@ -1,6 +1,6 @@
 Checking harness transmute_wrapper_diff_size...
 Status: UNREACHABLE\
-Description: ""Unreachable expected""
+Description: "Panic: "Unreachable expected""
 
 Failed Checks: Cannot transmute between types of different sizes. Transmuting from `8` to `16` bytes
 
@@ -9,10 +9,10 @@ VERIFICATION:- FAILED
 Checking harness transmute_diff_size...
 
 Status: UNREACHABLE\
-Description: ""This should never be reached""
+Description: "Panic: "This should never be reached""
 
 Status: UNREACHABLE\
-Description: ""Neither this one""
+Description: "Panic: "Neither this one""
 
 Failed Checks: Cannot transmute between types of different sizes. Transmuting from `4` to `2` bytes
 Failed Checks: Cannot transmute between types of different sizes. Transmuting from `4` to `16` bytes

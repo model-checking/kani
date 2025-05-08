@@ -1,2 +1,2 @@
-Failed Checks: |result| old({ *ptr+=1; *ptr }) == _val
+Failed Checks: Panic: |result| old({ *ptr+=1; *ptr }) == _val
 VERIFICATION:- FAILED

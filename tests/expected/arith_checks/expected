@@ -1,1 +1,1 @@
-Failed Checks: attempt to subtract with overflow
+Failed Checks: Panic: attempt to subtract with overflow

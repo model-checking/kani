@@ -61,7 +61,7 @@ Description: "dereference failure: pointer invalid"\
 in function Store::<'_, 3>::from
 
 Status: SUCCESS\
-Description: "assertion failed: broken.data.len() == 3"\
+Description: "Panic: assertion failed: broken.data.len() == 3"\
 in function check_store
 
 VERIFICATION:- FAILED
