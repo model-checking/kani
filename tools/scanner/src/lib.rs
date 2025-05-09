@@ -43,7 +43,7 @@ pub fn run_all(rustc_args: Vec<String>, verbose: bool) -> ExitCode {
 /// Executes a compilation and run the analysis that were requested.
 pub fn run_analyses(rustc_args: Vec<String>, analyses: &[Analysis], verbose: bool) -> ExitCode {
     VERBOSE.store(verbose, Ordering::Relaxed);
-    let result = run_with_tcx!(rustc_args, |tcx| analyze_crate(tcx, analyses));
+    let result = run_with_tcx!(&rustc_args, |tcx| analyze_crate(tcx, analyses));
     if result.is_ok() || matches!(result, Err(CompilerError::Skipped)) {
         ExitCode::SUCCESS
     } else {
