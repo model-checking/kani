@@ -139,13 +139,36 @@ In proof path 1, we prove properties inside the loop and at last check that the 
 In proof path 2, we prove properties after leaving the loop. As we leave the loop only when the loop guard is violated, the post condition of the loop can be expressed as
 `!guard && inv`, which is `x <= 1 && x >= 1` in the example. The postcondition implies `x == 1`—the property we want to prove at the end of `simple_loop_with_loop_contracts`.
 
+## Loop contracts inside functions with contracts 
+Kani supports using loop contracts together with function contracts, as demonstrated in the following example:
+``` Rust
+#![feature(proc_macro_hygiene)]
+#![feature(stmt_expr_attributes)]
 
+#[kani::requires(i>=2)]
+#[kani::ensures(|ret| *ret == 2)]
+pub fn has_loop(mut i: u16) -> u16 {
+    #[kani::loop_invariant(i>=2)]
+    while i > 2 {
+        i = i - 1
+    }
+    i
+}
+
+#[kani::proof_for_contract(has_loop)]
+fn contract_proof() {
+    let i: u16 = kani::any();
+    let j = has_loop(i);
+}
+```
+
+When loop contracts and function contracts are both enabled (by flags `-Z loop-contracts -Z function-contracts`), 
+Kani automatically contracts (instead of unwinds) all loops in the functions that we want to prove contracts for.
 ## Limitations
 
 Loop contracts comes with the following limitations.
 
-1. Only `while` loops are supported. The other three kinds of loops are not supported: [`loop` loops](https://doc.rust-lang.org/reference/expressions/loop-expr.html#infinite-loops)
-   , [`while let` loops](https://doc.rust-lang.org/reference/expressions/loop-expr.html#predicate-pattern-loops), and [`for` loops](https://doc.rust-lang.org/reference/expressions/loop-expr.html#iterator-loops).
+1. `while` loops and `loop` loops are supported. The other kinds of loops are not supported: [`while let` loops](https://doc.rust-lang.org/reference/expressions/loop-expr.html#predicate-pattern-loops), and [`for` loops](https://doc.rust-lang.org/reference/expressions/loop-expr.html#iterator-loops).
 2. Kani infers *loop modifies* with alias analysis. Loop modifies are those variables we assume to be arbitrary in the inductive hypothesis, and should cover all memory locations that are written to during 
    the execution of the loops. A proof will fail if the inferred loop modifies misses some targets written in the loops.
    We observed this happens when some fields of structs are modified by some other functions called in the loops.

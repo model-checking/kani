@@ -103,39 +103,10 @@ impl TransformPass for LoopContractPass {
                     let run = Instance::resolve(self.run_contract_fn.unwrap(), args).unwrap();
                     (true, run.body().unwrap())
                 } else {
-                    let mut new_body = MutableBody::from(body);
-                    let mut contain_loop_contracts: bool = false;
-
-                    // Visit basic blocks in control flow order (BFS).
-                    let mut visited: HashSet<BasicBlockIdx> = HashSet::new();
-                    let mut queue: VecDeque<BasicBlockIdx> = VecDeque::new();
-                    // Visit blocks in loops only when there is no blocks in queue.
-                    let mut loop_queue: VecDeque<BasicBlockIdx> = VecDeque::new();
-                    queue.push_back(0);
-
-                    while let Some(bb_idx) = queue.pop_front().or_else(|| loop_queue.pop_front()) {
-                        visited.insert(bb_idx);
-
-                        let terminator = new_body.blocks()[bb_idx].terminator.clone();
-
-                        let is_loop_head = self.transform_bb(tcx, &mut new_body, bb_idx);
-                        contain_loop_contracts |= is_loop_head;
-
-                        // Add successors of the current basic blocks to
-                        // the visiting queue.
-                        for to_visit in terminator.successors() {
-                            if !visited.contains(&to_visit) {
-                                if is_loop_head {
-                                    loop_queue.push_back(to_visit);
-                                } else {
-                                    queue.push_back(to_visit)
-                                };
-                            }
-                        }
-                    }
-                    (contain_loop_contracts, new_body.into())
+                    self.transform_body_with_loop(tcx, body)
                 }
             }
+            RigidTy::Closure(_, _) => self.transform_body_with_loop(tcx, body),
             _ => {
                 /* static variables case */
                 (false, body)
@@ -192,6 +163,43 @@ impl LoopContractPass {
         var_debug_info.iter().any(|info|
             matches!(&info.value, VarDebugInfoContents::Place(debug_place) if *place == *debug_place)
         ))
+    }
+
+    /// This function transform the function body as described in fn transform.
+    /// It is the core of fn transform, and is separated just to avoid code repetition.
+    fn transform_body_with_loop(&mut self, tcx: TyCtxt, body: Body) -> (bool, Body) {
+        let mut new_body = MutableBody::from(body);
+        let mut contain_loop_contracts: bool = false;
+
+        // Visit basic blocks in control flow order (BFS).
+        let mut visited: HashSet<BasicBlockIdx> = HashSet::new();
+        let mut queue: VecDeque<BasicBlockIdx> = VecDeque::new();
+        // Visit blocks in loops only when there is no blocks in queue.
+        let mut loop_queue: VecDeque<BasicBlockIdx> = VecDeque::new();
+        queue.push_back(0);
+
+        while let Some(bb_idx) = queue.pop_front().or_else(|| loop_queue.pop_front()) {
+            visited.insert(bb_idx);
+
+            let terminator = new_body.blocks()[bb_idx].terminator.clone();
+
+            let is_loop_head = self.transform_bb(tcx, &mut new_body, bb_idx);
+            contain_loop_contracts |= is_loop_head;
+
+            // Add successors of the current basic blocks to
+            // the visiting queue.
+            for to_visit in terminator.successors() {
+                if !visited.contains(&to_visit) {
+                    if is_loop_head {
+                        loop_queue.push_back(to_visit);
+                    } else {
+                        queue.push_back(to_visit)
+                    };
+                }
+            }
+        }
+
+        (contain_loop_contracts, new_body.into())
     }
 
     /// Transform loops with contracts from
@@ -316,7 +324,7 @@ impl LoopContractPass {
                 for stmt in &new_body.blocks()[bb_idx].statements {
                     if let StatementKind::Assign(place, rvalue) = &stmt.kind {
                         match rvalue {
-                            Rvalue::Ref(_,_,rplace) => {
+                            Rvalue::Ref(_,_,rplace) | Rvalue::CopyForDeref(rplace) => {
                                 if supported_vars.contains(&rplace.local) {
                                     supported_vars.push(place.local);
                                 } }
