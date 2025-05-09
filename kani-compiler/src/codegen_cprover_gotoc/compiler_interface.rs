@@ -253,7 +253,12 @@ impl CodegenBackend for GotocCodegenBackend {
     fn target_config(&self, _sess: &Session) -> TargetConfig {
         TargetConfig {
             target_features: vec![],
-            unstable_target_features: vec![Symbol::intern("sse"), Symbol::intern("neon")],
+            unstable_target_features: vec![
+                Symbol::intern("sse"),
+                Symbol::intern("neon"),
+                Symbol::intern("x87"),
+                Symbol::intern("sse2"),
+            ],
             // `true` is used as a default so backends need to acknowledge when they do not
             // support the float types, rather than accidentally quietly skipping all tests.
             has_reliable_f16: true,
