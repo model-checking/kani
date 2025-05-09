@@ -1,0 +1,8 @@
+has_loop.loop_invariant_base.1\
+	 - Status: SUCCESS\
+	 - Description: "Check invariant before entry for loop has_loop.0"\
+in function has_loop
+
+
+
+VERIFICATION:- SUCCESSFUL
