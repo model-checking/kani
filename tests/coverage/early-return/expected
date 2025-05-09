@@ -12,8 +12,8 @@
   12|     | \
   13|     | #[kani::proof]\
   14|    1| fn main() {\
-  15|    1|     let numbers = [10, 20, 30, 40, 50];\
-  16|    1|     let target = 30;\
-  17|    1|     let result = find_index(&numbers, target);\
-  18|    1|     assert_eq!(result, Some(2));\
+  15|     |     let numbers = [10, 20, 30, 40, 50];\
+  16|     |     let target = 30;\
+  17|     |     let result = find_index(&numbers, target);\
+  18|     |     assert_eq!(result, Some(2));\
   19|     | }\

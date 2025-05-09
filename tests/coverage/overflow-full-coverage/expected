@@ -10,8 +10,8 @@
   10|     | \
   11|     | #[kani::proof]\
   12|    1| fn main() {\
-  13|    1|     reduce(7);\
-  14|    1|     reduce(33);\
-  15|    1|     reduce(728);\
-  16|    1|     reduce(1079);\
+  13|     |     reduce(7);\
+  14|     |     reduce(33);\
+  15|     |     reduce(728);\
+  16|     |     reduce(1079);\
   17|     | }\

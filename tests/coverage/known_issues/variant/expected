@@ -27,6 +27,6 @@
   27|     | \
   28|     | #[kani::proof]\
   29|    1| fn main() {\
-  30|    1|     let direction = Direction::Left;\
-  31|    1|     print_direction(direction);\
+  30|     |     let direction = Direction::Left;\
+  31|     |     print_direction(direction);\
   32|     | }\

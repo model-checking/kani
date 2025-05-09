@@ -19,8 +19,8 @@
   19|     | \
   20|     | #[cfg_attr(kani, kani::proof)]\
   21|    1| fn main() {\
-  22|    1|     let test1 = test_cov(1);\
-  23|    1|     let test2 = test_cov(2);\
-  24|    1|     assert!(test1);\
-  25|    1|     assert!(test2);\
+  22|     |     let test1 = test_cov(1);\
+  23|     |     let test2 = test_cov(2);\
+  24|     |     assert!(test1);\
+  25|     |     assert!(test2);\
   26|     | }\

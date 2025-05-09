@@ -13,7 +13,7 @@
   13|     | \
   14|     | #[kani::proof]\
   15|    1| fn main() {\
-  16|    1|     let numbers = [-3, -1, 0, 2, 4];\
-  17|    1|     let result = find_positive(&numbers);\
-  18|    1|     assert_eq!(result, Some(2));\
+  16|     |     let numbers = [-3, -1, 0, 2, 4];\
+  17|     |     let result = find_positive(&numbers);\
+  18|     |     assert_eq!(result, Some(2));\
   19|     | }\

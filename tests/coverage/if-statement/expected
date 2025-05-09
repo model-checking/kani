@@ -2,7 +2,7 @@
    2|     | // SPDX-License-Identifier: Apache-2.0 OR MIT\
    3|     | \
    4|    1| fn check_number(num: i32) -> &'static str {\
-   5|    1|     if num > 0 {\
+   5|     |     if num > 0 {\
    6|     |         // The next line is partially covered\
    7|    1|         if num % 2 == 0 { ```"Positive and Even"''' } else { "Positive and Odd" }\
    8|    0|     } else if ```num < 0''' {\
@@ -14,7 +14,7 @@
   14|     | \
   15|     | #[kani::proof]\
   16|    1| fn main() {\
-  17|    1|     let number = 7;\
-  18|    1|     let result = check_number(number);\
-  19|    1|     assert_eq!(result, "Positive and Odd");\
+  17|     |     let number = 7;\
+  18|     |     let result = check_number(number);\
+  19|     |     assert_eq!(result, "Positive and Odd");\
   20|     | }\
