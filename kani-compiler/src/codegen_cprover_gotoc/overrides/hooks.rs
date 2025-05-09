@@ -14,11 +14,13 @@ use crate::kani_middle::attributes;
 use crate::kani_middle::kani_functions::{KaniFunction, KaniHook};
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
 use cbmc::goto_program::CIntType;
-use cbmc::goto_program::{BuiltinFn, Expr, Stmt, Type};
+use cbmc::goto_program::Symbol as GotoSymbol;
+use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Type};
 use rustc_middle::ty::TyCtxt;
 use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{BasicBlockIdx, Place};
+use stable_mir::ty::ClosureKind;
 use stable_mir::ty::RigidTy;
 use stable_mir::{CrateDef, ty::Span};
 use std::collections::HashMap;
@@ -761,10 +763,141 @@ impl GotocHook for LoopInvariantRegister {
     }
 }
 
+struct Forall;
+struct Exists;
+
+#[derive(Debug, Clone, Copy)]
+enum QuantifierKind {
+    ForAll,
+    Exists,
+}
+
+impl GotocHook for Forall {
+    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+        unreachable!("{UNEXPECTED_CALL}")
+    }
+
+    fn handle(
+        &self,
+        gcx: &mut GotocCtx,
+        instance: Instance,
+        fargs: Vec<Expr>,
+        assign_to: &Place,
+        target: Option<BasicBlockIdx>,
+        span: Span,
+    ) -> Stmt {
+        handle_quantifier(gcx, instance, fargs, assign_to, target, span, QuantifierKind::ForAll)
+    }
+}
+
+impl GotocHook for Exists {
+    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+        unreachable!("{UNEXPECTED_CALL}")
+    }
+
+    fn handle(
+        &self,
+        gcx: &mut GotocCtx,
+        instance: Instance,
+        fargs: Vec<Expr>,
+        assign_to: &Place,
+        target: Option<BasicBlockIdx>,
+        span: Span,
+    ) -> Stmt {
+        handle_quantifier(gcx, instance, fargs, assign_to, target, span, QuantifierKind::Exists)
+    }
+}
+
+fn handle_quantifier(
+    gcx: &mut GotocCtx,
+    instance: Instance,
+    fargs: Vec<Expr>,
+    assign_to: &Place,
+    target: Option<BasicBlockIdx>,
+    span: Span,
+    quantifier_kind: QuantifierKind,
+) -> Stmt {
+    let loc = gcx.codegen_span_stable(span);
+    let target = target.unwrap();
+    let lower_bound = &fargs[0];
+    let upper_bound = &fargs[1];
+    let closure_call_expr = find_closure_call_expr(&instance, gcx, loc)
+        .unwrap_or_else(|| unreachable!("Failed to find closure call expression"));
+
+    let predicate = Expr::address_of(fargs[2].clone());
+
+    // Quantified variable.
+    let base_name = "kani_quantified_var".to_string();
+    let mut counter = 0;
+    let mut unique_name = format!("{base_name}_{counter}");
+    // Ensure the name is not already in the symbol table
+    while gcx.symbol_table.lookup(&unique_name).is_some() {
+        counter += 1;
+        unique_name = format!("{base_name}_{counter}");
+    }
+    let new_variable_expr = {
+        let new_symbol =
+            GotoSymbol::variable(unique_name.clone(), unique_name, lower_bound.typ().clone(), loc);
+        gcx.symbol_table.insert(new_symbol.clone());
+        new_symbol.to_expr()
+    };
+
+    let lower_bound_comparison = lower_bound.clone().le(new_variable_expr.clone());
+    let upper_bound_comparison = new_variable_expr.clone().lt(upper_bound.clone());
+    let range = lower_bound_comparison.and(upper_bound_comparison);
+
+    let quantifier_expr = match quantifier_kind {
+        QuantifierKind::ForAll => {
+            let domain = range
+                .clone()
+                .implies(closure_call_expr.call(vec![predicate.clone(), new_variable_expr.clone()]))
+                .and(range.not().implies(Expr::bool_true()));
+            Expr::forall_expr(Type::Bool, new_variable_expr, domain)
+        }
+        QuantifierKind::Exists => {
+            let domain = range
+                .clone()
+                .and(closure_call_expr.call(vec![predicate.clone(), new_variable_expr.clone()]))
+                .and(range.not().implies(Expr::bool_false()));
+            Expr::exists_expr(Type::Bool, new_variable_expr, domain)
+        }
+    };
+
+    Stmt::block(
+        vec![
+            unwrap_or_return_codegen_unimplemented_stmt!(
+                gcx,
+                gcx.codegen_place_stable(assign_to, loc)
+            )
+            .goto_expr
+            .assign(quantifier_expr.cast_to(Type::CInteger(CIntType::Bool)), loc),
+            Stmt::goto(bb_label(target), loc),
+        ],
+        loc,
+    )
+}
+
+fn find_closure_call_expr(instance: &Instance, gcx: &mut GotocCtx, loc: Location) -> Option<Expr> {
+    for arg in instance.args().0.iter() {
+        let arg_ty = arg.ty()?;
+        let kind = arg_ty.kind();
+        let arg_kind = kind.rigid()?;
+
+        if let RigidTy::Closure(def_id, args) = arg_kind {
+            let instance_closure =
+                Instance::resolve_closure(*def_id, args, ClosureKind::Fn).ok()?;
+            return Some(gcx.codegen_func_expr(instance_closure, loc));
+        }
+    }
+    None
+}
+
 pub fn fn_hooks() -> GotocHooks {
     let kani_lib_hooks = [
         (KaniHook::Assert, Rc::new(Assert) as Rc<dyn GotocHook>),
         (KaniHook::Assume, Rc::new(Assume)),
+        (KaniHook::Exists, Rc::new(Exists)),
+        (KaniHook::Forall, Rc::new(Forall)),
         (KaniHook::Panic, Rc::new(Panic)),
         (KaniHook::Check, Rc::new(Check)),
         (KaniHook::Cover, Rc::new(Cover)),
