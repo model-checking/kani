@@ -2,9 +2,9 @@
    2|     | // SPDX-License-Identifier: Apache-2.0 OR MIT\
    3|     | #[kani::proof]\
    4|    1| fn contradiction() {\
-   5|    1|     let x: u8 = kani::any();\
-   6|    1|     let mut y: u8 = 0;\
-   7|    1|     if x > 5 {\
+   5|     |     let x: u8 = kani::any();\
+   6|     |     let mut y: u8 = 0;\
+   7|     |     if x > 5 {\
    8|    1|         if x < 2 ```{'''\
    9|    0| ```            y = x;'''\
   10|    1| ```        }'''\
