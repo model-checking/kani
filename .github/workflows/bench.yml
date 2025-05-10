@@ -15,7 +15,7 @@ on:
 
 jobs:
   perf-benchcomp:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     steps:
       - name: Save push event HEAD and HEAD~ to environment variables
         if: ${{ github.event_name == 'push' }}
@@ -46,13 +46,13 @@ jobs:
       - name: Set up Kani Dependencies (old variant)
         uses: ./old/.github/actions/setup
         with:
-          os: ubuntu-20.04
+          os: ubuntu-24.04
           kani_dir: old
 
       - name: Set up Kani Dependencies (new variant)
         uses: ./new/.github/actions/setup
         with:
-          os: ubuntu-20.04
+          os: ubuntu-24.04
           kani_dir: new
 
       - name: Copy benchmarks from new to old

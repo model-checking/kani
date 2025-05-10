@@ -5,7 +5,7 @@ use cbmc::goto_program::{DatatypeComponent, Expr, Location, Parameter, Symbol, S
 use cbmc::utils::aggr_tag;
 use cbmc::{InternString, InternedString};
 use rustc_abi::{
-    BackendRepr::Vector, FieldIdx, FieldsShape, Float, Integer, LayoutData, Primitive, Size,
+    BackendRepr::SimdVector, FieldIdx, FieldsShape, Float, Integer, LayoutData, Primitive, Size,
     TagEncoding, TyAndLayout, VariantIdx, Variants,
 };
 use rustc_ast::ast::Mutability;
@@ -718,7 +718,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 let mut final_fields = Vec::with_capacity(flds.len());
                 let mut offset = initial_offset;
                 for idx in layout.fields.index_by_increasing_offset() {
-                    let fld_offset = offsets[idx.into()];
+                    let fld_offset = offsets[rustc_abi::FieldIdx::from(idx)];
                     let (fld_name, fld_ty) = &flds[idx];
                     if let Some(padding) =
                         self.codegen_struct_padding(offset, fld_offset, final_fields.len())
@@ -1400,11 +1400,10 @@ impl<'tcx> GotocCtx<'tcx> {
 
     pub fn codegen_float_type(&self, f: Float) -> Ty<'tcx> {
         match f {
+            Float::F16 => self.tcx.types.f16,
             Float::F32 => self.tcx.types.f32,
             Float::F64 => self.tcx.types.f64,
-            // `F16` and `F128` are not yet handled.
-            // Tracked here: <https://github.com/model-checking/kani/issues/3069>
-            Float::F16 | Float::F128 => unimplemented!(),
+            Float::F128 => self.tcx.types.f128,
         }
     }
 
@@ -1473,7 +1472,7 @@ impl<'tcx> GotocCtx<'tcx> {
         debug! {"handling simd with layout {:?}", layout};
 
         let (element, size) = match layout {
-            Vector { element, count } => (element, count),
+            SimdVector { element, count } => (element, count),
             _ => unreachable!(),
         };
 
@@ -1557,9 +1556,9 @@ impl<'tcx> GotocCtx<'tcx> {
                     let components = fields_shape
                         .index_by_increasing_offset()
                         .map(|idx| {
-                            let idx = idx.into();
-                            let name = fields[idx].name.to_string().intern();
-                            let field_ty = fields[idx].ty(ctx.tcx, adt_args);
+                            let fidx = FieldIdx::from(idx);
+                            let name = fields[fidx].name.to_string().intern();
+                            let field_ty = fields[fidx].ty(ctx.tcx, adt_args);
                             let typ = if !ctx.is_zst(field_ty) {
                                 last_type.clone()
                             } else {

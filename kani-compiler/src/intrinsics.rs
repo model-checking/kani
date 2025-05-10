@@ -86,8 +86,6 @@ pub enum Intrinsic {
     MinNumF32,
     MinNumF64,
     MulWithOverflow,
-    NearbyIntF32,
-    NearbyIntF64,
     NeedsDrop,
     PowF32,
     PowF64,
@@ -99,12 +97,12 @@ pub enum Intrinsic {
     PtrOffsetFromUnsigned,
     RawEq,
     RetagBoxToRaw,
-    RintF32,
-    RintF64,
     RotateLeft,
     RotateRight,
     RoundF32,
     RoundF64,
+    RoundTiesEvenF32,
+    RoundTiesEvenF64,
     SaturatingAdd,
     SaturatingSub,
     SinF32,
@@ -676,10 +674,6 @@ fn try_match_f32(intrinsic_instance: &Instance) -> Option<Intrinsic> {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32), RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
             Some(Intrinsic::MinNumF32)
         }
-        "nearbyintf32" => {
-            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
-            Some(Intrinsic::NearbyIntF32)
-        }
         "powf32" => {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32), RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
             Some(Intrinsic::PowF32)
@@ -688,13 +682,13 @@ fn try_match_f32(intrinsic_instance: &Instance) -> Option<Intrinsic> {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32), RigidTy::Int(IntTy::I32) => RigidTy::Float(FloatTy::F32));
             Some(Intrinsic::PowIF32)
         }
-        "rintf32" => {
-            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
-            Some(Intrinsic::RintF32)
-        }
         "roundf32" => {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
             Some(Intrinsic::RoundF32)
+        }
+        "round_ties_even_f32" => {
+            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
+            Some(Intrinsic::RoundTiesEvenF32)
         }
         "sinf32" => {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
@@ -770,10 +764,6 @@ fn try_match_f64(intrinsic_instance: &Instance) -> Option<Intrinsic> {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64), RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
             Some(Intrinsic::MinNumF64)
         }
-        "nearbyintf64" => {
-            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
-            Some(Intrinsic::NearbyIntF64)
-        }
         "powf64" => {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64), RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
             Some(Intrinsic::PowF64)
@@ -782,13 +772,13 @@ fn try_match_f64(intrinsic_instance: &Instance) -> Option<Intrinsic> {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64), RigidTy::Int(IntTy::I32) => RigidTy::Float(FloatTy::F64));
             Some(Intrinsic::PowIF64)
         }
-        "rintf64" => {
-            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
-            Some(Intrinsic::RintF64)
-        }
         "roundf64" => {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
             Some(Intrinsic::RoundF64)
+        }
+        "round_ties_even_f64" => {
+            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
+            Some(Intrinsic::RoundTiesEvenF64)
         }
         "sinf64" => {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));

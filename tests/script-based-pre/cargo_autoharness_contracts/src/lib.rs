@@ -44,7 +44,7 @@ mod should_pass {
     // Test that we can autoharness functions for unsafe functions with contracts
     #[kani::requires(!left.overflowing_mul(rhs).1)]
     unsafe fn unchecked_mul(left: u8, rhs: u8) -> u8 {
-        left.unchecked_mul(rhs)
+        unsafe { left.unchecked_mul(rhs) }
     }
 }
 

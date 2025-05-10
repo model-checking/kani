@@ -664,8 +664,6 @@ fn is_identity_aliasing_intrinsic(intrinsic: Intrinsic) -> bool {
         | Intrinsic::MinNumF32
         | Intrinsic::MinNumF64
         | Intrinsic::MulWithOverflow
-        | Intrinsic::NearbyIntF32
-        | Intrinsic::NearbyIntF64
         | Intrinsic::NeedsDrop
         | Intrinsic::PowF32
         | Intrinsic::PowF64
@@ -677,12 +675,12 @@ fn is_identity_aliasing_intrinsic(intrinsic: Intrinsic) -> bool {
         | Intrinsic::PtrOffsetFromUnsigned
         | Intrinsic::RawEq
         | Intrinsic::RetagBoxToRaw
-        | Intrinsic::RintF32
-        | Intrinsic::RintF64
         | Intrinsic::RotateLeft
         | Intrinsic::RotateRight
         | Intrinsic::RoundF32
         | Intrinsic::RoundF64
+        | Intrinsic::RoundTiesEvenF32
+        | Intrinsic::RoundTiesEvenF64
         | Intrinsic::SaturatingAdd
         | Intrinsic::SaturatingSub
         | Intrinsic::SinF32

@@ -16,8 +16,7 @@ Although definitions for *mocking* (normally used in testing) and *stubbing* may
 
 ## Components
 
-The stubbing feature can be enabled by using the `--enable-stubbing` option when calling Kani.
-Since it's an unstable feature, it requires passing the `--enable-unstable` option in addition to `--enable-stubbing`.
+The stubbing feature can be enabled by using the `-Z stubbing` option when calling Kani (the `-Z` indicates that it's an unstable feature).
 
 At present, the only component of the stubbing feature is [the `#[kani::stub(<original>, <replacement>)]` attribute](#the-kanistub-attribute),
 which allows you to specify the pair of functions/methods that must be stubbed in a harness.
@@ -60,6 +59,8 @@ At present, Kani fails to verify this example due to [issue #1781](https://githu
 However, we can work around this limitation thanks to the stubbing feature:
 
 ```rust
+use rand::random;
+
 #[cfg(kani)]
 fn mock_random<T: kani::Arbitrary>() -> T {
     kani::any()
@@ -83,7 +84,8 @@ Note that this is a fair assumption to do: `rand::random` is expected to return 
 Now, let's run it through Kani:
 
 ```bash
-cargo kani --enable-unstable --enable-stubbing --harness encrypt_then_decrypt_is_identity
+cargo add rand
+cargo kani -Z stubbing --harness encrypt_then_decrypt_is_identity
 ```
 
 The verification result is composed of a single check: the assertion corresponding to `assert_eq!(data, decrypted_data)`.

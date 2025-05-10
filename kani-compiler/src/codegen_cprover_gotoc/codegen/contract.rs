@@ -63,9 +63,7 @@ impl GotocCtx<'_> {
         // Return item tagged with `#[kanitool::recursion_tracker]`
         let mut recursion_trackers = items.iter().filter_map(|item| {
             let MonoItem::Static(static_item) = item else { return None };
-            if !static_item
-                .attrs_by_path(&["kanitool".into(), "recursion_tracker".into()])
-                .is_empty()
+            if !static_item.tool_attrs(&["kanitool".into(), "recursion_tracker".into()]).is_empty()
             {
                 let span = static_item.span();
                 let loc = self.codegen_span_stable(span);

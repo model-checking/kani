@@ -130,7 +130,7 @@ pub fn validate_stub_const(tcx: TyCtxt, instance: Instance) -> bool {
     let item = CrateItem::try_from(instance).unwrap();
     let internal_instance = rustc_internal::internal(tcx, instance);
     let mut checker = StubConstChecker::new(tcx, internal_instance, item);
-    checker.visit_body(&item.body());
+    checker.visit_body(&item.expect_body());
     checker.is_valid()
 }
 
