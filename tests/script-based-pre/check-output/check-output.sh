@@ -31,7 +31,7 @@ cd $(dirname $0)
 
 echo "Running single-file check..."
 rm -rf *.c
-kani --gen-c --enable-unstable singlefile.rs >& kani.log || \
+kani --gen-c -Z unstable-options singlefile.rs >& kani.log || \
     { ret=$?; echo "== Failed to run Kani"; cat kani.log; rm kani.log; exit 1; }
 rm -f kani.log
 if ! [ -e singlefile_*main.c ]
@@ -70,7 +70,7 @@ echo
 (cd multifile
 echo "Running multi-file check..."
 rm -rf build
-cargo kani --target-dir build --gen-c --enable-unstable >& kani.log || \
+cargo kani --target-dir build --gen-c -Z unstable-options >& kani.log || \
     { ret=$?; echo "== Failed to run Kani"; cat kani.log; rm kani.log; exit 1; }
 rm -f kani.log
 cd build/kani/${TARGET}/debug/deps/

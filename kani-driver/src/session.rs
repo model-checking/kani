@@ -34,7 +34,7 @@ pub struct KaniSession {
     /// Automatically verify functions in the crate, in addition to running manual harnesses.
     pub auto_harness: bool,
 
-    /// The arguments that will be passed to the target package, i.e. kani_compiler.
+    /// The arguments that will be passed only to the target package, not its dependencies.
     pub pkg_args: Vec<String>,
 
     /// Include all publicly-visible symbols in the generated goto binary, not just those reachable from

@@ -129,7 +129,10 @@ macro_rules! kani_mem {
 
         /// Compute the size of the val pointed to if it is safe to do so.
         ///
-        /// Return `None` if an overflow would occur, or if alignment is not power of two.
+        /// Returns `None` if:
+        /// - An overflow occurs during the size computation.
+        /// - The pointer’s alignment is not a power of two.
+        /// - The computed size exceeds `isize::MAX` (the maximum safe Rust allocation size).
         /// TODO: Optimize this if T is sized.
         #[kanitool::fn_marker = "CheckedSizeOfIntrinsic"]
         pub fn checked_size_of_raw<T: ?Sized>(ptr: *const T) -> Option<usize> {
@@ -165,8 +168,19 @@ macro_rules! kani_mem {
 
         /// Checks that `ptr` points to an allocation that can hold data of size calculated from `T`.
         ///
-        /// This will panic if `ptr` points to an invalid `non_null`
-        fn is_inbounds<T: ?Sized>(ptr: *const T) -> bool {
+        /// This function always returns `true` for ZSTs, since every pointer to a ZST is valid.
+        /// For non-ZSTs, this function will return `false` if `ptr` is null
+        /// or the size of the val pointed to exceeds `isize::MAX`.
+        /// Otherwise, it will return `true` if and only if `ptr` points to allocated memory
+        /// that can hold data of size calculated from `T`.
+        /// Note that Kani does not support reasoning about pointers to unallocated memory,
+        /// so if `ptr` does not point to allocated memory, verification will fail.
+        #[crate::kani::unstable_feature(
+            feature = "mem-predicates",
+            issue = 3946,
+            reason = "experimental memory predicate API"
+        )]
+        pub fn is_inbounds<T: ?Sized>(ptr: *const T) -> bool {
             // If size overflows, then pointer cannot be inbounds.
             let Some(sz) = checked_size_of_raw(ptr) else { return false };
             if sz == 0 {
@@ -176,7 +190,7 @@ macro_rules! kani_mem {
             } else {
                 // Note that this branch can't be tested in concrete execution as `is_read_ok` needs to be
                 // stubbed.
-                // We first assert that the data_ptr
+                // We first assert that the data_ptr points to a valid allocation.
                 let data_ptr = ptr as *const ();
                 if !unsafe { is_allocated(data_ptr, 0) } {
                     crate::kani::unsupported(
