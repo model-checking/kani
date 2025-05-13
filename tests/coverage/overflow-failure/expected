@@ -10,6 +10,6 @@
   10|     | \
   11|     | #[kani::proof]\
   12|    1| fn main() {\
-  13|     |     cond_reduce(60, 70);\
-  14|     |     cond_reduce(40, 42);\
+  13|    1|     cond_reduce(60, 70);\
+  14|    1|     cond_reduce(40, 42);\
   15|     | }\
