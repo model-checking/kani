@@ -286,11 +286,10 @@ pub mod rustc_smir {
                 let Code { bcb } = mapping.kind else { unreachable!() };
                 let source_map = tcx.sess.source_map();
                 let file = source_map.lookup_source_file(mapping.span.lo());
-                if bcb == coverage {
-                    if let Some(source_region) = make_source_region(source_map, &file, mapping.span)
-                    {
-                        source_regions.push(source_region);
-                    }
+                if bcb == coverage
+                    && let Some(source_region) = make_source_region(source_map, &file, mapping.span)
+                {
+                    source_regions.push(source_region);
                 }
             }
             if !source_regions.is_empty() {
