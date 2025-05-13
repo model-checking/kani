@@ -83,7 +83,7 @@ fn wtr_false() -> WaitTimeoutResult {
     });
     let lock = Mutex::new(());
     let wt = cvar.wait_timeout(lock.lock().unwrap(), Duration::from_millis(1));
-    let (_, wtr) = wt.unwrap();
+    let (_unused, wtr) = wt.unwrap();
     wtr
 }
 
@@ -91,7 +91,7 @@ fn wtr_true() -> WaitTimeoutResult {
     let cvar = Condvar::new();
     let lock = Mutex::new(());
     let wt = cvar.wait_timeout(lock.lock().unwrap(), Duration::from_millis(0));
-    let (_, wtr) = wt.unwrap();
+    let (_unused, wtr) = wt.unwrap();
     wtr
 }
 
