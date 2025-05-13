@@ -9,7 +9,7 @@
    9|     | \
   10|     | #[kani::proof]\
   11|    1| fn check_assume_assert() {\
-  12|     |     let a: u8 = kani::any();\
-  13|     |     kani::assume(false);\
-  14|     |     assert!(a < 5);\
+  12|    1|     let a: u8 = kani::any();\
+  13|    1|     kani::assume(false);\
+  14|    1|     assert!(a < 5);\
   15|     | }\
