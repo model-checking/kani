@@ -6,6 +6,7 @@
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::codegen_cprover_gotoc::codegen::block::reverse_postorder;
 use cbmc::InternString;
+use cbmc::InternedString;
 use cbmc::goto_program::{Expr, Stmt, Symbol};
 use stable_mir::CrateDef;
 use stable_mir::mir::mono::Instance;
@@ -20,7 +21,7 @@ impl GotocCtx<'_> {
     /// - Index 0 represents the return value.
     /// - Indices [1, N] represent the function parameters where N is the number of parameters.
     /// - Indices that are greater than N represent local variables.
-    fn codegen_declare_variables(&mut self, body: &Body) {
+    fn codegen_declare_variables(&mut self, body: &Body, function_name: InternedString) {
         let ldecls = body.local_decls();
         let num_args = body.arg_locals().len();
         for (lc, ldata) in ldecls {
@@ -35,12 +36,22 @@ impl GotocCtx<'_> {
             let loc = self.codegen_span_stable(ldata.span);
             // Indices [1, N] represent the function parameters where N is the number of parameters.
             // Except that ZST fields are not included as parameters.
-            let sym =
-                Symbol::variable(name, base_name, var_type, self.codegen_span_stable(ldata.span))
-                    .with_is_hidden(!self.is_user_variable(&lc))
-                    .with_is_parameter((lc > 0 && lc <= num_args) && !self.is_zst_stable(ldata.ty));
+            let sym = Symbol::variable(
+                name.clone(),
+                base_name,
+                var_type,
+                self.codegen_span_stable(ldata.span),
+            )
+            .with_is_hidden(!self.is_user_variable(&lc))
+            .with_is_parameter((lc > 0 && lc <= num_args) && !self.is_zst_stable(ldata.ty));
             let sym_e = sym.to_expr();
             self.symbol_table.insert(sym);
+
+            // Store the parameter symbols of the function, which will be used for function
+            // inlining.
+            if lc > 0 && lc <= num_args {
+                self.symbol_table.insert_parameter(function_name, name);
+            }
 
             // Index 0 represents the return value, which does not need to be
             // declared in the first block
@@ -64,7 +75,7 @@ impl GotocCtx<'_> {
             self.set_current_fn(instance, &body);
             self.print_instance(instance, &body);
             self.codegen_function_prelude(&body);
-            self.codegen_declare_variables(&body);
+            self.codegen_declare_variables(&body, name.clone().into());
 
             // Get the order from internal body for now.
             reverse_postorder(&body).for_each(|bb| self.codegen_block(bb, &body.blocks[bb]));
