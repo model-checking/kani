@@ -8,7 +8,7 @@
    8|     | #[kani::proof]\
    9|    1| fn main() {\
   10|    1|     for i in 0..4 {\
-  11|     |         if i == 1 {\
+  11|    1|         if i == 1 {\
   12|     |             // This comes first and it should be reachable.\
   13|    1|             process::abort();\
   14|    1|         }\
