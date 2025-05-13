@@ -288,7 +288,6 @@ pub mod rustc_smir {
                 if bcb == coverage {
                     let source_region =
                         make_source_region(source_map, &file, mapping.span).unwrap();
-                    println!("source_region: {:?}", source_region);
                     source_regions.push(source_region);
                 }
             }
