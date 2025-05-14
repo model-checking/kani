@@ -48,6 +48,7 @@ jobs:
       - name: 'Run Clippy'
         run: |
           cargo clippy --workspace -- -D warnings
+          cargo clippy --workspace --tests -- -D warnings
           RUSTFLAGS="--cfg=kani_sysroot" cargo clippy --workspace -- -D warnings
 
       - name: 'Print Clippy Statistics'
