@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
 //! Utility functions that allow us to modify a function body.
+//!
+//! TODO: We should not need this code anymore now that https://github.com/rust-lang/rust/pull/138536 is merged
 
 use crate::kani_middle::kani_functions::KaniHook;
 use crate::kani_queries::QueryDb;
