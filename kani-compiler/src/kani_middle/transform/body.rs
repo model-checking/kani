@@ -54,12 +54,10 @@ impl MutableBody {
         &self.locals
     }
 
-    #[allow(dead_code)]
     pub fn arg_count(&self) -> usize {
         self.arg_count
     }
 
-    #[allow(dead_code)]
     pub fn var_debug_info(&self) -> &Vec<VarDebugInfo> {
         &self.var_debug_info
     }
@@ -328,7 +326,6 @@ impl MutableBody {
     /// `InsertPosition` is `InsertPosition::Before`, `source` will point to the same instruction as
     /// before. If `InsertPosition` is `InsertPosition::After`, `source` will point to the
     /// terminator of the newly inserted basic block.
-    #[allow(dead_code)]
     pub fn insert_bb(
         &mut self,
         mut bb: BasicBlock,
