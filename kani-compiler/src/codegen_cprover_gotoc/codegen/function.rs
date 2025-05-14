@@ -258,6 +258,24 @@ pub mod rustc_smir {
         region_from_coverage(tcx, bcb, instance)
     }
 
+    pub fn merge_source_region(source_regions: Vec<SourceRegion>) -> SourceRegion {
+        let start_line = source_regions.iter().map(|sr| sr.start_line).min().unwrap();
+        let start_col = source_regions
+            .iter()
+            .filter(|sr| sr.start_line == start_line)
+            .map(|sr| sr.start_col)
+            .min()
+            .unwrap();
+        let end_line = source_regions.iter().map(|sr| sr.end_line).max().unwrap();
+        let end_col = source_regions
+            .iter()
+            .filter(|sr| sr.end_line == end_line)
+            .map(|sr| sr.end_col)
+            .max()
+            .unwrap();
+        SourceRegion { start_line, start_col, end_line, end_col }
+    }
+
     /// Retrieves the `SourceRegion` associated with a `BasicCoverageBlock` object.
     ///
     /// Note: This function could be in the internal `rustc` impl for `Coverage`.
@@ -269,21 +287,24 @@ pub mod rustc_smir {
         // We need to pull the coverage info from the internal MIR instance.
         let instance_def = rustc_smir::rustc_internal::internal(tcx, instance.def.def_id());
         let body = tcx.instance_mir(rustc_middle::ty::InstanceKind::Item(instance_def));
-
+        let filename = rustc_internal::stable(body.span).get_filename();
         // Some functions, like `std` ones, may not have coverage info attached
         // to them because they have been compiled without coverage flags.
         if let Some(cov_info) = &body.function_coverage_info {
             // Iterate over the coverage mappings and match with the coverage term.
+            let mut source_regions: Vec<SourceRegion> = Vec::new();
             for mapping in &cov_info.mappings {
                 let Code { bcb } = mapping.kind else { unreachable!() };
                 let source_map = tcx.sess.source_map();
                 let file = source_map.lookup_source_file(mapping.span.lo());
-                if bcb == coverage {
-                    return Some((
-                        make_source_region(source_map, &file, mapping.span).unwrap(),
-                        rustc_internal::stable(mapping.span).get_filename(),
-                    ));
+                if bcb == coverage
+                    && let Some(source_region) = make_source_region(source_map, &file, mapping.span)
+                {
+                    source_regions.push(source_region);
                 }
+            }
+            if !source_regions.is_empty() {
+                return Some((merge_source_region(source_regions), filename));
             }
         }
         None
