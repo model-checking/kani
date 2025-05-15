@@ -307,7 +307,7 @@ fn resolve_prefix<'tcx>(
         (None, Some(segment)) if segment.ident == CRATE => {
             // Find the module at the root of the crate.
             let current_module_hir_id = tcx.local_def_id_to_hir_id(current_module);
-            let crate_root = match tcx.hir().parent_iter(current_module_hir_id).last() {
+            let crate_root = match tcx.hir_parent_iter(current_module_hir_id).last() {
                 None => current_module,
                 Some((hir_id, _)) => hir_id.owner.def_id,
             };
@@ -366,7 +366,7 @@ where
     I: Iterator<Item = &'a PathSegment>,
 {
     let current_module_hir_id = tcx.local_def_id_to_hir_id(current_module);
-    let mut parents = tcx.hir().parent_iter(current_module_hir_id);
+    let mut parents = tcx.hir_parent_iter(current_module_hir_id);
     let mut base_module = current_module;
     while segments.next_if(|segment| segment.ident == SUPER).is_some() {
         if let Some((parent, _)) = parents.next() {
@@ -430,12 +430,12 @@ fn resolve_relative(tcx: TyCtxt, current_module: LocalModDefId, name: &str) -> R
     debug!(?name, ?current_module, "resolve_relative");
 
     let mut glob_imports = vec![];
-    let result = tcx.hir().module_items(current_module).find_map(|item_id| {
-        let item = tcx.hir().item(item_id);
-        if item.ident.as_str() == name {
+    let result = tcx.hir_module_free_items(current_module).find_map(|item_id| {
+        let item = tcx.hir_item(item_id);
+        if item.kind.ident().is_some_and(|ident| ident.as_str() == name) {
             match item.kind {
-                ItemKind::Use(use_path, UseKind::Single) => use_path.res[0].opt_def_id(),
-                ItemKind::ExternCrate(orig_name) => resolve_external(
+                ItemKind::Use(use_path, UseKind::Single(_)) => use_path.res[0].opt_def_id(),
+                ItemKind::ExternCrate(orig_name, _) => resolve_external(
                     tcx,
                     orig_name.as_ref().map(|sym| sym.as_str()).unwrap_or(name),
                 ),

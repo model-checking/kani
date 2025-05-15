@@ -7,7 +7,7 @@
 //! Today, only stub / contracts can affect the harness codegen. Thus, we group the harnesses
 //! according to their stub configuration.
 
-use crate::args::ReachabilityType;
+use crate::args::{Arguments, ReachabilityType};
 use crate::kani_middle::attributes::{KaniAttributes, is_proof_harness};
 use crate::kani_middle::kani_functions::{KaniIntrinsic, KaniModel};
 use crate::kani_middle::metadata::{
@@ -17,25 +17,31 @@ use crate::kani_middle::reachability::filter_crate_items;
 use crate::kani_middle::resolve::expect_resolve_fn;
 use crate::kani_middle::stubbing::{check_compatibility, harness_stub_map};
 use crate::kani_queries::QueryDb;
-use kani_metadata::{ArtifactType, AssignsContract, HarnessKind, HarnessMetadata, KaniMetadata};
+use kani_metadata::{
+    ArtifactType, AssignsContract, AutoHarnessMetadata, AutoHarnessSkipReason, HarnessKind,
+    HarnessMetadata, KaniMetadata,
+};
 use rustc_hir::def_id::DefId;
 use rustc_middle::ty::TyCtxt;
 use rustc_session::config::OutputType;
 use rustc_smir::rustc_internal;
-use stable_mir::CrateDef;
 use stable_mir::mir::{TerminatorKind, mono::Instance};
 use stable_mir::ty::{FnDef, GenericArgKind, GenericArgs, IndexedVal, RigidTy, TyKind};
+use stable_mir::{CrateDef, CrateItem};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs::File;
 use std::io::BufWriter;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 use tracing::debug;
 
 /// An identifier for the harness function.
-type Harness = Instance;
+pub type Harness = Instance;
 
 /// A set of stubs.
 pub type Stubs = HashMap<FnDef, FnDef>;
+
+static AUTOHARNESS_MD: OnceLock<AutoHarnessMetadata> = OnceLock::new();
 
 /// Store some relevant information about the crate compilation.
 #[derive(Clone, Debug)]
@@ -46,9 +52,9 @@ struct CrateInfo {
 
 /// We group the harnesses that have the same stubs.
 pub struct CodegenUnits {
-    units: Vec<CodegenUnit>,
-    harness_info: HashMap<Harness, HarnessMetadata>,
     crate_info: CrateInfo,
+    harness_info: HashMap<Harness, HarnessMetadata>,
+    units: Vec<CodegenUnit>,
 }
 
 #[derive(Clone, Default, Debug)]
@@ -80,23 +86,22 @@ impl CodegenUnits {
                 let kani_fns = queries.kani_functions();
                 let kani_harness_intrinsic =
                     kani_fns.get(&KaniIntrinsic::AutomaticHarness.into()).unwrap();
-                let kani_any_inst = kani_fns.get(&KaniModel::Any.into()).unwrap();
 
-                let verifiable_fns = filter_crate_items(tcx, |_, instance: Instance| -> bool {
-                    // If the user specified functions to include or exclude, only allow instances matching those filters.
-                    let user_included = if !args.autoharness_included_functions.is_empty() {
-                        fn_list_contains_instance(&instance, &args.autoharness_included_functions)
-                    } else if !args.autoharness_excluded_functions.is_empty() {
-                        !fn_list_contains_instance(&instance, &args.autoharness_excluded_functions)
-                    } else {
-                        true
-                    };
-                    user_included
-                        && is_eligible_for_automatic_harness(tcx, instance, *kani_any_inst)
-                });
+                let (chosen, skipped) = automatic_harness_partition(
+                    tcx,
+                    args,
+                    *kani_fns.get(&KaniModel::Any.into()).unwrap(),
+                );
+                AUTOHARNESS_MD
+                    .set(AutoHarnessMetadata {
+                        chosen: chosen.iter().map(|func| func.name()).collect::<BTreeSet<_>>(),
+                        skipped,
+                    })
+                    .expect("Initializing the autoharness metdata failed");
+
                 let automatic_harnesses = get_all_automatic_harnesses(
                     tcx,
-                    verifiable_fns,
+                    chosen,
                     *kani_harness_intrinsic,
                     base_filename,
                 );
@@ -111,7 +116,8 @@ impl CodegenUnits {
                         })
                         .collect::<Vec<_>>(),
                 );
-                all_harnesses.extend(automatic_harnesses);
+                all_harnesses.extend(automatic_harnesses.clone());
+
                 // No need to validate the units again because validation only checks stubs, and we haven't added any stubs.
                 debug!(?units, "CodegenUnits::new");
                 CodegenUnits { units, harness_info: all_harnesses, crate_info }
@@ -139,13 +145,6 @@ impl CodegenUnits {
         for harness in harnesses {
             let metadata = self.harness_info.get_mut(harness).unwrap();
             metadata.has_loop_contracts = true;
-            // If we're generating this harness automatically and we encounter a loop contract,
-            // ensure that the HarnessKind is updated to be a contract harness
-            // targeting the function to verify.
-            if metadata.is_automatically_generated {
-                metadata.attributes.kind =
-                    HarnessKind::ProofForContract { target_fn: metadata.pretty_name.clone() }
-            }
         }
     }
 
@@ -169,7 +168,8 @@ impl CodegenUnits {
             proof_harnesses,
             unsupported_features: vec![],
             test_harnesses,
-            contracted_functions: gen_contracts_metadata(tcx),
+            contracted_functions: gen_contracts_metadata(tcx, &self.harness_info),
+            autoharness_md: AUTOHARNESS_MD.get().cloned(),
         }
     }
 }
@@ -346,46 +346,113 @@ fn get_all_automatic_harnesses(
         .collect::<HashMap<_, _>>()
 }
 
-/// Determine whether `instance` is eligible for automatic verification.
-fn is_eligible_for_automatic_harness(tcx: TyCtxt, instance: Instance, any_inst: FnDef) -> bool {
-    // `instance` is ineligble if it is a harness or has an nonexistent/empty body
-    if is_proof_harness(tcx, instance) || !instance.has_body() {
-        return false;
-    }
-    let body = instance.body().unwrap();
+/// Partition every function in the crate into (chosen, skipped), where `chosen` is a vector of the Instances for which we'll generate automatic harnesses,
+/// and `skipped` is a map of function names to the reason why we skipped them.
+fn automatic_harness_partition(
+    tcx: TyCtxt,
+    args: &Arguments,
+    kani_any_def: FnDef,
+) -> (Vec<Instance>, BTreeMap<String, AutoHarnessSkipReason>) {
+    // If `filter_list` contains `name`, either as an exact match or a substring.
+    let filter_contains = |name: &str, filter_list: &[String]| -> bool {
+        filter_list.iter().any(|filter_name| name.contains(filter_name))
+    };
 
-    // `instance` is ineligble if it is an associated item of a Kani trait implementation,
-    // or part of Kani contract instrumentation.
-    // FIXME -- find a less hardcoded way of checking the former condition (perhaps upstream PR to StableMIR).
-    if instance.name().contains("kani::Arbitrary")
-        || instance.name().contains("kani::Invariant")
-        || KaniAttributes::for_instance(tcx, instance)
-            .fn_marker()
-            .is_some_and(|m| m.as_str() == "kani_contract_mode")
-    {
-        return false;
-    }
+    // If `func` is not eligible for an automatic harness, return the reason why; if it is eligible, return None.
+    let skip_reason = |fn_item: CrateItem| -> Option<AutoHarnessSkipReason> {
+        if KaniAttributes::for_def_id(tcx, fn_item.def_id()).is_kani_instrumentation() {
+            return Some(AutoHarnessSkipReason::KaniImpl);
+        }
 
-    // Each non-generic argument of `instance`` must implement Arbitrary.
-    body.arg_locals().iter().all(|arg| {
-        let kani_any_body =
-            Instance::resolve(any_inst, &GenericArgs(vec![GenericArgKind::Type(arg.ty)]))
-                .unwrap()
-                .body()
-                .unwrap();
-        if let TerminatorKind::Call { func, .. } = &kani_any_body.blocks[0].terminator.kind {
-            if let Some((def, args)) = func.ty(body.arg_locals()).unwrap().kind().fn_def() {
-                return Instance::resolve(def, &args).is_ok();
+        let instance = match Instance::try_from(fn_item) {
+            Ok(inst) => inst,
+            Err(_) => {
+                return Some(AutoHarnessSkipReason::GenericFn);
+            }
+        };
+
+        if !instance.has_body() {
+            return Some(AutoHarnessSkipReason::NoBody);
+        }
+
+        let name = instance.name();
+        let body = instance.body().unwrap();
+
+        if is_proof_harness(tcx, instance)
+            || name.contains("kani::Arbitrary")
+            || name.contains("kani::Invariant")
+        {
+            return Some(AutoHarnessSkipReason::KaniImpl);
+        }
+
+        if (!args.autoharness_included_functions.is_empty()
+            && !filter_contains(&name, &args.autoharness_included_functions))
+            || (!args.autoharness_excluded_functions.is_empty()
+                && filter_contains(&name, &args.autoharness_excluded_functions))
+        {
+            return Some(AutoHarnessSkipReason::UserFilter);
+        }
+
+        // Each argument of `instance` must implement Arbitrary.
+        // Note that we've already filtered out generic functions, so we know that each of these arguments has a concrete type.
+        let mut problematic_args = vec![];
+        for (idx, arg) in body.arg_locals().iter().enumerate() {
+            let kani_any_body =
+                Instance::resolve(kani_any_def, &GenericArgs(vec![GenericArgKind::Type(arg.ty)]))
+                    .unwrap()
+                    .body()
+                    .unwrap();
+
+            let implements_arbitrary = if let TerminatorKind::Call { func, .. } =
+                &kani_any_body.blocks[0].terminator.kind
+            {
+                if let Some((def, args)) = func.ty(body.arg_locals()).unwrap().kind().fn_def() {
+                    Instance::resolve(def, &args).is_ok()
+                } else {
+                    false
+                }
+            } else {
+                false
+            };
+
+            if !implements_arbitrary {
+                // Find the name of the argument by referencing var_debug_info.
+                // Note that enumerate() starts at 0, while StableMIR argument_index starts at 1, hence the idx+1.
+                let arg_name = body
+                    .var_debug_info
+                    .iter()
+                    .find(|var| {
+                        var.argument_index.is_some_and(|arg_idx| idx + 1 == usize::from(arg_idx))
+                    })
+                    .map_or("_".to_string(), |debug_info| debug_info.name.to_string());
+                let arg_type = format!("{}", arg.ty);
+                problematic_args.push((arg_name, arg_type))
             }
         }
-        false
-    })
-}
+        if !problematic_args.is_empty() {
+            return Some(AutoHarnessSkipReason::MissingArbitraryImpl(problematic_args));
+        }
+        None
+    };
 
-/// Return whether the name of `instance` is included in `fn_list`.
-/// If `exact = true`, then `instance`'s exact, fully-qualified name must be in `fn_list`; otherwise, `fn_list`
-/// can have a substring of `instance`'s name.
-fn fn_list_contains_instance(instance: &Instance, fn_list: &[String]) -> bool {
-    let pretty_name = instance.name();
-    fn_list.contains(&pretty_name) || fn_list.iter().any(|fn_name| pretty_name.contains(fn_name))
+    let mut chosen = vec![];
+    let mut skipped = BTreeMap::new();
+
+    // FIXME: ideally, this filter would be matches!(item.kind(), ItemKind::Fn), since that would allow us to generate harnesses for top-level closures,
+    // c.f. https://github.com/model-checking/kani/issues/3832#issuecomment-2701671798.
+    // Note that filtering closures out here is a UX choice: we could instead call skip_reason() on closures,
+    // but the limitations in the linked issue would cause the user to be flooded with reports of "skipping" Kani instrumentation functions.
+    // Instead, we just pretend closures don't exist in our reporting of what we did and did not verify, which has the downside of also ignoring the user's top-level closures, but those are rare.
+    let crate_fns =
+        stable_mir::all_local_items().into_iter().filter(|item| item.ty().kind().is_fn());
+
+    for func in crate_fns {
+        if let Some(reason) = skip_reason(func) {
+            skipped.insert(func.name(), reason);
+        } else {
+            chosen.push(Instance::try_from(func).unwrap());
+        }
+    }
+
+    (chosen, skipped)
 }

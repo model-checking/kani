@@ -204,15 +204,22 @@ impl GotocCtx<'_> {
         let body = self.transformer.body(self.tcx, instance);
         self.set_current_fn(instance, &body);
         debug!(krate=?instance.def.krate(), is_std=self.current_fn().is_std(), "declare_function");
-        self.ensure(instance.mangled_name(), |ctx, fname| {
-            Symbol::function(
-                fname,
-                ctx.fn_typ(instance, &body),
-                None,
-                instance.name(),
-                ctx.codegen_span_stable(instance.def.span()),
-            )
-        });
+        let fname = instance.mangled_name();
+        let sym = Symbol::function(
+            &fname,
+            self.fn_typ(instance, &body),
+            None,
+            instance.name(),
+            self.codegen_span_stable(instance.def.span()),
+        );
+        if !self.symbol_table.contains((&fname).into()) {
+            self.symbol_table.insert(sym);
+        } else {
+            let old_sym = self.symbol_table.lookup(fname).unwrap();
+            if old_sym.location.is_builtin() {
+                self.symbol_table.replace(|_| true, sym);
+            }
+        }
         self.reset_current_fn();
     }
 }
@@ -259,11 +266,11 @@ pub mod rustc_smir {
             for mapping in &cov_info.mappings {
                 let Code { bcb } = mapping.kind else { unreachable!() };
                 let source_map = tcx.sess.source_map();
-                let file = source_map.lookup_source_file(cov_info.body_span.lo());
+                let file = source_map.lookup_source_file(mapping.span.lo());
                 if bcb == coverage {
                     return Some((
-                        make_source_region(source_map, cov_info, &file, mapping.span).unwrap(),
-                        rustc_internal::stable(cov_info.body_span).get_filename(),
+                        make_source_region(source_map, &file, mapping.span).unwrap(),
+                        rustc_internal::stable(mapping.span).get_filename(),
                     ));
                 }
             }

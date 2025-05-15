@@ -20,7 +20,7 @@ use anyhow::Result;
 use kani_metadata::{ContractedFunction, HarnessKind, KaniMetadata};
 
 /// Process the KaniMetadata output from kani-compiler and output the list subcommand results
-fn process_metadata(metadata: Vec<KaniMetadata>) -> ListMetadata {
+pub fn process_metadata(metadata: Vec<KaniMetadata>) -> ListMetadata {
     // We use ordered maps and sets so that the output is in lexicographic order (and consistent across invocations).
 
     // Map each file to a vector of its harnesses.

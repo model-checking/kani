@@ -20,6 +20,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+      - name: Install rustup
+        run: ./scripts/setup/install_rustup.sh
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:
           arguments: --all-features --workspace

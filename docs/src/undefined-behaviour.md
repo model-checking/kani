@@ -24,7 +24,7 @@ A non-exhaustive list of these, based on the non-exhaustive list from the [Rust 
 
 * Data races. 
     * Kani focuses on sequential code.
-* Breaking the pointer aliasing rules (http://llvm.org/docs/LangRef.html#pointer-aliasing-rules). 
+* Breaking the [pointer aliasing rules](http://llvm.org/docs/LangRef.html#pointer-aliasing-rules). 
     * Kani can detect if misuse of pointers causes memory safety or assertion violations, but does not track reference lifetimes.
 * Mutating immutable data.
     * Kani can detect if modification of immutable data causes memory safety or assertion violations, but does not track reference lifetimes.

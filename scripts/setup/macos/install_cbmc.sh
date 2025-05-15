@@ -15,4 +15,4 @@ fi
 # Install CBMC for macOS from CBMC tap
 # https://github.com/diffblue/cbmc/blob/develop/doc/ADR/homebrew_tap.md
 brew tap diffblue/cbmc
-brew install diffblue/cbmc/cbmc@${CBMC_VERSION}
+brew install --overwrite diffblue/cbmc/cbmc@${CBMC_VERSION}
