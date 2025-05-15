@@ -747,7 +747,7 @@ mod tests {
         fn length_one_item_prefix() {
             let generic_args = "::<u32>";
             let name = "unchecked_add";
-            let item_path = format!("NonZero{}::{}", generic_args, name);
+            let item_path = format!("NonZero{generic_args}::{name}");
             assert!(last_two_items_of_path_match(&item_path, generic_args, name))
         }
 
@@ -755,7 +755,7 @@ mod tests {
         fn length_three_item_prefix() {
             let generic_args = "::<u32>";
             let name = "unchecked_add";
-            let item_path = format!("core::num::NonZero{}::{}", generic_args, name);
+            let item_path = format!("core::num::NonZero{generic_args}::{name}");
             assert!(last_two_items_of_path_match(&item_path, generic_args, name))
         }
 

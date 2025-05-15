@@ -101,7 +101,6 @@ pub enum PropertyClass {
     Unreachable,
 }
 
-#[allow(dead_code)]
 impl PropertyClass {
     pub fn as_str(&self) -> &str {
         self.as_ref()

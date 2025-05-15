@@ -1427,69 +1427,6 @@ impl Type {
         }
         types
     }
-
-    /// Generate a string which uniquely identifies the given type
-    /// while also being a valid variable/funcion name
-    pub fn to_identifier(&self) -> String {
-        // Use String instead of InternedString, since we don't want to intern temporaries.
-        match self {
-            Type::Array { typ, size } => {
-                format!("array_of_{size}_{}", typ.to_identifier())
-            }
-            Type::Bool => "bool".to_string(),
-            Type::CBitField { width, typ } => {
-                format!("cbitfield_of_{width}_{}", typ.to_identifier())
-            }
-            Type::CInteger(int_kind) => format!("c_int_{int_kind:?}"),
-            // e.g. `int my_func(double x, float_y) {`
-            // => "code_from_double_float_to_int"
-            Type::Code { parameters, return_type } => {
-                let parameter_string = parameters
-                    .iter()
-                    .map(|param| param.typ().to_identifier())
-                    .collect::<Vec<_>>()
-                    .join("_");
-                let return_string = return_type.to_identifier();
-                format!("code_from_{parameter_string}_to_{return_string}")
-            }
-            Type::Constructor => "constructor".to_string(),
-            Type::Double => "double".to_string(),
-            Type::Empty => "empty".to_string(),
-            Type::FlexibleArray { typ } => format!("flexarray_of_{}", typ.to_identifier()),
-            Type::Float => "float".to_string(),
-            Type::Float16 => "float16".to_string(),
-            Type::Float128 => "float128".to_string(),
-            Type::IncompleteStruct { tag } => tag.to_string(),
-            Type::IncompleteUnion { tag } => tag.to_string(),
-            Type::InfiniteArray { typ } => {
-                format!("infinite_array_of_{}", typ.to_identifier())
-            }
-            Type::Integer => "integer".to_string(),
-            Type::Pointer { typ } => format!("pointer_to_{}", typ.to_identifier()),
-            Type::Signedbv { width } => format!("signed_bv_{width}"),
-            Type::Struct { tag, .. } => format!("struct_{tag}"),
-            Type::StructTag(tag) => format!("struct_tag_{tag}"),
-            Type::TypeDef { name: tag, .. } => format!("type_def_{tag}"),
-            Type::Union { tag, .. } => format!("union_{tag}"),
-            Type::UnionTag(tag) => format!("union_tag_{tag}"),
-            Type::Unsignedbv { width } => format!("unsigned_bv_{width}"),
-            // e.g. `int my_func(double x, float_y, ..) {`
-            // => "variadic_code_from_double_float_to_int"
-            Type::VariadicCode { parameters, return_type } => {
-                let parameter_string = parameters
-                    .iter()
-                    .map(|param| param.typ().to_identifier())
-                    .collect::<Vec<_>>()
-                    .join("_");
-                let return_string = return_type.to_identifier();
-                format!("variadic_code_from_{parameter_string}_to_{return_string}")
-            }
-            Type::Vector { typ, size } => {
-                let typ = typ.to_identifier();
-                format!("vec_of_{size}_{typ}")
-            }
-        }
-    }
 }
 
 #[cfg(test)]
@@ -1507,14 +1444,6 @@ mod type_tests {
         let type_def = Bool.to_typedef(NAME);
         assert_eq!(type_def.tag().unwrap().to_string().as_str(), NAME);
         assert_eq!(type_def.type_name().unwrap().to_string(), format!("tag-{NAME}"));
-    }
-
-    #[test]
-    fn check_typedef_identifier() {
-        let type_def = Bool.to_typedef(NAME);
-        let id = type_def.to_identifier();
-        assert!(id.ends_with(NAME));
-        assert!(id.starts_with("type_def"));
     }
 
     #[test]
