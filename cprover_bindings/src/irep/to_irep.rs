@@ -60,6 +60,7 @@ impl ToIrepId for BinaryOperator {
             BinaryOperator::Bitxor => IrepId::Bitxor,
             BinaryOperator::Div => IrepId::Div,
             BinaryOperator::Equal => IrepId::Equal,
+            BinaryOperator::FloatbvRoundToIntegral => IrepId::FloatbvRoundToIntegral,
             BinaryOperator::Ge => IrepId::Ge,
             BinaryOperator::Gt => IrepId::Gt,
             BinaryOperator::IeeeFloatEqual => IrepId::IeeeFloatEqual,

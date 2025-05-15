@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
-// kani-flags: --enable-unstable --cbmc-args --float-overflow-check
+// kani-flags: -Z unstable-options --cbmc-args --float-overflow-check
 // Check we don't print temporary variables as part of CBMC messages.
 extern crate kani;
 

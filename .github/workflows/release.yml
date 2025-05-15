@@ -70,7 +70,7 @@ jobs:
 
   build_bundle_linux:
     name: BuildBundle-Linux
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     outputs:
       version: ${{ steps.bundle.outputs.version }}
       bundle: ${{ steps.bundle.outputs.bundle }}
@@ -83,7 +83,7 @@ jobs:
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
         with:
-          os: ubuntu-20.04
+          os: ubuntu-22.04
 
       - name: Build bundle
         id: bundle
@@ -97,14 +97,11 @@ jobs:
     needs: [build_bundle_macos, build_bundle_linux]
     strategy:
       matrix:
-        os: [macos-13, ubuntu-20.04, ubuntu-22.04, ubuntu-24.04]
+        os: [macos-13, ubuntu-22.04, ubuntu-24.04]
         include:
         - os: macos-13
           rust_target: x86_64-apple-darwin
           prev_job: ${{ needs.build_bundle_macos.outputs }}
-        - os: ubuntu-20.04
-          rust_target: x86_64-unknown-linux-gnu
-          prev_job: ${{ needs.build_bundle_linux.outputs }}
         - os: ubuntu-22.04
           rust_target: x86_64-unknown-linux-gnu
           prev_job: ${{ needs.build_bundle_linux.outputs }}
@@ -200,7 +197,7 @@ jobs:
     needs: [build_bundle_macos, build_bundle_linux]
     strategy:
       matrix:
-        os: [macos-13, ubuntu-20.04, ubuntu-22.04, ubuntu-24.04]
+        os: [macos-13, ubuntu-22.04, ubuntu-24.04]
         include:
           # Stores the output of the previous job conditional to the OS
           - prev_job: ${{ needs.build_bundle_linux.outputs }}
@@ -244,7 +241,7 @@ jobs:
   kani_release:
     if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/kani-') }}
     name: Release
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     needs: [build_bundle_macos, build_bundle_macos_aarch64, build_bundle_linux, test_bundle]
     outputs:
       version: ${{ steps.versioning.outputs.version }}
@@ -287,7 +284,7 @@ jobs:
 
       - name: Create release
         id: create_release
-        uses: ncipollo/release-action@v1.15.0
+        uses: ncipollo/release-action@v1.16.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -301,12 +298,12 @@ jobs:
   package_docker:
     name: Package Docker
     needs: kani_release
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
       packages: write
     env:
-      os: ubuntu-20.04
+      os: ubuntu-24.04
       target: x86_64-unknown-linux-gnu
     steps:
       - name: Checkout code
@@ -315,7 +312,7 @@ jobs:
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
         with:
-          os: ubuntu-20.04
+          os: ubuntu-24.04
 
       - name: 'Build release bundle'
         run: |
@@ -339,7 +336,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: scripts/ci/Dockerfile.bundle-release-20-04
+          file: scripts/ci/Dockerfile.bundle-release-24-04
           push: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
           tags: |

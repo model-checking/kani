@@ -468,7 +468,7 @@ impl MirVisitor for CheckUninitVisitor {
                         && !ptx.is_mutating()
                     {
                         let contains_deref_projection =
-                            { place.projection.iter().any(|elem| *elem == ProjectionElem::Deref) };
+                            { place.projection.contains(&ProjectionElem::Deref) };
                         if contains_deref_projection {
                             // We do not currently support having a deref projection in the same
                             // place as union field access.
@@ -625,8 +625,6 @@ fn can_skip_intrinsic(intrinsic: Intrinsic) -> bool {
         | Intrinsic::MinNumF32
         | Intrinsic::MinNumF64
         | Intrinsic::MulWithOverflow
-        | Intrinsic::NearbyIntF32
-        | Intrinsic::NearbyIntF64
         | Intrinsic::NeedsDrop
         | Intrinsic::PowF32
         | Intrinsic::PowF64
@@ -634,8 +632,6 @@ fn can_skip_intrinsic(intrinsic: Intrinsic) -> bool {
         | Intrinsic::PowIF64
         | Intrinsic::PrefAlignOf
         | Intrinsic::RawEq
-        | Intrinsic::RintF32
-        | Intrinsic::RintF64
         | Intrinsic::RotateLeft
         | Intrinsic::RotateRight
         | Intrinsic::RoundF32

@@ -34,7 +34,7 @@ struct FnStats {
     is_unsafe: Option<bool>,
     has_unsafe_ops: Option<bool>,
     has_unsupported_input: Option<bool>,
-    has_loop: Option<bool>,
+    has_loop_or_iterator: Option<bool>,
 }
 
 impl FnStats {
@@ -44,8 +44,7 @@ impl FnStats {
             is_unsafe: None,
             has_unsafe_ops: None,
             has_unsupported_input: None,
-            // TODO: Implement this.
-            has_loop: None,
+            has_loop_or_iterator: None,
         }
     }
 }
@@ -139,7 +138,7 @@ impl OverallStats {
                 if !kind.is_fn() {
                     return None;
                 };
-                let unsafe_ops = FnUnsafeOperations::new(item.name()).collect(&item.body());
+                let unsafe_ops = FnUnsafeOperations::new(item.name()).collect(&item.expect_body());
                 let fn_sig = kind.fn_sig().unwrap();
                 let is_unsafe = fn_sig.skip_binder().safety == Safety::Unsafe;
                 self.fn_stats.get_mut(&item).unwrap().has_unsafe_ops =
@@ -168,7 +167,7 @@ impl OverallStats {
                 if !kind.is_fn() {
                     return None;
                 };
-                Some(FnLoops::new(item.name()).collect(&item.body()))
+                Some(FnLoops::new(item.name()).collect(&item.expect_body()))
             })
             .partition::<Vec<_>, _>(|props| props.has_loops());
 
@@ -180,7 +179,7 @@ impl OverallStats {
                 if !kind.is_fn() {
                     return None;
                 };
-                Some(FnLoops::new(item.name()).collect(&item.body()))
+                Some(FnLoops::new(item.name()).collect(&item.expect_body()))
             })
             .partition::<Vec<_>, _>(|props| props.has_iterators());
 
@@ -191,7 +190,10 @@ impl OverallStats {
                 if !kind.is_fn() {
                     return None;
                 };
-                Some(FnLoops::new(item.name()).collect(&item.body()))
+                let fn_props = FnLoops::new(item.name()).collect(&item.expect_body());
+                self.fn_stats.get_mut(&item).unwrap().has_loop_or_iterator =
+                    Some(fn_props.has_iterators() || fn_props.has_loops());
+                Some(fn_props)
             })
             .partition::<Vec<_>, _>(|props| props.has_iterators() || props.has_loops());
 
@@ -599,7 +601,7 @@ impl Recursion {
             .into_iter()
             .filter_map(|item| {
                 if let TyKind::RigidTy(RigidTy::FnDef(def, _)) = item.ty().kind() {
-                    let body = item.body();
+                    let body = item.expect_body();
                     let mut visitor = FnCallVisitor { body: &body, fns: vec![] };
                     visitor.visit_body(&body);
                     Some((def, visitor.fns))

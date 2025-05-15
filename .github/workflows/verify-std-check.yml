@@ -59,15 +59,27 @@ jobs:
         continue-on-error: true
         run: |
           kani verify-std -Z unstable-options ./library --target-dir ${{ runner.temp }} -Z function-contracts \
-            -Z mem-predicates -Z loop-contracts --enable-unstable --cbmc-args --object-bits 12
+            -Z mem-predicates -Z loop-contracts --cbmc-args --object-bits 12
 
       # If the head failed, check if it's a new failure.
-      - name: Checkout base
+      - name: Checkout BASE
         working-directory: kani
         if: steps.check-head.outcome != 'success' && github.event_name == 'pull_request'
         run: |
           BASE_REF=${{ github.event.pull_request.base.sha }}
           git checkout ${BASE_REF}
+
+      - name: Setup Kani Dependencies BASE
+        uses: ./kani/.github/actions/setup
+        if: steps.check-head.outcome != 'success' && github.event_name == 'pull_request'
+        with:
+          os: ${{ matrix.os }}
+          kani_dir: kani
+
+      - name: Build Kani BASE
+        working-directory: kani
+        if: steps.check-head.outcome != 'success' && github.event_name == 'pull_request'
+        run: |
           cargo build-dev
 
       - name: Run verification with BASE
@@ -77,7 +89,7 @@ jobs:
         continue-on-error: true
         run: |
           kani verify-std -Z unstable-options ./library --target-dir ${{ runner.temp }} -Z function-contracts \
-            -Z mem-predicates -Z loop-contracts --enable-unstable --cbmc-args --object-bits 12
+            -Z mem-predicates -Z loop-contracts --cbmc-args --object-bits 12
 
       - name: Compare PR results
         if: steps.check-head.outcome != 'success' && steps.check-head.outcome != steps.check-base.outcome

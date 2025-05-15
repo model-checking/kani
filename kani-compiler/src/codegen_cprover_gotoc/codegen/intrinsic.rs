@@ -414,8 +414,6 @@ impl GotocCtx<'_> {
             Intrinsic::MulWithOverflow => {
                 self.codegen_op_with_overflow(BinaryOperator::OverflowResultMult, fargs, place, loc)
             }
-            Intrinsic::NearbyIntF32 => codegen_simple_intrinsic!(Nearbyintf),
-            Intrinsic::NearbyIntF64 => codegen_simple_intrinsic!(Nearbyint),
             Intrinsic::NeedsDrop => codegen_intrinsic_const!(),
             Intrinsic::PowF32 => codegen_simple_intrinsic!(Powf),
             Intrinsic::PowF64 => codegen_simple_intrinsic!(Pow),
@@ -425,12 +423,13 @@ impl GotocCtx<'_> {
             Intrinsic::PtrGuaranteedCmp => self.codegen_ptr_guaranteed_cmp(fargs, place, loc),
             Intrinsic::RawEq => self.codegen_intrinsic_raw_eq(instance, fargs, place, loc),
             Intrinsic::RetagBoxToRaw => self.codegen_retag_box_to_raw(fargs, place, loc),
-            Intrinsic::RintF32 => codegen_simple_intrinsic!(Rintf),
-            Intrinsic::RintF64 => codegen_simple_intrinsic!(Rint),
             Intrinsic::RotateLeft => codegen_intrinsic_binop!(rol),
             Intrinsic::RotateRight => codegen_intrinsic_binop!(ror),
             Intrinsic::RoundF32 => codegen_simple_intrinsic!(Roundf),
             Intrinsic::RoundF64 => codegen_simple_intrinsic!(Round),
+            Intrinsic::RoundTiesEvenF32 | Intrinsic::RoundTiesEvenF64 => {
+                self.codegen_round_to_integral(cbmc::RoundingMode::ToNearest, fargs, place, loc)
+            }
             Intrinsic::SaturatingAdd => codegen_intrinsic_binop_with_mm!(saturating_add),
             Intrinsic::SaturatingSub => codegen_intrinsic_binop_with_mm!(saturating_sub),
             Intrinsic::SinF32 => codegen_simple_intrinsic!(Sinf),
@@ -636,6 +635,23 @@ impl GotocCtx<'_> {
         let divisor_is_minus_one =
             if btyp.is_signed(mm) { b.clone().eq(btyp.one().neg()) } else { Expr::bool_false() };
         dividend_is_int_min.and(divisor_is_minus_one).not()
+    }
+
+    // Builds a floatbv_round_to_integral expression with specified cbmc::RoundingMode.
+    fn codegen_round_to_integral(
+        &mut self,
+        rounding_mode: cbmc::RoundingMode,
+        mut fargs: Vec<Expr>,
+        place: &Place,
+        loc: Location,
+    ) -> Stmt {
+        let place_ty = self.place_ty_stable(place);
+        let result_type = self.codegen_ty_stable(place_ty);
+        let f = fargs.remove(0);
+        assert!(fargs.is_empty());
+        let rm = Expr::int_constant(rounding_mode, Type::c_int());
+        let expr = Expr::floatbv_round_to_integral(f, rm, result_type);
+        self.codegen_expr_to_place_stable(place, expr, loc)
     }
 
     /// Intrinsics of the form *_with_overflow

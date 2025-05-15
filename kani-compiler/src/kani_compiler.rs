@@ -41,6 +41,7 @@ pub fn run(args: Vec<String>) {
 }
 
 /// Configure the LLBC backend (Aeneas's IR).
+#[allow(unused)]
 fn llbc_backend(_queries: Arc<Mutex<QueryDb>>) -> Box<dyn CodegenBackend> {
     #[cfg(feature = "llbc")]
     return Box::new(LlbcCodegenBackend::new(_queries));
@@ -49,6 +50,7 @@ fn llbc_backend(_queries: Arc<Mutex<QueryDb>>) -> Box<dyn CodegenBackend> {
 }
 
 /// Configure the cprover backend that generates goto-programs.
+#[allow(unused)]
 fn cprover_backend(_queries: Arc<Mutex<QueryDb>>) -> Box<dyn CodegenBackend> {
     #[cfg(feature = "cprover")]
     return Box::new(GotocCodegenBackend::new(_queries));
@@ -109,6 +111,7 @@ impl Callbacks for KaniCompiler {
             let queries = self.queries.clone();
             move |_cfg| backend(queries)
         }));
+        // `kani-driver` passes the `kani-compiler` specific arguments through llvm-args, so extract them here.
         args.extend(config.opts.cg.llvm_args.iter().cloned());
         let args = Arguments::parse_from(args);
         init_session(&args, matches!(config.opts.error_format, ErrorOutputType::Json { .. }));

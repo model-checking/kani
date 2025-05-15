@@ -1,0 +1,49 @@
+Kani generated automatic harnesses for 2 function(s):
++-------------------+
+| Selected Function |
++===================+
+| gcd_recursion     |
+|-------------------|
+| infinite_loop     |
++-------------------+
+
+Skipped Functions: None. Kani generated automatic harnesses for all functions in the available crate(s).
+Autoharness: Checking function gcd_recursion against all possible inputs...
+Not unwinding recursion gcd_recursion iteration 21
+
+gcd_recursion.assertion\
+	 - Status: FAILURE\
+	 - Description: "attempt to calculate the remainder with a divisor of zero"
+
+gcd_recursion.recursion\
+	 - Status: FAILURE\
+	 - Description: "recursion unwinding assertion"
+
+VERIFICATION:- FAILED
+[Kani] info: Verification output shows one or more unwinding failures.
+[Kani] tip: Consider increasing the unwinding value or disabling `--unwinding-assertions`.
+
+Autoharness: Checking function infinite_loop against all possible inputs...
+Not unwinding loop
+
+infinite_loop.unwind.0\
+	 - Status: FAILURE\
+	 - Description: "unwinding assertion loop 0"
+
+VERIFICATION:- FAILED
+[Kani] info: Verification output shows one or more unwinding failures.
+[Kani] tip: Consider increasing the unwinding value or disabling `--unwinding-assertions`.
+
+Manual Harness Summary:
+No proof harnesses (functions with #[kani::proof]) were found to verify.
+
+Autoharness Summary:
++-------------------+---------------------------+---------------------+
+| Selected Function | Kind of Automatic Harness | Verification Result |
++=====================================================================+
+| gcd_recursion     | #[kani::proof]            | Failure             |
+|-------------------+---------------------------+---------------------|
+| infinite_loop     | #[kani::proof]            | Failure             |
++-------------------+---------------------------+---------------------+
+Note that `kani autoharness` sets default --harness-timeout of 60s and --default-unwind of 20.
+If verification failed because of timing out or too low of an unwinding bound, try passing larger values for these arguments (or, if possible, writing a loop contract).

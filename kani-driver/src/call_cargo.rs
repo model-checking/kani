@@ -182,14 +182,19 @@ crate-type = ["lib"]
             cargo_args.push("-v".into());
         }
 
-        // Arguments that will only be passed to the target package.
+        // Arguments that will only be passed to the target package (the package under verification)
+        // and not its dependencies, c.f. https://doc.rust-lang.org/cargo/commands/cargo-rustc.html.
+        // The difference between pkg_args and rustc_args is that rustc_args are also provided when
+        // we invoke rustc on the target package's dependencies.
+        // We do not provide the `--reachability` argument to dependencies so that it has the default value `None`
+        // (c.f. kani-compiler::args::ReachabilityType) and we skip codegen for the dependency.
+        // This is the desired behavior because we only want to construct `CodegenUnits` for the target package;
+        // i.e., if some dependency has harnesses, we don't want to run them.
+
+        // If you are adding a new `kani-compiler` argument, you likely want to put it `kani_compiler_flags()` instead,
+        // unless there a reason it shouldn't be passed to dependencies.
+        // (Note that at the time of writing, passing the other compiler args to dependencies is a no-op, since `--reachability=None` skips codegen anyway.)
         self.pkg_args.push(self.reachability_arg());
-        if let Some(backend_arg) = self.backend_arg() {
-            self.pkg_args.push(backend_arg);
-        }
-        if self.args.no_assert_contracts {
-            self.pkg_args.push("--no-assert-contracts".into());
-        }
 
         let mut found_target = false;
         let packages = self.packages_to_verify(&self.args, &metadata)?;

@@ -37,7 +37,7 @@ pub mod transform;
 /// error was found.
 pub fn check_crate_items(tcx: TyCtxt, ignore_asm: bool) {
     let krate = tcx.crate_name(LOCAL_CRATE);
-    for item in tcx.hir().items() {
+    for item in tcx.hir_free_items() {
         let def_id = item.owner_id.def_id.to_def_id();
         KaniAttributes::for_item(tcx, def_id).check_attributes();
         if tcx.def_kind(def_id) == DefKind::GlobalAsm {

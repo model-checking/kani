@@ -813,7 +813,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             let disambiguator = CharonDisambiguator::new(data.disambiguator as usize);
             use rustc_hir::definitions::DefPathData;
             match &data.data {
-                DefPathData::TypeNs(symbol) => {
+                DefPathData::TypeNs(Some(symbol)) => {
                     error_assert!(self, span, data.disambiguator == 0); // Sanity check
                     name.push(CharonPathElem::Ident(symbol.to_string(), disambiguator));
                 }
@@ -956,7 +956,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             let disambiguator = CharonDisambiguator::new(data.disambiguator as usize);
             use rustc_hir::definitions::DefPathData;
             match &data.data {
-                DefPathData::TypeNs(symbol) => {
+                DefPathData::TypeNs(Some(symbol)) => {
                     error_assert!(self, span, data.disambiguator == 0); // Sanity check
                     name.push(CharonPathElem::Ident(symbol.to_string(), disambiguator));
                 }
@@ -1063,7 +1063,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             let disambiguator = CharonDisambiguator::new(data.disambiguator as usize);
             use rustc_hir::definitions::DefPathData;
             match &data.data {
-                DefPathData::TypeNs(symbol) => {
+                DefPathData::TypeNs(Some(symbol)) => {
                     error_assert!(self, span, data.disambiguator == 0); // Sanity check
                     name.push(CharonPathElem::Ident(symbol.to_string(), disambiguator));
                 }
