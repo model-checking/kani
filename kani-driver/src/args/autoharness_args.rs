@@ -94,7 +94,8 @@ impl ValidateArgs for CargoAutoharnessArgs {
             ));
         }
 
-        if self.common_autoharness_args.format == Format::Pretty
+        if self.common_autoharness_args.list
+            && self.common_autoharness_args.format == Format::Pretty
             && self.verify_opts.common_args.quiet
         {
             return Err(Error::raw(
@@ -141,7 +142,8 @@ impl ValidateArgs for StandaloneAutoharnessArgs {
             ));
         }
 
-        if self.common_autoharness_args.format == Format::Pretty
+        if self.common_autoharness_args.list
+            && self.common_autoharness_args.format == Format::Pretty
             && self.verify_opts.common_args.quiet
         {
             return Err(Error::raw(
