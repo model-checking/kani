@@ -568,6 +568,7 @@ impl GotocCtx<'_> {
     ///
     /// N.B. public only because instrinsics use this directly, too.
     pub(crate) fn codegen_funcall_args(&mut self, fn_abi: &FnAbi, args: &[Operand]) -> Vec<Expr> {
+        //println!("funcall_args: {:?}",args);
         let fargs: Vec<Expr> = args
             .iter()
             .enumerate()
@@ -575,9 +576,13 @@ impl GotocCtx<'_> {
                 // Functions that require caller info will have an extra parameter.
                 let arg_abi = &fn_abi.args.get(i);
                 let ty = self.operand_ty_stable(op);
+                //println!("funcall_args ty: {:?}",ty.kind().is_closure());
+                //println!("funcall_args abi: {:?}",arg_abi.unwrap().mode);
                 if ty.kind().is_bool() {
                     Some(self.codegen_operand_stable(op).cast_to(Type::c_bool()))
                 } else if arg_abi.is_none_or(|abi| abi.mode != PassMode::Ignore) {
+                    Some(self.codegen_operand_stable(op))
+                } else if ty.kind().is_closure(){
                     Some(self.codegen_operand_stable(op))
                 } else {
                     None
@@ -585,6 +590,7 @@ impl GotocCtx<'_> {
             })
             .collect();
         debug!(?fargs, args_abi=?fn_abi.args, "codegen_funcall_args");
+        //println!("trans funcall_args: {:?}",fargs);
         fargs
     }
 
