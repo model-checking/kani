@@ -247,6 +247,9 @@ crate-type = ["lib"]
     pub fn cargo_metadata(&self, build_target: &str) -> Result<Metadata> {
         let mut cmd = MetadataCommand::new();
 
+        // Use Kani's toolchain when running `cargo metadata`
+        cmd.cargo_path(env!("CARGO"));
+
         // restrict metadata command to host platform. References:
         // https://github.com/rust-lang/rust-analyzer/issues/6908
         // https://github.com/rust-lang/rust-analyzer/pull/6912
