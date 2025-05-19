@@ -12,6 +12,7 @@ use rustc_abi::{FieldsShape, Primitive, TagEncoding, Variants};
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{List, TypingEnv};
 use rustc_smir::rustc_internal;
+use stable_mir::CrateDef;
 use stable_mir::abi::{ArgAbi, FnAbi, PassMode};
 use stable_mir::mir::mono::{Instance, InstanceKind};
 use stable_mir::mir::{
@@ -567,7 +568,11 @@ impl GotocCtx<'_> {
     /// Generate Goto-C for each argument to a function call.
     ///
     /// N.B. public only because instrinsics use this directly, too.
-    pub(crate) fn codegen_funcall_args(&mut self, fn_abi: &FnAbi, args: &[Operand]) -> Vec<Expr> {
+    pub(crate) fn codegen_funcall_args_for_quantifiers(
+        &mut self,
+        fn_abi: &FnAbi,
+        args: &[Operand],
+    ) -> Vec<Expr> {
         //println!("funcall_args: {:?}",args);
         let fargs: Vec<Expr> = args
             .iter()
@@ -583,6 +588,34 @@ impl GotocCtx<'_> {
                 } else if ty.kind().is_closure()
                     || (arg_abi.is_none_or(|abi| abi.mode != PassMode::Ignore))
                 {
+                    Some(self.codegen_operand_stable(op))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        debug!(?fargs, args_abi=?fn_abi.args, "codegen_funcall_args");
+        //println!("trans funcall_args: {:?}",fargs);
+        fargs
+    }
+
+    /// Generate Goto-C for each argument to a function call.
+    ///
+    /// N.B. public only because instrinsics use this directly, too.
+    pub(crate) fn codegen_funcall_args(&mut self, fn_abi: &FnAbi, args: &[Operand]) -> Vec<Expr> {
+        //println!("funcall_args: {:?}",args);
+        let fargs: Vec<Expr> = args
+            .iter()
+            .enumerate()
+            .filter_map(|(i, op)| {
+                // Functions that require caller info will have an extra parameter.
+                let arg_abi = &fn_abi.args.get(i);
+                let ty = self.operand_ty_stable(op);
+                //println!("funcall_args ty: {:?}",ty.kind().is_closure());
+                //println!("funcall_args abi: {:?}",arg_abi.unwrap().mode);
+                if ty.kind().is_bool() {
+                    Some(self.codegen_operand_stable(op).cast_to(Type::c_bool()))
+                } else if arg_abi.is_none_or(|abi| abi.mode != PassMode::Ignore) {
                     Some(self.codegen_operand_stable(op))
                 } else {
                     None
@@ -645,7 +678,13 @@ impl GotocCtx<'_> {
                 let mut fargs = if args.is_empty()
                     || fn_def.fn_sig().unwrap().value.abi != Abi::RustCall
                 {
-                    self.codegen_funcall_args(&fn_abi, args)
+                    if instance.def.name() == "kani::internal::kani_forall"
+                        || (instance.def.name() == "kani::internal::kani_exists")
+                    {
+                        self.codegen_funcall_args_for_quantifiers(&fn_abi, args)
+                    } else {
+                        self.codegen_funcall_args(&fn_abi, args)
+                    }
                 } else {
                     let (untupled, first_args) = args.split_last().unwrap();
                     let mut fargs = self.codegen_funcall_args(&fn_abi, first_args);
