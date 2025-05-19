@@ -580,9 +580,9 @@ impl GotocCtx<'_> {
                 //println!("funcall_args abi: {:?}",arg_abi.unwrap().mode);
                 if ty.kind().is_bool() {
                     Some(self.codegen_operand_stable(op).cast_to(Type::c_bool()))
-                } else if arg_abi.is_none_or(|abi| abi.mode != PassMode::Ignore) {
-                    Some(self.codegen_operand_stable(op))
-                } else if ty.kind().is_closure() {
+                } else if ty.kind().is_closure()
+                    || (arg_abi.is_none_or(|abi| abi.mode != PassMode::Ignore))
+                {
                     Some(self.codegen_operand_stable(op))
                 } else {
                     None
