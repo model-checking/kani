@@ -5,6 +5,6 @@
 
 #[kani::proof]
 fn test() {
-    let quan1 = kani::exists!(|j in (0, 100)| j == 0);
-    assert!(quan1);
+    let quan = kani::exists!(|j in (0, 100)| j == 0);
+    assert!(quan);
 }
