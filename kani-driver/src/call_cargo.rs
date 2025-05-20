@@ -4,7 +4,9 @@
 use crate::args::VerificationArgs;
 use crate::call_single_file::{LibConfig, to_rustc_arg};
 use crate::project::Artifact;
-use crate::session::{KaniSession, lib_folder, lib_no_core_folder, setup_cargo_command};
+use crate::session::{
+    KaniSession, get_cargo_path, lib_folder, lib_no_core_folder, setup_cargo_command,
+};
 use crate::util;
 use anyhow::{Context, Result, bail};
 use cargo_metadata::diagnostic::{Diagnostic, DiagnosticLevel};
@@ -248,7 +250,8 @@ crate-type = ["lib"]
         let mut cmd = MetadataCommand::new();
 
         // Use Kani's toolchain when running `cargo metadata`
-        cmd.cargo_path(env!("CARGO"));
+        let cargo_path = get_cargo_path().unwrap();
+        cmd.cargo_path(cargo_path);
 
         // restrict metadata command to host platform. References:
         // https://github.com/rust-lang/rust-analyzer/issues/6908

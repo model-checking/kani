@@ -439,3 +439,17 @@ pub fn setup_cargo_command() -> Result<Command> {
 
     Ok(cmd)
 }
+
+// Get the cargo path corresponding to the toolchain version in rust-toolchain.toml.
+// If kani is being run in developer mode, then we use the compile-time toolchain, i.e. the one used during cargo build-dev.
+// For release versions of Kani, we use a version of cargo that's in the toolchain that's been symlinked during `cargo-kani` setup.
+pub fn get_cargo_path() -> Result<PathBuf> {
+    let install_type = InstallType::new()?;
+
+    let cargo_path = match install_type {
+        InstallType::DevRepo(_) => env!("CARGO").into(),
+        InstallType::Release(kani_dir) => kani_dir.join("toolchain").join("bin").join("cargo"),
+    };
+
+    Ok(cargo_path)
+}
