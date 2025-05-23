@@ -141,14 +141,14 @@ pub struct StandaloneArgs {
 /// When no subcommand is provided, there is an implied verification subcommand.
 #[derive(Debug, clap::Subcommand)]
 pub enum StandaloneSubcommand {
+    /// Create and run harnesses automatically for eligible functions. Implies -Z function-contracts and -Z loop-contracts.
+    Autoharness(Box<autoharness_args::StandaloneAutoharnessArgs>),
+    /// List contracts and harnesses.
+    List(Box<list_args::StandaloneListArgs>),
     /// Execute concrete playback testcases of a local crate.
     Playback(Box<playback_args::KaniPlaybackArgs>),
     /// Verify the rust standard library.
     VerifyStd(Box<std_args::VerifyStdArgs>),
-    /// List contracts and harnesses.
-    List(Box<list_args::StandaloneListArgs>),
-    /// Create and run harnesses automatically for eligible functions. Implies -Z function-contracts and -Z loop-contracts.
-    Autoharness(Box<autoharness_args::StandaloneAutoharnessArgs>),
 }
 
 #[derive(Debug, clap::Parser)]
@@ -172,15 +172,15 @@ pub enum CargoKaniSubcommand {
     #[command(hide = true)]
     Assess(Box<crate::assess::AssessArgs>),
 
-    /// Execute concrete playback testcases of a local package.
-    Playback(Box<playback_args::CargoPlaybackArgs>),
+    /// Create and run harnesses automatically for eligible functions. Implies -Z function-contracts and -Z loop-contracts.
+    /// See https://model-checking.github.io/kani/reference/experimental/autoharness.html for documentation.
+    Autoharness(Box<autoharness_args::CargoAutoharnessArgs>),
 
     /// List contracts and harnesses.
     List(Box<list_args::CargoListArgs>),
 
-    /// Create and run harnesses automatically for eligible functions. Implies -Z function-contracts and -Z loop-contracts.
-    /// See https://model-checking.github.io/kani/reference/experimental/autoharness.html for documentation.
-    Autoharness(Box<autoharness_args::CargoAutoharnessArgs>),
+    /// Execute concrete playback testcases of a local package.
+    Playback(Box<playback_args::CargoPlaybackArgs>),
 }
 
 // Common arguments for invoking Kani for verification purpose. This gets put into KaniContext,
