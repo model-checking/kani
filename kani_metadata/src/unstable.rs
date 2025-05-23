@@ -67,45 +67,45 @@
 )]
 #[strum(serialize_all = "kebab-case")]
 pub enum UnstableFeature {
-    /// Allow replacing certain items with stubs (mocks).
-    /// See [RFC-0002](https://model-checking.github.io/kani/rfc/rfcs/0002-function-stubbing.html)
-    Stubbing,
-    /// Generate a C-like file equivalent to input program used for debugging purpose.
-    GenC,
-    /// Allow Kani to link against C code.
-    CFfi,
-    /// Enable concrete playback flow.
-    ConcretePlayback,
     /// Enable Kani's unstable async library.
     AsyncLib,
-    /// Enable source-based code coverage workflow.
-    /// See [RFC-0011](https://model-checking.github.io/kani/rfc/rfcs/0011-source-coverage.html)
-    SourceCoverage,
+    /// Enable the autoharness subcommand.
+    Autoharness,
+    /// Enable concrete playback flow.
+    ConcretePlayback,
+    /// Allow Kani to link against C code.
+    CFfi,
+    /// Kani APIs related to floating-point operations (e.g. `float_to_int_in_range`)
+    FloatLib,
     /// Enable function contracts [RFC 9](https://model-checking.github.io/kani/rfc/rfcs/0009-function-contracts.html)
     FunctionContracts,
+    /// Generate a C-like file equivalent to input program used for debugging purpose.
+    GenC,
+    /// Ghost state and shadow memory APIs.
+    GhostState,
+    /// Enabled Lean backend (Aeneas/LLBC)
+    Lean,
+    /// The list subcommand [RFC 13](https://model-checking.github.io/kani/rfc/rfcs/0013-list.html)
+    List,
     /// Enable loop contracts [RFC 12](https://model-checking.github.io/kani/rfc/rfcs/0012-loop-contracts.html)
     LoopContracts,
     /// Memory predicate APIs.
     MemPredicates,
-    /// Automatically check that no invalid value is produced which is considered UB in Rust.
-    /// Note that this does not include checking uninitialized value.
-    ValidValueChecks,
-    /// Enabled Lean backend (Aeneas/LLBC)
-    Lean,
-    /// Ghost state and shadow memory APIs.
-    GhostState,
+    /// Enable vtable restriction.
+    RestrictVtable,
+    /// Enable source-based code coverage workflow.
+    /// See [RFC-0011](https://model-checking.github.io/kani/rfc/rfcs/0011-source-coverage.html)
+    SourceCoverage,
+    /// Allow replacing certain items with stubs (mocks).
+    /// See [RFC-0002](https://model-checking.github.io/kani/rfc/rfcs/0002-function-stubbing.html)
+    Stubbing,
     /// Automatically check that uninitialized memory is not used.
     UninitChecks,
     /// Enable an unstable option or subcommand.
     UnstableOptions,
-    /// The list subcommand [RFC 13](https://model-checking.github.io/kani/rfc/rfcs/0013-list.html)
-    List,
-    /// Kani APIs related to floating-point operations (e.g. `float_to_int_in_range`)
-    FloatLib,
-    /// Enable vtable restriction.
-    RestrictVtable,
-    /// Enable the autoharness subcommand.
-    Autoharness,
+    /// Automatically check that no invalid value is produced which is considered UB in Rust.
+    /// Note that this does not include checking uninitialized value.
+    ValidValueChecks,
 }
 
 impl UnstableFeature {

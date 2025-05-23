@@ -192,73 +192,11 @@ pub struct VerificationArgs {
     #[arg(long, hide = true)]
     pub assess: bool,
 
-    /// Generate concrete playback unit test.
-    /// If value supplied is 'print', Kani prints the unit test to stdout.
-    /// If value supplied is 'inplace', Kani automatically adds the unit test to your source code.
-    /// This option does not work with `--output-format old`.
-    #[arg(long, ignore_case = true, value_enum)]
-    pub concrete_playback: Option<ConcretePlaybackMode>,
-    /// Keep temporary files generated throughout Kani process. This is already the default
-    /// behavior for `cargo-kani`.
-    #[arg(long, hide_short_help = true)]
-    pub keep_temps: bool,
-
-    /// Generate C file equivalent to inputted program for debug purpose.
-    /// This feature is unstable, and it requires `-Z unstable-options` to be used
-    #[arg(long, hide_short_help = true)]
-    pub gen_c: bool,
-
-    /// Directory for all generated artifacts.
-    #[arg(long)]
-    pub target_dir: Option<PathBuf>,
-
-    /// Force Kani to rebuild all packages before the verification.
-    #[arg(long)]
-    pub force_build: bool,
-
-    /// Toggle between different styles of output
-    #[arg(long, default_value = "regular", ignore_case = true, value_enum)]
-    pub output_format: OutputFormat,
-
-    #[command(flatten)]
-    pub checks: CheckArgs,
-
-    /// If specified, only run harnesses that match this filter. This option can be provided
-    /// multiple times, which will run all tests matching any of the filters.
-    /// If used with --exact, the harness filter will only match the exact fully qualified name of a harness.
-    #[arg(long = "harness", num_args(1), value_name = "HARNESS_FILTER")]
-    pub harnesses: Vec<String>,
-
-    /// When specified, the harness filter will only match the exact fully qualified name of a harness
-    #[arg(long, requires("harnesses"))]
-    pub exact: bool,
-
     /// Link external C files referenced by Rust code.
     /// This is an experimental feature and requires `-Z c-ffi` to be used
     #[arg(long, hide = true, num_args(1..))]
     pub c_lib: Vec<PathBuf>,
-    /// Enable test function verification. Only use this option when the entry point is a test function
-    #[arg(long)]
-    pub tests: bool,
-    /// Kani will only compile the crate. No verification will be performed
-    #[arg(long, hide_short_help = true)]
-    pub only_codegen: bool,
 
-    /// Run Kani without codegen. Useful for quick feedback on whether the code would compile successfully (similar to `cargo check`).
-    /// This feature is unstable and requires `-Z unstable-options` to be used
-    #[arg(long, hide_short_help = true)]
-    pub no_codegen: bool,
-
-    /// Specify the value used for loop unwinding in CBMC
-    #[arg(long)]
-    pub default_unwind: Option<u32>,
-    /// Specify the value used for loop unwinding for the specified harness in CBMC
-    #[arg(long, requires("harnesses"))]
-    pub unwind: Option<u32>,
-    /// Specify the CBMC solver to use. Overrides the harness `solver` attribute.
-    /// If no solver is specified (with --solver or harness attribute), Kani will use CaDiCaL.
-    #[arg(long, value_parser = CbmcSolverValueParser::new(CbmcSolver::VARIANTS))]
-    pub solver: Option<CbmcSolver>,
     /// Pass through directly to CBMC; must be the last flag.
     /// This feature is unstable and it requires `-Z unstable-options` to be used
     #[arg(
@@ -269,12 +207,24 @@ pub struct VerificationArgs {
     // consumes everything
     pub cbmc_args: Vec<OsString>,
 
-    /// Number of threads to spawn to verify harnesses in parallel.
-    /// Omit the flag entirely to run sequentially (i.e. one thread).
-    /// Pass -j to run with the thread pool's default number of threads.
-    /// Pass -j <N> to specify N threads.
-    #[arg(short, long, hide_short_help = true)]
-    pub jobs: Option<Option<usize>>,
+    /// Generate concrete playback unit test.
+    /// If value supplied is 'print', Kani prints the unit test to stdout.
+    /// If value supplied is 'inplace', Kani automatically adds the unit test to your source code.
+    /// This option does not work with `--output-format old`.
+    #[arg(long, ignore_case = true, value_enum)]
+    pub concrete_playback: Option<ConcretePlaybackMode>,
+
+    /// Enable Kani coverage output alongside verification result
+    #[arg(long, hide_short_help = true)]
+    pub coverage: bool,
+
+    /// Specify the value used for loop unwinding in CBMC
+    #[arg(long)]
+    pub default_unwind: Option<u32>,
+
+    /// When specified, the harness filter will only match the exact fully qualified name of a harness
+    #[arg(long, requires("harnesses"))]
+    pub exact: bool,
 
     /// Enable extra pointer checks such as invalid pointers in relation operations and pointer
     /// arithmetic overflow.
@@ -283,33 +233,103 @@ pub struct VerificationArgs {
     #[arg(long, hide_short_help = true)]
     pub extra_pointer_checks: bool,
 
-    /// Restrict the targets of virtual table function pointer calls.
-    /// This feature is unstable and it requires `-Z restrict-vtable` to be used
-    #[arg(long, hide = true, conflicts_with = "no_restrict_vtable")]
-    pub restrict_vtable: bool,
-    /// Disable restricting the targets of virtual table function pointer calls
-    #[arg(long, hide_short_help = true)]
-    pub no_restrict_vtable: bool,
-    /// Turn off assertion reachability checks
+    /// Stop the verification process as soon as one of the harnesses fails.
     #[arg(long)]
-    pub no_assertion_reach_checks: bool,
+    pub fail_fast: bool,
+
+    /// Force Kani to rebuild all packages before the verification.
+    #[arg(long)]
+    pub force_build: bool,
+
+    /// Generate C file equivalent to inputted program for debug purpose.
+    /// This feature is unstable, and it requires `-Z unstable-options` to be used
+    #[arg(long, hide_short_help = true)]
+    pub gen_c: bool,
+
+    /// If specified, only run harnesses that match this filter. This option can be provided
+    /// multiple times, which will run all tests matching any of the filters.
+    /// If used with --exact, the harness filter will only match the exact fully qualified name of a harness.
+    #[arg(long = "harness", num_args(1), value_name = "HARNESS_FILTER")]
+    pub harnesses: Vec<String>,
+
+    /// Timeout for each harness with optional suffix ('s': seconds, 'm': minutes, 'h': hours). Default is seconds. This option is experimental and requires `-Z unstable-options` to be used.
+    #[arg(long)]
+    pub harness_timeout: Option<Timeout>,
 
     /// Do not error out for crates containing `global_asm!`.
     /// This option may impact the soundness of the analysis and may cause false proofs and/or counterexamples
     #[arg(long, hide_short_help = true)]
     pub ignore_global_asm: bool,
 
-    /// Write the GotoC symbol table to a file in JSON format instead of goto binary format.
+    /// Number of threads to spawn to verify harnesses in parallel.
+    /// Omit the flag entirely to run sequentially (i.e. one thread).
+    /// Pass -j to run with the thread pool's default number of threads.
+    /// Pass -j <N> to specify N threads.
+    #[arg(short, long, hide_short_help = true)]
+    pub jobs: Option<Option<usize>>,
+
+    /// Keep temporary files generated throughout Kani process. This is already the default
+    /// behavior for `cargo-kani`.
+    #[arg(long, hide_short_help = true)]
+    pub keep_temps: bool,
+
+    /// Do not assert the function contracts of dependencies. Requires -Z function-contracts.
+    #[arg(long, hide_short_help = true)]
+    pub no_assert_contracts: bool,
+
+    /// Turn off assertion reachability checks
+    #[arg(long)]
+    pub no_assertion_reach_checks: bool,
+
+    /// Run Kani without codegen. Useful for quick feedback on whether the code would compile successfully (similar to `cargo check`).
+    /// This feature is unstable and requires `-Z unstable-options` to be used
+    #[arg(long, hide_short_help = true)]
+    pub no_codegen: bool,
+
+    /// Disable restricting the targets of virtual table function pointer calls
+    #[arg(long, hide_short_help = true)]
+    pub no_restrict_vtable: bool,
+
+    /// Disable CBMC's slice formula which prevents values from being assigned to redundant variables in traces.
+    #[arg(long, hide_short_help = true)]
+    pub no_slice_formula: bool,
+
+    /// Kani will only compile the crate. No verification will be performed
+    #[arg(long, hide_short_help = true)]
+    pub only_codegen: bool,
+
+    /// Toggle between different styles of output
+    #[arg(long, default_value = "regular", ignore_case = true, value_enum)]
+    pub output_format: OutputFormat,
+
+    // Harness Output into individual files
+    #[arg(long, hide_short_help = true)]
+    pub output_into_files: bool,
+
+    /// Print final LLBC for Lean backend. This requires the `-Z lean` option.
     #[arg(long, hide = true)]
-    pub write_json_symtab: bool,
+    pub print_llbc: bool,
+
+    /// Randomize the layout of structures. This option can help catching code that relies on
+    /// a specific layout chosen by the compiler that is not guaranteed to be stable in the future.
+    /// If a value is given, it will be used as the seed for randomization
+    /// See the `-Z randomize-layout` and `-Z layout-seed` arguments of the rust compiler.
+    #[arg(long)]
+    pub randomize_layout: Option<Option<u64>>,
+
+    /// Restrict the targets of virtual table function pointer calls.
+    /// This feature is unstable and it requires `-Z restrict-vtable` to be used
+    #[arg(long, hide = true, conflicts_with = "no_restrict_vtable")]
+    pub restrict_vtable: bool,
 
     /// Execute CBMC's sanity checks to ensure the goto-program we generate is correct.
     #[arg(long, hide_short_help = true)]
     pub run_sanity_checks: bool,
 
-    /// Disable CBMC's slice formula which prevents values from being assigned to redundant variables in traces.
-    #[arg(long, hide_short_help = true)]
-    pub no_slice_formula: bool,
+    /// Specify the CBMC solver to use. Overrides the harness `solver` attribute.
+    /// If no solver is specified (with --solver or harness attribute), Kani will use CaDiCaL.
+    #[arg(long, value_parser = CbmcSolverValueParser::new(CbmcSolver::VARIANTS))]
+    pub solver: Option<CbmcSolver>,
 
     /// Synthesize loop contracts for all loops.
     #[arg(
@@ -320,40 +340,28 @@ pub struct VerificationArgs {
     )]
     pub synthesize_loop_contracts: bool,
 
-    /// Do not assert the function contracts of dependencies. Requires -Z function-contracts.
-    #[arg(long, hide_short_help = true)]
-    pub no_assert_contracts: bool,
-
-    //Harness Output into individual files
-    #[arg(long, hide_short_help = true)]
-    pub output_into_files: bool,
-
-    /// Randomize the layout of structures. This option can help catching code that relies on
-    /// a specific layout chosen by the compiler that is not guaranteed to be stable in the future.
-    /// If a value is given, it will be used as the seed for randomization
-    /// See the `-Z randomize-layout` and `-Z layout-seed` arguments of the rust compiler.
+    /// Directory for all generated artifacts.
     #[arg(long)]
-    pub randomize_layout: Option<Option<u64>>,
+    pub target_dir: Option<PathBuf>,
 
-    /// Enable Kani coverage output alongside verification result
-    #[arg(long, hide_short_help = true)]
-    pub coverage: bool,
+    /// Enable test function verification. Only use this option when the entry point is a test function
+    #[arg(long)]
+    pub tests: bool,
 
-    /// Print final LLBC for Lean backend. This requires the `-Z lean` option.
+    /// Specify the value used for loop unwinding for the specified harness in CBMC
+    #[arg(long, requires("harnesses"))]
+    pub unwind: Option<u32>,
+
+    /// Write the GotoC symbol table to a file in JSON format instead of goto binary format.
     #[arg(long, hide = true)]
-    pub print_llbc: bool,
-
-    /// Timeout for each harness with optional suffix ('s': seconds, 'm': minutes, 'h': hours). Default is seconds. This option is experimental and requires `-Z unstable-options` to be used.
-    #[arg(long)]
-    pub harness_timeout: Option<Timeout>,
-
-    /// Stop the verification process as soon as one of the harnesses fails.
-    #[arg(long)]
-    pub fail_fast: bool,
+    pub write_json_symtab: bool,
 
     /// Arguments to pass down to Cargo
     #[command(flatten)]
     pub cargo: CargoCommonArgs,
+
+    #[command(flatten)]
+    pub checks: CheckArgs,
 
     /// Arguments used to select Cargo target.
     #[command(flatten)]
