@@ -303,7 +303,7 @@ pub struct VerificationArgs {
     #[arg(long, default_value = "regular", ignore_case = true, value_enum)]
     pub output_format: OutputFormat,
 
-    // Harness Output into individual files
+    /// Write verification results into per-harness files, rather than to stdout
     #[arg(long, hide_short_help = true)]
     pub output_into_files: bool,
 
