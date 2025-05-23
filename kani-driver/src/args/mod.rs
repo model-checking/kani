@@ -728,13 +728,21 @@ impl ValidateArgs for VerificationArgs {
         if !self.c_lib.is_empty()
             && !self.common_args.unstable_features.contains(UnstableFeature::CFfi)
         {
+            let z_feature = "-Z c-ffi";
             if self.common_args.enable_unstable {
-                print_deprecated(&self.common_args, "`--enable-unstable`", "-Z c-ffi");
+                return Err(Error::raw(
+                    ErrorKind::ValueValidation,
+                    format!(
+                        "The `--enable-unstable` option is obsolete. Use `{z_feature}` instead.",
+                    ),
+                ));
             } else {
                 return Err(Error::raw(
                     ErrorKind::MissingRequiredArgument,
-                    "The `--c-lib` argument is unstable and requires `-Z c-ffi` to enable \
-                unstable C-FFI support.",
+                    format!(
+                        "The `--c-lib` argument is unstable and requires `{z_feature}` to enable \
+                unstable C-FFI support."
+                    ),
                 ));
             }
         }
