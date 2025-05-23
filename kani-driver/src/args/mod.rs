@@ -57,7 +57,7 @@ pub fn print_deprecated(verbosity: &CommonArgs, option: &str, alternative: &str)
     if !verbosity.quiet {
         warning(&format!(
             "The `{option}` option is deprecated. This option will be removed soon. \
-            Consider using `{alternative}` instead"
+            Consider `{alternative}` instead"
         ))
     }
 }
@@ -209,6 +209,7 @@ pub enum CargoKaniSubcommand {
 
 // Common arguments for invoking Kani for verification purpose. This gets put into KaniContext,
 // whereas anything above is "local" to "main"'s control flow.
+// When adding an argument to this struct, make sure that it's in alphabetical order as displayed to the user when running --help.
 #[derive(Debug, clap::Args)]
 #[clap(next_help_heading = "Verification Options")]
 pub struct VerificationArgs {
@@ -459,35 +460,35 @@ pub struct CheckArgs {
     // Rust argument parsers (/clap) don't have the convenient '--flag' and '--no-flag' boolean pairs, so approximate
     // We're put both here then create helper functions to "intepret"
     /// Turn on all default checks
-    #[arg(long)]
+    #[arg(long, hide = true)]
     pub default_checks: bool,
     /// Turn off all default checks
     #[arg(long)]
     pub no_default_checks: bool,
 
     /// Turn on default memory safety checks
-    #[arg(long)]
+    #[arg(long, hide = true)]
     pub memory_safety_checks: bool,
     /// Turn off default memory safety checks
     #[arg(long)]
     pub no_memory_safety_checks: bool,
 
     /// Turn on default overflow checks
-    #[arg(long)]
+    #[arg(long, hide = true)]
     pub overflow_checks: bool,
     /// Turn off default overflow checks
     #[arg(long)]
     pub no_overflow_checks: bool,
 
     /// Turn on undefined function checks
-    #[arg(long)]
+    #[arg(long, hide = true)]
     pub undefined_function_checks: bool,
     /// Turn off undefined function checks
     #[arg(long)]
     pub no_undefined_function_checks: bool,
 
     /// Turn on default unwinding checks
-    #[arg(long)]
+    #[arg(long, hide = true)]
     pub unwinding_checks: bool,
     /// Turn off default unwinding checks
     #[arg(long)]
@@ -507,6 +508,24 @@ impl CheckArgs {
     }
     pub fn unwinding_on(&self) -> bool {
         !self.no_default_checks && !self.no_unwinding_checks || self.unwinding_checks
+    }
+    pub fn print_deprecated(&self, verbosity: &CommonArgs) {
+        let alternative = "omitting the argument, since this is already the default behavior";
+        if self.default_checks {
+            print_deprecated(verbosity, "--default-checks", alternative);
+        }
+        if self.memory_safety_checks {
+            print_deprecated(verbosity, "--memory-safety-checks", alternative);
+        }
+        if self.overflow_checks {
+            print_deprecated(verbosity, "--overflow-checks", alternative);
+        }
+        if self.undefined_function_checks {
+            print_deprecated(verbosity, "--undefined-function-checks", alternative);
+        }
+        if self.unwinding_checks {
+            print_deprecated(verbosity, "--unwinding-checks", alternative);
+        }
     }
 }
 
@@ -604,6 +623,7 @@ impl ValidateArgs for CargoKaniArgs {
 impl ValidateArgs for VerificationArgs {
     fn validate(&self) -> Result<(), Error> {
         self.common_args.validate()?;
+        self.checks.print_deprecated(&self.common_args);
         let extra_unwind =
             self.cbmc_args.iter().any(|s| s.to_str().unwrap().starts_with("--unwind"));
         let natives_unwind = self.default_unwind.is_some() || self.unwind.is_some();
