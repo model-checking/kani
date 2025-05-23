@@ -210,6 +210,7 @@ pub enum CargoKaniSubcommand {
 // whereas anything above is "local" to "main"'s control flow.
 // When adding an argument to this struct, make sure that it's in alphabetical order as displayed to the user when running --help.
 #[derive(Debug, clap::Args)]
+#[clap(next_help_heading = "Verification Options")]
 pub struct VerificationArgs {
     /// Temporary option to trigger assess mode for out test suite
     /// where we are able to add options but not subcommands
