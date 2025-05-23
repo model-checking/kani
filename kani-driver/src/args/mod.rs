@@ -62,6 +62,19 @@ pub fn print_deprecated(verbosity: &CommonArgs, option: &str, alternative: &str)
     }
 }
 
+/// First step in two-phase stabilization.
+/// When an unstable option is first stabilized, print this warning that `-Z unstable-options` has no effect.
+/// This warning should last for one release only; in the next Kani release, remove it.
+pub fn print_stabilized_option_warning(verbosity: &CommonArgs, option: &str) {
+    if !verbosity.quiet {
+        warning(&format!(
+            "The `{option}` option has been stabilized, so -Z {} has no effect for it. \
+            Remove it unless you are passing another unstable option.",
+            UnstableFeature::UnstableOptions,
+        ))
+    }
+}
+
 // By default we configure CBMC to use 16 bits to represent the object bits in pointers.
 const DEFAULT_OBJECT_BITS: u32 = 16;
 
@@ -686,11 +699,13 @@ impl ValidateArgs for VerificationArgs {
             UnstableFeature::UnstableOptions,
         )?;
 
-        self.common_args.check_unstable(
-            self.jobs.is_some(),
-            "--jobs",
-            UnstableFeature::UnstableOptions,
-        )?;
+        if self
+            .common_args
+            .check_unstable(self.jobs.is_some(), "--jobs", UnstableFeature::UnstableOptions)
+            .is_err()
+        {
+            print_stabilized_option_warning(&self.common_args, "--jobs");
+        };
 
         self.common_args.check_unstable(
             self.extra_pointer_checks,
