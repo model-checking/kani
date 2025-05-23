@@ -7,6 +7,7 @@ pub use kani_metadata::{EnabledUnstableFeatures, UnstableFeature};
 
 /// Common Kani arguments that we expect to be included in most subcommands.
 #[derive(Debug, clap::Args)]
+#[clap(next_help_heading = "Common Options")]
 pub struct CommonArgs {
     /// Produce full debug information
     #[arg(long)]

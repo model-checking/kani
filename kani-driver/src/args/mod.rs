@@ -186,6 +186,7 @@ pub enum CargoKaniSubcommand {
 // Common arguments for invoking Kani for verification purpose. This gets put into KaniContext,
 // whereas anything above is "local" to "main"'s control flow.
 #[derive(Debug, clap::Args)]
+#[clap(next_help_heading = "Verification Options")]
 pub struct VerificationArgs {
     /// Temporary option to trigger assess mode for out test suite
     /// where we are able to add options but not subcommands

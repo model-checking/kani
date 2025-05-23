@@ -12,6 +12,7 @@ use std::path::PathBuf;
 /// These do not (currently) include cargo args that kani pays special attention to:
 /// for instance, we keep `--tests` and `--target-dir` elsewhere.
 #[derive(Debug, Default, clap::Args)]
+#[clap(next_help_heading = "Cargo Common Options")]
 pub struct CargoCommonArgs {
     /// Activate all package features
     #[arg(long)]
@@ -99,6 +100,7 @@ impl ValidateArgs for CargoCommonArgs {
 /// See <https://doc.rust-lang.org/cargo/commands/cargo-test.html#target-selection> for more
 /// details.
 #[derive(Debug, Default, clap::Args)]
+#[clap(next_help_heading = "Cargo Target Options")]
 pub struct CargoTargetArgs {
     /// Check only the specified binary target.
     #[arg(long)]
