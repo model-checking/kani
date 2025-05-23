@@ -4,7 +4,7 @@
 
 use std::path::PathBuf;
 
-use crate::args::{CommonArgs, ValidateArgs, validate_std_path};
+use crate::args::{CommonArgs, ValidateArgs, print_stabilized_feature_warning, validate_std_path};
 use clap::{Error, Parser, ValueEnum, error::ErrorKind};
 use kani_metadata::UnstableFeature;
 
@@ -57,11 +57,8 @@ pub enum Format {
 impl ValidateArgs for CargoListArgs {
     fn validate(&self) -> Result<(), Error> {
         self.common_args.validate()?;
-        if !self.common_args.unstable_features.contains(UnstableFeature::List) {
-            return Err(Error::raw(
-                ErrorKind::MissingRequiredArgument,
-                "The `list` subcommand is unstable and requires -Z list",
-            ));
+        if self.common_args.unstable_features.contains(UnstableFeature::List) {
+            print_stabilized_feature_warning(&self.common_args, UnstableFeature::List);
         }
 
         if self.format == Format::Pretty && self.common_args.quiet {
@@ -78,11 +75,8 @@ impl ValidateArgs for CargoListArgs {
 impl ValidateArgs for StandaloneListArgs {
     fn validate(&self) -> Result<(), Error> {
         self.common_args.validate()?;
-        if !self.common_args.unstable_features.contains(UnstableFeature::List) {
-            return Err(Error::raw(
-                ErrorKind::MissingRequiredArgument,
-                "The `list` subcommand is unstable and requires -Z list",
-            ));
+        if self.common_args.unstable_features.contains(UnstableFeature::List) {
+            print_stabilized_feature_warning(&self.common_args, UnstableFeature::List);
         }
 
         if self.format == Format::Pretty && self.common_args.quiet {

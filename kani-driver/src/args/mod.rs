@@ -75,6 +75,17 @@ pub fn print_stabilized_option_warning(verbosity: &CommonArgs, option: &str) {
     }
 }
 
+/// First step in two-phase stabilization.
+/// When an unstable feature is first stabilized, print this warning that `-Z {feature}` has no effect.
+/// This warning should last for one release only; in the next Kani release, remove it.
+pub fn print_stabilized_feature_warning(verbosity: &CommonArgs, feature: UnstableFeature) {
+    if !verbosity.quiet {
+        warning(&format!(
+            "The `{feature}` feature has been stabilized, so -Z {feature} has no effect and should be removed",
+        ))
+    }
+}
+
 // By default we configure CBMC to use 16 bits to represent the object bits in pointers.
 const DEFAULT_OBJECT_BITS: u32 = 16;
 

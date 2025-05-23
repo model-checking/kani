@@ -5,7 +5,9 @@
 use std::path::PathBuf;
 
 use crate::args::list_args::Format;
-use crate::args::{ValidateArgs, VerificationArgs, validate_std_path};
+use crate::args::{
+    ValidateArgs, VerificationArgs, print_stabilized_feature_warning, validate_std_path,
+};
 use clap::{Error, Parser, error::ErrorKind};
 use kani_metadata::UnstableFeature;
 
@@ -31,7 +33,7 @@ pub struct CommonAutoharnessArgs {
     #[arg(long = "exclude-pattern", num_args(1), value_name = "PATTERN")]
     pub exclude_pattern: Vec<String>,
 
-    /// Run the `list` subcommand after generating the automatic harnesses. Requires -Z list. Note that this option implies --only-codegen.
+    /// Run the `list` subcommand after generating the automatic harnesses. Note that this option implies --only-codegen.
     #[arg(long)]
     pub list: bool,
 
@@ -86,12 +88,9 @@ impl ValidateArgs for CargoAutoharnessArgs {
         }
 
         if self.common_autoharness_args.list
-            && !self.verify_opts.common_args.unstable_features.contains(UnstableFeature::List)
+            && self.verify_opts.common_args.unstable_features.contains(UnstableFeature::List)
         {
-            return Err(Error::raw(
-                ErrorKind::MissingRequiredArgument,
-                format!("The `list` feature is unstable and requires -Z {}", UnstableFeature::List),
-            ));
+            print_stabilized_feature_warning(&self.verify_opts.common_args, UnstableFeature::List);
         }
 
         if self.common_autoharness_args.list
@@ -134,12 +133,9 @@ impl ValidateArgs for StandaloneAutoharnessArgs {
         }
 
         if self.common_autoharness_args.list
-            && !self.verify_opts.common_args.unstable_features.contains(UnstableFeature::List)
+            && self.verify_opts.common_args.unstable_features.contains(UnstableFeature::List)
         {
-            return Err(Error::raw(
-                ErrorKind::MissingRequiredArgument,
-                format!("The `list` feature is unstable and requires -Z {}", UnstableFeature::List),
-            ));
+            print_stabilized_feature_warning(&self.verify_opts.common_args, UnstableFeature::List);
         }
 
         if self.common_autoharness_args.list
