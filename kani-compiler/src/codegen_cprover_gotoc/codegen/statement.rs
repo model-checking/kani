@@ -497,32 +497,39 @@ impl GotocCtx<'_> {
         let switch_ty = v.typ().clone();
 
         // Switches with empty branches should've been eliminated already.
-        assert!(targets.len() > 1);
-        if targets.len() == 2 {
-            // Translate to a guarded goto
-            let (case, first_target) = targets.branches().next().unwrap();
-            Stmt::block(
-                vec![
-                    v.eq(Expr::int_constant(case, switch_ty)).if_then_else(
-                        Stmt::goto(bb_label(first_target), loc),
-                        None,
-                        loc,
-                    ),
-                    Stmt::goto(bb_label(targets.otherwise()), loc),
-                ],
-                loc,
-            )
-        } else {
-            let cases = targets
-                .branches()
-                .map(|(c, bb)| {
-                    Expr::int_constant(c, switch_ty.clone())
-                        .with_location(loc)
-                        .switch_case(Stmt::goto(bb_label(bb), loc))
-                })
-                .collect();
-            let default = Stmt::goto(bb_label(targets.otherwise()), loc);
-            v.switch(cases, Some(default), loc)
+        match targets.len() {
+            0 => unreachable!("switches have at least one target"),
+            1 => {
+                // Trivial switch.
+                Stmt::goto(bb_label(targets.otherwise()), loc)
+            }
+            2 => {
+                // Translate to a guarded goto
+                let (case, first_target) = targets.branches().next().unwrap();
+                Stmt::block(
+                    vec![
+                        v.eq(Expr::int_constant(case, switch_ty)).if_then_else(
+                            Stmt::goto(bb_label(first_target), loc),
+                            None,
+                            loc,
+                        ),
+                        Stmt::goto(bb_label(targets.otherwise()), loc),
+                    ],
+                    loc,
+                )
+            }
+            3.. => {
+                let cases = targets
+                    .branches()
+                    .map(|(c, bb)| {
+                        Expr::int_constant(c, switch_ty.clone())
+                            .with_location(loc)
+                            .switch_case(Stmt::goto(bb_label(bb), loc))
+                    })
+                    .collect();
+                let default = Stmt::goto(bb_label(targets.otherwise()), loc);
+                v.switch(cases, Some(default), loc)
+            }
         }
     }
 
