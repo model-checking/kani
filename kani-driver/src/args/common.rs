@@ -1,12 +1,13 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! Define arguments that should be common to all subcommands in Kani.
-use crate::args::{ValidateArgs, print_deprecated};
+use crate::args::ValidateArgs;
 use clap::{error::Error, error::ErrorKind};
 pub use kani_metadata::{EnabledUnstableFeatures, UnstableFeature};
 
 /// Common Kani arguments that we expect to be included in most subcommands.
 #[derive(Debug, clap::Args)]
+#[clap(next_help_heading = "Common Options")]
 pub struct CommonArgs {
     /// Produce full debug information
     #[arg(long)]
@@ -18,7 +19,7 @@ pub struct CommonArgs {
     #[arg(long, short, default_value_if("debug", "true", Some("true")))]
     pub verbose: bool,
     /// Enable usage of unstable options
-    #[arg(long, hide_short_help = true)]
+    #[arg(long, hide = true)]
     pub enable_unstable: bool,
 
     /// We no longer support dry-run. Use `--verbose` to see the commands being printed during
@@ -53,7 +54,12 @@ impl CommonArgs {
         if enabled && !self.unstable_features.contains(required) {
             let z_feature = format!("-Z {required}");
             if self.enable_unstable {
-                print_deprecated(self, "--enable-unstable", &z_feature);
+                return Err(Error::raw(
+                    ErrorKind::ValueValidation,
+                    format!(
+                        "The `--enable-unstable` option is obsolete. Use `{z_feature}` instead.",
+                    ),
+                ));
             } else {
                 return Err(Error::raw(
                     ErrorKind::MissingRequiredArgument,

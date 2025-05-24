@@ -12,5 +12,5 @@ edition = "2021"
 crate_with_global_asm = { path = "crate_with_global_asm" }
 
 [package.metadata.kani]
-# Issue with MIR Linker on static constant.
-flags = { enable-unstable = true, ignore-global-asm = true }
+flags = { ignore-global-asm = true}
+unstable = { unstable-options = true }
