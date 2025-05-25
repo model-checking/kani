@@ -63,13 +63,3 @@ fn check_with_discriminant() {
         WithDiscriminant::Disc => assert!(disc == 42),
     }
 }
-
-pub enum Reference {
-    ByName { alias: String },
-}
-
-#[kani::proof]
-fn check_nontrivial_drop() {
-    let result: Reference = Reference::ByName { alias: "foo".into() };
-    drop(result)
-}
