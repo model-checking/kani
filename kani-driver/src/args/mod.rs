@@ -589,7 +589,10 @@ impl ValidateArgs for VerificationArgs {
         }
 
         if self.write_json_symtab {
-            print_obsolete(&self.common_args, "--write-json-symtab");
+            return Err(Error::raw(
+                ErrorKind::ValueValidation,
+                "The `--write-json-symtab` option is obsolete.",
+            ));
         }
 
         // TODO: these conflicting flags reflect what's necessary to pass current tests unmodified.
