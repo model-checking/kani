@@ -299,7 +299,7 @@ pub struct VerificationArgs {
     pub ignore_global_asm: bool,
 
     /// Write the GotoC symbol table to a file in JSON format instead of goto binary format.
-    #[arg(long, hide_short_help = true)]
+    #[arg(long, hide = true)]
     pub write_json_symtab: bool,
 
     /// Execute CBMC's sanity checks to ensure the goto-program we generate is correct.
@@ -589,7 +589,10 @@ impl ValidateArgs for VerificationArgs {
         }
 
         if self.write_json_symtab {
-            print_obsolete(&self.common_args, "--write-json-symtab");
+            return Err(Error::raw(
+                ErrorKind::ValueValidation,
+                "The `--write-json-symtab` option is obsolete.",
+            ));
         }
 
         // TODO: these conflicting flags reflect what's necessary to pass current tests unmodified.
