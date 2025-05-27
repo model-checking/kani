@@ -52,6 +52,7 @@ pub fn print_obsolete(verbosity: &CommonArgs, option: &str) {
     }
 }
 
+#[allow(dead_code)]
 pub fn print_deprecated(verbosity: &CommonArgs, option: &str, alternative: &str) {
     if !verbosity.quiet {
         warning(&format!(
