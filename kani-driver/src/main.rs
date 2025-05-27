@@ -69,20 +69,15 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
     let args = args::CargoKaniArgs::parse_from(&input_args);
     check_is_valid(&args);
 
-    if let Some(CargoKaniSubcommand::List(list_args)) = args.command {
-        return list_cargo(*list_args, args.verify_opts);
-    }
-
-    if let Some(CargoKaniSubcommand::Autoharness(autoharness_args)) = args.command {
-        return autoharness_cargo(*autoharness_args);
-    }
-
     let mut session = match args.command {
+        Some(CargoKaniSubcommand::Autoharness(autoharness_args)) => {
+            return autoharness_cargo(*autoharness_args);
+        }
+        Some(CargoKaniSubcommand::List(list_args)) => {
+            return list_cargo(*list_args, args.verify_opts);
+        }
         Some(CargoKaniSubcommand::Playback(args)) => {
             return playback_cargo(*args);
-        }
-        Some(CargoKaniSubcommand::Autoharness(_)) | Some(CargoKaniSubcommand::List(_)) => {
-            unreachable!()
         }
         None => session::KaniSession::new(args.verify_opts)?,
     };
