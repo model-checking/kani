@@ -284,7 +284,7 @@ pub struct VerificationArgs {
 
     /// Restrict the targets of virtual table function pointer calls.
     /// This feature is unstable and it requires `-Z restrict-vtable` to be used
-    #[arg(long, hide_short_help = true, conflicts_with = "no_restrict_vtable")]
+    #[arg(long, hide = true, conflicts_with = "no_restrict_vtable")]
     pub restrict_vtable: bool,
     /// Disable restricting the targets of virtual table function pointer calls
     #[arg(long, hide_short_help = true)]
@@ -364,9 +364,8 @@ pub struct VerificationArgs {
 
 impl VerificationArgs {
     pub fn restrict_vtable(&self) -> bool {
-        self.restrict_vtable
-            || (self.common_args.unstable_features.contains(UnstableFeature::RestrictVtable)
-                && !self.no_restrict_vtable)
+        self.common_args.unstable_features.contains(UnstableFeature::RestrictVtable)
+            && !self.no_restrict_vtable
         // if we flip the default, this will become: !self.no_restrict_vtable
     }
 
@@ -713,13 +712,11 @@ impl ValidateArgs for VerificationArgs {
         )?;
 
         if self.restrict_vtable {
-            // Deprecated `--restrict-vtable` in favor our `-Z restrict-vtable`.
-            print_deprecated(&self.common_args, "--restrict-vtable", "-Z restrict-vtable");
-            self.common_args.check_unstable(
-                true,
-                "--restrict-vtable",
-                UnstableFeature::RestrictVtable,
-            )?;
+            let z_feature = "-Z restrict-vtable";
+            return Err(Error::raw(
+                ErrorKind::ValueValidation,
+                format!("The `--restrict-vtable` option is obsolete. Use `{z_feature}` instead.",),
+            ));
         }
 
         self.common_args.check_unstable(
@@ -1036,8 +1033,13 @@ mod tests {
 
     #[test]
     fn check_restrict_vtable_unstable() {
-        let restrict_vtable = |args: StandaloneArgs| args.verify_opts.restrict_vtable();
-        check("--restrict-vtable", Some(UnstableFeature::RestrictVtable), restrict_vtable);
+        let res = parse_unstable_enabled("--output-format=terse", UnstableFeature::RestrictVtable)
+            .unwrap();
+        assert!(res.verify_opts.restrict_vtable());
+
+        let res = parse_unstable_enabled("--no-restrict-vtable", UnstableFeature::RestrictVtable)
+            .unwrap();
+        assert!(!res.verify_opts.restrict_vtable());
     }
 
     #[test]
