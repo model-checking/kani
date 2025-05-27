@@ -22,7 +22,6 @@ use tracing::debug;
 
 mod args;
 mod args_toml;
-mod assess;
 mod autoharness;
 mod call_cargo;
 mod call_cbmc;
@@ -79,10 +78,6 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
     }
 
     let mut session = match args.command {
-        Some(CargoKaniSubcommand::Assess(assess_args)) => {
-            let sess = session::KaniSession::new(args.verify_opts)?;
-            return assess::run_assess(sess, *assess_args);
-        }
         Some(CargoKaniSubcommand::Playback(args)) => {
             return playback_cargo(*args);
         }
@@ -94,10 +89,6 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
 
     if !session.args.common_args.quiet {
         print_kani_version(InvocationType::CargoKani(input_args));
-    }
-
-    if session.args.assess {
-        return assess::run_assess(session, assess::AssessArgs::default());
     }
 
     let project = project::cargo_project(&mut session, false)?;

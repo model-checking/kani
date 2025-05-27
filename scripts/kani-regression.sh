@@ -91,9 +91,6 @@ fi
 # Check codegen of firecracker
 time "$SCRIPT_DIR"/codegen-firecracker.sh
 
-# Test run 'cargo kani assess scan'
-"$SCRIPT_DIR"/assess-scan-regression.sh
-
 # Test for --manifest-path which we cannot do through compiletest.
 # It should just successfully find the project and specified proof harness. (Then clean up.)
 FEATURES_MANIFEST_PATH="$KANI_DIR/tests/cargo-kani/cargo-features-flag/Cargo.toml"
