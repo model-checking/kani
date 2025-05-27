@@ -12,6 +12,7 @@ use rustc_abi::{FieldsShape, Primitive, TagEncoding, Variants};
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{List, TypingEnv};
 use rustc_smir::rustc_internal;
+use stable_mir::CrateDef;
 use stable_mir::abi::{ArgAbi, FnAbi, PassMode};
 use stable_mir::mir::mono::{Instance, InstanceKind};
 use stable_mir::mir::{
@@ -496,32 +497,39 @@ impl GotocCtx<'_> {
         let switch_ty = v.typ().clone();
 
         // Switches with empty branches should've been eliminated already.
-        assert!(targets.len() > 1);
-        if targets.len() == 2 {
-            // Translate to a guarded goto
-            let (case, first_target) = targets.branches().next().unwrap();
-            Stmt::block(
-                vec![
-                    v.eq(Expr::int_constant(case, switch_ty)).if_then_else(
-                        Stmt::goto(bb_label(first_target), loc),
-                        None,
-                        loc,
-                    ),
-                    Stmt::goto(bb_label(targets.otherwise()), loc),
-                ],
-                loc,
-            )
-        } else {
-            let cases = targets
-                .branches()
-                .map(|(c, bb)| {
-                    Expr::int_constant(c, switch_ty.clone())
-                        .with_location(loc)
-                        .switch_case(Stmt::goto(bb_label(bb), loc))
-                })
-                .collect();
-            let default = Stmt::goto(bb_label(targets.otherwise()), loc);
-            v.switch(cases, Some(default), loc)
+        match targets.len() {
+            0 => unreachable!("switches have at least one target"),
+            1 => {
+                // Trivial switch.
+                Stmt::goto(bb_label(targets.otherwise()), loc)
+            }
+            2 => {
+                // Translate to a guarded goto
+                let (case, first_target) = targets.branches().next().unwrap();
+                Stmt::block(
+                    vec![
+                        v.eq(Expr::int_constant(case, switch_ty)).if_then_else(
+                            Stmt::goto(bb_label(first_target), loc),
+                            None,
+                            loc,
+                        ),
+                        Stmt::goto(bb_label(targets.otherwise()), loc),
+                    ],
+                    loc,
+                )
+            }
+            3.. => {
+                let cases = targets
+                    .branches()
+                    .map(|(c, bb)| {
+                        Expr::int_constant(c, switch_ty.clone())
+                            .with_location(loc)
+                            .switch_case(Stmt::goto(bb_label(bb), loc))
+                    })
+                    .collect();
+                let default = Stmt::goto(bb_label(targets.otherwise()), loc);
+                v.switch(cases, Some(default), loc)
+            }
         }
     }
 
@@ -567,12 +575,41 @@ impl GotocCtx<'_> {
     /// Generate Goto-C for each argument to a function call.
     ///
     /// N.B. public only because instrinsics use this directly, too.
-    pub(crate) fn codegen_funcall_args(&mut self, fn_abi: &FnAbi, args: &[Operand]) -> Vec<Expr> {
+    pub(crate) fn codegen_funcall_args_for_quantifiers(
+        &mut self,
+        fn_abi: &FnAbi,
+        args: &[Operand],
+    ) -> Vec<Expr> {
         let fargs: Vec<Expr> = args
             .iter()
             .enumerate()
             .filter_map(|(i, op)| {
                 // Functions that require caller info will have an extra parameter.
+                let arg_abi = &fn_abi.args.get(i);
+                let ty = self.operand_ty_stable(op);
+                if ty.kind().is_bool() {
+                    Some(self.codegen_operand_stable(op).cast_to(Type::c_bool()))
+                } else if ty.kind().is_closure()
+                    || (arg_abi.is_none_or(|abi| abi.mode != PassMode::Ignore))
+                {
+                    Some(self.codegen_operand_stable(op))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        debug!(?fargs, args_abi=?fn_abi.args, "codegen_funcall_args");
+        fargs
+    }
+
+    /// Generate Goto-C for each argument to a function call.
+    ///
+    /// N.B. public only because instrinsics use this directly, too.
+    pub(crate) fn codegen_funcall_args(&mut self, fn_abi: &FnAbi, args: &[Operand]) -> Vec<Expr> {
+        let fargs: Vec<Expr> = args
+            .iter()
+            .enumerate()
+            .filter_map(|(i, op)| {
                 let arg_abi = &fn_abi.args.get(i);
                 let ty = self.operand_ty_stable(op);
                 if ty.kind().is_bool() {
@@ -639,7 +676,13 @@ impl GotocCtx<'_> {
                 let mut fargs = if args.is_empty()
                     || fn_def.fn_sig().unwrap().value.abi != Abi::RustCall
                 {
-                    self.codegen_funcall_args(&fn_abi, args)
+                    if instance.def.name() == "kani::internal::kani_forall"
+                        || (instance.def.name() == "kani::internal::kani_exists")
+                    {
+                        self.codegen_funcall_args_for_quantifiers(&fn_abi, args)
+                    } else {
+                        self.codegen_funcall_args(&fn_abi, args)
+                    }
                 } else {
                     let (untupled, first_args) = args.split_last().unwrap();
                     let mut fargs = self.codegen_funcall_args(&fn_abi, first_args);

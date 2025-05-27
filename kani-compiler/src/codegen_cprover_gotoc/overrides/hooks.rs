@@ -823,8 +823,13 @@ fn handle_quantifier(
     let upper_bound = &fargs[1];
     let closure_call_expr = find_closure_call_expr(&instance, gcx, loc)
         .unwrap_or_else(|| unreachable!("Failed to find closure call expression"));
-
-    let predicate = Expr::address_of(fargs[2].clone());
+    let closure_arg = fargs[2].clone();
+    let predicate = if closure_arg.is_symbol() {
+        Expr::address_of(closure_arg)
+    } else {
+        let predicate_ty = fargs[2].typ().clone().to_pointer();
+        Expr::nondet(predicate_ty)
+    };
 
     // Quantified variable.
     let base_name = "kani_quantified_var".to_string();
