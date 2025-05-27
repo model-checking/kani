@@ -7,7 +7,6 @@
 // This was previously failing:
 // https://github.com/model-checking/kani/issues/3717
 
-
 #[kani::proof]
 fn check_assert_2018() {
     let s = String::new();
