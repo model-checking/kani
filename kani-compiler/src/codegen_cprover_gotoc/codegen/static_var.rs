@@ -17,7 +17,18 @@ impl GotocCtx<'_> {
     /// Source: <https://rust-lang.github.io/rfcs/0246-const-vs-static.html>
     pub fn codegen_static(&mut self, def: StaticDef) {
         debug!("codegen_static");
-        let alloc = def.eval_initializer().unwrap();
+        let mut alloc = def.eval_initializer().unwrap();
+        if Instance::from(def).ty().kind().is_union() {
+            let mut newbytes: Vec<Option<u8>> = Vec::new();
+            for byteopt in alloc.bytes.iter() {
+                if byteopt.is_some() {
+                    newbytes.push(byteopt.clone());
+                }
+            }
+            alloc.bytes = newbytes;
+        }
+
+        //println!("alloc: {:?}", alloc);
         let symbol_name = Instance::from(def).mangled_name();
         self.codegen_alloc_in_memory(
             alloc,
