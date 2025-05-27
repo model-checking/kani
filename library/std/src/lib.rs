@@ -64,7 +64,7 @@ macro_rules! assert {
         // strategy, which is tracked in
         // https://github.com/model-checking/kani/issues/692
         if false {
-            kani::__kani__workaround_core_assert!(true, stringify!($first));
+            kani::__kani__workaround_core_assert!(true, "{}", $first);
         }
     }};
     ($cond:expr, $first:expr $(,)?) => {{
