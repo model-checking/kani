@@ -43,8 +43,15 @@ macro_rules! assert {
         // The double negation is to resolve https://github.com/model-checking/kani/issues/2108
         kani::assert(!!$cond, concat!("assertion failed: ", stringify!($cond)));
     };
-    ($cond:expr, $($arg:tt)+) => {{
-        kani::assert(!!$cond, concat!(stringify!($($arg)+)));
+    // Before edition 2021, the `assert!` macro could take a single argument
+    // that wasn't a string literal. This is not supported in edition 2021 and above.
+    // Because we reexport the 2021 edition macro, we need to support this
+    // case. For this, if there is a single argument we do the following:
+    // If it is a literal: Just pass it through and stringify it.
+    // If it isn't a literal: We add a default format
+    // specifier to the macro (see https://github.com/model-checking/kani/issues/1375).
+    ($cond:expr, $first:literal $(,)?) => {{
+        kani::assert(!!$cond, stringify!($first));
         // Process the arguments of the assert inside an unreachable block. This
         // is to make sure errors in the arguments (e.g. an unknown variable or
         // an argument that does not implement the Display or Debug traits) are
@@ -56,6 +63,20 @@ macro_rules! assert {
         // effects). This is fine until we add support for the "unwind" panic
         // strategy, which is tracked in
         // https://github.com/model-checking/kani/issues/692
+        if false {
+            kani::__kani__workaround_core_assert!(true, "{}", $first);
+        }
+    }};
+    ($cond:expr, $first:expr $(,)?) => {{
+        kani::assert(!!$cond, stringify!($first));
+        // See comment above
+        if false {
+            kani::__kani__workaround_core_assert!(true, "{}", $first);
+        }
+    }};
+    ($cond:expr, $($arg:tt)+) => {{
+        kani::assert(!!$cond, concat!(stringify!($($arg)+)));
+        // See comment above
         if false {
             kani::__kani__workaround_core_assert!(true, $($arg)+);
         }
