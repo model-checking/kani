@@ -6,7 +6,7 @@
 # Note that the list.expected file omits the value for "kani-version"
 # to avoid having to update the test every time we bump versions.
 
-output=$(kani list -Z function-contracts src/lib.rs --format json)
+output=$(cargo kani list -Z function-contracts --format json)
 
 # Check that Kani prints the absolute path to kani-list.json
 absolute_path="$(cd "$(dirname "kani-list.json")" && pwd -P && cd - > /dev/null)/$(basename "kani-list.json")"
