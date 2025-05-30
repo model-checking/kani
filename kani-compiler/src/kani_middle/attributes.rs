@@ -508,8 +508,10 @@ impl<'tcx> KaniAttributes<'tcx> {
     }
 
     /// Check that the function specified in the `proof_for_contract` attribute
-    /// is reachable and emit an error if it isn't
-    pub fn check_proof_for_contract(&self, reachable_functions: &HashSet<DefId>) {
+    /// is reachable and emit an error if it isn't.
+    /// This is different from the earlier `check_attributes` call:
+    /// that checks that the specified target exists, but not if we can reach that target from the harness.
+    pub fn check_proof_for_contract_reachability(&self, reachable_functions: &HashSet<DefId>) {
         if let Some((symbol, function, span)) = self.interpret_for_contract_attribute()
             && !reachable_functions.contains(&function)
         {
