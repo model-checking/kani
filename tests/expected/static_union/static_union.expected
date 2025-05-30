@@ -1,0 +1,10 @@
+main.assertion.2\
+         - Status: SUCCESS\
+         - Description: "assertion failed: unsafe { FOO.a[1] } == 0"
+
+
+main.assertion.3\
+         - Status: SUCCESS\
+         - Description: "assertion failed: unsafe { BAR.b } == 3"\
+
+VERIFICATION:- SUCCESSFUL
