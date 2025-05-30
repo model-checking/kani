@@ -97,7 +97,7 @@ pub enum CIntType {
 /// The fields types of a struct or union
 #[derive(PartialEq, Debug, Clone)]
 pub enum DatatypeComponent {
-    Field { name: InternedString, typ: Type },
+    Field { name: InternedString, typ: Type, padding: u64 },
     Padding { name: InternedString, bits: u64 },
 }
 
@@ -146,7 +146,7 @@ impl DatatypeComponent {
 
     pub fn sizeof_in_bits(&self, st: &SymbolTable) -> u64 {
         match self {
-            Field { typ, .. } => typ.sizeof_in_bits(st),
+            Field { typ, padding, .. } => typ.sizeof_in_bits(st) + padding,
             Padding { bits, .. } => *bits,
         }
     }
@@ -194,13 +194,13 @@ impl DatatypeComponent {
         }
     }
 
-    pub fn field<T: Into<InternedString>>(name: T, typ: Type) -> Self {
+    pub fn field<T: Into<InternedString>>(name: T, typ: Type, padding: u64) -> Self {
         let name = name.into();
         assert!(
             Self::typecheck_datatype_field(&typ),
             "Illegal field.\n\tName: {name}\n\tType: {typ:?}"
         );
-        Field { name, typ }
+        Field { name, typ, padding }
     }
 
     pub fn padding<T: Into<InternedString>>(name: T, bits: u64) -> Self {
@@ -254,6 +254,11 @@ impl CIntType {
             CIntType::SizeT => st.machine_model().pointer_width,
             CIntType::SSizeT => st.machine_model().pointer_width,
         }
+    }
+
+    pub fn allignment(&self, st: &SymbolTable) -> u64 {
+        let char_width = st.machine_model().char_width;
+        self.sizeof_in_bits(st) / char_width
     }
 }
 
@@ -379,13 +384,16 @@ impl Type {
             Pointer { .. } => st.machine_model().pointer_width,
             Signedbv { width } => *width,
             Struct { components, .. } => {
-                components.iter().map(|x| x.typ().sizeof_in_bits(st)).sum()
+                components.iter().map(|x| x.sizeof_in_bits(st)).sum::<u64>()
             }
             StructTag(tag) => st.lookup(*tag).unwrap().typ.sizeof_in_bits(st),
             TypeDef { .. } => unreachable!("Expected concrete type."),
-            Union { components, .. } => {
-                components.iter().map(|x| x.typ().sizeof_in_bits(st)).max().unwrap_or(0)
-            }
+            Union { components, .. } => components
+                .iter()
+                .filter(|dc| dc.is_field())
+                .map(|x| x.sizeof_in_bits(st))
+                .max()
+                .unwrap_or(0),
             UnionTag(tag) => st.lookup(*tag).unwrap().typ.sizeof_in_bits(st),
             Unsignedbv { width } => *width,
             // It's possible this should also have size 0, like Code, but we have not been
@@ -1525,7 +1533,7 @@ mod type_tests {
         let struct_name: InternedString = "MyStruct".into();
         let struct_type = Type::struct_type(
             struct_name,
-            vec![DatatypeComponent::Field { name: "field".into(), typ: Double }],
+            vec![DatatypeComponent::Field { name: "field".into(), typ: Double, padding: 0 }],
         );
         // Insert a field to the sym table to represent the struct field.
         let mut sym_table = SymbolTable::new(machine_model_test_stub());
