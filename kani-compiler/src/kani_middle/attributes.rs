@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, HashSet};
 
 use kani_metadata::{CbmcSolver, HarnessAttributes, HarnessKind, Stub};
 use quote::ToTokens;
-use rustc_ast::{LitKind, MetaItem, MetaItemKind, attr};
+use rustc_ast::{LitKind, MetaItem, MetaItemKind};
 use rustc_errors::ErrorGuaranteed;
 use rustc_hir::{AttrArgs, Attribute, def::DefKind, def_id::DefId};
 use rustc_middle::ty::{Instance, TyCtxt, TyKind};
@@ -708,21 +708,6 @@ pub fn is_proof_harness(tcx: TyCtxt, instance: InstanceStable) -> bool {
     })
 }
 
-/// Does this `def_id` have `#[rustc_test_marker]`?
-pub fn is_test_harness_description(tcx: TyCtxt, item: impl CrateDef) -> bool {
-    let def_id = rustc_internal::internal(tcx, item.def_id());
-    let attrs = tcx.get_attrs_unchecked(def_id);
-    attr::contains_name(attrs, rustc_span::symbol::sym::rustc_test_marker)
-}
-
-/// Extract the test harness name from the `#[rustc_test_maker]`
-pub fn test_harness_name(tcx: TyCtxt, def: &impl CrateDef) -> String {
-    let def_id = rustc_internal::internal(tcx, def.def_id());
-    let attrs = tcx.get_attrs_unchecked(def_id);
-    let marker = attr::find_by_name(attrs, rustc_span::symbol::sym::rustc_test_marker).unwrap();
-    parse_str_value(marker).unwrap()
-}
-
 /// Expect the contents of this attribute to be of the format #[attribute =
 /// "value"] and return the `"value"`.
 fn expect_key_string_value(
@@ -1012,16 +997,6 @@ fn parse_key_values(attr: &Attribute) -> Result<BTreeMap<String, String>, String
             )),
         })
         .collect()
-}
-
-/// Extracts the string value argument from the attribute provided.
-///
-/// For attributes with the following format, this will return a string that represents "VALUE".
-/// - `#[attribute = "VALUE"]`
-fn parse_str_value(attr: &Attribute) -> Option<String> {
-    // Vector of meta items , that contain the arguments given the attribute
-    let value = attr.value_str();
-    value.map(|sym| sym.to_string())
 }
 
 /// If the attribute is named `kanitool::name`, this extracts `name`

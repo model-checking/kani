@@ -34,8 +34,6 @@ pub struct CargoOutputs {
     pub metadata: Vec<Artifact>,
     /// Recording the cargo metadata from the build
     pub cargo_metadata: Metadata,
-    /// For build `keep_going` mode, we collect the targets that we failed to compile.
-    pub failed_targets: Option<Vec<String>>,
 }
 
 impl KaniSession {
@@ -238,12 +236,7 @@ crate-type = ["lib"]
             bail!("No supported targets were found.");
         }
 
-        Ok(CargoOutputs {
-            outdir,
-            metadata: artifacts,
-            cargo_metadata: metadata,
-            failed_targets: keep_going.then_some(failed_targets),
-        })
+        Ok(CargoOutputs { outdir, metadata: artifacts, cargo_metadata: metadata })
     }
 
     pub fn cargo_metadata(&self, build_target: &str) -> Result<Metadata> {
