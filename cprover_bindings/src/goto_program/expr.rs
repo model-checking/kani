@@ -297,8 +297,8 @@ pub fn arithmetic_overflow_result_type(operand_type: Type) -> Type {
     Type::struct_type(
         name,
         vec![
-            DatatypeComponent::field(ARITH_OVERFLOW_RESULT_FIELD, operand_type),
-            DatatypeComponent::field(ARITH_OVERFLOW_OVERFLOWED_FIELD, Type::bool()),
+            DatatypeComponent::field(ARITH_OVERFLOW_RESULT_FIELD, operand_type, 0),
+            DatatypeComponent::field(ARITH_OVERFLOW_OVERFLOWED_FIELD, Type::bool(), 0),
         ],
     )
 }

@@ -131,7 +131,7 @@ impl ToIrepId for UnaryOperator {
 impl ToIrep for DatatypeComponent {
     fn to_irep(&self, mm: &MachineModel) -> Irep {
         match self {
-            DatatypeComponent::Field { name, typ } => Irep::just_named_sub(linear_map![
+            DatatypeComponent::Field { name, typ, .. } => Irep::just_named_sub(linear_map![
                 (IrepId::Name, Irep::just_string_id(name.to_string())),
                 (IrepId::CPrettyName, Irep::just_string_id(name.to_string())),
                 (IrepId::Type, typ.to_irep(mm)),

@@ -540,8 +540,11 @@ impl<'tcx> GotocCtx<'tcx> {
                     AllocData::Bytes(bytes) => DatatypeComponent::field(
                         i.to_string(),
                         Type::unsigned_int(8).array_of(bytes.len()),
+                        0,
                     ),
-                    AllocData::Expr(e) => DatatypeComponent::field(i.to_string(), e.typ().clone()),
+                    AllocData::Expr(e) => {
+                        DatatypeComponent::field(i.to_string(), e.typ().clone(), 0)
+                    }
                 })
                 .collect()
         });
