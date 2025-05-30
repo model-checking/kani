@@ -155,7 +155,7 @@ impl GotocCtx<'_> {
                     writeln!(out, "struct {tag} ({pretty_name}) {{")?;
                     for c in components {
                         match c {
-                            DatatypeComponent::Field { name, typ } => {
+                            DatatypeComponent::Field { name, typ, .. } => {
                                 write!(out, "{:indent$}{name}: ", "", indent = indent + 2)?;
                                 debug_write_type(ctx, typ, out, indent + 2)?;
                                 writeln!(out, ",")?;
@@ -191,7 +191,7 @@ impl GotocCtx<'_> {
                     writeln!(out, "union {tag} ({pretty_name}) {{ ")?;
                     for c in components {
                         match c {
-                            DatatypeComponent::Field { name, typ } => {
+                            DatatypeComponent::Field { name, typ, .. } => {
                                 write!(out, "{:indent$}{name}: ", "", indent = indent + 2)?;
                                 debug_write_type(ctx, typ, out, indent + 2)?;
                                 writeln!(out, ",")?;
@@ -274,7 +274,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // vtable field name, i.e., 3_vol (idx_method)
         let vtable_field_name = self.vtable_field_name(idx);
 
-        DatatypeComponent::field(vtable_field_name, fn_ptr)
+        DatatypeComponent::field(vtable_field_name, fn_ptr, 0)
     }
 
     pub fn trait_ref_to_dyn_trait(
@@ -312,7 +312,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // vtable field name, i.e., 3_vol (idx_method)
         let vtable_field_name = self.vtable_field_name(idx);
 
-        DatatypeComponent::field(vtable_field_name, vtable_ptr)
+        DatatypeComponent::field(vtable_field_name, vtable_ptr, 0)
     }
 
     /// Generates a vtable that looks like this:
@@ -389,8 +389,8 @@ impl<'tcx> GotocCtx<'tcx> {
             // See the comment on codegen_ty_ref.
             let vtable_name = ctx.vtable_name(trait_type);
             vec![
-                DatatypeComponent::field("data", data_type),
-                DatatypeComponent::field("vtable", Type::struct_tag(vtable_name).to_pointer()),
+                DatatypeComponent::field("data", data_type, 0),
+                DatatypeComponent::field("vtable", Type::struct_tag(vtable_name).to_pointer(), 0),
             ]
         })
     }
@@ -769,7 +769,11 @@ impl<'tcx> GotocCtx<'tcx> {
                         final_fields.push(padding)
                     }
                     // we insert the actual field
-                    final_fields.push(DatatypeComponent::field(fld_name, self.codegen_ty(*fld_ty)));
+                    final_fields.push(DatatypeComponent::field(
+                        fld_name,
+                        self.codegen_ty(*fld_ty),
+                        0,
+                    ));
                     let layout = self.layout_of(*fld_ty);
                     // we compute the overall offset of the end of the current struct
                     offset = fld_offset + layout.size;
@@ -904,6 +908,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     "DirectFields".into(),
                     Some(*discriminant_field),
                 ),
+                padding: 0,
             };
             let mut fields = vec![direct_fields];
             for var_idx in variants.indices() {
@@ -917,6 +922,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         variant_name,
                         None,
                     ),
+                    padding: 0,
                 });
             }
             fields
@@ -959,6 +965,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 fields.push(DatatypeComponent::Field {
                     name: field_name,
                     typ: ctx.codegen_ty(field_ty),
+                    padding: 0,
                 });
                 offset = field_offset + field_size;
             }
@@ -1010,8 +1017,8 @@ impl<'tcx> GotocCtx<'tcx> {
             };
             self.ensure_struct(pointer_name, pretty_name, |_, _| {
                 vec![
-                    DatatypeComponent::field("data", element_type.to_pointer()),
-                    DatatypeComponent::field("len", Type::size_t()),
+                    DatatypeComponent::field("data", element_type.to_pointer(), 0),
+                    DatatypeComponent::field("len", Type::size_t(), 0),
                 ]
             })
         } else if self.use_vtable_fat_pointer(pointee_type) {
@@ -1183,16 +1190,21 @@ impl<'tcx> GotocCtx<'tcx> {
         def: &'tcx AdtDef,
         subst: &'tcx GenericArgsRef<'tcx>,
     ) -> Type {
+        let union_size = rustc_internal::stable(ty).layout().unwrap().shape().size.bits();
         self.ensure_union(self.ty_mangled_name(ty), self.ty_pretty_name(ty), |ctx, _| {
-            def.variants().raw[0]
+            let fields_info: Vec<(String, Type, u64)> = def.variants().raw[0]
                 .fields
                 .iter()
                 .map(|f| {
-                    DatatypeComponent::field(
-                        f.name.to_string(),
-                        ctx.codegen_ty(f.ty(ctx.tcx, subst)),
-                    )
+                    let ty = rustc_internal::stable(f.ty(ctx.tcx, subst));
+                    let ty_size = ty.layout().unwrap().shape().size.bits();
+                    let padding_size = union_size - ty_size;
+                    (f.name.to_string(), ctx.codegen_ty_stable(ty), padding_size as u64)
                 })
+                .collect();
+            fields_info
+                .iter()
+                .map(|(name, ty, padding)| DatatypeComponent::field(name, ty.clone(), *padding))
                 .collect()
         })
     }
@@ -1285,7 +1297,7 @@ impl<'tcx> GotocCtx<'tcx> {
                             let discr_offset = gcx.layout_of(discr_t).size;
                             let initial_offset =
                                 gcx.variant_min_offset(variants).unwrap_or(discr_offset);
-                            let mut fields = vec![DatatypeComponent::field("case", int)];
+                            let mut fields = vec![DatatypeComponent::field("case", int, 0)];
                             if let Some(padding) =
                                 gcx.codegen_struct_padding(discr_offset, initial_offset, 0)
                             {
@@ -1305,6 +1317,7 @@ impl<'tcx> GotocCtx<'tcx> {
                                         initial_offset,
                                     )
                                 }),
+                                0,
                             ));
                             // Check if any padding is needed for alignment. This is needed for
                             // https://github.com/model-checking/kani/issues/2857 for example.
@@ -1487,6 +1500,7 @@ impl<'tcx> GotocCtx<'tcx> {
                             &layouts[i],
                             initial_offset,
                         ),
+                        0,
                     ))
                 }
             })
@@ -1607,7 +1621,7 @@ impl<'tcx> GotocCtx<'tcx> {
                             } else {
                                 ctx.codegen_ty(field_ty)
                             };
-                            DatatypeComponent::Field { name, typ }
+                            DatatypeComponent::Field { name, typ, padding: 0 }
                         })
                         .collect();
                     trace!(?data_path, ?curr, ?s_name, ?components, "codegen_trait_receiver");
@@ -1728,11 +1742,13 @@ fn common_vtable_fields(drop_in_place: Type) -> Vec<DatatypeComponent> {
         .iter()
         .map(|entry| match entry {
             VtblEntry::MetadataDropInPlace => {
-                DatatypeComponent::field(VTABLE_DROP_FIELD, drop_in_place.clone())
+                DatatypeComponent::field(VTABLE_DROP_FIELD, drop_in_place.clone(), 0)
             }
-            VtblEntry::MetadataSize => DatatypeComponent::field(VTABLE_SIZE_FIELD, Type::size_t()),
+            VtblEntry::MetadataSize => {
+                DatatypeComponent::field(VTABLE_SIZE_FIELD, Type::size_t(), 0)
+            }
             VtblEntry::MetadataAlign => {
-                DatatypeComponent::field(VTABLE_ALIGN_FIELD, Type::size_t())
+                DatatypeComponent::field(VTABLE_ALIGN_FIELD, Type::size_t(), 0)
             }
             VtblEntry::Vacant | VtblEntry::Method(_) | VtblEntry::TraitVPtr(_) => {
                 unimplemented!("Entry shouldn't be common: {:?}", entry)
