@@ -23,7 +23,7 @@ pub enum Intrinsic {
     AtomicCxchg(String),
     AtomicCxchgWeak(String),
     AtomicFence(String),
-    AtomicLoad(String),
+    AtomicLoad,
     AtomicMax(String),
     AtomicMin(String),
     AtomicNand(String),
@@ -483,9 +483,9 @@ fn try_match_atomic(intrinsic_instance: &Instance) -> Option<Intrinsic> {
     } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_fence_") {
         assert_sig_matches!(sig, => RigidTy::Tuple(_));
         Some(Intrinsic::AtomicFence(suffix.into()))
-    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_load_") {
+    } else if intrinsic_str == "atomic_load" {
         assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Not) => _);
-        Some(Intrinsic::AtomicLoad(suffix.into()))
+        Some(Intrinsic::AtomicLoad)
     } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_max_") {
         assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
         Some(Intrinsic::AtomicMax(suffix.into()))

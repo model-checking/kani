@@ -227,7 +227,7 @@ impl<'tcx> Analysis<'tcx> for PointsToAnalysis<'_, 'tcx> {
                         }
                         // All `atomic_load` intrinsics take `src` as an argument.
                         // This is equivalent to `destination = *src`.
-                        Intrinsic::AtomicLoad(_) => {
+                        Intrinsic::AtomicLoad => {
                             let src_set = self.successors_for_deref(state, args[0].node.clone());
                             let destination_set = state.resolve_place(*destination, self.instance);
                             state.extend(&destination_set, &state.successors(&src_set));
