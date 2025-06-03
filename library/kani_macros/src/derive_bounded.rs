@@ -53,13 +53,14 @@ pub(crate) fn expand_derive_bounded_arbitrary(
     };
 
     // add `T: Arbitrary` bounds for generics
-    let (generics, clauses) = quote_generics(&parsed.generics);
+    let clauses = quote_generics(&parsed.generics);
+    let (impl_generics, ty_generics, _) = parsed.generics.split_for_impl();
     let name = &parsed.ident;
 
     // generate the implementation
     let kani_path = kani_path();
     quote! {
-        impl #generics #kani_path::BoundedArbitrary for #name #generics
+        impl #impl_generics #kani_path::BoundedArbitrary for #name #ty_generics
             #clauses
         {
             fn bounded_any<const N: usize>() -> Self {
@@ -127,12 +128,14 @@ fn union_constructor(ident: &syn::Ident, _data_union: &syn::DataUnion) -> TokenS
 ///     ...
 /// }
 /// ```
-fn quote_generics(generics: &syn::Generics) -> (TokenStream, TokenStream) {
+fn quote_generics(generics: &syn::Generics) -> TokenStream {
     let kani_path = kani_path();
-    let params = generics.type_params().map(|param| quote!(#param)).collect::<Vec<_>>();
-    let where_clauses = generics.type_params().map(|param| quote!(#param : #kani_path::Arbitrary));
-    if !params.is_empty() {
-        (quote!(<#(#params),*>), quote!(where #(#where_clauses),*))
+    let where_clauses = generics.type_params().map(|param| {
+        let ident = &param.ident;
+        quote!(#ident : #kani_path::Arbitrary)
+    });
+    if generics.type_params().count() > 0 {
+        quote!(where #(#where_clauses),*)
     } else {
         Default::default()
     }
