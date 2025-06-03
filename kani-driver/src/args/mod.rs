@@ -52,6 +52,7 @@ pub fn print_obsolete(verbosity: &CommonArgs, option: &str) {
     }
 }
 
+#[allow(dead_code)]
 pub fn print_deprecated(verbosity: &CommonArgs, option: &str, alternative: &str) {
     if !verbosity.quiet {
         warning(&format!(
@@ -284,7 +285,7 @@ pub struct VerificationArgs {
 
     /// Restrict the targets of virtual table function pointer calls.
     /// This feature is unstable and it requires `-Z restrict-vtable` to be used
-    #[arg(long, hide_short_help = true, conflicts_with = "no_restrict_vtable")]
+    #[arg(long, hide = true, conflicts_with = "no_restrict_vtable")]
     pub restrict_vtable: bool,
     /// Disable restricting the targets of virtual table function pointer calls
     #[arg(long, hide_short_help = true)]
@@ -299,7 +300,7 @@ pub struct VerificationArgs {
     pub ignore_global_asm: bool,
 
     /// Write the GotoC symbol table to a file in JSON format instead of goto binary format.
-    #[arg(long, hide_short_help = true)]
+    #[arg(long, hide = true)]
     pub write_json_symtab: bool,
 
     /// Execute CBMC's sanity checks to ensure the goto-program we generate is correct.
@@ -364,9 +365,8 @@ pub struct VerificationArgs {
 
 impl VerificationArgs {
     pub fn restrict_vtable(&self) -> bool {
-        self.restrict_vtable
-            || (self.common_args.unstable_features.contains(UnstableFeature::RestrictVtable)
-                && !self.no_restrict_vtable)
+        self.common_args.unstable_features.contains(UnstableFeature::RestrictVtable)
+            && !self.no_restrict_vtable
         // if we flip the default, this will become: !self.no_restrict_vtable
     }
 
@@ -589,7 +589,10 @@ impl ValidateArgs for VerificationArgs {
         }
 
         if self.write_json_symtab {
-            print_obsolete(&self.common_args, "--write-json-symtab");
+            return Err(Error::raw(
+                ErrorKind::ValueValidation,
+                "The `--write-json-symtab` option is obsolete.",
+            ));
         }
 
         // TODO: these conflicting flags reflect what's necessary to pass current tests unmodified.
@@ -710,13 +713,11 @@ impl ValidateArgs for VerificationArgs {
         )?;
 
         if self.restrict_vtable {
-            // Deprecated `--restrict-vtable` in favor our `-Z restrict-vtable`.
-            print_deprecated(&self.common_args, "--restrict-vtable", "-Z restrict-vtable");
-            self.common_args.check_unstable(
-                true,
-                "--restrict-vtable",
-                UnstableFeature::RestrictVtable,
-            )?;
+            let z_feature = "-Z restrict-vtable";
+            return Err(Error::raw(
+                ErrorKind::ValueValidation,
+                format!("The `--restrict-vtable` option is obsolete. Use `{z_feature}` instead.",),
+            ));
         }
 
         self.common_args.check_unstable(
@@ -728,13 +729,21 @@ impl ValidateArgs for VerificationArgs {
         if !self.c_lib.is_empty()
             && !self.common_args.unstable_features.contains(UnstableFeature::CFfi)
         {
+            let z_feature = "-Z c-ffi";
             if self.common_args.enable_unstable {
-                print_deprecated(&self.common_args, "`--enable-unstable`", "-Z c-ffi");
+                return Err(Error::raw(
+                    ErrorKind::ValueValidation,
+                    format!(
+                        "The `--enable-unstable` option is obsolete. Use `{z_feature}` instead.",
+                    ),
+                ));
             } else {
                 return Err(Error::raw(
                     ErrorKind::MissingRequiredArgument,
-                    "The `--c-lib` argument is unstable and requires `-Z c-ffi` to enable \
-                unstable C-FFI support.",
+                    format!(
+                        "The `--c-lib` argument is unstable and requires `{z_feature}` to enable \
+                unstable C-FFI support."
+                    ),
                 ));
             }
         }
@@ -1025,8 +1034,13 @@ mod tests {
 
     #[test]
     fn check_restrict_vtable_unstable() {
-        let restrict_vtable = |args: StandaloneArgs| args.verify_opts.restrict_vtable();
-        check("--restrict-vtable", Some(UnstableFeature::RestrictVtable), restrict_vtable);
+        let res = parse_unstable_enabled("--output-format=terse", UnstableFeature::RestrictVtable)
+            .unwrap();
+        assert!(res.verify_opts.restrict_vtable());
+
+        let res = parse_unstable_enabled("--no-restrict-vtable", UnstableFeature::RestrictVtable)
+            .unwrap();
+        assert!(!res.verify_opts.restrict_vtable());
     }
 
     #[test]
