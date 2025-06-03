@@ -41,7 +41,7 @@ use rustc_session::Session;
 use rustc_session::config::{CrateType, OutputFilenames, OutputType};
 use rustc_session::output::out_filename;
 use rustc_smir::rustc_internal;
-use rustc_span::symbol::Symbol;
+use rustc_span::{Symbol, sym};
 use rustc_target::spec::PanicStrategy;
 use stable_mir::CrateDef;
 use stable_mir::mir::mono::{Instance, MonoItem};
@@ -252,21 +252,58 @@ impl CodegenBackend for GotocCodegenBackend {
         DEFAULT_LOCALE_RESOURCE
     }
 
-    fn target_config(&self, _sess: &Session) -> TargetConfig {
+    fn target_config(&self, sess: &Session) -> TargetConfig {
+        // This code is copied from the cranelift backend:
+        // https://github.com/rust-lang/rust/blob/a124fb3cb7291d75872934f411d81fe298379ace/compiler/rustc_codegen_cranelift/src/lib.rs#L184
+        // FIXME return the actually used target features. this is necessary for #[cfg(target_feature)]
+        let target_features = if sess.target.arch == "x86_64" && sess.target.os != "none" {
+            // x86_64 mandates SSE2 support and rustc requires the x87 feature to be enabled
+            vec![sym::fsxr, sym::sse, sym::sse2, Symbol::intern("x87")]
+        } else if sess.target.arch == "aarch64" {
+            match &*sess.target.os {
+                "none" => vec![],
+                // On macOS the aes, sha2 and sha3 features are enabled by default and ring
+                // fails to compile on macOS when they are not present.
+                "macos" => vec![sym::neon, sym::aes, sym::sha2, sym::sha3],
+                // AArch64 mandates Neon support
+                _ => vec![sym::neon],
+            }
+        } else {
+            vec![]
+        };
+        // FIXME do `unstable_target_features` properly
+        let unstable_target_features = target_features.clone();
+
+        // FIXME(f16_f128): LLVM 20 (currently used by `rustc`) passes `f128` in XMM registers on
+        // Windows, whereas LLVM 21+ and Cranelift pass it indirectly. This means that `f128` won't
+        // work when linking against a LLVM-built sysroot.
+        let has_reliable_f128 = !sess.target.is_like_windows;
+        let has_reliable_f16 = match &*sess.target.arch {
+            // FIXME(f16_f128): LLVM 20 does not support `f16` on s390x, meaning the required
+            // builtins are not available in `compiler-builtins`.
+            "s390x" => false,
+            // FIXME(f16_f128): `rustc_codegen_llvm` currently disables support on Windows GNU
+            // targets due to GCC using a different ABI than LLVM. Therefore `f16` won't be
+            // available when using a LLVM-built sysroot.
+            "x86_64"
+                if sess.target.os == "windows"
+                    && sess.target.env == "gnu"
+                    && sess.target.abi != "llvm" =>
+            {
+                false
+            }
+            _ => true,
+        };
+
         TargetConfig {
-            target_features: vec![],
-            unstable_target_features: vec![
-                Symbol::intern("sse"),
-                Symbol::intern("neon"),
-                Symbol::intern("x87"),
-                Symbol::intern("sse2"),
-            ],
-            // `true` is used as a default so backends need to acknowledge when they do not
-            // support the float types, rather than accidentally quietly skipping all tests.
-            has_reliable_f16: true,
-            has_reliable_f16_math: true,
-            has_reliable_f128: true,
-            has_reliable_f128_math: true,
+            target_features,
+            unstable_target_features,
+            // `rustc_codegen_cranelift` polyfills functionality not yet
+            // available in Cranelift.
+            has_reliable_f16,
+            has_reliable_f16_math: has_reliable_f16,
+            has_reliable_f128,
+            has_reliable_f128_math: has_reliable_f128,
         }
     }
 
