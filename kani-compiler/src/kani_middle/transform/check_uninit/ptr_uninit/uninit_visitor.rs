@@ -286,7 +286,7 @@ impl MirVisitor for CheckUninitVisitor {
                             Intrinsic::AtomicAnd(_)
                             | Intrinsic::AtomicCxchg(_)
                             | Intrinsic::AtomicCxchgWeak(_)
-                            | Intrinsic::AtomicLoad(_)
+                            | Intrinsic::AtomicLoad
                             | Intrinsic::AtomicMax(_)
                             | Intrinsic::AtomicMin(_)
                             | Intrinsic::AtomicNand(_)

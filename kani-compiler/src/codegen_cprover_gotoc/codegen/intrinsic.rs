@@ -308,7 +308,7 @@ impl GotocCtx<'_> {
             }
 
             Intrinsic::AtomicFence(_) => self.codegen_atomic_noop(intrinsic_str, loc),
-            Intrinsic::AtomicLoad(_) => self.codegen_atomic_load(intrinsic_str, fargs, place, loc),
+            Intrinsic::AtomicLoad => self.codegen_atomic_load(intrinsic_str, fargs, place, loc),
             Intrinsic::AtomicMax(_) => codegen_atomic_binop!(max),
             Intrinsic::AtomicMin(_) => codegen_atomic_binop!(min),
             Intrinsic::AtomicNand(_) => codegen_atomic_binop!(bitnand),
