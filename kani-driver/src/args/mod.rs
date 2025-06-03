@@ -430,6 +430,7 @@ pub enum OutputFormat {
 }
 
 #[derive(Debug, clap::Args)]
+#[clap(next_help_heading = "Memory Checks")]
 pub struct CheckArgs {
     // Rust argument parsers (/clap) don't have the convenient '--flag' and '--no-flag' boolean pairs, so approximate
     // We're put both here then create helper functions to "intepret"
