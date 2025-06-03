@@ -357,19 +357,19 @@ pub struct VerificationArgs {
     #[arg(long, hide = true)]
     pub write_json_symtab: bool,
 
+    #[command(flatten)]
+    pub checks: CheckArgs,
+
+    #[command(flatten)]
+    pub common_args: CommonArgs,
+
     /// Arguments to pass down to Cargo
     #[command(flatten)]
     pub cargo: CargoCommonArgs,
 
-    #[command(flatten)]
-    pub checks: CheckArgs,
-
     /// Arguments used to select Cargo target.
     #[command(flatten)]
     pub target: CargoTargetArgs,
-
-    #[command(flatten)]
-    pub common_args: CommonArgs,
 }
 
 impl VerificationArgs {
