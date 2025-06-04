@@ -77,28 +77,25 @@ mod intrinsics {
         let mask_len = mask_array.len();
 
         // Process 8 lanes at a time when possible
-        for byte in 0..mask_len {
+        for (byte_idx, byte) in mask_array.iter_mut().enumerate() {
             // Calculate the starting lane for this byte
-            let start_lane = byte * 8;
+            let start_lane = byte_idx * 8;
             // Calculate how many bits to process (handle the last byte which might be partial)
             let bits_to_process = (LANES - start_lane).min(8);
 
-            // disable formatting for this code block to make it easier to edit/read
-            #[rustfmt::skip]
-            let byte_mask =
-                if bits_to_process > 0 && input[start_lane + 0] == T::TRUE { 1 << 0 } else { 0 } |
-                if bits_to_process > 1 && input[start_lane + 1] == T::TRUE { 1 << 1 } else { 0 } |
-                if bits_to_process > 2 && input[start_lane + 2] == T::TRUE { 1 << 2 } else { 0 } |
-                if bits_to_process > 3 && input[start_lane + 3] == T::TRUE { 1 << 3 } else { 0 } |
-                if bits_to_process > 4 && input[start_lane + 4] == T::TRUE { 1 << 4 } else { 0 } |
-                if bits_to_process > 5 && input[start_lane + 5] == T::TRUE { 1 << 5 } else { 0 } |
-                if bits_to_process > 6 && input[start_lane + 6] == T::TRUE { 1 << 6 } else { 0 } |
-                if bits_to_process > 7 && input[start_lane + 7] == T::TRUE { 1 << 7 } else { 0 };
+            *byte = if bits_to_process > 0 && input[start_lane] == T::TRUE { 1 << 0 } else { 0 }
+                | if bits_to_process > 1 && input[start_lane + 1] == T::TRUE { 1 << 1 } else { 0 }
+                | if bits_to_process > 2 && input[start_lane + 2] == T::TRUE { 1 << 2 } else { 0 }
+                | if bits_to_process > 3 && input[start_lane + 3] == T::TRUE { 1 << 3 } else { 0 }
+                | if bits_to_process > 4 && input[start_lane + 4] == T::TRUE { 1 << 4 } else { 0 }
+                | if bits_to_process > 5 && input[start_lane + 5] == T::TRUE { 1 << 5 } else { 0 }
+                | if bits_to_process > 6 && input[start_lane + 6] == T::TRUE { 1 << 6 } else { 0 }
+                | if bits_to_process > 7 && input[start_lane + 7] == T::TRUE { 1 << 7 } else { 0 };
 
             assert!(
                 bits_to_process < 1
-                    || input[start_lane + 0] == T::TRUE
-                    || input[start_lane + 0] == T::FALSE,
+                    || input[start_lane] == T::TRUE
+                    || input[start_lane] == T::FALSE,
                 "Masks values should either be 0 or -1"
             );
             assert!(
@@ -143,8 +140,6 @@ mod intrinsics {
                     || input[start_lane + 7] == T::FALSE,
                 "Masks values should either be 0 or -1"
             );
-
-            mask_array[byte] = byte_mask;
         }
 
         mask_array
