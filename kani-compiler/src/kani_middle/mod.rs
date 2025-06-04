@@ -94,10 +94,10 @@ impl TyVisitor for FindUnsafeCell<'_> {
 pub fn check_reachable_items(tcx: TyCtxt, queries: &QueryDb, items: &[MonoItem]) {
     // Avoid printing the same error multiple times for different instantiations of the same item.
     let mut def_ids = HashSet::new();
-    let reachable_functions: HashSet<InternalDefId> = items
+    let reachable_functions: HashSet<DefId> = items
         .iter()
         .filter_map(|i| match i {
-            MonoItem::Fn(instance) => Some(rustc_internal::internal(tcx, instance.def.def_id())),
+            MonoItem::Fn(instance) => Some(instance.def.def_id()),
             _ => None,
         })
         .collect();
