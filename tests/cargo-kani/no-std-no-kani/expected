@@ -1,2 +1,0 @@
-error: Failed to detect Kani functions.
-Try adding `crate extern kani` to the crate root to explicitly import kani.
