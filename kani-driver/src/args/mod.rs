@@ -69,7 +69,7 @@ pub fn print_stabilized_option_warning(verbosity: &CommonArgs, option: &str) {
     if !verbosity.quiet {
         warning(&format!(
             "The `{option}` option has been stabilized, so -Z {} has no effect for it. \
-            Remove it unless you are passing another unstable option.",
+            Remove it unless it is needed for another unstable option.",
             UnstableFeature::UnstableOptions,
         ))
     }
