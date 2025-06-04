@@ -15,7 +15,7 @@ fn concrete_state() -> RandomState {
 
 #[kani::proof]
 #[kani::stub(RandomState::new, concrete_state)]
-#[kani::unwind(9)]
+#[kani::unwind(17)]
 #[kani::solver(kissat)]
 fn check_insert() {
     let mut set: HashSet<i32> = HashSet::default();
@@ -27,7 +27,7 @@ fn check_insert() {
 
 #[kani::proof]
 #[kani::stub(RandomState::new, concrete_state)]
-#[kani::unwind(9)]
+#[kani::unwind(17)]
 #[kani::solver(kissat)]
 fn check_contains() {
     let first = kani::any();
@@ -37,7 +37,7 @@ fn check_contains() {
 
 #[kani::proof]
 #[kani::stub(RandomState::new, concrete_state)]
-#[kani::unwind(9)]
+#[kani::unwind(17)]
 #[kani::solver(kissat)]
 fn check_contains_str() {
     let set = HashSet::from(["s"]);
@@ -49,7 +49,7 @@ fn check_contains_str() {
 mod slow {
     #[kani::proof]
     #[kani::stub(RandomState::new, concrete_state)]
-    #[kani::unwind(9)]
+    #[kani::unwind(17)]
     fn check_insert_two_elements() {
         let mut set: HashSet<i8> = HashSet::default();
         let first = kani::any();
@@ -63,7 +63,7 @@ mod slow {
 
     #[kani::proof]
     #[kani::stub(RandomState::new, concrete_state)]
-    #[kani::unwind(9)]
+    #[kani::unwind(17)]
     #[kani::solver(kissat)]
     fn check_insert_two_concrete() {
         let mut set: HashSet<i32> = HashSet::default();
