@@ -74,7 +74,6 @@ mod intrinsics {
         T: MaskElement,
     {
         let mut mask_array = [0; mask_len(LANES)];
-        let mask_len = mask_array.len();
 
         // Process 8 lanes at a time when possible
         for (byte_idx, byte) in mask_array.iter_mut().enumerate() {
