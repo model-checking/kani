@@ -75,10 +75,29 @@ mod intrinsics {
     {
         let mut mask_array = [0; mask_len(LANES)];
 
-        // Process 8 lanes at a time when possible
+        // The implementation below is the equivalent of the following:
+        // ```rust
+        //     for lane in (0..input.len()).rev() {
+        //         let byte = lane / 8;
+        //         let mask = &mut mask_array[byte];
+        //         let shift_mask = *mask << 1;
+        //         *mask = if input[lane] == T::TRUE {
+        //             shift_mask | 0x1
+        //         } else {
+        //             assert_eq!(input[lane], T::FALSE, "Masks values should either be 0 or -1");
+        //             shift_mask
+        //         };
+        //     }
+        // ```
+        // but is intentionally written in a way that minimizes the number of
+        // loop iterations. In particular, it's implemented as a nested loop
+        // where the outer loop iterates over bytes and the inner "loop" (which
+        // is manually unwound) iterates over bits in a byte.  This is to avoid
+        // needing a high unwind value for harnesses that invoke this code (e.g.
+        // through the `HashSet` data structure).
         for (byte_idx, byte) in mask_array.iter_mut().enumerate() {
             // Calculate the starting lane for this byte
-            let start_lane = byte_idx * 8;
+            let start_lane = byte_idx << 3;
             // Calculate how many bits to process (handle the last byte which might be partial)
             let bits_to_process = (LANES - start_lane).min(8);
 
