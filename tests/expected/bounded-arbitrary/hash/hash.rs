@@ -4,7 +4,7 @@
 //! This file tests whether we can generate a bounded Hashmap/Hashset that has any possible size between 0-BOUND
 
 #[kani::proof]
-#[kani::unwind(5)]
+#[kani::unwind(9)]
 fn check_hashmap() {
     // A larger bound causes this to take a long time
     const BOUND: usize = 1;
@@ -14,7 +14,7 @@ fn check_hashmap() {
 }
 
 #[kani::proof]
-#[kani::unwind(5)]
+#[kani::unwind(9)]
 fn check_hashset() {
     const BOUND: usize = 1;
     let hash_set: std::collections::HashSet<u8, _> = kani::bounded_any::<_, BOUND>();
