@@ -38,7 +38,7 @@
 //!
 //! ### Reusing
 //!
-//! You can turn an [`UnstableFeature`] back into it's command line
+//! You can turn an [`UnstableFeature`] back into its command line
 //! representation. This should be done with
 //! [`EnabledUnstableFeatures::as_arguments`], which returns an iterator that,
 //! when passed to e.g. [`std::process::Command::args`] will enable those
@@ -115,6 +115,20 @@ impl UnstableFeature {
     pub fn as_argument(&self) -> [&str; 2] {
         ["-Z", self.as_ref()]
     }
+
+    /// Serialize this feature into a format ideal for error messages.
+    pub fn as_argument_string(&self) -> String {
+        self.as_argument().join(" ")
+    }
+
+    /// If this unstable feature has been stabilized, return the version it was stabilized in.
+    /// Use this function to produce warnings that the unstable flag is no longer necessary.
+    pub fn stabilization_version(&self) -> Option<String> {
+        match self {
+            UnstableFeature::List => Some("0.63.0".to_string()),
+            _ => None,
+        }
+    }
 }
 
 /// An opaque collection of unstable features that is enabled on this session.
@@ -141,6 +155,10 @@ impl EnabledUnstableFeatures {
     /// Is this feature enabled?
     pub fn contains(&self, feature: UnstableFeature) -> bool {
         self.enabled_unstable_features.contains(&feature)
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &UnstableFeature> {
+        self.enabled_unstable_features.iter()
     }
 
     /// Enable an additional unstable feature.
