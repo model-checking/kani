@@ -53,10 +53,10 @@ pub fn print_obsolete(verbosity: &CommonArgs, option: &str) {
 }
 
 #[allow(dead_code)]
-pub fn print_deprecated(verbosity: &CommonArgs, option: &str, alternative: &str) {
+pub fn print_deprecated(verbosity: &CommonArgs, option: &str, version: &str, alternative: &str) {
     if !verbosity.quiet {
         warning(&format!(
-            "The `{option}` option is deprecated. This option will be removed soon. \
+            "The `{option}` option has been deprecated since {version} and will be removed soon. \
             Consider {alternative} instead"
         ))
     }
@@ -532,21 +532,27 @@ impl CheckArgs {
         !self.no_default_checks && !self.no_unwinding_checks || self.unwinding_checks
     }
     pub fn print_deprecated(&self, verbosity: &CommonArgs) {
+        let deprecation_version = "0.63.0";
         let alternative = "omitting the argument, since this is already the default behavior";
         if self.default_checks {
-            print_deprecated(verbosity, "--default-checks", alternative);
+            print_deprecated(verbosity, "--default-checks", deprecation_version, alternative);
         }
         if self.memory_safety_checks {
-            print_deprecated(verbosity, "--memory-safety-checks", alternative);
+            print_deprecated(verbosity, "--memory-safety-checks", deprecation_version, alternative);
         }
         if self.overflow_checks {
-            print_deprecated(verbosity, "--overflow-checks", alternative);
+            print_deprecated(verbosity, "--overflow-checks", deprecation_version, alternative);
         }
         if self.undefined_function_checks {
-            print_deprecated(verbosity, "--undefined-function-checks", alternative);
+            print_deprecated(
+                verbosity,
+                "--undefined-function-checks",
+                deprecation_version,
+                alternative,
+            );
         }
         if self.unwinding_checks {
-            print_deprecated(verbosity, "--unwinding-checks", alternative);
+            print_deprecated(verbosity, "--unwinding-checks", deprecation_version, alternative);
         }
     }
 }
