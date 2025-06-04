@@ -12,7 +12,6 @@
 
 use crate::kani_middle::stable_fn_def;
 use quote::ToTokens;
-use rustc_errors::ErrorGuaranteed;
 use rustc_hir::def::{DefKind, Res};
 use rustc_hir::def_id::{CRATE_DEF_INDEX, DefId, LOCAL_CRATE, LocalDefId, LocalModDefId};
 use rustc_hir::{ItemKind, UseKind};
@@ -45,6 +44,15 @@ pub(crate) use validate_kind;
 pub enum FnResolution {
     Fn(FnDef),
     FnImpl { def: FnDef, ty: Ty },
+}
+
+impl FnResolution {
+    pub fn def(&self) -> &FnDef {
+        match self {
+            Self::Fn(def) => def,
+            Self::FnImpl { def, .. } => def,
+        }
+    }
 }
 
 /// Resolve a path to a function / method.
@@ -107,33 +115,6 @@ pub fn resolve_fn<'tcx>(
         Ok(rustc_internal::internal(tcx, def.def_id()))
     } else {
         Err(ResolveError::UnsupportedPath { kind: "qualified paths" })
-    }
-}
-
-/// Resolve the name of a function from the context of the definition provided.
-///
-/// Ideally this should pass a more precise span, but we don't keep them around.
-pub fn expect_resolve_fn<T: CrateDef>(
-    tcx: TyCtxt,
-    res_cx: T,
-    name: &str,
-    reason: &str,
-) -> Result<FnDef, ErrorGuaranteed> {
-    let internal_def_id = rustc_internal::internal(tcx, res_cx.def_id());
-    let current_module = tcx.parent_module_from_def_id(internal_def_id.as_local().unwrap());
-    let maybe_resolved = resolve_fn(tcx, current_module.to_local_def_id(), name);
-    let resolved = maybe_resolved.map_err(|err| {
-        tcx.dcx().span_err(
-            rustc_internal::internal(tcx, res_cx.span()),
-            format!("Failed to resolve `{name}` for `{reason}`: {err}"),
-        )
-    })?;
-    let ty_internal = tcx.type_of(resolved).instantiate_identity();
-    let ty = rustc_internal::stable(ty_internal);
-    if let TyKind::RigidTy(RigidTy::FnDef(def, _)) = ty.kind() {
-        Ok(def)
-    } else {
-        unreachable!("Expected function for `{name}`, but found: {ty}")
     }
 }
 
