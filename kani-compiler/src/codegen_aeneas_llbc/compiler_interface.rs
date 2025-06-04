@@ -38,6 +38,7 @@ use rustc_session::config::{CrateType, OutputFilenames, OutputType};
 use rustc_session::output::out_filename;
 use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::{Instance, MonoItem};
+use stable_mir::ty::FnDef;
 use stable_mir::{CrateDef, DefId};
 use std::any::Any;
 use std::fs::File;
@@ -233,7 +234,8 @@ impl CodegenBackend for LlbcCodegenBackend {
                                 tcx,
                                 &[MonoItem::Fn(*harness)],
                                 model_path,
-                                contract_metadata,
+                                contract_metadata
+                                    .map(|def| rustc_internal::internal(tcx, def.def_id())),
                                 transformer,
                             );
                             transformer = BodyTransformation::new(&queries, tcx, &unit);
@@ -351,9 +353,9 @@ impl ArchiveBuilderBuilder for ArArchiveBuilderBuilder {
 fn contract_metadata_for_harness(
     tcx: TyCtxt,
     def_id: DefId,
-) -> Result<Option<InternalDefId>, ErrorGuaranteed> {
+) -> Result<Option<FnDef>, ErrorGuaranteed> {
     let attrs = KaniAttributes::for_def_id(tcx, def_id);
-    Ok(attrs.interpret_for_contract_attribute().map(|(_, id, _)| id))
+    Ok(attrs.interpret_for_contract_attribute())
 }
 
 /// Return a struct that contains information about the codegen results as expected by `rustc`.
