@@ -730,11 +730,11 @@ fn expect_key_string_value(
     }
 }
 
-fn expect_single<'a>(
+fn expect_single<'tcx>(
     tcx: TyCtxt,
     kind: KaniAttributeKind,
-    attributes: &'a Vec<&'a Attribute>,
-) -> &'a Attribute {
+    attributes: &Vec<&'tcx Attribute>,
+) -> &'tcx Attribute {
     let attr = attributes.first().unwrap_or_else(|| {
         panic!("expected at least one attribute {} in {attributes:?}", kind.as_ref())
     });
