@@ -40,6 +40,12 @@ impl ValidateArgs for CommonArgs {
                 "The `--dry-run` option is obsolete. Use --verbose instead.",
             ));
         }
+        if self.enable_unstable {
+            return Err(Error::raw(
+                ErrorKind::ValueValidation,
+                "The `--enable-unstable` option is obsolete. Enable the appropriate unstable feature(s) with `-Z {feature}` instead.",
+            ));
+        }
 
         // Warn if a deprecated unstable feature is enabled.
         for feature in self.unstable_features.iter() {
@@ -61,23 +67,13 @@ impl CommonArgs {
         required: UnstableFeature,
     ) -> Result<(), Error> {
         if enabled && !self.unstable_features.contains(required) {
-            let z_feature = format!("-Z {required}");
-            if self.enable_unstable {
-                return Err(Error::raw(
-                    ErrorKind::ValueValidation,
-                    format!(
-                        "The `--enable-unstable` option is obsolete. Use `{z_feature}` instead.",
-                    ),
-                ));
-            } else {
-                return Err(Error::raw(
-                    ErrorKind::MissingRequiredArgument,
-                    format!(
-                        "The `--{argument}` option is unstable and requires `{}` to be used.",
-                        required.as_argument_string()
-                    ),
-                ));
-            }
+            return Err(Error::raw(
+                ErrorKind::MissingRequiredArgument,
+                format!(
+                    "The `--{argument}` option is unstable and requires `{}` to be used.",
+                    required.as_argument_string()
+                ),
+            ));
         }
         Ok(())
     }
