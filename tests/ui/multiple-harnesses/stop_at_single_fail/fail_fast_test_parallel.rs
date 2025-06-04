@@ -1,6 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-flags: --fail-fast -Z unstable-options --jobs 4 --output-format=terse
+// kani-flags: --fail-fast --jobs 4 --output-format=terse
 //! Ensure that the verification process stops as soon as one of the harnesses fails.
 //! This test runs on 4 parallel threads. Stops verification as soon as a harness on any of the threads fails.
 
