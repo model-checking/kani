@@ -38,7 +38,7 @@
 //!
 //! ### Reusing
 //!
-//! You can turn an [`UnstableFeature`] back into it's command line
+//! You can turn an [`UnstableFeature`] back into its command line
 //! representation. This should be done with
 //! [`EnabledUnstableFeatures::as_arguments`], which returns an iterator that,
 //! when passed to e.g. [`std::process::Command::args`] will enable those

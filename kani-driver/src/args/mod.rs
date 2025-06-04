@@ -57,7 +57,7 @@ pub fn print_deprecated(verbosity: &CommonArgs, option: &str, alternative: &str)
     if !verbosity.quiet {
         warning(&format!(
             "The `{option}` option is deprecated. This option will be removed soon. \
-            Consider `{alternative}` instead"
+            Consider {alternative} instead"
         ))
     }
 }
