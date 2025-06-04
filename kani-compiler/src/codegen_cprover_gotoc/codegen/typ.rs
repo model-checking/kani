@@ -489,7 +489,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // TODO: Skipping name mangling is likely insufficient if a dependent crate has two versions of
         // linked C libraries
         // https://github.com/model-checking/kani/issues/450.
-        // Note that we only mangle #[repr(C)] types if the unstable c-ffi feature is enabled; otherwise,
+        // Note that #[repr(C)] types are unmangled only if the unstable c-ffi feature is enabled; otherwise,
         // we assume that this struct is a #[repr(C)] in Rust code and mangle it,
         // c.f. https://github.com/model-checking/kani/issues/4007.
         match t.kind() {
