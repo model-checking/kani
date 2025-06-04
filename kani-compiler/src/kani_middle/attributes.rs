@@ -15,7 +15,7 @@ use rustc_smir::rustc_internal;
 use rustc_span::{Span, Symbol};
 use stable_mir::crate_def::Attribute as AttributeStable;
 use stable_mir::mir::mono::Instance as InstanceStable;
-use stable_mir::{CrateDef, DefId as StableDefId, Symbol as SymbolStable};
+use stable_mir::{CrateDef, DefId as DefIdStable, Symbol as SymbolStable};
 use std::str::FromStr;
 use strum_macros::{AsRefStr, EnumString};
 use syn::parse::Parser;
@@ -161,7 +161,7 @@ impl<'tcx> KaniAttributes<'tcx> {
     }
 
     /// Look up the attributes by a stable MIR DefID
-    pub fn for_def_id(tcx: TyCtxt<'tcx>, def_id: StableDefId) -> Self {
+    pub fn for_def_id(tcx: TyCtxt<'tcx>, def_id: DefIdStable) -> Self {
         KaniAttributes::for_item(tcx, rustc_internal::internal(tcx, def_id))
     }
 
