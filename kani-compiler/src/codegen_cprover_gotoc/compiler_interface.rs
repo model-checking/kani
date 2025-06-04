@@ -253,12 +253,11 @@ impl CodegenBackend for GotocCodegenBackend {
     }
 
     fn target_config(&self, sess: &Session) -> TargetConfig {
-        // This code is copied from the cranelift backend:
+        // This code is adapted from the cranelift backend:
         // https://github.com/rust-lang/rust/blob/a124fb3cb7291d75872934f411d81fe298379ace/compiler/rustc_codegen_cranelift/src/lib.rs#L184
-        // FIXME return the actually used target features. this is necessary for #[cfg(target_feature)]
         let target_features = if sess.target.arch == "x86_64" && sess.target.os != "none" {
             // x86_64 mandates SSE2 support and rustc requires the x87 feature to be enabled
-            vec![sym::fsxr, sym::sse, sym::sse2, Symbol::intern("x87")]
+            vec![sym::sse, sym::sse2, Symbol::intern("x87")]
         } else if sess.target.arch == "aarch64" {
             match &*sess.target.os {
                 "none" => vec![],
@@ -274,32 +273,12 @@ impl CodegenBackend for GotocCodegenBackend {
         // FIXME do `unstable_target_features` properly
         let unstable_target_features = target_features.clone();
 
-        // FIXME(f16_f128): LLVM 20 (currently used by `rustc`) passes `f128` in XMM registers on
-        // Windows, whereas LLVM 21+ and Cranelift pass it indirectly. This means that `f128` won't
-        // work when linking against a LLVM-built sysroot.
-        let has_reliable_f128 = !sess.target.is_like_windows;
-        let has_reliable_f16 = match &*sess.target.arch {
-            // FIXME(f16_f128): LLVM 20 does not support `f16` on s390x, meaning the required
-            // builtins are not available in `compiler-builtins`.
-            "s390x" => false,
-            // FIXME(f16_f128): `rustc_codegen_llvm` currently disables support on Windows GNU
-            // targets due to GCC using a different ABI than LLVM. Therefore `f16` won't be
-            // available when using a LLVM-built sysroot.
-            "x86_64"
-                if sess.target.os == "windows"
-                    && sess.target.env == "gnu"
-                    && sess.target.abi != "llvm" =>
-            {
-                false
-            }
-            _ => true,
-        };
+        let has_reliable_f128 = true;
+        let has_reliable_f16 = true;
 
         TargetConfig {
             target_features,
             unstable_target_features,
-            // `rustc_codegen_cranelift` polyfills functionality not yet
-            // available in Cranelift.
             has_reliable_f16,
             has_reliable_f16_math: has_reliable_f16,
             has_reliable_f128,
