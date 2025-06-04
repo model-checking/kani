@@ -5,9 +5,7 @@
 use std::path::PathBuf;
 
 use crate::args::list_args::Format;
-use crate::args::{
-    ValidateArgs, VerificationArgs, print_stabilized_feature_warning, validate_std_path,
-};
+use crate::args::{ValidateArgs, VerificationArgs, validate_std_path};
 use clap::{Error, Parser, error::ErrorKind};
 use kani_metadata::UnstableFeature;
 
@@ -88,12 +86,6 @@ impl ValidateArgs for CargoAutoharnessArgs {
         }
 
         if self.common_autoharness_args.list
-            && self.verify_opts.common_args.unstable_features.contains(UnstableFeature::List)
-        {
-            print_stabilized_feature_warning(&self.verify_opts.common_args, UnstableFeature::List);
-        }
-
-        if self.common_autoharness_args.list
             && self.common_autoharness_args.format == Format::Pretty
             && self.verify_opts.common_args.quiet
         {
@@ -130,12 +122,6 @@ impl ValidateArgs for StandaloneAutoharnessArgs {
                     UnstableFeature::Autoharness
                 ),
             ));
-        }
-
-        if self.common_autoharness_args.list
-            && self.verify_opts.common_args.unstable_features.contains(UnstableFeature::List)
-        {
-            print_stabilized_feature_warning(&self.verify_opts.common_args, UnstableFeature::List);
         }
 
         if self.common_autoharness_args.list
