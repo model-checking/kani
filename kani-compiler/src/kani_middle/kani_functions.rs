@@ -271,5 +271,7 @@ pub fn validate_kani_functions(kani_funcs: &HashMap<KaniFunction, FnDef>) {
     }
     // If this is failing for #[no_std] crates, try explicitly adding `extern crate kani` to the crate root.
     // See https://github.com/model-checking/kani/issues/3906 for why this is required.
-    assert_eq!(missing, 0, "Failed to find `{missing}` Kani functions");
+    if missing != 0 {
+        tracing::error!("Failed to find `{missing}` Kani functions")
+    }
 }

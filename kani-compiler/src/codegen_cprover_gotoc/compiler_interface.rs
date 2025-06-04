@@ -290,10 +290,9 @@ impl CodegenBackend for GotocCodegenBackend {
             if queries.args().reachability_analysis != ReachabilityType::None
                 && queries.kani_functions().is_empty()
             {
-                if tcx.crates(()).iter().all(|c| {
-                    let name = tcx.crate_name(*c);
-                    name.as_str() != "std" && name.as_str() != "kani"
-                }) {
+                if stable_mir::find_crates("std").is_empty()
+                    && stable_mir::find_crates("kani").is_empty()
+                {
                     // Special error for when not importing kani and using #[no_std].
                     // See here for more info: https://github.com/model-checking/kani/issues/3906#issuecomment-2932687768.
                     tcx.sess.dcx().struct_err(
