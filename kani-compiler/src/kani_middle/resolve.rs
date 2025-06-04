@@ -18,8 +18,8 @@ use rustc_hir::{ItemKind, UseKind};
 use rustc_middle::ty::TyCtxt;
 use rustc_middle::ty::fast_reject::{self, TreatParams};
 use rustc_smir::rustc_internal;
-use stable_mir::CrateDef;
 use stable_mir::ty::{FnDef, RigidTy, Ty, TyKind};
+use stable_mir::{CrateDef, CrateDefItems};
 use std::collections::HashSet;
 use std::fmt;
 use std::iter::Peekable;
@@ -67,10 +67,18 @@ pub fn resolve_fn_path<'tcx>(
     match &path.qself {
         // Qualified path for a trait method implementation, like `<Foo as Bar>::bar`.
         Some(QSelf { ty: syn_ty, position, .. }) if *position > 0 => {
+            // Resolve the self type and DefId of the trait definition method.
+            // E.g., in path <usize as SliceIndex<[i32]>>::get_unchecked, ty = `usize` and `trait_method_id` is the ID of `get_unchecked`
+            // in the definition of the `SliceIndex`` trait.
             let ty = type_resolution::resolve_ty(tcx, current_module, syn_ty)?;
-            let def_id = resolve_path(tcx, current_module, &path.path)?;
-            validate_kind!(tcx, def_id, "function / method", DefKind::Fn | DefKind::AssocFn)?;
-            Ok(FnResolution::FnImpl { def: stable_fn_def(tcx, def_id).unwrap(), ty })
+            let trait_method_id = resolve_path(tcx, current_module, &path.path)?;
+            validate_kind!(
+                tcx,
+                trait_method_id,
+                "function / method",
+                DefKind::Fn | DefKind::AssocFn
+            )?;
+            resolve_in_trait_impl(tcx, current_module, ty, trait_method_id)
         }
         // Qualified path for a primitive type, such as `<[u8]::sort>`.
         Some(QSelf { ty: syn_ty, .. }) if type_resolution::is_type_primitive(syn_ty) => {
@@ -159,6 +167,8 @@ pub enum ResolveError<'tcx> {
     InvalidPath { msg: String },
     /// Unable to find an item.
     MissingItem { tcx: TyCtxt<'tcx>, base: DefId, unresolved: String },
+    /// Unable to find the specified implementation of a trait.
+    MissingTraitImpl { tcx: TyCtxt<'tcx>, trait_method_id: DefId, ty: Ty },
     /// Unable to find an item in a primitive type.
     MissingPrimitiveItem { base: Ty, unresolved: String },
     /// Error triggered when the identifier points to an item with unexpected type.
@@ -213,6 +223,10 @@ impl fmt::Display for ResolveError<'_> {
             ResolveError::MissingItem { tcx, base, unresolved } => {
                 let def_desc = description(*tcx, *base);
                 write!(f, "unable to find `{unresolved}` inside {def_desc}")
+            }
+            ResolveError::MissingTraitImpl { tcx, trait_method_id, ty } => {
+                let def_desc = description(*tcx, *trait_method_id);
+                write!(f, "unable to find implementation of {def_desc} for {ty}")
             }
             ResolveError::MissingPrimitiveItem { base, unresolved } => {
                 write!(f, "unable to find `{unresolved}` inside `{base}`")
@@ -384,6 +398,50 @@ fn resolve_in_foreign_module(tcx: TyCtxt, foreign_mod: DefId, name: &str) -> Opt
     tcx.module_children(foreign_mod)
         .iter()
         .find_map(|item| if item.ident.as_str() == name { item.res.opt_def_id() } else { None })
+}
+
+/// Resolves a trait method implementation.
+fn resolve_in_trait_impl(
+    tcx: TyCtxt<'_>,
+    current_module: LocalDefId,
+    ty: Ty,
+    trait_method_id: DefId,
+) -> Result<FnResolution, ResolveError<'_>> {
+    // Find the implementation of the trait for `ty`, then select the associated item corresponding to `trait_method_id`.
+    let impls = stable_mir::all_trait_impls();
+    let associated_items = impls
+        .iter()
+        .flat_map(|imp| {
+            imp.associated_items().into_iter().filter(|item| {
+                item.trait_item_def_id
+                    .is_some_and(|id| rustc_internal::internal(tcx, id.def_id()) == trait_method_id)
+            })
+        })
+        .collect::<Vec<_>>();
+    let matching_item = associated_items.into_iter().find_map(|item| {
+        let item_name = item.def_id.name();
+        let item_path: TypePath = syn::parse_str(&item_name).ok()?;
+        if let Some(QSelf { ty: i_ty, position, .. }) = &item_path.qself
+            && *position > 0
+        {
+            let item_ty = type_resolution::resolve_ty(tcx, current_module, i_ty).ok()?;
+            let item_def_id = resolve_path(tcx, current_module, &item_path.path).ok()?;
+            // If `ty` and `def_id` match, then we've found the right implementation
+            if item_ty == ty && item_def_id == trait_method_id {
+                Some(FnResolution::FnImpl {
+                    def: stable_fn_def(tcx, rustc_internal::internal(tcx, item.def_id.def_id()))
+                        .unwrap(),
+                    ty,
+                })
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    });
+
+    matching_item.ok_or(ResolveError::MissingTraitImpl { tcx, trait_method_id, ty })
 }
 
 /// Generates a more friendly string representation of a def_id including kind and name.
@@ -635,6 +693,8 @@ fn resolve_in_trait<'tcx>(
     let missing_item_err =
         || ResolveError::MissingItem { tcx, base: trait_id, unresolved: name.to_string() };
     let trait_def = tcx.trait_def(trait_id);
+    let impls = tcx.trait_impls_of(trait_def.def_id);
+    debug!(?impls);
     // Look for the given name in the list of associated items for the trait definition.
     tcx.associated_item_def_ids(trait_def.def_id)
         .iter()
