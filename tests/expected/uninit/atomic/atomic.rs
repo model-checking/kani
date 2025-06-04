@@ -21,7 +21,9 @@ fn local_atomic_uninit() {
                 std::intrinsics::atomic_store_relaxed(ptr, 1);
             }
             1 => {
-                std::intrinsics::atomic_load_relaxed(ptr as *const u8);
+                std::intrinsics::atomic_load::<_, { std::intrinsics::AtomicOrdering::Relaxed }>(
+                    ptr as *const u8,
+                );
             }
             _ => {
                 std::intrinsics::atomic_cxchg_relaxed_relaxed(ptr, 1, 1);
