@@ -35,11 +35,6 @@ pub struct KaniSession {
     /// Invariant: this field is_some() iff the autoharness subcommand is enabled.
     pub autoharness_compiler_flags: Option<Vec<String>>,
 
-    /// Include all publicly-visible symbols in the generated goto binary, not just those reachable from
-    /// a proof harness. Useful when attempting to verify things that were not annotated with kani
-    /// proof attributes.
-    pub codegen_tests: bool,
-
     /// The location we found the 'kani_rustc' command
     pub kani_compiler: PathBuf,
     /// The location we found 'kani_lib.c'
@@ -70,7 +65,6 @@ impl KaniSession {
         Ok(KaniSession {
             args,
             autoharness_compiler_flags: None,
-            codegen_tests: false,
             kani_compiler: install.kani_compiler()?,
             kani_lib_c: install.kani_lib_c()?,
             temporaries: Mutex::new(vec![]),
@@ -96,9 +90,7 @@ impl KaniSession {
     /// Determine which symbols Kani should codegen (i.e. by slicing away symbols
     /// that are considered unreachable.)
     pub fn reachability_mode(&self) -> ReachabilityMode {
-        if self.codegen_tests {
-            ReachabilityMode::Tests
-        } else if self.autoharness_compiler_flags.is_some() {
+        if self.autoharness_compiler_flags.is_some() {
             ReachabilityMode::AllFns
         } else {
             ReachabilityMode::ProofHarnesses
@@ -112,7 +104,6 @@ pub enum ReachabilityMode {
     AllFns,
     #[strum(to_string = "harnesses")]
     ProofHarnesses,
-    Tests,
 }
 
 impl Drop for KaniSession {
