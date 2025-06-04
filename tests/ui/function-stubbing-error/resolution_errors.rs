@@ -12,12 +12,20 @@ pub struct Bar;
 pub fn stub_foo() -> bool {
     true
 }
+/// Dummy trait
+pub trait Foo {
+    fn foo() -> bool {
+        false
+    }
+}
+
+impl Foo for Bar {}
 
 #[kani::proof]
-#[kani::stub(<Bar>::foo, stub_foo)]
 #[kani::stub(u8::foo, stub_foo)]
 #[kani::stub(<(i32, i32)>::foo, stub_foo)]
 #[kani::stub(<[u32]>::foo, stub_foo)]
 #[kani::stub(str::foo, stub_foo)]
 #[kani::stub(<[char; 10]>::foo, stub_foo)]
+#[kani::stub(<Bar as Foo>::bar, stub_foo)]
 fn invalid_methods() {}

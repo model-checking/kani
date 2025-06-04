@@ -1,0 +1,28 @@
+error: invalid stub: function does not have a body, but is not an extern function\
+resolution_failure\
+|\
+| #[kani::stub(X::foo, B::bar)]\
+| ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+|\
+note: `B::bar` does not have a body\
+resolution_failure\
+|\
+|     fn bar(&self) -> u32;\
+|     ^^^^^^^^^^^^^^^^^^^^^\
+   = help: if this stub refers to associated functions, try using fully-qualified syntax instead
+
+error: failed to resolve `X::bar`: unable to find `bar` inside struct `X`\
+resolution_failure\
+|\
+| #[kani::stub(X::bar, A::foo)]\
+| ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\
+|
+
+error: failed to resolve `A::baz`: unable to find `baz` inside trait `A`\
+resolution_failure\
+|\
+| #[kani::stub(<X as B>::bar, A::baz)]\
+| ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\
+|
+
+error: aborting due to 3 previous errors

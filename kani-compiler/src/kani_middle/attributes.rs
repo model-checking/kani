@@ -732,8 +732,43 @@ impl<'tcx> KaniAttributes<'tcx> {
             });
             match paths.as_slice() {
                 [orig, replace] => {
-                    let _ = self.resolve_path(current_module, orig, attr.span());
-                    let _ = self.resolve_path(current_module, replace, attr.span());
+                    let original_res = self.resolve_path(current_module, orig, attr.span()).map(|res| res.def());
+                    let replace_res = self.resolve_path(current_module, replace, attr.span()).map(|res| res.def());
+
+                    if let Ok(original_res) = original_res && let Ok(replace_res) = replace_res {
+                        // Emit an error if either function is local, yet doesn't have a body.
+                        // This can happen if a user specifies a trait fn without a default body, e.g. B::bar, where B is a trait.
+                        let o_bad = original_res.krate().is_local && !original_res.has_body();
+                        let r_bad = replace_res.krate().is_local && !replace_res.has_body();
+
+                        if o_bad || r_bad {
+                            let mut err = self.tcx.dcx().struct_span_err(
+                                attr.span(),
+                                "invalid stub: function does not have a body, but is not an extern function",
+                            );
+                            if o_bad {
+                                err = err.with_span_note(
+                                    rustc_internal::internal(self.tcx, original_res.span()),
+                                    format!(
+                                    "`{}` does not have a body",
+                                    original_res.name()
+                                ));
+                            }
+                            if r_bad {
+                                err = err.with_span_note(
+                                    rustc_internal::internal(self.tcx, replace_res.span()),
+                                    format!(
+                                    "`{}` does not have a body",
+                                    replace_res.name()
+                                ));
+                            }
+                            err = err.with_help(
+                                "if this stub refers to associated functions, try using fully-qualified syntax instead"
+                            );
+                            err.emit();
+                        }
+                    }
+
                     Some(Stub {
                         original: orig.to_token_stream().to_string(),
                         replacement: replace.to_token_stream().to_string(),
