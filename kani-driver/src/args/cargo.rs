@@ -12,13 +12,15 @@ use std::path::PathBuf;
 /// These do not (currently) include cargo args that kani pays special attention to:
 /// for instance, we keep `--tests` and `--target-dir` elsewhere.
 #[derive(Debug, Default, clap::Args)]
+#[clap(next_help_heading = "Cargo Common Options")]
 pub struct CargoCommonArgs {
     /// Activate all package features
     #[arg(long)]
     pub all_features: bool,
-    /// Do not activate the `default` feature
-    #[arg(long)]
-    pub no_default_features: bool,
+
+    /// Exclude the specified packages
+    #[arg(long, short, requires("workspace"), conflicts_with("package"), num_args(1..))]
+    pub exclude: Vec<String>,
 
     // This tolerates spaces too, but we say "comma" only because this is the least error-prone approach...
     /// Comma separated list of package features to activate
@@ -29,17 +31,17 @@ pub struct CargoCommonArgs {
     #[arg(long, name = "PATH")]
     pub manifest_path: Option<PathBuf>,
 
-    /// Build all packages in the workspace
+    /// Do not activate the `default` feature
     #[arg(long)]
-    pub workspace: bool,
+    pub no_default_features: bool,
 
     /// Run Kani on the specified packages (see `cargo help pkgid` for the accepted format)
     #[arg(long, short, conflicts_with("workspace"), num_args(1..))]
     pub package: Vec<String>,
 
-    /// Exclude the specified packages
-    #[arg(long, short, requires("workspace"), conflicts_with("package"), num_args(1..))]
-    pub exclude: Vec<String>,
+    /// Build all packages in the workspace
+    #[arg(long)]
+    pub workspace: bool,
 }
 
 impl CargoCommonArgs {
@@ -98,6 +100,7 @@ impl ValidateArgs for CargoCommonArgs {
 /// See <https://doc.rust-lang.org/cargo/commands/cargo-test.html#target-selection> for more
 /// details.
 #[derive(Debug, Default, clap::Args)]
+#[clap(next_help_heading = "Cargo Target Options")]
 pub struct CargoTargetArgs {
     /// Check only the specified binary target.
     #[arg(long)]

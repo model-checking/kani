@@ -31,7 +31,7 @@ pub struct CommonAutoharnessArgs {
     #[arg(long = "exclude-pattern", num_args(1), value_name = "PATTERN")]
     pub exclude_pattern: Vec<String>,
 
-    /// Run the `list` subcommand after generating the automatic harnesses. Requires -Z list. Note that this option implies --only-codegen.
+    /// Run the `list` subcommand after generating the automatic harnesses. Note that this option implies --only-codegen.
     #[arg(long)]
     pub list: bool,
 
@@ -86,15 +86,6 @@ impl ValidateArgs for CargoAutoharnessArgs {
         }
 
         if self.common_autoharness_args.list
-            && !self.verify_opts.common_args.unstable_features.contains(UnstableFeature::List)
-        {
-            return Err(Error::raw(
-                ErrorKind::MissingRequiredArgument,
-                format!("The `list` feature is unstable and requires -Z {}", UnstableFeature::List),
-            ));
-        }
-
-        if self.common_autoharness_args.list
             && self.common_autoharness_args.format == Format::Pretty
             && self.verify_opts.common_args.quiet
         {
@@ -130,15 +121,6 @@ impl ValidateArgs for StandaloneAutoharnessArgs {
                     "The `autoharness` subcommand is unstable and requires -Z {}",
                     UnstableFeature::Autoharness
                 ),
-            ));
-        }
-
-        if self.common_autoharness_args.list
-            && !self.verify_opts.common_args.unstable_features.contains(UnstableFeature::List)
-        {
-            return Err(Error::raw(
-                ErrorKind::MissingRequiredArgument,
-                format!("The `list` feature is unstable and requires -Z {}", UnstableFeature::List),
             ));
         }
 
