@@ -1230,7 +1230,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     } else {
                         let pad =
                             DatatypeComponent::Padding { name: pad_name.into(), bits: *padding };
-                        ctx.ensure_struct(struct_name, pretty_struct_name, |ctx, _| {
+                        ctx.ensure_struct(struct_name, pretty_struct_name, |_ctx, _| {
                             vec![DatatypeComponent::field(name, ty.clone()), pad.clone()]
                         })
                     };
