@@ -4,6 +4,7 @@ use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::{DatatypeComponent, Expr, Location, Parameter, Symbol, SymbolTable, Type};
 use cbmc::utils::aggr_tag;
 use cbmc::{InternString, InternedString};
+use kani_metadata::UnstableFeature;
 use rustc_abi::{
     BackendRepr::SimdVector, FieldIdx, FieldsShape, Float, Integer, LayoutData, Primitive, Size,
     TagEncoding, TyAndLayout, VariantIdx, Variants,
@@ -487,9 +488,20 @@ impl<'tcx> GotocCtx<'tcx> {
         // This is not a restriction because C can only access non-generic types anyway.
         // TODO: Skipping name mangling is likely insufficient if a dependent crate has two versions of
         // linked C libraries
-        // https://github.com/model-checking/kani/issues/450
+        // https://github.com/model-checking/kani/issues/450.
+        // Note that #[repr(C)] types are unmangled only if the unstable c-ffi feature is enabled; otherwise,
+        // we assume that this struct is a #[repr(C)] in Rust code and mangle it,
+        // c.f. https://github.com/model-checking/kani/issues/4007.
         match t.kind() {
-            TyKind::Adt(def, args) if args.is_empty() && def.repr().c() => {
+            TyKind::Adt(def, args)
+                if args.is_empty()
+                    && def.repr().c()
+                    && self
+                        .queries
+                        .args()
+                        .unstable_features
+                        .contains(&UnstableFeature::CFfi.to_string()) =>
+            {
                 // For non-generic #[repr(C)] types, use the literal path instead of mangling it.
                 self.tcx.def_path_str(def.did()).intern()
             }

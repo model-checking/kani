@@ -7,8 +7,18 @@ pub struct Foo {
     y: i32,
 }
 
+pub enum Field {
+    Case1,
+    Case2,
+}
+
+#[repr(C)]
+pub struct ReprCStruct {
+    pub field: Field,
+}
+
 // Export a function that takes a struct type which differs between this crate
-// and the other vesion.
+// and the other version.
 pub fn take_foo(foo: &Foo) -> i32 {
     foo.x + foo.y
 }
