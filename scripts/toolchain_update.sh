@@ -48,11 +48,11 @@ then
   echo "next_toolchain_hash=$next_toolchain_hash" >> $GITHUB_ENV
 
   EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
-  echo "git_log<<$EOF" >> $GITHUB_ENV
+  git_log_filename=GIT_LOG_$EOF
+  echo "git_log_filename=$git_log_filename" >> $GITHUB_ENV
 
   git log --oneline $current_toolchain_hash..$next_toolchain_hash | \
-    sed 's#^#https://github.com/rust-lang/rust/commit/#' >> $GITHUB_ENV
-  echo "$EOF" >> $GITHUB_ENV
+    sed 's#^#https://github.com/rust-lang/rust/commit/#' >> $git_log_filename
 
   cd ..
   rm -rf rust.git

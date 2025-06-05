@@ -64,7 +64,7 @@ jobs:
                 https://github.com/rust-lang/rust/commit/${{ env.next_toolchain_hash }}. The log
                 for this commit range is:
 
-                ` + process.env.git_log
+                ` + $(cat process.env.git_log_filename)
             })
 
       - name: Create Issue
@@ -86,4 +86,4 @@ jobs:
             https://github.com/rust-lang/rust/commit/${{ env.next_toolchain_hash }}. The log
             for this commit range is:
 
-            ${{ env.git_log }}
+            $(cat ${{ env.git_log_filename }})
