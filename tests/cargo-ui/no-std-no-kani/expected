@@ -1,3 +1,3 @@
 error: Failed to detect Kani functions.\
   |\
-  = help: This project seems to be using #[no_std] but does not import kani. Try adding `crate extern kani` to the crate root to explicitly import kani.
+  = help: This project seems to be using #[no_std] but does not import Kani. Try adding `crate extern kani` to the crate root to explicitly import Kani.
