@@ -227,7 +227,7 @@ fn transform_break_continue(block: &mut Block) {
     block.stmts.push(return_stmt);
 }
 
-pub fn transform_for_to_loop(for_loop: ExprForLoop) -> (Stmt, Option<Stmt>) {
+pub fn transform_for_to_loop(for_loop: ExprForLoop) -> (Stmt, Option<Stmt>, Option<Stmt>) {
     // Extract components from the for loop
     let pat = *for_loop.pat;
     let expr = for_loop.expr;
@@ -235,51 +235,62 @@ pub fn transform_for_to_loop(for_loop: ExprForLoop) -> (Stmt, Option<Stmt>) {
     let attrs = for_loop.attrs;
 
     // Create an iterator variable name
-    let itername = "kaniiter".to_owned();
+    let itername = "kaniiter_iter".to_owned();
     let iter_ident = format_ident!("{}", itername);
+
+    let ptrname = "kaniiter_ptr".to_owned();
+    let ptr_ident = format_ident!("{}", ptrname);
+
+    let lenname = "kaniiter_len".to_owned();
+    let len_ident = format_ident!("{}", lenname);
 
     // Create initialization statement for the iterator
     let init_stmt: Stmt = parse_quote! {
-        let mut #iter_ident = kani::KaniIntoIter::kani_into_iter(#expr);
+        let (#ptr_ident, #len_ident) = kani::KaniIntoIter::kani_into_iter(#expr);
+    };
+
+    let init_iter_stmt: Stmt = parse_quote! {
+        let mut #iter_ident = 0;
     };
 
     // Create the new loop body with iterator advancement
     let mut new_body_stmts = Vec::new();
 
     // Add the pattern binding using next()
-    let nextoptionname = "__nextoption".to_owned();
-    let nextoption_ident = format_ident!("{}", nextoptionname);
+    //let nextoptionname = "__nextoption".to_owned();
+    //let nextoption_ident = format_ident!("{}", nextoptionname);
     let next_stmt: Stmt = parse_quote! {
-        let #nextoption_ident = #iter_ident.next();
+        #iter_ident = #iter_ident + 1;
     };
 
-    let check_stmt: Stmt = parse_quote! {
-        if #nextoption_ident.is_none() { break; };
-    };
+    //let check_stmt: Stmt = parse_quote! {
+    //    if #nextoption_ident.is_none() { break; };
+    //};
 
     let next_ident = match pat {
         Pat::Ident(ref patident) => patident.ident.clone(),
         _ => abort_call_site!("Unsupported pattern in for loop"),
     };
 
-    let next_unwrap_stmt: Stmt = parse_quote! {
-        let #pat = #nextoption_ident.unwrap();
+    let pat_assign: Stmt = parse_quote! {
+        let #pat = unsafe {*#ptr_ident.wrapping_add(#iter_ident)};
     };
 
+    new_body_stmts.push(pat_assign);
     new_body_stmts.push(next_stmt);
-    new_body_stmts.push(check_stmt);
-    new_body_stmts.push(next_unwrap_stmt);
+    //new_body_stmts.push(check_stmt);
+    //new_body_stmts.push(next_unwrap_stmt);
 
     // Add the original loop body statements
     new_body_stmts.extend(body.stmts.iter().cloned());
 
     // Create the final expression with the iterator initialization
     let loop_loop: Stmt = parse_quote! {
-            loop{
+            while (#iter_ident < #len_ident) {
                 #(#new_body_stmts)*
             }
     };
-    (loop_loop, Some(init_stmt))
+    (loop_loop, Some(init_stmt), Some(init_iter_stmt))
 }
 
 pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -287,9 +298,10 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut loop_stmt: Stmt = syn::parse(item.clone()).unwrap();
     let loop_id = generate_unique_id_from_span(&loop_stmt);
     let mut initstmt: Option<Stmt> = None;
+    let mut init_iter_stmto: Option<Stmt> = None;
     if let Stmt::Expr(ref e, _) = loop_stmt {
         if let Expr::ForLoop(for_loop) = e {
-            (loop_stmt, initstmt) = transform_for_to_loop(for_loop.clone());
+            (loop_stmt, initstmt, init_iter_stmto) = transform_for_to_loop(for_loop.clone());
         }
     }
 
@@ -436,11 +448,13 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
         }
     } else {
         let inititer = initstmt.unwrap();
+        let init_iter_stmt = init_iter_stmto.unwrap();
         if has_prev {
             quote!(
             {
             #(#onentry_decl_stms)*
             #(#prev_decl_stms)*
+            #init_iter_stmt
             #inititer
             let mut #loop_body_closure = ||
             #loop_body;
@@ -476,6 +490,7 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
             const fn #register_ident<F: Fn() -> bool>(_f: &F, _transformed: usize) -> bool {
                 true
             }
+            #init_iter_stmt
             #inititer
             #loop_stmt
             })
