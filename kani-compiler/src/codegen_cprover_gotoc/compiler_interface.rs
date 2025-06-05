@@ -298,8 +298,8 @@ impl CodegenBackend for GotocCodegenBackend {
                     tcx.sess.dcx().struct_err(
                         "Failed to detect Kani functions."
                     ).with_help(
-                        "This project seems to be using #[no_std] but does not import kani. \
-                        Try adding `crate extern kani` to the crate root to explicitly import kani."
+                        "This project seems to be using #[no_std] but does not import Kani. \
+                        Try adding `crate extern kani` to the crate root to explicitly import Kani."
                     )
                     .emit();
                 } else {
