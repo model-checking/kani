@@ -306,9 +306,23 @@ impl CodegenBackend for GotocCodegenBackend {
             if queries.args().reachability_analysis != ReachabilityType::None
                 && queries.kani_functions().is_empty()
             {
-                tcx.sess.dcx().err(
-                    "Failed to detect Kani functions. Please check your installation is correct.",
-                );
+                if stable_mir::find_crates("std").is_empty()
+                    && stable_mir::find_crates("kani").is_empty()
+                {
+                    // Special error for when not importing kani and using #[no_std].
+                    // See here for more info: https://github.com/model-checking/kani/issues/3906#issuecomment-2932687768.
+                    tcx.sess.dcx().struct_err(
+                        "Failed to detect Kani functions."
+                    ).with_help(
+                        "This project seems to be using #[no_std] but does not import Kani. \
+                        Try adding `crate extern kani` to the crate root to explicitly import Kani."
+                    )
+                    .emit();
+                } else {
+                    tcx.sess.dcx().struct_err(
+                        "Failed to detect Kani functions. Please check your installation is correct."
+                    ).emit();
+                }
             }
 
             // Codegen all items that need to be processed according to the selected reachability mode:
