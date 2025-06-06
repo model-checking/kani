@@ -5,7 +5,6 @@
 //! We use this trait to overwrite the Rust IntoIter trait to reduce call stacks and avoid complicated loop invariant specifications,
 //! while maintaining the semantic of the loop.
 
-
 #[macro_export]
 #[allow(clippy::crate_in_macro_def)]
 macro_rules! generate_iter {

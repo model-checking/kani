@@ -290,7 +290,13 @@ pub fn transform_for_to_loop(
                 #(#new_body_stmts)*
             }
     };
-    (loop_loop, Some(init_ptr_stmt), Some(init_iter_stmt), Some(init_pat_stmt), Some(alloc_assume_stmt))
+    (
+        loop_loop,
+        Some(init_ptr_stmt),
+        Some(init_iter_stmt),
+        Some(init_pat_stmt),
+        Some(alloc_assume_stmt),
+    )
 }
 
 pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -506,7 +512,6 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
             .into()
         }
     };
-    println!("{}", ret.to_string());
     ret
 }
 
