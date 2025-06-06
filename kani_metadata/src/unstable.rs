@@ -99,6 +99,8 @@ pub enum UnstableFeature {
     /// Allow replacing certain items with stubs (mocks).
     /// See [RFC-0002](https://model-checking.github.io/kani/rfc/rfcs/0002-function-stubbing.html)
     Stubbing,
+    /// Enable quantifiers [RFC 10](https://model-checking.github.io/kani/rfc/rfcs/0010-quantifiers.html)
+    Quantifiers,
     /// Automatically check that uninitialized memory is not used.
     UninitChecks,
     /// Enable an unstable option or subcommand.
@@ -106,8 +108,6 @@ pub enum UnstableFeature {
     /// Automatically check that no invalid value is produced which is considered UB in Rust.
     /// Note that this does not include checking uninitialized value.
     ValidValueChecks,
-    /// Enable quantifiers
-    Quantifiers,
 }
 
 impl UnstableFeature {
