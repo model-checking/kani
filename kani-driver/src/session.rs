@@ -418,18 +418,46 @@ fn init_logger(args: &VerificationArgs) {
     tracing::subscriber::set_global_default(subscriber).unwrap();
 }
 
-// Setup the default version of cargo being run, based on the type/mode of installation for kani
-// If kani is being run in developer mode, then we use the one provided by rustup as we can assume that the developer will have rustup installed
+pub fn setup_cargo_command() -> Result<Command> {
+    setup_cargo_command_inner(None)
+}
+
+// Setup the default version of cargo being run, based on the type/mode of installation for kani.
+// Optionally takes a path to output compiler profiling info to.
+// If kani is being run in developer mode, then we use the one provided by rustup as we can assume that the developer will have rustup installed.
 // For release versions of Kani, we use a version of cargo that's in the toolchain that's been symlinked during `cargo-kani` setup. This will allow
 // Kani to remove the runtime dependency on rustup later on.
-pub fn setup_cargo_command() -> Result<Command> {
+pub fn setup_cargo_command_inner(profiling_out_path: Option<String>) -> Result<Command> {
     let install_type = InstallType::new()?;
 
     let cmd = match install_type {
         InstallType::DevRepo(_) => {
-            let mut cmd = Command::new("cargo");
-            cmd.arg(self::toolchain_shorthand());
-            cmd
+            // check if we should instrument the compiler for a flamegraph
+            let instrument_compiler = matches!(
+                std::env::var("FLAMEGRAPH"),
+                Ok(ref s) if s == "all" || s == "compiler"
+            );
+            let flamegraph_dir = "flamegraphs";
+
+            if let Some(profiler_out_path) = profiling_out_path
+                && instrument_compiler
+            {
+                let _ = std::fs::create_dir(flamegraph_dir); // create temporary flamegraph directory
+
+                let mut cmd = Command::new("samply");
+                cmd.arg("record");
+                cmd.arg("-r").arg("8000"); // adjust the sampling rate (in Hz)
+                cmd.arg("-o")
+                    .arg(format!("{flamegraph_dir}/compiler-{profiler_out_path}.json.gz",)); // set the output file
+                cmd.arg("--save-only"); // just save the output and don't open the interactive UI.
+                cmd.arg("cargo");
+                cmd.arg(self::toolchain_shorthand());
+                cmd
+            } else {
+                let mut cmd = Command::new("cargo");
+                cmd.arg(self::toolchain_shorthand());
+                cmd
+            }
         }
         InstallType::Release(kani_dir) => {
             let cargo_path = kani_dir.join("toolchain").join("bin").join("cargo");
