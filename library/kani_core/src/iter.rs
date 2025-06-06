@@ -1,19 +1,17 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-//! This macro generates implementations of the `Arbitrary` trait for various types. The `Arbitrary` trait defines
-//! methods for generating arbitrary (unconstrained) values of the implementing type.
-//! trivial_arbitrary and nonzero_arbitrary are implementations of Arbitrary for types that can be represented
-//! by an unconstrained symbolic value of their size (e.g., `u8`, `u16`, `u32`, etc.).
-//!
-//! TODO: Use this inside kani library so that we dont have to maintain two copies of the same proc macro for arbitrary.
+//! This macro generates implementations of the `KaniIntoIter` trait for various common types that are used in for loop.
+//! We use this trait to overwrite the Rust IntoIter trait to reduce call stacks and avoid complicated loop invariant specifications,
+//! while maintaining the semantic of the loop.
+
 
 #[macro_export]
 #[allow(clippy::crate_in_macro_def)]
 macro_rules! generate_iter {
     () => {
         use core_path::slice::Iter;
-        
+
         pub struct KaniIter<T> {
             pub iptr: *const T,
             pub len: usize,
@@ -52,7 +50,7 @@ macro_rules! generate_iter {
 
         impl<T> KaniIntoIter for Iter<'_, T> {
             type Item = T;
-            fn kani_into_iter(self) -> (*const Self::Item, usize){
+            fn kani_into_iter(self) -> (*const Self::Item, usize) {
                 (self.as_slice().as_ptr(), self.len())
             }
         }
@@ -73,11 +71,10 @@ macro_rules! generate_iter {
 
         impl<T> KaniIntoIter for Vec<T> {
             type Item = T;
-            fn kani_into_iter(self) -> (*const Self::Item, usize){
+            fn kani_into_iter(self) -> (*const Self::Item, usize) {
                 let s = self.iter();
                 (s.as_slice().as_ptr(), s.len())
             }
         }
-
     };
 }
