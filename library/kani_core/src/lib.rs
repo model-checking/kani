@@ -629,7 +629,7 @@ macro_rules! kani_intrinsics {
 
             #[crate::kani::unstable_feature(
                 feature = "quantifiers",
-                issue = 4134,
+                issue = 2546,
                 reason = "experimental quantifiers"
             )]
             #[inline(never)]
@@ -643,7 +643,7 @@ macro_rules! kani_intrinsics {
 
             #[crate::kani::unstable_feature(
                 feature = "quantifiers",
-                issue = 4134,
+                issue = 2546,
                 reason = "experimental quantifiers"
             )]
             #[inline(never)]
