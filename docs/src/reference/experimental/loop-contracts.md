@@ -93,7 +93,7 @@ Complete - 1 successfully verified harnesses, 0 failures, 1 total.
 ```
 
 
-## Loop contracts for `while` loops
+## Loop contracts
 
 ### Syntax
 > 
@@ -168,10 +168,12 @@ Kani automatically contracts (instead of unwinds) all loops in the functions tha
 
 Loop contracts comes with the following limitations.
 
-1. `while` loops and `loop` loops are supported. The other kinds of loops are not supported: [`while let` loops](https://doc.rust-lang.org/reference/expressions/loop-expr.html#predicate-pattern-loops), and [`for` loops](https://doc.rust-lang.org/reference/expressions/loop-expr.html#iterator-loops).
-2. Kani infers *loop modifies* with alias analysis. Loop modifies are those variables we assume to be arbitrary in the inductive hypothesis, and should cover all memory locations that are written to during 
+1. `while` loops and `loop` loops are supported. The [`while let` loops](https://doc.rust-lang.org/reference/expressions/loop-expr.html#predicate-pattern-loops) are not supported. 
+2. [`for` loops](https://doc.rust-lang.org/reference/expressions/loop-expr.html#iterator-loops) are supported for some common types: `array`, `slice`, `Iter`, `Vec`. 
+The memory predicates feature must be enabled (`-Z loop-contracts -Z memory-predicates`).
+3. Kani infers *loop modifies* with alias analysis. Loop modifies are those variables we assume to be arbitrary in the inductive hypothesis, and should cover all memory locations that are written to during 
    the execution of the loops. A proof will fail if the inferred loop modifies misses some targets written in the loops.
    We observed this happens when some fields of structs are modified by some other functions called in the loops.
-3. Kani doesn't check if a loop will always terminate in proofs with loop contracts. So it could be that some properties are proved successfully with Kani but actually are unreachable due to the 
+4. Kani doesn't check if a loop will always terminate in proofs with loop contracts. So it could be that some properties are proved successfully with Kani but actually are unreachable due to the 
    non-termination of some loops.
-4. We don't check if loop invariants are side-effect free. A loop invariant with a side effect could lead to an unsound proof result. Make sure that the specified loop contracts are side-effect free.
+5. We don't check if loop invariants are side-effect free. A loop invariant with a side effect could lead to an unsound proof result. Make sure that the specified loop contracts are side-effect free.
