@@ -627,6 +627,11 @@ macro_rules! kani_intrinsics {
                 assert!(cond, "{}", msg);
             }
 
+            #[crate::kani::unstable_feature(
+                feature = "quantifiers",
+                issue = 2546,
+                reason = "experimental quantifiers"
+            )]
             #[inline(never)]
             #[kanitool::fn_marker = "ForallHook"]
             pub fn kani_forall<T, F>(lower_bound: T, upper_bound: T, predicate: F) -> bool
@@ -636,6 +641,11 @@ macro_rules! kani_intrinsics {
                 predicate(lower_bound)
             }
 
+            #[crate::kani::unstable_feature(
+                feature = "quantifiers",
+                issue = 2546,
+                reason = "experimental quantifiers"
+            )]
             #[inline(never)]
             #[kanitool::fn_marker = "ExistsHook"]
             pub fn kani_exists<T, F>(lower_bound: T, upper_bound: T, predicate: F) -> bool
