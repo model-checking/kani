@@ -240,11 +240,11 @@ pub fn transform_for_to_loop(
     let iter_ident = format_ident!("{}", itername);
 
     let mut ptrname = "kaniiter_ptr".to_owned();
-    ptrname.push_str(&loop_id);
+    ptrname.push_str(loop_id);
     let ptr_ident = format_ident!("{}", ptrname);
 
     let mut lenname = "kaniiter_len".to_owned();
-    lenname.push_str(&loop_id);
+    lenname.push_str(loop_id);
     let len_ident = format_ident!("{}", lenname);
 
     // Create initialization statement for the iterator
@@ -307,13 +307,10 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut init_iter_stmt: Option<Stmt> = None;
     let mut init_pat_stmt: Option<Stmt> = None;
     let mut alloc_assume_stmt: Option<Stmt> = None;
-    if let Stmt::Expr(ref e, _) = loop_stmt {
-        if let Expr::ForLoop(for_loop) = e {
-            (loop_stmt, init_ptr_stmt, init_iter_stmt, init_pat_stmt, alloc_assume_stmt) =
-                transform_for_to_loop(for_loop.clone(), &loop_id);
-        }
+    if let Stmt::Expr(Expr::ForLoop(for_loop), _) = &loop_stmt {
+        (loop_stmt, init_ptr_stmt, init_iter_stmt, init_pat_stmt, alloc_assume_stmt) =
+            transform_for_to_loop(for_loop.clone(), &loop_id);
     }
-
     // name of the loop invariant as closure of the form
     // __kani_loop_invariant_#startline_#startcol_#endline_#endcol
     let mut inv_name: String = "__kani_loop_invariant".to_owned();
@@ -409,54 +406,7 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
             note = "for now, loop contracts is only supported for while-loops.";
         ),
     }
-    let ret: TokenStream = if init_ptr_stmt.is_none() {
-        if has_prev {
-            quote!(
-            {
-            if (#loop_guard) {
-            #(#onentry_decl_stms)*
-            #(#prev_decl_stms)*
-            let mut #loop_body_closure = ||
-            #loop_body;
-            let (#loop_body_closure_ret_1, #loop_body_closure_ret_2) = #loop_body_closure ();
-            if #loop_body_closure_ret_2.is_some() {
-                return #loop_body_closure_ret_2.unwrap();
-            }
-            if #loop_body_closure_ret_1 {
-            // Dummy function used to force the compiler to capture the environment.
-            // We cannot call closures inside constant functions.
-            // This function gets replaced by `kani::internal::call_closure`.
-                #[inline(never)]
-                #[kanitool::fn_marker = "kani_register_loop_contract"]
-                const fn #register_ident<F: Fn() -> bool>(_f: &F, _transformed: usize) -> bool {
-                    true
-                }
-                #loop_stmt
-            }
-            else {
-                assert!(#inv_expr);
-            };
-            }
-            })
-            .into()
-        } else {
-            quote!(
-            {
-            #(#onentry_decl_stms)*
-            // Dummy function used to force the compiler to capture the environment.
-            // We cannot call closures inside constant functions.
-            // This function gets replaced by `kani::internal::call_closure`.
-            #[inline(never)]
-            #[kanitool::fn_marker = "kani_register_loop_contract"]
-            const fn #register_ident<F: Fn() -> bool>(_f: &F, _transformed: usize) -> bool {
-                true
-            }
-            #loop_stmt
-            })
-            .into()
-        }
-    } else {
-        let init_ptr_stmt = init_ptr_stmt.unwrap();
+    let ret: TokenStream = if let Some(init_ptr_stmt) = init_ptr_stmt {
         let init_iter_stmt = init_iter_stmt.unwrap();
         let init_pat_stmt = init_pat_stmt.unwrap();
         let alloc_assume_stmt = alloc_assume_stmt.unwrap();
@@ -507,6 +457,52 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
             #init_ptr_stmt
             #alloc_assume_stmt
             #init_pat_stmt
+            #loop_stmt
+            })
+            .into()
+        }
+    } else {
+        if has_prev {
+            quote!(
+            {
+            if (#loop_guard) {
+            #(#onentry_decl_stms)*
+            #(#prev_decl_stms)*
+            let mut #loop_body_closure = ||
+            #loop_body;
+            let (#loop_body_closure_ret_1, #loop_body_closure_ret_2) = #loop_body_closure ();
+            if #loop_body_closure_ret_2.is_some() {
+                return #loop_body_closure_ret_2.unwrap();
+            }
+            if #loop_body_closure_ret_1 {
+            // Dummy function used to force the compiler to capture the environment.
+            // We cannot call closures inside constant functions.
+            // This function gets replaced by `kani::internal::call_closure`.
+                #[inline(never)]
+                #[kanitool::fn_marker = "kani_register_loop_contract"]
+                const fn #register_ident<F: Fn() -> bool>(_f: &F, _transformed: usize) -> bool {
+                    true
+                }
+                #loop_stmt
+            }
+            else {
+                assert!(#inv_expr);
+            };
+            }
+            })
+            .into()
+        } else {
+            quote!(
+            {
+            #(#onentry_decl_stms)*
+            // Dummy function used to force the compiler to capture the environment.
+            // We cannot call closures inside constant functions.
+            // This function gets replaced by `kani::internal::call_closure`.
+            #[inline(never)]
+            #[kanitool::fn_marker = "kani_register_loop_contract"]
+            const fn #register_ident<F: Fn() -> bool>(_f: &F, _transformed: usize) -> bool {
+                true
+            }
             #loop_stmt
             })
             .into()
