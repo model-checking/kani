@@ -817,9 +817,6 @@ fn handle_quantifier(
     span: Span,
     quantifier_kind: QuantifierKind,
 ) -> Stmt {
-    if gcx.queries.args().unstable_features.contains(&"loop-contracts".to_string()) {
-        panic!("Unstable feature Quantifier is not enable")
-    }
     let loc = gcx.codegen_span_stable(span);
     let target = target.unwrap();
     let lower_bound = &fargs[0];
