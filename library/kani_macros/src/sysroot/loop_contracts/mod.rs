@@ -228,7 +228,7 @@ fn transform_break_continue(block: &mut Block) {
 
 pub fn transform_for_to_loop(
     for_loop: ExprForLoop,
-    loop_id: &String,
+    loop_id: &str,
 ) -> (Stmt, Option<Stmt>, Option<Stmt>, Option<Stmt>, Option<Stmt>) {
     // Extract components from the for loop
     let pat = *for_loop.pat;
@@ -461,52 +461,50 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
             })
             .into()
         }
-    } else {
-        if has_prev {
-            quote!(
-            {
-            if (#loop_guard) {
-            #(#onentry_decl_stms)*
-            #(#prev_decl_stms)*
-            let mut #loop_body_closure = ||
-            #loop_body;
-            let (#loop_body_closure_ret_1, #loop_body_closure_ret_2) = #loop_body_closure ();
-            if #loop_body_closure_ret_2.is_some() {
-                return #loop_body_closure_ret_2.unwrap();
-            }
-            if #loop_body_closure_ret_1 {
-            // Dummy function used to force the compiler to capture the environment.
-            // We cannot call closures inside constant functions.
-            // This function gets replaced by `kani::internal::call_closure`.
-                #[inline(never)]
-                #[kanitool::fn_marker = "kani_register_loop_contract"]
-                const fn #register_ident<F: Fn() -> bool>(_f: &F, _transformed: usize) -> bool {
-                    true
-                }
-                #loop_stmt
-            }
-            else {
-                assert!(#inv_expr);
-            };
-            }
-            })
-            .into()
-        } else {
-            quote!(
-            {
-            #(#onentry_decl_stms)*
-            // Dummy function used to force the compiler to capture the environment.
-            // We cannot call closures inside constant functions.
-            // This function gets replaced by `kani::internal::call_closure`.
+    } else if has_prev {
+        quote!(
+        {
+        if (#loop_guard) {
+        #(#onentry_decl_stms)*
+        #(#prev_decl_stms)*
+        let mut #loop_body_closure = ||
+        #loop_body;
+        let (#loop_body_closure_ret_1, #loop_body_closure_ret_2) = #loop_body_closure ();
+        if #loop_body_closure_ret_2.is_some() {
+            return #loop_body_closure_ret_2.unwrap();
+        }
+        if #loop_body_closure_ret_1 {
+        // Dummy function used to force the compiler to capture the environment.
+        // We cannot call closures inside constant functions.
+        // This function gets replaced by `kani::internal::call_closure`.
             #[inline(never)]
             #[kanitool::fn_marker = "kani_register_loop_contract"]
             const fn #register_ident<F: Fn() -> bool>(_f: &F, _transformed: usize) -> bool {
                 true
             }
             #loop_stmt
-            })
-            .into()
         }
+        else {
+            assert!(#inv_expr);
+        };
+        }
+        })
+        .into()
+    } else {
+        quote!(
+        {
+        #(#onentry_decl_stms)*
+        // Dummy function used to force the compiler to capture the environment.
+        // We cannot call closures inside constant functions.
+        // This function gets replaced by `kani::internal::call_closure`.
+        #[inline(never)]
+        #[kanitool::fn_marker = "kani_register_loop_contract"]
+        const fn #register_ident<F: Fn() -> bool>(_f: &F, _transformed: usize) -> bool {
+            true
+        }
+        #loop_stmt
+        })
+        .into()
     };
     ret
 }
