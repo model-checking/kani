@@ -41,7 +41,7 @@ use rustc_session::Session;
 use rustc_session::config::{CrateType, OutputFilenames, OutputType};
 use rustc_session::output::out_filename;
 use rustc_smir::rustc_internal;
-use rustc_span::symbol::Symbol;
+use rustc_span::{Symbol, sym};
 use rustc_target::spec::PanicStrategy;
 use stable_mir::CrateDef;
 use stable_mir::mir::mono::{Instance, MonoItem};
@@ -252,21 +252,37 @@ impl CodegenBackend for GotocCodegenBackend {
         DEFAULT_LOCALE_RESOURCE
     }
 
-    fn target_config(&self, _sess: &Session) -> TargetConfig {
+    fn target_config(&self, sess: &Session) -> TargetConfig {
+        // This code is adapted from the cranelift backend:
+        // https://github.com/rust-lang/rust/blob/a124fb3cb7291d75872934f411d81fe298379ace/compiler/rustc_codegen_cranelift/src/lib.rs#L184
+        let target_features = if sess.target.arch == "x86_64" && sess.target.os != "none" {
+            // x86_64 mandates SSE2 support and rustc requires the x87 feature to be enabled
+            vec![sym::sse, sym::sse2, Symbol::intern("x87")]
+        } else if sess.target.arch == "aarch64" {
+            match &*sess.target.os {
+                "none" => vec![],
+                // On macOS the aes, sha2 and sha3 features are enabled by default and ring
+                // fails to compile on macOS when they are not present.
+                "macos" => vec![sym::neon, sym::aes, sym::sha2, sym::sha3],
+                // AArch64 mandates Neon support
+                _ => vec![sym::neon],
+            }
+        } else {
+            vec![]
+        };
+        // FIXME do `unstable_target_features` properly
+        let unstable_target_features = target_features.clone();
+
+        let has_reliable_f128 = true;
+        let has_reliable_f16 = true;
+
         TargetConfig {
-            target_features: vec![],
-            unstable_target_features: vec![
-                Symbol::intern("sse"),
-                Symbol::intern("neon"),
-                Symbol::intern("x87"),
-                Symbol::intern("sse2"),
-            ],
-            // `true` is used as a default so backends need to acknowledge when they do not
-            // support the float types, rather than accidentally quietly skipping all tests.
-            has_reliable_f16: true,
-            has_reliable_f16_math: true,
-            has_reliable_f128: true,
-            has_reliable_f128_math: true,
+            target_features,
+            unstable_target_features,
+            has_reliable_f16,
+            has_reliable_f16_math: has_reliable_f16,
+            has_reliable_f128,
+            has_reliable_f128_math: has_reliable_f128,
         }
     }
 
@@ -290,9 +306,23 @@ impl CodegenBackend for GotocCodegenBackend {
             if queries.args().reachability_analysis != ReachabilityType::None
                 && queries.kani_functions().is_empty()
             {
-                tcx.sess.dcx().err(
-                    "Failed to detect Kani functions. Please check your installation is correct.",
-                );
+                if stable_mir::find_crates("std").is_empty()
+                    && stable_mir::find_crates("kani").is_empty()
+                {
+                    // Special error for when not importing kani and using #[no_std].
+                    // See here for more info: https://github.com/model-checking/kani/issues/3906#issuecomment-2932687768.
+                    tcx.sess.dcx().struct_err(
+                        "Failed to detect Kani functions."
+                    ).with_help(
+                        "This project seems to be using #[no_std] but does not import Kani. \
+                        Try adding `crate extern kani` to the crate root to explicitly import Kani."
+                    )
+                    .emit();
+                } else {
+                    tcx.sess.dcx().struct_err(
+                        "Failed to detect Kani functions. Please check your installation is correct."
+                    ).emit();
+                }
             }
 
             // Codegen all items that need to be processed according to the selected reachability mode:

@@ -13,7 +13,7 @@ publish = false
 
 [dependencies]
 kani_metadata = { path = "../kani_metadata" }
-cargo_metadata = "0.19"
+cargo_metadata = "0.20"
 anyhow = "1"
 console = "0.15.1"
 once_cell = "1.19.0"

@@ -73,7 +73,7 @@ pub(crate) fn assess_scan_main(session: KaniSession, args: &ScanArgs) -> Result<
         let workspace_root = workspace.workspace_root.as_std_path();
         for package in workspace.workspace_packages() {
             if let Some(filter) = &package_filter
-                && !filter.contains(&package.name)
+                && !filter.contains(package.name.as_ref())
             {
                 println!("Skipping filtered-out package {}", package.name);
                 continue;
