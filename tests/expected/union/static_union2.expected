@@ -1,0 +1,11 @@
+main.assertion.1\
+         - Status: SUCCESS\
+         - Description: "index out of bounds: the length is less than or equal to the given index"\
+
+Check 2: main.assertion.2\
+         - Status: FAILURE\
+         - Description: "assertion failed: unsafe { FOO.a[1] } == 5"\
+
+Failed Checks: assertion failed: unsafe { FOO.a[1] } == 5
+
+VERIFICATION:- FAILED

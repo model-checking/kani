@@ -161,6 +161,11 @@ impl GotocCtx<'_> {
                                 debug_write_type(ctx, typ, out, indent + 2)?;
                                 writeln!(out, ",")?;
                             }
+                            DatatypeComponent::UnionField { name, typ, .. } => {
+                                write!(out, "{:indent$}{name}: ", "", indent = indent + 2)?;
+                                debug_write_type(ctx, typ, out, indent + 2)?;
+                                writeln!(out, ",")?;
+                            }
                             DatatypeComponent::Padding { bits, .. } => {
                                 writeln!(
                                     out,
@@ -193,6 +198,11 @@ impl GotocCtx<'_> {
                     for c in components {
                         match c {
                             DatatypeComponent::Field { name, typ } => {
+                                write!(out, "{:indent$}{name}: ", "", indent = indent + 2)?;
+                                debug_write_type(ctx, typ, out, indent + 2)?;
+                                writeln!(out, ",")?;
+                            }
+                            DatatypeComponent::UnionField { name, typ, .. } => {
                                 write!(out, "{:indent$}{name}: ", "", indent = indent + 2)?;
                                 debug_write_type(ctx, typ, out, indent + 2)?;
                                 writeln!(out, ",")?;
@@ -1195,15 +1205,36 @@ impl<'tcx> GotocCtx<'tcx> {
         def: &'tcx AdtDef,
         subst: &'tcx GenericArgsRef<'tcx>,
     ) -> Type {
+        let union_size = rustc_internal::stable(ty).layout().unwrap().shape().size.bits();
+        let union_name = self.ty_mangled_name(ty);
+        let union_pretty_name = self.ty_pretty_name(ty);
         self.ensure_union(self.ty_mangled_name(ty), self.ty_pretty_name(ty), |ctx, _| {
-            def.variants().raw[0]
+            let fields_info: Vec<(String, Type, u64)> = def.variants().raw[0]
                 .fields
                 .iter()
                 .map(|f| {
-                    DatatypeComponent::field(
-                        f.name.to_string(),
-                        ctx.codegen_ty(f.ty(ctx.tcx, subst)),
-                    )
+                    let ty = rustc_internal::stable(f.ty(ctx.tcx, subst));
+                    let ty_size = ty.layout().unwrap().shape().size.bits();
+                    let padding_size = union_size - ty_size;
+                    (f.name.to_string(), ctx.codegen_ty_stable(ty), padding_size as u64)
+                })
+                .collect();
+            fields_info
+                .iter()
+                .map(|(name, ty, padding)| {
+                    let struct_name = format!("{union_name}::{name}");
+                    let pretty_struct_name = format!("{union_pretty_name}::{name}");
+                    let pad_name = format!("{name}_padding");
+                    let padded_typ: Type = if *padding == 0 {
+                        ty.clone()
+                    } else {
+                        let pad =
+                            DatatypeComponent::Padding { name: pad_name.into(), bits: *padding };
+                        ctx.ensure_struct(struct_name, pretty_struct_name, |_ctx, _| {
+                            vec![DatatypeComponent::field(name, ty.clone()), pad.clone()]
+                        })
+                    };
+                    DatatypeComponent::unionfield(name, ty.clone(), padded_typ)
                 })
                 .collect()
         })
