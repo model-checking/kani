@@ -72,8 +72,26 @@ pub struct StandaloneAutoharnessArgs {
     pub verify_opts: VerificationArgs,
 }
 
+impl ValidateArgs for CommonAutoharnessArgs {
+    fn validate(&self) -> Result<(), Error> {
+        // Error gracefully if a pattern contains whitespace, since rustc_driver argument will panic later if we try to pass this back,
+        // c.f. https://github.com/model-checking/kani/issues/4046
+        for pattern in self.include_pattern.iter().chain(self.exclude_pattern.iter()) {
+            if pattern.contains(char::is_whitespace) {
+                return Err(Error::raw(
+                    ErrorKind::InvalidValue,
+                    "The `--include-pattern` and `--exclude-pattern` options do not support patterns with whitespace. \
+                        Use regular expression pattern flags (e.g., . to match any character) instead.",
+                ));
+            }
+        }
+        Ok(())
+    }
+}
+
 impl ValidateArgs for CargoAutoharnessArgs {
     fn validate(&self) -> Result<(), Error> {
+        self.common_autoharness_args.validate()?;
         self.verify_opts.validate()?;
         if !self.verify_opts.common_args.unstable_features.contains(UnstableFeature::Autoharness) {
             return Err(Error::raw(
@@ -113,6 +131,7 @@ impl ValidateArgs for CargoAutoharnessArgs {
 
 impl ValidateArgs for StandaloneAutoharnessArgs {
     fn validate(&self) -> Result<(), Error> {
+        self.common_autoharness_args.validate()?;
         self.verify_opts.validate()?;
         if !self.verify_opts.common_args.unstable_features.contains(UnstableFeature::Autoharness) {
             return Err(Error::raw(
