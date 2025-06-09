@@ -29,6 +29,7 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 * Set target features depending on the target architecture by @zhassan-aws in https://github.com/model-checking/kani/pull/4127
 * Improve linking error output for `#[no_std]` crates by @AlexanderPortland in https://github.com/model-checking/kani/pull/4126
 * Gate quantifiers behind an experimental feature by @thanhnguyen-aws in https://github.com/model-checking/kani/pull/4141
+* Autoharness: change `pattern` options to accept regexes by @carolynzech in https://github.com/model-checking/kani/pull/4144
 * Rust toolchain upgraded to 2025-06-03 by @carolynzech @thanhnguyen-aws @zhassan-aws
 
 **Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.62.0...kani-0.63.0
