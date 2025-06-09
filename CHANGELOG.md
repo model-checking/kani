@@ -15,7 +15,6 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 ### What's Changed
 * Enable target features: x87 and sse2 by @thanhnguyen-aws in https://github.com/model-checking/kani/pull/4062
 * Fix the bug: Loop contracts are not composable with function contracts by @thanhnguyen-aws in https://github.com/model-checking/kani/pull/3979
-* Fix stabilization instructions in RFC intro by @carolynzech in https://github.com/model-checking/kani/pull/4067
 * Autoharness argument validation: only error on `--quiet` if `--list` was passed by @carolynzech in https://github.com/model-checking/kani/pull/4069
 * Add setup scripts for Ubuntu 20.04 by @zhassan-aws in https://github.com/model-checking/kani/pull/4082
 * Fix the error that Kani panics when there is no external parameter in quantifier's closure. by @thanhnguyen-aws in https://github.com/model-checking/kani/pull/4088
