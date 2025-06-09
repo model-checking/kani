@@ -299,20 +299,18 @@ impl IrepNumbering {
             .map(|(key, value)| (self.number_irep_id(key).number, self.number_irep(value).number))
             .collect();
         let key = IrepKey::new(id, &sub, &named_sub);
-        self.get_or_insert(&key)
+        self.get_or_insert(key)
     }
 
     /// Gets the existing [NumberedIrep] from the [IrepKey] or inserts a fresh
     /// one and returns it.
-    fn get_or_insert(&mut self, key: &IrepKey) -> NumberedIrep {
-        if let Some(number) = self.cache.get(key) {
-            // Return the NumberedIrep from the inverse cache
-            return self.inv_cache.index[*number];
-        }
-        // This is where the key gets its unique number assigned.
-        let number = self.inv_cache.add_key(key);
-        self.cache.insert(key.clone(), number);
-        self.inv_cache.index[number]
+    fn get_or_insert(&mut self, key: IrepKey) -> NumberedIrep {
+        let number = self.cache.entry(key).or_insert_with_key(|key| {
+            // This is where the key gets its unique number assigned.
+            self.inv_cache.add_key(key)
+        });
+
+        self.inv_cache.index[*number]
     }
 
     /// Returns the unique number of the `id` field of the given [NumberedIrep].
@@ -829,7 +827,7 @@ where
                         let key = IrepKey::new(id, &sub, &named_sub);
 
                         // Insert key in the numbering
-                        let numbered = self.numbering.get_or_insert(&key);
+                        let numbered = self.numbering.get_or_insert(key);
 
                         // Map number from the binary to new number
                         self.add_irep_mapping(irep_number, numbered.number);
