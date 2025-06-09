@@ -6,6 +6,7 @@ use std::path::PathBuf;
 
 use crate::args::list_args::Format;
 use crate::args::{ValidateArgs, VerificationArgs, validate_std_path};
+use crate::util::warning;
 use clap::{Error, Parser, error::ErrorKind};
 use kani_metadata::UnstableFeature;
 use regex::Regex;
@@ -92,6 +93,21 @@ impl ValidateArgs for CommonAutoharnessArgs {
                 ));
             }
         }
+
+        for include_pattern in self.include_pattern.iter() {
+            for exclude_pattern in self.exclude_pattern.iter() {
+                // Check if include pattern contains exclude pattern
+                // This catches cases like include="foo::bar" exclude="bar" or include="foo" exclude="foo"
+                if include_pattern.contains(exclude_pattern) {
+                    warning(&format!(
+                        "Include pattern '{include_pattern}' contains exclude pattern '{exclude_pattern}'. \
+                            This combination will never match any functions since all functions matching \
+                            the include pattern will also match the exclude pattern, and the exclude pattern takes precedence."
+                    ));
+                }
+            }
+        }
+
         Ok(())
     }
 }
