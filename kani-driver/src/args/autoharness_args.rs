@@ -8,6 +8,7 @@ use crate::args::list_args::Format;
 use crate::args::{ValidateArgs, VerificationArgs, validate_std_path};
 use clap::{Error, Parser, error::ErrorKind};
 use kani_metadata::UnstableFeature;
+use regex::Regex;
 
 // TODO: It would be nice if we could borrow --exact here from VerificationArgs to differentiate between partial/exact matches,
 // like --harnesses does. Sharing arguments with VerificationArgs doesn't work with our current structure, though.
@@ -82,6 +83,12 @@ impl ValidateArgs for CommonAutoharnessArgs {
                     ErrorKind::InvalidValue,
                     "The `--include-pattern` and `--exclude-pattern` options do not support patterns with whitespace. \
                         Use regular expression pattern flags (e.g., . to match any character) instead.",
+                ));
+            }
+            if let Err(e) = Regex::new(pattern) {
+                return Err(Error::raw(
+                    ErrorKind::InvalidValue,
+                    format!("invalid autoharness regular expression pattern: {e}"),
                 ));
             }
         }
