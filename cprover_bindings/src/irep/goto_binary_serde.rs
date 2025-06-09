@@ -80,6 +80,9 @@
 
 use crate::irep::{Irep, IrepId, Symbol, SymbolTable};
 use crate::{InternString, InternedString};
+#[cfg(not(test))]
+use fxhash::FxHashMap;
+#[cfg(test)]
 use std::collections::HashMap;
 use std::fs::File;
 use std::hash::Hash;
@@ -199,6 +202,23 @@ impl IrepNumberingInv {
     }
 }
 
+#[cfg(not(test))]
+/// A numbering of [InternedString], [IrepId] and [Irep] based on their contents.
+struct IrepNumbering {
+    /// Map from [InternedString] to their unique numbers.
+    string_cache: FxHashMap<InternedString, usize>,
+
+    /// Inverse string cache.
+    inv_string_cache: Vec<NumberedString>,
+
+    /// Map from [IrepKey] to their unique numbers.
+    cache: FxHashMap<IrepKey, usize>,
+
+    /// Inverse cache, allows to get a NumberedIrep from its unique number.
+    inv_cache: IrepNumberingInv,
+}
+
+#[cfg(test)]
 /// A numbering of [InternedString], [IrepId] and [Irep] based on their contents.
 struct IrepNumbering {
     /// Map from [InternedString] to their unique numbers.
@@ -214,16 +234,31 @@ struct IrepNumbering {
     inv_cache: IrepNumberingInv,
 }
 
+#[cfg(not(test))]
 impl IrepNumbering {
     fn new() -> Self {
         IrepNumbering {
-            string_cache: HashMap::new(),
+            string_cache: FxHashMap::default(),
             inv_string_cache: Vec::new(),
-            cache: HashMap::new(),
+            cache: FxHashMap::default(),
             inv_cache: IrepNumberingInv::new(),
         }
     }
+}
 
+#[cfg(test)]
+impl IrepNumbering {
+    fn new() -> Self {
+        IrepNumbering {
+            string_cache: HashMap::default(),
+            inv_string_cache: Vec::new(),
+            cache: HashMap::default(),
+            inv_cache: IrepNumberingInv::new(),
+        }
+    }
+}
+
+impl IrepNumbering {
     /// Returns a [NumberedString] from its number if it exists, None otherwise.
     fn numbered_string_from_number(&mut self, string_number: usize) -> Option<NumberedString> {
         self.inv_string_cache.get(string_number).copied()
