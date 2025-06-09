@@ -14,7 +14,6 @@ use crate::list::collect_metadata::process_metadata;
 use crate::list::output::output_list_results;
 use crate::project::{Project, standalone_project, std_project};
 use crate::session::KaniSession;
-use crate::util::warning;
 use crate::{InvocationType, print_kani_version, project, verify_project};
 use anyhow::Result;
 use comfy_table::Table as PrettyTable;
@@ -163,20 +162,6 @@ impl KaniSession {
 
     /// Add the compiler arguments specific to the `autoharness` subcommand.
     pub fn add_auto_harness_args(&mut self, included: &[String], excluded: &[String]) {
-        for include_pattern in included {
-            for exclude_pattern in excluded {
-                // Check if include pattern contains exclude pattern
-                // This catches cases like include="foo::bar" exclude="bar" or include="foo" exclude="foo"
-                if include_pattern.contains(exclude_pattern) {
-                    warning(&format!(
-                        "Include pattern '{include_pattern}' contains exclude pattern '{exclude_pattern}'. \
-                            This combination will never match any functions since all functions matching \
-                            the include pattern will also match the exclude pattern, and the exclude pattern takes precedence."
-                    ));
-                }
-            }
-        }
-
         let mut args = vec![];
         for pattern in included {
             args.push(format!("--autoharness-include-pattern {pattern}"));
