@@ -11,25 +11,15 @@ use clap::{Error, Parser, error::ErrorKind};
 use kani_metadata::UnstableFeature;
 use regex::Regex;
 
-// TODO: It would be nice if we could borrow --exact here from VerificationArgs to differentiate between partial/exact matches,
-// like --harnesses does. Sharing arguments with VerificationArgs doesn't work with our current structure, though.
 #[derive(Debug, Parser)]
 pub struct CommonAutoharnessArgs {
-    /// Only create automatic harnesses for functions that match the given pattern.
-    /// This option can be provided multiple times, which will verify functions matching any of the patterns.
-    /// Kani considers a function to match the pattern if its fully qualified path contains PATTERN as a substring.
-    /// Example: `--include-pattern foo` matches all functions whose fully qualified paths contain the substring "foo".
+    /// Only create automatic harnesses for functions that match the given regular expression.
     #[arg(long = "include-pattern", num_args(1), value_name = "PATTERN")]
     pub include_pattern: Vec<String>,
 
-    /// Only create automatic harnesses for functions that do not match the given pattern.
-    /// This option can be provided multiple times, which will verify functions that do not match any of the patterns.
-    /// Kani considers a function to match the pattern if its fully qualified path contains PATTERN as a substring.
-
+    /// Only create automatic harnesses for functions that do not match the given regular expression pattern.
     /// This option takes precedence over `--include-pattern`, i.e., Kani will first select all functions that match `--include-pattern`,
     /// then exclude those that match `--exclude-pattern.`
-    /// Example: `--include-pattern foo --exclude-pattern foo::bar` creates automatic harnesses for all functions whose paths contain "foo" without "foo::bar".
-    /// Example: `--include-pattern foo::bar --exclude-pattern foo` makes the `--include-pattern` a no-op, since the exclude pattern is a superset of the include pattern.
     #[arg(long = "exclude-pattern", num_args(1), value_name = "PATTERN")]
     pub exclude_pattern: Vec<String>,
 
