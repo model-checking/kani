@@ -6,6 +6,9 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 
 ## [0.63.0]
 
+### Breaking Changes
+* Finish deprecating `--enable-unstable`, `--restrict-vtable`, and `--write-json-symtab` by @carolynzech in https://github.com/model-checking/kani/pull/4110
+
 ### Major Changes
 * Add support for quantifiers by @qinheping in https://github.com/model-checking/kani/pull/3993
 
@@ -21,7 +24,6 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 * Update `kani::mem` pointer validity documentation by @carolynzech in https://github.com/model-checking/kani/pull/4092
 * Add support for edition 2018 crates using assert! (Fixes #3717) by @sintemal in https://github.com/model-checking/kani/pull/4096
 * Handle generic defaults in BoundedArbitrary derives by @zhassan-aws in https://github.com/model-checking/kani/pull/4117
-* Finish deprecating `--enable-unstable`, `--restrict-vtable`, and `--write-json-symtab` by @carolynzech in https://github.com/model-checking/kani/pull/4110
 * `ty_mangled_name`: only use non-mangled name if `-Zcffi` is enabled. by @carolynzech in https://github.com/model-checking/kani/pull/4114
 * Improve Help Menu by @carolynzech in https://github.com/model-checking/kani/pull/4109
 * Start stabilizing `--jobs` and `list`; deprecate default memory checks by @carolynzech in https://github.com/model-checking/kani/pull/4108
