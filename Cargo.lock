@@ -985,6 +985,7 @@ dependencies = [
  "lazy_static",
  "num",
  "quote",
+ "regex",
  "serde",
  "serde_json",
  "strum",
