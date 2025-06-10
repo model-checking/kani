@@ -3,7 +3,7 @@
 //
 // kani-flags: -Z stubbing
 //
-//! This tests that we emit a nice error message for unsupported paths.
+//! This tests that we can stub trait implementations.
 
 /// Dummy structure
 pub struct Bar;
@@ -30,11 +30,8 @@ pub fn stub_foo() -> bool {
     true
 }
 
-/// We still do not support stubbing for trait methods.
-/// <https://github.com/model-checking/kani/issues/1997>
 #[kani::proof]
 #[kani::stub(<Bar as Foo>::foo, stub_foo)]
-#[kani::stub(<Bar as Foo>::bar, stub_foo)]
 #[kani::stub(<(i32, i32) as Foo>::foo, stub_foo)]
 #[kani::stub(<[u32] as Foo>::foo, stub_foo)]
-fn unsupported_args() {}
+fn stub_trait_methods() {}
