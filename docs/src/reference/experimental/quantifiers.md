@@ -14,8 +14,8 @@ Kani currently supports the following quantifiers:
 ```rust
 #[kani::proof]
 fn test_forall() {
-    let v = vec![10; 10];
-    kani::assert(kani::forall!(|i in 0..10| v[i] == 10));
+    let v : [u8;10] = [10; 10];
+    assert!(kani::forall!(|i in (0,10)| v[i] == 10) );
 }
 ```
 
@@ -27,10 +27,11 @@ fn test_forall() {
 ```rust
 #[kani::proof]
 fn test_exists() {
-    let v = vec![1, 2, 3, 4, 5];
-    kani::assert(kani::exists!(|i in 0..v.len()| v[i] == 3));
+    let v : [u8;5] = [1, 2, 3, 4, 5];
+    assert!(kani::exists!(|i in (0,v.len())| v[i] == 3));
 }
 ```
+
 
 ### Limitations
 
@@ -39,7 +40,6 @@ fn test_exists() {
 The performance of quantifiers can be affected by the depth of call stacks in the quantified expressions. If the call stack is too deep, Kani may not be able to evaluate the quantifier effectively, leading to potential timeouts or running out of memory. Actually, array indexing in Rust leads to a deep call stack, which can cause issues with quantifiers. To mitigate this, consider using *unsafe* pointer dereferencing instead of array indexing when working with quantifiers. For example:
 
 ```rust
-
 #[kani::proof]
 fn vec_assert_forall_harness() {
     let v = vec![10 as u8; 128];
