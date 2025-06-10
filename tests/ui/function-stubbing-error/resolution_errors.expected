@@ -34,3 +34,8 @@ resolution_errors.rs
 | #[kani::stub(<Bar>::foo, stub_foo)]
 | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+error: failed to resolve `<Bar as Foo>::bar`: unable to find `bar` inside trait `Foo`
+resolution_errors.rs
+|
+| #[kani::stub(<Bar as Foo>::bar, stub_foo)]
+| ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

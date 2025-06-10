@@ -14,12 +14,11 @@ use crate::kani_middle::metadata::{
     gen_automatic_proof_metadata, gen_contracts_metadata, gen_proof_metadata,
 };
 use crate::kani_middle::reachability::filter_crate_items;
-use crate::kani_middle::resolve::expect_resolve_fn;
 use crate::kani_middle::stubbing::{check_compatibility, harness_stub_map};
 use crate::kani_queries::QueryDb;
 use kani_metadata::{
-    ArtifactType, AssignsContract, AutoHarnessMetadata, AutoHarnessSkipReason, HarnessKind,
-    HarnessMetadata, KaniMetadata,
+    ArtifactType, AssignsContract, AutoHarnessMetadata, AutoHarnessSkipReason, HarnessMetadata,
+    KaniMetadata,
 };
 use regex::RegexSet;
 use rustc_hir::def_id::DefId;
@@ -198,7 +197,7 @@ fn group_by_stubs(
     let mut per_stubs: HashMap<_, CodegenUnit> = HashMap::default();
     for (harness, metadata) in all_harnesses {
         let stub_ids = harness_stub_map(tcx, *harness, metadata);
-        let contracts = extract_contracts(tcx, *harness, metadata);
+        let contracts = extract_contracts(tcx, *harness);
         let stub_map = stub_ids
             .iter()
             .map(|(k, v)| (tcx.def_path_hash(*k), tcx.def_path_hash(*v)))
@@ -228,22 +227,15 @@ enum ContractUsage {
 ///
 /// Note that any error interpreting the result is emitted, but we delay aborting, so we emit as
 /// many errors as possible.
-fn extract_contracts(
-    tcx: TyCtxt,
-    harness: Harness,
-    metadata: &HarnessMetadata,
-) -> BTreeSet<ContractUsage> {
+fn extract_contracts(tcx: TyCtxt, harness: Harness) -> BTreeSet<ContractUsage> {
     let def = harness.def;
     let mut result = BTreeSet::new();
-    if let HarnessKind::ProofForContract { target_fn } = &metadata.attributes.kind
-        && let Ok(check_def) = expect_resolve_fn(tcx, def, target_fn, "proof_for_contract")
-    {
-        result.insert(ContractUsage::Check(check_def.def_id().to_index()));
+    let attributes = KaniAttributes::for_def_id(tcx, def.def_id());
+    if let Some(target) = attributes.interpret_for_contract_attribute() {
+        result.insert(ContractUsage::Check(target.def_id().to_index()));
     }
-
-    for stub in &metadata.attributes.verified_stubs {
-        let Ok(stub_def) = expect_resolve_fn(tcx, def, stub, "stub_verified") else { continue };
-        result.insert(ContractUsage::Stub(stub_def.def_id().to_index()));
+    for stub in attributes.interpret_stub_verified_attribute() {
+        result.insert(ContractUsage::Stub(stub.def_id().to_index()));
     }
 
     result
