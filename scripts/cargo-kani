@@ -30,5 +30,6 @@ if (( FLAMEGRAPH_DRIVER == 0 )); then
     exec -a cargo-kani "${KANI_DRIVER}" "$@"
 else 
     mkdir -p "${FLAMEGRAPH_DIR}"
-    exec -a cargo-kani samply record -r $FLAMEGRAPH_SAMPLING_RATE -o "${FLAMEGRAPH_DIR}/driver.json.gz" --save-only "${KANI_DRIVER}" "$@"
+    DATE_POSTFIX=$(date +"%Y-%m-%dT%H:%M:%S")
+    exec -a cargo-kani samply record -r $FLAMEGRAPH_SAMPLING_RATE -o "${FLAMEGRAPH_DIR}/driver-${DATE_POSTFIX}.json.gz" --save-only "${KANI_DRIVER}" "$@"
 fi

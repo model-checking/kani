@@ -444,13 +444,15 @@ pub fn setup_cargo_command_inner(profiling_out_path: Option<String>) -> Result<C
             if let Some(profiler_out_path) = profiling_out_path
                 && instrument_compiler
             {
-                let _ = std::fs::create_dir(FLAMEGRAPH_DIR); // create temporary flamegraph directory
+                let _ = std::fs::create_dir_all(FLAMEGRAPH_DIR); // create temporary flamegraph directory
+                let time_postfix = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S");
 
                 let mut cmd = Command::new("samply");
                 cmd.arg("record");
                 cmd.arg("-r").arg(FLAMEGRAPH_SAMPLING_RATE); // adjust the sampling rate (in Hz)
-                cmd.arg("-o")
-                    .arg(format!("{FLAMEGRAPH_DIR}/compiler-{profiler_out_path}.json.gz",)); // set the output file
+                cmd.arg("-o").arg(format!(
+                    "{FLAMEGRAPH_DIR}/compiler-{profiler_out_path}-{time_postfix}.json.gz",
+                ));
                 cmd.arg("--save-only"); // just save the output and don't open the interactive UI.
                 cmd.arg("cargo");
                 cmd.arg(self::toolchain_shorthand());
