@@ -38,7 +38,7 @@
 //!
 //! ### Reusing
 //!
-//! You can turn an [`UnstableFeature`] back into it's command line
+//! You can turn an [`UnstableFeature`] back into its command line
 //! representation. This should be done with
 //! [`EnabledUnstableFeatures::as_arguments`], which returns an iterator that,
 //! when passed to e.g. [`std::process::Command::args`] will enable those
@@ -99,6 +99,8 @@ pub enum UnstableFeature {
     /// Allow replacing certain items with stubs (mocks).
     /// See [RFC-0002](https://model-checking.github.io/kani/rfc/rfcs/0002-function-stubbing.html)
     Stubbing,
+    /// Enable quantifiers [RFC 10](https://model-checking.github.io/kani/rfc/rfcs/0010-quantifiers.html)
+    Quantifiers,
     /// Automatically check that uninitialized memory is not used.
     UninitChecks,
     /// Enable an unstable option or subcommand.
@@ -114,6 +116,20 @@ impl UnstableFeature {
     /// require only the serialized feature name use [`Self::as_ref`].
     pub fn as_argument(&self) -> [&str; 2] {
         ["-Z", self.as_ref()]
+    }
+
+    /// Serialize this feature into a format ideal for error messages.
+    pub fn as_argument_string(&self) -> String {
+        self.as_argument().join(" ")
+    }
+
+    /// If this unstable feature has been stabilized, return the version it was stabilized in.
+    /// Use this function to produce warnings that the unstable flag is no longer necessary.
+    pub fn stabilization_version(&self) -> Option<String> {
+        match self {
+            UnstableFeature::List => Some("0.63.0".to_string()),
+            _ => None,
+        }
     }
 }
 
@@ -141,6 +157,10 @@ impl EnabledUnstableFeatures {
     /// Is this feature enabled?
     pub fn contains(&self, feature: UnstableFeature) -> bool {
         self.enabled_unstable_features.contains(&feature)
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &UnstableFeature> {
+        self.enabled_unstable_features.iter()
     }
 
     /// Enable an additional unstable feature.

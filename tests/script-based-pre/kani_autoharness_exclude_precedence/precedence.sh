@@ -64,13 +64,13 @@ verify_functions() {
     local exclude_pattern="$3"
     
     for func in "${FUNCTIONS[@]}"; do
-        # If the function name matches the include pattern and not the exclude pattern, it should be selected
-        if echo "$func" | grep -q "$include_pattern" && ! echo "$func" | grep -q "$exclude_pattern"; then
+        local full_path="lib::$func"
+
+        if [[ -z "$include_pattern" || "$full_path" =~ $include_pattern ]] && [[ -z "$exclude_pattern" || ! "$full_path" =~ $exclude_pattern ]]; then
             if ! check_selected "$output" "$func"; then
                 echo "ERROR: Expected $func to be selected"
                 exit 1
             fi
-        # Otherwise, it should be skipped
         else
             if ! check_skipped "$output" "$func"; then
                 echo "ERROR: Expected $func to be skipped"
@@ -80,12 +80,18 @@ verify_functions() {
     done
 }
 
-# Test cases
 test_cases=(
     "include 'foo' exclude 'foo::bar'"
     "include 'foo' exclude 'bar'"
     "include 'foo::bar' exclude 'bar'"
     "include 'foo' exclude 'foo'"
+    "include 'foo::.*' exclude 'foo::bar::.*'"
+    "include 'foo::.*' exclude '.*bar.*'"
+    "include 'foo::bar::.*' exclude '.*bar_function$'"
+    "include '^foo.*' exclude '^foo.*'"
+    "include '.*::foo_.*' exclude '.*::bar::.*'"
+    "include '^[^:]+$' exclude '.*_top_level$'"
+    "include '.*' exclude '^foo::.*'"
 )
 
 include_patterns=(
@@ -93,6 +99,13 @@ include_patterns=(
     "foo"
     "foo::bar"
     "foo"
+    "foo::.*"
+    "foo::.*"
+    "foo::bar::.*"
+    "^foo.*"
+    ".*::foo_.*"
+    "^[^:]+$"
+    ".*"
 )
 
 exclude_patterns=(
@@ -100,6 +113,13 @@ exclude_patterns=(
     "bar"
     "bar"
     "foo"
+    "foo::bar::.*"
+    ".*bar.*"
+    ".*bar_function$"
+    "^foo.*"
+    ".*::bar::.*"
+    ".*_top_level$"
+    "^foo::.*"
 )
 
 # Whether each test case should produce a warning about no functions being selected
@@ -108,6 +128,13 @@ should_warn=(
     false
     true
     true
+    false
+    false
+    false
+    true
+    false
+    false
+    false
 )
 
 for i in "${!test_cases[@]}"; do

@@ -4,6 +4,41 @@ This file contains notable changes (e.g. breaking changes, major changes, etc.) 
 
 This file was introduced starting Kani 0.23.0, so it only contains changes from version 0.23.0 onwards.
 
+## [0.63.0]
+
+### Breaking Changes
+* Finish deprecating `--enable-unstable`, `--restrict-vtable`, and `--write-json-symtab` by @carolynzech in https://github.com/model-checking/kani/pull/4110
+
+### Major Changes
+* Add support for quantifiers by @qinheping in https://github.com/model-checking/kani/pull/3993
+
+### What's Changed
+* Improvements to autoharness feature:
+  * Autoharness argument validation: only error on `--quiet` if `--list` was passed by @carolynzech in https://github.com/model-checking/kani/pull/4069
+  * Autoharness: change `pattern` options to accept regexes by @carolynzech in https://github.com/model-checking/kani/pull/4144
+* Target feature changes:
+  * Enable target features: x87 and sse2 by @thanhnguyen-aws in https://github.com/model-checking/kani/pull/4062
+  * Set target features depending on the target architecture by @zhassan-aws in https://github.com/model-checking/kani/pull/4127
+* Support for quantifiers:
+  * Fix the error that Kani panics when there is no external parameter in quantifier's closure. by @thanhnguyen-aws in https://github.com/model-checking/kani/pull/4088
+  * Gate quantifiers behind an experimental feature by @thanhnguyen-aws in https://github.com/model-checking/kani/pull/4141
+* Other:
+  * Fix the bug: Loop contracts are not composable with function contracts by @thanhnguyen-aws in https://github.com/model-checking/kani/pull/3979
+  * Add setup scripts for Ubuntu 20.04 by @zhassan-aws in https://github.com/model-checking/kani/pull/4082
+  * Use our toolchain when invoking `cargo metadata` by @carolynzech in https://github.com/model-checking/kani/pull/4090
+  * Fix a bug codegening `SwitchInt`s with only an otherwise branch by @bkirwi in https://github.com/model-checking/kani/pull/4095
+  * Update `kani::mem` pointer validity documentation by @carolynzech in https://github.com/model-checking/kani/pull/4092
+  * Add support for edition 2018 crates using assert! (Fixes #3717) by @sintemal in https://github.com/model-checking/kani/pull/4096
+  * Handle generic defaults in BoundedArbitrary derives by @zhassan-aws in https://github.com/model-checking/kani/pull/4117
+  * `ty_mangled_name`: only use non-mangled name if `-Zcffi` is enabled. by @carolynzech in https://github.com/model-checking/kani/pull/4114
+  * Improve Help Menu by @carolynzech in https://github.com/model-checking/kani/pull/4109
+  * Start stabilizing `--jobs` and `list`; deprecate default memory checks by @carolynzech in https://github.com/model-checking/kani/pull/4108
+  * Refactor simd_bitmask to reduce the number of iterations by @zhassan-aws in https://github.com/model-checking/kani/pull/4129
+  * Improve linking error output for `#[no_std]` crates by @AlexanderPortland in https://github.com/model-checking/kani/pull/4126
+  * Rust toolchain upgraded to 2025-06-03 by @carolynzech @thanhnguyen-aws @zhassan-aws
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.62.0...kani-0.63.0
+
 ## [0.62.0]
 
 ### What's Changed
