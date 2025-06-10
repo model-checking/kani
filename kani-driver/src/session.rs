@@ -25,6 +25,9 @@ pub const BUG_REPORT_URL: &str =
 /// the driver logs separately, by using the logger directives to  select the kani-driver crate.
 /// `export KANI_LOG=kani_driver=debug`.
 const LOG_ENV_VAR: &str = "KANI_LOG";
+const FLAMEGRAPH_ENV_VAR: &str = "FLAMEGRAPH";
+const FLAMEGRAPH_DIR: &str = "flamegraphs";
+const FLAMEGRAPH_SAMPLING_RATE: &str = "8000"; // in Hz
 
 /// Contains information about the execution environment and arguments that affect operations
 pub struct KaniSession {
@@ -434,21 +437,20 @@ pub fn setup_cargo_command_inner(profiling_out_path: Option<String>) -> Result<C
         InstallType::DevRepo(_) => {
             // check if we should instrument the compiler for a flamegraph
             let instrument_compiler = matches!(
-                std::env::var("FLAMEGRAPH"),
+                std::env::var(FLAMEGRAPH_ENV_VAR),
                 Ok(ref s) if s == "all" || s == "compiler"
             );
-            let flamegraph_dir = "flamegraphs";
 
             if let Some(profiler_out_path) = profiling_out_path
                 && instrument_compiler
             {
-                let _ = std::fs::create_dir(flamegraph_dir); // create temporary flamegraph directory
+                let _ = std::fs::create_dir(FLAMEGRAPH_DIR); // create temporary flamegraph directory
 
                 let mut cmd = Command::new("samply");
                 cmd.arg("record");
-                cmd.arg("-r").arg("8000"); // adjust the sampling rate (in Hz)
+                cmd.arg("-r").arg(FLAMEGRAPH_SAMPLING_RATE); // adjust the sampling rate (in Hz)
                 cmd.arg("-o")
-                    .arg(format!("{flamegraph_dir}/compiler-{profiler_out_path}.json.gz",)); // set the output file
+                    .arg(format!("{FLAMEGRAPH_DIR}/compiler-{profiler_out_path}.json.gz",)); // set the output file
                 cmd.arg("--save-only"); // just save the output and don't open the interactive UI.
                 cmd.arg("cargo");
                 cmd.arg(self::toolchain_shorthand());

@@ -20,6 +20,7 @@ fi
 
 FLAMEGRAPH_DRIVER=0
 FLAMEGRAPH_DIR="flamegraphs"
+FLAMEGRAPH_SAMPLING_RATE=8000 # in Hz
 
 if [[ ( -n "${FLAMEGRAPH:-}" ) && ( "${FLAMEGRAPH}" == "driver" || "${FLAMEGRAPH}" == "all" ) ]]; then
     FLAMEGRAPH_DRIVER=1
@@ -29,5 +30,5 @@ if (( FLAMEGRAPH_DRIVER == 0 )); then
     exec -a cargo-kani "${KANI_DRIVER}" "$@"
 else 
     mkdir -p "${FLAMEGRAPH_DIR}"
-    exec -a cargo-kani samply record -r 8000 -o "${FLAMEGRAPH_DIR}/driver.json.gz" --save-only "${KANI_DRIVER}" "$@"
+    exec -a cargo-kani samply record -r $FLAMEGRAPH_SAMPLING_RATE -o "${FLAMEGRAPH_DIR}/driver.json.gz" --save-only "${KANI_DRIVER}" "$@"
 fi

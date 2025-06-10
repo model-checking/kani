@@ -14,6 +14,8 @@ The `FLAMEGRAPH` environment variable can be set to `driver` (to profile the com
 
 We have to instrument the driver and compiler separately because samply's instrumentation usually cannot handle detecting the subprocess the driver uses to call the compiler.
 
+Our default sampling rate is *8000 Hz*, but you can change it yourself in [`session.rs`](../../kani-driver/src/session.rs) for the compiler or the [cargo-kani](../../scripts/cargo-kani) script for the driver.
+
 > Note: Specifically when profiling the compiler, ensure you are running `cargo clean` immediately before `cargo kani`, or parts of the workspace may not be recompiled by the Kani compiler.
 
 
