@@ -5,9 +5,6 @@
 //! `DefId`s for functions and methods. For the definition of a path, see
 //! <https://doc.rust-lang.org/reference/paths.html>.
 //!
-//! TODO: Change `resolve_fn` in order to return information about trait implementations.
-//! <https://github.com/model-checking/kani/issues/1997>
-//!
 //! Note that glob use statements can form loops. The paths can also walk through the loop.
 
 use crate::kani_middle::stable_fn_def;
@@ -106,9 +103,7 @@ pub fn resolve_fn_path<'tcx>(
     }
 }
 
-/// Attempts to resolve a *simple path* (in the form of a string) to a function / method `DefId`.
-///
-/// Use `[resolve_fn_path]` if you want to handle qualified paths and simple paths.
+/// Attempts to resolve a path (in the form of a string) to a function / method `DefId`.
 pub fn resolve_fn<'tcx>(
     tcx: TyCtxt<'tcx>,
     current_module: LocalDefId,
@@ -119,11 +114,7 @@ pub fn resolve_fn<'tcx>(
         msg: format!("Expected a path, but found `{path_str}`. {err}"),
     })?;
     let result = resolve_fn_path(tcx, current_module, &path)?;
-    if let FnResolution::Fn(def) = result {
-        Ok(rustc_internal::internal(tcx, def.def_id()))
-    } else {
-        Err(ResolveError::UnsupportedPath { kind: "qualified paths" })
-    }
+    Ok(rustc_internal::internal(tcx, result.def().def_id()))
 }
 
 /// Attempts to resolve a simple path (in the form of a string) to a `DefId`.
@@ -418,28 +409,42 @@ fn resolve_in_trait_impl(
             })
         })
         .collect::<Vec<_>>();
-    let matching_item = associated_items.into_iter().find_map(|item| {
-        let item_name = item.def_id.name();
-        let item_path: TypePath = syn::parse_str(&item_name).ok()?;
-        if let Some(QSelf { ty: i_ty, position, .. }) = &item_path.qself
-            && *position > 0
-        {
-            let item_ty = type_resolution::resolve_ty(tcx, current_module, i_ty).ok()?;
-            let item_def_id = resolve_path(tcx, current_module, &item_path.path).ok()?;
-            // If `ty` and `def_id` match, then we've found the right implementation
-            if item_ty == ty && item_def_id == trait_method_id {
-                Some(FnResolution::FnImpl {
-                    def: stable_fn_def(tcx, rustc_internal::internal(tcx, item.def_id.def_id()))
+    let matching_item = associated_items
+        .into_iter()
+        .find_map(|item| {
+            let item_name = item.def_id.name();
+            let item_path: TypePath = syn::parse_str(&item_name).ok()?;
+            if let Some(QSelf { ty: i_ty, position, .. }) = &item_path.qself
+                && *position > 0
+            {
+                let item_ty = type_resolution::resolve_ty(tcx, current_module, i_ty).ok()?;
+                let item_def_id = resolve_path(tcx, current_module, &item_path.path).ok()?;
+                // If `ty` and `def_id` match, then we've found the right implementation
+                if item_ty == ty && item_def_id == trait_method_id {
+                    Some(FnResolution::FnImpl {
+                        def: stable_fn_def(
+                            tcx,
+                            rustc_internal::internal(tcx, item.def_id.def_id()),
+                        )
                         .unwrap(),
-                    ty,
-                })
+                        ty,
+                    })
+                } else {
+                    None
+                }
             } else {
                 None
             }
-        } else {
-            None
-        }
-    });
+        })
+        .or_else(|| {
+            // If there's no associated item that implements the method, return a default implementation if it exists
+            let default_impl = stable_fn_def(tcx, trait_method_id).unwrap();
+            if default_impl.has_body() {
+                Some(FnResolution::FnImpl { def: default_impl, ty })
+            } else {
+                None
+            }
+        });
 
     matching_item.ok_or(ResolveError::MissingTraitImpl { tcx, trait_method_id, ty })
 }
