@@ -25,6 +25,7 @@ pub const BUG_REPORT_URL: &str =
 /// the driver logs separately, by using the logger directives to  select the kani-driver crate.
 /// `export KANI_LOG=kani_driver=debug`.
 const LOG_ENV_VAR: &str = "KANI_LOG";
+// Constants related to the option to create flamegraphs to debug compiler performance. See our mdbook's developer documentation for details.
 const FLAMEGRAPH_ENV_VAR: &str = "FLAMEGRAPH";
 const FLAMEGRAPH_DIR: &str = "flamegraphs";
 const FLAMEGRAPH_SAMPLING_RATE: &str = "8000"; // in Hz
@@ -444,18 +445,22 @@ pub fn setup_cargo_command_inner(profiling_out_path: Option<String>) -> Result<C
             if let Some(profiler_out_path) = profiling_out_path
                 && instrument_compiler
             {
-                let _ = std::fs::create_dir_all(FLAMEGRAPH_DIR); // create temporary flamegraph directory
+                // create temporary flamegraph directory
+                let _ = std::fs::create_dir_all(FLAMEGRAPH_DIR);
                 let time_postfix = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S");
 
                 let mut cmd = Command::new("samply");
                 cmd.arg("record");
-                cmd.arg("-r").arg(FLAMEGRAPH_SAMPLING_RATE); // adjust the sampling rate (in Hz)
+
+                // adjust the sampling rate (in Hz)
+                cmd.arg("-r").arg(FLAMEGRAPH_SAMPLING_RATE);
                 cmd.arg("-o").arg(format!(
                     "{FLAMEGRAPH_DIR}/compiler-{profiler_out_path}-{time_postfix}.json.gz",
                 ));
-                cmd.arg("--save-only"); // just save the output and don't open the interactive UI.
-                cmd.arg("cargo");
-                cmd.arg(self::toolchain_shorthand());
+
+                // just save the output and don't open the interactive UI.
+                cmd.arg("--save-only");
+                cmd.arg("cargo").arg(self::toolchain_shorthand());
                 cmd
             } else {
                 let mut cmd = Command::new("cargo");
