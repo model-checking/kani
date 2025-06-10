@@ -32,7 +32,6 @@ fn test_exists() {
 }
 ```
 
-When the range is not specified, it is assumed to be the whole `usize` range.
 
 ### Limitations
 
