@@ -10,7 +10,7 @@ First, install `samply` using [the instructions](https://github.com/mstange/samp
 1. First, build Kani from source with `cargo build-dev --profile profiling` to ensure you are getting all release mode optimizations without stripping useful debug info.
 2. Then, you can profile the Kani compiler on a crate of your choice by [exporting Kani to your local PATH](build-from-source.md#adding-kani-to-your-path) and  running `FLAMEGRAPH=[OPTION] cargo kani` within the crate.
 
-The `FLAMEGRAPH` environment variable can be set to `driver` (to profile the complete `kani-driver` execution), `compiler` (to profile each time the `kani-compiler` is called) or `all` (to profile both).
+The `FLAMEGRAPH` environment variable can be set to `driver` (to profile the complete `kani-driver` execution) or `compiler` (to profile each time the `kani-compiler` is called).
 
 We have to instrument the driver and compiler separately because samply's instrumentation usually cannot handle detecting the subprocess the driver uses to call the compiler.
 

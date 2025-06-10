@@ -18,11 +18,11 @@ then
     exit 1
 fi
 
-FLAMEGRAPH_DRIVER=0
 FLAMEGRAPH_DIR="flamegraphs"
 FLAMEGRAPH_SAMPLING_RATE=8000 # in Hz
 
-if [[ ( -n "${FLAMEGRAPH:-}" ) && ( "${FLAMEGRAPH}" == "driver" || "${FLAMEGRAPH}" == "all" ) ]]; then
+FLAMEGRAPH_DRIVER=0
+if [[ ( -n "${FLAMEGRAPH:-}" ) && ( "${FLAMEGRAPH}" == "driver" ) ]]; then
     FLAMEGRAPH_DRIVER=1
 fi
 

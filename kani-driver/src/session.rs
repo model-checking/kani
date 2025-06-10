@@ -438,7 +438,7 @@ pub fn setup_cargo_command_inner(profiling_out_path: Option<String>) -> Result<C
             // check if we should instrument the compiler for a flamegraph
             let instrument_compiler = matches!(
                 std::env::var(FLAMEGRAPH_ENV_VAR),
-                Ok(ref s) if s == "all" || s == "compiler"
+                Ok(ref s) if s == "compiler"
             );
 
             if let Some(profiler_out_path) = profiling_out_path
