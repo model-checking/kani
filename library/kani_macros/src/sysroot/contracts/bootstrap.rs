@@ -47,8 +47,14 @@ impl<'a> ContractConditionsHandler<'a> {
             #[kanitool::asserted_with = #assert_name]
             #[kanitool::modifies_wrapper = #modifies_name]
             #vis #sig {
+                // Dummy functions used to force the compiler to annotate Kani's
+                // closures as FnOnce.
                 #[inline(never)]
                 const fn kani_force_fn_once<T, F: FnOnce() -> T>(f: F) -> F {
+                    f
+                }
+                #[inline(never)]
+                const fn kani_force_fn_once_with_args<A, T, F: FnOnce(A) -> T>(f: F) -> F {
                     f
                 }
                 // Dummy function used to force the compiler to capture the environment.
