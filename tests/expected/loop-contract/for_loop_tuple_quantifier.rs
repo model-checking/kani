@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// kani-flags: -Z loop-contracts -Z mem-predicates
+// kani-flags: -Z loop-contracts -Z mem-predicates -Z quantifiers
 
 //! Check for-loop invariant for when pat is a tuple.
 
