@@ -424,16 +424,6 @@ impl VerificationResult {
             }
         }
     }
-
-    /// Find the failed properties from this verification run
-    pub fn failed_properties(&self) -> Vec<&Property> {
-        if let Ok(properties) = &self.results {
-            properties.iter().filter(|prop| prop.status == CheckStatus::Failure).collect()
-        } else {
-            debug_assert!(false, "expected error to be handled before invoking this function");
-            vec![]
-        }
-    }
 }
 
 /// We decide if verification succeeded based on properties, not (typically) on exit code

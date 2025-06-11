@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use crate::kani_middle::attributes::{KaniAttributes, test_harness_name};
+use crate::kani_middle::attributes::KaniAttributes;
 use crate::kani_middle::codegen_units::Harness;
 use crate::kani_middle::{SourceLocation, stable_fn_def};
 use kani_metadata::ContractedFunction;
@@ -152,35 +152,5 @@ pub fn gen_automatic_proof_metadata(
         contract: Default::default(),
         has_loop_contracts: false,
         is_automatically_generated: true,
-    }
-}
-
-/// Create the harness metadata for a test description.
-#[allow(dead_code)]
-pub fn gen_test_metadata(
-    tcx: TyCtxt,
-    test_desc: impl CrateDef,
-    test_fn: Instance,
-    base_name: &Path,
-) -> HarnessMetadata {
-    let pretty_name = test_harness_name(tcx, &test_desc);
-    let mangled_name = test_fn.mangled_name();
-    let loc = SourceLocation::new(test_desc.span());
-    let file_stem = format!("{}_{mangled_name}", base_name.file_stem().unwrap().to_str().unwrap());
-    let model_file = base_name.with_file_name(file_stem).with_extension(ArtifactType::SymTabGoto);
-
-    HarnessMetadata {
-        pretty_name,
-        mangled_name,
-        crate_name: test_desc.krate().name,
-        original_file: loc.filename,
-        original_start_line: loc.start_line,
-        original_end_line: loc.end_line,
-        attributes: HarnessAttributes::new(HarnessKind::Test),
-        // TODO: This no longer needs to be an Option.
-        goto_file: Some(model_file),
-        contract: Default::default(),
-        has_loop_contracts: false,
-        is_automatically_generated: false,
     }
 }
