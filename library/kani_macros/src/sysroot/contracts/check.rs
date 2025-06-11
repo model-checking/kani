@@ -114,7 +114,7 @@ impl<'a> ContractConditionsHandler<'a> {
         quote!(
             #[kanitool::is_contract_generated(check)]
             #[allow(dead_code, unused_variables, unused_mut)]
-            let mut #check_ident = || #output #body;
+            let mut #check_ident = kani_force_fn_once(|| #output #body);
         )
     }
 
@@ -133,7 +133,7 @@ impl<'a> ContractConditionsHandler<'a> {
     /// Emit a modifies wrapper. It's only argument is the list of addresses that may be modified.
     pub fn modifies_closure(
         &self,
-        output: &ReturnType,
+        _output: &ReturnType,
         body: &Block,
         redefs: TokenStream2,
     ) -> TokenStream2 {
@@ -144,7 +144,7 @@ impl<'a> ContractConditionsHandler<'a> {
         quote!(
             #[kanitool::is_contract_generated(wrapper)]
             #[allow(dead_code, unused_variables, unused_mut)]
-            let mut #modifies_ident = |#wrapper_ident: _| #output {
+            let mut #modifies_ident = |#wrapper_ident: _| {
                 #redefs
                 #(#stmts)*
             };
