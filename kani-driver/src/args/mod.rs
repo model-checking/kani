@@ -2,15 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! Module that define Kani's command line interface. This includes all subcommands.
 
-pub mod assess_args;
 pub mod autoharness_args;
 pub mod cargo;
 pub mod common;
 pub mod list_args;
 pub mod playback_args;
 pub mod std_args;
-
-pub use assess_args::*;
 
 use self::common::*;
 use crate::args::cargo::CargoTargetArgs;
@@ -198,9 +195,6 @@ pub struct CargoKaniArgs {
 /// cargo-kani takes optional subcommands to request specialized behavior
 #[derive(Debug, clap::Subcommand)]
 pub enum CargoKaniSubcommand {
-    #[command(hide = true)]
-    Assess(Box<crate::assess::AssessArgs>),
-
     /// Create and run harnesses automatically for eligible functions. Implies -Z function-contracts and -Z loop-contracts.
     /// See https://model-checking.github.io/kani/reference/experimental/autoharness.html for documentation.
     Autoharness(Box<autoharness_args::CargoAutoharnessArgs>),
@@ -218,11 +212,6 @@ pub enum CargoKaniSubcommand {
 #[derive(Debug, clap::Args)]
 #[clap(next_help_heading = "Verification Options")]
 pub struct VerificationArgs {
-    /// Temporary option to trigger assess mode for out test suite
-    /// where we are able to add options but not subcommands
-    #[arg(long, hide = true)]
-    pub assess: bool,
-
     /// Link external C files referenced by Rust code.
     /// This is an experimental feature and requires `-Z c-ffi` to be used
     #[arg(long, hide = true, num_args(1..))]
@@ -624,8 +613,6 @@ where
 impl ValidateArgs for CargoKaniSubcommand {
     fn validate(&self) -> Result<(), Error> {
         match self {
-            // Assess doesn't implement validation yet.
-            CargoKaniSubcommand::Assess(_) => Ok(()),
             CargoKaniSubcommand::Autoharness(autoharness) => autoharness.validate(),
             CargoKaniSubcommand::Playback(playback) => playback.validate(),
             CargoKaniSubcommand::List(list) => list.validate(),
@@ -637,14 +624,7 @@ impl ValidateArgs for CargoKaniArgs {
     fn validate(&self) -> Result<(), Error> {
         self.verify_opts.validate()?;
         self.command.validate()?;
-
-        // --assess requires -Z unstable-options, but the subcommand needs manual checking
-        self.verify_opts.common_args.check_unstable(
-            (matches!(self.command, Some(CargoKaniSubcommand::Assess(_)))
-                || self.verify_opts.assess),
-            "assess",
-            UnstableFeature::UnstableOptions,
-        )
+        Ok(())
     }
 }
 
