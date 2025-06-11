@@ -6,11 +6,13 @@
 
 use proc_macro::TokenStream;
 use proc_macro_error2::abort_call_site;
+use proc_macro2::Span;
 use quote::{format_ident, quote};
 use syn::spanned::Spanned;
 use syn::token::AndAnd;
 use syn::{
-    BinOp, Block, Expr, ExprBinary, ExprForLoop, Ident, Stmt, parse_quote, visit_mut::VisitMut,
+    BinOp, Block, Expr, ExprBinary, ExprForLoop, Ident, Pat, PatTuple, Stmt, Token, parse_quote,
+    visit_mut::VisitMut,
 };
 
 /*
@@ -232,6 +234,45 @@ fn transform_break_continue(block: &mut Block) {
     block.stmts.push(return_stmt);
 }
 
+fn make_pat_tuple_mutable(pat: &Pat) -> Pat {
+    match pat {
+        Pat::Tuple(pat_tuple) => {
+            let mut_elems = pat_tuple
+                .elems
+                .iter()
+                .map(|elem| {
+                    match elem {
+                        Pat::Ident(pat_ident) => {
+                            let mut mut_ident = pat_ident.clone();
+                            mut_ident.mutability = Some(Token![mut](Span::call_site()));
+                            Pat::Ident(mut_ident)
+                        }
+                        Pat::Tuple(nested_tuple) => {
+                            // Recursively handle nested tuples
+                            make_pat_tuple_mutable(&Pat::Tuple(nested_tuple.clone()))
+                        }
+                        // Keep other pattern types unchanged
+                        _ => elem.clone(),
+                    }
+                })
+                .collect();
+
+            Pat::Tuple(PatTuple {
+                attrs: pat_tuple.attrs.clone(),
+                paren_token: pat_tuple.paren_token,
+                elems: mut_elems,
+            })
+        }
+        Pat::Ident(pat_ident) => {
+            let mut mut_ident = pat_ident.clone();
+            mut_ident.mutability = Some(Token![mut](Span::call_site()));
+            Pat::Ident(mut_ident)
+        }
+        // If not a tuple, return unchanged
+        _ => pat.clone(),
+    }
+}
+
 #[allow(clippy::type_complexity)]
 pub fn transform_for_to_loop(
     for_loop: ExprForLoop,
@@ -266,8 +307,9 @@ pub fn transform_for_to_loop(
         let #len_ident = #iter_ident.len;
     };
 
+    let mut_pat = make_pat_tuple_mutable(&pat);
     let init_pat_stmt: Stmt = parse_quote! {
-        let mut #pat = kani::KaniIter::first(&#iter_ident);
+        let #mut_pat = kani::KaniIter::first(&#iter_ident);
     };
 
     // Create the new loop body with iterator advancement
@@ -406,7 +448,6 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
                 });
             }
             Expr::Loop(ref mut el) => {
-                //let retexpr = get_return_statement(&el.body);
                 let invstmt: Stmt = syn::parse(quote!(if !(#register_ident(&||->bool{#inv_expr}, 0)) {assert!(false); unreachable!()};).into()).unwrap();
                 let mut new_stmts: Vec<Stmt> = Vec::new();
                 new_stmts.push(invstmt);
