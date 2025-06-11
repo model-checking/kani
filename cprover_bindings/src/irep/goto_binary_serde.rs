@@ -204,6 +204,9 @@ impl IrepNumberingInv {
 
 #[cfg(not(test))]
 /// A numbering of [InternedString], [IrepId] and [Irep] based on their contents.
+/// Note that using [FxHashMap] makes our caches faster, but we still have to use
+/// the default [HashMap] in a test context as only it implements the
+/// `memuse::DynamicUsage` trait we need for memory profiling under test.
 struct IrepNumbering {
     /// Map from [InternedString] to their unique numbers.
     string_cache: FxHashMap<InternedString, usize>,
@@ -220,6 +223,7 @@ struct IrepNumbering {
 
 #[cfg(test)]
 /// A numbering of [InternedString], [IrepId] and [Irep] based on their contents.
+/// See above for explanation of why this definition is only used in a test context.
 struct IrepNumbering {
     /// Map from [InternedString] to their unique numbers.
     string_cache: HashMap<InternedString, usize>,
