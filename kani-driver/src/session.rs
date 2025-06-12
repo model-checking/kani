@@ -446,7 +446,7 @@ pub fn setup_cargo_command_inner(profiling_out_path: Option<String>) -> Result<C
                 && instrument_compiler
             {
                 // create temporary flamegraph directory
-                let _ = std::fs::create_dir_all(FLAMEGRAPH_DIR);
+                std::fs::create_dir_all(FLAMEGRAPH_DIR)?;
                 let time_postfix = chrono::Local::now().format("%Y-%m-%dT%H:%M:%S");
 
                 let mut cmd = Command::new("samply");
