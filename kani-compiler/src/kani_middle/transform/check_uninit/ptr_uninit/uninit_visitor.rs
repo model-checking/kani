@@ -629,7 +629,6 @@ fn can_skip_intrinsic(intrinsic: Intrinsic) -> bool {
         | Intrinsic::PowF64
         | Intrinsic::PowIF32
         | Intrinsic::PowIF64
-        | Intrinsic::PrefAlignOf
         | Intrinsic::RawEq
         | Intrinsic::RotateLeft
         | Intrinsic::RotateRight

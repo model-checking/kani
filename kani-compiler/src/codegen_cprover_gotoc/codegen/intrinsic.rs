@@ -419,7 +419,6 @@ impl GotocCtx<'_> {
             Intrinsic::PowF64 => codegen_simple_intrinsic!(Pow),
             Intrinsic::PowIF32 => codegen_simple_intrinsic!(Powif),
             Intrinsic::PowIF64 => codegen_simple_intrinsic!(Powi),
-            Intrinsic::PrefAlignOf => codegen_intrinsic_const!(),
             Intrinsic::PtrGuaranteedCmp => self.codegen_ptr_guaranteed_cmp(fargs, place, loc),
             Intrinsic::RawEq => self.codegen_intrinsic_raw_eq(instance, fargs, place, loc),
             Intrinsic::RetagBoxToRaw => self.codegen_retag_box_to_raw(fargs, place, loc),

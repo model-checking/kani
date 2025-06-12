@@ -91,7 +91,6 @@ pub enum Intrinsic {
     PowF64,
     PowIF32,
     PowIF64,
-    PrefAlignOf,
     PtrGuaranteedCmp,
     PtrOffsetFrom,
     PtrOffsetFromUnsigned,
@@ -330,10 +329,6 @@ impl Intrinsic {
             "offset" => unreachable!(
                 "Expected `core::intrinsics::unreachable` to be handled by `BinOp::OffSet`"
             ),
-            "pref_align_of" => {
-                assert_sig_matches!(sig, => RigidTy::Uint(UintTy::Usize));
-                Self::PrefAlignOf
-            }
             "ptr_guaranteed_cmp" => {
                 assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Not), RigidTy::RawPtr(_, Mutability::Not) => RigidTy::Uint(UintTy::U8));
                 Self::PtrGuaranteedCmp

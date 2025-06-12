@@ -187,7 +187,6 @@ powf32 | Partial | Results are overapproximated |
 powf64 | Partial | Results are overapproximated |
 powif32 | Partial | Results are overapproximated |
 powif64 | Partial | Results are overapproximated |
-pref_align_of | Yes | |
 prefetch_read_data | No | |
 prefetch_read_instruction | No | |
 prefetch_write_data | No | |

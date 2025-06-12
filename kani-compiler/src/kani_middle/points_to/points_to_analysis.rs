@@ -669,7 +669,6 @@ fn is_identity_aliasing_intrinsic(intrinsic: Intrinsic) -> bool {
         | Intrinsic::PowF64
         | Intrinsic::PowIF32
         | Intrinsic::PowIF64
-        | Intrinsic::PrefAlignOf
         | Intrinsic::PtrGuaranteedCmp
         | Intrinsic::PtrOffsetFrom
         | Intrinsic::PtrOffsetFromUnsigned
