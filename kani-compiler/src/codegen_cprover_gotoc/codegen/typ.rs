@@ -914,7 +914,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     pretty_name,
                     type_and_layout,
                     "DirectFields".into(),
-                    Some(*discriminant_field),
+                    Some((*discriminant_field).as_usize()),
                 ),
             };
             let mut fields = vec![direct_fields];
@@ -1277,7 +1277,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 // Contrary to coroutines, currently enums have only one field (the discriminant), the rest are in the variants:
                 assert!(layout.fields.count() <= 1);
                 // Contrary to coroutines, the discriminant is the first (and only) field for enums:
-                assert_eq!(*tag_field, 0);
+                assert_eq!((*tag_field).as_usize(), 0);
                 match tag_encoding {
                     TagEncoding::Direct => {
                         self.ensure_struct(self.ty_mangled_name(ty), pretty_name, |gcx, name| {

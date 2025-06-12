@@ -519,7 +519,7 @@ impl GotocCtx<'_> {
                 .index_by_increasing_offset()
                 .map(|idx| {
                     let field_ty = layout.field(self, idx).ty;
-                    if idx == *discriminant_field {
+                    if idx == (*discriminant_field).as_usize() {
                         Expr::int_constant(0, self.codegen_ty(field_ty))
                     } else {
                         self.codegen_operand_stable(&operands[idx])
