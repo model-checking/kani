@@ -136,9 +136,15 @@ impl VisitMut for CallReplacer {
         if let Expr::Call(call) = expr {
             if let Expr::Path(expr_path) = &*call.func {
                 if self.should_replace(expr_path) {
-                    let new_var = self.generate_var_name();
-                    self.replacements.push((expr.clone(), new_var.clone()));
-                    *expr = syn::parse_quote!(#new_var);
+                    let replace_var =
+                        self.replacements.iter().find(|(e, _)| e == expr).map(|(_, v)| v);
+                    if let Some(var) = replace_var {
+                        *expr = syn::parse_quote!(#var);
+                    } else {
+                        let new_var = self.generate_var_name();
+                        self.replacements.push((expr.clone(), new_var.clone()));
+                        *expr = syn::parse_quote!(#new_var);
+                    };
                 }
             }
         }

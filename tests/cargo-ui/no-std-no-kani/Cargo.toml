@@ -2,8 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
 [package]
-name = "subpackage"
+name = "no-std-help"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]

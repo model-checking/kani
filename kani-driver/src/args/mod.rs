@@ -2,15 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! Module that define Kani's command line interface. This includes all subcommands.
 
-pub mod assess_args;
 pub mod autoharness_args;
 pub mod cargo;
 pub mod common;
 pub mod list_args;
 pub mod playback_args;
 pub mod std_args;
-
-pub use assess_args::*;
 
 use self::common::*;
 use crate::args::cargo::CargoTargetArgs;
@@ -53,11 +50,40 @@ pub fn print_obsolete(verbosity: &CommonArgs, option: &str) {
 }
 
 #[allow(dead_code)]
-pub fn print_deprecated(verbosity: &CommonArgs, option: &str, alternative: &str) {
+pub fn print_deprecated(verbosity: &CommonArgs, option: &str, version: &str, alternative: &str) {
     if !verbosity.quiet {
         warning(&format!(
-            "The `{option}` option is deprecated. This option will be removed soon. \
-            Consider using `{alternative}` instead"
+            "The `{option}` option has been deprecated since {version} and will be removed soon. \
+            Consider {alternative} instead"
+        ))
+    }
+}
+
+/// First step in two-phase stabilization.
+/// When an unstable option is first stabilized, print this warning that `-Z unstable-options` has no effect.
+/// This warning should last for one release only; in the next Kani release, remove it.
+pub fn print_stabilized_option_warning(verbosity: &CommonArgs, option: &str, version: &str) {
+    if !verbosity.quiet {
+        warning(&format!(
+            "The `--{option}` option has been stable since {version} and no longer requires {} to enable. \
+            Remove it unless it is needed for another unstable option.",
+            UnstableFeature::UnstableOptions.as_argument_string(),
+        ))
+    }
+}
+
+/// First step in two-phase stabilization.
+/// When an unstable feature is first stabilized, print this warning that `-Z {feature}` has no effect.
+/// This warning should last for one release only; in the next Kani release, remove it.
+pub fn print_stabilized_feature_warning(
+    verbosity: &CommonArgs,
+    feature: UnstableFeature,
+    version: &str,
+) {
+    if !verbosity.quiet {
+        warning(&format!(
+            "The `{feature}` feature has been stable since {version} and no longer requires {} to enable",
+            feature.as_argument_string()
         ))
     }
 }
@@ -169,9 +195,6 @@ pub struct CargoKaniArgs {
 /// cargo-kani takes optional subcommands to request specialized behavior
 #[derive(Debug, clap::Subcommand)]
 pub enum CargoKaniSubcommand {
-    #[command(hide = true)]
-    Assess(Box<crate::assess::AssessArgs>),
-
     /// Create and run harnesses automatically for eligible functions. Implies -Z function-contracts and -Z loop-contracts.
     /// See https://model-checking.github.io/kani/reference/experimental/autoharness.html for documentation.
     Autoharness(Box<autoharness_args::CargoAutoharnessArgs>),
@@ -185,14 +208,10 @@ pub enum CargoKaniSubcommand {
 
 // Common arguments for invoking Kani for verification purpose. This gets put into KaniContext,
 // whereas anything above is "local" to "main"'s control flow.
+// When adding an argument to this struct, make sure that it's in alphabetical order as displayed to the user when running --help.
 #[derive(Debug, clap::Args)]
 #[clap(next_help_heading = "Verification Options")]
 pub struct VerificationArgs {
-    /// Temporary option to trigger assess mode for out test suite
-    /// where we are able to add options but not subcommands
-    #[arg(long, hide = true)]
-    pub assess: bool,
-
     /// Link external C files referenced by Rust code.
     /// This is an experimental feature and requires `-Z c-ffi` to be used
     #[arg(long, hide = true, num_args(1..))]
@@ -376,7 +395,6 @@ impl VerificationArgs {
     pub fn restrict_vtable(&self) -> bool {
         self.common_args.unstable_features.contains(UnstableFeature::RestrictVtable)
             && !self.no_restrict_vtable
-        // if we flip the default, this will become: !self.no_restrict_vtable
     }
 
     /// Assertion reachability checks should be disabled
@@ -390,6 +408,24 @@ impl VerificationArgs {
             None
         } else {
             Some(DEFAULT_OBJECT_BITS)
+        }
+    }
+
+    /// Given an argument, warn if UnstableFeature::UnstableOptions is enabled.
+    /// This is for cases where the option was previously unstable but has since been stabilized.
+    pub fn check_unnecessary_unstable_option(&self, enabled: bool, option: &str) {
+        fn stabilization_version(option: &str) -> Option<String> {
+            match option {
+                "jobs" => Some("0.63.0".to_string()),
+                _ => None,
+            }
+        }
+        let stabilization_version = stabilization_version(option);
+        if let Some(version) = stabilization_version
+            && enabled
+            && self.common_args.unstable_features.contains(UnstableFeature::UnstableOptions)
+        {
+            print_stabilized_option_warning(&self.common_args, option, &version)
         }
     }
 
@@ -435,35 +471,35 @@ pub struct CheckArgs {
     // Rust argument parsers (/clap) don't have the convenient '--flag' and '--no-flag' boolean pairs, so approximate
     // We're put both here then create helper functions to "intepret"
     /// Turn on all default checks
-    #[arg(long)]
+    #[arg(long, hide = true)]
     pub default_checks: bool,
     /// Turn off all default checks
     #[arg(long)]
     pub no_default_checks: bool,
 
     /// Turn on default memory safety checks
-    #[arg(long)]
+    #[arg(long, hide = true)]
     pub memory_safety_checks: bool,
     /// Turn off default memory safety checks
     #[arg(long)]
     pub no_memory_safety_checks: bool,
 
     /// Turn on default overflow checks
-    #[arg(long)]
+    #[arg(long, hide = true)]
     pub overflow_checks: bool,
     /// Turn off default overflow checks
     #[arg(long)]
     pub no_overflow_checks: bool,
 
     /// Turn on undefined function checks
-    #[arg(long)]
+    #[arg(long, hide = true)]
     pub undefined_function_checks: bool,
     /// Turn off undefined function checks
     #[arg(long)]
     pub no_undefined_function_checks: bool,
 
     /// Turn on default unwinding checks
-    #[arg(long)]
+    #[arg(long, hide = true)]
     pub unwinding_checks: bool,
     /// Turn off default unwinding checks
     #[arg(long)]
@@ -483,6 +519,30 @@ impl CheckArgs {
     }
     pub fn unwinding_on(&self) -> bool {
         !self.no_default_checks && !self.no_unwinding_checks || self.unwinding_checks
+    }
+    pub fn print_deprecated(&self, verbosity: &CommonArgs) {
+        let deprecation_version = "0.63.0";
+        let alternative = "omitting the argument, since this is already the default behavior";
+        if self.default_checks {
+            print_deprecated(verbosity, "--default-checks", deprecation_version, alternative);
+        }
+        if self.memory_safety_checks {
+            print_deprecated(verbosity, "--memory-safety-checks", deprecation_version, alternative);
+        }
+        if self.overflow_checks {
+            print_deprecated(verbosity, "--overflow-checks", deprecation_version, alternative);
+        }
+        if self.undefined_function_checks {
+            print_deprecated(
+                verbosity,
+                "--undefined-function-checks",
+                deprecation_version,
+                alternative,
+            );
+        }
+        if self.unwinding_checks {
+            print_deprecated(verbosity, "--unwinding-checks", deprecation_version, alternative);
+        }
     }
 }
 
@@ -553,8 +613,6 @@ where
 impl ValidateArgs for CargoKaniSubcommand {
     fn validate(&self) -> Result<(), Error> {
         match self {
-            // Assess doesn't implement validation yet.
-            CargoKaniSubcommand::Assess(_) => Ok(()),
             CargoKaniSubcommand::Autoharness(autoharness) => autoharness.validate(),
             CargoKaniSubcommand::Playback(playback) => playback.validate(),
             CargoKaniSubcommand::List(list) => list.validate(),
@@ -566,24 +624,206 @@ impl ValidateArgs for CargoKaniArgs {
     fn validate(&self) -> Result<(), Error> {
         self.verify_opts.validate()?;
         self.command.validate()?;
-
-        // --assess requires -Z unstable-options, but the subcommand needs manual checking
-        self.verify_opts.common_args.check_unstable(
-            (matches!(self.command, Some(CargoKaniSubcommand::Assess(_)))
-                || self.verify_opts.assess),
-            "assess",
-            UnstableFeature::UnstableOptions,
-        )
+        Ok(())
     }
 }
 
 impl ValidateArgs for VerificationArgs {
     fn validate(&self) -> Result<(), Error> {
         self.common_args.validate()?;
-        let extra_unwind =
-            self.cbmc_args.iter().any(|s| s.to_str().unwrap().starts_with("--unwind"));
-        let natives_unwind = self.default_unwind.is_some() || self.unwind.is_some();
 
+        // check_unstable() calls: for each unstable option, check that the requisite unstable feature is provided.
+        let unstable = || -> Result<(), Error> {
+            self.common_args.check_unstable(
+                self.concrete_playback.is_some(),
+                "concrete-playback",
+                UnstableFeature::ConcretePlayback,
+            )?;
+
+            self.common_args.check_unstable(
+                !self.c_lib.is_empty(),
+                "c-lib",
+                UnstableFeature::CFfi,
+            )?;
+
+            self.common_args.check_unstable(
+                self.gen_c,
+                "gen-c",
+                UnstableFeature::UnstableOptions,
+            )?;
+
+            self.common_args.check_unstable(
+                !self.cbmc_args.is_empty(),
+                "cbmc-args",
+                UnstableFeature::UnstableOptions,
+            )?;
+
+            self.common_args.check_unstable(
+                self.no_codegen,
+                "no-codegen",
+                UnstableFeature::UnstableOptions,
+            )?;
+
+            self.common_args.check_unstable(
+                self.extra_pointer_checks,
+                "extra-pointer-checks",
+                UnstableFeature::UnstableOptions,
+            )?;
+
+            self.common_args.check_unstable(
+                self.ignore_global_asm,
+                "ignore-asm",
+                UnstableFeature::UnstableOptions,
+            )?;
+
+            self.common_args.check_unstable(
+                self.run_sanity_checks,
+                "run-sanity-checks",
+                UnstableFeature::UnstableOptions,
+            )?;
+
+            self.common_args.check_unstable(
+                self.no_slice_formula,
+                "no-slice-formula",
+                UnstableFeature::UnstableOptions,
+            )?;
+
+            self.common_args.check_unstable(
+                self.synthesize_loop_contracts,
+                "synthesize-loop-contracts",
+                UnstableFeature::UnstableOptions,
+            )?;
+
+            self.common_args.check_unstable(
+                self.no_restrict_vtable,
+                "no-restrict-vtable",
+                UnstableFeature::RestrictVtable,
+            )?;
+
+            self.common_args.check_unstable(
+                self.coverage,
+                "coverage",
+                UnstableFeature::SourceCoverage,
+            )?;
+            self.common_args.check_unstable(
+                self.output_into_files,
+                "output-into-files",
+                UnstableFeature::UnstableOptions,
+            )?;
+            self.common_args.check_unstable(
+                self.print_llbc,
+                "print-llbc",
+                UnstableFeature::Lean,
+            )?;
+            self.common_args.check_unstable(
+                self.harness_timeout.is_some(),
+                "harness-timeout",
+                UnstableFeature::UnstableOptions,
+            )?;
+            self.common_args.check_unstable(
+                self.no_assert_contracts,
+                "no-assert",
+                UnstableFeature::FunctionContracts,
+            )?;
+
+            Ok(())
+        };
+
+        // Check for argument conflicts.
+        let conflicting_options = || -> Result<(), Error> {
+            let extra_unwind =
+                self.cbmc_args.iter().any(|s| s.to_str().unwrap().starts_with("--unwind"));
+            let natives_unwind = self.default_unwind.is_some() || self.unwind.is_some();
+
+            // TODO: these conflicting flags reflect what's necessary to pass current tests unmodified.
+            // We should consider improving the error messages slightly in a later pull request.
+            if natives_unwind && extra_unwind {
+                return Err(Error::raw(
+                    ErrorKind::ArgumentConflict,
+                    "Conflicting flags: unwind flags provided to kani and in --cbmc-args.",
+                ));
+            }
+            if self.cbmc_args.contains(&OsString::from("--function")) {
+                return Err(Error::raw(
+                    ErrorKind::ArgumentConflict,
+                    "Invalid flag: --function is not supported in Kani.",
+                ));
+            }
+            if self.common_args.quiet && self.concrete_playback == Some(ConcretePlaybackMode::Print)
+            {
+                return Err(Error::raw(
+                    ErrorKind::ArgumentConflict,
+                    "Conflicting options: --concrete-playback=print and --quiet.",
+                ));
+            }
+            if self.concrete_playback.is_some() && self.output_format == OutputFormat::Old {
+                return Err(Error::raw(
+                    ErrorKind::ArgumentConflict,
+                    "Conflicting options: --concrete-playback isn't compatible with \
+                --output-format=old.",
+                ));
+            }
+            if self.concrete_playback.is_some() && self.jobs() != Some(1) {
+                // Concrete playback currently embeds a lot of assumptions about the order in which harnesses get called.
+                return Err(Error::raw(
+                    ErrorKind::ArgumentConflict,
+                    "Conflicting options: --concrete-playback isn't compatible with --jobs.",
+                ));
+            }
+            if self.jobs.is_some() && self.output_format != OutputFormat::Terse {
+                // More verbose output formats make it hard to interpret output right now when run in parallel.
+                // This can be removed when we change up how results are printed.
+                return Err(Error::raw(
+                    ErrorKind::ArgumentConflict,
+                    "Conflicting options: --jobs requires `--output-format=terse`",
+                ));
+            }
+            // TODO: error out for other CBMC-backend-specific arguments
+            if self.common_args.unstable_features.contains(UnstableFeature::Lean)
+                && !self.cbmc_args.is_empty()
+            {
+                return Err(Error::raw(
+                    ErrorKind::ArgumentConflict,
+                    format!(
+                        "Conflicting options: --cbmc-args cannot be used with {}.",
+                        UnstableFeature::Lean.as_argument_string()
+                    ),
+                ));
+            }
+
+            Ok(())
+        };
+
+        // Check for any deprecated/obsolete options, or providing an unstable flag that has since been stabilized.
+        let deprecated_stabilized_obsolete = || -> Result<(), Error> {
+            self.checks.print_deprecated(&self.common_args);
+            self.check_unnecessary_unstable_option(self.jobs.is_some(), "jobs");
+
+            if self.write_json_symtab {
+                return Err(Error::raw(
+                    ErrorKind::ValueValidation,
+                    "The `--write-json-symtab` option is obsolete.",
+                ));
+            }
+
+            if self.restrict_vtable {
+                return Err(Error::raw(
+                    ErrorKind::ValueValidation,
+                    format!(
+                        "The restrict-vtable option is obsolete. Use `{}` instead.",
+                        UnstableFeature::RestrictVtable.as_argument_string()
+                    ),
+                ));
+            }
+
+            Ok(())
+        };
+
+        unstable()?;
+        conflicting_options()?;
+        deprecated_stabilized_obsolete()?;
+
+        // Bespoke validations that don't fit into any of the categories above.
         if self.randomize_layout.is_some() && self.concrete_playback.is_some() {
             let random_seed = if let Some(seed) = self.randomize_layout.unwrap() {
                 format!(" -Z layout-seed={seed}")
@@ -598,55 +838,6 @@ impl ValidateArgs for VerificationArgs {
             );
         }
 
-        if self.write_json_symtab {
-            return Err(Error::raw(
-                ErrorKind::ValueValidation,
-                "The `--write-json-symtab` option is obsolete.",
-            ));
-        }
-
-        // TODO: these conflicting flags reflect what's necessary to pass current tests unmodified.
-        // We should consider improving the error messages slightly in a later pull request.
-        if natives_unwind && extra_unwind {
-            return Err(Error::raw(
-                ErrorKind::ArgumentConflict,
-                "Conflicting flags: unwind flags provided to kani and in --cbmc-args.",
-            ));
-        }
-        if self.cbmc_args.contains(&OsString::from("--function")) {
-            return Err(Error::raw(
-                ErrorKind::ArgumentConflict,
-                "Invalid flag: --function is not supported in Kani.",
-            ));
-        }
-        if self.common_args.quiet && self.concrete_playback == Some(ConcretePlaybackMode::Print) {
-            return Err(Error::raw(
-                ErrorKind::ArgumentConflict,
-                "Conflicting options: --concrete-playback=print and --quiet.",
-            ));
-        }
-        if self.concrete_playback.is_some() && self.output_format == OutputFormat::Old {
-            return Err(Error::raw(
-                ErrorKind::ArgumentConflict,
-                "Conflicting options: --concrete-playback isn't compatible with \
-                --output-format=old.",
-            ));
-        }
-        if self.concrete_playback.is_some() && self.jobs() != Some(1) {
-            // Concrete playback currently embeds a lot of assumptions about the order in which harnesses get called.
-            return Err(Error::raw(
-                ErrorKind::ArgumentConflict,
-                "Conflicting options: --concrete-playback isn't compatible with --jobs.",
-            ));
-        }
-        if self.jobs.is_some() && self.output_format != OutputFormat::Terse {
-            // More verbose output formats make it hard to interpret output right now when run in parallel.
-            // This can be removed when we change up how results are printed.
-            return Err(Error::raw(
-                ErrorKind::ArgumentConflict,
-                "Conflicting options: --jobs requires `--output-format=terse`",
-            ));
-        }
         if let Some(out_dir) = &self.target_dir
             && out_dir.exists()
             && !out_dir.is_dir()
@@ -656,163 +847,6 @@ impl ValidateArgs for VerificationArgs {
                 format!(
                     "Invalid argument: `--target-dir` argument `{}` is not a directory",
                     out_dir.display()
-                ),
-            ));
-        }
-
-        self.common_args.check_unstable(
-            self.concrete_playback.is_some(),
-            "--concrete-playback",
-            UnstableFeature::ConcretePlayback,
-        )?;
-
-        self.common_args.check_unstable(
-            !self.c_lib.is_empty(),
-            "--c-lib",
-            UnstableFeature::CFfi,
-        )?;
-
-        self.common_args.check_unstable(self.gen_c, "--gen-c", UnstableFeature::UnstableOptions)?;
-
-        self.common_args.check_unstable(
-            !self.cbmc_args.is_empty(),
-            "--cbmc-args",
-            UnstableFeature::UnstableOptions,
-        )?;
-
-        self.common_args.check_unstable(
-            self.no_codegen,
-            "--no-codegen",
-            UnstableFeature::UnstableOptions,
-        )?;
-
-        self.common_args.check_unstable(
-            self.jobs.is_some(),
-            "--jobs",
-            UnstableFeature::UnstableOptions,
-        )?;
-
-        self.common_args.check_unstable(
-            self.extra_pointer_checks,
-            "--extra-pointer-checks",
-            UnstableFeature::UnstableOptions,
-        )?;
-
-        self.common_args.check_unstable(
-            self.ignore_global_asm,
-            "--ignore-global-asm",
-            UnstableFeature::UnstableOptions,
-        )?;
-
-        self.common_args.check_unstable(
-            self.run_sanity_checks,
-            "--run-sanity-checks",
-            UnstableFeature::UnstableOptions,
-        )?;
-
-        self.common_args.check_unstable(
-            self.no_slice_formula,
-            "--no-slice-formula",
-            UnstableFeature::UnstableOptions,
-        )?;
-
-        self.common_args.check_unstable(
-            self.synthesize_loop_contracts,
-            "--synthesize-loop-contracts",
-            UnstableFeature::UnstableOptions,
-        )?;
-
-        if self.restrict_vtable {
-            let z_feature = "-Z restrict-vtable";
-            return Err(Error::raw(
-                ErrorKind::ValueValidation,
-                format!("The `--restrict-vtable` option is obsolete. Use `{z_feature}` instead.",),
-            ));
-        }
-
-        self.common_args.check_unstable(
-            self.no_restrict_vtable,
-            "--no-restrict-vtable",
-            UnstableFeature::RestrictVtable,
-        )?;
-
-        if !self.c_lib.is_empty()
-            && !self.common_args.unstable_features.contains(UnstableFeature::CFfi)
-        {
-            let z_feature = "-Z c-ffi";
-            if self.common_args.enable_unstable {
-                return Err(Error::raw(
-                    ErrorKind::ValueValidation,
-                    format!(
-                        "The `--enable-unstable` option is obsolete. Use `{z_feature}` instead.",
-                    ),
-                ));
-            } else {
-                return Err(Error::raw(
-                    ErrorKind::MissingRequiredArgument,
-                    format!(
-                        "The `--c-lib` argument is unstable and requires `{z_feature}` to enable \
-                unstable C-FFI support."
-                    ),
-                ));
-            }
-        }
-
-        if self.coverage
-            && !self.common_args.unstable_features.contains(UnstableFeature::SourceCoverage)
-        {
-            return Err(Error::raw(
-                ErrorKind::MissingRequiredArgument,
-                "The `--coverage` argument is unstable and requires `-Z \
-            source-coverage` to be used.",
-            ));
-        }
-
-        if self.output_into_files
-            && !self.common_args.unstable_features.contains(UnstableFeature::UnstableOptions)
-        {
-            return Err(Error::raw(
-                ErrorKind::MissingRequiredArgument,
-                "The `--output-into-files` argument is unstable and requires `-Z unstable-options` to enable \
-            unstable options support.",
-            ));
-        }
-
-        if self.print_llbc && !self.common_args.unstable_features.contains(UnstableFeature::Lean) {
-            return Err(Error::raw(
-                ErrorKind::MissingRequiredArgument,
-                "The `--print-llbc` argument is unstable and requires `-Z lean` to be used.",
-            ));
-        }
-
-        // TODO: error out for other CBMC-backend-specific arguments
-        if self.common_args.unstable_features.contains(UnstableFeature::Lean)
-            && !self.cbmc_args.is_empty()
-        {
-            return Err(Error::raw(
-                ErrorKind::ArgumentConflict,
-                "The `--cbmc-args` argument cannot be used with -Z lean.",
-            ));
-        }
-
-        if self.harness_timeout.is_some()
-            && !self.common_args.unstable_features.contains(UnstableFeature::UnstableOptions)
-        {
-            return Err(Error::raw(
-                ErrorKind::MissingRequiredArgument,
-                format!(
-                    "The `--harness-timeout` argument is unstable and requires `-Z {}` to be used.",
-                    UnstableFeature::UnstableOptions
-                ),
-            ));
-        }
-
-        if !self.is_function_contracts_enabled() && self.no_assert_contracts {
-            return Err(Error::raw(
-                ErrorKind::MissingRequiredArgument,
-                format!(
-                    "The `--no-assert-contracts` option requires `-Z {}`.",
-                    UnstableFeature::FunctionContracts
                 ),
             ));
         }
