@@ -304,7 +304,7 @@ pub fn transform_for_to_loop(
     };
 
     let init_len_stmt: Stmt = parse_quote! {
-        let #len_ident = #iter_ident.len;
+        let #len_ident = kani::KaniIter::len(&#iter_ident);
     };
 
     let mut_pat = make_pat_tuple_mutable(&pat);
@@ -337,7 +337,7 @@ pub fn transform_for_to_loop(
 
     // Create the final expression with the iterator initialization
     let loop_loop: Stmt = parse_quote! {
-            while (#index_ident < #iter_ident.len) {
+            while (#index_ident < #len_ident) {
                 #(#new_body_stmts)*
             }
     };
@@ -571,6 +571,7 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
         })
         .into()
     };
+    println!("{}", ret);
     ret
 }
 

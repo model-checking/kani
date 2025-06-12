@@ -9,7 +9,9 @@
 #[allow(clippy::crate_in_macro_def)]
 macro_rules! generate_iter {
     () => {
+        use core::iter::StepBy;
         use core_path::mem as stdmem;
+        use core_path::ops::Range;
         use core_path::slice::Iter;
 
         pub trait KaniIter
@@ -20,20 +22,21 @@ macro_rules! generate_iter {
             fn indexing(&self, i: usize) -> Self::Item;
             fn first(&self) -> Self::Item;
             fn assumption(&self);
+            fn len(&self) -> usize;
         }
 
-        pub struct KaniSingleIter<T: Copy> {
+        pub struct KaniPtrIter<T: Copy> {
             pub ptr: *const T,
             pub len: usize,
         }
 
-        impl<T: Copy> KaniSingleIter<T> {
+        impl<T: Copy> KaniPtrIter<T> {
             pub fn new(ptr: *const T, len: usize) -> Self {
-                KaniSingleIter { ptr, len }
+                KaniPtrIter { ptr, len }
             }
         }
 
-        impl<T: Copy> KaniIter for KaniSingleIter<T> {
+        impl<T: Copy> KaniIter for KaniPtrIter<T> {
             type Item = T;
             fn indexing(&self, i: usize) -> Self::Item {
                 unsafe { *self.ptr.wrapping_add(i) }
@@ -42,9 +45,54 @@ macro_rules! generate_iter {
                 unsafe { *self.ptr }
             }
             fn assumption(&self) {
-                assume(unsafe {
-                    self.len == 0 || mem::is_allocated(self.ptr as *const (), self.len)
-                });
+                assume(unsafe { mem::is_allocated(self.ptr as *const (), self.len) });
+            }
+            fn len(&self) -> usize {
+                self.len
+            }
+        }
+
+        impl KaniIter for Range<i32> {
+            type Item = i32;
+            fn indexing(&self, i: usize) -> Self::Item {
+                self.start + i as i32
+            }
+            fn first(&self) -> Self::Item {
+                self.start
+            }
+            fn assumption(&self) {}
+            fn len(&self) -> usize {
+                (self.end - self.start) as usize
+            }
+        }
+
+        pub struct KaniStepBy<I: KaniIter> {
+            iter: I,
+            step: usize,
+        }
+
+        impl<I: KaniIter> KaniStepBy<I> {
+            pub fn new(iter: I, step: usize) -> Self {
+                KaniStepBy { iter, step }
+            }
+        }
+
+        impl<I: KaniIter> KaniIter for KaniStepBy<I> {
+            type Item = I::Item;
+
+            fn indexing(&self, i: usize) -> Self::Item {
+                self.iter.indexing(i * self.step)
+            }
+
+            fn first(&self) -> Self::Item {
+                self.iter.first()
+            }
+
+            fn assumption(&self) {
+                self.iter.assumption();
+            }
+            fn len(&self) -> usize {
+                (self.iter.len() + self.step - 1) / self.step
             }
         }
 
@@ -57,30 +105,53 @@ macro_rules! generate_iter {
         }
 
         impl<T: Copy, const N: usize> KaniIntoIter for [T; N] {
-            type Iter = KaniSingleIter<T>;
+            type Iter = KaniPtrIter<T>;
             fn kani_into_iter(self) -> Self::Iter {
-                KaniSingleIter::new(self.as_ptr(), N)
+                KaniPtrIter::new(self.as_ptr(), N)
             }
         }
 
         impl<'a, T: Copy> KaniIntoIter for &'a [T] {
-            type Iter = KaniSingleIter<T>;
+            type Iter = KaniPtrIter<T>;
             fn kani_into_iter(self) -> Self::Iter {
-                KaniSingleIter::new(self.as_ptr(), self.len())
+                KaniPtrIter::new(self.as_ptr(), self.len())
             }
         }
 
         impl<'a, T: Copy> KaniIntoIter for &'a mut [T] {
-            type Iter = KaniSingleIter<T>;
+            type Iter = KaniPtrIter<T>;
             fn kani_into_iter(self) -> Self::Iter {
-                KaniSingleIter::new(self.as_ptr(), self.len())
+                KaniPtrIter::new(self.as_ptr(), self.len())
             }
         }
 
         impl<T: Copy> KaniIntoIter for Iter<'_, T> {
-            type Iter = KaniSingleIter<T>;
+            type Iter = KaniPtrIter<T>;
             fn kani_into_iter(self) -> Self::Iter {
-                KaniSingleIter::new(self.as_slice().as_ptr(), self.len())
+                KaniPtrIter::new(self.as_slice().as_ptr(), self.len())
+            }
+        }
+
+        impl KaniIntoIter for Range<i32> {
+            type Iter = Range<i32>;
+            fn kani_into_iter(self) -> Self::Iter {
+                self
+            }
+        }
+
+        impl<I: KaniIntoIter> KaniIntoIter for StepBy<I> {
+            type Iter = KaniStepBy<I::Iter>;
+            fn kani_into_iter(self) -> Self::Iter {
+                struct StepByLayout<T> {
+                    iter: T,
+                    step_minus_one: usize,
+                    first_take: bool,
+                }
+                let ptr = &self as *const StepBy<I> as *const StepByLayout<I>;
+                let step = unsafe { (*ptr).step_minus_one + 1 };
+                let iter = unsafe { core::ptr::read(&(*ptr).iter) };
+                let kaniiter = iter.kani_into_iter();
+                KaniStepBy::new(kaniiter, step)
             }
         }
     };

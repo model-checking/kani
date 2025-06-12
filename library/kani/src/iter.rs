@@ -5,12 +5,12 @@
 //! We use this trait to overwrite the Rust IntoIter trait to reduce call stacks and avoid complicated loop invariant specifications,
 //! while maintaining the semantic of the loop.
 
-use crate::{KaniIntoIter, KaniSingleIter};
+use crate::{KaniIntoIter, KaniPtrIter};
 
 impl<T: Copy> KaniIntoIter for Vec<T> {
-    type Iter = KaniSingleIter<T>;
+    type Iter = KaniPtrIter<T>;
     fn kani_into_iter(self) -> Self::Iter {
         let s = self.iter();
-        KaniSingleIter::new(s.as_slice().as_ptr(), s.len())
+        KaniPtrIter::new(s.as_slice().as_ptr(), s.len())
     }
 }
