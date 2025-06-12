@@ -6,14 +6,11 @@
 use crate::args::ReachabilityType;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::kani_middle::analysis;
-use crate::kani_middle::attributes::{KaniAttributes, is_test_harness_description};
+use crate::kani_middle::attributes::KaniAttributes;
 use crate::kani_middle::check_reachable_items;
 use crate::kani_middle::codegen_units::{CodegenUnit, CodegenUnits};
-use crate::kani_middle::metadata::gen_test_metadata;
 use crate::kani_middle::provide;
-use crate::kani_middle::reachability::{
-    collect_reachable_items, filter_const_crate_items, filter_crate_items,
-};
+use crate::kani_middle::reachability::{collect_reachable_items, filter_crate_items};
 use crate::kani_middle::transform::{BodyTransformation, GlobalPasses};
 use crate::kani_queries::QueryDb;
 use cbmc::RoundingMode;
@@ -306,9 +303,23 @@ impl CodegenBackend for GotocCodegenBackend {
             if queries.args().reachability_analysis != ReachabilityType::None
                 && queries.kani_functions().is_empty()
             {
-                tcx.sess.dcx().err(
-                    "Failed to detect Kani functions. Please check your installation is correct.",
-                );
+                if stable_mir::find_crates("std").is_empty()
+                    && stable_mir::find_crates("kani").is_empty()
+                {
+                    // Special error for when not importing kani and using #[no_std].
+                    // See here for more info: https://github.com/model-checking/kani/issues/3906#issuecomment-2932687768.
+                    tcx.sess.dcx().struct_err(
+                        "Failed to detect Kani functions."
+                    ).with_help(
+                        "This project seems to be using #[no_std] but does not import Kani. \
+                        Try adding `crate extern kani` to the crate root to explicitly import Kani."
+                    )
+                    .emit();
+                } else {
+                    tcx.sess.dcx().struct_err(
+                        "Failed to detect Kani functions. Please check your installation is correct."
+                    ).emit();
+                }
             }
 
             // Codegen all items that need to be processed according to the selected reachability mode:
@@ -356,53 +367,6 @@ impl CodegenBackend for GotocCodegenBackend {
                     units.store_modifies(&modifies_instances);
                     units.store_loop_contracts(&loop_contracts_instances);
                     units.write_metadata(&queries, tcx);
-                }
-                ReachabilityType::Tests => {
-                    // We're iterating over crate items here, so what we have to codegen is the "test description" containing the
-                    // test closure that we want to execute
-                    // TODO: Refactor this code so we can guarantee that the pair (test_fn, test_desc) actually match.
-                    let unit = CodegenUnit::default();
-                    let mut transformer = BodyTransformation::new(&queries, tcx, &unit);
-                    let mut descriptions = vec![];
-                    let harnesses = filter_const_crate_items(tcx, &mut transformer, |_, item| {
-                        if is_test_harness_description(tcx, item.def) {
-                            descriptions.push(item.def);
-                            true
-                        } else {
-                            false
-                        }
-                    });
-                    // Codegen still takes a considerable amount, thus, we only generate one model for
-                    // all harnesses and copy them for each harness.
-                    // We will be able to remove this once we optimize all calls to CBMC utilities.
-                    // https://github.com/model-checking/kani/issues/1971
-                    let model_path = base_filename.with_extension(ArtifactType::SymTabGoto);
-                    let (gcx, items, contract_info) = self.codegen_items(
-                        tcx,
-                        &harnesses,
-                        &model_path,
-                        &results.machine_model,
-                        Default::default(),
-                        transformer,
-                    );
-                    results.extend(gcx, items, None);
-
-                    assert!(contract_info.is_none());
-
-                    for (test_fn, test_desc) in harnesses.iter().zip(descriptions.iter()) {
-                        let instance =
-                            if let MonoItem::Fn(instance) = test_fn { instance } else { continue };
-                        let metadata = gen_test_metadata(tcx, *test_desc, *instance, base_filename);
-                        let test_model_path = &metadata.goto_file.as_ref().unwrap();
-                        std::fs::copy(&model_path, test_model_path).unwrap_or_else(|_| {
-                            panic!(
-                                "Failed to copy {} to {}",
-                                model_path.display(),
-                                test_model_path.display()
-                            )
-                        });
-                        results.harnesses.push(metadata);
-                    }
                 }
                 ReachabilityType::None => {}
                 ReachabilityType::PubFns => {
@@ -665,8 +629,8 @@ impl GotoCodegenResults {
             unsupported_features,
             test_harnesses: tests,
             // We don't collect the contracts metadata because the FunctionWithContractPass
-            // removes any contracts logic for ReachabilityType::Test or ReachabilityType::PubFns,
-            // which are the two ReachabilityTypes under which the compiler calls this function.
+            // removes any contracts logic for ReachabilityType::PubFns,
+            // which is the only ReachabilityType under which the compiler calls this function.
             contracted_functions: vec![],
             autoharness_md: None,
         }

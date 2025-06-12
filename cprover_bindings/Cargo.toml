@@ -3,7 +3,7 @@
 
 [package]
 name = "cprover_bindings"
-version = "0.62.0"
+version = "0.63.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 publish = false
@@ -20,6 +20,7 @@ serde = {version = "1", features = ["derive"]}
 string-interner = "0.19"
 tracing = "0.1"
 linear-map = {version = "1.2", features = ["serde_impl"]}
+fxhash = "0.2.1"
 
 [dev-dependencies]
 serde_test = "1"

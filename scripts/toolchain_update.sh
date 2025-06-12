@@ -50,7 +50,7 @@ then
   EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
   echo "git_log<<$EOF" >> $GITHUB_ENV
 
-  git log --oneline $current_toolchain_hash..$next_toolchain_hash | \
+  git log --oneline --ancestry-path $current_toolchain_hash..$next_toolchain_hash | \
     sed 's#^#https://github.com/rust-lang/rust/commit/#' >> $GITHUB_ENV
   echo "$EOF" >> $GITHUB_ENV
 
