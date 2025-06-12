@@ -273,11 +273,18 @@ fn make_pat_tuple_mutable(pat: &Pat) -> Pat {
     }
 }
 
-#[allow(clippy::type_complexity)]
+pub struct ForLoopExtraStmts {
+    init_iter_stmt: Stmt,
+    init_len_stmt: Stmt,
+    init_index_stmt: Stmt,
+    init_pat_stmt: Stmt,
+    alloc_assume_stmt: Stmt,
+}
+
 pub fn transform_for_to_loop(
     for_loop: ExprForLoop,
     loop_id: &str,
-) -> (Stmt, Option<Stmt>, Option<Stmt>, Option<Stmt>, Option<Stmt>, Option<Stmt>) {
+) -> (Stmt, Option<ForLoopExtraStmts>) {
     // Extract components from the for loop
     let pat = *for_loop.pat;
     let expr = for_loop.expr;
@@ -341,34 +348,24 @@ pub fn transform_for_to_loop(
                 #(#new_body_stmts)*
             }
     };
-    (
-        loop_loop,
-        Some(init_iter_stmt),
-        Some(init_len_stmt),
-        Some(init_index_stmt),
-        Some(init_pat_stmt),
-        Some(alloc_assume_stmt),
-    )
+    let forloopextras = ForLoopExtraStmts {
+        init_iter_stmt,
+        init_len_stmt,
+        init_index_stmt,
+        init_pat_stmt,
+        alloc_assume_stmt,
+    };
+
+    (loop_loop, Some(forloopextras))
 }
 
 pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
     // parse the stmt of the loop
     let mut loop_stmt: Stmt = syn::parse(item.clone()).unwrap();
     let loop_id = generate_unique_id_from_span(&loop_stmt);
-    let mut init_iter_stmt: Option<Stmt> = None;
-    let mut init_len_stmt: Option<Stmt> = None;
-    let mut init_index_stmt: Option<Stmt> = None;
-    let mut init_pat_stmt: Option<Stmt> = None;
-    let mut alloc_assume_stmt: Option<Stmt> = None;
+    let mut forloopextras: Option<ForLoopExtraStmts> = None;
     if let Stmt::Expr(Expr::ForLoop(for_loop), _) = &loop_stmt {
-        (
-            loop_stmt,
-            init_iter_stmt,
-            init_len_stmt,
-            init_index_stmt,
-            init_pat_stmt,
-            alloc_assume_stmt,
-        ) = transform_for_to_loop(for_loop.clone(), &loop_id);
+        (loop_stmt, forloopextras) = transform_for_to_loop(for_loop.clone(), &loop_id);
     }
     // name of the loop invariant as closure of the form
     // __kani_loop_invariant_#startline_#startcol_#endline_#endcol
@@ -464,11 +461,14 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
             note = "for now, loop contracts is only supported for while-loops.";
         ),
     }
-    let ret: TokenStream = if let Some(init_iter_stmt) = init_iter_stmt {
-        let init_len_stmt = init_len_stmt.unwrap();
-        let init_index_stmt = init_index_stmt.unwrap();
-        let init_pat_stmt = init_pat_stmt.unwrap();
-        let alloc_assume_stmt = alloc_assume_stmt.unwrap();
+    let ret: TokenStream = if let Some(ForLoopExtraStmts {
+        init_iter_stmt,
+        init_len_stmt,
+        init_index_stmt,
+        init_pat_stmt,
+        alloc_assume_stmt,
+    }) = forloopextras
+    {
         if has_prev {
             quote!(
             {
