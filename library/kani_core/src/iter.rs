@@ -92,7 +92,7 @@ macro_rules! generate_iter {
                 self.iter.assumption();
             }
             fn len(&self) -> usize {
-                (self.iter.len() + self.step - 1) / self.step
+                self.iter.len().div_ceil(self.step)
             }
         }
 

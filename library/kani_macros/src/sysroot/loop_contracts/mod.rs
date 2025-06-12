@@ -571,7 +571,6 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
         })
         .into()
     };
-    println!("{}", ret);
     ret
 }
 
