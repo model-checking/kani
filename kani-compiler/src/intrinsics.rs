@@ -471,55 +471,55 @@ impl Intrinsic {
 fn try_match_atomic(intrinsic_instance: &Instance) -> Option<Intrinsic> {
     let intrinsic_str = intrinsic_instance.intrinsic_name().unwrap();
     let sig = intrinsic_instance.ty().kind().fn_sig().unwrap().skip_binder();
-    if let Some(suffix) = intrinsic_str.strip_prefix("atomic_and_") {
+    if let Some(suffix) = intrinsic_str.strip_prefix("atomic_and") {
         assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
         Some(Intrinsic::AtomicAnd(suffix.into()))
-    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_cxchgweak_") {
+    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_cxchgweak") {
         assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _, _ => RigidTy::Tuple(_));
         Some(Intrinsic::AtomicCxchgWeak(suffix.into()))
-    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_cxchg_") {
+    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_cxchg") {
         assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _, _ => RigidTy::Tuple(_));
         Some(Intrinsic::AtomicCxchg(suffix.into()))
-    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_fence_") {
+    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_fence") {
         assert_sig_matches!(sig, => RigidTy::Tuple(_));
         Some(Intrinsic::AtomicFence(suffix.into()))
     } else if intrinsic_str == "atomic_load" {
         assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Not) => _);
         Some(Intrinsic::AtomicLoad)
-    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_max_") {
+    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_max") {
         assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
         Some(Intrinsic::AtomicMax(suffix.into()))
-    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_min_") {
+    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_min") {
         assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
         Some(Intrinsic::AtomicMin(suffix.into()))
-    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_nand_") {
+    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_nand") {
         assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
         Some(Intrinsic::AtomicNand(suffix.into()))
-    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_or_") {
+    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_or") {
         assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
         Some(Intrinsic::AtomicOr(suffix.into()))
-    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_singlethreadfence_") {
+    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_singlethreadfence") {
         assert_sig_matches!(sig, => RigidTy::Tuple(_));
         Some(Intrinsic::AtomicSingleThreadFence(suffix.into()))
-    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_store_") {
+    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_store") {
         assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => RigidTy::Tuple(_));
         Some(Intrinsic::AtomicStore(suffix.into()))
-    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_umax_") {
+    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_umax") {
         assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
         Some(Intrinsic::AtomicUmax(suffix.into()))
-    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_umin_") {
+    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_umin") {
         assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
         Some(Intrinsic::AtomicUmin(suffix.into()))
-    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_xadd_") {
+    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_xadd") {
         assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
         Some(Intrinsic::AtomicXadd(suffix.into()))
-    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_xchg_") {
+    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_xchg") {
         assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
         Some(Intrinsic::AtomicXchg(suffix.into()))
-    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_xor_") {
+    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_xor") {
         assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
         Some(Intrinsic::AtomicXor(suffix.into()))
-    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_xsub_") {
+    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_xsub") {
         assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
         Some(Intrinsic::AtomicXsub(suffix.into()))
     } else {
