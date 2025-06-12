@@ -50,10 +50,12 @@ impl<'a> ContractConditionsHandler<'a> {
                 // Dummy functions used to force the compiler to annotate Kani's
                 // closures as FnOnce.
                 #[inline(never)]
+                #[kanitool::fn_marker = "kani_force_fn_once"]
                 const fn kani_force_fn_once<T, F: FnOnce() -> T>(f: F) -> F {
                     f
                 }
                 #[inline(never)]
+                #[kanitool::fn_marker = "kani_force_fn_once_with_args"]
                 const fn kani_force_fn_once_with_args<A, T, F: FnOnce(A) -> T>(f: F) -> F {
                     f
                 }

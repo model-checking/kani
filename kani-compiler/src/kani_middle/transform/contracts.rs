@@ -282,6 +282,10 @@ pub struct FunctionWithContractPass {
     unused_closures: HashSet<ClosureDef>,
     /// Cache KaniRunContract function used to implement contracts.
     run_contract_fn: Option<FnDef>,
+    /// Kani ForceFnOnce function used to enforce correct closure annotation.
+    force_fn_once: Option<FnDef>,
+    /// Kani ForceFnOnceWithArgs function used to enforce correct closure annotation.
+    force_fn_once_with_args: Option<FnDef>,
 }
 
 impl TransformPass for FunctionWithContractPass {
@@ -312,6 +316,17 @@ impl TransformPass for FunctionWithContractPass {
                     == Some(Symbol::intern("kani_register_contract"))
                 {
                     let run = Instance::resolve(self.run_contract_fn.unwrap(), args).unwrap();
+                    (true, run.body().unwrap())
+                } else if KaniAttributes::for_instance(tcx, instance).fn_marker()
+                    == Some(Symbol::intern("kani_force_fn_once"))
+                {
+                    let run = Instance::resolve(self.force_fn_once.unwrap(), args).unwrap();
+                    (true, run.body().unwrap())
+                } else if KaniAttributes::for_instance(tcx, instance).fn_marker()
+                    == Some(Symbol::intern("kani_force_fn_once_with_args"))
+                {
+                    let run =
+                        Instance::resolve(self.force_fn_once_with_args.unwrap(), args).unwrap();
                     (true, run.body().unwrap())
                 } else {
                     // Not a contract annotated function
@@ -372,12 +387,28 @@ impl FunctionWithContractPass {
             let run_contract_fn =
                 queries.kani_functions().get(&KaniModel::RunContract.into()).copied();
             assert!(run_contract_fn.is_some(), "Failed to find Kani run contract function");
+
+            let force_fn_once =
+                queries.kani_functions().get(&KaniModel::ForceContractType.into()).copied();
+            assert!(force_fn_once.is_some(), "Failed to find Kani force_fn_once function");
+
+            let force_fn_once_with_args = queries
+                .kani_functions()
+                .get(&KaniModel::ForceContractTypeWithArguments.into())
+                .copied();
+            assert!(
+                force_fn_once_with_args.is_some(),
+                "Failed to find Kani force_fn_once_with_args function"
+            );
+
             FunctionWithContractPass {
                 check_fn,
                 replace_fns,
                 assert_contracts: !queries.args().no_assert_contracts,
                 unused_closures: Default::default(),
                 run_contract_fn,
+                force_fn_once,
+                force_fn_once_with_args,
             }
         } else {
             // If reachability mode is PubFns or Tests, we just remove any contract logic.
