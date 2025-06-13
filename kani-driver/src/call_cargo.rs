@@ -6,6 +6,7 @@ use crate::call_single_file::{LibConfig, to_rustc_arg};
 use crate::project::Artifact;
 use crate::session::{
     KaniSession, get_cargo_path, lib_folder, lib_no_core_folder, setup_cargo_command,
+    setup_cargo_command_inner,
 };
 use crate::util;
 use anyhow::{Context, Result, bail};
@@ -202,7 +203,8 @@ crate-type = ["lib"]
         let mut failed_targets = vec![];
         for package in packages {
             for verification_target in package_targets(&self.args, package) {
-                let mut cmd = setup_cargo_command()?;
+                let mut cmd =
+                    setup_cargo_command_inner(Some(verification_target.target().name.clone()))?;
                 cmd.args(&cargo_args)
                     .args(vec!["-p", &package.id.to_string()])
                     .args(verification_target.to_args())
