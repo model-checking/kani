@@ -136,6 +136,13 @@ impl ToIrep for DatatypeComponent {
                 (IrepId::CPrettyName, Irep::just_string_id(name.to_string())),
                 (IrepId::Type, typ.to_irep(mm)),
             ]),
+            DatatypeComponent::UnionField { name, typ: _, padded_typ } => {
+                Irep::just_named_sub(linear_map![
+                    (IrepId::Name, Irep::just_string_id(name.to_string())),
+                    (IrepId::CPrettyName, Irep::just_string_id(name.to_string())),
+                    (IrepId::Type, padded_typ.to_irep(mm)),
+                ])
+            }
             DatatypeComponent::Padding { name, bits } => Irep::just_named_sub(linear_map![
                 (IrepId::CIsPadding, Irep::one()),
                 (IrepId::Name, Irep::just_string_id(name.to_string())),
