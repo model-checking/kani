@@ -25,6 +25,10 @@ pub const BUG_REPORT_URL: &str =
 /// the driver logs separately, by using the logger directives to  select the kani-driver crate.
 /// `export KANI_LOG=kani_driver=debug`.
 const LOG_ENV_VAR: &str = "KANI_LOG";
+// Constants related to the option to create flamegraphs to debug compiler performance. See our mdbook's developer documentation for details.
+const FLAMEGRAPH_ENV_VAR: &str = "FLAMEGRAPH";
+const FLAMEGRAPH_DIR: &str = "flamegraphs";
+const FLAMEGRAPH_SAMPLING_RATE: &str = "8000"; // in Hz
 
 /// Contains information about the execution environment and arguments that affect operations
 pub struct KaniSession {
@@ -409,18 +413,51 @@ fn init_logger(args: &VerificationArgs) {
     tracing::subscriber::set_global_default(subscriber).unwrap();
 }
 
-// Setup the default version of cargo being run, based on the type/mode of installation for kani
-// If kani is being run in developer mode, then we use the one provided by rustup as we can assume that the developer will have rustup installed
+pub fn setup_cargo_command() -> Result<Command> {
+    setup_cargo_command_inner(None)
+}
+
+// Setup the default version of cargo being run, based on the type/mode of installation for kani.
+// Optionally takes a path to output compiler profiling info to.
+// If kani is being run in developer mode, then we use the one provided by rustup as we can assume that the developer will have rustup installed.
 // For release versions of Kani, we use a version of cargo that's in the toolchain that's been symlinked during `cargo-kani` setup. This will allow
 // Kani to remove the runtime dependency on rustup later on.
-pub fn setup_cargo_command() -> Result<Command> {
+pub fn setup_cargo_command_inner(profiling_out_path: Option<String>) -> Result<Command> {
     let install_type = InstallType::new()?;
 
     let cmd = match install_type {
         InstallType::DevRepo(_) => {
-            let mut cmd = Command::new("cargo");
-            cmd.arg(self::toolchain_shorthand());
-            cmd
+            // check if we should instrument the compiler for a flamegraph
+            let instrument_compiler = matches!(
+                std::env::var(FLAMEGRAPH_ENV_VAR),
+                Ok(ref s) if s == "compiler"
+            );
+
+            if let Some(profiler_out_path) = profiling_out_path
+                && instrument_compiler
+            {
+                // create temporary flamegraph directory
+                std::fs::create_dir_all(FLAMEGRAPH_DIR)?;
+                let time_postfix = chrono::Local::now().format("%Y-%m-%dT%H:%M:%S");
+
+                let mut cmd = Command::new("samply");
+                cmd.arg("record");
+
+                // adjust the sampling rate (in Hz)
+                cmd.arg("-r").arg(FLAMEGRAPH_SAMPLING_RATE);
+                cmd.arg("-o").arg(format!(
+                    "{FLAMEGRAPH_DIR}/compiler-{profiler_out_path}-{time_postfix}.json.gz",
+                ));
+
+                // just save the output and don't open the interactive UI.
+                cmd.arg("--save-only");
+                cmd.arg("cargo").arg(self::toolchain_shorthand());
+                cmd
+            } else {
+                let mut cmd = Command::new("cargo");
+                cmd.arg(self::toolchain_shorthand());
+                cmd
+            }
         }
         InstallType::Release(kani_dir) => {
             let cargo_path = kani_dir.join("toolchain").join("bin").join("cargo");

@@ -42,6 +42,7 @@
     - [`benchcomp` command line](./benchcomp-cli.md)
     - [`benchcomp` configuration file](./benchcomp-conf.md)
     - [Custom parsers](./benchcomp-parse.md)
+  - [Profiling Kani](./profiling.md)
 
 - [Limitations](./limitations.md)
   - [Undefined behaviour](./undefined-behaviour.md)
