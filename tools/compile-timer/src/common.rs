@@ -1,12 +1,9 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use std::{
-    path::{Path, PathBuf},
-    time::Duration,
-};
-
 use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AggrResult {
