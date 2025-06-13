@@ -10,6 +10,8 @@
 macro_rules! generate_iter {
     () => {
         use core::iter::StepBy;
+        use core_path::cmp::min;
+        use core_path::iter::{Chain, Map, Zip};
         use core_path::mem as stdmem;
         use core_path::ops::Range;
         use core_path::slice::Iter;
@@ -21,7 +23,7 @@ macro_rules! generate_iter {
             type Item;
             fn indexing(&self, i: usize) -> Self::Item;
             fn first(&self) -> Self::Item;
-            fn assumption(&self);
+            fn assumption(&self) -> bool;
             fn len(&self) -> usize;
         }
 
@@ -44,8 +46,36 @@ macro_rules! generate_iter {
             fn first(&self) -> Self::Item {
                 unsafe { *self.ptr }
             }
-            fn assumption(&self) {
-                assume(unsafe { mem::is_allocated(self.ptr as *const (), self.len) });
+            fn assumption(&self) -> bool {
+                unsafe { mem::is_allocated(self.ptr as *const (), self.len) }
+            }
+            fn len(&self) -> usize {
+                self.len
+            }
+        }
+
+        pub struct KaniRefIter<'a, T: Copy> {
+            pub ptr: *const T,
+            pub len: usize,
+            _marker: PhantomData<&'a T>,
+        }
+
+        impl<'a, T: Copy> KaniRefIter<'a, T> {
+            pub fn new(ptr: *const T, len: usize) -> Self {
+                KaniRefIter { ptr, len, _marker: PhantomData }
+            }
+        }
+
+        impl<'a, T: Copy> KaniIter for KaniRefIter<'a, T> {
+            type Item = &'a T;
+            fn indexing(&self, i: usize) -> Self::Item {
+                unsafe { &*self.ptr.wrapping_add(i) }
+            }
+            fn first(&self) -> Self::Item {
+                unsafe { &*self.ptr }
+            }
+            fn assumption(&self) -> bool {
+                unsafe { mem::is_allocated(self.ptr as *const (), self.len) }
             }
             fn len(&self) -> usize {
                 self.len
@@ -60,7 +90,9 @@ macro_rules! generate_iter {
             fn first(&self) -> Self::Item {
                 self.start
             }
-            fn assumption(&self) {}
+            fn assumption(&self) -> bool {
+                true
+            }
             fn len(&self) -> usize {
                 (self.end - self.start) as usize
             }
@@ -88,11 +120,103 @@ macro_rules! generate_iter {
                 self.iter.first()
             }
 
-            fn assumption(&self) {
-                self.iter.assumption();
+            fn assumption(&self) -> bool {
+                self.iter.assumption()
             }
             fn len(&self) -> usize {
                 self.iter.len().div_ceil(self.step)
+            }
+        }
+
+        pub struct KaniChainIter<I: KaniIter> {
+            pub iter1: I,
+            pub iter2: I,
+        }
+
+        impl<I: KaniIter> KaniChainIter<I> {
+            pub fn new(iter1: I, iter2: I) -> Self {
+                KaniChainIter { iter1, iter2 }
+            }
+        }
+
+        impl<I: KaniIter> KaniIter for KaniChainIter<I> {
+            type Item = I::Item;
+            fn indexing(&self, i: usize) -> Self::Item {
+                if i < self.iter1.len() {
+                    self.iter1.indexing(i)
+                } else {
+                    self.iter2.indexing(i - self.iter1.len())
+                }
+            }
+            fn first(&self) -> Self::Item {
+                if self.iter1.len() > 0 { self.iter1.first() } else { self.iter2.first() }
+            }
+            fn assumption(&self) -> bool {
+                self.iter1.assumption() || self.iter2.assumption()
+            }
+            fn len(&self) -> usize {
+                self.iter1.len() + self.iter2.len()
+            }
+        }
+
+        pub struct KaniZipIter<I1: KaniIter, I2: KaniIter> {
+            pub iter1: I1,
+            pub iter2: I2,
+        }
+
+        impl<I1: KaniIter, I2: KaniIter> KaniZipIter<I1, I2> {
+            pub fn new(iter1: I1, iter2: I2) -> Self {
+                KaniZipIter { iter1, iter2 }
+            }
+        }
+
+        impl<I1: KaniIter, I2: KaniIter> KaniIter for KaniZipIter<I1, I2> {
+            type Item = (I1::Item, I2::Item);
+            fn indexing(&self, i: usize) -> Self::Item {
+                (self.iter1.indexing(i), self.iter2.indexing(i))
+            }
+            fn first(&self) -> Self::Item {
+                (self.iter1.first(), self.iter2.first())
+            }
+            fn assumption(&self) -> bool {
+                self.iter1.assumption() && self.iter2.assumption()
+            }
+            fn len(&self) -> usize {
+                min(self.iter1.len(), self.iter2.len())
+            }
+        }
+
+        pub struct KaniMapIter<I: KaniIter, F> {
+            pub iter: I,
+            pub map: F,
+        }
+
+        impl<I: KaniIter, F> KaniMapIter<I, F> {
+            pub fn new(iter: I, map: F) -> Self {
+                KaniMapIter { iter, map }
+            }
+        }
+
+        impl<B, I: KaniIter, F> KaniIter for KaniMapIter<I, F>
+        where
+            F: FnMut(I::Item) -> B + Copy,
+        {
+            type Item = B;
+            fn indexing(&self, i: usize) -> Self::Item {
+                let item = self.iter.indexing(i);
+                let map_ptr = &self.map as *const F as *mut F;
+                unsafe { (*map_ptr)(item) }
+            }
+            fn first(&self) -> Self::Item {
+                let item = self.iter.first();
+                let map_ptr = &self.map as *const F as *mut F;
+                unsafe { (*map_ptr)(item) }
+            }
+            fn assumption(&self) -> bool {
+                self.iter.assumption()
+            }
+            fn len(&self) -> usize {
+                self.iter.len()
             }
         }
 
@@ -125,10 +249,10 @@ macro_rules! generate_iter {
             }
         }
 
-        impl<T: Copy> KaniIntoIter for Iter<'_, T> {
-            type Iter = KaniPtrIter<T>;
+        impl<'a, T: Copy> KaniIntoIter for Iter<'a, T> {
+            type Iter = KaniRefIter<'a, T>;
             fn kani_into_iter(self) -> Self::Iter {
-                KaniPtrIter::new(self.as_slice().as_ptr(), self.len())
+                KaniRefIter::new(self.as_slice().as_ptr(), self.len())
             }
         }
 
@@ -152,6 +276,55 @@ macro_rules! generate_iter {
                 let iter = unsafe { core::ptr::read(&(*ptr).iter) };
                 let kaniiter = iter.kani_into_iter();
                 KaniStepBy::new(kaniiter, step)
+            }
+        }
+
+        impl<I: KaniIntoIter + Clone> KaniIntoIter for Chain<I, I> {
+            type Iter = KaniChainIter<I::Iter>;
+            fn kani_into_iter(self) -> Self::Iter {
+                struct ChainLayout<I> {
+                    a: Option<I>,
+                    b: Option<I>,
+                }
+                let ptr = &self as *const Chain<I, I> as *const ChainLayout<I>;
+                let iter1 = unsafe { (*ptr).a.clone().unwrap().kani_into_iter() };
+                let iter2 = unsafe { (*ptr).b.clone().unwrap().kani_into_iter() };
+                KaniChainIter::new(iter1, iter2)
+            }
+        }
+
+        impl<I1: KaniIntoIter + Clone, I2: KaniIntoIter + Clone> KaniIntoIter for Zip<I1, I2> {
+            type Iter = KaniZipIter<I1::Iter, I2::Iter>;
+            fn kani_into_iter(self) -> Self::Iter {
+                struct ZipLayout<I1, I2> {
+                    a: I1,
+                    b: I2,
+                    index: usize,
+                    len: usize,
+                    a_len: usize,
+                }
+                let ptr = &self as *const Zip<I1, I2> as *const ZipLayout<I1, I2>;
+                let iter1 = unsafe { (*ptr).a.clone().kani_into_iter() };
+                let iter2 = unsafe { (*ptr).b.clone().kani_into_iter() };
+                KaniZipIter::new(iter1, iter2)
+            }
+        }
+
+        impl<B, I: KaniIntoIter + Clone, F> KaniIntoIter for Map<I, F>
+        where
+            <<I as KaniIntoIter>::Iter as KaniIter>::Item: Clone,
+            F: FnMut(<<I as KaniIntoIter>::Iter as KaniIter>::Item) -> B + Copy,
+        {
+            type Iter = KaniMapIter<I::Iter, F>;
+            fn kani_into_iter(self) -> Self::Iter {
+                struct MapLayout<I, F> {
+                    iter: I,
+                    map: F,
+                }
+                let ptr = &self as *const Map<I, F> as *const MapLayout<I, F>;
+                let iter = unsafe { (*ptr).iter.clone().kani_into_iter() };
+                let map = unsafe { (*ptr).map };
+                KaniMapIter::new(iter, map)
             }
         }
     };

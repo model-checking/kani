@@ -18,7 +18,7 @@ fn forloop() {
     let a: [(u8, u8); 10] = kani::any();
     kani::assume(kani::forall!(|i in (0,10)| sum_pair(a[i]) <= 10));
     #[kani::loop_invariant( kaniindex <= 10 && sum <= (kaniindex as u32 * 10 as u32) )]
-    for (i, j) in a.iter() {
+    for (i, j) in a {
         sum = sum + (i as u32) + (j as u32);
     }
     assert!(sum <= 100);

@@ -323,7 +323,7 @@ pub fn transform_for_to_loop(
     let mut new_body_stmts = Vec::new();
 
     let alloc_assume_stmt: Stmt = parse_quote! {
-        kani::KaniIter::assumption(&#iter_ident);
+        kani::assume (kani::KaniIter::assumption(&#iter_ident));
     };
 
     // Increase the iter
