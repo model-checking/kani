@@ -887,7 +887,7 @@ impl ToString for IrepId {
 }
 
 impl IrepId {
-    pub fn to_string_cow(&self) -> Cow<str> {
+    pub fn to_string_cow(&self) -> Cow<'_, str> {
         match self.to_owned_string() {
             Some(owned) => Cow::Owned(owned),
             None => Cow::Borrowed(self.to_static_string()),
