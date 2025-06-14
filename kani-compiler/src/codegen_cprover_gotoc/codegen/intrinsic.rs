@@ -302,27 +302,25 @@ impl GotocCtx<'_> {
                 "Rust intrinsic assumption failed",
                 loc,
             ),
-            Intrinsic::AtomicAnd(_) => codegen_atomic_binop!(bitand),
-            Intrinsic::AtomicCxchg(_) | Intrinsic::AtomicCxchgWeak(_) => {
+            Intrinsic::AtomicAnd => codegen_atomic_binop!(bitand),
+            Intrinsic::AtomicCxchg | Intrinsic::AtomicCxchgWeak => {
                 self.codegen_atomic_cxchg(intrinsic_str, fargs, place, loc)
             }
 
-            Intrinsic::AtomicFence(_) => self.codegen_atomic_noop(intrinsic_str, loc),
+            Intrinsic::AtomicFence => self.codegen_atomic_noop(intrinsic_str, loc),
             Intrinsic::AtomicLoad => self.codegen_atomic_load(intrinsic_str, fargs, place, loc),
-            Intrinsic::AtomicMax(_) => codegen_atomic_binop!(max),
-            Intrinsic::AtomicMin(_) => codegen_atomic_binop!(min),
-            Intrinsic::AtomicNand(_) => codegen_atomic_binop!(bitnand),
-            Intrinsic::AtomicOr(_) => codegen_atomic_binop!(bitor),
-            Intrinsic::AtomicSingleThreadFence(_) => self.codegen_atomic_noop(intrinsic_str, loc),
-            Intrinsic::AtomicStore(_) => {
-                self.codegen_atomic_store(intrinsic_str, fargs, place, loc)
-            }
-            Intrinsic::AtomicUmax(_) => codegen_atomic_binop!(max),
-            Intrinsic::AtomicUmin(_) => codegen_atomic_binop!(min),
-            Intrinsic::AtomicXadd(_) => codegen_atomic_binop!(plus),
-            Intrinsic::AtomicXchg(_) => self.codegen_atomic_store(intrinsic_str, fargs, place, loc),
-            Intrinsic::AtomicXor(_) => codegen_atomic_binop!(bitxor),
-            Intrinsic::AtomicXsub(_) => codegen_atomic_binop!(sub),
+            Intrinsic::AtomicMax => codegen_atomic_binop!(max),
+            Intrinsic::AtomicMin => codegen_atomic_binop!(min),
+            Intrinsic::AtomicNand => codegen_atomic_binop!(bitnand),
+            Intrinsic::AtomicOr => codegen_atomic_binop!(bitor),
+            Intrinsic::AtomicSingleThreadFence => self.codegen_atomic_noop(intrinsic_str, loc),
+            Intrinsic::AtomicStore => self.codegen_atomic_store(intrinsic_str, fargs, place, loc),
+            Intrinsic::AtomicUmax => codegen_atomic_binop!(max),
+            Intrinsic::AtomicUmin => codegen_atomic_binop!(min),
+            Intrinsic::AtomicXadd => codegen_atomic_binop!(plus),
+            Intrinsic::AtomicXchg => self.codegen_atomic_store(intrinsic_str, fargs, place, loc),
+            Intrinsic::AtomicXor => codegen_atomic_binop!(bitxor),
+            Intrinsic::AtomicXsub => codegen_atomic_binop!(sub),
             Intrinsic::Bitreverse => {
                 self.codegen_expr_to_place_stable(place, fargs.remove(0).bitreverse(), loc)
             }
