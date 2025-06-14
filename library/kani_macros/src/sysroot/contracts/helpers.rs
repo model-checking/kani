@@ -123,9 +123,25 @@ pub fn closure_body(closure: &mut Stmt) -> &mut ExprBlock {
     let Stmt::Local(Local { init: Some(LocalInit { expr, .. }), .. }) = closure else {
         unreachable!()
     };
-    let Expr::Closure(closure) = expr.as_mut() else { unreachable!() };
-    let Expr::Block(body) = closure.body.as_mut() else { unreachable!() };
-    body
+    match expr.as_mut() {
+        // The case of closures wrapped in `kani_force_fn_once`
+        Expr::Call(call) if call.args.len() == 1 => {
+            let arg = call.args.first_mut().unwrap();
+            match arg {
+                Expr::Closure(closure) => {
+                    let Expr::Block(body) = closure.body.as_mut() else { unreachable!() };
+                    body
+                }
+                _ => unreachable!(),
+            }
+        }
+
+        Expr::Closure(closure) => {
+            let Expr::Block(body) = closure.body.as_mut() else { unreachable!() };
+            body
+        }
+        _ => unreachable!(),
+    }
 }
 
 /// Does the provided path have the same chain of identifiers as `mtch` (match)
