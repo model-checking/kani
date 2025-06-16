@@ -21,6 +21,9 @@ name: Kani Extra
 on:
   pull_request_target:
   merge_group:
+  push:
+    branches:
+      - 'main'
 
 jobs:
   # Keep this job minimal since it requires extra permission
@@ -43,9 +46,16 @@ jobs:
       with:
         dot: true
 
-  verification-bench:
-    name: Verification Benchmarks
+  end-to-end-bench:
+    name: End-to-End Benchmarks
     needs: auto-label
     permissions: {}
-    if: ${{ contains(needs.auto-label.outputs.all-labels, 'Z-BenchCI') && github.event_name != 'merge_group' }}
-    uses: ./.github/workflows/bench.yml
+    if: ${{ contains(needs.auto-label.outputs.all-labels, 'Z-EndToEndBenchCI') && github.event_name != 'merge_group' }}
+    uses: ./.github/workflows/bench-e2e.yml
+
+  compiler-bench:
+    name: Compiler Benchmarks
+    needs: auto-label
+    permissions: {}
+    if: ${{ contains(needs.auto-label.outputs.all-labels, 'Z-CompilerBenchCI') && github.event_name != 'merge_group' }}
+    uses: ./.github/workflows/bench-compiler.yml
