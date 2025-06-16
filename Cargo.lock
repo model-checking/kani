@@ -202,7 +202,7 @@ dependencies = [
  "anyhow",
  "cargo_metadata",
  "clap",
- "which",
+ "which 8.0.0",
 ]
 
 [[package]]
@@ -321,7 +321,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "tracing-tree 0.4.0 (git+https://github.com/Nadrieril/tracing-tree)",
- "which",
+ "which 7.0.3",
 ]
 
 [[package]]
@@ -771,9 +771,9 @@ checksum = "a8d1add55171497b4705a648c6b583acafb01d58050a51727785f0b2c8e0a2b2"
 
 [[package]]
 name = "graph-cycles"
-version = "0.2.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3092eb8c0a52f9146161afd672f10fbb970daec4fa79d17b26f79f10139cba9e"
+checksum = "27b92c49194cd4f20bad0d9875503c951993f4249c0cfd210a49ed39ef072a0c"
 dependencies = [
  "ahash",
  "petgraph 0.7.1",
@@ -1132,7 +1132,7 @@ dependencies = [
  "toml",
  "tracing",
  "tracing-subscriber",
- "which",
+ "which 8.0.0",
 ]
 
 [[package]]
@@ -2522,6 +2522,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "24d643ce3fd3e5b54854602a080f34fb10ab75e0b813ee32d00ca2b44fa74762"
 dependencies = [
  "either",
+ "env_home",
+ "rustix 1.0.7",
+ "winsafe",
+]
+
+[[package]]
+name = "which"
+version = "8.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d3fabb953106c3c8eea8306e4393700d7657561cb43122571b172bbfb7c7ba1d"
+dependencies = [
  "env_home",
  "rustix 1.0.7",
  "winsafe",

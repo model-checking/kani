@@ -32,7 +32,7 @@ strum_macros = {version = "0.27.1"}
 tempfile = "3"
 tracing = {version = "0.1", features = ["max_level_trace", "release_max_level_debug"]}
 tracing-subscriber = {version = "0.3.8", features = ["env-filter", "json", "fmt"]}
-which = "7"
+which = "8"
 time = {version = "0.3.36", features = ["formatting"]}
 tokio = { version = "1.40.0", features = ["io-util", "process", "rt", "time"] }
 chrono = { version = "0.4.41", default-features = false, features = [ "clock" ]}
