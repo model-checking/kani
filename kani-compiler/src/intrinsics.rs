@@ -309,11 +309,11 @@ impl Intrinsic {
                 assert_sig_matches!(sig, RigidTy::Bool => RigidTy::Bool);
                 Self::Likely
             }
-            "min_align_of" => {
+            "align_of" => {
                 assert_sig_matches!(sig, => RigidTy::Uint(UintTy::Usize));
                 Self::MinAlignOf
             }
-            "min_align_of_val" => {
+            "align_of_val" => {
                 assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Not) => RigidTy::Uint(UintTy::Usize));
                 Self::MinAlignOfVal
             }
