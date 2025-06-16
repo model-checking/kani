@@ -289,6 +289,7 @@ impl CodegenBackend for GotocCodegenBackend {
         rustc_metadata: EncodedMetadata,
         _need_metadata_module: bool,
     ) -> Box<dyn Any> {
+        std::thread::sleep(std::time::Duration::from_millis(100));
         let ret_val = rustc_internal::run(tcx, || {
             super::utils::init();
 
