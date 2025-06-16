@@ -14,7 +14,7 @@ enum MyEnum {}
 fn main() {
     // for the following types x86_64 and aarch64 agree on the alignment; see
     // AlignOfVal/align_of_fat_ptr.rs for some example of where they don't agree
-    #[cfg(any(target_arch = "x86_64" | target_arch = "aarch64"))]
+    #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
     {
         // Scalar types
         assert!(align_of::<i8>() == 1);
