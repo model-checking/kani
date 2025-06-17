@@ -95,7 +95,7 @@ fn print_markdown(results: &[(AggrResult, AggrResult)]) {
         .collect::<Vec<_>>();
 
     println!(
-        "\n[^1]: thresholds: (std_dev: {FRAC_STD_DEV_THRESHOLD}, absolute: {FRAC_ABSOLUTE_THRESHOLD})."
+        "\n[^1]: threshold: max({FRAC_STD_DEV_THRESHOLD} x std_dev, {FRAC_ABSOLUTE_THRESHOLD} x initial_time)."
     );
 
     if regressions.is_empty() {

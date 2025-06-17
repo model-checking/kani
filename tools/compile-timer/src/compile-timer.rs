@@ -20,6 +20,10 @@ struct TimerArgs {
     #[arg(short, long, value_name = "FILE")]
     out_path: PathBuf,
 
+    /// The paths of additional paths to visit beyond the current subtree
+    #[arg(short, long, value_name = "DIR")]
+    also_visit: Vec<PathBuf>,
+
     /// The names or paths of files to ignore
     #[arg(short, long)]
     ignore: Vec<PathBuf>,
@@ -36,8 +40,9 @@ fn main() {
 
     let current_directory = std::env::current_dir().expect("should be run in a directory");
     let (mut to_visit, mut res) = (vec![current_directory], vec![]);
-    let mut out_ser = serde_json::Serializer::pretty(File::create(&args.out_path).unwrap());
+    to_visit.extend(args.also_visit);
 
+    let mut out_ser = serde_json::Serializer::pretty(File::create(&args.out_path).unwrap());
     let run_start = std::time::Instant::now();
 
     // recursively visit subdirectories to time the compiler on all rust projects
@@ -136,6 +141,7 @@ fn run_command_in(absolute_path: &Path) -> RunResult {
 }
 
 fn extract_duration(s: &str) -> Duration {
+    let s = &s[s.find("IN").unwrap_or(0)..];
     let micros = s.chars().filter(|c| c.is_ascii_digit()).collect::<String>().parse().ok().unwrap();
 
     Duration::from_micros(micros)
