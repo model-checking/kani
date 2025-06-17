@@ -20,7 +20,7 @@ use cbmc::{InternedString, MachineModel};
 use kani_metadata::artifact::convert_type;
 use kani_metadata::{ArtifactType, HarnessMetadata, KaniMetadata, UnsupportedFeature};
 use kani_metadata::{AssignsContract, CompilerArtifactStub};
-use rustc_abi::Endian;
+use rustc_abi::{Align, Endian};
 use rustc_codegen_ssa::back::archive::{
     ArArchiveBuilder, ArchiveBuilder, ArchiveBuilderBuilder, DEFAULT_OBJECT_READER,
 };
@@ -511,10 +511,11 @@ fn check_options(session: &Session) {
     // a valid CBMC machine model in function `machine_model_from_session` from
     // src/kani-compiler/src/codegen_cprover_gotoc/context/goto_ctx.rs
     match session.target.options.min_global_align {
-        Some(1) => (),
+        Some(Align::ONE) => (),
         Some(align) => {
             let err_msg = format!(
-                "Kani requires the target architecture option `min_global_align` to be 1, but it is {align}."
+                "Kani requires the target architecture option `min_global_align` to be 1, but it is {}.",
+                align.bytes()
             );
             session.dcx().err(err_msg);
         }
@@ -705,7 +706,7 @@ fn new_machine_model(sess: &Session) -> MachineModel {
     // We check these options in function `check_options` from
     // src/kani-compiler/src/codegen_cprover_gotoc/compiler_interface.rs
     // and error if their values are not the ones we expect.
-    let alignment = sess.target.options.min_global_align.unwrap_or(1);
+    let alignment = sess.target.options.min_global_align.map_or(1, |align| align.bytes());
     let is_big_endian = match sess.target.options.endian {
         Endian::Little => false,
         Endian::Big => true,

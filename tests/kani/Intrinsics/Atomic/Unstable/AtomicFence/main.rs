@@ -5,16 +5,14 @@
 // processed.
 
 #![feature(core_intrinsics)]
-use std::intrinsics::{
-    atomic_fence_acqrel, atomic_fence_acquire, atomic_fence_release, atomic_fence_seqcst,
-};
+use std::intrinsics::{AtomicOrdering, atomic_fence};
 
 #[kani::proof]
 fn main() {
     unsafe {
-        atomic_fence_seqcst();
-        atomic_fence_acquire();
-        atomic_fence_acqrel();
-        atomic_fence_release();
+        atomic_fence::<{ AtomicOrdering::SeqCst }>();
+        atomic_fence::<{ AtomicOrdering::Acquire }>();
+        atomic_fence::<{ AtomicOrdering::AcqRel }>();
+        atomic_fence::<{ AtomicOrdering::Release }>();
     }
 }
