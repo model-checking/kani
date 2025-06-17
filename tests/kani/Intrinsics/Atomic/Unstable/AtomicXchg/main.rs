@@ -5,10 +5,7 @@
 // expected result.
 
 #![feature(core_intrinsics)]
-use std::intrinsics::{
-    atomic_xchg_acqrel, atomic_xchg_acquire, atomic_xchg_relaxed, atomic_xchg_release,
-    atomic_xchg_seqcst,
-};
+use std::intrinsics::{AtomicOrdering, atomic_xchg};
 
 #[kani::proof]
 fn main() {
@@ -29,15 +26,15 @@ fn main() {
         // Returns (val, ok) where
         //  * val: the old value
         //  * ok:  bool indicating whether the operation was successful or not
-        assert!(atomic_xchg_seqcst(ptr_a1, 1) == 0);
-        assert!(atomic_xchg_seqcst(ptr_a1, 0) == 1);
-        assert!(atomic_xchg_acquire(ptr_a2, 1) == 0);
-        assert!(atomic_xchg_acquire(ptr_a2, 0) == 1);
-        assert!(atomic_xchg_acqrel(ptr_a3, 1) == 0);
-        assert!(atomic_xchg_acqrel(ptr_a3, 0) == 1);
-        assert!(atomic_xchg_release(ptr_a4, 1) == 0);
-        assert!(atomic_xchg_release(ptr_a4, 0) == 1);
-        assert!(atomic_xchg_relaxed(ptr_a5, 1) == 0);
-        assert!(atomic_xchg_relaxed(ptr_a5, 0) == 1);
+        assert!(atomic_xchg::<_, { AtomicOrdering::SeqCst }>(ptr_a1, 1) == 0);
+        assert!(atomic_xchg::<_, { AtomicOrdering::SeqCst }>(ptr_a1, 0) == 1);
+        assert!(atomic_xchg::<_, { AtomicOrdering::Acquire }>(ptr_a2, 1) == 0);
+        assert!(atomic_xchg::<_, { AtomicOrdering::Acquire }>(ptr_a2, 0) == 1);
+        assert!(atomic_xchg::<_, { AtomicOrdering::AcqRel }>(ptr_a3, 1) == 0);
+        assert!(atomic_xchg::<_, { AtomicOrdering::AcqRel }>(ptr_a3, 0) == 1);
+        assert!(atomic_xchg::<_, { AtomicOrdering::Release }>(ptr_a4, 1) == 0);
+        assert!(atomic_xchg::<_, { AtomicOrdering::Release }>(ptr_a4, 0) == 1);
+        assert!(atomic_xchg::<_, { AtomicOrdering::Relaxed }>(ptr_a5, 1) == 0);
+        assert!(atomic_xchg::<_, { AtomicOrdering::Relaxed }>(ptr_a5, 0) == 1);
     }
 }

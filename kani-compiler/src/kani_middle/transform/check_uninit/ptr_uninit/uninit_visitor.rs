@@ -283,21 +283,21 @@ impl MirVisitor for CheckUninitVisitor {
                             intrinsic_name if can_skip_intrinsic(intrinsic_name.clone()) => {
                                 /* Intrinsics that can be safely skipped */
                             }
-                            Intrinsic::AtomicAnd(_)
-                            | Intrinsic::AtomicCxchg(_)
-                            | Intrinsic::AtomicCxchgWeak(_)
+                            Intrinsic::AtomicAnd
+                            | Intrinsic::AtomicCxchg
+                            | Intrinsic::AtomicCxchgWeak
                             | Intrinsic::AtomicLoad
-                            | Intrinsic::AtomicMax(_)
-                            | Intrinsic::AtomicMin(_)
-                            | Intrinsic::AtomicNand(_)
-                            | Intrinsic::AtomicOr(_)
-                            | Intrinsic::AtomicStore(_)
-                            | Intrinsic::AtomicUmax(_)
-                            | Intrinsic::AtomicUmin(_)
-                            | Intrinsic::AtomicXadd(_)
-                            | Intrinsic::AtomicXchg(_)
-                            | Intrinsic::AtomicXor(_)
-                            | Intrinsic::AtomicXsub(_) => {
+                            | Intrinsic::AtomicMax
+                            | Intrinsic::AtomicMin
+                            | Intrinsic::AtomicNand
+                            | Intrinsic::AtomicOr
+                            | Intrinsic::AtomicStore
+                            | Intrinsic::AtomicUmax
+                            | Intrinsic::AtomicUmin
+                            | Intrinsic::AtomicXadd
+                            | Intrinsic::AtomicXchg
+                            | Intrinsic::AtomicXor
+                            | Intrinsic::AtomicXsub => {
                                 self.push_target(MemoryInitOp::Check { operand: args[0].clone() });
                             }
                             Intrinsic::CompareBytes => {
@@ -629,7 +629,6 @@ fn can_skip_intrinsic(intrinsic: Intrinsic) -> bool {
         | Intrinsic::PowF64
         | Intrinsic::PowIF32
         | Intrinsic::PowIF64
-        | Intrinsic::PrefAlignOf
         | Intrinsic::RawEq
         | Intrinsic::RotateLeft
         | Intrinsic::RotateRight
@@ -686,7 +685,7 @@ fn can_skip_intrinsic(intrinsic: Intrinsic) -> bool {
             /* SIMD operations */
             true
         }
-        Intrinsic::AtomicFence(_) | Intrinsic::AtomicSingleThreadFence(_) => {
+        Intrinsic::AtomicFence | Intrinsic::AtomicSingleThreadFence => {
             /* Atomic fences */
             true
         }

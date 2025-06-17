@@ -5,7 +5,7 @@
 #![feature(core_intrinsics)]
 
 use std::alloc::{Layout, alloc};
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::intrinsics::{AtomicOrdering, atomic_cxchg, atomic_load, atomic_store};
 
 // Checks if memory initialization checks correctly fail when uninitialized memory is passed to
 // atomic intrinsics.
@@ -18,15 +18,15 @@ fn local_atomic_uninit() {
     unsafe {
         match kani::any() {
             0 => {
-                std::intrinsics::atomic_store_relaxed(ptr, 1);
+                atomic_store::<_, { AtomicOrdering::Relaxed }>(ptr, 1);
             }
             1 => {
-                std::intrinsics::atomic_load::<_, { std::intrinsics::AtomicOrdering::Relaxed }>(
-                    ptr as *const u8,
-                );
+                atomic_load::<_, { AtomicOrdering::Relaxed }>(ptr as *const u8);
             }
             _ => {
-                std::intrinsics::atomic_cxchg_relaxed_relaxed(ptr, 1, 1);
+                atomic_cxchg::<_, { AtomicOrdering::Relaxed }, { AtomicOrdering::Relaxed }>(
+                    ptr, 1, 1,
+                );
             }
         };
     }
