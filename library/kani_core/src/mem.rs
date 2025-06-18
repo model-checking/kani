@@ -13,6 +13,7 @@ macro_rules! kani_mem {
     ($core:tt) => {
         use super::kani_intrinsic;
         use $core::ptr::{DynMetadata, NonNull, Pointee};
+        use $core::marker::MetaSized;
 
         /// Check if the pointer is valid for write access according to [crate::mem] conditions 1, 2
         /// and 3.
@@ -31,7 +32,7 @@ macro_rules! kani_mem {
             issue = 2690,
             reason = "experimental memory predicate API"
         )]
-        pub fn can_write<T: ?Sized>(ptr: *mut T) -> bool {
+        pub fn can_write<T: MetaSized>(ptr: *mut T) -> bool {
             is_ptr_aligned(ptr) && is_inbounds(ptr)
         }
 
@@ -49,7 +50,7 @@ macro_rules! kani_mem {
             issue = 2690,
             reason = "experimental memory predicate API"
         )]
-        pub fn can_write_unaligned<T: ?Sized>(ptr: *const T) -> bool {
+        pub fn can_write_unaligned<T: MetaSized>(ptr: *const T) -> bool {
             let (thin_ptr, metadata) = ptr.to_raw_parts();
             is_inbounds(ptr)
         }
@@ -72,7 +73,7 @@ macro_rules! kani_mem {
             reason = "experimental memory predicate API"
         )]
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
-        pub fn can_dereference<T: ?Sized>(ptr: *const T) -> bool {
+        pub fn can_dereference<T: MetaSized>(ptr: *const T) -> bool {
             // Need to assert `is_initialized` because non-determinism is used under the hood, so it
             // does not make sense to use it inside assumption context.
             is_ptr_aligned(ptr)
@@ -99,7 +100,7 @@ macro_rules! kani_mem {
             reason = "experimental memory predicate API"
         )]
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
-        pub fn can_read_unaligned<T: ?Sized>(ptr: *const T) -> bool {
+        pub fn can_read_unaligned<T: MetaSized>(ptr: *const T) -> bool {
             let (thin_ptr, metadata) = ptr.to_raw_parts();
             // Need to assert `is_initialized` because non-determinism is used under the hood, so it
             // does not make sense to use it inside assumption context.
@@ -116,12 +117,12 @@ macro_rules! kani_mem {
             reason = "experimental memory predicate API"
         )]
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
-        pub fn same_allocation<T: ?Sized>(ptr1: *const T, ptr2: *const T) -> bool {
+        pub fn same_allocation<T: MetaSized>(ptr1: *const T, ptr2: *const T) -> bool {
             same_allocation_internal(ptr1, ptr2)
         }
 
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
-        pub(super) fn same_allocation_internal<T: ?Sized>(ptr1: *const T, ptr2: *const T) -> bool {
+        pub(super) fn same_allocation_internal<T: MetaSized>(ptr1: *const T, ptr2: *const T) -> bool {
             let addr1 = ptr1 as *const ();
             let addr2 = ptr2 as *const ();
             cbmc::same_allocation(addr1, addr2)
@@ -135,7 +136,7 @@ macro_rules! kani_mem {
         /// - The computed size exceeds `isize::MAX` (the maximum safe Rust allocation size).
         /// TODO: Optimize this if T is sized.
         #[kanitool::fn_marker = "CheckedSizeOfIntrinsic"]
-        pub fn checked_size_of_raw<T: ?Sized>(ptr: *const T) -> Option<usize> {
+        pub fn checked_size_of_raw<T: MetaSized>(ptr: *const T) -> Option<usize> {
             #[cfg(not(feature = "concrete_playback"))]
             return kani_intrinsic();
 
@@ -153,7 +154,7 @@ macro_rules! kani_mem {
         /// Return `None` if alignment information cannot be retrieved (foreign types), or if value
         /// is not power-of-two.
         #[kanitool::fn_marker = "CheckedAlignOfIntrinsic"]
-        pub fn checked_align_of_raw<T: ?Sized>(ptr: *const T) -> Option<usize> {
+        pub fn checked_align_of_raw<T: MetaSized>(ptr: *const T) -> Option<usize> {
             #[cfg(not(feature = "concrete_playback"))]
             return kani_intrinsic();
 
@@ -180,7 +181,7 @@ macro_rules! kani_mem {
             issue = 3946,
             reason = "experimental memory predicate API"
         )]
-        pub fn is_inbounds<T: ?Sized>(ptr: *const T) -> bool {
+        pub fn is_inbounds<T: MetaSized>(ptr: *const T) -> bool {
             // If size overflows, then pointer cannot be inbounds.
             let Some(sz) = checked_size_of_raw(ptr) else { return false };
             if sz == 0 {
@@ -203,7 +204,7 @@ macro_rules! kani_mem {
 
         // Return whether the pointer is aligned
         #[allow(clippy::manual_is_power_of_two)]
-        fn is_ptr_aligned<T: ?Sized>(ptr: *const T) -> bool {
+        fn is_ptr_aligned<T: MetaSized>(ptr: *const T) -> bool {
             // Cannot be aligned if pointer alignment cannot be computed.
             let Some(align) = checked_align_of_raw(ptr) else { return false };
             if align > 0 && (align & (align - 1)) == 0 {
@@ -237,19 +238,19 @@ macro_rules! kani_mem {
         /// - Users have to ensure that the pointed to memory is allocated.
         #[kanitool::fn_marker = "ValidValueIntrinsic"]
         #[inline(never)]
-        unsafe fn has_valid_value<T: ?Sized>(_ptr: *const T) -> bool {
+        unsafe fn has_valid_value<T: MetaSized>(_ptr: *const T) -> bool {
             kani_intrinsic()
         }
 
         /// Check whether `len * size_of::<T>()` bytes are initialized starting from `ptr`.
         #[kanitool::fn_marker = "IsInitializedIntrinsic"]
         #[inline(never)]
-        pub(crate) fn is_initialized<T: ?Sized>(_ptr: *const T) -> bool {
+        pub(crate) fn is_initialized<T: MetaSized>(_ptr: *const T) -> bool {
             kani_intrinsic()
         }
 
         /// A helper to assert `is_initialized` to use it as a part of other predicates.
-        fn assert_is_initialized<T: ?Sized>(ptr: *const T) -> bool {
+        fn assert_is_initialized<T: MetaSized>(ptr: *const T) -> bool {
             super::internal::check(
                 is_initialized(ptr),
                 "Undefined Behavior: Reading from an uninitialized pointer",
@@ -277,7 +278,7 @@ macro_rules! kani_mem {
         #[doc(hidden)]
         #[kanitool::fn_marker = "PointerObjectHook"]
         #[inline(never)]
-        pub(crate) fn pointer_object<T: ?Sized>(_ptr: *const T) -> usize {
+        pub(crate) fn pointer_object<T: MetaSized>(_ptr: *const T) -> usize {
             kani_intrinsic()
         }
 
@@ -290,7 +291,7 @@ macro_rules! kani_mem {
         )]
         #[kanitool::fn_marker = "PointerOffsetHook"]
         #[inline(never)]
-        pub fn pointer_offset<T: ?Sized>(_ptr: *const T) -> usize {
+        pub fn pointer_offset<T: MetaSized>(_ptr: *const T) -> usize {
             kani_intrinsic()
         }
     };

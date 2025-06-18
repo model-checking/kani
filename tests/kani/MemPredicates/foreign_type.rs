@@ -5,15 +5,17 @@
 //! types since it cannot compute its size.
 #![feature(ptr_metadata)]
 #![feature(extern_types)]
+#![feature(sized_hierarchy)]
 
 extern crate kani;
 
 use kani::mem::{can_dereference, can_read_unaligned, can_write};
 use std::ffi::c_void;
 use std::ptr;
+use std::marker::PointeeSized;
 
 #[derive(Clone, Copy, kani::Arbitrary)]
-struct Wrapper<T: ?Sized, U> {
+struct Wrapper<T: PointeeSized, U> {
     _size: U,
     _value: T,
 }
