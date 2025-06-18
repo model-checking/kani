@@ -82,6 +82,67 @@ macro_rules! generate_iter {
             }
         }
 
+        macro_rules! generate_impl_range {
+            ($t:ty) => {
+                impl KaniIter for Range<$t> {
+                    type Item = $t;
+                    fn indexing(&self, i: usize) -> Self::Item {
+                        self.start + i as $t
+                    }
+                    fn first(&self) -> Self::Item {
+                        self.start
+                    }
+                    fn assumption(&self) -> bool {
+                        true
+                    }
+                    fn len(&self) -> usize {
+                        (self.end - self.start) as usize
+                    }
+                }
+            };
+        }
+
+        generate_impl_range!(i8);
+        generate_impl_range!(i16);
+        generate_impl_range!(i32);
+        generate_impl_range!(i64);
+        generate_impl_range!(isize);
+        generate_impl_range!(u8);
+        generate_impl_range!(u16);
+        generate_impl_range!(u32);
+        generate_impl_range!(u64);
+        generate_impl_range!(usize);
+
+        pub struct KaniStepBy<I: KaniIter> {
+            iter: I,
+            step: usize,
+        }
+
+        impl<I: KaniIter> KaniStepBy<I> {
+            pub fn new(iter: I, step: usize) -> Self {
+                KaniStepBy { iter, step }
+            }
+        }
+
+        impl<I: KaniIter> KaniIter for KaniStepBy<I> {
+            type Item = I::Item;
+
+            fn indexing(&self, i: usize) -> Self::Item {
+                self.iter.indexing(i * self.step)
+            }
+
+            fn first(&self) -> Self::Item {
+                self.iter.first()
+            }
+
+            fn assumption(&self) -> bool {
+                self.iter.assumption()
+            }
+            fn len(&self) -> usize {
+                self.iter.len().div_ceil(self.step)
+            }
+        }
+
         pub trait KaniIntoIter
         where
             Self: Sized,
@@ -115,6 +176,29 @@ macro_rules! generate_iter {
             type Iter = KaniRefIter<'a, T>;
             fn kani_into_iter(self) -> Self::Iter {
                 KaniRefIter::new(self.as_slice().as_ptr(), self.len())
+            }
+        }
+
+        impl KaniIntoIter for Range<i32> {
+            type Iter = Range<i32>;
+            fn kani_into_iter(self) -> Self::Iter {
+                self
+            }
+        }
+
+        impl<I: KaniIntoIter> KaniIntoIter for StepBy<I> {
+            type Iter = KaniStepBy<I::Iter>;
+            fn kani_into_iter(self) -> Self::Iter {
+                struct StepByLayout<T> {
+                    iter: T,
+                    step_minus_one: usize,
+                    first_take: bool,
+                }
+                let ptr = &self as *const StepBy<I> as *const StepByLayout<I>;
+                let step = unsafe { (*ptr).step_minus_one + 1 };
+                let iter = unsafe { core::ptr::read(&(*ptr).iter) };
+                let kaniiter = iter.kani_into_iter();
+                KaniStepBy::new(kaniiter, step)
             }
         }
     };
