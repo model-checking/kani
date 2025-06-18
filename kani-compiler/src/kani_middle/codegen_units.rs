@@ -16,6 +16,7 @@ use crate::kani_middle::metadata::{
 use crate::kani_middle::reachability::filter_crate_items;
 use crate::kani_middle::resolve::expect_resolve_fn;
 use crate::kani_middle::stubbing::{check_compatibility, harness_stub_map};
+use crate::kani_middle::{can_derive_arbitrary, implements_arbitrary};
 use crate::kani_queries::QueryDb;
 use kani_metadata::{
     ArtifactType, AssignsContract, AutoHarnessMetadata, AutoHarnessSkipReason, HarnessKind,
@@ -26,7 +27,7 @@ use rustc_hir::def_id::DefId;
 use rustc_middle::ty::TyCtxt;
 use rustc_session::config::OutputType;
 use rustc_smir::rustc_internal;
-use stable_mir::mir::{TerminatorKind, mono::Instance};
+use stable_mir::mir::mono::Instance;
 use stable_mir::ty::{FnDef, GenericArgKind, GenericArgs, IndexedVal, RigidTy, TyKind};
 use stable_mir::{CrateDef, CrateItem};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
@@ -432,25 +433,10 @@ fn automatic_harness_partition(
         // Note that we've already filtered out generic functions, so we know that each of these arguments has a concrete type.
         let mut problematic_args = vec![];
         for (idx, arg) in body.arg_locals().iter().enumerate() {
-            let kani_any_body =
-                Instance::resolve(kani_any_def, &GenericArgs(vec![GenericArgKind::Type(arg.ty)]))
-                    .unwrap()
-                    .body()
-                    .unwrap();
-
-            let implements_arbitrary = if let TerminatorKind::Call { func, .. } =
-                &kani_any_body.blocks[0].terminator.kind
+            // TODO: cache whether a type implements Arbitrary so we only do this check once per type
+            if !(implements_arbitrary(arg.ty, kani_any_def)
+                || can_derive_arbitrary(arg.ty, kani_any_def))
             {
-                if let Some((def, args)) = func.ty(body.arg_locals()).unwrap().kind().fn_def() {
-                    Instance::resolve(def, args).is_ok()
-                } else {
-                    false
-                }
-            } else {
-                false
-            };
-
-            if !implements_arbitrary {
                 // Find the name of the argument by referencing var_debug_info.
                 // Note that enumerate() starts at 0, while StableMIR argument_index starts at 1, hence the idx+1.
                 let arg_name = body

@@ -9,8 +9,10 @@ use crate::kani_queries::QueryDb;
 use rustc_hir::{def::DefKind, def_id::DefId as InternalDefId, def_id::LOCAL_CRATE};
 use rustc_middle::ty::TyCtxt;
 use rustc_smir::rustc_internal;
-use stable_mir::mir::mono::MonoItem;
-use stable_mir::ty::{FnDef, RigidTy, Span as SpanStable, Ty, TyKind};
+use stable_mir::mir::TerminatorKind;
+use stable_mir::mir::mono::{Instance, MonoItem};
+use stable_mir::ty::AdtKind;
+use stable_mir::ty::{FnDef, GenericArgKind, GenericArgs, RigidTy, Span as SpanStable, Ty, TyKind};
 use stable_mir::visitor::{Visitable, Visitor as TyVisitor};
 use stable_mir::{CrateDef, DefId};
 use std::ops::ControlFlow;
@@ -163,5 +165,63 @@ pub fn stable_fn_def(tcx: TyCtxt, def_id: InternalDefId) -> Option<FnDef> {
         Some(def)
     } else {
         None
+    }
+}
+
+/// Inspect a `kani::any<T>()` call to determine if `T: Arbitrary`
+/// `kani_any_def` refers to a function that looks like:
+/// ```rust
+/// fn any<T: Arbitrary>() -> T {
+///   T::any()
+/// }
+/// ```
+/// So we select the terminator that calls T::kani::Arbitrary::any(), then try to resolve it to an Instance.
+/// `T` implements Arbitrary iff we successfully resolve the Instance.
+fn implements_arbitrary(ty: Ty, kani_any_def: FnDef) -> bool {
+    let kani_any_body =
+        Instance::resolve(kani_any_def, &GenericArgs(vec![GenericArgKind::Type(ty)]))
+            .unwrap()
+            .body()
+            .unwrap();
+
+    for bb in kani_any_body.blocks.iter() {
+        let TerminatorKind::Call { func, .. } = &bb.terminator.kind else {
+            continue;
+        };
+        if let TyKind::RigidTy(RigidTy::FnDef(def, args)) =
+            func.ty(kani_any_body.arg_locals()).unwrap().kind()
+        {
+            return Instance::resolve(def, &args).is_ok();
+        }
+    }
+    false
+}
+
+/// Is `ty` a struct or enum whose fields/variants implement Arbitrary?
+fn can_derive_arbitrary(ty: Ty, kani_any_def: FnDef) -> bool {
+    if let TyKind::RigidTy(RigidTy::Adt(def, _)) = ty.kind() {
+        match def.kind() {
+            AdtKind::Enum => {
+                // Enums with no variants cannot be instantiated
+                if def.num_variants() == 0 {
+                    return false;
+                }
+                for variant in def.variants_iter() {
+                    let fields = variant.fields();
+                    let mut fields_impl_arbitrary = true;
+                    for ty in fields.iter().map(|field| field.ty()) {
+                        fields_impl_arbitrary &= implements_arbitrary(ty, kani_any_def);
+                    }
+                    if !fields_impl_arbitrary {
+                        return false;
+                    }
+                }
+                true
+            }
+            AdtKind::Struct => todo!(),
+            AdtKind::Union => false,
+        }
+    } else {
+        false
     }
 }
