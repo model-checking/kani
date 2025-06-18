@@ -11,7 +11,7 @@ macro_rules! generate_iter {
     () => {
         use core::iter::StepBy;
         use core_path::cmp::min;
-        use core_path::iter::{Chain, Map, Zip};
+        use core_path::iter::{Chain, Enumerate, Map, Zip};
         use core_path::mem as stdmem;
         use core_path::ops::Range;
         use core_path::slice::Iter;
@@ -235,6 +235,34 @@ macro_rules! generate_iter {
             }
         }
 
+        pub struct KaniEnumerateIter<I: KaniIter> {
+            pub iter: I,
+        }
+
+        impl<I: KaniIter> KaniEnumerateIter<I> {
+            pub fn new(iter: I) -> Self {
+                KaniEnumerateIter { iter }
+            }
+        }
+
+        impl<I: KaniIter> KaniIter for KaniEnumerateIter<I> {
+            type Item = (usize, I::Item);
+            fn indexing(&self, i: usize) -> Self::Item {
+                let item = self.iter.indexing(i);
+                (i, item)
+            }
+            fn first(&self) -> Self::Item {
+                let item = self.iter.first();
+                (0, item)
+            }
+            fn assumption(&self) -> bool {
+                self.iter.assumption()
+            }
+            fn len(&self) -> usize {
+                self.iter.len()
+            }
+        }
+
         pub trait KaniIntoIter
         where
             Self: Sized,
@@ -340,6 +368,19 @@ macro_rules! generate_iter {
                 let iter = unsafe { (*ptr).iter.clone().kani_into_iter() };
                 let map = unsafe { (*ptr).map };
                 KaniMapIter::new(iter, map)
+            }
+        }
+
+        impl<I: KaniIntoIter + Clone> KaniIntoIter for Enumerate<I> {
+            type Iter = KaniEnumerateIter<I::Iter>;
+            fn kani_into_iter(self) -> Self::Iter {
+                struct EnumerateLayout<I> {
+                    iter: I,
+                    count: usize,
+                }
+                let ptr = &self as *const Enumerate<I> as *const EnumerateLayout<I>;
+                let iter = unsafe { (*ptr).iter.clone().kani_into_iter() };
+                KaniEnumerateIter::new(iter)
             }
         }
     };
