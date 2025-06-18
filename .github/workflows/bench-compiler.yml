@@ -75,4 +75,68 @@ jobs:
           export PATH="${{ github.workspace }}/new/scripts:$PATH"
           cd new/tests/perf && ../../target/release/compile-timer --out-path compile-times-new.json --ignore kani-lib --ignore display_trait --ignore s2n-quic
       - name: Run analysis between the two
-        run: ./new/target/release/compile-analyzer --path-pre old/tests/perf/compile-times-old.json --path-post new/tests/perf/compile-times-new.json --only-markdown >> "$GITHUB_STEP_SUMMARY"
+        run: ./new/target/release/compile-analyzer --path-pre old/tests/perf/compile-times-old.json --path-post new/tests/perf/compile-times-new.json --only-markdown --suite-name short >> "$GITHUB_STEP_SUMMARY"
+
+  compile-timer-long:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Save push event HEAD and HEAD~ to environment variables
+        if: ${{ github.event_name == 'push' }}
+        run: |
+          echo "NEW_REF=${{ github.event.after}}" | tee -a "$GITHUB_ENV"
+          echo "OLD_REF=${{ github.event.before }}" | tee -a "$GITHUB_ENV"
+      - name: Save pull request HEAD and base to environment variables
+        if: ${{ contains(fromJSON('["pull_request", "pull_request_target"]'), github.event_name) }}
+        run: |
+          echo "OLD_REF=${{ github.event.pull_request.base.sha }}" | tee -a "$GITHUB_ENV"
+          echo "NEW_REF=${{ github.event.pull_request.head.sha }}" | tee -a "$GITHUB_ENV"
+      
+      - name: Check out Kani (old variant)
+        uses: actions/checkout@v4
+        with:
+          path: ./old
+          ref: ${{ env.OLD_REF }}
+          fetch-depth: 2
+
+      - name: Check out Kani (new variant)
+        uses: actions/checkout@v4
+        with:
+          path: ./new
+          ref: ${{ env.NEW_REF }}
+          fetch-depth: 1
+
+      - name: Set up Kani Dependencies (old variant)
+        uses: ./old/.github/actions/setup
+        with:
+          os: ubuntu-24.04
+          kani_dir: old
+
+      - name: Set up Kani Dependencies (new variant)
+        uses: ./new/.github/actions/setup
+        with:
+          os: ubuntu-24.04
+          kani_dir: new
+
+      - name: Copy benchmarks from new to old
+        run: rm -rf ./old/tests/perf ; cp -r ./new/tests/perf ./old/tests/
+
+      - name: Build `compile-timer` in old
+        run: cd old/tools/compile-timer && cargo build --release
+      - name: Build `kani` in old
+        run: cd old && cargo build-dev --release
+
+      - name: Build `compile-timer` in new
+        run: cd new/tools/compile-timer && cargo build --release
+      - name: Build `kani` in new
+        run: cd new && cargo build-dev --release
+
+      - name: Run `compile-timer` on old
+        run: |
+          export PATH="${{ github.workspace }}/old/scripts:$PATH"
+          cd old/tests/perf/s2n-quic && ../../../target/release/compile-timer --out-path compile-times-old.json --also-visit quic/s2n-quic-core --also-visit quic/s2n-quic-platform --also-visit common/s2n-codec --skip-current
+      - name: Run `compile-timer` on new
+        run: |
+          export PATH="${{ github.workspace }}/new/scripts:$PATH"
+          cd new/tests/perf/s2n-quic && ../../../target/release/compile-timer --out-path compile-times-new.json --also-visit quic/s2n-quic-core --also-visit quic/s2n-quic-platform --also-visit common/s2n-codec --skip-current
+      - name: Run analysis between the two
+        run: ./new/target/release/compile-analyzer --path-pre old/tests/perf/s2n-quic/compile-times-old.json --path-post new/tests/perf/s2n-quic/compile-times-new.json --only-markdown --suite-name long >> "$GITHUB_STEP_SUMMARY"

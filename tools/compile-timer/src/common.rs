@@ -15,8 +15,15 @@ pub struct AggrResult {
     full_stats: Stats,
 }
 
-fn krate_trimmed_path(krate: &Path) -> String {
-    format!("{:?}", krate.strip_prefix(std::env::current_dir().unwrap().parent().unwrap()).unwrap())
+pub fn krate_trimmed_path(krate: &Path) -> String {
+    format!(
+        "{:?}",
+        krate
+            .canonicalize()
+            .unwrap()
+            .strip_prefix(std::env::current_dir().unwrap().parent().unwrap())
+            .unwrap()
+    )
 }
 
 #[allow(dead_code)]

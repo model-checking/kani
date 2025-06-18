@@ -3,7 +3,7 @@
 
 #![feature(exit_status_error)]
 
-use crate::common::{AggrResult, Stats, aggregate_aggregates};
+use crate::common::{AggrResult, Stats, aggregate_aggregates, krate_trimmed_path};
 use clap::Parser;
 use serde::Serialize;
 use std::fs::File;
@@ -19,6 +19,10 @@ struct TimerArgs {
     /// Sets a custom config file
     #[arg(short, long, value_name = "FILE")]
     out_path: PathBuf,
+
+    /// Ignore compiling the current directory
+    #[arg(short, long)]
+    skip_current: bool,
 
     /// The paths of additional paths to visit beyond the current subtree
     #[arg(short, long, value_name = "DIR")]
@@ -38,20 +42,24 @@ const TIMED_RUNS: usize = 10;
 fn main() {
     let args = TimerArgs::parse();
 
-    let current_directory = std::env::current_dir().expect("should be run in a directory");
-    let (mut to_visit, mut res) = (vec![current_directory], vec![]);
-    to_visit.extend(args.also_visit);
+    let (mut to_visit, mut res) = (vec![], vec![]);
+    to_visit.extend(args.also_visit.into_iter().rev());
+    if !args.skip_current {
+        let current_directory = std::env::current_dir().expect("should be run in a directory");
+        to_visit.push(current_directory);
+    }
 
     let mut out_ser = serde_json::Serializer::pretty(File::create(&args.out_path).unwrap());
     let run_start = std::time::Instant::now();
 
     // recursively visit subdirectories to time the compiler on all rust projects
     while let Some(next) = to_visit.pop() {
-        let path_to_toml = next.canonicalize().unwrap().join("Cargo.toml");
+        let next = next.canonicalize().unwrap();
+        let path_to_toml = next.join("Cargo.toml");
 
         if path_to_toml.exists() && path_to_toml.is_file() {
             // in rust crate so we want to profile it
-            println!("[!] profiling in {next:?}");
+            println!("[!] profiling in {}", krate_trimmed_path(&next));
             let new_res = profile_on_crate(&next);
             new_res.serialize(&mut out_ser).unwrap();
             res.push(new_res);

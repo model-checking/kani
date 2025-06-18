@@ -24,6 +24,9 @@ struct AnalyzerArgs {
     #[arg(short, long, value_name = "FILE")]
     path_post: PathBuf,
 
+    #[arg(short, long)]
+    suite_name: Option<String>,
+
     /// Output results in markdown format
     #[arg(short, long)]
     only_markdown: bool,
@@ -50,15 +53,20 @@ fn main() {
     });
 
     if args.only_markdown {
-        print_markdown(results.as_slice());
+        print_markdown(results.as_slice(), args.suite_name);
     } else {
         print_to_terminal(results.as_slice());
     }
 }
 
 // Print results in a markdown format (for GitHub actions).
-fn print_markdown(results: &[(AggrResult, AggrResult)]) {
-    println!("# Compiletime Results");
+fn print_markdown(results: &[(AggrResult, AggrResult)], suite_name: Option<String>) {
+    let suite_text = if let Some(suite_name) = suite_name {
+        format!(" (`{suite_name}` suite)")
+    } else {
+        "".to_string()
+    };
+    println!("# Compiletime Results{suite_text}");
     let total_pre = results.iter().map(|i| i.0.iqr_stats.avg).sum();
     let total_post = results.iter().map(|i| i.1.iqr_stats.avg).sum();
     println!(
@@ -94,14 +102,18 @@ fn print_markdown(results: &[(AggrResult, AggrResult)]) {
         )
         .collect::<Vec<_>>();
 
+    let footnote_number = 1;
     println!(
-        "\n[^1]: threshold: max({FRAC_STD_DEV_THRESHOLD} x std_dev, {FRAC_ABSOLUTE_THRESHOLD} x initial_time)."
+        "\n[^{footnote_number}]: threshold: max({FRAC_STD_DEV_THRESHOLD} x std_dev, {FRAC_ABSOLUTE_THRESHOLD} x initial_time)."
     );
 
     if regressions.is_empty() {
-        println!("## No suspected regressions[^1]!");
+        println!("## No suspected regressions[^{footnote_number}]!");
     } else {
-        println!("## Failing because of {} suspected regressions[^1]:", regressions.len());
+        println!(
+            "## Failing because of {} suspected regressions[^{footnote_number}]:",
+            regressions.len()
+        );
         println!("{}", regressions.join(", "));
         std::process::exit(1);
     }
