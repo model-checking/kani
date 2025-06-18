@@ -283,12 +283,7 @@ impl CodegenBackend for GotocCodegenBackend {
         }
     }
 
-    fn codegen_crate(
-        &self,
-        tcx: TyCtxt,
-        rustc_metadata: EncodedMetadata,
-        _need_metadata_module: bool,
-    ) -> Box<dyn Any> {
+    fn codegen_crate(&self, tcx: TyCtxt) -> Box<dyn Any> {
         let ret_val = rustc_internal::run(tcx, || {
             super::utils::init();
 
@@ -414,7 +409,7 @@ impl CodegenBackend for GotocCodegenBackend {
                     );
                 }
             }
-            codegen_results(tcx, rustc_metadata, &results.machine_model)
+            codegen_results(tcx, &results.machine_model)
         });
         ret_val.unwrap()
     }
@@ -440,12 +435,18 @@ impl CodegenBackend for GotocCodegenBackend {
     /// For other crate types, we stub the file requested by writing the
     /// path of the `kani-metadata.json` file so `kani-driver` can safely find the latest metadata.
     /// See <https://github.com/model-checking/kani/issues/2234> for more details.
-    fn link(&self, sess: &Session, codegen_results: CodegenResults, outputs: &OutputFilenames) {
+    fn link(
+        &self,
+        sess: &Session,
+        codegen_results: CodegenResults,
+        rustc_metadata: EncodedMetadata,
+        outputs: &OutputFilenames,
+    ) {
         let requested_crate_types = &codegen_results.crate_info.crate_types.clone();
         let local_crate_name = codegen_results.crate_info.local_crate_name;
         // Create the rlib if one was requested.
         if requested_crate_types.contains(&CrateType::Rlib) {
-            link_binary(sess, &ArArchiveBuilderBuilder, codegen_results, outputs);
+            link_binary(sess, &ArArchiveBuilderBuilder, codegen_results, rustc_metadata, outputs);
         }
 
         // But override all the other outputs.
@@ -541,18 +542,12 @@ fn check_options(session: &Session) {
 }
 
 /// Return a struct that contains information about the codegen results as expected by `rustc`.
-fn codegen_results(
-    tcx: TyCtxt,
-    rustc_metadata: EncodedMetadata,
-    machine: &MachineModel,
-) -> Box<dyn Any> {
+fn codegen_results(tcx: TyCtxt, machine: &MachineModel) -> Box<dyn Any> {
     let work_products = FxIndexMap::<WorkProductId, WorkProduct>::default();
     Box::new((
         CodegenResults {
             modules: vec![],
             allocator_module: None,
-            metadata_module: None,
-            metadata: rustc_metadata,
             crate_info: CrateInfo::new(tcx, machine.architecture.clone()),
         },
         work_products,
