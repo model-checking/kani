@@ -133,7 +133,7 @@ impl<'a> ContractConditionsHandler<'a> {
         quote!(
             #[kanitool::is_contract_generated(replace)]
             #[allow(dead_code, unused_variables, unused_mut)]
-            let mut #replace_ident = || #output #body;
+            let mut #replace_ident = kani_force_fn_once(|| #output #body);
         )
     }
 

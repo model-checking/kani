@@ -114,7 +114,7 @@ impl<'a> ContractConditionsHandler<'a> {
         quote!(
             #[kanitool::is_contract_generated(check)]
             #[allow(dead_code, unused_variables, unused_mut)]
-            let mut #check_ident = || #output #body;
+            let mut #check_ident = kani_force_fn_once(|| #output #body);
         )
     }
 
@@ -144,10 +144,10 @@ impl<'a> ContractConditionsHandler<'a> {
         quote!(
             #[kanitool::is_contract_generated(wrapper)]
             #[allow(dead_code, unused_variables, unused_mut)]
-            let mut #modifies_ident = |#wrapper_ident: _| #output {
+            let mut #modifies_ident = kani_force_fn_once_with_args(|#wrapper_ident: _| #output {
                 #redefs
                 #(#stmts)*
-            };
+            });
         )
     }
 
@@ -157,7 +157,13 @@ impl<'a> ContractConditionsHandler<'a> {
             let Stmt::Local(Local { init: Some(LocalInit { expr, .. }), .. }) = closure_stmt else {
                 unreachable!()
             };
-            let Expr::Closure(closure) = expr.as_ref() else { unreachable!() };
+            // The closure is wrapped into `kani_force_fn_once_with_args`
+            let Expr::Call(call) = expr.as_ref() else { unreachable!() };
+            if call.args.len() != 1 {
+                unreachable!()
+            }
+            let expr = call.args.first().unwrap();
+            let Expr::Closure(closure) = expr else { unreachable!() };
             let Expr::Block(body) = closure.body.as_ref() else { unreachable!() };
             let stream = self.modifies_closure(&closure.output, &body.block, TokenStream2::new());
             *closure_stmt = syn::parse2(stream).unwrap();
