@@ -1075,6 +1075,7 @@ dependencies = [
  "charon",
  "clap",
  "cprover_bindings",
+ "fxhash",
  "itertools 0.14.0",
  "kani_metadata",
  "lazy_static",
