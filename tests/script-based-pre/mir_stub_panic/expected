@@ -1,0 +1,52 @@
+--VERIFYING panic.rs--
+Manual Harness Summary: \
+Verification failed for - main \
+Complete - 0 successfully verified harnesses, 1 failures, 1 total.
+
+--READING MIR for panic.rs--
+fn kani::rustc_intrinsics::panic_stub(_1: &str) -> ! { \
+    let mut _0: !; \
+    debug t => _1; \
+    bb0: { \
+        goto -> bb1; \
+    } \
+    bb1: { \
+        goto -> bb1; \
+    } \
+}
+
+
+--VERIFYING option.rs--
+Manual Harness Summary: \
+Verification failed for - main \
+Complete - 0 successfully verified harnesses, 1 failures, 1 total.
+
+--READING MIR for option.rs--
+fn kani::rustc_intrinsics::panic_stub(_1: &str) -> ! { \
+    let mut _0: !; \
+    debug t => _1; \
+    bb0: { \
+        goto -> bb1; \
+    } \
+    bb1: { \
+        goto -> bb1; \
+    } \
+}
+
+
+--VERIFYING result.rs--
+Manual Harness Summary: \
+Verification failed for - main \
+Complete - 0 successfully verified harnesses, 1 failures, 1 total.
+
+--READING MIR for result.rs--
+fn kani::rustc_intrinsics::panic_stub(_1: &str) -> ! { \
+    let mut _0: !; \
+    debug t => _1; \
+    bb0: { \
+        goto -> bb1; \
+    } \
+    bb1: { \
+        goto -> bb1; \
+    } \
+}
