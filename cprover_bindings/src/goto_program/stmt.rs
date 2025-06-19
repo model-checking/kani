@@ -87,6 +87,7 @@ pub enum StmtBody {
         // The loop invariants annotated to the goto, which can be
         // applied as loop contracts in CBMC if it is a backward goto.
         loop_invariants: Option<Expr>,
+        loop_assigns: Option<Vec<Expr>>,
     },
     /// `if (i) { t } else { e }`
     Ifthenelse {
@@ -288,7 +289,7 @@ impl Stmt {
     pub fn goto<T: Into<InternedString>>(dest: T, loc: Location) -> Self {
         let dest = dest.into();
         assert!(!dest.is_empty());
-        stmt!(Goto { dest, loop_invariants: None }, loc)
+        stmt!(Goto { dest, loop_invariants: None, loop_assigns: None }, loc)
     }
 
     /// `if (i) { t } else { e }` or `if (i) { t }`
@@ -333,11 +334,34 @@ impl Stmt {
 
     /// `goto dest;` with loop invariant
     pub fn with_loop_contracts(self, inv: Expr) -> Self {
-        if let Goto { dest, loop_invariants } = self.body() {
+        if let Goto { dest, loop_invariants, loop_assigns } = self.body() {
             assert!(loop_invariants.is_none());
-            stmt!(Goto { dest: *dest, loop_invariants: Some(inv) }, *self.location())
+            stmt!(
+                Goto {
+                    dest: *dest,
+                    loop_invariants: Some(inv),
+                    loop_assigns: loop_assigns.clone()
+                },
+                *self.location()
+            )
         } else {
             unreachable!("Loop contracts should be annotated only to goto stmt")
+        }
+    }
+
+    pub fn with_loop_assigns(self, asg: Vec<Expr>) -> Self {
+        if let Goto { dest, loop_invariants, loop_assigns } = self.body() {
+            assert!(loop_assigns.is_none());
+            stmt!(
+                Goto {
+                    dest: *dest,
+                    loop_invariants: loop_invariants.clone(),
+                    loop_assigns: Some(asg)
+                },
+                *self.location()
+            )
+        } else {
+            unreachable!("Loop assigns should be annotated only to goto stmt")
         }
     }
 }

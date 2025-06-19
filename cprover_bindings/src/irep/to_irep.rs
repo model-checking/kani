@@ -548,17 +548,19 @@ impl ToIrep for StmtBody {
                     arguments_irep(arguments.iter(), mm),
                 ],
             ),
-            StmtBody::Goto { dest, loop_invariants } => {
-                let stmt_goto = code_irep(IrepId::Goto, vec![])
-                    .with_named_sub(IrepId::Destination, Irep::just_string_id(dest.to_string()));
-                if let Some(inv) = loop_invariants {
-                    stmt_goto.with_named_sub(
-                        IrepId::CSpecLoopInvariant,
-                        inv.clone().and(Expr::bool_true()).to_irep(mm),
-                    )
-                } else {
-                    stmt_goto
-                }
+            StmtBody::Goto { dest, loop_invariants, loop_assigns } => {
+                let inv = loop_invariants
+                    .clone()
+                    .map(|inv| inv.clone().and(Expr::bool_true()).to_irep(mm));
+                let assigns = loop_assigns.clone().map(|assigns| {
+                    Irep::just_sub(vec![Irep::just_sub(
+                        assigns.iter().map(|assign| assign.to_irep(mm)).collect(),
+                    )])
+                });
+                code_irep(IrepId::Goto, vec![])
+                    .with_named_sub(IrepId::Destination, Irep::just_string_id(dest.to_string()))
+                    .with_named_sub_option(IrepId::CSpecLoopInvariant, inv)
+                    .with_named_sub_option(IrepId::CSpecAssigns, assigns.clone())
             }
             StmtBody::Ifthenelse { i, t, e } => code_irep(
                 IrepId::Ifthenelse,

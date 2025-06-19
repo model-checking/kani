@@ -7,9 +7,13 @@
 use proc_macro::TokenStream;
 use proc_macro_error2::abort_call_site;
 use quote::{format_ident, quote};
+use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::token::AndAnd;
-use syn::{BinOp, Block, Expr, ExprBinary, Ident, Stmt, parse_quote, visit_mut::VisitMut};
+use syn::{
+    BinOp, Block, Expr, ExprBinary, Ident, Stmt, Token, parse_macro_input, parse_quote,
+    visit_mut::VisitMut,
+};
 
 /*
     Transform the loop to support on_entry(expr) : the value of expr before entering the loop
@@ -388,4 +392,23 @@ fn generate_unique_id_from_span(stmt: &Stmt) -> String {
 
     // Create a tuple of location information (file path, start line, start column, end line, end column)
     format!("_{:?}_{:?}_{:?}_{:?}", start.line(), start.column(), end.line(), end.column())
+}
+
+pub fn loop_assigns(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let assigns = parse_macro_input!(attr with Punctuated::<Expr, Token![,]>::parse_terminated)
+        .into_iter()
+        .collect::<Vec<Expr>>();
+    let loop_assign_name: String = "kani_loop_assigns".to_owned();
+    let loop_assign_ident = format_ident!("{}", loop_assign_name);
+    let loop_assign_stmt: Stmt = parse_quote! {
+        let #loop_assign_ident = (#(#assigns),*);
+    };
+    let loop_stmt: Stmt = syn::parse(item.clone()).unwrap();
+    let ret: TokenStream = quote!(
+    {
+        #loop_assign_stmt
+        #loop_stmt
+    })
+    .into();
+    ret
 }
