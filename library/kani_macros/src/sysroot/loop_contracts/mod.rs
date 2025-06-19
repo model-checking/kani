@@ -270,6 +270,7 @@ Reason:
 3. The iter_assume_stmt assumes some truths about allocation, so that the user does not neet to specify them in the loop invariant
 */
 
+//The group of 5 extra stmts (mentioned above) that are outside of the loop
 pub struct ForLoopExtraStmts {
     init_iter_stmt: Stmt,
     init_len_stmt: Stmt,
@@ -278,6 +279,7 @@ pub struct ForLoopExtraStmts {
     iter_assume_stmt: Stmt,
 }
 
+//Transform a for loop into a while loop according to the mechanism mentioned above
 pub fn transform_for_to_loop(
     for_loop: ExprForLoop,
     loop_id: &str,
@@ -359,9 +361,11 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
     // parse the stmt of the loop
     let mut loop_stmt: Stmt = syn::parse(item.clone()).unwrap();
     let loop_id = generate_unique_id_from_span(&loop_stmt);
-    let mut forloopextras: Option<ForLoopExtraStmts> = None;
+    //We use Option to mark if the loop is a for loop.
+    //i.e. if for_loop_extras.is_some() then it is a for loop
+    let mut for_loop_extras: Option<ForLoopExtraStmts> = None;
     if let Stmt::Expr(Expr::ForLoop(for_loop), _) = &loop_stmt {
-        (loop_stmt, forloopextras) = transform_for_to_loop(for_loop.clone(), &loop_id);
+        (loop_stmt, for_loop_extras) = transform_for_to_loop(for_loop.clone(), &loop_id);
     }
     // name of the loop invariant as closure of the form
     // __kani_loop_invariant_#startline_#startcol_#endline_#endcol
@@ -370,7 +374,7 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     // expr of the loop invariant
     let mut inv_expr: Expr = syn::parse(attr).unwrap();
-    if forloopextras.is_some() {
+    if for_loop_extras.is_some() {
         inv_expr = parse_quote! { kaniindex <= kaniiterlen && #inv_expr}
     }
 
@@ -466,7 +470,7 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
         init_index_stmt,
         init_pat_stmt,
         iter_assume_stmt,
-    }) = forloopextras
+    }) = for_loop_extras
     {
         if has_prev {
             quote!(
