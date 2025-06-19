@@ -116,7 +116,7 @@ impl TransformPass for AutomaticArbitraryPass {
         if let TyKind::RigidTy(RigidTy::Adt(def, ..)) = ty.kind() {
             match def.kind() {
                 AdtKind::Enum => (true, self.generate_enum_body(def, body)),
-                AdtKind::Struct => (true, self.generate_struct_body()),
+                AdtKind::Struct => (true, self.generate_struct_body(def, body)),
                 AdtKind::Union => unexpected_ty(ty),
             }
         } else {
@@ -237,8 +237,26 @@ impl AutomaticArbitraryPass {
         new_body.into()
     }
 
-    fn generate_struct_body(&self) -> Body {
-        todo!()
+    /// Overwrite the default kani::any() implementation `body` for the struct described by `def`.
+    /// The returned body is equivalent to:
+    /// ```ignore
+    /// struct Struct {
+    ///   field1: kani::any(),
+    ///   field2: kani::any(),
+    ///   ...
+    /// }
+    /// ```
+    fn generate_struct_body(&self, def: AdtDef, body: Body) -> Body {
+        assert_eq!(def.num_variants(), 1);
+
+        let mut new_body = MutableBody::from(body);
+        new_body.clear_body(TerminatorKind::Unreachable);
+        let mut source = SourceInstruction::Terminator { bb: 0 };
+
+        let variant = def.variants()[0];
+        self.call_kani_any_for_variant(def, &mut new_body, &mut source, variant);
+
+        new_body.into()
     }
 }
 /// Transform the dummy body of an automatic_harness Kani intrinsic to be a proof harness for a given function.

@@ -11,8 +11,9 @@ use rustc_middle::ty::TyCtxt;
 use rustc_smir::rustc_internal;
 use stable_mir::mir::TerminatorKind;
 use stable_mir::mir::mono::{Instance, MonoItem};
-use stable_mir::ty::AdtKind;
-use stable_mir::ty::{FnDef, GenericArgKind, GenericArgs, RigidTy, Span as SpanStable, Ty, TyKind};
+use stable_mir::ty::{
+    AdtDef, AdtKind, FnDef, GenericArgKind, GenericArgs, RigidTy, Span as SpanStable, Ty, TyKind,
+};
 use stable_mir::visitor::{Visitable, Visitor as TyVisitor};
 use stable_mir::{CrateDef, DefId};
 use std::ops::ControlFlow;
@@ -199,6 +200,20 @@ fn implements_arbitrary(ty: Ty, kani_any_def: FnDef) -> bool {
 
 /// Is `ty` a struct or enum whose fields/variants implement Arbitrary?
 fn can_derive_arbitrary(ty: Ty, kani_any_def: FnDef) -> bool {
+    let variants_can_derive = |def: AdtDef| {
+        for variant in def.variants_iter() {
+            let fields = variant.fields();
+            let mut fields_impl_arbitrary = true;
+            for ty in fields.iter().map(|field| field.ty()) {
+                fields_impl_arbitrary &= implements_arbitrary(ty, kani_any_def);
+            }
+            if !fields_impl_arbitrary {
+                return false;
+            }
+        }
+        true
+    };
+
     if let TyKind::RigidTy(RigidTy::Adt(def, _)) = ty.kind() {
         match def.kind() {
             AdtKind::Enum => {
@@ -206,19 +221,9 @@ fn can_derive_arbitrary(ty: Ty, kani_any_def: FnDef) -> bool {
                 if def.num_variants() == 0 {
                     return false;
                 }
-                for variant in def.variants_iter() {
-                    let fields = variant.fields();
-                    let mut fields_impl_arbitrary = true;
-                    for ty in fields.iter().map(|field| field.ty()) {
-                        fields_impl_arbitrary &= implements_arbitrary(ty, kani_any_def);
-                    }
-                    if !fields_impl_arbitrary {
-                        return false;
-                    }
-                }
-                true
+                variants_can_derive(def)
             }
-            AdtKind::Struct => todo!(),
+            AdtKind::Struct => variants_can_derive(def),
             AdtKind::Union => false,
         }
     } else {
