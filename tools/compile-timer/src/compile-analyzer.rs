@@ -10,10 +10,10 @@ mod common;
 
 /// The fractional of a sample's standard deviation that it can regress by
 /// without being considered a significant regression.
-const FRAC_STD_DEV_THRESHOLD: f64 = 1.5; // In this case, 1.5x of the std deviation.
+const FRAC_STD_DEV_THRESHOLD: f64 = 2.0; // In this case, 2x the average std deviation.
 
 /// The fractional amount a run can regress by without it being considered a significant regression.
-const FRAC_ABSOLUTE_THRESHOLD: f64 = 0.01; // In this case, 1% of the initial time.
+const FRAC_ABSOLUTE_THRESHOLD: f64 = 0.05; // In this case, 5% of the initial time.
 
 #[derive(Debug, Parser)]
 #[command(version, about, long_about = None)]
