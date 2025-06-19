@@ -174,11 +174,12 @@ impl MutMirVisitor for ReplaceIntrinsicCallVisitor<'_, '_> {
             && let TyKind::RigidTy(RigidTy::FnDef(def, args)) =
                 func.ty(&self.locals).unwrap().kind()
         {
-            if def.is_intrinsic() {
+            // Get the model we should use to replace this function call, if any.
+            let replacement_model = if def.is_intrinsic() {
                 let instance = Instance::resolve(def, &args).unwrap();
                 let intrinsic = Intrinsic::from_instance(&instance);
                 debug!(?intrinsic, "handle_terminator");
-                let model = match intrinsic {
+                match intrinsic {
                     Intrinsic::SizeOfVal => self.models[&KaniModel::SizeOfVal],
                     Intrinsic::MinAlignOfVal => self.models[&KaniModel::AlignOfVal],
                     Intrinsic::PtrOffsetFrom => self.models[&KaniModel::PtrOffsetFrom],
@@ -189,24 +190,23 @@ impl MutMirVisitor for ReplaceIntrinsicCallVisitor<'_, '_> {
                     _ => {
                         return self.super_terminator(term);
                     }
-                };
-                let new_instance = Instance::resolve(model, &args).unwrap();
-                let literal = MirConst::try_new_zero_sized(new_instance.ty()).unwrap();
-                let span = term.span;
-                let new_func = ConstOperand { span, user_ty: None, const_: literal };
-                *func = Operand::Constant(new_func);
-                self.changed = true;
+                }
             } else if is_panic_function(&self.tcx, def.0) {
-                // if we find a panic function, replace it with our stub
-                let new_instance =
-                    Instance::resolve(self.models[&KaniModel::PanicStub], &args).unwrap();
+                // If we find a panic function, we replace it with our stub.
+                self.models[&KaniModel::PanicStub]
+            } else {
+                return self.super_terminator(term);
+            };
 
-                let literal = MirConst::try_new_zero_sized(new_instance.ty()).unwrap();
-                let span = term.span;
-                let new_func = ConstOperand { span, user_ty: None, const_: literal };
-                *func = Operand::Constant(new_func);
-                self.changed = true;
-            }
+            let new_instance = Instance::resolve(replacement_model, &args).unwrap();
+
+            // Construct the wrapper types needed to insert our resolved model [Instance]
+            // back into the MIR as an operand.
+            let literal = MirConst::try_new_zero_sized(new_instance.ty()).unwrap();
+            let span = term.span;
+            let new_func = ConstOperand { span, user_ty: None, const_: literal };
+            *func = Operand::Constant(new_func);
+            self.changed = true;
         }
         self.super_terminator(term);
     }
