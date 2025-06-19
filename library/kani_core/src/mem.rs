@@ -226,7 +226,7 @@ macro_rules! kani_mem {
         /// Otherwise, it returns non-det boolean.
         #[kanitool::fn_marker = "IsAllocatedHook"]
         #[inline(never)]
-        unsafe fn is_allocated(_ptr: *const (), _size: usize) -> bool {
+        pub(crate) unsafe fn is_allocated(_ptr: *const (), _size: usize) -> bool {
             kani_intrinsic()
         }
 
