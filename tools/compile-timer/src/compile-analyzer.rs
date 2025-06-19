@@ -75,7 +75,11 @@ fn print_markdown(results: &[(AggrResult, AggrResult)], suite_name: Option<Strin
         total_post,
         diff_string(total_pre, total_post)
     );
-    println!("| test crate | old compile time | new compile time | diff | verdict |");
+    // Note that we have to call the fourth column "heterogeneousness" because the color-formatted
+    // diff will cut off if the column isn't wide enough for it, so verbosity is required.
+    println!(
+        "| test crate | old compile time | new compile time | heterogeneousness (diff) | verdict |"
+    );
     println!("| - | - | - | - | - |");
     let regressions = results
         .iter()
