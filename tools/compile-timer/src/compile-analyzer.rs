@@ -178,7 +178,7 @@ fn verdict_on_change(pre: &AggrResult, post: &AggrResult) -> Verdict {
 
 fn signed_percent_diff(pre: &Duration, post: &Duration) -> f64 {
     let change_amount =
-        (pre.abs_diff(*post).as_micros() as f64 / post.as_micros() as f64) * 100_f64;
+        (pre.abs_diff(*post).as_micros() as f64 / pre.as_micros() as f64) * 100_f64;
     if post < pre { -change_amount } else { change_amount }
 }
 
