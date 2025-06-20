@@ -265,12 +265,17 @@ class dump_markdown_results_table:
             Scatterplot axis ranges are {{ d["scaled_metrics"][metric]["min_value"] }} (bottom/left) to {{ d["scaled_metrics"][metric]["max_value"] }} (top/right).
 
             {% endif -%}
+            <details> <summary>Breakdown by harness</summary>
+
             | Benchmark | {% for variant in d["variants"][metric] %} {{ variant }} |{% endfor %}
             | --- |{% for variant in d["variants"][metric] %} --- |{% endfor -%}
             {% for bench_name, bench_variants in benchmarks.items () %}
             | {{ bench_name }} {% for variant in d["variants"][metric] -%}
              | {{ bench_variants[variant] }} {% endfor %}|
             {%- endfor %}
+            
+            </details>
+
             {% endfor -%}
             """)
 

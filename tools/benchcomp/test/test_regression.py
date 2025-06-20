@@ -477,18 +477,28 @@ class RegressionTests(unittest.TestCase):
                     ```
                     Scatterplot axis ranges are 5 (bottom/left) to 10 (top/right).
 
+                    <details> <summary>Breakdown by harness</summary>
+
                     | Benchmark |  variant_1 | variant_2 | ratio |
                     | --- | --- | --- | --- |
                     | bench_1 | 5 | 10 | **2.0** |
                     | bench_2 | 10 | 5 | 0.5 |
 
+                    </details>
+                    
+                    
                     ## success
+
+                    <details> <summary>Breakdown by harness</summary>
 
                     | Benchmark |  variant_1 | variant_2 | notes |
                     | --- | --- | --- | --- |
                     | bench_1 | True | True |  |
                     | bench_2 | True | False | regressed |
                     | bench_3 | False | True | newly passing |
+
+                    </details>
+                    
                     """))
 
 
