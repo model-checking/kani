@@ -16,7 +16,9 @@ use crate::kani_middle::metadata::{
 use crate::kani_middle::reachability::filter_crate_items;
 use crate::kani_middle::resolve::expect_resolve_fn;
 use crate::kani_middle::stubbing::{check_compatibility, harness_stub_map};
+use crate::kani_middle::{can_derive_arbitrary, implements_arbitrary};
 use crate::kani_queries::QueryDb;
+use fxhash::FxHashMap;
 use kani_metadata::{
     ArtifactType, AssignsContract, AutoHarnessMetadata, AutoHarnessSkipReason, HarnessKind,
     HarnessMetadata, KaniMetadata,
@@ -26,8 +28,8 @@ use rustc_hir::def_id::DefId;
 use rustc_middle::ty::TyCtxt;
 use rustc_session::config::OutputType;
 use rustc_smir::rustc_internal;
-use stable_mir::mir::{TerminatorKind, mono::Instance};
-use stable_mir::ty::{FnDef, GenericArgKind, GenericArgs, IndexedVal, RigidTy, TyKind};
+use stable_mir::mir::mono::Instance;
+use stable_mir::ty::{FnDef, GenericArgKind, GenericArgs, IndexedVal, RigidTy, Ty, TyKind};
 use stable_mir::{CrateDef, CrateItem};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs::File;
@@ -394,10 +396,13 @@ fn automatic_harness_partition(
     let included_set = make_regex_set(args.autoharness_included_patterns.clone());
     let excluded_set = make_regex_set(args.autoharness_excluded_patterns.clone());
 
+    // Cache whether a type implements or can derive Arbitrary
+    let mut ty_arbitrary_cache: FxHashMap<Ty, bool> = FxHashMap::default();
+
     // If `func` is not eligible for an automatic harness, return the reason why; if it is eligible, return None.
     // Note that we only return one reason for ineligiblity, when there could be multiple;
     // we can revisit this implementation choice in the future if users request more verbose output.
-    let skip_reason = |fn_item: CrateItem| -> Option<AutoHarnessSkipReason> {
+    let mut skip_reason = |fn_item: CrateItem| -> Option<AutoHarnessSkipReason> {
         if KaniAttributes::for_def_id(tcx, fn_item.def_id()).is_kani_instrumentation() {
             return Some(AutoHarnessSkipReason::KaniImpl);
         }
@@ -432,25 +437,12 @@ fn automatic_harness_partition(
         // Note that we've already filtered out generic functions, so we know that each of these arguments has a concrete type.
         let mut problematic_args = vec![];
         for (idx, arg) in body.arg_locals().iter().enumerate() {
-            let kani_any_body =
-                Instance::resolve(kani_any_def, &GenericArgs(vec![GenericArgKind::Type(arg.ty)]))
-                    .unwrap()
-                    .body()
-                    .unwrap();
+            let implements_arbitrary = ty_arbitrary_cache.entry(arg.ty).or_insert_with(|| {
+                implements_arbitrary(arg.ty, kani_any_def)
+                    || can_derive_arbitrary(arg.ty, kani_any_def)
+            });
 
-            let implements_arbitrary = if let TerminatorKind::Call { func, .. } =
-                &kani_any_body.blocks[0].terminator.kind
-            {
-                if let Some((def, args)) = func.ty(body.arg_locals()).unwrap().kind().fn_def() {
-                    Instance::resolve(def, args).is_ok()
-                } else {
-                    false
-                }
-            } else {
-                false
-            };
-
-            if !implements_arbitrary {
+            if !(*implements_arbitrary) {
                 // Find the name of the argument by referencing var_debug_info.
                 // Note that enumerate() starts at 0, while StableMIR argument_index starts at 1, hence the idx+1.
                 let arg_name = body
