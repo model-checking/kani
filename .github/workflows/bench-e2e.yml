@@ -6,7 +6,7 @@
 # This workflow will run when:
 #  - Changes are pushed to 'main'.
 #  - Triggered by another workflow
-name: Kani Performance Benchmarks
+name: Kani End-To-End Performance Benchmarks
 on:
   push:
     branches:
