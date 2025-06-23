@@ -82,8 +82,8 @@ fn main() {
     print!("\t [*] run took {:?}", run_start.elapsed());
 }
 
-// Profile a crate by running a certain number of untimed warmup runs and then
-// a certain number of timed runs, returning aggregates of the timing results.
+/// Profile a crate by running a certain number of untimed warmup runs and then
+/// a certain number of timed runs, returning aggregates of the timing results.
 fn profile_on_crate(absolute_path: &std::path::PathBuf) -> AggrResult {
     let _warmup_results = (0..WARMUP_RUNS)
         .map(|i| {
@@ -112,8 +112,8 @@ fn profile_on_crate(absolute_path: &std::path::PathBuf) -> AggrResult {
 }
 
 type RunResult = Duration;
-// Run `cargo kani` in a crate and parse out the compiler timing info outputted
-// by the `TIME_COMPILER` environment variable.
+/// Run `cargo kani` in a crate and parse out the compiler timing info outputted
+/// by the `TIME_COMPILER` environment variable.
 fn run_command_in(absolute_path: &Path) -> RunResult {
     // `cargo clean` first to ensure the compiler is fully run again
     let _ = Command::new("cargo")
@@ -161,19 +161,17 @@ fn aggregate_results(path: &Path, results: &[Duration]) -> AggrResult {
     // sort and calculate the subset of times in the interquartile range
     let mut sorted = results.to_vec();
     sorted.sort();
-    let iqr_bounds = (0.25 * results.len() as f64, 0.75 * results.len() as f64);
+    let iqr_bounds = (results.len() / 4, results.len() * 3 / 4);
     let iqr_durations = sorted
         .into_iter()
         .enumerate()
-        .filter_map(|(i, v)| {
-            if i >= iqr_bounds.0 as usize && i <= iqr_bounds.1 as usize { Some(v) } else { None }
-        })
+        .filter_map(|(i, v)| if i >= iqr_bounds.0 && i <= iqr_bounds.1 { Some(v) } else { None })
         .collect::<Vec<Duration>>();
 
     AggrResult::new(path.to_path_buf(), result_stats(&iqr_durations), result_stats(results))
 }
 
-// Record the stats from a subset slice of timing runs.
+/// Record the stats from a subset slice of timing runs.
 fn result_stats(results: &[Duration]) -> Stats {
     let avg = results.iter().sum::<Duration>() / results.len().try_into().unwrap();
     let range = (*results.iter().min().unwrap(), *results.iter().max().unwrap());

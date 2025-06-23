@@ -1,5 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+#![allow(dead_code)]
 use crate::common::{AggrResult, fraction_of_duration};
 use clap::Parser;
 use serde_json::Deserializer;
@@ -25,6 +26,7 @@ struct AnalyzerArgs {
     path_post: PathBuf,
 
     #[arg(short, long)]
+    /// The test suite name to display as part of the output's title
     suite_name: Option<String>,
 
     /// Output results in markdown format
@@ -48,9 +50,8 @@ fn main() {
         .filter_map(Result::ok)
         .zip(post_results.into_iter().filter_map(Result::ok))
         .collect::<Vec<_>>();
-    results.sort_by_key(|a| {
-        -(signed_percent_diff(&a.0.iqr_stats.avg, &a.1.iqr_stats.avg).abs() * 1000_f64) as i64
-    });
+
+    sort_results(&mut results);
 
     if args.only_markdown {
         print_markdown(results.as_slice(), args.suite_name);
@@ -59,7 +60,15 @@ fn main() {
     }
 }
 
-// Print results in a markdown format (for GitHub actions).
+/// Sort results based on percentage change, with high magnitude regressions first, then low
+/// magnitude regressions, low magnitude improvements and finally high magnitude improvements.
+fn sort_results(results: &mut [(AggrResult, AggrResult)]) {
+    results.sort_by_key(|a| {
+        -(signed_percent_diff(&a.0.iqr_stats.avg, &a.1.iqr_stats.avg).abs() * 1000_f64) as i64
+    });
+}
+
+/// Print results in a markdown format (for GitHub actions).
 fn print_markdown(results: &[(AggrResult, AggrResult)], suite_name: Option<String>) {
     let suite_text = if let Some(suite_name) = suite_name {
         format!(" (`{suite_name}` suite)")
@@ -78,7 +87,7 @@ fn print_markdown(results: &[(AggrResult, AggrResult)], suite_name: Option<Strin
     // Note that we have to call the fourth column "heterogeneousness" because the color-formatted
     // diff will cut off if the column isn't wide enough for it, so verbosity is required.
     println!(
-        "| test crate | old compile time | new compile time | heterogeneousness (diff) | verdict |"
+        "| test crate | old compile time | new compile time | heterogeneousness (percentage difference) | verdict |"
     );
     println!("| - | - | - | - | - |");
     let regressions = results
@@ -123,7 +132,7 @@ fn print_markdown(results: &[(AggrResult, AggrResult)], suite_name: Option<Strin
     }
 }
 
-// Print results for a terminal output.
+/// Print results for a terminal output.
 fn print_to_terminal(results: &[(AggrResult, AggrResult)]) {
     let krate_column_len = results
         .iter()
@@ -157,11 +166,13 @@ fn print_to_terminal(results: &[(AggrResult, AggrResult)]) {
     }
 }
 
+/// Classify a change into a [Verdict], determining whether it was an improvement, regression,
+/// or likely just noise based on provided thresholds.
 fn verdict_on_change(pre: &AggrResult, post: &AggrResult) -> Verdict {
     let (pre_time, post_time) = (pre.iqr_stats.avg, post.iqr_stats.avg);
 
-    if pre.iqr_stats.avg > post.iqr_stats.avg {
-        return Verdict::Improved;
+    if post_time.abs_diff(pre_time) < fraction_of_duration(pre_time, FRAC_ABSOLUTE_THRESHOLD) {
+        return Verdict::ProbablyNoise(NoiseExplanation::SmallPercentageChange);
     }
 
     let avg_std_dev = (pre.full_std_dev() + post.full_std_dev()) / 2;
@@ -169,16 +180,15 @@ fn verdict_on_change(pre: &AggrResult, post: &AggrResult) -> Verdict {
         return Verdict::ProbablyNoise(NoiseExplanation::SmallComparedToStdDevOf(avg_std_dev));
     }
 
-    if post_time.abs_diff(pre_time) < fraction_of_duration(pre_time, FRAC_ABSOLUTE_THRESHOLD) {
-        return Verdict::ProbablyNoise(NoiseExplanation::SmallPercentageChange);
+    if pre.iqr_stats.avg > post.iqr_stats.avg {
+        return Verdict::Improved;
     }
 
     Verdict::PotentialRegression { sample_std_dev: avg_std_dev }
 }
 
 fn signed_percent_diff(pre: &Duration, post: &Duration) -> f64 {
-    let change_amount =
-        (pre.abs_diff(*post).as_micros() as f64 / pre.as_micros() as f64) * 100_f64;
+    let change_amount = (pre.abs_diff(*post).as_micros() as f64 / pre.as_micros() as f64) * 100_f64;
     if post < pre { -change_amount } else { change_amount }
 }
 
@@ -195,7 +205,6 @@ fn diff_string(pre: Duration, post: Duration) -> String {
 }
 
 #[derive(Debug)]
-#[allow(dead_code)]
 enum Verdict {
     /// This crate now compiles faster!
     Improved,
@@ -206,7 +215,6 @@ enum Verdict {
 }
 
 #[derive(Debug)]
-#[allow(dead_code)]
 /// The reason a regression was flagged as likely noise rather than a true performance regression.
 enum NoiseExplanation {
     /// The increase in compile time is so small compared to the

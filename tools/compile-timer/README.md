@@ -10,4 +10,10 @@ After doing that, you should make sure you have Kani on your $PATH (see instruct
 By default, the script recursively goes into directories and will use `cargo kani` to profile any Rust projects it encounters (which it determines by looking for a `Cargo.toml`). You can tell it to ignore specific subtrees by passing in the `--ignore [DIR_NAME]` flag.
 
 ## Visualizing Compiler Times with `compile-analyzer`
-`compile-timer` itself will have some debug output including each individual run's time and aggregates for each crate and the whole analysis, but `compile-analyzer` is specifically for comparing performance across multiple commits. Once you've run `compile-timer` on both commits, you can run `compile-analyzer --path-pre [FIRST_JSON_FILE] --path-post [SECOND_JSON_FILE]` to see the change in performance going from the first to second commit. By default, `compile-analyzer` will just print to the console, but if you specify the `--only-markdown` option, it's output will be formatted for GitHub flavored markdown (as is useful in CI).
+`compile-timer` itself will have some debug output including each individual run's time and aggregates for each crate.
+
+`compile-analyzer` is specifically for comparing performance across multiple commits. 
+
+Once you've run `compile-timer` on both commits, you can run `compile-analyzer --path-pre [FIRST_JSON_FILE] --path-post [SECOND_JSON_FILE]` to see the change in performance going from the first to second commit. 
+
+By default, `compile-analyzer` will just print to the console, but if you specify the `--only-markdown` option, it's output will be formatted for GitHub flavored markdown (as is useful in CI).
