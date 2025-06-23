@@ -12,8 +12,8 @@
 macro_rules! kani_mem {
     ($core:tt) => {
         use super::kani_intrinsic;
-        use $core::ptr::{DynMetadata, NonNull, Pointee};
         use $core::marker::MetaSized;
+        use $core::ptr::{DynMetadata, NonNull, Pointee};
 
         /// Check if the pointer is valid for write access according to [crate::mem] conditions 1, 2
         /// and 3.
@@ -122,7 +122,10 @@ macro_rules! kani_mem {
         }
 
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
-        pub(super) fn same_allocation_internal<T: MetaSized>(ptr1: *const T, ptr2: *const T) -> bool {
+        pub(super) fn same_allocation_internal<T: MetaSized>(
+            ptr1: *const T,
+            ptr2: *const T,
+        ) -> bool {
             let addr1 = ptr1 as *const ();
             let addr2 = ptr2 as *const ();
             cbmc::same_allocation(addr1, addr2)
