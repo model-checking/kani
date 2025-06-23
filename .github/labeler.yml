@@ -18,7 +18,7 @@ Z-CompilerBenchCI:
   - changed-files:
     # any parts of the compiler change
     - any-glob-to-any-file: ['kani-compiler/**', 'cprover_bindings/**', 'library/**']
-    # the way we call the compiler through cargo changes
-    - any-glob-to-any-file: ['kani-driver/src/call_cargo.rs']
+    # the way we call the compiler changes
+    - any-glob-to-any-file: ['kani-driver/src/call_cargo.rs', 'kani-driver/src/call_single_file.rs']
     # or if our dependencies change
-    - any-glob-to-any-file: ['rust-toolchain.toml', 'Cargo.lock', 'kani-dependencies']
+    - any-glob-to-any-file: ['rust-toolchain.toml', 'Cargo.lock']

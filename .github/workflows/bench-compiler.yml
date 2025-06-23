@@ -1,11 +1,7 @@
 # Copyright Kani Contributors
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 #
-# Run performance benchmarks comparing two different Kani versions.
-# This workflow takes much longer than other workflows, so we don't run it by default.
-# This workflow will run when:
-#  - Changes are pushed to 'main'.
-#  - Triggered by another workflow
+# Run performance benchmarks comparing the compiler performance of two different Kani versions.
 name: Kani Compiler Performance Benchmarks
 on:
   push:
@@ -117,6 +113,8 @@ jobs:
           os: ubuntu-24.04
           kani_dir: new
 
+      # Ensures that a PR changing the benchmarks will have the new benchmarks run 
+      # for both commits.
       - name: Copy benchmarks from new to old
         run: rm -rf ./old/tests/perf ; cp -r ./new/tests/perf ./old/tests/
 
