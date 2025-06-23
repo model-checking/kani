@@ -92,19 +92,40 @@ fn generate_type_constructor(type_name: TokenStream, fields: &syn::Fields) -> To
 /// Generates a `match` case to construct each variant of the given type. Uses a
 /// symbolic `usize` to decide which variant to construct.
 fn enum_constructor(ident: &syn::Ident, data_enum: &syn::DataEnum) -> TokenStream {
-    let variant_constructors = data_enum.variants.iter().map(|variant| {
+    if data_enum.variants.is_empty() {
+        let msg = format!(
+            "Cannot create symbolic enum `{ident}`. Enums with zero-variants cannot be instantiated"
+        );
+        quote! {
+            panic!(#msg)
+        }
+    } else if data_enum.variants.len() == 1 {
+        let variant = data_enum.variants.first().unwrap();
         let variant_name = &variant.ident;
-        generate_type_constructor(quote!(#ident::#variant_name), &variant.fields)
-    });
-    let n_variants = data_enum.variants.len();
-    let cases = variant_constructors.enumerate().map(|(idx, var_constr)| {
-        if idx < n_variants - 1 { quote!(#idx => #var_constr) } else { quote!(_ => #var_constr) }
-    });
+        let variant_constructor =
+            generate_type_constructor(quote!(#ident::#variant_name), &variant.fields);
+        quote! {
+            #variant_constructor
+        }
+    } else {
+        let variant_constructors = data_enum.variants.iter().map(|variant| {
+            let variant_name = &variant.ident;
+            generate_type_constructor(quote!(#ident::#variant_name), &variant.fields)
+        });
+        let n_variants = data_enum.variants.len();
+        let cases = variant_constructors.enumerate().map(|(idx, var_constr)| {
+            if idx < n_variants - 1 {
+                quote!(#idx => #var_constr)
+            } else {
+                quote!(_ => #var_constr)
+            }
+        });
 
-    let kani_path = kani_path();
-    quote! {
-        match #kani_path::any() {
-            #(#cases),* ,
+        let kani_path = kani_path();
+        quote! {
+            match #kani_path::any() {
+                #(#cases),* ,
+            }
         }
     }
 }
