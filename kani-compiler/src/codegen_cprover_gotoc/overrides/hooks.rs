@@ -326,7 +326,12 @@ struct Panic;
 impl GotocHook for Panic {
     fn hook_applies(&self, tcx: TyCtxt, instance: Instance) -> bool {
         let def_id = rustc_internal::internal(tcx, instance.def.def_id());
-        Some(def_id) == tcx.lang_items().panic_fn()
+        let kani_tool_attr = attributes::fn_marker(instance.def);
+
+        // we check the attributes to make sure this hook applies to
+        // panic functions we've stubbed too
+        kani_tool_attr.is_some_and(|kani| kani.contains("PanicStub"))
+            || Some(def_id) == tcx.lang_items().panic_fn()
             || tcx.has_attr(def_id, rustc_span::sym::rustc_const_panic_str)
             || Some(def_id) == tcx.lang_items().panic_fmt()
             || Some(def_id) == tcx.lang_items().begin_panic_fn()

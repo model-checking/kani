@@ -52,13 +52,22 @@ impl TransformPass for RustcIntrinsicsPass {
     /// For every unsafe dereference or a transmute operation, we check all values are valid.
     fn transform(&mut self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
         debug!(function=?instance.name(), "transform");
+
         let mut new_body = MutableBody::from(body);
         let mut visitor =
-            ReplaceIntrinsicCallVisitor::new(&self.models, new_body.locals().to_vec());
+            ReplaceIntrinsicCallVisitor::new(&self.models, new_body.locals().to_vec(), tcx);
         visitor.visit_body(&mut new_body);
         let changed = self.replace_lowered_intrinsics(tcx, &mut new_body);
         (visitor.changed || changed, new_body.into())
     }
+}
+
+fn is_panic_function(tcx: &TyCtxt, def_id: rustc_smir::stable_mir::DefId) -> bool {
+    let def_id = rustc_internal::internal(*tcx, def_id);
+    Some(def_id) == tcx.lang_items().panic_fn()
+        || tcx.has_attr(def_id, rustc_span::sym::rustc_const_panic_str)
+        || Some(def_id) == tcx.lang_items().panic_fmt()
+        || Some(def_id) == tcx.lang_items().begin_panic_fn()
 }
 
 impl RustcIntrinsicsPass {
@@ -132,19 +141,24 @@ impl RustcIntrinsicsPass {
     }
 }
 
-struct ReplaceIntrinsicCallVisitor<'a> {
+struct ReplaceIntrinsicCallVisitor<'a, 'tcx> {
     models: &'a HashMap<KaniModel, FnDef>,
     locals: Vec<LocalDecl>,
+    tcx: TyCtxt<'tcx>,
     changed: bool,
 }
 
-impl<'a> ReplaceIntrinsicCallVisitor<'a> {
-    fn new(models: &'a HashMap<KaniModel, FnDef>, locals: Vec<LocalDecl>) -> Self {
-        ReplaceIntrinsicCallVisitor { models, locals, changed: false }
+impl<'a, 'tcx> ReplaceIntrinsicCallVisitor<'a, 'tcx> {
+    fn new(
+        models: &'a HashMap<KaniModel, FnDef>,
+        locals: Vec<LocalDecl>,
+        tcx: TyCtxt<'tcx>,
+    ) -> Self {
+        ReplaceIntrinsicCallVisitor { models, locals, changed: false, tcx }
     }
 }
 
-impl MutMirVisitor for ReplaceIntrinsicCallVisitor<'_> {
+impl MutMirVisitor for ReplaceIntrinsicCallVisitor<'_, '_> {
     /// Replace the terminator for some rustc's intrinsics.
     ///
     /// In some cases, we replace a function call to a rustc intrinsic by a call to the
@@ -159,22 +173,35 @@ impl MutMirVisitor for ReplaceIntrinsicCallVisitor<'_> {
         if let TerminatorKind::Call { func, .. } = &mut term.kind
             && let TyKind::RigidTy(RigidTy::FnDef(def, args)) =
                 func.ty(&self.locals).unwrap().kind()
-            && def.is_intrinsic()
         {
-            let instance = Instance::resolve(def, &args).unwrap();
-            let intrinsic = Intrinsic::from_instance(&instance);
-            debug!(?intrinsic, "handle_terminator");
-            let model = match intrinsic {
-                Intrinsic::SizeOfVal => self.models[&KaniModel::SizeOfVal],
-                Intrinsic::MinAlignOfVal => self.models[&KaniModel::AlignOfVal],
-                Intrinsic::PtrOffsetFrom => self.models[&KaniModel::PtrOffsetFrom],
-                Intrinsic::PtrOffsetFromUnsigned => self.models[&KaniModel::PtrOffsetFromUnsigned],
-                // The rest is handled in codegen.
-                _ => {
-                    return self.super_terminator(term);
+            // Get the model we should use to replace this function call, if any.
+            let replacement_model = if def.is_intrinsic() {
+                let instance = Instance::resolve(def, &args).unwrap();
+                let intrinsic = Intrinsic::from_instance(&instance);
+                debug!(?intrinsic, "handle_terminator");
+                match intrinsic {
+                    Intrinsic::SizeOfVal => self.models[&KaniModel::SizeOfVal],
+                    Intrinsic::MinAlignOfVal => self.models[&KaniModel::AlignOfVal],
+                    Intrinsic::PtrOffsetFrom => self.models[&KaniModel::PtrOffsetFrom],
+                    Intrinsic::PtrOffsetFromUnsigned => {
+                        self.models[&KaniModel::PtrOffsetFromUnsigned]
+                    }
+                    // The rest is handled in codegen.
+                    _ => {
+                        return self.super_terminator(term);
+                    }
                 }
+            } else if is_panic_function(&self.tcx, def.0) {
+                // If we find a panic function, we replace it with our stub.
+                self.models[&KaniModel::PanicStub]
+            } else {
+                return self.super_terminator(term);
             };
-            let new_instance = Instance::resolve(model, &args).unwrap();
+
+            let new_instance = Instance::resolve(replacement_model, &args).unwrap();
+
+            // Construct the wrapper types needed to insert our resolved model [Instance]
+            // back into the MIR as an operand.
             let literal = MirConst::try_new_zero_sized(new_instance.ty()).unwrap();
             let span = term.span;
             let new_func = ConstOperand { span, user_ty: None, const_: literal };

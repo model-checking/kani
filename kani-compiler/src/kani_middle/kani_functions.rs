@@ -99,6 +99,8 @@ pub enum KaniModel {
     SetSliceChunkPtrInitialized,
     #[strum(serialize = "SetSlicePtrInitializedModel")]
     SetSlicePtrInitialized,
+    #[strum(serialize = "PanicStub")]
+    PanicStub,
     #[strum(serialize = "SetStrPtrInitializedModel")]
     SetStrPtrInitialized,
     #[strum(serialize = "SizeOfDynObjectModel")]
