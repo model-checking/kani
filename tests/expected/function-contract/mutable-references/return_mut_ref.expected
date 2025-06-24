@@ -1,11 +1,1 @@
-assertion\
-	- Status: UNREACHABLE\
-	- Description: "attempt to divide by zero"\
-in function divide_by
-
-assertion\
-	- Status: SUCCESS\
-	- Description: "|result| **result <= a"\
-in function divide_by
-
 VERIFICATION:- SUCCESSFUL

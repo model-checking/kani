@@ -2,15 +2,17 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Z function-contracts
 
-#[kani::requires(*b > 0 && *b < a)]
-#[kani::ensures(|result| **result <= a)]
-#[kani::modifies(b)]
-fn divide_by(a: u8, b: &mut u8) -> &mut u8 {
-    *b = a / *b;
-    b
+//! Checking that we can write contracts for functions returning mutable references.
+//! This verifies that Rust correctly identifies contract closures as `FnOnce`.
+//! See https://github.com/model-checking/kani/issues/3764
+
+#[kani::requires(*val != 0)]
+unsafe fn foo(val: &mut u8) -> &mut u8 {
+    val
 }
 
-#[kani::proof_for_contract(divide_by)]
-fn divide_by_harness() {
-    divide_by(kani::any(), &mut kani::any());
+#[kani::proof_for_contract(foo)]
+fn harness() {
+    let mut x: u8 = kani::any();
+    unsafe { foo(&mut x) };
 }
