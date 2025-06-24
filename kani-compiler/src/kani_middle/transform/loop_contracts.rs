@@ -156,6 +156,165 @@ impl LoopContractPass {
         body.replace_statements(&SourceInstruction::Terminator { bb: bb_idx }, stmts);
     }
 
+    fn get_user_defined_variables(&self, body: &MutableBody) -> Vec<usize> {
+        let mut user_vars = Vec::new();
+
+        // Iterate through all locals
+        for (idx, _) in body.locals().iter().enumerate() {
+            // Skip the return place (local 0)
+            if idx == 0 {
+                continue;
+            }
+
+            // Check if this is a user-defined variable (not a compiler temp)
+            let is_user_defined = body.var_debug_info().iter().any(|info| {
+            matches!(&info.value, VarDebugInfoContents::Place(place) if place.local == idx)
+        });
+
+            if is_user_defined {
+                user_vars.push(idx);
+            }
+        }
+
+        user_vars
+    }
+
+    fn is_loop_head(&self, body: &MutableBody, tcx: TyCtxt, block_idx: usize) -> bool {
+        let terminator = body.blocks()[block_idx].terminator.clone();
+        if let TerminatorKind::Call {
+            func: terminator_func,
+            args: terminator_args,
+            destination: _,
+            target: _,
+            unwind: _,
+        } = &terminator.kind
+        {
+            // Get the function signature of the terminator call.
+            let Some(RigidTy::FnDef(fn_def, _)) = terminator_func
+                .ty(body.locals())
+                .ok()
+                .map(|fn_ty| fn_ty.kind().rigid().unwrap().clone())
+            else {
+                return false;
+            };
+            // The basic blocks end with register functions are loop head blocks.
+            KaniAttributes::for_def_id(tcx, fn_def.def_id()).fn_marker()
+                == Some(Symbol::intern("kani_register_loop_contract"))
+                && matches!(&terminator_args[1], Operand::Constant(op) if op.const_.eval_target_usize().unwrap() == 0)
+        } else {
+            false
+        }
+    }
+
+    fn get_loop_positions(&self, body: &MutableBody, tcx: TyCtxt) -> Vec<(usize, usize)> {
+        let mut loop_pos: Vec<(usize, usize)> = Vec::new();
+        for (block_idx, _) in body.blocks().iter().enumerate() {
+            if self.is_loop_head(body, tcx, block_idx) {
+                let loop_latch_id = self.get_loop_latch_id(body, block_idx);
+                loop_pos.push((block_idx, loop_latch_id));
+            }
+        }
+        loop_pos
+    }
+
+    fn get_closest_loop_head(
+        &self,
+        block_idx: usize,
+        loop_positions: &Vec<(usize, usize)>,
+    ) -> Option<usize> {
+        let mut current_loop_head: Option<usize> = None;
+        for (loop_head_idx, loop_latch_idx) in loop_positions {
+            if block_idx > *loop_head_idx && block_idx <= *loop_latch_idx {
+                current_loop_head = Some(*loop_head_idx);
+            }
+        }
+        current_loop_head
+    }
+
+    fn move_storagelive_to_loophead(
+        &self,
+        body: &mut MutableBody,
+        loop_positions: Vec<(usize, usize)>,
+    ) {
+        let mut move_list: Vec<(usize, usize, usize)> = Vec::new();
+        let localvars = self.get_user_defined_variables(body);
+        for (block_idx, block) in body.blocks().iter().enumerate() {
+            for (stmt_idx, stmt) in block.statements.iter().enumerate() {
+                match stmt.kind {
+                    StatementKind::StorageLive(x) if localvars.contains(&x) => {
+                        move_list.push((block_idx, stmt_idx, x));
+                    }
+                    _ => (),
+                }
+            }
+        }
+        let mut moved_list: Vec<usize> = Vec::new();
+        for (block_idx, stmt_idx, local) in move_list {
+            let storagelive_stmt = body.blocks()[block_idx].statements[stmt_idx].clone();
+            let next_stmt = body.blocks()[block_idx].statements[stmt_idx + 1].clone();
+            if (!moved_list.contains(&local))
+                && matches!(next_stmt.kind.clone(), StatementKind::Assign(lhs,_) if lhs.local == local)
+            {
+                moved_list.push(local);
+                if let Some(closest_loop_head) =
+                    self.get_closest_loop_head(block_idx, &loop_positions)
+                {
+                    body.remove_stmt(block_idx, stmt_idx);
+                    body.remove_stmt(block_idx, stmt_idx);
+                    body.insert_stmt(
+                        storagelive_stmt,
+                        &mut SourceInstruction::Terminator { bb: closest_loop_head },
+                        InsertPosition::Before,
+                    );
+
+                    body.insert_stmt(
+                        next_stmt,
+                        &mut SourceInstruction::Terminator { bb: closest_loop_head },
+                        InsertPosition::Before,
+                    );
+                }
+            }
+        }
+    }
+
+    fn move_storagedead(&self, body: &mut MutableBody, src_block_idx: usize, dst_block_idx: usize) {
+        let localvars = self.get_user_defined_variables(body);
+        let storagedead_stmts: Vec<_> = body.blocks()[src_block_idx]
+            .clone()
+            .statements
+            .iter()
+            .filter(
+                |stmt| matches!(stmt.kind, StatementKind::StorageDead(x) if localvars.contains(&x)),
+            )
+            .cloned()
+            .collect();
+        let other_stmts: Vec<_> = body.blocks()[src_block_idx]
+            .clone()
+            .statements
+            .iter()
+            .filter(|stmt| !matches!(stmt.kind, StatementKind::StorageDead(x) if localvars.contains(&x)))
+            .cloned()
+            .collect();
+        body.replace_statements(&SourceInstruction::Terminator { bb: src_block_idx }, other_stmts);
+        let mut new_stmts = body.blocks()[dst_block_idx].statements.clone();
+        new_stmts.extend(storagedead_stmts);
+        body.replace_statements(&SourceInstruction::Terminator { bb: dst_block_idx }, new_stmts);
+    }
+
+    fn get_loop_latch_id(&self, body: &MutableBody, loop_head_id: usize) -> usize {
+        for (bb_idx, block) in body.blocks().iter().enumerate() {
+            match block.terminator.kind {
+                TerminatorKind::Goto { target }
+                    if (target == loop_head_id && bb_idx > loop_head_id) =>
+                {
+                    return bb_idx;
+                }
+                _ => (),
+            }
+        }
+        loop_head_id
+    }
+
     /// We only support closure arguments that are either `copy`` or `move`` of reference of user variables.
     fn is_supported_argument_of_closure(&self, rv: &Rvalue, body: &MutableBody) -> bool {
         let var_debug_info = &body.var_debug_info();
@@ -169,6 +328,8 @@ impl LoopContractPass {
     /// It is the core of fn transform, and is separated just to avoid code repetition.
     fn transform_body_with_loop(&mut self, tcx: TyCtxt, body: Body) -> (bool, Body) {
         let mut new_body = MutableBody::from(body);
+        let loop_positions = self.get_loop_positions(&new_body, tcx);
+        self.move_storagelive_to_loophead(&mut new_body, loop_positions);
         let mut contain_loop_contracts: bool = false;
 
         // Visit basic blocks in control flow order (BFS).
@@ -198,7 +359,6 @@ impl LoopContractPass {
                 }
             }
         }
-
         (contain_loop_contracts, new_body.into())
     }
 
@@ -280,6 +440,16 @@ impl LoopContractPass {
                 == Some(Symbol::intern("kani_register_loop_contract"))
                 && matches!(&terminator_args[1], Operand::Constant(op) if op.const_.eval_target_usize().unwrap() == 0)
             {
+                let loop_skip_block_id = *new_body.blocks()[terminator_target.unwrap()]
+                    .terminator
+                    .clone()
+                    .successors()
+                    .first()
+                    .unwrap();
+                let loop_latch_id = self.get_loop_latch_id(new_body, bb_idx);
+
+                self.move_storagedead(new_body, loop_latch_id, loop_skip_block_id);
+
                 // Check if the MIR satisfy the assumptions of this transformation.
                 if !new_body.blocks()[terminator_target.unwrap()].statements.is_empty()
                     || !matches!(
