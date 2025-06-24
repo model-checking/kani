@@ -48,7 +48,9 @@ impl<'a> ContractConditionsHandler<'a> {
             #[kanitool::modifies_wrapper = #modifies_name]
             #vis #sig {
                 // Dummy functions used to force the compiler to annotate Kani's
-                // closures as FnOnce.
+                // closures as `FnOnce`. Without this, Rust infers the generated closures as `FnMut`,
+                // preventing us from writing contracts for functions returning mutable references.
+                // See https://github.com/model-checking/kani/issues/3764
                 #[inline(never)]
                 #[kanitool::fn_marker = "kani_force_fn_once"]
                 const fn kani_force_fn_once<T, F: FnOnce() -> T>(f: F) -> F {
