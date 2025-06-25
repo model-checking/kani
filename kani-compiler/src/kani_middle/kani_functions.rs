@@ -91,10 +91,6 @@ pub enum KaniModel {
     PtrOffsetFromUnsigned,
     #[strum(serialize = "RunContractModel")]
     RunContract,
-    #[strum(serialize = "ForceContractTypeModel")]
-    ForceContractType,
-    #[strum(serialize = "ForceContractTypeWithArgumentsModel")]
-    ForceContractTypeWithArguments,
     #[strum(serialize = "RunLoopContractModel")]
     RunLoopContract,
     #[strum(serialize = "SetPtrInitializedModel")]

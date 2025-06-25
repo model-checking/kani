@@ -56,12 +56,12 @@ impl<'a> ContractConditionsHandler<'a> {
                 #[inline(never)]
                 #[kanitool::fn_marker = "kani_force_fn_once"]
                 const fn kani_force_fn_once<T, F: FnOnce() -> T>(f: F) -> F {
-                    unreachable!()
+                    f
                 }
                 #[inline(never)]
                 #[kanitool::fn_marker = "kani_force_fn_once_with_args"]
                 const fn kani_force_fn_once_with_args<A, T, F: FnOnce(A) -> T>(f: F) -> F {
-                    unreachable!()
+                    f
                 }
                 // Dummy function used to force the compiler to capture the environment.
                 // We cannot call closures inside constant functions.

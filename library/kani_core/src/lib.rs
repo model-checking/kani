@@ -567,30 +567,6 @@ macro_rules! kani_intrinsics {
                 func()
             }
 
-            /// Function that wraps a closure without arguments used to implement contracts.
-            ///
-            /// To ensure Rust correctly infers type of a contract closure as FnOnce, we wrap it in a dummy
-            /// function that explicitly requires an FnOnce. This wrapping is done at the point of closure
-            /// definition.
-            #[doc(hidden)]
-            #[allow(dead_code)]
-            #[kanitool::fn_marker = "ForceContractTypeModel"]
-            fn force_fn_once<T, F: FnOnce() -> T>(func: F) -> F {
-                func
-            }
-
-            /// Function that wraps a closure with one argument used to implement contracts.
-            ///
-            /// To ensure Rust correctly infers type of a contract closure as FnOnce, we wrap it in a dummy
-            /// function that explicitly requires an FnOnce. This wrapping is done at the point of closure
-            /// definition.
-            #[doc(hidden)]
-            #[allow(dead_code)]
-            #[kanitool::fn_marker = "ForceContractTypeWithArgumentsModel"]
-            fn force_fn_once_with_args<A, T, F: FnOnce(A) -> T>(func: F) -> F {
-                func
-            }
-
             /// Function that calls a closure used to implement loop contracts.
             ///
             /// In contracts, we cannot invoke the generated closures directly, instead, we call register
