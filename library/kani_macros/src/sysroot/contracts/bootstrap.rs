@@ -51,8 +51,6 @@ impl<'a> ContractConditionsHandler<'a> {
                 // closures as `FnOnce`. Without this, Rust infers the generated closures as `FnMut`,
                 // preventing us from writing contracts for functions returning mutable references.
                 // See https://github.com/model-checking/kani/issues/3764
-                // These functions get replaced by `kani::internal::force_fn_once` and
-                // `kani::internal::force_fn_once_with_args`, respectively.
                 #[inline(never)]
                 #[kanitool::fn_marker = "kani_force_fn_once"]
                 const fn kani_force_fn_once<T, F: FnOnce() -> T>(f: F) -> F {
