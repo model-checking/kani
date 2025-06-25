@@ -1,1 +1,31 @@
+pointer_dereference\
+	- Status: SUCCESS\
+	- Description: "dereference failure: pointer NULL"\
+in function foo
+
+pointer_dereference\
+	- Status: SUCCESS\
+	- Description: "dereference failure: pointer invalid"\
+in function foo
+
+pointer_dereference\
+	- Status: SUCCESS\
+	- Description: "dereference failure: deallocated dynamic object"\
+in function foo
+
+pointer_dereference\
+	- Status: SUCCESS\
+	- Description: "dereference failure: dead object"\
+in function foo
+
+pointer_dereference\
+	- Status: SUCCESS\
+	- Description: "dereference failure: pointer outside object bounds"\
+in function foo
+
+pointer_dereference\
+	- Status: SUCCESS\
+	- Description: "dereference failure: invalid integer address"\
+in function foo
+
 VERIFICATION:- SUCCESSFUL
