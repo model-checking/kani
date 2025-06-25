@@ -3,10 +3,12 @@
 //! This crate implements irep serialization using serde Serializer.
 use crate::InternedString;
 use crate::irep::{Irep, IrepId, Symbol, SymbolTable};
+use bumpalo::Bump;
+use hashbrown::{DefaultHashBuilder, HashMap};
 use serde::Serialize;
 use serde::ser::{SerializeMap, Serializer};
 
-impl Serialize for Irep {
+impl<'b> Serialize for Irep<'b> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -14,12 +16,27 @@ impl Serialize for Irep {
         let mut obj = serializer.serialize_map(None)?;
         obj.serialize_entry("id", &self.id)?;
         if !self.sub.is_empty() {
-            obj.serialize_entry("sub", &self.sub)?;
+            obj.serialize_entry("sub", &VecWrapper(&self.sub))?;
         }
         if !self.named_sub.is_empty() {
-            obj.serialize_entry("namedSub", &self.named_sub)?;
+            obj.serialize_entry("namedSub", &HashMapWrapper(&self.named_sub))?;
         }
         obj.end()
+    }
+}
+
+pub struct HashMapWrapper<'b>(&'b HashMap<IrepId, Irep<'b>, DefaultHashBuilder, &'b Bump>);
+
+impl Serialize for HashMapWrapper<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_map(Some(self.0.len()))?;
+        for (k, v) in self.0 {
+            state.serialize_entry(k, v)?;
+        }
+        state.end()
     }
 }
 
@@ -32,14 +49,42 @@ impl Serialize for IrepId {
     }
 }
 
-impl Serialize for SymbolTable {
+impl Serialize for SymbolTable<'_> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
         let mut obj = serializer.serialize_map(None)?;
-        obj.serialize_entry("symbolTable", &self.symbol_table)?;
+        obj.serialize_entry("symbolTable", &BTreeMapWrapper(&self.symbol_table))?;
+        // obj.serialize_key("symbolTable")?;
+        // obj.serialize_value(&)?;
         obj.end()
+    }
+}
+
+pub struct VecWrapper<'b>(&'b std::vec::Vec<Irep<'b>, &'b bumpalo::Bump>);
+
+impl<'b> Serialize for VecWrapper<'b> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        // manually implementing this jawn bc the blanket implementation doesn't cover generic allocators :(
+        serializer.collect_seq(self.0)
+    }
+}
+
+pub struct BTreeMapWrapper<'b>(
+    pub &'b std::collections::BTreeMap<InternedString, Symbol<'b>, &'b bumpalo::Bump>,
+);
+
+impl<'b> Serialize for BTreeMapWrapper<'b> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        // manually implementing this jawn bc the blanket implementation doesn't cover generic allocators :(
+        serializer.collect_map(self.0)
     }
 }
 
@@ -63,10 +108,11 @@ impl Serialize for StreamingSymbols<'_> {
         S: Serializer,
     {
         let mm = self.0.machine_model();
+        let arena = &Bump::new();
         let mut obj = serializer.serialize_map(None)?;
         for (k, v) in self.0.iter() {
             // We're only storing the to_irep in RAM for one symbol at a time
-            obj.serialize_entry(k, &v.to_irep(mm))?;
+            obj.serialize_entry(k, &v.to_irep(arena, mm))?;
         }
         obj.end()
     }
@@ -107,7 +153,7 @@ impl serde::de::Visitor<'_> for InternedStringVisitor {
     }
 }
 
-impl Serialize for Symbol {
+impl<'b> Serialize for Symbol<'b> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -144,11 +190,15 @@ impl Serialize for Symbol {
 
 #[cfg(test)]
 mod test {
+    use crate::irep::to_irep::collect_into;
+    use crate::vec_in;
+
     use super::*;
     use serde_test::{Token, assert_ser_tokens};
     #[test]
     fn serialize_irep() {
-        let irep = Irep::empty();
+        let arena = &bumpalo::Bump::new();
+        let irep = Irep::empty(arena);
         assert_ser_tokens(
             &irep,
             &[Token::Map { len: None }, Token::String("id"), Token::String("empty"), Token::MapEnd],
@@ -157,11 +207,12 @@ mod test {
 
     #[test]
     fn serialize_sym_table() {
-        let mut sym_table = SymbolTable::new();
+        let arena = &bumpalo::Bump::new();
+        let mut sym_table = SymbolTable::new_in(&arena);
         let symbol = Symbol {
-            typ: Irep::empty(),
-            value: Irep::empty(),
-            location: Irep::empty(),
+            typ: Irep::empty(arena),
+            value: Irep::empty(arena),
+            location: Irep::empty(arena),
             name: "my_name".into(),
             module: "".into(),
             base_name: "".into(),
@@ -265,10 +316,11 @@ mod test {
 
     #[test]
     fn serialize_irep_sub() {
-        let empty_irep = Irep::empty();
-        let one_irep = Irep::one();
-        let sub_irep = Irep::just_sub(vec![empty_irep.clone(), one_irep]);
-        let top_irep = Irep::just_sub(vec![sub_irep, empty_irep]);
+        let arena = &bumpalo::Bump::new();
+        let empty_irep = Irep::empty(arena);
+        let one_irep = Irep::one(arena);
+        let sub_irep = Irep::just_sub(vec_in![arena, empty_irep.clone(), one_irep]);
+        let top_irep = Irep::just_sub(vec_in![arena, sub_irep, empty_irep]);
         assert_ser_tokens(
             &top_irep,
             &[

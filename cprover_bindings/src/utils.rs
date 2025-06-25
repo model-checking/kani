@@ -49,15 +49,11 @@ macro_rules! btree_map {
 /// Provides a useful shortcut for making BTreeMaps.
 #[macro_export]
 macro_rules! linear_map {
-    ($($x:expr),*) => {{
-        use linear_map::LinearMap;
-        use std::iter::FromIterator;
-        (LinearMap::from_iter(vec![$($x),*]))
-    }};
-    ($($x:expr,)*) => {{
-        use linear_map::LinearMap;
-        use std::iter::FromIterator;
-        (LinearMap::from_iter(vec![$($x),*]))
+    ($arena:ident $(,)?) => {
+        std::mem::ManuallyDrop::new(hashbrown::HashMap::new_in($arena))
+    };
+    ($arena:ident, $($x:expr),* $(,)?) => {{
+        (hash_collect_into([$($x),*], $arena))
     }}
 }
 

@@ -98,10 +98,11 @@ use std::path::Path;
 /// - src/util/irep_hash_container.h
 /// - src/util/irep_hash.h
 pub fn write_goto_binary_file(filename: &Path, source: &crate::goto_program::SymbolTable) {
+    let bump_allocator = bumpalo::Bump::new();
     let out_file = File::create(filename).unwrap();
     let mut writer = BufWriter::new(out_file);
     let mut serializer = GotoBinarySerializer::new(&mut writer);
-    let irep_symbol_table = &source.to_irep();
+    let irep_symbol_table = &&source.to_irep_in(&bump_allocator);
     serializer.write_file(irep_symbol_table);
 }
 
@@ -1219,66 +1220,74 @@ mod tests {
     use crate::irep::Irep;
     use crate::irep::IrepId;
     use crate::irep::goto_binary_serde::GotoBinaryDeserializer;
-    use crate::linear_map;
-    use linear_map::LinearMap;
+    use crate::irep::to_irep::collect_into;
+    use crate::irep::to_irep::hash_collect_into;
+    use crate::vec_in;
+    use bumpalo::Bump;
     use std::io::BufWriter;
     /// Utility function : creates a Irep representing a single symbol.
-    fn make_symbol_expr(identifier: &str) -> Irep {
+    fn make_symbol_expr<'b>(identifier: &str, arena: &'b Bump) -> Irep<'b> {
         Irep {
             id: IrepId::Symbol,
-            sub: vec![],
-            named_sub: linear_map![(IrepId::Identifier, Irep::just_string_id(identifier),)],
+            sub: vec_in![arena],
+            named_sub: hash_collect_into(
+                [(IrepId::Identifier, Irep::just_string_id(arena, identifier))],
+                arena,
+            ),
         }
     }
 
     /// Utility function: creates an expression by folding the symbol expressions with the given operator.
-    fn fold_with_op(identifiers: &Vec<&str>, id: IrepId) -> Irep {
-        identifiers.iter().fold(make_symbol_expr("dummy"), |acc, identifier| Irep {
+    fn fold_with_op<'b>(identifiers: &Vec<&str>, id: IrepId, arena: &'b Bump) -> Irep<'b> {
+        identifiers.iter().fold(make_symbol_expr("dummy", arena), |acc, identifier| Irep {
             id: id.clone(),
-            sub: vec![acc, make_symbol_expr(identifier)],
-            named_sub: LinearMap::new(),
+            sub: vec_in![arena, acc, make_symbol_expr(identifier, arena)],
+            named_sub: hash_collect_into([], arena),
         })
     }
 
     #[test]
     /// Create two structurally identical ireps and check that they get the same number.
     fn test_irep_numbering_eq() {
+        let arena = &Bump::new();
         let mut numbering = IrepNumbering::new();
         let identifiers = vec![
             "foo", "bar", "baz", "zab", "rab", "oof", "foo", "bar", "baz", "zab", "rab", "oof",
         ];
-        let num1 = numbering.number_irep(&fold_with_op(&identifiers, IrepId::And));
-        let num2 = numbering.number_irep(&fold_with_op(&identifiers, IrepId::And));
+        let num1 = numbering.number_irep(&fold_with_op(&identifiers, IrepId::And, arena));
+        let num2 = numbering.number_irep(&fold_with_op(&identifiers, IrepId::And, arena));
         assert_eq!(num1, num2);
     }
 
     #[test]
     /// Create two ireps with different named subs and check that they get different numbers.
     fn test_irep_numbering_ne_named_sub() {
+        let arena = &Bump::new();
         let mut numbering = IrepNumbering::new();
 
         let identifiers1 = vec![
             "foo", "bar", "baz", "zab", "rab", "oof", "foo", "bar", "baz", "zab", "rab", "oof",
         ];
-        let num1 = numbering.number_irep(&fold_with_op(&identifiers1, IrepId::And));
+        let num1 = numbering.number_irep(&fold_with_op(&identifiers1, IrepId::And, arena));
 
         let identifiers2 = vec![
             "foo", "bar", "HERE", "zab", "rab", "oof", "foo", "bar", "baz", "zab", "rab", "oof",
         ];
-        let num2 = numbering.number_irep(&fold_with_op(&identifiers2, IrepId::And));
+        let num2 = numbering.number_irep(&fold_with_op(&identifiers2, IrepId::And, arena));
         assert_ne!(num1, num2);
     }
 
     #[test]
     /// Create two ireps with different ids and check that they get different numbers.
     fn test_irep_numbering_ne_id() {
+        let arena = &Bump::new();
         let mut numbering = IrepNumbering::new();
 
         let identifiers = vec![
             "foo", "bar", "baz", "zab", "rab", "oof", "foo", "bar", "baz", "zab", "rab", "oof",
         ];
-        let num1 = numbering.number_irep(&fold_with_op(&identifiers, IrepId::And));
-        let num2 = numbering.number_irep(&fold_with_op(&identifiers, IrepId::Or));
+        let num1 = numbering.number_irep(&fold_with_op(&identifiers, IrepId::And, arena));
+        let num2 = numbering.number_irep(&fold_with_op(&identifiers, IrepId::Or, arena));
 
         assert_ne!(num1, num2);
     }
@@ -1393,8 +1402,9 @@ mod tests {
     #[test]
     /// Write and read back distinct ireps.
     fn test_write_irep_ref() {
+        let arena = &Bump::new();
         let identifiers1 = vec!["foo", "bar", "baz", "same", "zab", "rab", "oof"];
-        let irep1 = &fold_with_op(&identifiers1, IrepId::And);
+        let irep1 = &fold_with_op(&identifiers1, IrepId::And, arena);
 
         let mut vec: Vec<u8> = Vec::new();
         {
@@ -1406,7 +1416,7 @@ mod tests {
 
             // Number an structurally different irep
             let identifiers2 = vec!["foo", "bar", "baz", "different", "zab", "rab", "oof"];
-            let irep2 = &fold_with_op(&identifiers2, IrepId::And);
+            let irep2 = &fold_with_op(&identifiers2, IrepId::And, arena);
             let num2 = serializer.numbering.number_irep(irep2);
 
             // Check that they have the different numbers.
@@ -1436,6 +1446,7 @@ mod tests {
     #[test]
     /// Write and read back several identical ireps.
     fn test_write_read_irep_ref() {
+        let arena = &Bump::new();
         let identifiers = vec![
             "foo", "bar", "baz", "zab", "rab", "oof", "foo", "bar", "baz", "zab", "rab", "oof",
         ];
@@ -1445,8 +1456,8 @@ mod tests {
             // Write two structurally identical ireps
             let mut writer = BufWriter::new(&mut vec);
             let mut serializer = GotoBinarySerializer::new(&mut writer);
-            let irep1 = &fold_with_op(&identifiers, IrepId::And);
-            let irep2 = &fold_with_op(&identifiers, IrepId::And);
+            let irep1 = &fold_with_op(&identifiers, IrepId::And, arena);
+            let irep2 = &fold_with_op(&identifiers, IrepId::And, arena);
             serializer.write_irep_ref(irep1);
             serializer.write_irep_ref(irep2);
             serializer.write_irep_ref(irep1);

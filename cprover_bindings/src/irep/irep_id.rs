@@ -10,7 +10,7 @@ use num::bigint::{BigInt, BigUint, Sign};
 
 use std::borrow::Cow;
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug, Hash)]
 pub enum IrepId {
     /// In addition to the standard enums defined below, CBMC also allows ids to be strings.
     /// For e.g, to store the id of a variable. This enum variant captures those strings.

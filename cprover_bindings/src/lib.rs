@@ -31,6 +31,8 @@
 
 #![feature(f128)]
 #![feature(f16)]
+#![feature(btreemap_alloc)]
+#![feature(allocator_api)]
 
 mod env;
 pub use env::global_dead_object;
