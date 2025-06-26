@@ -41,8 +41,7 @@ jobs:
         id: bundle
         uses: ./.github/actions/build-bundle
         with:
-          os: macos-13
-          arch: x86_64-apple-darwin
+          platform: x86_64-apple-darwin
 
   build_bundle_macos_aarch64:
     name: BuildBundle-MacOs-ARM
@@ -65,8 +64,7 @@ jobs:
         id: bundle
         uses: ./.github/actions/build-bundle
         with:
-          os: macos-14
-          arch: aarch64-apple-darwin
+          platform: aarch64-apple-darwin
 
   build_bundle_linux:
     name: BuildBundle-Linux
@@ -89,8 +87,7 @@ jobs:
         id: bundle
         uses: ./.github/actions/build-bundle
         with:
-          os: linux
-          arch: x86_64-unknown-linux-gnu
+          platform: x86_64-unknown-linux-gnu
 
   build_bundle_linux_arm:
     name: BuildBundle-Linux-Arm
@@ -113,8 +110,7 @@ jobs:
         id: bundle
         uses: ./.github/actions/build-bundle
         with:
-          os: linux
-          arch: aarch64-unknown-linux-gnu
+          platform: aarch64-unknown-linux-gnu
 
   test-use-local-toolchain:
     name: TestLocalToolchain
