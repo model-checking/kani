@@ -8,6 +8,6 @@
 Z-BenchCI:
 - any:
   - changed-files:
-    - any-glob-to-any-file: ['kani-compiler/**', 'kani-driver/src/call-*', 'cprover_bindings/**', 'library/**']
+    - any-glob-to-any-file: ['kani-compiler/**', 'kani-driver/src/call_*', 'cprover_bindings/**', 'library/**']
     - any-glob-to-any-file: ['rust-toolchain.toml', 'Cargo.lock']
     - any-glob-to-any-file: ['kani-dependencies']
