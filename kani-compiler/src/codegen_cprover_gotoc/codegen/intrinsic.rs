@@ -299,30 +299,28 @@ impl GotocCtx<'_> {
             Intrinsic::Assume => self.codegen_assert_assume(
                 fargs.remove(0).cast_to(Type::bool()),
                 PropertyClass::Assume,
-                "assumption failed",
+                "Rust intrinsic assumption failed",
                 loc,
             ),
-            Intrinsic::AtomicAnd(_) => codegen_atomic_binop!(bitand),
-            Intrinsic::AtomicCxchg(_) | Intrinsic::AtomicCxchgWeak(_) => {
+            Intrinsic::AtomicAnd => codegen_atomic_binop!(bitand),
+            Intrinsic::AtomicCxchg | Intrinsic::AtomicCxchgWeak => {
                 self.codegen_atomic_cxchg(intrinsic_str, fargs, place, loc)
             }
 
-            Intrinsic::AtomicFence(_) => self.codegen_atomic_noop(intrinsic_str, loc),
-            Intrinsic::AtomicLoad(_) => self.codegen_atomic_load(intrinsic_str, fargs, place, loc),
-            Intrinsic::AtomicMax(_) => codegen_atomic_binop!(max),
-            Intrinsic::AtomicMin(_) => codegen_atomic_binop!(min),
-            Intrinsic::AtomicNand(_) => codegen_atomic_binop!(bitnand),
-            Intrinsic::AtomicOr(_) => codegen_atomic_binop!(bitor),
-            Intrinsic::AtomicSingleThreadFence(_) => self.codegen_atomic_noop(intrinsic_str, loc),
-            Intrinsic::AtomicStore(_) => {
-                self.codegen_atomic_store(intrinsic_str, fargs, place, loc)
-            }
-            Intrinsic::AtomicUmax(_) => codegen_atomic_binop!(max),
-            Intrinsic::AtomicUmin(_) => codegen_atomic_binop!(min),
-            Intrinsic::AtomicXadd(_) => codegen_atomic_binop!(plus),
-            Intrinsic::AtomicXchg(_) => self.codegen_atomic_store(intrinsic_str, fargs, place, loc),
-            Intrinsic::AtomicXor(_) => codegen_atomic_binop!(bitxor),
-            Intrinsic::AtomicXsub(_) => codegen_atomic_binop!(sub),
+            Intrinsic::AtomicFence => self.codegen_atomic_noop(intrinsic_str, loc),
+            Intrinsic::AtomicLoad => self.codegen_atomic_load(intrinsic_str, fargs, place, loc),
+            Intrinsic::AtomicMax => codegen_atomic_binop!(max),
+            Intrinsic::AtomicMin => codegen_atomic_binop!(min),
+            Intrinsic::AtomicNand => codegen_atomic_binop!(bitnand),
+            Intrinsic::AtomicOr => codegen_atomic_binop!(bitor),
+            Intrinsic::AtomicSingleThreadFence => self.codegen_atomic_noop(intrinsic_str, loc),
+            Intrinsic::AtomicStore => self.codegen_atomic_store(intrinsic_str, fargs, place, loc),
+            Intrinsic::AtomicUmax => codegen_atomic_binop!(max),
+            Intrinsic::AtomicUmin => codegen_atomic_binop!(min),
+            Intrinsic::AtomicXadd => codegen_atomic_binop!(plus),
+            Intrinsic::AtomicXchg => self.codegen_atomic_store(intrinsic_str, fargs, place, loc),
+            Intrinsic::AtomicXor => codegen_atomic_binop!(bitxor),
+            Intrinsic::AtomicXsub => codegen_atomic_binop!(sub),
             Intrinsic::Bitreverse => {
                 self.codegen_expr_to_place_stable(place, fargs.remove(0).bitreverse(), loc)
             }
@@ -414,23 +412,21 @@ impl GotocCtx<'_> {
             Intrinsic::MulWithOverflow => {
                 self.codegen_op_with_overflow(BinaryOperator::OverflowResultMult, fargs, place, loc)
             }
-            Intrinsic::NearbyIntF32 => codegen_simple_intrinsic!(Nearbyintf),
-            Intrinsic::NearbyIntF64 => codegen_simple_intrinsic!(Nearbyint),
             Intrinsic::NeedsDrop => codegen_intrinsic_const!(),
             Intrinsic::PowF32 => codegen_simple_intrinsic!(Powf),
             Intrinsic::PowF64 => codegen_simple_intrinsic!(Pow),
             Intrinsic::PowIF32 => codegen_simple_intrinsic!(Powif),
             Intrinsic::PowIF64 => codegen_simple_intrinsic!(Powi),
-            Intrinsic::PrefAlignOf => codegen_intrinsic_const!(),
             Intrinsic::PtrGuaranteedCmp => self.codegen_ptr_guaranteed_cmp(fargs, place, loc),
             Intrinsic::RawEq => self.codegen_intrinsic_raw_eq(instance, fargs, place, loc),
             Intrinsic::RetagBoxToRaw => self.codegen_retag_box_to_raw(fargs, place, loc),
-            Intrinsic::RintF32 => codegen_simple_intrinsic!(Rintf),
-            Intrinsic::RintF64 => codegen_simple_intrinsic!(Rint),
             Intrinsic::RotateLeft => codegen_intrinsic_binop!(rol),
             Intrinsic::RotateRight => codegen_intrinsic_binop!(ror),
             Intrinsic::RoundF32 => codegen_simple_intrinsic!(Roundf),
             Intrinsic::RoundF64 => codegen_simple_intrinsic!(Round),
+            Intrinsic::RoundTiesEvenF32 | Intrinsic::RoundTiesEvenF64 => {
+                self.codegen_round_to_integral(cbmc::RoundingMode::ToNearest, fargs, place, loc)
+            }
             Intrinsic::SaturatingAdd => codegen_intrinsic_binop_with_mm!(saturating_add),
             Intrinsic::SaturatingSub => codegen_intrinsic_binop_with_mm!(saturating_sub),
             Intrinsic::SinF32 => codegen_simple_intrinsic!(Sinf),
@@ -565,7 +561,7 @@ impl GotocCtx<'_> {
             self.intrinsics_typecheck_fail(span, "ctpop", "integer type", arg_rust_ty)
         } else {
             let loc = self.codegen_span_stable(span);
-            self.codegen_expr_to_place_stable(&target_place, arg.popcount(), loc)
+            self.codegen_expr_to_place_stable(target_place, arg.popcount(), loc)
         }
     }
 
@@ -636,6 +632,23 @@ impl GotocCtx<'_> {
         let divisor_is_minus_one =
             if btyp.is_signed(mm) { b.clone().eq(btyp.one().neg()) } else { Expr::bool_false() };
         dividend_is_int_min.and(divisor_is_minus_one).not()
+    }
+
+    // Builds a floatbv_round_to_integral expression with specified cbmc::RoundingMode.
+    fn codegen_round_to_integral(
+        &mut self,
+        rounding_mode: cbmc::RoundingMode,
+        mut fargs: Vec<Expr>,
+        place: &Place,
+        loc: Location,
+    ) -> Stmt {
+        let place_ty = self.place_ty_stable(place);
+        let result_type = self.codegen_ty_stable(place_ty);
+        let f = fargs.remove(0);
+        assert!(fargs.is_empty());
+        let rm = Expr::int_constant(rounding_mode, Type::c_int());
+        let expr = Expr::floatbv_round_to_integral(f, rm, result_type);
+        self.codegen_expr_to_place_stable(place, expr, loc)
     }
 
     /// Intrinsics of the form *_with_overflow
@@ -1237,10 +1250,10 @@ impl GotocCtx<'_> {
                 let size = sized_size.plus(unsized_size);
 
                 // Packed types ignore the alignment of their fields.
-                if let TyKind::RigidTy(RigidTy::Adt(def, _)) = ty.kind() {
-                    if rustc_internal::internal(self.tcx, def).repr().packed() {
-                        unsized_align = sized_align.clone();
-                    }
+                if let TyKind::RigidTy(RigidTy::Adt(def, _)) = ty.kind()
+                    && rustc_internal::internal(self.tcx, def).repr().packed()
+                {
+                    unsized_align = sized_align.clone();
                 }
 
                 // The alignment should be the maximum of the alignments for the
@@ -1866,12 +1879,11 @@ impl GotocCtx<'_> {
         assert!(ty.kind().is_float());
         let TyKind::RigidTy(integral_ty) = res_ty.kind() else {
             panic!(
-                "Expected intrinsic `{}` type to be `RigidTy`, but found: `{:?}`",
-                intrinsic, res_ty
+                "Expected intrinsic `{intrinsic}` type to be `RigidTy`, but found: `{res_ty:?}`"
             );
         };
         let TyKind::RigidTy(RigidTy::Float(float_type)) = ty.kind() else {
-            panic!("Expected intrinsic `{}` type to be `Float`, but found: `{:?}`", intrinsic, ty);
+            panic!("Expected intrinsic `{intrinsic}` type to be `Float`, but found: `{ty:?}`");
         };
         let mm = self.symbol_table.machine_model();
         let in_range = utils::codegen_in_range_expr(&expr, float_type, integral_ty, mm);

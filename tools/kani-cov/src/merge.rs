@@ -45,11 +45,11 @@ fn parse_raw_results(paths: &Vec<PathBuf>) -> Result<Vec<CoverageResults>> {
     let mut raw_results = Vec::with_capacity(paths.len());
     for path in paths {
         let filename = path.to_string_lossy();
-        let file = File::open(path).expect(&format!("could not open file {filename}"));
+        let file = File::open(path).unwrap_or_else(|_| panic!("could not open file {filename}"));
         let reader = BufReader::new(file);
 
         let result = serde_json::from_reader(reader)
-            .expect(&format!("could not deserialize file {filename}"));
+            .unwrap_or_else(|_| panic!("could not deserialize file {filename}"));
         raw_results.push(result);
     }
     Ok(raw_results)

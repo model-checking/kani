@@ -6,6 +6,7 @@
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::codegen_cprover_gotoc::codegen::block::reverse_postorder;
 use cbmc::InternString;
+use cbmc::InternedString;
 use cbmc::goto_program::{Expr, Stmt, Symbol};
 use stable_mir::CrateDef;
 use stable_mir::mir::mono::Instance;
@@ -20,7 +21,7 @@ impl GotocCtx<'_> {
     /// - Index 0 represents the return value.
     /// - Indices [1, N] represent the function parameters where N is the number of parameters.
     /// - Indices that are greater than N represent local variables.
-    fn codegen_declare_variables(&mut self, body: &Body) {
+    fn codegen_declare_variables(&mut self, body: &Body, function_name: InternedString) {
         let ldecls = body.local_decls();
         let num_args = body.arg_locals().len();
         for (lc, ldata) in ldecls {
@@ -35,12 +36,22 @@ impl GotocCtx<'_> {
             let loc = self.codegen_span_stable(ldata.span);
             // Indices [1, N] represent the function parameters where N is the number of parameters.
             // Except that ZST fields are not included as parameters.
-            let sym =
-                Symbol::variable(name, base_name, var_type, self.codegen_span_stable(ldata.span))
-                    .with_is_hidden(!self.is_user_variable(&lc))
-                    .with_is_parameter((lc > 0 && lc <= num_args) && !self.is_zst_stable(ldata.ty));
+            let sym = Symbol::variable(
+                name.clone(),
+                base_name,
+                var_type,
+                self.codegen_span_stable(ldata.span),
+            )
+            .with_is_hidden(!self.is_user_variable(&lc))
+            .with_is_parameter((lc > 0 && lc <= num_args) && !self.is_zst_stable(ldata.ty));
             let sym_e = sym.to_expr();
             self.symbol_table.insert(sym);
+
+            // Store the parameter symbols of the function, which will be used for function
+            // inlining.
+            if lc > 0 && lc <= num_args {
+                self.symbol_table.insert_parameter(function_name, name);
+            }
 
             // Index 0 represents the return value, which does not need to be
             // declared in the first block
@@ -64,7 +75,7 @@ impl GotocCtx<'_> {
             self.set_current_fn(instance, &body);
             self.print_instance(instance, &body);
             self.codegen_function_prelude(&body);
-            self.codegen_declare_variables(&body);
+            self.codegen_declare_variables(&body, name.clone().into());
 
             // Get the order from internal body for now.
             reverse_postorder(&body).for_each(|bb| self.codegen_block(bb, &body.blocks[bb]));
@@ -204,15 +215,22 @@ impl GotocCtx<'_> {
         let body = self.transformer.body(self.tcx, instance);
         self.set_current_fn(instance, &body);
         debug!(krate=?instance.def.krate(), is_std=self.current_fn().is_std(), "declare_function");
-        self.ensure(instance.mangled_name(), |ctx, fname| {
-            Symbol::function(
-                fname,
-                ctx.fn_typ(instance, &body),
-                None,
-                instance.name(),
-                ctx.codegen_span_stable(instance.def.span()),
-            )
-        });
+        let fname = instance.mangled_name();
+        let sym = Symbol::function(
+            &fname,
+            self.fn_typ(instance, &body),
+            None,
+            instance.name(),
+            self.codegen_span_stable(instance.def.span()),
+        );
+        if !self.symbol_table.contains((&fname).into()) {
+            self.symbol_table.insert(sym);
+        } else {
+            let old_sym = self.symbol_table.lookup(fname).unwrap();
+            if old_sym.location.is_builtin() {
+                self.symbol_table.replace(|_| true, sym);
+            }
+        }
         self.reset_current_fn();
     }
 }
@@ -220,7 +238,7 @@ impl GotocCtx<'_> {
 pub mod rustc_smir {
     use crate::codegen_cprover_gotoc::codegen::source_region::{SourceRegion, make_source_region};
     use crate::stable_mir::CrateDef;
-    use rustc_middle::mir::coverage::CovTerm;
+    use rustc_middle::mir::coverage::BasicCoverageBlock;
     use rustc_middle::mir::coverage::MappingKind::Code;
     use rustc_middle::ty::TyCtxt;
     use rustc_smir::rustc_internal;
@@ -236,60 +254,73 @@ pub mod rustc_smir {
         coverage_opaque: &CoverageOpaque,
         instance: Instance,
     ) -> Option<(SourceRegion, Filename)> {
-        let cov_term = parse_coverage_opaque(coverage_opaque);
-        region_from_coverage(tcx, cov_term, instance)
+        let bcb = parse_coverage_opaque(coverage_opaque);
+        region_from_coverage(tcx, bcb, instance)
     }
 
-    /// Retrieves the `SourceRegion` associated with a `CovTerm` object.
+    pub fn merge_source_region(source_regions: Vec<SourceRegion>) -> SourceRegion {
+        let start_line = source_regions.iter().map(|sr| sr.start_line).min().unwrap();
+        let start_col = source_regions
+            .iter()
+            .filter(|sr| sr.start_line == start_line)
+            .map(|sr| sr.start_col)
+            .min()
+            .unwrap();
+        let end_line = source_regions.iter().map(|sr| sr.end_line).max().unwrap();
+        let end_col = source_regions
+            .iter()
+            .filter(|sr| sr.end_line == end_line)
+            .map(|sr| sr.end_col)
+            .max()
+            .unwrap();
+        SourceRegion { start_line, start_col, end_line, end_col }
+    }
+
+    /// Retrieves the `SourceRegion` associated with a `BasicCoverageBlock` object.
     ///
     /// Note: This function could be in the internal `rustc` impl for `Coverage`.
     pub fn region_from_coverage(
         tcx: TyCtxt<'_>,
-        coverage: CovTerm,
+        coverage: BasicCoverageBlock,
         instance: Instance,
     ) -> Option<(SourceRegion, Filename)> {
         // We need to pull the coverage info from the internal MIR instance.
         let instance_def = rustc_smir::rustc_internal::internal(tcx, instance.def.def_id());
         let body = tcx.instance_mir(rustc_middle::ty::InstanceKind::Item(instance_def));
-
+        let filename = rustc_internal::stable(body.span).get_filename();
         // Some functions, like `std` ones, may not have coverage info attached
         // to them because they have been compiled without coverage flags.
         if let Some(cov_info) = &body.function_coverage_info {
             // Iterate over the coverage mappings and match with the coverage term.
+            let mut source_regions: Vec<SourceRegion> = Vec::new();
             for mapping in &cov_info.mappings {
-                let Code(term) = mapping.kind else { unreachable!() };
+                let Code { bcb } = mapping.kind else { unreachable!() };
                 let source_map = tcx.sess.source_map();
-                let file = source_map.lookup_source_file(cov_info.body_span.lo());
-                if term == coverage {
-                    return Some((
-                        make_source_region(source_map, cov_info, &file, mapping.span).unwrap(),
-                        rustc_internal::stable(cov_info.body_span).get_filename(),
-                    ));
+                let file = source_map.lookup_source_file(mapping.span.lo());
+                if bcb == coverage
+                    && let Some(source_region) = make_source_region(source_map, &file, mapping.span)
+                {
+                    source_regions.push(source_region);
                 }
+            }
+            if !source_regions.is_empty() {
+                return Some((merge_source_region(source_regions), filename));
             }
         }
         None
     }
 
-    /// Parse a `CoverageOpaque` item and return the corresponding `CovTerm`:
-    /// <https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/coverage/enum.CovTerm.html>
-    ///
-    /// At present, a `CovTerm` can be one of the following:
-    ///  - `CounterIncrement(<num>)`: A physical counter.
-    ///  - `ExpressionUsed(<num>)`: An expression-based counter.
-    ///  - `Zero`: A counter with a constant zero value.
-    fn parse_coverage_opaque(coverage_opaque: &Opaque) -> CovTerm {
+    /// Parse a `CoverageOpaque` item and return the corresponding `BasicCoverageBlock`:
+    fn parse_coverage_opaque(coverage_opaque: &Opaque) -> BasicCoverageBlock {
         let coverage_str = coverage_opaque.to_string();
-        if let Some(rest) = coverage_str.strip_prefix("CounterIncrement(") {
+        if let Some(rest) = coverage_str.strip_prefix("VirtualCounter(bcb") {
             let (num_str, _rest) = rest.split_once(')').unwrap();
             let num = num_str.parse::<u32>().unwrap();
-            CovTerm::Counter(num.into())
-        } else if let Some(rest) = coverage_str.strip_prefix("ExpressionUsed(") {
-            let (num_str, _rest) = rest.split_once(')').unwrap();
-            let num = num_str.parse::<u32>().unwrap();
-            CovTerm::Expression(num.into())
+            BasicCoverageBlock::from_u32(num)
         } else {
-            CovTerm::Zero
+            // When the coverage statement is injected into mir_body, it always has the form CoverageKind::VirtualCounter { bcb }
+            // https://github.com/rust-lang/rust/pull/136053/files#diff-c99ec9a281dce4a381fa7e11cf2d04f55dba5573d1d14389d47929fe0a154d24R209-R212
+            unreachable!();
         }
     }
 }

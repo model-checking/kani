@@ -4,26 +4,31 @@ use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::{DatatypeComponent, Expr, Location, Parameter, Symbol, SymbolTable, Type};
 use cbmc::utils::aggr_tag;
 use cbmc::{InternString, InternedString};
+use kani_metadata::UnstableFeature;
+use rustc_abi::{
+    BackendRepr::SimdVector, FieldIdx, FieldsShape, Float, Integer, LayoutData, Primitive, Size,
+    TagEncoding, TyAndLayout, VariantIdx, Variants,
+};
 use rustc_ast::ast::Mutability;
 use rustc_index::IndexVec;
-use rustc_middle::ty::GenericArgsRef;
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::print::FmtPrinter;
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::{
-    self, AdtDef, Const, CoroutineArgs, CoroutineArgsExt, FloatTy, Instance, IntTy, PolyFnSig, Ty,
-    TyCtxt, TyKind, UintTy, VariantDef, VtblEntry,
+    self, AdtDef, Const, CoroutineArgs, CoroutineArgsExt, FloatTy, Instance, IntTy, PolyFnSig,
+    TraitRef, Ty, TyCtxt, TyKind, UintTy, VariantDef, VtblEntry,
 };
+use rustc_middle::ty::{ExistentialTraitRef, GenericArgsRef};
 use rustc_middle::ty::{List, TypeFoldable};
 use rustc_smir::rustc_internal;
 use rustc_span::def_id::DefId;
-use rustc_target::abi::{
-    BackendRepr::Vector, FieldIdx, FieldsShape, Float, Integer, LayoutData, Primitive, Size,
-    TagEncoding, TyAndLayout, VariantIdx, Variants,
-};
 use stable_mir::abi::{ArgAbi, FnAbi, PassMode};
 use stable_mir::mir::Body;
 use stable_mir::mir::mono::Instance as InstanceStable;
+use stable_mir::ty::{
+    Binder, DynKind, ExistentialPredicate, ExistentialProjection, Region, RegionKind, RigidTy,
+    Ty as StableTy,
+};
 use tracing::{debug, trace, warn};
 
 /// Map the unit type to an empty struct
@@ -156,6 +161,11 @@ impl GotocCtx<'_> {
                                 debug_write_type(ctx, typ, out, indent + 2)?;
                                 writeln!(out, ",")?;
                             }
+                            DatatypeComponent::UnionField { name, typ, .. } => {
+                                write!(out, "{:indent$}{name}: ", "", indent = indent + 2)?;
+                                debug_write_type(ctx, typ, out, indent + 2)?;
+                                writeln!(out, ",")?;
+                            }
                             DatatypeComponent::Padding { bits, .. } => {
                                 writeln!(
                                     out,
@@ -188,6 +198,11 @@ impl GotocCtx<'_> {
                     for c in components {
                         match c {
                             DatatypeComponent::Field { name, typ } => {
+                                write!(out, "{:indent$}{name}: ", "", indent = indent + 2)?;
+                                debug_write_type(ctx, typ, out, indent + 2)?;
+                                writeln!(out, ",")?;
+                            }
+                            DatatypeComponent::UnionField { name, typ, .. } => {
                                 write!(out, "{:indent$}{name}: ", "", indent = indent + 2)?;
                                 debug_write_type(ctx, typ, out, indent + 2)?;
                                 writeln!(out, ",")?;
@@ -254,8 +269,7 @@ impl<'tcx> GotocCtx<'tcx> {
             .is_sized(*self.tcx.at(rustc_span::DUMMY_SP), ty::TypingEnv::fully_monomorphized())
     }
 
-    /// Generates the type for a single field for a dynamic vtable.
-    /// In particular, these fields are function pointers.
+    /// Generates the type for a supertrait vtable pointer field for a vtable.
     fn trait_method_vtable_field_type(
         &mut self,
         instance: Instance<'tcx>,
@@ -272,6 +286,44 @@ impl<'tcx> GotocCtx<'tcx> {
         let vtable_field_name = self.vtable_field_name(idx);
 
         DatatypeComponent::field(vtable_field_name, fn_ptr)
+    }
+
+    pub fn trait_ref_to_dyn_trait(
+        &self,
+        trait_ref: TraitRef<'tcx>,
+        projections: Vec<Binder<ExistentialProjection>>,
+    ) -> StableTy {
+        let existential_trait_ref =
+            rustc_internal::stable(ExistentialTraitRef::erase_self_ty(self.tcx, trait_ref));
+        let binder = Binder::dummy(ExistentialPredicate::Trait(existential_trait_ref));
+
+        let mut predictates = vec![binder];
+        predictates.extend(
+            projections.into_iter().map(|proj| proj.map_bound(ExistentialPredicate::Projection)),
+        );
+        let rigid =
+            RigidTy::Dynamic(predictates, Region { kind: RegionKind::ReErased }, DynKind::Dyn);
+
+        stable_mir::ty::Ty::from_rigid_kind(rigid)
+    }
+
+    /// Generates the type for a single field for a dynamic vtable.
+    /// In particular, these fields are function pointers.
+    fn trait_vptr_vtable_field_type(
+        &mut self,
+        idx: usize,
+        trait_ref: TraitRef<'tcx>,
+        projections: Vec<Binder<ExistentialProjection>>,
+    ) -> DatatypeComponent {
+        let dyn_trait = self.trait_ref_to_dyn_trait(trait_ref, projections);
+        let vtable_ty =
+            self.codegen_trait_vtable_type(rustc_internal::internal(self.tcx, dyn_trait));
+        let vtable_ptr = vtable_ty.to_pointer();
+
+        // vtable field name, i.e., 3_vol (idx_method)
+        let vtable_field_name = self.vtable_field_name(idx);
+
+        DatatypeComponent::field(vtable_field_name, vtable_ptr)
     }
 
     /// Generates a vtable that looks like this:
@@ -371,6 +423,7 @@ impl<'tcx> GotocCtx<'tcx> {
             // The virtual methods on the trait ref. Some auto traits have no methods.
             if let Some(principal) = binder.principal() {
                 let poly = principal.with_self_ty(self.tcx, t);
+                let poly = self.tcx.instantiate_bound_regions_with_erased(poly);
                 let poly = self.tcx.erase_regions(poly);
                 let mut flds = self
                     .tcx
@@ -382,9 +435,11 @@ impl<'tcx> GotocCtx<'tcx> {
                         VtblEntry::Method(instance) => {
                             Some(self.trait_method_vtable_field_type(instance, idx))
                         }
-                        // TODO: trait upcasting
-                        // https://github.com/model-checking/kani/issues/358
-                        VtblEntry::TraitVPtr(..) => None,
+                        VtblEntry::TraitVPtr(trait_ref) => Some(self.trait_vptr_vtable_field_type(
+                            idx,
+                            trait_ref,
+                            binder.projection_bounds().map(rustc_internal::stable).collect(),
+                        )),
                         VtblEntry::MetadataDropInPlace
                         | VtblEntry::MetadataSize
                         | VtblEntry::MetadataAlign
@@ -443,9 +498,20 @@ impl<'tcx> GotocCtx<'tcx> {
         // This is not a restriction because C can only access non-generic types anyway.
         // TODO: Skipping name mangling is likely insufficient if a dependent crate has two versions of
         // linked C libraries
-        // https://github.com/model-checking/kani/issues/450
+        // https://github.com/model-checking/kani/issues/450.
+        // Note that #[repr(C)] types are unmangled only if the unstable c-ffi feature is enabled; otherwise,
+        // we assume that this struct is a #[repr(C)] in Rust code and mangle it,
+        // c.f. https://github.com/model-checking/kani/issues/4007.
         match t.kind() {
-            TyKind::Adt(def, args) if args.is_empty() && def.repr().c() => {
+            TyKind::Adt(def, args)
+                if args.is_empty()
+                    && def.repr().c()
+                    && self
+                        .queries
+                        .args()
+                        .unstable_features
+                        .contains(&UnstableFeature::CFfi.to_string()) =>
+            {
                 // For non-generic #[repr(C)] types, use the literal path instead of mangling it.
                 self.tcx.def_path_str(def.did()).intern()
             }
@@ -717,7 +783,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 let mut final_fields = Vec::with_capacity(flds.len());
                 let mut offset = initial_offset;
                 for idx in layout.fields.index_by_increasing_offset() {
-                    let fld_offset = offsets[idx.into()];
+                    let fld_offset = offsets[rustc_abi::FieldIdx::from(idx)];
                     let (fld_name, fld_ty) = &flds[idx];
                     if let Some(padding) =
                         self.codegen_struct_padding(offset, fld_offset, final_fields.len())
@@ -858,7 +924,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     pretty_name,
                     type_and_layout,
                     "DirectFields".into(),
-                    Some(*discriminant_field),
+                    Some((*discriminant_field).as_usize()),
                 ),
             };
             let mut fields = vec![direct_fields];
@@ -1139,15 +1205,36 @@ impl<'tcx> GotocCtx<'tcx> {
         def: &'tcx AdtDef,
         subst: &'tcx GenericArgsRef<'tcx>,
     ) -> Type {
+        let union_size = rustc_internal::stable(ty).layout().unwrap().shape().size.bits();
+        let union_name = self.ty_mangled_name(ty);
+        let union_pretty_name = self.ty_pretty_name(ty);
         self.ensure_union(self.ty_mangled_name(ty), self.ty_pretty_name(ty), |ctx, _| {
-            def.variants().raw[0]
+            let fields_info: Vec<(String, Type, u64)> = def.variants().raw[0]
                 .fields
                 .iter()
                 .map(|f| {
-                    DatatypeComponent::field(
-                        f.name.to_string(),
-                        ctx.codegen_ty(f.ty(ctx.tcx, subst)),
-                    )
+                    let ty = rustc_internal::stable(f.ty(ctx.tcx, subst));
+                    let ty_size = ty.layout().unwrap().shape().size.bits();
+                    let padding_size = union_size - ty_size;
+                    (f.name.to_string(), ctx.codegen_ty_stable(ty), padding_size as u64)
+                })
+                .collect();
+            fields_info
+                .iter()
+                .map(|(name, ty, padding)| {
+                    let struct_name = format!("{union_name}::{name}");
+                    let pretty_struct_name = format!("{union_pretty_name}::{name}");
+                    let pad_name = format!("{name}_padding");
+                    let padded_typ: Type = if *padding == 0 {
+                        ty.clone()
+                    } else {
+                        let pad =
+                            DatatypeComponent::Padding { name: pad_name.into(), bits: *padding };
+                        ctx.ensure_struct(struct_name, pretty_struct_name, |_ctx, _| {
+                            vec![DatatypeComponent::field(name, ty.clone()), pad.clone()]
+                        })
+                    };
+                    DatatypeComponent::unionfield(name, ty.clone(), padded_typ)
                 })
                 .collect()
         })
@@ -1221,7 +1308,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 // Contrary to coroutines, currently enums have only one field (the discriminant), the rest are in the variants:
                 assert!(layout.fields.count() <= 1);
                 // Contrary to coroutines, the discriminant is the first (and only) field for enums:
-                assert_eq!(*tag_field, 0);
+                assert_eq!((*tag_field).as_usize(), 0);
                 match tag_encoding {
                     TagEncoding::Direct => {
                         self.ensure_struct(self.ty_mangled_name(ty), pretty_name, |gcx, name| {
@@ -1399,11 +1486,10 @@ impl<'tcx> GotocCtx<'tcx> {
 
     pub fn codegen_float_type(&self, f: Float) -> Ty<'tcx> {
         match f {
+            Float::F16 => self.tcx.types.f16,
             Float::F32 => self.tcx.types.f32,
             Float::F64 => self.tcx.types.f64,
-            // `F16` and `F128` are not yet handled.
-            // Tracked here: <https://github.com/model-checking/kani/issues/3069>
-            Float::F16 | Float::F128 => unimplemented!(),
+            Float::F128 => self.tcx.types.f128,
         }
     }
 
@@ -1472,7 +1558,7 @@ impl<'tcx> GotocCtx<'tcx> {
         debug! {"handling simd with layout {:?}", layout};
 
         let (element, size) = match layout {
-            Vector { element, count } => (element, count),
+            SimdVector { element, count } => (element, count),
             _ => unreachable!(),
         };
 
@@ -1505,11 +1591,11 @@ impl<'tcx> GotocCtx<'tcx> {
                     // components as parameters with a special naming convention
                     // so that we can "retuple" them in the function prelude.
                     // See: compiler/rustc_codegen_llvm/src/gotoc/mod.rs:codegen_function_prelude
-                    if let Some(spread) = body.spread_arg() {
-                        if lc >= spread {
-                            let (name, _) = self.codegen_spread_arg_name(&lc);
-                            ident = name;
-                        }
+                    if let Some(spread) = body.spread_arg()
+                        && lc >= spread
+                    {
+                        let (name, _) = self.codegen_spread_arg_name(&lc);
+                        ident = name;
                     }
                     Some(
                         self.codegen_ty_stable(ty)
@@ -1556,9 +1642,9 @@ impl<'tcx> GotocCtx<'tcx> {
                     let components = fields_shape
                         .index_by_increasing_offset()
                         .map(|idx| {
-                            let idx = idx.into();
-                            let name = fields[idx].name.to_string().intern();
-                            let field_ty = fields[idx].ty(ctx.tcx, adt_args);
+                            let fidx = FieldIdx::from(idx);
+                            let name = fields[fidx].name.to_string().intern();
+                            let field_ty = fields[fidx].ty(ctx.tcx, adt_args);
                             let typ = if !ctx.is_zst(field_ty) {
                                 last_type.clone()
                             } else {

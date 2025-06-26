@@ -53,9 +53,6 @@ impl KaniSession {
     ) -> Result<()> {
         let mut kani_args = self.kani_compiler_flags();
         kani_args.push(format!("--reachability={}", self.reachability_mode()));
-        if self.args.common_args.unstable_features.contains(UnstableFeature::Lean) {
-            kani_args.push("--backend=llbc".into());
-        }
 
         let lib_path = lib_folder().unwrap();
         let mut rustc_args = self.kani_rustc_flags(LibConfig::new(lib_path));
@@ -84,6 +81,8 @@ impl KaniSession {
         let mut cmd = Command::new(&self.kani_compiler);
         let kani_compiler_args = to_rustc_arg(kani_args);
         cmd.arg(kani_compiler_args).args(rustc_args);
+        // This is only required for stable but is a no-op for nightly channels
+        cmd.env("RUSTC_BOOTSTRAP", "1");
 
         if self.args.common_args.quiet {
             self.run_suppress(cmd)?;
@@ -96,14 +95,6 @@ impl KaniSession {
     /// Create a compiler option that represents the reachability mode.
     pub fn reachability_arg(&self) -> String {
         to_rustc_arg(vec![format!("--reachability={}", self.reachability_mode())])
-    }
-
-    pub fn backend_arg(&self) -> Option<String> {
-        if self.args.common_args.unstable_features.contains(UnstableFeature::Lean) {
-            Some(to_rustc_arg(vec!["--backend=llbc".into()]))
-        } else {
-            None
-        }
     }
 
     /// These arguments are arguments passed to kani-compiler that are `kani` compiler specific.
@@ -148,12 +139,20 @@ impl KaniSession {
             flags.push("--ub-check=uninit".into());
         }
 
+        if self.args.common_args.unstable_features.contains(UnstableFeature::Lean) {
+            flags.push("--backend=llbc".into());
+        }
+
         if self.args.print_llbc {
             flags.push("--print-llbc".into());
         }
 
         if self.args.no_assert_contracts {
             flags.push("--no-assert-contracts".into());
+        }
+
+        if let Some(args) = self.autoharness_compiler_flags.clone() {
+            flags.extend(args);
         }
 
         flags.extend(self.args.common_args.unstable_features.as_arguments().map(str::to_string));
@@ -181,9 +180,16 @@ impl KaniSession {
                 "-Z",
                 "mir-enable-passes=-RemoveStorageMarkers",
                 "--check-cfg=cfg(kani)",
+                // Do not invoke the linker since the compiler will not generate real object files
+                "-Clinker=echo",
             ]
             .map(OsString::from),
         );
+
+        if self.args.no_codegen {
+            flags.push("-Z".into());
+            flags.push("no-codegen".into());
+        }
 
         if let Some(seed_opt) = self.args.randomize_layout {
             flags.push("-Z".into());

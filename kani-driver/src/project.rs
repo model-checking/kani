@@ -6,7 +6,7 @@
 
 use crate::metadata::from_json;
 use crate::session::KaniSession;
-use crate::util::crate_name;
+use crate::util::{crate_name, info_operation};
 use anyhow::{Context, Result};
 use kani_metadata::{
     ArtifactType, ArtifactType::*, HarnessMetadata, KaniMetadata, artifact::convert_type,
@@ -42,8 +42,6 @@ pub struct Project {
     artifacts: Vec<Artifact>,
     /// Records the cargo metadata from the build, if there was any
     pub cargo_metadata: Option<cargo_metadata::Metadata>,
-    /// For build `keep_going` mode, we collect the targets that we failed to compile.
-    pub failed_targets: Option<Vec<String>>,
 }
 
 impl Project {
@@ -90,7 +88,6 @@ impl Project {
         input: Option<PathBuf>,
         metadata: Vec<KaniMetadata>,
         cargo_metadata: Option<cargo_metadata::Metadata>,
-        failed_targets: Option<Vec<String>>,
     ) -> Result<Self> {
         // For each harness (test or proof) from each metadata, read the path for the goto
         // SymTabGoto file. Use that path to find all the other artifacts.
@@ -121,7 +118,7 @@ impl Project {
             }
         }
 
-        Ok(Project { outdir, input, metadata, artifacts, cargo_metadata, failed_targets })
+        Ok(Project { outdir, input, metadata, artifacts, cargo_metadata })
     }
 }
 
@@ -175,20 +172,20 @@ impl Artifact {
 /// Generate a project using `cargo`.
 /// Accept a boolean to build as many targets as possible. The number of failures in that case can
 /// be collected from the project.
-pub fn cargo_project(session: &KaniSession, keep_going: bool) -> Result<Project> {
+pub fn cargo_project(session: &mut KaniSession, keep_going: bool) -> Result<Project> {
     let outputs = session.cargo_build(keep_going)?;
+    if session.args.no_codegen {
+        info_operation(
+            "info:",
+            "Compilation succeeded up until codegen. Skipping codegen because of `--no-codegen` option. Rerun without `--no-codegen` to perform codegen.",
+        );
+        return Ok(Project::default());
+    }
     let outdir = outputs.outdir.canonicalize()?;
     // For the MIR Linker we know there is only one metadata per crate. Use that in our favor.
     let metadata =
         outputs.metadata.iter().map(|md_file| from_json(md_file)).collect::<Result<Vec<_>>>()?;
-    Project::try_new(
-        session,
-        outdir,
-        None,
-        metadata,
-        Some(outputs.cargo_metadata),
-        outputs.failed_targets,
-    )
+    Project::try_new(session, outdir, None, metadata, Some(outputs.cargo_metadata))
 }
 
 /// Generate a project directly using `kani-compiler` on a single crate.
@@ -225,7 +222,7 @@ impl<'a> StandaloneProjectBuilder<'a> {
         } else {
             input.canonicalize().unwrap().parent().unwrap().to_path_buf()
         };
-        let crate_name = if let Some(name) = krate_name { name } else { crate_name(&input) };
+        let crate_name = if let Some(name) = krate_name { name } else { crate_name(input) };
         let metadata = standalone_artifact(&outdir, &crate_name, Metadata);
         Ok(StandaloneProjectBuilder {
             outdir,
@@ -250,14 +247,8 @@ impl<'a> StandaloneProjectBuilder<'a> {
         let metadata = from_json(&self.metadata)?;
 
         // Create the project with the artifacts built by the compiler.
-        let result = Project::try_new(
-            self.session,
-            self.outdir,
-            Some(self.input),
-            vec![metadata],
-            None,
-            None,
-        );
+        let result =
+            Project::try_new(self.session, self.outdir, Some(self.input), vec![metadata], None);
         if let Ok(project) = &result {
             self.session.record_temporary_files(&project.artifacts);
         }
@@ -311,5 +302,5 @@ pub(crate) fn std_project(std_path: &Path, session: &KaniSession) -> Result<Proj
 
     // Get the metadata and return a Kani project.
     let metadata = outputs.iter().map(|md_file| from_json(md_file)).collect::<Result<Vec<_>>>()?;
-    Project::try_new(session, outdir, None, metadata, None, None)
+    Project::try_new(session, outdir, None, metadata, None)
 }

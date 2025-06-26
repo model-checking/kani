@@ -296,12 +296,20 @@ pub struct TraceItem {
 /// Struct that represents a trace value.
 ///
 /// Note: this struct can have a lot of different fields depending on the value type.
-/// The fields included right now are relevant to primitive types.
+/// The fields included right now are relevant to primitive types and arrays.
 #[derive(Clone, Debug, Deserialize)]
 pub struct TraceValue {
     pub binary: Option<String>,
     pub data: Option<TraceData>,
     pub width: Option<u32>,
+    // Invariant: elements is Some iff binary, data, and width are None.
+    pub elements: Option<Vec<TraceArrayValue>>,
+}
+
+/// Struct that represents an element of an array in a trace.
+#[derive(Clone, Debug, Deserialize)]
+pub struct TraceArrayValue {
+    pub value: TraceValue,
 }
 
 /// Enum that represents a trace data item.
@@ -765,8 +773,8 @@ mod tests {
                 }
             ]
         }"#;
-        let parser_item: Result<ParserItem, _> = serde_json::from_str(&data);
-        let result_struct: Result<ResultStruct, _> = serde_json::from_str(&data);
+        let parser_item: Result<ParserItem, _> = serde_json::from_str(data);
+        let result_struct: Result<ResultStruct, _> = serde_json::from_str(data);
         assert!(parser_item.is_ok());
         assert!(result_struct.is_ok());
     }

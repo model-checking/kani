@@ -14,11 +14,13 @@ use crate::kani_middle::attributes;
 use crate::kani_middle::kani_functions::{KaniFunction, KaniHook};
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
 use cbmc::goto_program::CIntType;
-use cbmc::goto_program::{BuiltinFn, Expr, Stmt, Type};
+use cbmc::goto_program::Symbol as GotoSymbol;
+use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Type};
 use rustc_middle::ty::TyCtxt;
 use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{BasicBlockIdx, Place};
+use stable_mir::ty::ClosureKind;
 use stable_mir::ty::RigidTy;
 use stable_mir::{CrateDef, ty::Span};
 use std::collections::HashMap;
@@ -160,24 +162,25 @@ impl GotocHook for UnsupportedCheck {
         target: Option<BasicBlockIdx>,
         span: Span,
     ) -> Stmt {
-        assert_eq!(fargs.len(), 2);
+        assert_eq!(fargs.len(), 1);
         let msg = fargs.pop().unwrap();
-        let cond = fargs.pop().unwrap().cast_to(Type::bool());
         let msg = gcx.extract_const_message(&msg).unwrap();
-        let target = target.unwrap();
         let caller_loc = gcx.codegen_caller_span_stable(span);
-        Stmt::block(
-            vec![
-                gcx.codegen_assert_assume(
-                    cond,
-                    PropertyClass::UnsupportedConstruct,
-                    &msg,
-                    caller_loc,
-                ),
-                Stmt::goto(bb_label(target), caller_loc),
-            ],
-            caller_loc,
-        )
+        if let Some(target) = target {
+            Stmt::block(
+                vec![
+                    gcx.codegen_assert_assume_false(
+                        PropertyClass::UnsupportedConstruct,
+                        &msg,
+                        caller_loc,
+                    ),
+                    Stmt::goto(bb_label(target), caller_loc),
+                ],
+                caller_loc,
+            )
+        } else {
+            gcx.codegen_assert_assume_false(PropertyClass::UnsupportedConstruct, &msg, caller_loc)
+        }
     }
 }
 
@@ -205,6 +208,37 @@ impl GotocHook for SafetyCheck {
         Stmt::block(
             vec![
                 gcx.codegen_assert_assume(cond, PropertyClass::SafetyCheck, &msg, caller_loc),
+                Stmt::goto(bb_label(target), caller_loc),
+            ],
+            caller_loc,
+        )
+    }
+}
+
+struct SafetyCheckNoAssume;
+impl GotocHook for SafetyCheckNoAssume {
+    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+        unreachable!("{UNEXPECTED_CALL}")
+    }
+
+    fn handle(
+        &self,
+        gcx: &mut GotocCtx,
+        _instance: Instance,
+        mut fargs: Vec<Expr>,
+        _assign_to: &Place,
+        target: Option<BasicBlockIdx>,
+        span: Span,
+    ) -> Stmt {
+        assert_eq!(fargs.len(), 2);
+        let msg = fargs.pop().unwrap();
+        let cond = fargs.pop().unwrap().cast_to(Type::bool());
+        let msg = gcx.extract_const_message(&msg).unwrap();
+        let target = target.unwrap();
+        let caller_loc = gcx.codegen_caller_span_stable(span);
+        Stmt::block(
+            vec![
+                gcx.codegen_assert(cond, PropertyClass::SafetyCheck, &msg, caller_loc),
                 Stmt::goto(bb_label(target), caller_loc),
             ],
             caller_loc,
@@ -292,7 +326,12 @@ struct Panic;
 impl GotocHook for Panic {
     fn hook_applies(&self, tcx: TyCtxt, instance: Instance) -> bool {
         let def_id = rustc_internal::internal(tcx, instance.def.def_id());
-        Some(def_id) == tcx.lang_items().panic_fn()
+        let kani_tool_attr = attributes::fn_marker(instance.def);
+
+        // we check the attributes to make sure this hook applies to
+        // panic functions we've stubbed too
+        kani_tool_attr.is_some_and(|kani| kani.contains("PanicStub"))
+            || Some(def_id) == tcx.lang_items().panic_fn()
             || tcx.has_attr(def_id, rustc_span::sym::rustc_const_panic_str)
             || Some(def_id) == tcx.lang_items().panic_fmt()
             || Some(def_id) == tcx.lang_items().begin_panic_fn()
@@ -729,15 +768,152 @@ impl GotocHook for LoopInvariantRegister {
     }
 }
 
+struct Forall;
+struct Exists;
+
+#[derive(Debug, Clone, Copy)]
+enum QuantifierKind {
+    ForAll,
+    Exists,
+}
+
+impl GotocHook for Forall {
+    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+        unreachable!("{UNEXPECTED_CALL}")
+    }
+
+    fn handle(
+        &self,
+        gcx: &mut GotocCtx,
+        instance: Instance,
+        fargs: Vec<Expr>,
+        assign_to: &Place,
+        target: Option<BasicBlockIdx>,
+        span: Span,
+    ) -> Stmt {
+        handle_quantifier(gcx, instance, fargs, assign_to, target, span, QuantifierKind::ForAll)
+    }
+}
+
+impl GotocHook for Exists {
+    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+        unreachable!("{UNEXPECTED_CALL}")
+    }
+
+    fn handle(
+        &self,
+        gcx: &mut GotocCtx,
+        instance: Instance,
+        fargs: Vec<Expr>,
+        assign_to: &Place,
+        target: Option<BasicBlockIdx>,
+        span: Span,
+    ) -> Stmt {
+        handle_quantifier(gcx, instance, fargs, assign_to, target, span, QuantifierKind::Exists)
+    }
+}
+
+fn handle_quantifier(
+    gcx: &mut GotocCtx,
+    instance: Instance,
+    fargs: Vec<Expr>,
+    assign_to: &Place,
+    target: Option<BasicBlockIdx>,
+    span: Span,
+    quantifier_kind: QuantifierKind,
+) -> Stmt {
+    let loc = gcx.codegen_span_stable(span);
+    let target = target.unwrap();
+    let lower_bound = &fargs[0];
+    let upper_bound = &fargs[1];
+    let closure_call_expr = find_closure_call_expr(&instance, gcx, loc)
+        .unwrap_or_else(|| unreachable!("Failed to find closure call expression"));
+    let closure_arg = fargs[2].clone();
+    let predicate = if closure_arg.is_symbol() {
+        Expr::address_of(closure_arg)
+    } else {
+        let predicate_ty = fargs[2].typ().clone().to_pointer();
+        Expr::nondet(predicate_ty)
+    };
+
+    // Quantified variable.
+    let base_name = "kani_quantified_var".to_string();
+    let mut counter = 0;
+    let mut unique_name = format!("{base_name}_{counter}");
+    // Ensure the name is not already in the symbol table
+    while gcx.symbol_table.lookup(&unique_name).is_some() {
+        counter += 1;
+        unique_name = format!("{base_name}_{counter}");
+    }
+    let new_variable_expr = {
+        let new_symbol =
+            GotoSymbol::variable(unique_name.clone(), unique_name, lower_bound.typ().clone(), loc);
+        gcx.symbol_table.insert(new_symbol.clone());
+        new_symbol.to_expr()
+    };
+
+    let lower_bound_comparison = lower_bound.clone().le(new_variable_expr.clone());
+    let upper_bound_comparison = new_variable_expr.clone().lt(upper_bound.clone());
+    let range = lower_bound_comparison.and(upper_bound_comparison);
+
+    let quantifier_expr = match quantifier_kind {
+        QuantifierKind::ForAll => {
+            let domain = range
+                .clone()
+                .implies(closure_call_expr.call(vec![predicate.clone(), new_variable_expr.clone()]))
+                .and(range.not().implies(Expr::bool_true()));
+            Expr::forall_expr(Type::Bool, new_variable_expr, domain)
+        }
+        QuantifierKind::Exists => {
+            let domain = range
+                .clone()
+                .and(closure_call_expr.call(vec![predicate.clone(), new_variable_expr.clone()]))
+                .and(range.not().implies(Expr::bool_false()));
+            Expr::exists_expr(Type::Bool, new_variable_expr, domain)
+        }
+    };
+
+    Stmt::block(
+        vec![
+            unwrap_or_return_codegen_unimplemented_stmt!(
+                gcx,
+                gcx.codegen_place_stable(assign_to, loc)
+            )
+            .goto_expr
+            .assign(quantifier_expr.cast_to(Type::CInteger(CIntType::Bool)), loc),
+            Stmt::goto(bb_label(target), loc),
+        ],
+        loc,
+    )
+}
+
+fn find_closure_call_expr(instance: &Instance, gcx: &mut GotocCtx, loc: Location) -> Option<Expr> {
+    for arg in instance.args().0.iter() {
+        let arg_ty = arg.ty()?;
+        let kind = arg_ty.kind();
+        let arg_kind = kind.rigid()?;
+
+        if let RigidTy::Closure(def_id, args) = arg_kind {
+            let instance_closure =
+                Instance::resolve_closure(*def_id, args, ClosureKind::Fn).ok()?;
+            return Some(gcx.codegen_func_expr(instance_closure, loc));
+        }
+    }
+    None
+}
+
 pub fn fn_hooks() -> GotocHooks {
     let kani_lib_hooks = [
         (KaniHook::Assert, Rc::new(Assert) as Rc<dyn GotocHook>),
         (KaniHook::Assume, Rc::new(Assume)),
+        (KaniHook::Exists, Rc::new(Exists)),
+        (KaniHook::Forall, Rc::new(Forall)),
         (KaniHook::Panic, Rc::new(Panic)),
         (KaniHook::Check, Rc::new(Check)),
         (KaniHook::Cover, Rc::new(Cover)),
         (KaniHook::AnyRaw, Rc::new(Nondet)),
         (KaniHook::SafetyCheck, Rc::new(SafetyCheck)),
+        (KaniHook::SafetyCheckNoAssume, Rc::new(SafetyCheckNoAssume)),
         (KaniHook::IsAllocated, Rc::new(IsAllocated)),
         (KaniHook::PointerObject, Rc::new(PointerObject)),
         (KaniHook::PointerOffset, Rc::new(PointerOffset)),

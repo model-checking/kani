@@ -3,7 +3,7 @@
 
 [package]
 name = "kani-verifier"
-version = "0.58.0"
+version = "0.63.0"
 edition = "2021"
 description = "A bit-precise model checker for Rust."
 readme = "README.md"
@@ -32,6 +32,12 @@ path = "src/bin/cargo_kani.rs"
 [profile.release]
 strip = "debuginfo"
 
+[profile.profiling]
+inherits = "release"
+debug = true
+strip = "none"
+lto = "off"
+
 # Below is the workspace (vs above is "kani-verifier" crate) config:
 
 [workspace]
@@ -42,6 +48,7 @@ members = [
   "tools/build-kani",
   "tools/kani-cov",
   "tools/scanner",
+  "tools/compile-timer",
   "kani-driver",
   "kani-compiler",
   "kani_metadata",
@@ -67,12 +74,13 @@ exclude = [
   "tests/cargo-ui",
   "tests/slow",
   "tests/std-checks",
-  "tests/assess-scan-test-scaffold",
   "tests/script-based-pre",
   "tests/script-based-pre/build-cache-bin/target/new_dep",
   "tests/script-based-pre/build-cache-dirty/target/new_dep",
   "tests/script-based-pre/verify_std_cmd/tmp_dir/target/kani_verify_std",
   "tests/script-based-pre/kani_lib_dep",
+  "tests/script-based-pre/no_codegen",
+  "tests/script-based-pre/no_codegen_error",
 ]
 
 [workspace.lints.clippy]

@@ -28,8 +28,9 @@ pub enum ReachabilityType {
     None,
     /// Start the cross-crate reachability analysis from all public functions in the local crate.
     PubFns,
-    /// Start the cross-crate reachability analysis from all *test* (i.e. `#[test]`) harnesses in the local crate.
-    Tests,
+    /// Start the cross-crate reachability analysis from all functions in the local crate.
+    /// Currently, this mode is only used for automatic harness generation.
+    AllFns,
 }
 
 /// Command line arguments that this instance of the compiler run was called
@@ -88,6 +89,14 @@ pub struct Arguments {
     /// Print the final LLBC file to stdout.
     #[clap(long)]
     pub print_llbc: bool,
+    /// If we are running the autoharness subcommand, the paths to include.
+    /// See kani_driver::autoharness_args for documentation.
+    #[arg(long = "autoharness-include-pattern", num_args(1))]
+    pub autoharness_included_patterns: Vec<String>,
+    /// If we are running the autoharness subcommand, the paths to exclude.
+    /// See kani_driver::autoharness_args for documentation.
+    #[arg(long = "autoharness-exclude-pattern", num_args(1))]
+    pub autoharness_excluded_patterns: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, AsRefStr, EnumString, VariantNames, PartialEq, Eq)]

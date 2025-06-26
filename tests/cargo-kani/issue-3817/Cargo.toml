@@ -1,0 +1,17 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+
+[package]
+name = "issue-3817"
+version = "0.1.0"
+edition = "2024"
+description = "Issue with linking cdylib and another shared library"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+bzip2 = "0.5.0"
+
+[profile.release]
+lto = true

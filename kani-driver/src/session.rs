@@ -17,21 +17,27 @@ use tokio::process::Command as TokioCommand;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::{EnvFilter, Registry, layer::SubscriberExt};
 
+pub const BUG_REPORT_URL: &str =
+    "https://github.com/model-checking/kani/issues/new?labels=bug&template=bug_report.md";
+
 /// Environment variable used to control this session log tracing.
 /// This is the same variable used to control `kani-compiler` logs. Note that you can still control
 /// the driver logs separately, by using the logger directives to  select the kani-driver crate.
 /// `export KANI_LOG=kani_driver=debug`.
 const LOG_ENV_VAR: &str = "KANI_LOG";
+// Constants related to the option to create flamegraphs to debug compiler performance. See our mdbook's developer documentation for details.
+const FLAMEGRAPH_ENV_VAR: &str = "FLAMEGRAPH";
+const FLAMEGRAPH_DIR: &str = "flamegraphs";
+const FLAMEGRAPH_SAMPLING_RATE: &str = "8000"; // in Hz
 
 /// Contains information about the execution environment and arguments that affect operations
 pub struct KaniSession {
     /// The common command-line arguments
     pub args: VerificationArgs,
 
-    /// Include all publicly-visible symbols in the generated goto binary, not just those reachable from
-    /// a proof harness. Useful when attempting to verify things that were not annotated with kani
-    /// proof attributes.
-    pub codegen_tests: bool,
+    /// The autoharness-specific compiler arguments.
+    /// Invariant: this field is_some() iff the autoharness subcommand is enabled.
+    pub autoharness_compiler_flags: Option<Vec<String>>,
 
     /// The location we found the 'kani_rustc' command
     pub kani_compiler: PathBuf,
@@ -62,7 +68,7 @@ impl KaniSession {
 
         Ok(KaniSession {
             args,
-            codegen_tests: false,
+            autoharness_compiler_flags: None,
             kani_compiler: install.kani_compiler()?,
             kani_lib_c: install.kani_lib_c()?,
             temporaries: Mutex::new(vec![]),
@@ -88,16 +94,20 @@ impl KaniSession {
     /// Determine which symbols Kani should codegen (i.e. by slicing away symbols
     /// that are considered unreachable.)
     pub fn reachability_mode(&self) -> ReachabilityMode {
-        if self.codegen_tests { ReachabilityMode::Tests } else { ReachabilityMode::ProofHarnesses }
+        if self.autoharness_compiler_flags.is_some() {
+            ReachabilityMode::AllFns
+        } else {
+            ReachabilityMode::ProofHarnesses
+        }
     }
 }
 
 #[derive(Debug, Copy, Clone, Display)]
 #[strum(serialize_all = "snake_case")]
 pub enum ReachabilityMode {
+    AllFns,
     #[strum(to_string = "harnesses")]
     ProofHarnesses,
-    Tests,
 }
 
 impl Drop for KaniSession {
@@ -195,7 +205,7 @@ async fn run_terminal_timeout(
         cmd.stderr(std::process::Stdio::null());
     }
     if verbosity.verbose() {
-        println!("[Kani] Running: `{}`", render_command(&cmd.as_std()).to_string_lossy());
+        println!("[Kani] Running: `{}`", render_command(cmd.as_std()).to_string_lossy());
     }
     let program = cmd.as_std().get_program().to_string_lossy().to_string();
     let result = with_timer(
@@ -403,18 +413,51 @@ fn init_logger(args: &VerificationArgs) {
     tracing::subscriber::set_global_default(subscriber).unwrap();
 }
 
-// Setup the default version of cargo being run, based on the type/mode of installation for kani
-// If kani is being run in developer mode, then we use the one provided by rustup as we can assume that the developer will have rustup installed
+pub fn setup_cargo_command() -> Result<Command> {
+    setup_cargo_command_inner(None)
+}
+
+// Setup the default version of cargo being run, based on the type/mode of installation for kani.
+// Optionally takes a path to output compiler profiling info to.
+// If kani is being run in developer mode, then we use the one provided by rustup as we can assume that the developer will have rustup installed.
 // For release versions of Kani, we use a version of cargo that's in the toolchain that's been symlinked during `cargo-kani` setup. This will allow
 // Kani to remove the runtime dependency on rustup later on.
-pub fn setup_cargo_command() -> Result<Command> {
+pub fn setup_cargo_command_inner(profiling_out_path: Option<String>) -> Result<Command> {
     let install_type = InstallType::new()?;
 
     let cmd = match install_type {
         InstallType::DevRepo(_) => {
-            let mut cmd = Command::new("cargo");
-            cmd.arg(self::toolchain_shorthand());
-            cmd
+            // check if we should instrument the compiler for a flamegraph
+            let instrument_compiler = matches!(
+                std::env::var(FLAMEGRAPH_ENV_VAR),
+                Ok(ref s) if s == "compiler"
+            );
+
+            if let Some(profiler_out_path) = profiling_out_path
+                && instrument_compiler
+            {
+                // create temporary flamegraph directory
+                std::fs::create_dir_all(FLAMEGRAPH_DIR)?;
+                let time_postfix = chrono::Local::now().format("%Y-%m-%dT%H:%M:%S");
+
+                let mut cmd = Command::new("samply");
+                cmd.arg("record");
+
+                // adjust the sampling rate (in Hz)
+                cmd.arg("-r").arg(FLAMEGRAPH_SAMPLING_RATE);
+                cmd.arg("-o").arg(format!(
+                    "{FLAMEGRAPH_DIR}/compiler-{profiler_out_path}-{time_postfix}.json.gz",
+                ));
+
+                // just save the output and don't open the interactive UI.
+                cmd.arg("--save-only");
+                cmd.arg("cargo").arg(self::toolchain_shorthand());
+                cmd
+            } else {
+                let mut cmd = Command::new("cargo");
+                cmd.arg(self::toolchain_shorthand());
+                cmd
+            }
         }
         InstallType::Release(kani_dir) => {
             let cargo_path = kani_dir.join("toolchain").join("bin").join("cargo");
@@ -423,4 +466,18 @@ pub fn setup_cargo_command() -> Result<Command> {
     };
 
     Ok(cmd)
+}
+
+// Get the cargo path corresponding to the toolchain version in rust-toolchain.toml.
+// If kani is being run in developer mode, then we use the compile-time toolchain, i.e. the one used during cargo build-dev.
+// For release versions of Kani, we use a version of cargo that's in the toolchain that's been symlinked during `cargo-kani` setup.
+pub fn get_cargo_path() -> Result<PathBuf> {
+    let install_type = InstallType::new()?;
+
+    let cargo_path = match install_type {
+        InstallType::DevRepo(_) => env!("CARGO").into(),
+        InstallType::Release(kani_dir) => kani_dir.join("toolchain").join("bin").join("cargo"),
+    };
+
+    Ok(cargo_path)
 }

@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
 //! Utility functions that allow us to modify a function body.
+//!
+//! TODO: We should not need this code anymore now that https://github.com/rust-lang/rust/pull/138536 is merged
 
 use crate::kani_middle::kani_functions::KaniHook;
 use crate::kani_queries::QueryDb;
@@ -54,12 +56,10 @@ impl MutableBody {
         &self.locals
     }
 
-    #[allow(dead_code)]
     pub fn arg_count(&self) -> usize {
         self.arg_count
     }
 
-    #[allow(dead_code)]
     pub fn var_debug_info(&self) -> &Vec<VarDebugInfo> {
         &self.var_debug_info
     }
@@ -181,23 +181,31 @@ impl MutableBody {
         check_type: &CheckType,
         source: &mut SourceInstruction,
         position: InsertPosition,
-        value: Local,
+        value: Option<Local>,
         msg: &str,
     ) {
-        assert_eq!(
-            self.locals[value].ty,
-            Ty::bool_ty(),
-            "Expected boolean value as the assert input"
-        );
         let new_bb = self.blocks.len();
         let span = source.span(&self.blocks);
-        let CheckType::Assert(assert_fn) = check_type;
+        let msg_op = self.new_str_operand(msg, span);
+        let (assert_fn, args) = match check_type {
+            CheckType::SafetyCheck(assert_fn) | CheckType::SafetyCheckNoAssume(assert_fn) => {
+                assert_eq!(
+                    self.locals[value.unwrap()].ty,
+                    Ty::bool_ty(),
+                    "Expected boolean value as the assert input"
+                );
+                (assert_fn, vec![Operand::Move(Place::from(value.unwrap())), msg_op])
+            }
+            CheckType::UnsupportedCheck(assert_fn) => {
+                assert!(value.is_none());
+                (assert_fn, vec![msg_op])
+            }
+        };
         let assert_op =
             Operand::Copy(Place::from(self.new_local(assert_fn.ty(), span, Mutability::Not)));
-        let msg_op = self.new_str_operand(msg, span);
         let kind = TerminatorKind::Call {
             func: assert_op,
-            args: vec![Operand::Move(Place::from(value)), msg_op],
+            args,
             destination: Place {
                 local: self.new_local(Ty::new_tuple(&[]), span, Mutability::Not),
                 projection: vec![],
@@ -320,7 +328,6 @@ impl MutableBody {
     /// `InsertPosition` is `InsertPosition::Before`, `source` will point to the same instruction as
     /// before. If `InsertPosition` is `InsertPosition::After`, `source` will point to the
     /// terminator of the newly inserted basic block.
-    #[allow(dead_code)]
     pub fn insert_bb(
         &mut self,
         mut bb: BasicBlock,
@@ -441,30 +448,35 @@ impl MutableBody {
     }
 }
 
-// TODO: Remove this enum, since we now only support kani's assert.
 #[derive(Clone, Debug)]
 pub enum CheckType {
-    /// This is used by default when the `kani` crate is available.
-    Assert(Instance),
+    SafetyCheck(Instance),
+    SafetyCheckNoAssume(Instance),
+    UnsupportedCheck(Instance),
 }
 
 impl CheckType {
-    /// This will create the type of check that is available in the current crate, attempting to
-    /// create a check that generates an assertion following by an assumption of the same assertion.
-    pub fn new_assert_assume(queries: &QueryDb) -> CheckType {
-        let fn_def = queries.kani_functions()[&KaniHook::Assert.into()];
-        CheckType::Assert(Instance::resolve(fn_def, &GenericArgs(vec![])).unwrap())
+    /// This will create the type of safety check that is available in the current crate, attempting
+    /// to create a check that generates an assertion following by an assumption of the same
+    /// assertion.
+    pub fn new_safety_check_assert_assume(queries: &QueryDb) -> CheckType {
+        let fn_def = queries.kani_functions()[&KaniHook::SafetyCheck.into()];
+        CheckType::SafetyCheck(Instance::resolve(fn_def, &GenericArgs(vec![])).unwrap())
     }
 
-    /// This will create the type of check that is available in the current crate, attempting to
-    /// create a check that generates an assertion, without assuming the condition afterwards.
-    ///
-    /// If `kani` crate is available, this will return [CheckType::Assert], and the instance will
-    /// point to `kani::assert`. Otherwise, we will collect the `core::panic_str` method and return
-    /// [CheckType::Panic].
-    pub fn new_assert(queries: &QueryDb) -> CheckType {
-        let fn_def = queries.kani_functions()[&KaniHook::Check.into()];
-        CheckType::Assert(Instance::resolve(fn_def, &GenericArgs(vec![])).unwrap())
+    /// This will create the type of safety check that is available in the current crate, attempting
+    /// to create a check that generates an assertion, but not following by an assumption.
+    pub fn new_safety_check_assert_no_assume(queries: &QueryDb) -> CheckType {
+        let fn_def = queries.kani_functions()[&KaniHook::SafetyCheckNoAssume.into()];
+        CheckType::SafetyCheckNoAssume(Instance::resolve(fn_def, &GenericArgs(vec![])).unwrap())
+    }
+
+    /// This will create the type of operation-unsupported check that is available in the current
+    /// crate, attempting to create a check that generates an assertion following by an assumption
+    /// of the same assertion.
+    pub fn new_unsupported_check_assert_assume_false(queries: &QueryDb) -> CheckType {
+        let fn_def = queries.kani_functions()[&KaniHook::UnsupportedCheck.into()];
+        CheckType::UnsupportedCheck(Instance::resolve(fn_def, &GenericArgs(vec![])).unwrap())
     }
 }
 

@@ -59,14 +59,14 @@ pub fn resolve_fn_path<'tcx>(
     match &path.qself {
         // Qualified path for a trait method implementation, like `<Foo as Bar>::bar`.
         Some(QSelf { ty: syn_ty, position, .. }) if *position > 0 => {
-            let ty = type_resolution::resolve_ty(tcx, current_module, &syn_ty)?;
+            let ty = type_resolution::resolve_ty(tcx, current_module, syn_ty)?;
             let def_id = resolve_path(tcx, current_module, &path.path)?;
             validate_kind!(tcx, def_id, "function / method", DefKind::Fn | DefKind::AssocFn)?;
             Ok(FnResolution::FnImpl { def: stable_fn_def(tcx, def_id).unwrap(), ty })
         }
         // Qualified path for a primitive type, such as `<[u8]::sort>`.
         Some(QSelf { ty: syn_ty, .. }) if type_resolution::is_type_primitive(syn_ty) => {
-            let ty = type_resolution::resolve_ty(tcx, current_module, &syn_ty)?;
+            let ty = type_resolution::resolve_ty(tcx, current_module, syn_ty)?;
             let resolved = resolve_in_primitive(tcx, ty, path.path.segments.iter())?;
             if resolved.segments.is_empty() {
                 Ok(FnResolution::Fn(stable_fn_def(tcx, resolved.base).unwrap()))
@@ -76,7 +76,7 @@ pub fn resolve_fn_path<'tcx>(
         }
         // Qualified path for a non-primitive type, such as `<Bar>::foo>`.
         Some(QSelf { ty: syn_ty, .. }) => {
-            let ty = type_resolution::resolve_ty(tcx, current_module, &syn_ty)?;
+            let ty = type_resolution::resolve_ty(tcx, current_module, syn_ty)?;
             let def_id = resolve_in_user_type(tcx, ty, path.path.segments.iter())?;
             validate_kind!(tcx, def_id, "function / method", DefKind::Fn | DefKind::AssocFn)?;
             Ok(FnResolution::Fn(stable_fn_def(tcx, def_id).unwrap()))
@@ -307,7 +307,7 @@ fn resolve_prefix<'tcx>(
         (None, Some(segment)) if segment.ident == CRATE => {
             // Find the module at the root of the crate.
             let current_module_hir_id = tcx.local_def_id_to_hir_id(current_module);
-            let crate_root = match tcx.hir().parent_iter(current_module_hir_id).last() {
+            let crate_root = match tcx.hir_parent_iter(current_module_hir_id).last() {
                 None => current_module,
                 Some((hir_id, _)) => hir_id.owner.def_id,
             };
@@ -366,7 +366,7 @@ where
     I: Iterator<Item = &'a PathSegment>,
 {
     let current_module_hir_id = tcx.local_def_id_to_hir_id(current_module);
-    let mut parents = tcx.hir().parent_iter(current_module_hir_id);
+    let mut parents = tcx.hir_parent_iter(current_module_hir_id);
     let mut base_module = current_module;
     while segments.next_if(|segment| segment.ident == SUPER).is_some() {
         if let Some((parent, _)) = parents.next() {
@@ -430,12 +430,14 @@ fn resolve_relative(tcx: TyCtxt, current_module: LocalModDefId, name: &str) -> R
     debug!(?name, ?current_module, "resolve_relative");
 
     let mut glob_imports = vec![];
-    let result = tcx.hir().module_items(current_module).find_map(|item_id| {
-        let item = tcx.hir().item(item_id);
-        if item.ident.as_str() == name {
+    let result = tcx.hir_module_free_items(current_module).find_map(|item_id| {
+        let item = tcx.hir_item(item_id);
+        if item.kind.ident().is_some_and(|ident| ident.as_str() == name) {
             match item.kind {
-                ItemKind::Use(use_path, UseKind::Single) => use_path.res[0].opt_def_id(),
-                ItemKind::ExternCrate(orig_name) => resolve_external(
+                ItemKind::Use(use_path, UseKind::Single(_)) => {
+                    use_path.res.present_items().filter_map(|res| res.opt_def_id()).next()
+                }
+                ItemKind::ExternCrate(orig_name, _) => resolve_external(
                     tcx,
                     orig_name.as_ref().map(|sym| sym.as_str()).unwrap_or(name),
                 ),
@@ -445,7 +447,7 @@ fn resolve_relative(tcx: TyCtxt, current_module: LocalModDefId, name: &str) -> R
             if let ItemKind::Use(use_path, UseKind::Glob) = item.kind {
                 // Do not immediately try to resolve the path using this glob,
                 // since paths resolved via non-globs take precedence.
-                glob_imports.push(use_path.res[0]);
+                glob_imports.extend(use_path.res.present_items());
             }
             None
         }
@@ -708,6 +710,8 @@ fn is_item_name(tcx: TyCtxt, item: DefId, name: &str) -> bool {
     last == name
 }
 
+/// Use this when we don't just care about the item name matching (c.f. is_item_name),
+/// but also if the generic arguments are the same, e.g. <u32>::unchecked_add.
 fn is_item_name_with_generic_args(
     tcx: TyCtxt,
     item: DefId,
@@ -715,6 +719,54 @@ fn is_item_name_with_generic_args(
     name: &str,
 ) -> bool {
     let item_path = tcx.def_path_str(item);
-    let all_but_base_type = item_path.find("::").map_or("", |idx| &item_path[idx..]);
-    all_but_base_type == format!("{}::{}", generic_args, name)
+    last_two_items_of_path_match(&item_path, generic_args, name)
+}
+
+// This is just a helper function for is_item_name_with_generic_args.
+// It's in a separate function so we can unit-test it without a mock TyCtxt or DefIds.
+fn last_two_items_of_path_match(item_path: &str, generic_args: &str, name: &str) -> bool {
+    let parts: Vec<&str> = item_path.split("::").collect();
+
+    if parts.len() < 2 {
+        return false;
+    }
+
+    let actual_last_two =
+        format!("{}{}{}{}", "::", parts[parts.len() - 2], "::", parts[parts.len() - 1]);
+
+    let last_two = format!("{}{}{}", generic_args, "::", name);
+
+    // The last two components of the item_path should be the same as ::{generic_args}::{name}
+    last_two == actual_last_two
+}
+
+#[cfg(test)]
+mod tests {
+    mod simple_last_two_items_of_path_match {
+        use crate::kani_middle::resolve::last_two_items_of_path_match;
+
+        #[test]
+        fn length_one_item_prefix() {
+            let generic_args = "::<u32>";
+            let name = "unchecked_add";
+            let item_path = format!("NonZero{generic_args}::{name}");
+            assert!(last_two_items_of_path_match(&item_path, generic_args, name))
+        }
+
+        #[test]
+        fn length_three_item_prefix() {
+            let generic_args = "::<u32>";
+            let name = "unchecked_add";
+            let item_path = format!("core::num::NonZero{generic_args}::{name}");
+            assert!(last_two_items_of_path_match(&item_path, generic_args, name))
+        }
+
+        #[test]
+        fn wrong_generic_arg() {
+            let generic_args = "::<u64>";
+            let name = "unchecked_add";
+            let item_path = format!("core::num::NonZero{}::{}", "::<u32>", name);
+            assert!(!last_two_items_of_path_match(&item_path, generic_args, name))
+        }
+    }
 }

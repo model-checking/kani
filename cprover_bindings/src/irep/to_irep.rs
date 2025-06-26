@@ -60,6 +60,7 @@ impl ToIrepId for BinaryOperator {
             BinaryOperator::Bitxor => IrepId::Bitxor,
             BinaryOperator::Div => IrepId::Div,
             BinaryOperator::Equal => IrepId::Equal,
+            BinaryOperator::FloatbvRoundToIntegral => IrepId::FloatbvRoundToIntegral,
             BinaryOperator::Ge => IrepId::Ge,
             BinaryOperator::Gt => IrepId::Gt,
             BinaryOperator::IeeeFloatEqual => IrepId::IeeeFloatEqual,
@@ -135,6 +136,13 @@ impl ToIrep for DatatypeComponent {
                 (IrepId::CPrettyName, Irep::just_string_id(name.to_string())),
                 (IrepId::Type, typ.to_irep(mm)),
             ]),
+            DatatypeComponent::UnionField { name, typ: _, padded_typ } => {
+                Irep::just_named_sub(linear_map![
+                    (IrepId::Name, Irep::just_string_id(name.to_string())),
+                    (IrepId::CPrettyName, Irep::just_string_id(name.to_string())),
+                    (IrepId::Type, padded_typ.to_irep(mm)),
+                ])
+            }
             DatatypeComponent::Padding { name, bits } => Irep::just_named_sub(linear_map![
                 (IrepId::CIsPadding, Irep::one()),
                 (IrepId::Name, Irep::just_string_id(name.to_string())),
@@ -273,12 +281,10 @@ impl ToIrep for ExprValue {
                     )],
                 }
             }
-            ExprValue::FunctionCall { function, arguments } => {
-                side_effect_irep(IrepId::FunctionCall, vec![
-                    function.to_irep(mm),
-                    arguments_irep(arguments.iter(), mm),
-                ])
-            }
+            ExprValue::FunctionCall { function, arguments } => side_effect_irep(
+                IrepId::FunctionCall,
+                vec![function.to_irep(mm), arguments_irep(arguments.iter(), mm)],
+            ),
             ExprValue::If { c, t, e } => Irep {
                 id: IrepId::If,
                 sub: vec![c.to_irep(mm), t.to_irep(mm), e.to_irep(mm)],
@@ -320,11 +326,10 @@ impl ToIrep for ExprValue {
                 named_sub: linear_map![],
             },
             ExprValue::SelfOp { op, e } => side_effect_irep(op.to_irep_id(), vec![e.to_irep(mm)]),
-            ExprValue::StatementExpression { statements: ops, location: loc } => {
-                side_effect_irep(IrepId::StatementExpression, vec![
-                    Stmt::block(ops.to_vec(), *loc).to_irep(mm),
-                ])
-            }
+            ExprValue::StatementExpression { statements: ops, location: loc } => side_effect_irep(
+                IrepId::StatementExpression,
+                vec![Stmt::block(ops.to_vec(), *loc).to_irep(mm)],
+            ),
             ExprValue::StringConstant { s } => Irep {
                 id: IrepId::StringConstant,
                 sub: vec![],
@@ -377,6 +382,30 @@ impl ToIrep for ExprValue {
             ExprValue::Vector { elems } => Irep {
                 id: IrepId::Vector,
                 sub: elems.iter().map(|x| x.to_irep(mm)).collect(),
+                named_sub: linear_map![],
+            },
+            ExprValue::Forall { variable, domain } => Irep {
+                id: IrepId::Forall,
+                sub: vec![
+                    Irep {
+                        id: IrepId::Tuple,
+                        sub: vec![variable.to_irep(mm)],
+                        named_sub: linear_map![],
+                    },
+                    domain.to_irep(mm),
+                ],
+                named_sub: linear_map![],
+            },
+            ExprValue::Exists { variable, domain } => Irep {
+                id: IrepId::Exists,
+                sub: vec![
+                    Irep {
+                        id: IrepId::Tuple,
+                        sub: vec![variable.to_irep(mm)],
+                        named_sub: linear_map![],
+                    },
+                    domain.to_irep(mm),
+                ],
                 named_sub: linear_map![],
             },
         }
@@ -491,10 +520,10 @@ impl ToIrep for StmtBody {
             StmtBody::Dead(symbol) => code_irep(IrepId::Dead, vec![symbol.to_irep(mm)]),
             StmtBody::Decl { lhs, value } => {
                 if value.is_some() {
-                    code_irep(IrepId::Decl, vec![
-                        lhs.to_irep(mm),
-                        value.as_ref().unwrap().to_irep(mm),
-                    ])
+                    code_irep(
+                        IrepId::Decl,
+                        vec![lhs.to_irep(mm), value.as_ref().unwrap().to_irep(mm)],
+                    )
                 } else {
                     code_irep(IrepId::Decl, vec![lhs.to_irep(mm)])
                 }
@@ -507,19 +536,18 @@ impl ToIrep for StmtBody {
                     .with_comment("deinit")
             }
             StmtBody::Expression(e) => code_irep(IrepId::Expression, vec![e.to_irep(mm)]),
-            StmtBody::For { init, cond, update, body } => code_irep(IrepId::For, vec![
-                init.to_irep(mm),
-                cond.to_irep(mm),
-                update.to_irep(mm),
-                body.to_irep(mm),
-            ]),
-            StmtBody::FunctionCall { lhs, function, arguments } => {
-                code_irep(IrepId::FunctionCall, vec![
+            StmtBody::For { init, cond, update, body } => code_irep(
+                IrepId::For,
+                vec![init.to_irep(mm), cond.to_irep(mm), update.to_irep(mm), body.to_irep(mm)],
+            ),
+            StmtBody::FunctionCall { lhs, function, arguments } => code_irep(
+                IrepId::FunctionCall,
+                vec![
                     lhs.as_ref().map_or(Irep::nil(), |x| x.to_irep(mm)),
                     function.to_irep(mm),
                     arguments_irep(arguments.iter(), mm),
-                ])
-            }
+                ],
+            ),
             StmtBody::Goto { dest, loop_invariants } => {
                 let stmt_goto = code_irep(IrepId::Goto, vec![])
                     .with_named_sub(IrepId::Destination, Irep::just_string_id(dest.to_string()));
@@ -532,11 +560,14 @@ impl ToIrep for StmtBody {
                     stmt_goto
                 }
             }
-            StmtBody::Ifthenelse { i, t, e } => code_irep(IrepId::Ifthenelse, vec![
-                i.to_irep(mm),
-                t.to_irep(mm),
-                e.as_ref().map_or(Irep::nil(), |x| x.to_irep(mm)),
-            ]),
+            StmtBody::Ifthenelse { i, t, e } => code_irep(
+                IrepId::Ifthenelse,
+                vec![
+                    i.to_irep(mm),
+                    t.to_irep(mm),
+                    e.as_ref().map_or(Irep::nil(), |x| x.to_irep(mm)),
+                ],
+            ),
             StmtBody::Label { label, body } => code_irep(IrepId::Label, vec![body.to_irep(mm)])
                 .with_named_sub(IrepId::Label, Irep::just_string_id(label.to_string())),
             StmtBody::Return(e) => {
@@ -548,10 +579,10 @@ impl ToIrep for StmtBody {
                 if default.is_some() {
                     switch_arms.push(switch_default_irep(default.as_ref().unwrap(), mm));
                 }
-                code_irep(IrepId::Switch, vec![
-                    control.to_irep(mm),
-                    code_irep(IrepId::Block, switch_arms),
-                ])
+                code_irep(
+                    IrepId::Switch,
+                    vec![control.to_irep(mm), code_irep(IrepId::Block, switch_arms)],
+                )
             }
             StmtBody::While { cond, body } => {
                 code_irep(IrepId::While, vec![cond.to_irep(mm), body.to_irep(mm)])

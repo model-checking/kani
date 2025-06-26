@@ -177,6 +177,14 @@ pub enum ExprValue {
     Vector {
         elems: Vec<Expr>,
     },
+    Forall {
+        variable: Expr, // symbol
+        domain: Expr,   // where
+    },
+    Exists {
+        variable: Expr, // symbol
+        domain: Expr,   // where
+    },
 }
 
 /// Binary operators. The names are the same as in the Irep representation.
@@ -190,6 +198,7 @@ pub enum BinaryOperator {
     Bitxor,
     Div,
     Equal,
+    FloatbvRoundToIntegral,
     Ge,
     Gt,
     IeeeFloatEqual,
@@ -285,10 +294,13 @@ pub fn arithmetic_overflow_result_type(operand_type: Type) -> Type {
     // give the struct the name "overflow_result_<type>", e.g.
     // "overflow_result_Unsignedbv"
     let name: InternedString = format!("overflow_result_{operand_type:?}").into();
-    Type::struct_type(name, vec![
-        DatatypeComponent::field(ARITH_OVERFLOW_RESULT_FIELD, operand_type),
-        DatatypeComponent::field(ARITH_OVERFLOW_OVERFLOWED_FIELD, Type::bool()),
-    ])
+    Type::struct_type(
+        name,
+        vec![
+            DatatypeComponent::field(ARITH_OVERFLOW_RESULT_FIELD, operand_type),
+            DatatypeComponent::field(ARITH_OVERFLOW_OVERFLOWED_FIELD, Type::bool()),
+        ],
+    )
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -968,6 +980,16 @@ impl Expr {
         let typ = typ.aggr_tag().unwrap();
         expr!(Union { value, field }, typ)
     }
+
+    pub fn forall_expr(typ: Type, variable: Expr, domain: Expr) -> Expr {
+        assert!(variable.is_symbol());
+        expr!(Forall { variable, domain }, typ)
+    }
+
+    pub fn exists_expr(typ: Type, variable: Expr, domain: Expr) -> Expr {
+        assert!(variable.is_symbol());
+        expr!(Exists { variable, domain }, typ)
+    }
 }
 
 /// Constructors for Binary Operations
@@ -1013,11 +1035,12 @@ impl Expr {
             IeeeFloatEqual | IeeeFloatNotequal => lhs.typ == rhs.typ && lhs.typ.is_floating_point(),
             // Overflow flags
             OverflowMinus | OverflowResultMinus => {
-                (lhs.typ == rhs.typ && (lhs.typ.is_pointer() || lhs.typ.is_numeric()))
+                (lhs.typ == rhs.typ
+                    && (lhs.typ.is_pointer() || lhs.typ.is_numeric() || lhs.typ.is_vector()))
                     || (lhs.typ.is_pointer() && rhs.typ.is_integer())
             }
             OverflowMult | OverflowPlus | OverflowResultMult | OverflowResultPlus => {
-                (lhs.typ == rhs.typ && lhs.typ.is_integer())
+                (lhs.typ == rhs.typ && (lhs.typ.is_numeric() || lhs.typ.is_vector()))
                     || (lhs.typ.is_pointer() && rhs.typ.is_integer())
             }
             ROk => lhs.typ.is_pointer() && rhs.typ.is_c_size_t(),
@@ -1026,6 +1049,7 @@ impl Expr {
                     "vector comparison operators must be typechecked by `typecheck_vector_cmp_expr`"
                 )
             }
+            FloatbvRoundToIntegral => lhs.typ.is_floating_point() && rhs.typ.is_integer(),
         }
     }
 
@@ -1064,6 +1088,11 @@ impl Expr {
             VectorEqual | VectorNotequal | VectorGe | VectorLe | VectorGt | VectorLt => {
                 unreachable!(
                     "return type for vector comparison operators depends on the place type"
+                )
+            }
+            FloatbvRoundToIntegral => {
+                unreachable!(
+                    "return type for float-to-integer rounding operator depends on the place type"
                 )
             }
         }
@@ -1307,6 +1336,11 @@ impl Expr {
         assert!(!self.is_side_effect() && !e.is_side_effect());
         let cmp = self.clone().gt(e.clone());
         cmp.ternary(self, e)
+    }
+
+    /// floating-point to integer rounding
+    pub fn floatbv_round_to_integral(f: Expr, rm: Expr, ret_typ: Type) -> Expr {
+        expr!(BinOp { op: FloatbvRoundToIntegral, lhs: f, rhs: rm }, ret_typ)
     }
 }
 

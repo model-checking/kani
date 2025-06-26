@@ -10,7 +10,7 @@ use syn::spanned::Spanned;
 use syn::{Attribute, Expr, ExprBlock, Local, LocalInit, PatIdent, Stmt, parse_quote};
 
 /// If an explicit return type was provided it is returned, otherwise `()`.
-pub fn return_type_to_type(return_type: &syn::ReturnType) -> Cow<syn::Type> {
+pub fn return_type_to_type(return_type: &syn::ReturnType) -> Cow<'_, syn::Type> {
     match return_type {
         syn::ReturnType::Default => Cow::Owned(syn::Type::Tuple(syn::TypeTuple {
             paren_token: syn::token::Paren::default(),
@@ -94,8 +94,9 @@ pub fn find_contract_closure<'a>(
 ///
 /// Panic if no closure was found.
 pub fn expect_closure<'a>(stmts: &'a mut [Stmt], name: &'static str) -> &'a mut Stmt {
-    find_contract_closure(stmts, name)
-        .expect(&format!("Internal Failure: Expected to find `{name}` closure, but found none"))
+    find_contract_closure(stmts, name).unwrap_or_else(|| {
+        panic!("Internal Failure: Expected to find `{name}` closure, but found none")
+    })
 }
 
 /// Find a closure inside a match block.
@@ -112,7 +113,9 @@ pub fn expect_closure_in_match<'a>(stmts: &'a mut [Stmt], name: &'static str) ->
             None
         }
     });
-    closure.expect(&format!("Internal Failure: Expected to find `{name}` closure, but found none"))
+    closure.unwrap_or_else(|| {
+        panic!("Internal Failure: Expected to find `{name}` closure, but found none")
+    })
 }
 
 /// Extract the body of a closure declaration.

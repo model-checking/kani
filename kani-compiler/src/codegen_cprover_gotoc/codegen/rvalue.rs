@@ -18,15 +18,18 @@ use cbmc::goto_program::{
 };
 use cbmc::{InternString, InternedString, btree_string_map};
 use num::bigint::BigInt;
+use rustc_abi::{FieldsShape, TagEncoding, Variants};
 use rustc_middle::ty::{TyCtxt, TypingEnv, VtblEntry};
 use rustc_smir::rustc_internal;
-use rustc_target::abi::{FieldsShape, TagEncoding, Variants};
 use stable_mir::abi::{Primitive, Scalar, ValueAbi};
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{
     AggregateKind, BinOp, CastKind, NullOp, Operand, Place, PointerCoercion, Rvalue, UnOp,
 };
-use stable_mir::ty::{ClosureKind, IntTy, RigidTy, Size, Ty, TyConst, TyKind, UintTy, VariantIdx};
+use stable_mir::ty::{
+    Binder, ClosureKind, ExistentialPredicate, IntTy, RigidTy, Size, Ty, TyConst, TyKind, UintTy,
+    VariantIdx,
+};
 use std::collections::BTreeMap;
 use tracing::{debug, trace, warn};
 
@@ -516,7 +519,7 @@ impl GotocCtx<'_> {
                 .index_by_increasing_offset()
                 .map(|idx| {
                     let field_ty = layout.field(self, idx).ty;
-                    if idx == *discriminant_field {
+                    if idx == (*discriminant_field).as_usize() {
                         Expr::int_constant(0, self.codegen_ty(field_ty))
                     } else {
                         self.codegen_operand_stable(&operands[idx])
@@ -667,7 +670,7 @@ impl GotocCtx<'_> {
                 assert!(operands.len() == 2);
                 let typ = self.codegen_ty_stable(res_ty);
                 let layout = self.layout_of_stable(res_ty);
-                assert!(layout.ty.is_unsafe_ptr());
+                assert!(layout.ty.is_raw_ptr());
                 let data = self.codegen_operand_stable(&operands[0]);
                 match pointee_ty.kind() {
                     TyKind::RigidTy(RigidTy::Slice(inner_ty)) => {
@@ -731,7 +734,7 @@ impl GotocCtx<'_> {
                     }
                 }
             }
-            AggregateKind::Coroutine(_, _, _) => self.codegen_rvalue_coroutine(&operands, res_ty),
+            AggregateKind::Coroutine(_, _, _) => self.codegen_rvalue_coroutine(operands, res_ty),
             AggregateKind::CoroutineClosure(_, _) => {
                 let ty = self.codegen_ty_stable(res_ty);
                 self.codegen_unimplemented_expr(
@@ -751,10 +754,10 @@ impl GotocCtx<'_> {
             Rvalue::Use(p) => self.codegen_operand_stable(p),
             Rvalue::Repeat(op, sz) => self.codegen_rvalue_repeat(op, sz, loc),
             Rvalue::Ref(_, _, p) | Rvalue::AddressOf(_, p) => {
-                let place_ref = self.codegen_place_ref_stable(&p, loc);
+                let place_ref = self.codegen_place_ref_stable(p, loc);
                 let place_ref_type = place_ref.typ().clone();
                 match self.codegen_raw_ptr_deref_validity_check(
-                    &p,
+                    p,
                     place_ref.clone(),
                     self.place_ty_stable(p),
                     &loc,
@@ -801,8 +804,30 @@ impl GotocCtx<'_> {
                 self.codegen_pointer_cast(k, e, *t, loc)
             }
             Rvalue::Cast(CastKind::Transmute, operand, ty) => {
-                let goto_typ = self.codegen_ty_stable(*ty);
-                self.codegen_operand_stable(operand).transmute_to(goto_typ, &self.symbol_table)
+                let src_ty = operand.ty(self.current_fn().locals()).unwrap();
+                // Transmute requires sized types.
+                let src_sz = LayoutOf::new(src_ty).size_of().unwrap();
+                let dst_sz = LayoutOf::new(*ty).size_of().unwrap();
+                let dst_type = self.codegen_ty_stable(*ty);
+                if src_sz != dst_sz {
+                    Expr::statement_expression(
+                        vec![
+                            self.codegen_assert_assume_false(
+                                PropertyClass::SafetyCheck,
+                                &format!(
+                                    "Cannot transmute between types of different sizes. \
+                                Transmuting from `{src_sz}` to `{dst_sz}` bytes"
+                                ),
+                                loc,
+                            ),
+                            dst_type.nondet().as_stmt(loc),
+                        ],
+                        dst_type,
+                        loc,
+                    )
+                } else {
+                    self.codegen_operand_stable(operand).transmute_to(dst_type, &self.symbol_table)
+                }
             }
             Rvalue::BinaryOp(op, e1, e2) => self.codegen_rvalue_binary_op(res_ty, op, e1, e2, loc),
             Rvalue::CheckedBinaryOp(op, e1, e2) => {
@@ -829,7 +854,7 @@ impl GotocCtx<'_> {
                             .bytes(),
                         Type::size_t(),
                     ),
-                    NullOp::UbChecks => Expr::c_false(),
+                    NullOp::ContractChecks | NullOp::UbChecks => Expr::c_false(),
                 }
             }
             Rvalue::ShallowInitBox(ref operand, content_ty) => {
@@ -942,10 +967,10 @@ impl GotocCtx<'_> {
     pub fn codegen_discriminant_field(&self, place: Expr, ty: Ty) -> Expr {
         let layout = self.layout_of_stable(ty);
         assert!(
-            matches!(&layout.variants, Variants::Multiple {
-                tag_encoding: TagEncoding::Direct,
-                ..
-            }),
+            matches!(
+                &layout.variants,
+                Variants::Multiple { tag_encoding: TagEncoding::Direct, .. }
+            ),
             "discriminant field (`case`) only exists for multiple variants and direct encoding"
         );
         let expr = if ty.kind().is_coroutine() {
@@ -980,8 +1005,10 @@ impl GotocCtx<'_> {
                     // https://github.com/rust-lang/rust/blob/fee75fbe11b1fad5d93c723234178b2a329a3c03/compiler/rustc_codegen_ssa/src/mir/place.rs#L247
                     // See also the cranelift backend:
                     // https://github.com/rust-lang/rust/blob/05d22212e89588e7c443cc6b9bc0e4e02fdfbc8d/compiler/rustc_codegen_cranelift/src/discriminant.rs#L116
-                    let offset = match &layout.fields {
-                        FieldsShape::Arbitrary { offsets, .. } => offsets[0usize.into()],
+                    let offset: rustc_abi::Size = match &layout.fields {
+                        FieldsShape::Arbitrary { offsets, .. } => {
+                            offsets[rustc_abi::FieldIdx::from_usize(0)]
+                        }
                         _ => unreachable!("niche encoding must have arbitrary fields"),
                     };
 
@@ -1483,8 +1510,10 @@ impl GotocCtx<'_> {
             |ctx, var| {
                 // Build the vtable, using Rust's vtable_entries to determine field order
                 let vtable_entries = if let Some(principal) = trait_type.kind().trait_principal() {
-                    let trait_ref_binder = principal.with_self_ty(src_mir_type);
-                    ctx.tcx.vtable_entries(rustc_internal::internal(ctx.tcx, trait_ref_binder))
+                    let trait_ref =
+                        rustc_internal::internal(ctx.tcx, principal.with_self_ty(src_mir_type));
+                    let trait_ref = ctx.tcx.instantiate_bound_regions_with_erased(trait_ref);
+                    ctx.tcx.vtable_entries(trait_ref)
                 } else {
                     TyCtxt::COMMON_VTABLE_ENTRIES
                 };
@@ -1502,9 +1531,26 @@ impl GotocCtx<'_> {
                         VtblEntry::MetadataSize => Some(vt_size.clone()),
                         VtblEntry::MetadataAlign => Some(vt_align.clone()),
                         VtblEntry::Vacant => None,
-                        // TODO: trait upcasting
-                        // https://github.com/model-checking/kani/issues/358
-                        VtblEntry::TraitVPtr(_trait_ref) => None,
+                        VtblEntry::TraitVPtr(trait_ref) => {
+                            let projections = match dst_mir_type.kind() {
+                                TyKind::RigidTy(RigidTy::Dynamic(predicates, ..)) => predicates
+                                    .iter()
+                                    .filter_map(|pred| match &pred.value {
+                                        ExistentialPredicate::Projection(proj) => {
+                                            Some(Binder::bind_with_vars(
+                                                proj.clone(),
+                                                pred.bound_vars.clone(),
+                                            ))
+                                        }
+                                        _ => None,
+                                    })
+                                    .collect(),
+                                _ => vec![],
+                            };
+
+                            let dyn_ref = ctx.trait_ref_to_dyn_trait(*trait_ref, projections);
+                            Some(ctx.codegen_vtable(src_mir_type, dyn_ref, loc).address_of())
+                        }
                         VtblEntry::Method(instance) => Some(ctx.codegen_vtable_method_field(
                             rustc_internal::stable(instance),
                             trait_type,
@@ -1567,8 +1613,15 @@ impl GotocCtx<'_> {
                 };
                 slice_fat_ptr(fat_ptr_type, dst_data_expr, dst_goto_len, &self.symbol_table)
             }
-            (TyKind::RigidTy(RigidTy::Dynamic(..)), TyKind::RigidTy(RigidTy::Dynamic(..))) => {
-                // Cast between fat pointers. Cast the data and the source
+            (
+                ref src_ty @ TyKind::RigidTy(RigidTy::Dynamic(.., ref src_dyn_kind)),
+                ref dst_ty @ TyKind::RigidTy(RigidTy::Dynamic(.., ref dst_dyn_kind)),
+            ) => {
+                assert_eq!(
+                    src_dyn_kind, dst_dyn_kind,
+                    "casting from `{src_dyn_kind:?}` to `{dst_dyn_kind:?}` is not supported"
+                );
+                // Cast between dyn pointers. Cast the data and the source
                 let src_data = src_goto_expr.to_owned().member("data", &self.symbol_table);
                 let dst_data = src_data.cast_to(dst_data_type);
 
@@ -1576,9 +1629,28 @@ impl GotocCtx<'_> {
                 let src_vtable = src_goto_expr.member("vtable", &self.symbol_table);
                 let vtable_name = self.vtable_name_stable(metadata_dst_type);
                 let vtable_ty = Type::struct_tag(vtable_name).to_pointer();
-                let dst_vtable = src_vtable.cast_to(vtable_ty);
 
-                // Construct a fat pointer with the same (casted) fields and new type
+                // Note: Logic based on upstream rustc_codegen_ssa:
+                // https://github.com/rust-lang/rust/blob/8bf5a8d/compiler/rustc_codegen_ssa/src/base.rs#L171
+                let dst_vtable = if src_ty.trait_principal() == dst_ty.trait_principal()
+                    || dst_ty.trait_principal().is_none()
+                {
+                    // If we're casting to the same dyn trait, we can reuse the old vtable
+                    src_vtable.cast_to(vtable_ty)
+                } else if let Some(vptr_entry_idx) = self.tcx.supertrait_vtable_slot((
+                    rustc_internal::internal(self.tcx, metadata_src_type),
+                    rustc_internal::internal(self.tcx, metadata_dst_type),
+                )) {
+                    // Otherwise, if the principals differ and our vtable contains a pointer to the supertrait vtable,
+                    // we can load that
+                    src_vtable
+                        .dereference()
+                        .member(vptr_entry_idx.to_string(), &self.symbol_table)
+                        .cast_to(vtable_ty)
+                } else {
+                    // Fallback to original vtable
+                    src_vtable.cast_to(vtable_ty)
+                };
                 dynamic_fat_ptr(fat_ptr_type, dst_data, dst_vtable, &self.symbol_table)
             }
             (_, TyKind::RigidTy(RigidTy::Dynamic(..))) => {

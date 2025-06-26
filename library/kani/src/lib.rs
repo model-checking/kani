@@ -21,11 +21,13 @@
 #![feature(f16)]
 #![feature(f128)]
 #![feature(convert_float_to_int)]
+#![feature(sized_hierarchy)]
 
 // Allow us to use `kani::` to access crate features.
 extern crate self as kani;
 
 pub mod arbitrary;
+pub mod bounded_arbitrary;
 #[cfg(feature = "concrete_playback")]
 mod concrete_playback;
 pub mod futures;

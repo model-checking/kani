@@ -21,6 +21,7 @@
 #![feature(f128)]
 
 mod arbitrary;
+mod bounded_arbitrary;
 mod float;
 mod mem;
 mod mem_init;
@@ -41,9 +42,12 @@ macro_rules! kani_lib {
         #[unstable(feature = "kani", issue = "none")]
         pub mod kani {
             // We need to list them all today because there is conflict with unstable.
+            use core as core_path;
             pub use kani_core::*;
-            kani_core::kani_intrinsics!(core);
-            kani_core::generate_arbitrary!(core);
+
+            kani_core::kani_intrinsics!();
+            kani_core::generate_arbitrary!();
+            kani_core::generate_bounded_arbitrary!();
             kani_core::generate_models!();
 
             pub mod float {
@@ -62,19 +66,59 @@ macro_rules! kani_lib {
 
     (kani) => {
         pub use kani_core::*;
-        kani_core::kani_intrinsics!(std);
-        kani_core::generate_arbitrary!(std);
+        use std as core_path;
+
+        kani_core::kani_intrinsics!();
+        kani_core::generate_arbitrary!();
+        kani_core::generate_bounded_arbitrary!();
         kani_core::generate_models!();
 
         pub mod float {
+            //! This module contains functions useful for float-related checks
             kani_core::generate_float!(std);
         }
 
         pub mod mem {
+            //! This module contains functions useful for checking unsafe memory access.
+            //!
+            //! Given the following validity rules provided in the Rust documentation:
+            //! <https://doc.rust-lang.org/std/ptr/index.html> (accessed May 20th, 2025)
+            //!
+            //! 1. For memory accesses of size zero, every pointer is valid, including the null pointer.
+            //!    The following points are only concerned with non-zero-sized accesses.
+            //! 2. A null pointer is never valid.
+            //! 3. For a pointer to be valid, it is necessary, but not always sufficient, that the pointer
+            //!    be dereferenceable: the memory range of the given size starting at the pointer must all be
+            //!    within the bounds of a single allocated object. Note that in Rust, every (stack-allocated)
+            //!    variable is considered a separate allocated object.
+            //! 4. All accesses performed by functions in this module are non-atomic in the sense of atomic
+            //!    operations used to synchronize between threads.
+            //!    This means it is undefined behavior to perform two concurrent accesses to the same location
+            //!    from different threads unless both accesses only read from memory.
+            //!    Notice that this explicitly includes `read_volatile` and `write_volatile`:
+            //!    Volatile accesses cannot be used for inter-thread synchronization.
+            //! 5. The result of casting a reference to a pointer is valid for as long as the underlying
+            //!    object is live and no reference (just raw pointers) is used to access the same memory.
+            //!    That is, reference and pointer accesses cannot be interleaved.
+            //!
+            //! Kani is able to verify #1, #2, and #3 today.
             kani_core::kani_mem!(std);
         }
 
         mod mem_init {
+            //! This module provides instrumentation for tracking memory initialization of raw pointers.
+            //!
+            //! Currently, memory initialization is tracked on per-byte basis, so each byte of memory pointed to
+            //! by raw pointers could be either initialized or uninitialized. Padding bytes are always
+            //! considered uninitialized when read as data bytes. Each type has a type layout to specify which
+            //! bytes are considered to be data and which -- padding. This is determined at compile time and
+            //! statically injected into the program (see `Layout`).
+            //!
+            //! Compiler automatically inserts calls to `is_xxx_initialized` and `set_xxx_initialized` at
+            //! appropriate locations to get or set the initialization status of the memory pointed to.
+            //!
+            //! Note that for each harness, tracked object and tracked offset are chosen non-deterministically,
+            //! so calls to `is_xxx_initialized` should be only used in assertion contexts.
             kani_core::kani_mem_init!(std);
         }
     };
@@ -88,7 +132,7 @@ macro_rules! kani_lib {
 #[allow(clippy::crate_in_macro_def)]
 #[macro_export]
 macro_rules! kani_intrinsics {
-    ($core:tt) => {
+    () => {
         /// Creates an assumption that will be valid after this statement run. Note that the assumption
         /// will only be applied for paths that follow the assumption. If the assumption doesn't hold, the
         /// program will exit successfully.
@@ -150,6 +194,34 @@ macro_rules! kani_intrinsics {
             assert!(cond, "{}", msg);
         }
 
+        #[macro_export]
+        macro_rules! forall {
+            (|$i:ident in ($lower_bound:expr, $upper_bound:expr)| $predicate:expr) => {{
+                let lower_bound: usize = $lower_bound;
+                let upper_bound: usize = $upper_bound;
+                let predicate = |$i| $predicate;
+                kani::internal::kani_forall(lower_bound, upper_bound, predicate)
+            }};
+            (|$i:ident | $predicate:expr) => {{
+                let predicate = |$i| $predicate;
+                kani::internal::kani_forall(usize::MIN, usize::MAX, predicate)
+            }};
+        }
+
+        #[macro_export]
+        macro_rules! exists {
+            (|$i:ident in ($lower_bound:expr, $upper_bound:expr)| $predicate:expr) => {{
+                let lower_bound: usize = $lower_bound;
+                let upper_bound: usize = $upper_bound;
+                let predicate = |$i| $predicate;
+                kani::internal::kani_exists(lower_bound, upper_bound, predicate)
+            }};
+            (|$i:ident | $predicate:expr) => {{
+                let predicate = |$i| $predicate;
+                kani::internal::kani_exists(usize::MIN, usize::MAX, predicate)
+            }};
+        }
+
         /// Creates a cover property with the specified condition and message.
         ///
         /// # Example:
@@ -201,6 +273,15 @@ macro_rules! kani_intrinsics {
         #[inline(always)]
         pub fn any<T: Arbitrary>() -> T {
             T::any()
+        }
+
+        /// Creates a symbolic value *bounded* by `N`. Bounded means `|T| <= N`. The type
+        /// implementing BoundedArbitrary decides exactly what size means for them.
+        ///
+        /// *Note*: Any proof using a bounded symbolic value is only valid up to that bound.
+        #[inline(always)]
+        pub fn bounded_any<T: BoundedArbitrary, const N: usize>() -> T {
+            T::bounded_any::<N>()
         }
 
         /// This function is only used for function contract instrumentation.
@@ -308,6 +389,18 @@ macro_rules! kani_intrinsics {
             assert!(cond, "Safety check failed: {msg}");
         }
 
+        #[doc(hidden)]
+        #[allow(dead_code)]
+        #[kanitool::fn_marker = "SafetyCheckNoAssumeHook"]
+        #[inline(never)]
+        pub(crate) fn safety_check_no_assume(cond: bool, msg: &'static str) {
+            #[cfg(not(feature = "concrete_playback"))]
+            return kani_intrinsic();
+
+            #[cfg(feature = "concrete_playback")]
+            assert!(cond, "Safety check failed: {msg}");
+        }
+
         /// This should indicate that Kani does not support a certain operation.
         #[doc(hidden)]
         #[allow(dead_code)]
@@ -382,6 +475,12 @@ macro_rules! kani_intrinsics {
                 unsafe fn assignable(self) -> *mut Self::Inner {
                     self
                 }
+            }
+
+            /// Used to hold the bodies of automatically generated harnesses.
+            #[kanitool::fn_marker = "AutomaticHarnessIntrinsic"]
+            pub fn automatic_harness() {
+                super::kani_intrinsic()
             }
 
             /// A way to break the ownerhip rules. Only used by contracts where we can
@@ -526,6 +625,34 @@ macro_rules! kani_intrinsics {
             #[kanitool::fn_marker = "CheckHook"]
             pub(crate) const fn check(cond: bool, msg: &'static str) {
                 assert!(cond, "{}", msg);
+            }
+
+            #[crate::kani::unstable_feature(
+                feature = "quantifiers",
+                issue = 2546,
+                reason = "experimental quantifiers"
+            )]
+            #[inline(never)]
+            #[kanitool::fn_marker = "ForallHook"]
+            pub fn kani_forall<T, F>(lower_bound: T, upper_bound: T, predicate: F) -> bool
+            where
+                F: Fn(T) -> bool,
+            {
+                predicate(lower_bound)
+            }
+
+            #[crate::kani::unstable_feature(
+                feature = "quantifiers",
+                issue = 2546,
+                reason = "experimental quantifiers"
+            )]
+            #[inline(never)]
+            #[kanitool::fn_marker = "ExistsHook"]
+            pub fn kani_exists<T, F>(lower_bound: T, upper_bound: T, predicate: F) -> bool
+            where
+                F: Fn(T) -> bool,
+            {
+                predicate(lower_bound)
             }
         }
     };

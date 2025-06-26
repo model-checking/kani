@@ -4,7 +4,10 @@
 use crate::args::VerificationArgs;
 use crate::call_single_file::{LibConfig, to_rustc_arg};
 use crate::project::Artifact;
-use crate::session::{KaniSession, lib_folder, lib_no_core_folder, setup_cargo_command};
+use crate::session::{
+    KaniSession, get_cargo_path, lib_folder, lib_no_core_folder, setup_cargo_command,
+    setup_cargo_command_inner,
+};
 use crate::util;
 use anyhow::{Context, Result, bail};
 use cargo_metadata::diagnostic::{Diagnostic, DiagnosticLevel};
@@ -32,8 +35,6 @@ pub struct CargoOutputs {
     pub metadata: Vec<Artifact>,
     /// Recording the cargo metadata from the build
     pub cargo_metadata: Metadata,
-    /// For build `keep_going` mode, we collect the targets that we failed to compile.
-    pub failed_targets: Option<Vec<String>>,
 }
 
 impl KaniSession {
@@ -126,7 +127,7 @@ crate-type = ["lib"]
     }
 
     /// Calls `cargo_build` to generate `*.symtab.json` files in `target_dir`
-    pub fn cargo_build(&self, keep_going: bool) -> Result<CargoOutputs> {
+    pub fn cargo_build(&mut self, keep_going: bool) -> Result<CargoOutputs> {
         let build_target = env!("TARGET"); // see build.rs
         let metadata = self.cargo_metadata(build_target)?;
         let target_dir = self
@@ -182,15 +183,19 @@ crate-type = ["lib"]
             cargo_args.push("-v".into());
         }
 
-        // Arguments that will only be passed to the target package.
-        let mut pkg_args: Vec<String> = vec![];
-        pkg_args.extend(["--".to_string(), self.reachability_arg()]);
-        if let Some(backend_arg) = self.backend_arg() {
-            pkg_args.push(backend_arg);
-        }
-        if self.args.no_assert_contracts {
-            pkg_args.push("--no-assert-contracts".into());
-        }
+        // Arguments that will only be passed to the target package (the package under verification)
+        // and not its dependencies, c.f. https://doc.rust-lang.org/cargo/commands/cargo-rustc.html.
+        // The difference between pkg_args and rustc_args is that rustc_args are also provided when
+        // we invoke rustc on the target package's dependencies.
+        // We do not provide the `--reachability` argument to dependencies so that it has the default value `None`
+        // (c.f. kani-compiler::args::ReachabilityType) and we skip codegen for the dependency.
+        // This is the desired behavior because we only want to construct `CodegenUnits` for the target package;
+        // i.e., if some dependency has harnesses, we don't want to run them.
+
+        // If you are adding a new `kani-compiler` argument, you likely want to put it `kani_compiler_flags()` instead,
+        // unless there a reason it shouldn't be passed to dependencies.
+        // (Note that at the time of writing, passing the other compiler args to dependencies is a no-op, since `--reachability=None` skips codegen anyway.)
+        let pkg_args = vec!["--".into(), self.reachability_arg()];
 
         let mut found_target = false;
         let packages = self.packages_to_verify(&self.args, &metadata)?;
@@ -198,7 +203,8 @@ crate-type = ["lib"]
         let mut failed_targets = vec![];
         for package in packages {
             for verification_target in package_targets(&self.args, package) {
-                let mut cmd = setup_cargo_command()?;
+                let mut cmd =
+                    setup_cargo_command_inner(Some(verification_target.target().name.clone()))?;
                 cmd.args(&cargo_args)
                     .args(vec!["-p", &package.id.to_string()])
                     .args(verification_target.to_args())
@@ -207,6 +213,8 @@ crate-type = ["lib"]
                     // Use CARGO_ENCODED_RUSTFLAGS instead of RUSTFLAGS is preferred. See
                     // https://doc.rust-lang.org/cargo/reference/environment-variables.html
                     .env("CARGO_ENCODED_RUSTFLAGS", rustc_args.join(OsStr::new("\x1f")))
+                    // This is only required for stable but is a no-op for nightly channels
+                    .env("RUSTC_BOOTSTRAP", "1")
                     .env("CARGO_TERM_PROGRESS_WHEN", "never");
 
                 match self.run_build_target(cmd, verification_target.target()) {
@@ -230,16 +238,15 @@ crate-type = ["lib"]
             bail!("No supported targets were found.");
         }
 
-        Ok(CargoOutputs {
-            outdir,
-            metadata: artifacts,
-            cargo_metadata: metadata,
-            failed_targets: keep_going.then_some(failed_targets),
-        })
+        Ok(CargoOutputs { outdir, metadata: artifacts, cargo_metadata: metadata })
     }
 
     pub fn cargo_metadata(&self, build_target: &str) -> Result<Metadata> {
         let mut cmd = MetadataCommand::new();
+
+        // Use Kani's toolchain when running `cargo metadata`
+        let cargo_path = get_cargo_path().unwrap();
+        cmd.cargo_path(cargo_path);
 
         // restrict metadata command to host platform. References:
         // https://github.com/rust-lang/rust-analyzer/issues/6908
@@ -350,7 +357,13 @@ crate-type = ["lib"]
                     && t1.doc == t2.doc)
         }
 
+        let compile_start = std::time::Instant::now();
         let artifacts = self.run_build(cargo_cmd)?;
+        if std::env::var("TIME_COMPILER").is_ok() {
+            // conditionally print the compilation time for debugging & use by `compile-timer`
+            // doesn't just use the existing `--debug` flag because the number of prints significantly affects performance
+            println!("BUILT {} IN {:?}μs", target.name, compile_start.elapsed().as_micros());
+        }
         debug!(?artifacts, "run_build_target");
 
         // We generate kani specific artifacts only for the build target. The build target is

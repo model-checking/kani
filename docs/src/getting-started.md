@@ -20,7 +20,7 @@ We also publish updates on Kani use cases and features on our [blog](https://mod
 There is support for a fair amount of Rust language features, but not all (e.g., concurrency).
 Please see [Limitations](./limitations.md) for a detailed list of supported features.
 
-Kani releases every two weeks.
+Kani releases every month.
 As part of every release, Kani will synchronize with a recent nightly release of Rust, and so is generally up-to-date with the latest Rust language features.
 
 If you encounter issues when using Kani, we encourage you to [report them to us](https://github.com/model-checking/kani/issues/new/choose).

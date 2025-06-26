@@ -48,6 +48,8 @@ pub enum KaniIntrinsic {
     CheckedAlignOf,
     #[strum(serialize = "CheckedSizeOfIntrinsic")]
     CheckedSizeOf,
+    #[strum(serialize = "AutomaticHarnessIntrinsic")]
+    AutomaticHarness,
     #[strum(serialize = "IsInitializedIntrinsic")]
     IsInitialized,
     #[strum(serialize = "ValidValueIntrinsic")]
@@ -85,8 +87,8 @@ pub enum KaniModel {
     Offset,
     #[strum(serialize = "PtrOffsetFromModel")]
     PtrOffsetFrom,
-    #[strum(serialize = "PtrSubPtrModel")]
-    PtrSubPtr,
+    #[strum(serialize = "PtrOffsetFromUnsignedModel")]
+    PtrOffsetFromUnsigned,
     #[strum(serialize = "RunContractModel")]
     RunContract,
     #[strum(serialize = "RunLoopContractModel")]
@@ -97,6 +99,8 @@ pub enum KaniModel {
     SetSliceChunkPtrInitialized,
     #[strum(serialize = "SetSlicePtrInitializedModel")]
     SetSlicePtrInitialized,
+    #[strum(serialize = "PanicStub")]
+    PanicStub,
     #[strum(serialize = "SetStrPtrInitializedModel")]
     SetStrPtrInitialized,
     #[strum(serialize = "SizeOfDynObjectModel")]
@@ -131,6 +135,10 @@ pub enum KaniHook {
     Check,
     #[strum(serialize = "CoverHook")]
     Cover,
+    #[strum(serialize = "ExistsHook")]
+    Exists,
+    #[strum(serialize = "ForallHook")]
+    Forall,
     // TODO: this is temporarily implemented as a hook, but should be implemented as an intrinsic
     #[strum(serialize = "FloatToIntInRangeHook")]
     FloatToIntInRange,
@@ -146,6 +154,8 @@ pub enum KaniHook {
     PointerOffset,
     #[strum(serialize = "SafetyCheckHook")]
     SafetyCheck,
+    #[strum(serialize = "SafetyCheckNoAssumeHook")]
+    SafetyCheckNoAssume,
     #[strum(serialize = "UnsupportedCheckHook")]
     UnsupportedCheck,
     #[strum(serialize = "UntrackedDerefHook")]
@@ -261,5 +271,9 @@ pub fn validate_kani_functions(kani_funcs: &HashMap<KaniFunction, FnDef>) {
             missing += 1;
         }
     }
-    assert_eq!(missing, 0, "Failed to find `{missing}` Kani functions");
+    // If this is failing for #[no_std] crates, try explicitly adding `extern crate kani` to the crate root.
+    // See https://github.com/model-checking/kani/issues/3906 for why this is required.
+    if missing != 0 {
+        tracing::error!("Failed to find `{missing}` Kani functions")
+    }
 }

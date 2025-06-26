@@ -4,7 +4,6 @@
 //! Module used to configure a compiler session.
 
 use crate::args::Arguments;
-use rustc_data_structures::sync::Lrc;
 use rustc_errors::{
     ColorConfig, DiagInner, emitter::Emitter, emitter::HumanReadableErrorType,
     fallback_fluent_bundle, json::JsonEmitter, registry::Registry as ErrorRegistry,
@@ -16,6 +15,7 @@ use rustc_span::source_map::SourceMap;
 use std::io;
 use std::io::IsTerminal;
 use std::panic;
+use std::sync::Arc;
 use std::sync::LazyLock;
 use tracing_subscriber::{EnvFilter, Registry, layer::SubscriberExt};
 use tracing_tree::HierarchicalLayer;
@@ -57,7 +57,7 @@ static JSON_PANIC_HOOK: LazyLock<Box<dyn Fn(&panic::PanicHookInfo<'_>) + Sync + 
             let mut emitter = JsonEmitter::new(
                 Box::new(io::BufWriter::new(io::stderr())),
                 #[allow(clippy::arc_with_non_send_sync)]
-                Lrc::new(SourceMap::new(FilePathMapping::empty())),
+                Some(Arc::new(SourceMap::new(FilePathMapping::empty()))),
                 fallback_bundle,
                 false,
                 HumanReadableErrorType::Default,

@@ -27,6 +27,7 @@ is following our CI scripts:
 git clone https://github.com/model-checking/kani.git
 cd kani
 git submodule update --init
+ # For Ubuntu 20.04, use: `./scripts/setup/ubuntu-20.04/install_deps.sh`
 ./scripts/setup/ubuntu/install_deps.sh
 # If you haven't already (or from https://rustup.rs/):
 ./scripts/setup/install_rustup.sh
@@ -50,11 +51,16 @@ source $HOME/.cargo/env
 
 ## Build and test Kani
 
-Build the Kani package:
+Build the Kani package using:
 
+```
+cargo build-dev -- --release
+```
+to compile with optimizations turned on or using:
 ```
 cargo build-dev
 ```
+to compile in debug/development mode.
 
 Then, optionally, run the regression tests:
 

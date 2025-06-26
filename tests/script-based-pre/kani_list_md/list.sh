@@ -6,7 +6,7 @@
 # Note that the list.expected file omits the value for "kani-version"
 # to avoid having to update the test every time we bump versions.
 
-output=$(kani list -Z list -Z function-contracts src/lib.rs --format markdown)
+output=$(kani list -Z function-contracts src/lib.rs --format markdown)
 
 # Check that Kani prints the absolute path to kani-list.md
 absolute_path="$(cd "$(dirname "kani-list.md")" && pwd -P && cd - > /dev/null)/$(basename "kani-list.md")"

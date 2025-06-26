@@ -18,7 +18,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macos-13, ubuntu-20.04, ubuntu-22.04, ubuntu-24.04, macos-14, ubuntu-24.04-arm]
+        os: [macos-13, ubuntu-22.04, ubuntu-24.04, macos-14, ubuntu-24.04-arm]
     steps:
       - name: Checkout Kani
         uses: actions/checkout@v4
@@ -32,7 +32,7 @@ jobs:
         run: ./scripts/kani-regression.sh
 
   benchcomp-tests:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout Kani
         uses: actions/checkout@v4
@@ -46,7 +46,7 @@ jobs:
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
         with:
-          os: ubuntu-20.04
+          os: ubuntu-24.04
 
       - name: Build Kani using release mode
         run: cargo build-dev -- --release
@@ -55,7 +55,7 @@ jobs:
         run: pushd tools/benchcomp && PATH=$(realpath ../../scripts):$PATH test/run
 
   perf:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout Kani
         uses: actions/checkout@v4
@@ -63,15 +63,32 @@ jobs:
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
         with:
-          os: ubuntu-20.04
+          os: ubuntu-24.04
 
       - name: Execute Kani performance tests
         run: ./scripts/kani-perf.sh
         env:
           RUST_TEST_THREADS: 1
 
+  llbc-regression:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Kani
+        uses: actions/checkout@v4
+
+      - name: Setup Kani Dependencies
+        uses: ./.github/actions/setup
+        with:
+          os: ubuntu-24.04
+
+      - name: Build Kani with Charon
+        run: cargo build-dev -- --features cprover --features llbc
+
+      - name: Run tests
+        run: ./scripts/kani-llbc-regression.sh
+
   documentation:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:

@@ -163,7 +163,8 @@ impl<'tcx> PointsToGraph<'tcx> {
                 | ProjectionElem::Subslice { .. }
                 | ProjectionElem::Downcast(..)
                 | ProjectionElem::OpaqueCast(..)
-                | ProjectionElem::Subtype(..) => {
+                | ProjectionElem::Subtype(..)
+                | ProjectionElem::UnwrapUnsafeBinder(..) => {
                     /* There operations are no-ops w.r.t aliasing since we are tracking it on per-object basis. */
                 }
             }
@@ -186,7 +187,7 @@ impl<'tcx> PointsToGraph<'tcx> {
     /// Dump the graph into a file using the graphviz format for later visualization.
     pub fn dump(&self, file_path: &str) {
         let mut nodes: Vec<String> =
-            self.nodes.keys().map(|from| format!("\t\"{:?}\"", from)).collect();
+            self.nodes.keys().map(|from| format!("\t\"{from:?}\"")).collect();
         nodes.sort();
         let nodes_str = nodes.join("\n");
 
@@ -194,9 +195,9 @@ impl<'tcx> PointsToGraph<'tcx> {
             .nodes
             .iter()
             .flat_map(|(from, to)| {
-                let from = format!("\"{:?}\"", from);
+                let from = format!("\"{from:?}\"");
                 to.successors.iter().map(move |to| {
-                    let to = format!("\"{:?}\"", to);
+                    let to = format!("\"{to:?}\"");
                     format!("\t{} -> {}", from.clone(), to)
                 })
             })
@@ -204,7 +205,7 @@ impl<'tcx> PointsToGraph<'tcx> {
         edges.sort();
         let edges_str = edges.join("\n");
 
-        std::fs::write(file_path, format!("digraph {{\n{}\n{}\n}}", nodes_str, edges_str)).unwrap();
+        std::fs::write(file_path, format!("digraph {{\n{nodes_str}\n{edges_str}\n}}")).unwrap();
     }
 
     /// Find a transitive closure of the graph starting from a set of given locations; this also

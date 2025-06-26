@@ -5,9 +5,7 @@ use anyhow::{Result, bail};
 use std::path::Path;
 use tracing::{debug, trace};
 
-use kani_metadata::{
-    HarnessMetadata, InternedString, KaniMetadata, TraitDefinedMethod, VtableCtxResults,
-};
+use kani_metadata::{HarnessMetadata, InternedString, TraitDefinedMethod, VtableCtxResults};
 use std::collections::{BTreeSet, HashMap};
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
@@ -89,27 +87,6 @@ pub fn from_json<T: for<'a> Deserialize<'a>>(path: &Path) -> Result<T> {
     Ok(obj)
 }
 
-/// Consumes a vector of parsed metadata, and produces a combined structure
-pub fn merge_kani_metadata(files: Vec<KaniMetadata>) -> KaniMetadata {
-    let mut result = KaniMetadata {
-        crate_name: "cbmc-linked".to_string(),
-        proof_harnesses: vec![],
-        unsupported_features: vec![],
-        test_harnesses: vec![],
-        contracted_functions: vec![],
-    };
-    for md in files {
-        // Note that we're taking ownership of the original vec, and so we can move the data into the new data structure.
-        result.proof_harnesses.extend(md.proof_harnesses);
-        // TODO: these should be merged via a map to aggregate them all
-        // https://github.com/model-checking/kani/issues/1758
-        result.unsupported_features.extend(md.unsupported_features);
-        result.test_harnesses.extend(md.test_harnesses);
-        result.contracted_functions.extend(md.contracted_functions);
-    }
-    result
-}
-
 impl KaniSession {
     /// Determine which function to use as entry point, based on command-line arguments and kani-metadata.
     pub fn determine_targets<'a>(
@@ -176,6 +153,10 @@ fn find_proof_harnesses<'a>(
     debug!(?targets, "find_proof_harness");
     let mut result = vec![];
     for md in all_harnesses.iter() {
+        // --harnesses should not select automatic harnesses
+        if md.is_automatically_generated {
+            continue;
+        }
         if exact_filter {
             // Check for exact match only
             if targets.contains(&md.pretty_name) {
@@ -224,6 +205,7 @@ pub mod tests {
             goto_file: model_file,
             contract: Default::default(),
             has_loop_contracts: false,
+            is_automatically_generated: false,
         }
     }
 

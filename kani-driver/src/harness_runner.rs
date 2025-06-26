@@ -1,8 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use anyhow::{Result, bail};
-use kani_metadata::{ArtifactType, HarnessMetadata};
+use anyhow::{Error, Result, bail};
+use kani_metadata::{ArtifactType, HarnessKind, HarnessMetadata};
 use rayon::prelude::*;
 use std::fs::File;
 use std::io::Write;
@@ -11,7 +11,7 @@ use std::path::Path;
 use crate::args::OutputFormat;
 use crate::call_cbmc::{VerificationResult, VerificationStatus};
 use crate::project::Project;
-use crate::session::KaniSession;
+use crate::session::{BUG_REPORT_URL, KaniSession};
 
 use std::env::current_dir;
 use std::path::PathBuf;
@@ -32,6 +32,20 @@ pub(crate) struct HarnessRunner<'sess, 'pr> {
 pub(crate) struct HarnessResult<'pr> {
     pub harness: &'pr HarnessMetadata,
     pub result: VerificationResult,
+}
+
+#[derive(Debug)]
+struct FailFastHarnessInfo {
+    pub index_to_failing_harness: usize,
+    pub result: VerificationResult,
+}
+
+impl std::error::Error for FailFastHarnessInfo {}
+
+impl std::fmt::Display for FailFastHarnessInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "harness failed")
+    }
 }
 
 impl<'pr> HarnessRunner<'_, 'pr> {
@@ -55,23 +69,43 @@ impl<'pr> HarnessRunner<'_, 'pr> {
         let results = pool.install(|| -> Result<Vec<HarnessResult<'pr>>> {
             sorted_harnesses
                 .par_iter()
-                .map(|harness| -> Result<HarnessResult<'pr>> {
+                .enumerate()
+                .map(|(idx, harness)| -> Result<HarnessResult<'pr>> {
                     let goto_file =
-                        self.project.get_harness_artifact(&harness, ArtifactType::Goto).unwrap();
+                        self.project.get_harness_artifact(harness, ArtifactType::Goto).unwrap();
 
-                    self.sess.instrument_model(goto_file, goto_file, &self.project, &harness)?;
+                    self.sess.instrument_model(goto_file, goto_file, self.project, harness)?;
 
                     if self.sess.args.synthesize_loop_contracts {
-                        self.sess.synthesize_loop_contracts(goto_file, &goto_file, &harness)?;
+                        self.sess.synthesize_loop_contracts(goto_file, goto_file, harness)?;
                     }
 
                     let result = self.sess.check_harness(goto_file, harness)?;
-                    Ok(HarnessResult { harness, result })
+                    if self.sess.args.fail_fast && result.status == VerificationStatus::Failure {
+                        Err(Error::new(FailFastHarnessInfo {
+                            index_to_failing_harness: idx,
+                            result,
+                        }))
+                    } else {
+                        Ok(HarnessResult { harness, result })
+                    }
                 })
                 .collect::<Result<Vec<_>>>()
-        })?;
-
-        Ok(results)
+        });
+        match results {
+            Ok(results) => Ok(results),
+            Err(err) => {
+                if err.is::<FailFastHarnessInfo>() {
+                    let failed = err.downcast::<FailFastHarnessInfo>().unwrap();
+                    Ok(vec![HarnessResult {
+                        harness: sorted_harnesses[failed.index_to_failing_harness],
+                        result: failed.result,
+                    }])
+                } else {
+                    Err(err)
+                }
+            }
+        }
     }
 
     /// Return an error if the user is trying to verify a harness with stubs without enabling the
@@ -146,7 +180,7 @@ impl KaniSession {
             file_output = format!("Thread {thread_index}:\n{file_output}");
         }
 
-        if let Err(e) = writeln!(file, "{}", file_output) {
+        if let Err(e) = writeln!(file, "{file_output}") {
             eprintln!(
                 "Failed to write to file {}: {}",
                 file_name.into_os_string().into_string().unwrap(),
@@ -168,11 +202,28 @@ impl KaniSession {
     ) -> Result<VerificationResult> {
         let thread_index = rayon::current_thread_index().unwrap_or_default();
         if !self.args.common_args.quiet {
-            if rayon::current_num_threads() > 1 {
-                println!("Thread {thread_index}: Checking harness {}...", harness.pretty_name);
+            // If the harness is automatically generated, pretty_name refers to the function under verification.
+            let mut msg = if harness.is_automatically_generated {
+                if matches!(harness.attributes.kind, HarnessKind::Proof) {
+                    format!(
+                        "Autoharness: Checking function {} against all possible inputs...",
+                        harness.pretty_name
+                    )
+                } else {
+                    format!(
+                        "Autoharness: Checking function {}'s contract against all possible inputs...",
+                        harness.pretty_name
+                    )
+                }
             } else {
-                println!("Checking harness {}...", harness.pretty_name);
+                format!("Checking harness {}...", harness.pretty_name)
+            };
+
+            if rayon::current_num_threads() > 1 {
+                msg = format!("Thread {thread_index}: {msg}");
             }
+
+            println!("{msg}");
         }
 
         let mut result = self.with_timer(|| self.run_cbmc(binary, harness), "run_cbmc")?;
@@ -188,61 +239,72 @@ impl KaniSession {
     /// Note: Takes `self` "by ownership". This function wants to be able to drop before
     /// exiting with an error code, if needed.
     pub(crate) fn print_final_summary(self, results: &[HarnessResult<'_>]) -> Result<()> {
+        if self.args.common_args.quiet {
+            return Ok(());
+        }
+
+        let (automatic, manual): (Vec<_>, Vec<_>) =
+            results.iter().partition(|r| r.harness.is_automatically_generated);
+
         let (successes, failures): (Vec<_>, Vec<_>) =
-            results.iter().partition(|r| r.result.status == VerificationStatus::Success);
+            manual.into_iter().partition(|r| r.result.status == VerificationStatus::Success);
 
         let succeeding = successes.len();
         let failing = failures.len();
         let total = succeeding + failing;
 
-        if self.args.concrete_playback.is_some()
-            && !self.args.common_args.quiet
-            && results.iter().all(|r| !r.result.generated_concrete_test)
-        {
-            println!(
-                "INFO: The concrete playback feature never generated unit tests because there were no failing harnesses."
-            )
+        if self.args.concrete_playback.is_some() {
+            if failures.is_empty() {
+                println!(
+                    "INFO: The concrete playback feature never generated unit tests because there were no failing harnesses."
+                )
+            } else if failures.iter().all(|r| !r.result.generated_concrete_test) {
+                eprintln!(
+                    "The concrete playback feature did not generate unit tests, but there were failing harnesses. Please file a bug report at {BUG_REPORT_URL}"
+                )
+            }
         }
 
-        // We currently omit a summary if there was just 1 harness
-        if !self.args.common_args.quiet {
-            if failing > 0 {
-                println!("Summary:");
-            }
-            for failure in failures.iter() {
-                println!("Verification failed for - {}", failure.harness.pretty_name);
-            }
+        println!("Manual Harness Summary:");
 
-            if total > 0 {
-                println!(
-                    "Complete - {succeeding} successfully verified harnesses, {failing} failures, {total} total."
-                );
-            } else {
-                match self.args.harnesses.as_slice() {
-                    [] =>
-                    // TODO: This could use a better message, possibly with links to Kani documentation.
-                    // New users may encounter this and could use a pointer to how to write proof harnesses.
-                    {
-                        println!(
-                            "No proof harnesses (functions with #[kani::proof]) were found to verify."
-                        )
-                    }
-                    [harness] => {
-                        bail!("no harnesses matched the harness filter: `{harness}`")
-                    }
-                    harnesses => bail!(
-                        "no harnesses matched the harness filters: `{}`",
-                        harnesses.join("`, `")
-                    ),
-                };
-            }
+        for failure in failures.iter() {
+            println!("Verification failed for - {}", failure.harness.pretty_name);
+        }
+
+        if total > 0 {
+            println!(
+                "Complete - {succeeding} successfully verified harnesses, {failing} failures, {total} total."
+            );
+        } else {
+            match self.args.harnesses.as_slice() {
+                [] =>
+                // TODO: This could use a better message, possibly with links to Kani documentation.
+                // New users may encounter this and could use a pointer to how to write proof harnesses.
+                {
+                    println!(
+                        "No proof harnesses (functions with #[kani::proof]) were found to verify."
+                    )
+                }
+                [harness] => {
+                    bail!("no harnesses matched the harness filter: `{harness}`")
+                }
+                harnesses => {
+                    bail!("no harnesses matched the harness filters: `{}`", harnesses.join("`, `"))
+                }
+            };
         }
 
         if self.args.coverage {
             self.show_coverage_summary()?;
         }
 
-        if failing > 0 {
+        let autoharness_failing = if self.autoharness_compiler_flags.is_some() {
+            self.print_autoharness_summary(automatic)?
+        } else {
+            0
+        };
+
+        if failing + autoharness_failing > 0 {
             // Failure exit code without additional error message
             drop(self);
             std::process::exit(1);

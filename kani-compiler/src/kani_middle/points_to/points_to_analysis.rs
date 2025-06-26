@@ -218,7 +218,7 @@ impl<'tcx> Analysis<'tcx> for PointsToAnalysis<'_, 'tcx> {
                         }
                         // All `atomic_cxchg` intrinsics take `dst, old, src` as arguments.
                         // This is equivalent to `destination = *dst; *dst = src`.
-                        Intrinsic::AtomicCxchg(_) | Intrinsic::AtomicCxchgWeak(_) => {
+                        Intrinsic::AtomicCxchg | Intrinsic::AtomicCxchgWeak => {
                             let src_set = self.successors_for_operand(state, args[2].node.clone());
                             let dst_set = self.successors_for_deref(state, args[0].node.clone());
                             let destination_set = state.resolve_place(*destination, self.instance);
@@ -227,31 +227,31 @@ impl<'tcx> Analysis<'tcx> for PointsToAnalysis<'_, 'tcx> {
                         }
                         // All `atomic_load` intrinsics take `src` as an argument.
                         // This is equivalent to `destination = *src`.
-                        Intrinsic::AtomicLoad(_) => {
+                        Intrinsic::AtomicLoad => {
                             let src_set = self.successors_for_deref(state, args[0].node.clone());
                             let destination_set = state.resolve_place(*destination, self.instance);
                             state.extend(&destination_set, &state.successors(&src_set));
                         }
                         // All `atomic_store` intrinsics take `dst, val` as arguments.
                         // This is equivalent to `*dst = val`.
-                        Intrinsic::AtomicStore(_) => {
+                        Intrinsic::AtomicStore => {
                             let dst_set = self.successors_for_deref(state, args[0].node.clone());
                             let val_set = self.successors_for_operand(state, args[1].node.clone());
                             state.extend(&dst_set, &val_set);
                         }
                         // All other `atomic` intrinsics take `dst, src` as arguments.
                         // This is equivalent to `destination = *dst; *dst = src`.
-                        Intrinsic::AtomicAnd(_)
-                        | Intrinsic::AtomicMax(_)
-                        | Intrinsic::AtomicMin(_)
-                        | Intrinsic::AtomicNand(_)
-                        | Intrinsic::AtomicOr(_)
-                        | Intrinsic::AtomicUmax(_)
-                        | Intrinsic::AtomicUmin(_)
-                        | Intrinsic::AtomicXadd(_)
-                        | Intrinsic::AtomicXchg(_)
-                        | Intrinsic::AtomicXor(_)
-                        | Intrinsic::AtomicXsub(_) => {
+                        Intrinsic::AtomicAnd
+                        | Intrinsic::AtomicMax
+                        | Intrinsic::AtomicMin
+                        | Intrinsic::AtomicNand
+                        | Intrinsic::AtomicOr
+                        | Intrinsic::AtomicUmax
+                        | Intrinsic::AtomicUmin
+                        | Intrinsic::AtomicXadd
+                        | Intrinsic::AtomicXchg
+                        | Intrinsic::AtomicXor
+                        | Intrinsic::AtomicXsub => {
                             let src_set = self.successors_for_operand(state, args[1].node.clone());
                             let dst_set = self.successors_for_deref(state, args[0].node.clone());
                             let destination_set = state.resolve_place(*destination, self.instance);
@@ -361,7 +361,7 @@ fn try_resolve_instance<'tcx>(
                 tcx,
                 TypingEnv::fully_monomorphized(),
                 *def,
-                &args,
+                args,
                 DUMMY_SP,
             ))
         }
@@ -463,19 +463,22 @@ impl<'tcx> PointsToAnalysis<'_, 'tcx> {
             // Sanity check. The first argument is the closure itself and the second argument is the tupled arguments from the caller.
             assert!(args.len() == 2);
             // First, connect all upvars.
-            let lvalue_set = HashSet::from([MemLoc::new_stack_allocation(instance, Place {
-                local: 1usize.into(),
-                projection: List::empty(),
-            })]);
+            let lvalue_set = HashSet::from([MemLoc::new_stack_allocation(
+                instance,
+                Place { local: 1usize.into(), projection: List::empty() },
+            )]);
             let rvalue_set = self.successors_for_operand(state, args[0].node.clone());
             initial_graph.extend(&lvalue_set, &rvalue_set);
             // Then, connect the argument tuple to each of the spread arguments.
             let spread_arg_operand = args[1].node.clone();
             for i in 0..new_body.arg_count {
-                let lvalue_set = HashSet::from([MemLoc::new_stack_allocation(instance, Place {
-                    local: (i + 1).into(), // Since arguments in the callee are starting with 1, account for that.
-                    projection: List::empty(),
-                })]);
+                let lvalue_set = HashSet::from([MemLoc::new_stack_allocation(
+                    instance,
+                    Place {
+                        local: (i + 1).into(), // Since arguments in the callee are starting with 1, account for that.
+                        projection: List::empty(),
+                    },
+                )]);
                 // This conservatively assumes all arguments alias to all parameters.
                 let rvalue_set = self.successors_for_operand(state, spread_arg_operand.clone());
                 initial_graph.extend(&lvalue_set, &rvalue_set);
@@ -483,10 +486,13 @@ impl<'tcx> PointsToAnalysis<'_, 'tcx> {
         } else {
             // Otherwise, simply connect all arguments to parameters.
             for (i, arg) in args.iter().enumerate() {
-                let lvalue_set = HashSet::from([MemLoc::new_stack_allocation(instance, Place {
-                    local: (i + 1).into(), // Since arguments in the callee are starting with 1, account for that.
-                    projection: List::empty(),
-                })]);
+                let lvalue_set = HashSet::from([MemLoc::new_stack_allocation(
+                    instance,
+                    Place {
+                        local: (i + 1).into(), // Since arguments in the callee are starting with 1, account for that.
+                        projection: List::empty(),
+                    },
+                )]);
                 let rvalue_set = self.successors_for_operand(state, arg.node.clone());
                 initial_graph.extend(&lvalue_set, &rvalue_set);
             }
@@ -500,10 +506,10 @@ impl<'tcx> PointsToAnalysis<'_, 'tcx> {
 
         // Connect the return value to the return destination.
         let lvalue_set = state.resolve_place(*destination, self.instance);
-        let rvalue_set = HashSet::from([MemLoc::new_stack_allocation(instance, Place {
-            local: 0usize.into(),
-            projection: List::empty(),
-        })]);
+        let rvalue_set = HashSet::from([MemLoc::new_stack_allocation(
+            instance,
+            Place { local: 0usize.into(), projection: List::empty() },
+        )]);
         state.extend(&lvalue_set, &state.successors(&rvalue_set));
     }
 
@@ -519,7 +525,8 @@ impl<'tcx> PointsToAnalysis<'_, 'tcx> {
             Rvalue::Use(operand)
             | Rvalue::ShallowInitBox(operand, _)
             | Rvalue::Cast(_, operand, _)
-            | Rvalue::Repeat(operand, ..) => self.successors_for_operand(state, operand),
+            | Rvalue::Repeat(operand, ..)
+            | Rvalue::WrapUnsafeBinder(operand, _) => self.successors_for_operand(state, operand),
             Rvalue::Ref(_, _, ref_place) | Rvalue::RawPtr(_, ref_place) => {
                 // Here, a reference to a place is created, which leaves the place
                 // unchanged.
@@ -575,7 +582,7 @@ impl<'tcx> PointsToAnalysis<'_, 'tcx> {
                 // The same story from BinOp applies here, too. Need to track those things.
                 self.successors_for_operand(state, operand)
             }
-            Rvalue::NullaryOp(..) | Rvalue::Discriminant(..) => {
+            Rvalue::NullaryOp(..) | Rvalue::Discriminant(..) | Rvalue::Len(_) => {
                 // All of those should yield a constant.
                 HashSet::new()
             }
@@ -657,25 +664,22 @@ fn is_identity_aliasing_intrinsic(intrinsic: Intrinsic) -> bool {
         | Intrinsic::MinNumF32
         | Intrinsic::MinNumF64
         | Intrinsic::MulWithOverflow
-        | Intrinsic::NearbyIntF32
-        | Intrinsic::NearbyIntF64
         | Intrinsic::NeedsDrop
         | Intrinsic::PowF32
         | Intrinsic::PowF64
         | Intrinsic::PowIF32
         | Intrinsic::PowIF64
-        | Intrinsic::PrefAlignOf
         | Intrinsic::PtrGuaranteedCmp
         | Intrinsic::PtrOffsetFrom
         | Intrinsic::PtrOffsetFromUnsigned
         | Intrinsic::RawEq
         | Intrinsic::RetagBoxToRaw
-        | Intrinsic::RintF32
-        | Intrinsic::RintF64
         | Intrinsic::RotateLeft
         | Intrinsic::RotateRight
         | Intrinsic::RoundF32
         | Intrinsic::RoundF64
+        | Intrinsic::RoundTiesEvenF32
+        | Intrinsic::RoundTiesEvenF64
         | Intrinsic::SaturatingAdd
         | Intrinsic::SaturatingSub
         | Intrinsic::SinF32
@@ -723,7 +727,7 @@ fn is_identity_aliasing_intrinsic(intrinsic: Intrinsic) -> bool {
             /* SIMD operations */
             true
         }
-        Intrinsic::AtomicFence(_) | Intrinsic::AtomicSingleThreadFence(_) => {
+        Intrinsic::AtomicFence | Intrinsic::AtomicSingleThreadFence => {
             /* Atomic fences */
             true
         }

@@ -6,7 +6,7 @@ use super::{Expr, Location, Symbol, Type};
 
 use std::fmt::Display;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BuiltinFn {
     Abort,
     Assert,

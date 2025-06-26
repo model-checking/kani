@@ -1416,10 +1416,13 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             }
             RigidTy::RawPtr(ty, mutability) => {
                 let c_ty = self.translate_ty(ty);
-                CharonTy::new(CharonTyKind::RawPtr(c_ty, match mutability {
-                    Mutability::Mut => CharonRefKind::Mut,
-                    Mutability::Not => CharonRefKind::Shared,
-                }))
+                CharonTy::new(CharonTyKind::RawPtr(
+                    c_ty,
+                    match mutability {
+                        Mutability::Mut => CharonRefKind::Mut,
+                        Mutability::Not => CharonRefKind::Shared,
+                    },
+                ))
             }
             RigidTy::FnPtr(polyfunsig) => {
                 let value = polyfunsig.value;
@@ -1539,9 +1542,12 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     args: args.iter().map(|arg| self.translate_operand(arg)).collect(),
                     dest: self.translate_place(destination),
                 };
-                (Some(CharonRawStatement::Call(call)), CharonRawTerminator::Goto {
-                    target: CharonBlockId::from_usize(target.unwrap()),
-                })
+                (
+                    Some(CharonRawStatement::Call(call)),
+                    CharonRawTerminator::Goto {
+                        target: CharonBlockId::from_usize(target.unwrap()),
+                    },
+                )
             }
             TerminatorKind::Assert { cond, expected, msg: _, target, .. } => (
                 Some(CharonRawStatement::Assert(CharonAssert {

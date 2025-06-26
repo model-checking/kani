@@ -19,6 +19,7 @@ use rustc_middle::ty::TraitRef;
 use rustc_middle::ty::adjustment::CustomCoerceUnsized;
 use rustc_middle::ty::{PseudoCanonicalInput, Ty, TyCtxt, TypingEnv};
 use rustc_smir::rustc_internal;
+use rustc_span::DUMMY_SP;
 use stable_mir::Symbol;
 use stable_mir::ty::{RigidTy, Ty as TyStable, TyKind};
 use tracing::trace;
@@ -90,14 +91,12 @@ pub fn extract_unsize_casting<'tcx>(
     .last()
     .unwrap();
     // Extract the pointee type that is being coerced.
-    let src_pointee_ty = extract_pointee(tcx, coerce_info.src_ty).expect(&format!(
-        "Expected source to be a pointer. Found {:?} instead",
-        coerce_info.src_ty
-    ));
-    let dst_pointee_ty = extract_pointee(tcx, coerce_info.dst_ty).expect(&format!(
-        "Expected destination to be a pointer. Found {:?} instead",
-        coerce_info.dst_ty
-    ));
+    let src_pointee_ty = extract_pointee(tcx, coerce_info.src_ty).unwrap_or_else(|| {
+        panic!("Expected source to be a pointer. Found {:?} instead", coerce_info.src_ty)
+    });
+    let dst_pointee_ty = extract_pointee(tcx, coerce_info.dst_ty).unwrap_or_else(|| {
+        panic!("Expected destination to be a pointer. Found {:?} instead", coerce_info.dst_ty)
+    });
     // Find the tail of the coercion that determines the type of metadata to be stored.
     let (src_base_ty, dst_base_ty) = tcx.struct_lockstep_tails_for_codegen(
         src_pointee_ty,
@@ -222,8 +221,8 @@ impl Iterator for CoerceUnsizedIterator<'_> {
                 let coerce_index = coerce_index.as_usize();
                 assert!(coerce_index < src_fields.len());
 
-                self.src_ty = Some(src_fields[coerce_index].ty_with_args(&src_args));
-                self.dst_ty = Some(dst_fields[coerce_index].ty_with_args(&dst_args));
+                self.src_ty = Some(src_fields[coerce_index].ty_with_args(src_args));
+                self.dst_ty = Some(dst_fields[coerce_index].ty_with_args(dst_args));
                 Some(src_fields[coerce_index].name.clone())
             }
             _ => {
@@ -247,7 +246,7 @@ fn custom_coerce_unsize_info<'tcx>(
     source_ty: Ty<'tcx>,
     target_ty: Ty<'tcx>,
 ) -> CustomCoerceUnsized {
-    let def_id = tcx.require_lang_item(LangItem::CoerceUnsized, None);
+    let def_id = tcx.require_lang_item(LangItem::CoerceUnsized, DUMMY_SP);
 
     let trait_ref = TraitRef::new(tcx, def_id, tcx.mk_args_trait(source_ty, [target_ty.into()]));
 

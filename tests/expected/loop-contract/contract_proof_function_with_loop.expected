@@ -1,0 +1,13 @@
+has_loop::{closure#2}::{closure#1}.loop_invariant_step.1\
+	 - Status: SUCCESS\
+	 - Description: "Check invariant after step for loop has_loop::{closure#2}::{closure#1}.0"\
+in function has_loop::{closure#2}::{closure#1}
+
+
+
+has_loop::{closure#2}::{closure#1}.precondition_instance.1\
+	 - Status: SUCCESS\
+	 - Description: "free argument must be NULL or valid pointer"\
+in function has_loop::{closure#2}::{closure#1}
+
+VERIFICATION:- SUCCESSFUL

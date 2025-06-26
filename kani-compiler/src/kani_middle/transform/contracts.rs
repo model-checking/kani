@@ -1,6 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! This module contains code related to the MIR-to-MIR pass to enable contracts.
+use crate::args::ReachabilityType;
 use crate::kani_middle::attributes::KaniAttributes;
 use crate::kani_middle::codegen_units::CodegenUnit;
 use crate::kani_middle::kani_functions::{KaniIntrinsic, KaniModel};
@@ -341,13 +342,33 @@ impl FunctionWithContractPass {
     /// verifying.
     pub fn new(tcx: TyCtxt, queries: &QueryDb, unit: &CodegenUnit) -> FunctionWithContractPass {
         if let Some(harness) = unit.harnesses.first() {
-            let attrs = KaniAttributes::for_instance(tcx, *harness);
-            let check_fn = attrs.interpret_for_contract_attribute().map(|(_, def_id, _)| def_id);
-            let replace_fns: HashSet<_> = attrs
-                .interpret_stub_verified_attribute()
-                .iter()
-                .map(|(_, def_id, _)| *def_id)
-                .collect();
+            let (check_fn, replace_fns) = {
+                let harness_generic_args = harness.args().0;
+                // Manual harnesses have no arguments, so if there are generic arguments,
+                // we know this is an automatic harness
+                if matches!(queries.args().reachability_analysis, ReachabilityType::AllFns)
+                    && !harness_generic_args.is_empty()
+                {
+                    let kind = harness.args().0[0].expect_ty().kind();
+                    let (fn_to_verify_def, _) = kind.fn_def().unwrap();
+                    // For automatic harnesses, the target is the function to verify,
+                    // and stubs are empty.
+                    (
+                        Some(rustc_internal::internal(tcx, fn_to_verify_def.def_id())),
+                        HashSet::default(),
+                    )
+                } else {
+                    let attrs = KaniAttributes::for_instance(tcx, *harness);
+                    let check_fn =
+                        attrs.interpret_for_contract_attribute().map(|(_, def_id, _)| def_id);
+                    let replace_fns: HashSet<_> = attrs
+                        .interpret_stub_verified_attribute()
+                        .iter()
+                        .map(|(_, def_id, _)| *def_id)
+                        .collect();
+                    (check_fn, replace_fns)
+                }
+            };
             let run_contract_fn =
                 queries.kani_functions().get(&KaniModel::RunContract.into()).copied();
             assert!(run_contract_fn.is_some(), "Failed to find Kani run contract function");
@@ -434,10 +455,10 @@ impl FunctionWithContractPass {
             &mut mode_call,
             InsertPosition::Before,
         );
-        new_body.replace_terminator(&mode_call, Terminator {
-            kind: TerminatorKind::Goto { target },
-            span,
-        });
+        new_body.replace_terminator(
+            &mode_call,
+            Terminator { kind: TerminatorKind::Goto { target }, span },
+        );
 
         new_body.into()
     }
@@ -470,10 +491,10 @@ impl FunctionWithContractPass {
     fn mark_unused(&mut self, tcx: TyCtxt, fn_def: FnDef, body: &Body, mode: ContractMode) {
         let contract =
             KaniAttributes::for_def_id(tcx, fn_def.def_id()).contract_attributes().unwrap();
-        let recursion_closure = find_closure(tcx, fn_def, &body, contract.recursion_check.as_str());
-        let check_closure = find_closure(tcx, fn_def, &body, contract.checked_with.as_str());
-        let replace_closure = find_closure(tcx, fn_def, &body, contract.replaced_with.as_str());
-        let assert_closure = find_closure(tcx, fn_def, &body, contract.asserted_with.as_str());
+        let recursion_closure = find_closure(tcx, fn_def, body, contract.recursion_check.as_str());
+        let check_closure = find_closure(tcx, fn_def, body, contract.checked_with.as_str());
+        let replace_closure = find_closure(tcx, fn_def, body, contract.replaced_with.as_str());
+        let assert_closure = find_closure(tcx, fn_def, body, contract.asserted_with.as_str());
         match mode {
             ContractMode::Original => {
                 // No contract instrumentation needed. Add all closures to the list of unused.

@@ -93,7 +93,7 @@ fn simd_len_and_type<'tcx>(tcx: TyCtxt<'tcx>, simd_ty: Ty<'tcx>) -> (Const<'tcx>
         ty::Adt(def, args) => {
             assert!(def.repr().simd(), "`simd_size_and_type` called on non-SIMD type");
             let variant = def.non_enum_variant();
-            let f0_ty = variant.fields[0u32.into()].ty(tcx, args);
+            let f0_ty = variant.fields[rustc_abi::FieldIdx::from_usize(0)].ty(tcx, args);
 
             match f0_ty.kind() {
                 ty::Array(elem_ty, len) => (*len, *elem_ty),
@@ -108,10 +108,10 @@ fn resolve_rust_intrinsic<'tcx>(
     tcx: TyCtxt<'tcx>,
     func_ty: Ty<'tcx>,
 ) -> Option<(IntrinsicDef, GenericArgsRef<'tcx>)> {
-    if let ty::FnDef(def_id, args) = *func_ty.kind() {
-        if let Some(symbol) = tcx.intrinsic(def_id) {
-            return Some((symbol, args));
-        }
+    if let ty::FnDef(def_id, args) = *func_ty.kind()
+        && let Some(symbol) = tcx.intrinsic(def_id)
+    {
+        return Some((symbol, args));
     }
     None
 }

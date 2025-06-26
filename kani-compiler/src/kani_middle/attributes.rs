@@ -6,9 +6,9 @@ use std::collections::{BTreeMap, HashSet};
 
 use kani_metadata::{CbmcSolver, HarnessAttributes, HarnessKind, Stub};
 use quote::ToTokens;
-use rustc_ast::{LitKind, MetaItem, MetaItemKind, attr};
+use rustc_ast::{LitKind, MetaItem, MetaItemKind};
 use rustc_errors::ErrorGuaranteed;
-use rustc_hir::{AttrArgs, AttrKind, Attribute, def::DefKind, def_id::DefId};
+use rustc_hir::{AttrArgs, Attribute, def::DefKind, def_id::DefId};
 use rustc_middle::ty::{Instance, TyCtxt, TyKind};
 use rustc_session::Session;
 use rustc_smir::rustc_internal;
@@ -214,7 +214,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                     .resolve_from_mod(name.as_str())
                     .map_err(|e| {
                         let mut err = self.tcx.dcx().struct_span_err(
-                            attr.span,
+                            attr.span(),
                             format!(
                                 "Failed to resolve replacement function {}: {e}",
                                 name.as_str()
@@ -229,7 +229,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                         err.emit();
                     })
                     .ok()?;
-                Some((name, def, attr.span))
+                Some((name, def, attr.span()))
             })
             .collect()
     }
@@ -247,10 +247,10 @@ impl<'tcx> KaniAttributes<'tcx> {
         self.expect_maybe_one(KaniAttributeKind::ProofForContract).and_then(|target| {
             let name = expect_key_string_value(self.tcx.sess, target).ok()?;
             self.resolve_from_mod(name.as_str())
-                .map(|ok| (name, ok, target.span))
+                .map(|ok| (name, ok, target.span()))
                 .map_err(|resolve_err| {
                     let mut err = self.tcx.dcx().struct_span_err(
-                        target.span,
+                        target.span(),
                         format!(
                             "Failed to resolve checking function {} because {resolve_err}",
                             name.as_str()
@@ -310,6 +310,17 @@ impl<'tcx> KaniAttributes<'tcx> {
         })
     }
 
+    // Is this a function inserted by Kani instrumentation?
+    pub fn is_kani_instrumentation(&self) -> bool {
+        self.fn_marker().is_some() || self.is_contract_generated()
+    }
+
+    // Is this a contract-generated function?
+    // Note that this function currently always returns false because of https://github.com/model-checking/kani/issues/3921
+    fn is_contract_generated(&self) -> bool {
+        self.map.contains_key(&KaniAttributeKind::IsContractGenerated)
+    }
+
     /// Return a function marker if any.
     pub fn fn_marker(&self) -> Option<Symbol> {
         self.attribute_value(KaniAttributeKind::FnMarker)
@@ -336,7 +347,7 @@ impl<'tcx> KaniAttributes<'tcx> {
         // Check that all attributes are correctly used and well formed.
         let is_harness = self.is_proof_harness();
         for (&kind, attrs) in self.map.iter() {
-            let local_error = |msg| self.tcx.dcx().span_err(attrs[0].span, msg);
+            let local_error = |msg| self.tcx.dcx().span_err(attrs[0].span(), msg);
 
             if !is_harness && kind.is_harness_only() {
                 local_error(format!(
@@ -346,19 +357,19 @@ impl<'tcx> KaniAttributes<'tcx> {
             }
             match kind {
                 KaniAttributeKind::ShouldPanic => {
-                    expect_single(self.tcx, kind, &attrs);
+                    expect_single(self.tcx, kind, attrs);
                     attrs.iter().for_each(|attr| {
                         expect_no_args(self.tcx, kind, attr);
                     })
                 }
                 KaniAttributeKind::Recursion => {
-                    expect_single(self.tcx, kind, &attrs);
+                    expect_single(self.tcx, kind, attrs);
                     attrs.iter().for_each(|attr| {
                         expect_no_args(self.tcx, kind, attr);
                     })
                 }
                 KaniAttributeKind::Solver => {
-                    expect_single(self.tcx, kind, &attrs);
+                    expect_single(self.tcx, kind, attrs);
                     attrs.iter().for_each(|attr| {
                         parse_solver(self.tcx, attr);
                     })
@@ -367,7 +378,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                     parse_stubs(self.tcx, self.item, attrs);
                 }
                 KaniAttributeKind::Unwind => {
-                    expect_single(self.tcx, kind, &attrs);
+                    expect_single(self.tcx, kind, attrs);
                     attrs.iter().for_each(|attr| {
                         parse_unwind(self.tcx, attr);
                     })
@@ -378,7 +389,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                             "`proof` and `proof_for_contract` may not be used on the same function.".to_string(),
                         );
                     }
-                    expect_single(self.tcx, kind, &attrs);
+                    expect_single(self.tcx, kind, attrs);
                     attrs.iter().for_each(|attr| self.check_proof_attribute(kind, attr))
                 }
                 KaniAttributeKind::Unstable => attrs.iter().for_each(|attr| {
@@ -390,11 +401,11 @@ impl<'tcx> KaniAttributes<'tcx> {
                             "`proof` and `proof_for_contract` may not be used on the same function.".to_string(),
                         );
                     }
-                    expect_single(self.tcx, kind, &attrs);
+                    expect_single(self.tcx, kind, attrs);
                     attrs.iter().for_each(|attr| self.check_proof_attribute(kind, attr))
                 }
                 KaniAttributeKind::StubVerified => {
-                    expect_single(self.tcx, kind, &attrs);
+                    self.check_stub_verified();
                 }
                 KaniAttributeKind::FnMarker
                 | KaniAttributeKind::CheckedWith
@@ -451,7 +462,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                     kind.as_ref()
                 );
                 if let Some(attr) = self.map.get(&kind).unwrap().first() {
-                    self.tcx.dcx().span_err(attr.span, msg);
+                    self.tcx.dcx().span_err(attr.span(), msg);
                 } else {
                     self.tcx.dcx().err(msg);
                 }
@@ -499,14 +510,14 @@ impl<'tcx> KaniAttributes<'tcx> {
     /// Check that the function specified in the `proof_for_contract` attribute
     /// is reachable and emit an error if it isn't
     pub fn check_proof_for_contract(&self, reachable_functions: &HashSet<DefId>) {
-        if let Some((symbol, function, span)) = self.interpret_for_contract_attribute() {
-            if !reachable_functions.contains(&function) {
-                let err_msg = format!(
-                    "The function specified in the `proof_for_contract` attribute, `{symbol}`, was not found.\
+        if let Some((symbol, function, span)) = self.interpret_for_contract_attribute()
+            && !reachable_functions.contains(&function)
+        {
+            let err_msg = format!(
+                "The function specified in the `proof_for_contract` attribute, `{symbol}`, was not found.\
                     \nMake sure the function is reachable from the harness."
-                );
-                self.tcx.dcx().span_err(span, err_msg);
-            }
+            );
+            self.tcx.dcx().span_err(span, err_msg);
         }
     }
 
@@ -591,15 +602,28 @@ impl<'tcx> KaniAttributes<'tcx> {
         }
     }
 
-    fn handle_stub_verified(&self, harness: &mut HarnessAttributes) {
+    fn check_stub_verified(&self) {
         let dcx = self.tcx.dcx();
+        let mut seen = HashSet::new();
         for (name, def_id, span) in self.interpret_stub_verified_attribute() {
+            if seen.contains(&name) {
+                dcx.struct_span_warn(
+                    span,
+                    format!("Multiple occurrences of `stub_verified({name})`."),
+                )
+                .with_span_note(
+                    self.tcx.def_span(def_id),
+                    format!("Use a single `stub_verified({name})` annotation."),
+                )
+                .emit();
+            } else {
+                seen.insert(name);
+            }
             if KaniAttributes::for_item(self.tcx, def_id).contract_attributes().is_none() {
                 dcx.struct_span_err(
                     span,
                     format!(
-                        "Failed to generate verified stub: Function `{}` has no contract.",
-                        self.item_name(),
+                        "Target function in `stub_verified({name})` has no contract.",
                     ),
                 )
                     .with_span_note(
@@ -612,6 +636,16 @@ impl<'tcx> KaniAttributes<'tcx> {
                     .emit();
                 return;
             }
+        }
+    }
+
+    /// Adds the verified stub names to the `harness.verified_stubs`.
+    ///
+    /// This method must be called after `check_stub_verified`, to ensure that
+    /// the target names are known and have contracts, and there are no
+    /// duplicate target names.
+    fn handle_stub_verified(&self, harness: &mut HarnessAttributes) {
+        for (name, _, _) in self.interpret_stub_verified_attribute() {
             harness.verified_stubs.push(name.to_string())
         }
     }
@@ -622,7 +656,7 @@ impl<'tcx> KaniAttributes<'tcx> {
 
     /// Check that if this item is tagged with a proof_attribute, it is a valid harness.
     fn check_proof_attribute(&self, kind: KaniAttributeKind, proof_attribute: &Attribute) {
-        let span = proof_attribute.span;
+        let span = proof_attribute.span();
         let tcx = self.tcx;
         if let KaniAttributeKind::Proof = kind {
             expect_no_args(tcx, kind, proof_attribute);
@@ -674,28 +708,13 @@ pub fn is_proof_harness(tcx: TyCtxt, instance: InstanceStable) -> bool {
     })
 }
 
-/// Does this `def_id` have `#[rustc_test_marker]`?
-pub fn is_test_harness_description(tcx: TyCtxt, item: impl CrateDef) -> bool {
-    let def_id = rustc_internal::internal(tcx, item.def_id());
-    let attrs = tcx.get_attrs_unchecked(def_id);
-    attr::contains_name(attrs, rustc_span::symbol::sym::rustc_test_marker)
-}
-
-/// Extract the test harness name from the `#[rustc_test_maker]`
-pub fn test_harness_name(tcx: TyCtxt, def: &impl CrateDef) -> String {
-    let def_id = rustc_internal::internal(tcx, def.def_id());
-    let attrs = tcx.get_attrs_unchecked(def_id);
-    let marker = attr::find_by_name(attrs, rustc_span::symbol::sym::rustc_test_marker).unwrap();
-    parse_str_value(&marker).unwrap()
-}
-
 /// Expect the contents of this attribute to be of the format #[attribute =
 /// "value"] and return the `"value"`.
 fn expect_key_string_value(
     sess: &Session,
     attr: &Attribute,
 ) -> Result<rustc_span::Symbol, ErrorGuaranteed> {
-    let span = attr.span;
+    let span = attr.span();
     let AttrArgs::Eq { expr, .. } = &attr.get_normal_item().args else {
         return Err(sess
             .dcx()
@@ -714,12 +733,12 @@ fn expect_single<'a>(
     kind: KaniAttributeKind,
     attributes: &'a Vec<&'a Attribute>,
 ) -> &'a Attribute {
-    let attr = attributes
-        .first()
-        .expect(&format!("expected at least one attribute {} in {attributes:?}", kind.as_ref()));
+    let attr = attributes.first().unwrap_or_else(|| {
+        panic!("expected at least one attribute {} in {attributes:?}", kind.as_ref())
+    });
     if attributes.len() > 1 {
         tcx.dcx().span_err(
-            attr.span,
+            attr.span(),
             format!("only one '#[kani::{}]' attribute is allowed per harness", kind.as_ref()),
         );
     }
@@ -750,7 +769,7 @@ impl UnstableAttrParseError<'_> {
     fn report(&self, tcx: TyCtxt) -> ErrorGuaranteed {
         tcx.dcx()
             .struct_span_err(
-                self.attr.span,
+                self.attr.span(),
                 format!("failed to parse `#[kani::unstable_feature]`: {}", self.reason),
             )
             .with_note(format!(
@@ -793,7 +812,7 @@ impl<'a> TryFrom<&'a Attribute> for UnstableAttribute {
 fn expect_no_args(tcx: TyCtxt, kind: KaniAttributeKind, attr: &Attribute) {
     if !attr.is_word() {
         tcx.dcx()
-            .struct_span_err(attr.span, format!("unexpected argument for `{}`", kind.as_ref()))
+            .struct_span_err(attr.span(), format!("unexpected argument for `{}`", kind.as_ref()))
             .with_help("remove the extra argument")
             .emit();
     }
@@ -806,7 +825,7 @@ fn parse_unwind(tcx: TyCtxt, attr: &Attribute) -> Option<u32> {
         None => {
             // There are no integers or too many arguments given to the attribute
             tcx.dcx().span_err(
-                attr.span,
+                attr.span(),
                 "invalid argument for `unwind` attribute, expected an integer",
             );
             None
@@ -815,7 +834,7 @@ fn parse_unwind(tcx: TyCtxt, attr: &Attribute) -> Option<u32> {
             if let Ok(val) = unwind_integer_value.try_into() {
                 Some(val)
             } else {
-                tcx.dcx().span_err(attr.span, "value above maximum permitted value - u32::MAX");
+                tcx.dcx().span_err(attr.span(), "value above maximum permitted value - u32::MAX");
                 None
             }
         }
@@ -830,13 +849,13 @@ fn parse_stubs(tcx: TyCtxt, harness: DefId, attributes: &[&Attribute]) -> Vec<St
             Ok(FnResolution::Fn(_)) => { /* no-op */ }
             Ok(FnResolution::FnImpl { .. }) => {
                 tcx.dcx().span_err(
-                    attr.span,
+                    attr.span(),
                     "Kani currently does not support stubbing trait implementations.",
                 );
             }
             Err(err) => {
                 tcx.dcx().span_err(
-                    attr.span,
+                    attr.span(),
                     format!("failed to resolve `{}`: {err}", pretty_type_path(path)),
                 );
             }
@@ -847,7 +866,7 @@ fn parse_stubs(tcx: TyCtxt, harness: DefId, attributes: &[&Attribute]) -> Vec<St
         .filter_map(|attr| {
             let paths = parse_paths(tcx, attr).unwrap_or_else(|_| {
                 tcx.dcx().span_err(
-                    attr.span,
+                    attr.span(),
                     format!(
                     "attribute `kani::{}` takes two path arguments; found argument that is not a path",
                     KaniAttributeKind::Stub.as_ref())
@@ -869,7 +888,7 @@ fn parse_stubs(tcx: TyCtxt, harness: DefId, attributes: &[&Attribute]) -> Vec<St
                 }
                 _ => {
                     tcx.dcx().span_err(
-                        attr.span,
+                        attr.span(),
                         format!(
                             "attribute `kani::stub` takes two path arguments; found {}",
                             paths.len()
@@ -888,7 +907,7 @@ fn parse_solver(tcx: TyCtxt, attr: &Attribute) -> Option<CbmcSolver> {
     const ATTRIBUTE: &str = "#[kani::solver]";
     let invalid_arg_err = |attr: &Attribute| {
         tcx.dcx().span_err(
-            attr.span,
+            attr.span(),
             format!("invalid argument for `{ATTRIBUTE}` attribute, expected one of the supported solvers (e.g. `kissat`) or a SAT solver binary (e.g. `bin=\"<SAT_SOLVER_BINARY>\"`)"),
         )
     };
@@ -896,7 +915,7 @@ fn parse_solver(tcx: TyCtxt, attr: &Attribute) -> Option<CbmcSolver> {
     let attr_args = attr.meta_item_list().unwrap();
     if attr_args.len() != 1 {
         tcx.dcx().span_err(
-            attr.span,
+            attr.span(),
             format!(
                 "the `{ATTRIBUTE}` attribute expects a single argument. Got {} arguments.",
                 attr_args.len()
@@ -919,7 +938,7 @@ fn parse_solver(tcx: TyCtxt, attr: &Attribute) -> Option<CbmcSolver> {
             match solver {
                 Ok(solver) => Some(solver),
                 Err(_) => {
-                    tcx.dcx().span_err(attr.span, format!("unknown solver `{ident_str}`"));
+                    tcx.dcx().span_err(attr.span(), format!("unknown solver `{ident_str}`"));
                     None
                 }
             }
@@ -980,38 +999,27 @@ fn parse_key_values(attr: &Attribute) -> Result<BTreeMap<String, String>, String
         .collect()
 }
 
-/// Extracts the string value argument from the attribute provided.
-///
-/// For attributes with the following format, this will return a string that represents "VALUE".
-/// - `#[attribute = "VALUE"]`
-fn parse_str_value(attr: &Attribute) -> Option<String> {
-    // Vector of meta items , that contain the arguments given the attribute
-    let value = attr.value_str();
-    value.map(|sym| sym.to_string())
-}
-
 /// If the attribute is named `kanitool::name`, this extracts `name`
 fn attr_kind(tcx: TyCtxt, attr: &Attribute) -> Option<KaniAttributeKind> {
-    match &attr.kind {
-        AttrKind::Normal(normal) => {
-            let segments = &normal.path.segments;
-            if (!segments.is_empty()) && segments[0].as_str() == "kanitool" {
-                let ident_str = segments[1..]
-                    .iter()
-                    .map(|segment| segment.as_str())
-                    .intersperse("::")
-                    .collect::<String>();
-                KaniAttributeKind::try_from(ident_str.as_str())
-                    .inspect_err(|&err| {
-                        debug!(?err, "attr_kind_failed");
-                        tcx.dcx().span_err(attr.span, format!("unknown attribute `{ident_str}`"));
-                    })
-                    .ok()
-            } else {
-                None
-            }
+    if let Attribute::Unparsed(normal) = attr {
+        let segments = &normal.path.segments;
+        if (!segments.is_empty()) && segments[0].as_str() == "kanitool" {
+            let ident_str = segments[1..]
+                .iter()
+                .map(|segment| segment.as_str())
+                .intersperse("::")
+                .collect::<String>();
+            KaniAttributeKind::try_from(ident_str.as_str())
+                .inspect_err(|&err| {
+                    debug!(?err, "attr_kind_failed");
+                    tcx.dcx().span_err(attr.span(), format!("unknown attribute `{ident_str}`"));
+                })
+                .ok()
+        } else {
+            None
         }
-        _ => None,
+    } else {
+        None
     }
 }
 
@@ -1027,7 +1035,7 @@ fn syn_attr(tcx: TyCtxt, attr: &Attribute) -> syn::Attribute {
 /// Parse a stable attribute using `syn`.
 fn syn_attr_stable(attr: &AttributeStable) -> syn::Attribute {
     let parser = syn::Attribute::parse_outer;
-    parser.parse_str(&attr.as_str()).unwrap().pop().unwrap()
+    parser.parse_str(attr.as_str()).unwrap().pop().unwrap()
 }
 
 /// Return a more user-friendly string for path by trying to remove unneeded whitespace.
@@ -1075,10 +1083,10 @@ fn pretty_type_path(path: &TypePath) -> String {
 /// Retrieve the value of the `fn_marker` attribute for the given definition if it has one.
 pub(crate) fn fn_marker<T: CrateDef>(def: T) -> Option<String> {
     let fn_marker: [SymbolStable; 2] = ["kanitool".into(), "fn_marker".into()];
-    let marker = def.attrs_by_path(&fn_marker).pop()?;
+    let marker = def.tool_attrs(&fn_marker).pop()?;
     let attribute = syn_attr_stable(&marker);
     let meta_name = attribute.meta.require_name_value().unwrap_or_else(|_| {
-        panic!("Expected name value attribute for `kanitool::fn_marker`, but found: `{:?}`", marker)
+        panic!("Expected name value attribute for `kanitool::fn_marker`, but found: `{marker:?}`")
     });
     let Expr::Lit(ExprLit { lit: Lit::Str(lit_str), .. }) = &meta_name.value else {
         panic!(

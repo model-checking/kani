@@ -49,25 +49,35 @@ impl GotocCtx<'_> {
     /// handled later.
     pub fn codegen_foreign_fn(&mut self, instance: Instance) -> &Symbol {
         debug!(?instance, "codegen_foreign_function");
-        let fn_name = instance.mangled_name().intern();
+        let trimmed_fn_name = instance.trimmed_name().intern();
+        let mangled_fn_name = instance.mangled_name().intern();
         let loc = self.codegen_span_stable(instance.def.span());
-        if self.symbol_table.contains(fn_name) {
-            // Symbol has been added (either a built-in CBMC function or a Rust allocation function).
-            self.symbol_table.lookup(fn_name).unwrap()
-        } else if RUST_ALLOC_FNS.contains(&fn_name)
-            || (self.is_cffi_enabled() && instance.fn_abi().unwrap().conv == CallConvention::C)
-        {
+        if self.symbol_table.contains(mangled_fn_name) {
+            // Symbol has been added (a built-in CBMC function)
+            self.symbol_table.lookup(mangled_fn_name).unwrap()
+        } else if self.symbol_table.contains(trimmed_fn_name) {
+            // Symbol has been added (a Rust allocation function)
+            self.symbol_table.lookup(trimmed_fn_name).unwrap()
+        } else if RUST_ALLOC_FNS.contains(&trimmed_fn_name) {
             // Add a Rust alloc lib function as is declared by core.
+            // We use the trimmed name to ensure that it matches the function names in kani_lib.c
+            self.ensure(trimmed_fn_name, |gcx, _| {
+                let typ = gcx.codegen_ffi_type(instance);
+                Symbol::function(trimmed_fn_name, typ, None, instance.name(), loc)
+                    .with_is_extern(true)
+            })
+        } else if self.is_cffi_enabled() && instance.fn_abi().unwrap().conv == CallConvention::C {
             // When C-FFI feature is enabled, we just trust the rust declaration.
             // TODO: Add proper casting and clashing definitions check.
             // https://github.com/model-checking/kani/issues/1350
             // https://github.com/model-checking/kani/issues/2426
-            self.ensure(fn_name, |gcx, _| {
+            self.ensure(mangled_fn_name, |gcx, _| {
                 let typ = gcx.codegen_ffi_type(instance);
-                Symbol::function(fn_name, typ, None, instance.name(), loc).with_is_extern(true)
+                Symbol::function(mangled_fn_name, typ, None, instance.name(), loc)
+                    .with_is_extern(true)
             })
         } else {
-            let shim_name = format!("{fn_name}_ffi_shim");
+            let shim_name = format!("{mangled_fn_name}_ffi_shim");
             trace!(?shim_name, "codegen_foreign_function");
             self.ensure(&shim_name, |gcx, _| {
                 // Generate a shim with an unsupported C-FFI error message.

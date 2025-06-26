@@ -42,6 +42,7 @@ use std::{
 
 use crate::kani_middle::coercion;
 use crate::kani_middle::coercion::CoercionBase;
+use crate::kani_middle::is_anon_static;
 use crate::kani_middle::transform::BodyTransformation;
 
 /// Collect all reachable items starting from the given starting points.
@@ -83,49 +84,24 @@ where
     crate_items
         .iter()
         .filter_map(|item| {
+            // avoid stable MIR panic
+            // https://github.com/model-checking/kani/issues/3919
+            if let Ok(instance) = Instance::try_from(*item) {
+                let int_def_id = rustc_internal::internal(tcx, instance.def.def_id());
+                if matches!(tcx.def_kind(int_def_id), rustc_hir::def::DefKind::GlobalAsm) {
+                    return None;
+                }
+            };
             // Only collect monomorphic items.
-            // TODO: Remove the def_kind check once https://github.com/rust-lang/rust/pull/119135 has been released.
-            let def_id = rustc_internal::internal(tcx, item.def_id());
-            (matches!(tcx.def_kind(def_id), rustc_hir::def::DefKind::Ctor(..))
-                || matches!(item.kind(), ItemKind::Fn))
-            .then(|| {
-                Instance::try_from(*item)
-                    .ok()
-                    .and_then(|instance| predicate(tcx, instance).then_some(instance))
-            })
-            .flatten()
+            matches!(item.kind(), ItemKind::Fn)
+                .then(|| {
+                    Instance::try_from(*item)
+                        .ok()
+                        .and_then(|instance| predicate(tcx, instance).then_some(instance))
+                })
+                .flatten()
         })
         .collect::<Vec<_>>()
-}
-
-/// Use a predicate to find `const` declarations, then extract all items reachable from them.
-///
-/// Probably only specifically useful with a predicate to find `TestDescAndFn` const declarations from
-/// tests and extract the closures from them.
-pub fn filter_const_crate_items<F>(
-    tcx: TyCtxt,
-    transformer: &mut BodyTransformation,
-    mut predicate: F,
-) -> Vec<MonoItem>
-where
-    F: FnMut(TyCtxt, Instance) -> bool,
-{
-    let crate_items = stable_mir::all_local_items();
-    let mut roots = Vec::new();
-    // Filter regular items.
-    for item in crate_items {
-        // Only collect monomorphic items.
-        if let Ok(instance) = Instance::try_from(item) {
-            if predicate(tcx, instance) {
-                let body = transformer.body(tcx, instance);
-                let mut collector =
-                    MonoItemsFnCollector { tcx, body: &body, collected: FxHashSet::default() };
-                collector.visit_body(&body);
-                roots.extend(collector.collected.into_iter());
-            }
-        }
-    }
-    roots.into_iter().map(|root| root.item).collect()
 }
 
 /// Reason for introducing an edge in the call graph.
@@ -214,20 +190,25 @@ impl<'tcx, 'a> MonoItemsCollector<'tcx, 'a> {
         let _guard = debug_span!("visit_static", ?def).entered();
         let mut next_items = vec![];
 
-        // Collect drop function.
-        let static_ty = def.ty();
-        let instance = Instance::resolve_drop_in_place(static_ty);
-        next_items
-            .push(CollectedItem { item: instance.into(), reason: CollectionReason::StaticDrop });
+        // Collect drop function, unless it's an anonymous static.
+        if !is_anon_static(self.tcx, def.def_id()) {
+            let static_ty = def.ty();
+            let instance = Instance::resolve_drop_in_place(static_ty);
+            next_items.push(CollectedItem {
+                item: instance.into(),
+                reason: CollectionReason::StaticDrop,
+            });
 
-        // Collect initialization.
-        let alloc = def.eval_initializer().unwrap();
-        for (_, prov) in alloc.provenance.ptrs {
-            next_items.extend(
-                collect_alloc_items(prov.0)
-                    .into_iter()
-                    .map(|item| CollectedItem { item, reason: CollectionReason::Static }),
-            );
+            // Collect initialization.
+            let alloc = def.eval_initializer().unwrap();
+            debug!(?alloc, "visit_static: initializer");
+            for (_, prov) in alloc.provenance.ptrs {
+                next_items.extend(
+                    collect_alloc_items(self.tcx, prov.0)
+                        .into_iter()
+                        .map(|item| CollectedItem { item, reason: CollectionReason::Static }),
+                );
+            }
         }
 
         next_items
@@ -259,11 +240,11 @@ impl MonoItemsFnCollector<'_, '_> {
             // A trait object type can have multiple trait bounds but up to one non-auto-trait
             // bound. This non-auto-trait, named principal, is the only one that can have methods.
             // https://doc.rust-lang.org/reference/special-types-and-traits.html#auto-traits
-            let poly_trait_ref = principal.with_self_ty(concrete_ty);
+            let trait_ref = rustc_internal::internal(self.tcx, principal.with_self_ty(concrete_ty));
+            let trait_ref = self.tcx.instantiate_bound_regions_with_erased(trait_ref);
 
             // Walk all methods of the trait, including those of its supertraits
-            let entries =
-                self.tcx.vtable_entries(rustc_internal::internal(self.tcx, &poly_trait_ref));
+            let entries = self.tcx.vtable_entries(trait_ref);
             let methods = entries.iter().filter_map(|entry| match entry {
                 VtblEntry::MetadataAlign
                 | VtblEntry::MetadataDropInPlace
@@ -326,7 +307,7 @@ impl MonoItemsFnCollector<'_, '_> {
         debug!(?alloc, "collect_allocation");
         for (_, id) in &alloc.provenance.ptrs {
             self.collected.extend(
-                collect_alloc_items(id.0)
+                collect_alloc_items(self.tcx, id.0)
                     .into_iter()
                     .map(|item| CollectedItem { item, reason: CollectionReason::Static }),
             )
@@ -432,7 +413,7 @@ impl MirVisitor for MonoItemsFnCollector<'_, '_> {
                 return;
             }
         };
-        self.collect_allocation(&allocation);
+        self.collect_allocation(allocation);
     }
 
     /// Collect function calls.
@@ -461,7 +442,7 @@ impl MirVisitor for MonoItemsFnCollector<'_, '_> {
                 // We don't support inline assembly. This shall be replaced by an unsupported
                 // construct during codegen.
             }
-            TerminatorKind::Abort { .. } | TerminatorKind::Assert { .. } => {
+            TerminatorKind::Abort | TerminatorKind::Assert { .. } => {
                 // We generate code for this without invoking any lang item.
             }
             TerminatorKind::Goto { .. }
@@ -472,6 +453,22 @@ impl MirVisitor for MonoItemsFnCollector<'_, '_> {
         }
 
         self.super_terminator(terminator, location);
+    }
+
+    /// Collect any function definition that may occur as a type.
+    ///
+    /// The codegen stage will require the definition to be available.
+    /// This is a conservative approach, since there are cases where the function is never
+    /// actually used, so we don't need the body.
+    ///
+    /// Another alternative would be to lazily declare functions, but it would require a bigger
+    /// change to codegen.
+    fn visit_ty(&mut self, ty: &Ty, _: Location) {
+        if let TyKind::RigidTy(RigidTy::FnDef(def, args)) = ty.kind() {
+            let instance = Instance::resolve(def, &args).unwrap();
+            self.collect_instance(instance, true);
+        }
+        self.super_ty(ty);
     }
 }
 
@@ -499,27 +496,38 @@ fn should_codegen_locally(instance: &Instance) -> bool {
     !instance.is_foreign_item()
 }
 
-fn collect_alloc_items(alloc_id: AllocId) -> Vec<MonoItem> {
+fn collect_alloc_items(tcx: TyCtxt, alloc_id: AllocId) -> Vec<MonoItem> {
     trace!(?alloc_id, "collect_alloc_items");
     let mut items = vec![];
     match GlobalAlloc::from(alloc_id) {
         GlobalAlloc::Static(def) => {
-            // This differ from rustc's collector since rustc does not include static from
-            // upstream crates.
-            let instance = Instance::try_from(CrateItem::from(def)).unwrap();
-            should_codegen_locally(&instance).then(|| items.push(MonoItem::from(def)));
+            if is_anon_static(tcx, def.def_id()) {
+                let alloc = def.eval_initializer().unwrap();
+                items.extend(
+                    alloc
+                        .provenance
+                        .ptrs
+                        .iter()
+                        .flat_map(|(_, prov)| collect_alloc_items(tcx, prov.0)),
+                );
+            } else {
+                // This differ from rustc's collector since rustc does not include static from
+                // upstream crates.
+                let instance = Instance::try_from(CrateItem::from(def)).unwrap();
+                should_codegen_locally(&instance).then(|| items.push(MonoItem::from(def)));
+            }
         }
         GlobalAlloc::Function(instance) => {
             should_codegen_locally(&instance).then(|| items.push(MonoItem::from(instance)));
         }
         GlobalAlloc::Memory(alloc) => {
             items.extend(
-                alloc.provenance.ptrs.iter().flat_map(|(_, prov)| collect_alloc_items(prov.0)),
+                alloc.provenance.ptrs.iter().flat_map(|(_, prov)| collect_alloc_items(tcx, prov.0)),
             );
         }
         vtable_alloc @ GlobalAlloc::VTable(..) => {
             let vtable_id = vtable_alloc.vtable_allocation().unwrap();
-            items = collect_alloc_items(vtable_id);
+            items = collect_alloc_items(tcx, vtable_id);
         }
     };
     items
