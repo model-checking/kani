@@ -3,7 +3,7 @@
 
 [package]
 name = "kani-compiler"
-version = "0.60.0"
+version = "0.62.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 publish = false
@@ -28,7 +28,7 @@ tracing-tree = "0.4.0"
 
 # Future proofing: enable backend dependencies using feature.
 [features]
-default = ['cprover', 'llbc']
+default = ['cprover']
 llbc = ['charon']
 cprover = ['cbmc', 'num', 'serde']
 

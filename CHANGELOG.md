@@ -4,6 +4,51 @@ This file contains notable changes (e.g. breaking changes, major changes, etc.) 
 
 This file was introduced starting Kani 0.23.0, so it only contains changes from version 0.23.0 onwards.
 
+## [0.62.0]
+
+### What's Changed
+* Disable llbc feature by default by @zhassan-aws in https://github.com/model-checking/kani/pull/3980
+* Add an option to skip codegen by @zhassan-aws in https://github.com/model-checking/kani/pull/4002
+* Add support for loop-contract historic values by @thanhnguyen-aws in https://github.com/model-checking/kani/pull/3951
+* Clarify Rust intrinsic assumption error message by @carolynzech in https://github.com/model-checking/kani/pull/4015
+* Autoharness: enable function-contracts and loop-contracts features by default by @carolynzech in https://github.com/model-checking/kani/pull/4016
+* Autoharness: Harness Generation Improvements by @carolynzech in https://github.com/model-checking/kani/pull/4017
+* Add support for Loop-loops by @thanhnguyen-aws in https://github.com/model-checking/kani/pull/4011
+* Clarify installation instructions by @zhassan-aws in https://github.com/model-checking/kani/pull/4023
+* Fix the bug of while loop invariant contains no local variables by @thanhnguyen-aws in https://github.com/model-checking/kani/pull/4022
+* List Subcommand: include crate name by @carolynzech in https://github.com/model-checking/kani/pull/4024
+* Autoharness: Update Filtering Options by @carolynzech in https://github.com/model-checking/kani/pull/4025
+* Introduce BoundedArbitrary trait and macro for bounded proofs by @sgpthomas in https://github.com/model-checking/kani/pull/4000
+* Support `trait_upcasting` by @clubby789 in https://github.com/model-checking/kani/pull/4001
+* Analyze unsafe code reachability by @carolynzech in https://github.com/model-checking/kani/pull/4037
+* Scanner: log crate-level visibility of functions by @tautschnig in https://github.com/model-checking/kani/pull/4041
+* Autoharness: exit code 1 upon harness failure by @carolynzech in https://github.com/model-checking/kani/pull/4043
+* Overflow operators can also be used with vectors by @tautschnig in https://github.com/model-checking/kani/pull/4049
+* Remove bool typedef by @zhassan-aws in https://github.com/model-checking/kani/pull/4058
+* Update CBMC dependency to 6.6.0 by @qinheping in https://github.com/model-checking/kani/pull/4050
+* Automatic toolchain upgrade to nightly-2025-04-24 by @zhassan-aws in https://github.com/model-checking/kani/pull/4042
+
+## New Contributors
+* @sgpthomas made their first contribution in https://github.com/model-checking/kani/pull/4000
+* @clubby789 made their first contribution in https://github.com/model-checking/kani/pull/4001
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.61.0...kani-0.62.0
+
+## [0.61.0]
+
+### What's Changed
+* Make `is_inbounds` public by @rajath-mk in https://github.com/model-checking/kani/pull/3958
+* Finish adding support for `f16` and `f128` by @carolynzech in https://github.com/model-checking/kani/pull/3943
+* Support user overrides of Rust built-ins by @tautschnig in https://github.com/model-checking/kani/pull/3945
+* Add support for anonymous nested statics by @carolynzech in https://github.com/model-checking/kani/pull/3953
+* Add support for struct field access in loop contracts by @thanhnguyen-aws in https://github.com/model-checking/kani/pull/3970
+* Autoharness: Don't panic on `_` argument by @carolynzech in https://github.com/model-checking/kani/pull/3942
+* Autoharness: improve metdata printed to terminal and enable standard library application by @carolynzech in https://github.com/model-checking/kani/pull/3948, https://github.com/model-checking/kani/pull/3952, https://github.com/model-checking/kani/pull/3971
+* Upgrade toolchain to nightly-2025-04-03 by @qinheping, @tautschnig, @zhassan-aws, @carolynzech in https://github.com/model-checking/kani/pull/3988
+* Update CBMC dependency to 6.5.0 by @tautschnig in https://github.com/model-checking/kani/pull/3936
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.60.0...kani-0.61.0
+
 ## [0.60.0]
 
 ### Breaking Changes

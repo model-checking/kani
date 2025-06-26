@@ -91,16 +91,14 @@ pub struct Arguments {
     /// Print the final LLBC file to stdout.
     #[clap(long)]
     pub print_llbc: bool,
-    /// If we are running the autoharness subcommand, the functions to include
-    #[arg(
-        long = "autoharness-include-function",
-        num_args(1),
-        conflicts_with = "autoharness_excluded_functions"
-    )]
-    pub autoharness_included_functions: Vec<String>,
-    /// If we are running the autoharness subcommand, the functions to exclude
-    #[arg(long = "autoharness-exclude-function", num_args(1))]
-    pub autoharness_excluded_functions: Vec<String>,
+    /// If we are running the autoharness subcommand, the paths to include.
+    /// See kani_driver::autoharness_args for documentation.
+    #[arg(long = "autoharness-include-pattern", num_args(1))]
+    pub autoharness_included_patterns: Vec<String>,
+    /// If we are running the autoharness subcommand, the paths to exclude.
+    /// See kani_driver::autoharness_args for documentation.
+    #[arg(long = "autoharness-exclude-pattern", num_args(1))]
+    pub autoharness_excluded_patterns: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, AsRefStr, EnumString, VariantNames, PartialEq, Eq)]

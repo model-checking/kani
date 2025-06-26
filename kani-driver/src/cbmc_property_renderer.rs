@@ -441,7 +441,7 @@ pub fn format_coverage(
     let verification_output =
         format_result(&non_coverage_checks, status, should_panic, failed_properties, show_checks);
     let cov_results_intro = "Source-based code coverage results:";
-    let result = format!("{}\n{}\n\n{}", verification_output, cov_results_intro, cov_results);
+    let result = format!("{verification_output}\n{cov_results_intro}\n\n{cov_results}");
 
     result
 }
@@ -557,8 +557,8 @@ fn has_check_failure(properties: &Vec<Property>, description: &str) -> bool {
 
 // Determines if there were unwinding assertion failures in a set of properties
 fn has_unwinding_assertion_failures(properties: &Vec<Property>) -> bool {
-    has_check_failure(&properties, UNWINDING_ASSERT_DESC)
-        || has_check_failure(&properties, UNWINDING_ASSERT_REC_DESC)
+    has_check_failure(properties, UNWINDING_ASSERT_DESC)
+        || has_check_failure(properties, UNWINDING_ASSERT_REC_DESC)
 }
 
 /// Replaces the description of all properties from functions with a missing

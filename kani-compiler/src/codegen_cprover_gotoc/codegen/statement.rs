@@ -12,6 +12,7 @@ use rustc_abi::{FieldsShape, Primitive, TagEncoding, Variants};
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{List, TypingEnv};
 use rustc_smir::rustc_internal;
+use stable_mir::CrateDef;
 use stable_mir::abi::{ArgAbi, FnAbi, PassMode};
 use stable_mir::mir::mono::{Instance, InstanceKind};
 use stable_mir::mir::{
@@ -148,15 +149,18 @@ impl GotocCtx<'_> {
                 // Pack the operands and their types, then call `codegen_copy`
                 let fargs =
                     operands.iter().map(|op| self.codegen_operand_stable(op)).collect::<Vec<_>>();
-                let farg_types = operands.map(|op| self.operand_ty_stable(&op));
+                let farg_types = operands.map(|op| self.operand_ty_stable(op));
                 self.codegen_copy("copy_nonoverlapping", true, fargs, &farg_types, None, location)
             }
+            // https://doc.rust-lang.org/beta/nightly-rustc/rustc_middle/mir/enum.NonDivergingIntrinsic.html#variant.Assume
+            // Informs the optimizer that a condition is always true.
+            // If the condition is false, the behavior is undefined.
             StatementKind::Intrinsic(NonDivergingIntrinsic::Assume(ref op)) => {
                 let cond = self.codegen_operand_stable(op).cast_to(Type::bool());
                 self.codegen_assert_assume(
                     cond,
                     PropertyClass::Assume,
-                    "assumption failed",
+                    "Rust intrinsic assumption failed",
                     location,
                 )
             }
@@ -165,7 +169,7 @@ impl GotocCtx<'_> {
                 let instance = self.current_fn().instance_stable();
                 let counter_data = format!("{coverage_opaque:?} ${function_name}$");
                 let maybe_source_region =
-                    region_from_coverage_opaque(self.tcx, &coverage_opaque, instance);
+                    region_from_coverage_opaque(self.tcx, coverage_opaque, instance);
                 if let Some((source_region, file_name)) = maybe_source_region {
                     let coverage_stmt =
                         self.codegen_coverage(&counter_data, stmt.span, source_region, &file_name);
@@ -280,6 +284,7 @@ impl GotocCtx<'_> {
                     | AssertMessage::DivisionByZero { .. }
                     | AssertMessage::RemainderByZero { .. }
                     | AssertMessage::ResumedAfterReturn { .. }
+                    | AssertMessage::ResumedAfterDrop { .. }
                     | AssertMessage::ResumedAfterPanic { .. } => {
                         (msg.description().unwrap(), PropertyClass::Assertion)
                     }
@@ -563,12 +568,41 @@ impl GotocCtx<'_> {
     /// Generate Goto-C for each argument to a function call.
     ///
     /// N.B. public only because instrinsics use this directly, too.
-    pub(crate) fn codegen_funcall_args(&mut self, fn_abi: &FnAbi, args: &[Operand]) -> Vec<Expr> {
+    pub(crate) fn codegen_funcall_args_for_quantifiers(
+        &mut self,
+        fn_abi: &FnAbi,
+        args: &[Operand],
+    ) -> Vec<Expr> {
         let fargs: Vec<Expr> = args
             .iter()
             .enumerate()
             .filter_map(|(i, op)| {
                 // Functions that require caller info will have an extra parameter.
+                let arg_abi = &fn_abi.args.get(i);
+                let ty = self.operand_ty_stable(op);
+                if ty.kind().is_bool() {
+                    Some(self.codegen_operand_stable(op).cast_to(Type::c_bool()))
+                } else if ty.kind().is_closure()
+                    || (arg_abi.is_none_or(|abi| abi.mode != PassMode::Ignore))
+                {
+                    Some(self.codegen_operand_stable(op))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        debug!(?fargs, args_abi=?fn_abi.args, "codegen_funcall_args");
+        fargs
+    }
+
+    /// Generate Goto-C for each argument to a function call.
+    ///
+    /// N.B. public only because instrinsics use this directly, too.
+    pub(crate) fn codegen_funcall_args(&mut self, fn_abi: &FnAbi, args: &[Operand]) -> Vec<Expr> {
+        let fargs: Vec<Expr> = args
+            .iter()
+            .enumerate()
+            .filter_map(|(i, op)| {
                 let arg_abi = &fn_abi.args.get(i);
                 let ty = self.operand_ty_stable(op);
                 if ty.kind().is_bool() {
@@ -618,8 +652,8 @@ impl GotocCtx<'_> {
             if def.as_intrinsic().unwrap().must_be_overridden() || !instance.has_body() {
                 return self.codegen_funcall_of_intrinsic(
                     instance,
-                    &args,
-                    &destination,
+                    args,
+                    destination,
                     target.map(|bb| bb),
                     span,
                 );
@@ -635,10 +669,16 @@ impl GotocCtx<'_> {
                 let mut fargs = if args.is_empty()
                     || fn_def.fn_sig().unwrap().value.abi != Abi::RustCall
                 {
-                    self.codegen_funcall_args(&fn_abi, &args)
+                    if instance.def.name() == "kani::internal::kani_forall"
+                        || (instance.def.name() == "kani::internal::kani_exists")
+                    {
+                        self.codegen_funcall_args_for_quantifiers(&fn_abi, args)
+                    } else {
+                        self.codegen_funcall_args(&fn_abi, args)
+                    }
                 } else {
                     let (untupled, first_args) = args.split_last().unwrap();
-                    let mut fargs = self.codegen_funcall_args(&fn_abi, &first_args);
+                    let mut fargs = self.codegen_funcall_args(&fn_abi, first_args);
                     fargs.append(
                         &mut self.codegen_untupled_args(untupled, &fn_abi.args[first_args.len()..]),
                     );
@@ -685,11 +725,11 @@ impl GotocCtx<'_> {
                     self.tcx
                         .fn_abi_of_fn_ptr(
                             TypingEnv::fully_monomorphized()
-                                .as_query_input((fn_sig_internal, &List::empty())),
+                                .as_query_input((fn_sig_internal, List::empty())),
                         )
                         .unwrap(),
                 );
-                let fargs = self.codegen_funcall_args(&fn_ptr_abi, &args);
+                let fargs = self.codegen_funcall_args(&fn_ptr_abi, args);
                 let func_expr = self.codegen_operand_stable(func).dereference();
                 // Actually generate the function call and return.
                 Stmt::block(

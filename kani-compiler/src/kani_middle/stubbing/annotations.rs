@@ -45,18 +45,18 @@ pub fn update_stub_mapping(
 ) {
     if let Some((orig_id, stub_id)) = stub_def_ids(tcx, harness, stub) {
         let other_opt = stub_pairs.insert(orig_id, stub_id);
-        if let Some(other) = other_opt {
-            if other != stub_id {
-                tcx.dcx().span_err(
-                    tcx.def_span(harness),
-                    format!(
-                        "duplicate stub mapping: {} mapped to {} and {}",
-                        tcx.def_path_str(orig_id),
-                        tcx.def_path_str(stub_id),
-                        tcx.def_path_str(other)
-                    ),
-                );
-            }
+        if let Some(other) = other_opt
+            && other != stub_id
+        {
+            tcx.dcx().span_err(
+                tcx.def_span(harness),
+                format!(
+                    "duplicate stub mapping: {} mapped to {} and {}",
+                    tcx.def_path_str(orig_id),
+                    tcx.def_path_str(stub_id),
+                    tcx.def_path_str(other)
+                ),
+            );
         }
     }
 }

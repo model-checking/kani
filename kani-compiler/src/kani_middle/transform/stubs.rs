@@ -46,14 +46,13 @@ impl TransformPass for FnStubPass {
     fn transform(&mut self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
         trace!(function=?instance.name(), "transform");
         let ty = instance.ty();
-        if let TyKind::RigidTy(RigidTy::FnDef(fn_def, args)) = ty.kind() {
-            if let Some(replace) = self.stubs.get(&fn_def) {
-                let new_instance = Instance::resolve(*replace, &args).unwrap();
-                debug!(from=?instance.name(), to=?new_instance.name(), "FnStubPass::transform");
-                if let Some(body) = FnStubValidator::validate(tcx, (fn_def, *replace), new_instance)
-                {
-                    return (true, body);
-                }
+        if let TyKind::RigidTy(RigidTy::FnDef(fn_def, args)) = ty.kind()
+            && let Some(replace) = self.stubs.get(&fn_def)
+        {
+            let new_instance = Instance::resolve(*replace, &args).unwrap();
+            debug!(from=?instance.name(), to=?new_instance.name(), "FnStubPass::transform");
+            if let Some(body) = FnStubValidator::validate(tcx, (fn_def, *replace), new_instance) {
+                return (true, body);
             }
         }
         (false, body)
@@ -152,28 +151,28 @@ impl FnStubValidator<'_, '_> {
 impl MirVisitor for FnStubValidator<'_, '_> {
     fn visit_operand(&mut self, op: &Operand, loc: Location) {
         let op_ty = op.ty(self.locals).unwrap();
-        if let TyKind::RigidTy(RigidTy::FnDef(def, args)) = op_ty.kind() {
-            if Instance::resolve(def, &args).is_err() {
-                self.is_valid = false;
-                let callee = def.name();
-                let receiver_ty = args.0[0].expect_ty();
-                let sep = callee.rfind("::").unwrap();
-                let trait_ = &callee[..sep];
-                self.tcx.dcx().span_err(
-                    rustc_internal::internal(self.tcx, loc.span()),
-                    format!(
-                        "`{}` doesn't implement \
+        if let TyKind::RigidTy(RigidTy::FnDef(def, args)) = op_ty.kind()
+            && Instance::resolve(def, &args).is_err()
+        {
+            self.is_valid = false;
+            let callee = def.name();
+            let receiver_ty = args.0[0].expect_ty();
+            let sep = callee.rfind("::").unwrap();
+            let trait_ = &callee[..sep];
+            self.tcx.dcx().span_err(
+                rustc_internal::internal(self.tcx, loc.span()),
+                format!(
+                    "`{}` doesn't implement \
                                         `{}`. The function `{}` \
                                         cannot be stubbed by `{}` due to \
                                         generic bounds not being met. Callee: {}",
-                        receiver_ty,
-                        trait_,
-                        self.stub.0.name(),
-                        self.stub.1.name(),
-                        callee,
-                    ),
-                );
-            }
+                    receiver_ty,
+                    trait_,
+                    self.stub.0.name(),
+                    self.stub.1.name(),
+                    callee,
+                ),
+            );
         }
     }
 }
@@ -187,36 +186,34 @@ struct ExternFnStubVisitor<'a> {
 impl MutMirVisitor for ExternFnStubVisitor<'_> {
     fn visit_terminator(&mut self, term: &mut Terminator) {
         // Replace direct calls
-        if let TerminatorKind::Call { func, .. } = &mut term.kind {
-            if let TyKind::RigidTy(RigidTy::FnDef(def, args)) =
+        if let TerminatorKind::Call { func, .. } = &mut term.kind
+            && let TyKind::RigidTy(RigidTy::FnDef(def, args)) =
                 func.ty(&self.locals).unwrap().kind()
-            {
-                if let Some(new_def) = self.stubs.get(&def) {
-                    let instance = Instance::resolve(*new_def, &args).unwrap();
-                    let literal = MirConst::try_new_zero_sized(instance.ty()).unwrap();
-                    let span = term.span;
-                    let new_func = ConstOperand { span, user_ty: None, const_: literal };
-                    *func = Operand::Constant(new_func);
-                    self.changed = true;
-                }
-            }
+            && let Some(new_def) = self.stubs.get(&def)
+        {
+            let instance = Instance::resolve(*new_def, &args).unwrap();
+            let literal = MirConst::try_new_zero_sized(instance.ty()).unwrap();
+            let span = term.span;
+            let new_func = ConstOperand { span, user_ty: None, const_: literal };
+            *func = Operand::Constant(new_func);
+            self.changed = true;
         }
         self.super_terminator(term);
     }
 
     fn visit_operand(&mut self, operand: &mut Operand) {
         let func_ty = operand.ty(&self.locals).unwrap();
-        if let TyKind::RigidTy(RigidTy::FnDef(orig_def, args)) = func_ty.kind() {
-            if let Some(new_def) = self.stubs.get(&orig_def) {
-                let Operand::Constant(ConstOperand { span, .. }) = operand else {
-                    unreachable!();
-                };
-                let instance = Instance::resolve_for_fn_ptr(*new_def, &args).unwrap();
-                let literal = MirConst::try_new_zero_sized(instance.ty()).unwrap();
-                let new_func = ConstOperand { span: *span, user_ty: None, const_: literal };
-                *operand = Operand::Constant(new_func);
-                self.changed = true;
-            }
+        if let TyKind::RigidTy(RigidTy::FnDef(orig_def, args)) = func_ty.kind()
+            && let Some(new_def) = self.stubs.get(&orig_def)
+        {
+            let Operand::Constant(ConstOperand { span, .. }) = operand else {
+                unreachable!();
+            };
+            let instance = Instance::resolve_for_fn_ptr(*new_def, &args).unwrap();
+            let literal = MirConst::try_new_zero_sized(instance.ty()).unwrap();
+            let new_func = ConstOperand { span: *span, user_ty: None, const_: literal };
+            *operand = Operand::Constant(new_func);
+            self.changed = true;
         }
     }
 }

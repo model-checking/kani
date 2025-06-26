@@ -350,12 +350,11 @@ impl FunctionWithContractPass {
                     && !harness_generic_args.is_empty()
                 {
                     let kind = harness.args().0[0].expect_ty().kind();
-                    let (def, args) = kind.fn_def().unwrap();
-                    let fn_to_verify = Instance::resolve(def, &args).unwrap();
+                    let (fn_to_verify_def, _) = kind.fn_def().unwrap();
                     // For automatic harnesses, the target is the function to verify,
                     // and stubs are empty.
                     (
-                        Some(rustc_internal::internal(tcx, fn_to_verify.def.def_id())),
+                        Some(rustc_internal::internal(tcx, fn_to_verify_def.def_id())),
                         HashSet::default(),
                     )
                 } else {
@@ -492,10 +491,10 @@ impl FunctionWithContractPass {
     fn mark_unused(&mut self, tcx: TyCtxt, fn_def: FnDef, body: &Body, mode: ContractMode) {
         let contract =
             KaniAttributes::for_def_id(tcx, fn_def.def_id()).contract_attributes().unwrap();
-        let recursion_closure = find_closure(tcx, fn_def, &body, contract.recursion_check.as_str());
-        let check_closure = find_closure(tcx, fn_def, &body, contract.checked_with.as_str());
-        let replace_closure = find_closure(tcx, fn_def, &body, contract.replaced_with.as_str());
-        let assert_closure = find_closure(tcx, fn_def, &body, contract.asserted_with.as_str());
+        let recursion_closure = find_closure(tcx, fn_def, body, contract.recursion_check.as_str());
+        let check_closure = find_closure(tcx, fn_def, body, contract.checked_with.as_str());
+        let replace_closure = find_closure(tcx, fn_def, body, contract.replaced_with.as_str());
+        let assert_closure = find_closure(tcx, fn_def, body, contract.asserted_with.as_str());
         match mode {
             ContractMode::Original => {
                 // No contract instrumentation needed. Add all closures to the list of unused.

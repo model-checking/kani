@@ -299,7 +299,7 @@ impl GotocCtx<'_> {
             Intrinsic::Assume => self.codegen_assert_assume(
                 fargs.remove(0).cast_to(Type::bool()),
                 PropertyClass::Assume,
-                "assumption failed",
+                "Rust intrinsic assumption failed",
                 loc,
             ),
             Intrinsic::AtomicAnd(_) => codegen_atomic_binop!(bitand),
@@ -564,7 +564,7 @@ impl GotocCtx<'_> {
             self.intrinsics_typecheck_fail(span, "ctpop", "integer type", arg_rust_ty)
         } else {
             let loc = self.codegen_span_stable(span);
-            self.codegen_expr_to_place_stable(&target_place, arg.popcount(), loc)
+            self.codegen_expr_to_place_stable(target_place, arg.popcount(), loc)
         }
     }
 
@@ -1253,10 +1253,10 @@ impl GotocCtx<'_> {
                 let size = sized_size.plus(unsized_size);
 
                 // Packed types ignore the alignment of their fields.
-                if let TyKind::RigidTy(RigidTy::Adt(def, _)) = ty.kind() {
-                    if rustc_internal::internal(self.tcx, def).repr().packed() {
-                        unsized_align = sized_align.clone();
-                    }
+                if let TyKind::RigidTy(RigidTy::Adt(def, _)) = ty.kind()
+                    && rustc_internal::internal(self.tcx, def).repr().packed()
+                {
+                    unsized_align = sized_align.clone();
                 }
 
                 // The alignment should be the maximum of the alignments for the
@@ -1882,12 +1882,11 @@ impl GotocCtx<'_> {
         assert!(ty.kind().is_float());
         let TyKind::RigidTy(integral_ty) = res_ty.kind() else {
             panic!(
-                "Expected intrinsic `{}` type to be `RigidTy`, but found: `{:?}`",
-                intrinsic, res_ty
+                "Expected intrinsic `{intrinsic}` type to be `RigidTy`, but found: `{res_ty:?}`"
             );
         };
         let TyKind::RigidTy(RigidTy::Float(float_type)) = ty.kind() else {
-            panic!("Expected intrinsic `{}` type to be `Float`, but found: `{:?}`", intrinsic, ty);
+            panic!("Expected intrinsic `{intrinsic}` type to be `Float`, but found: `{ty:?}`");
         };
         let mm = self.symbol_table.machine_model();
         let in_range = utils::codegen_in_range_expr(&expr, float_type, integral_ty, mm);

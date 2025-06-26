@@ -10,20 +10,24 @@ use rustc_abi::{
 };
 use rustc_ast::ast::Mutability;
 use rustc_index::IndexVec;
-use rustc_middle::ty::GenericArgsRef;
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::print::FmtPrinter;
 use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::{
-    self, AdtDef, Const, CoroutineArgs, CoroutineArgsExt, FloatTy, Instance, IntTy, PolyFnSig, Ty,
-    TyCtxt, TyKind, UintTy, VariantDef, VtblEntry,
+    self, AdtDef, Const, CoroutineArgs, CoroutineArgsExt, FloatTy, Instance, IntTy, PolyFnSig,
+    TraitRef, Ty, TyCtxt, TyKind, UintTy, VariantDef, VtblEntry,
 };
+use rustc_middle::ty::{ExistentialTraitRef, GenericArgsRef};
 use rustc_middle::ty::{List, TypeFoldable};
 use rustc_smir::rustc_internal;
 use rustc_span::def_id::DefId;
 use stable_mir::abi::{ArgAbi, FnAbi, PassMode};
 use stable_mir::mir::Body;
 use stable_mir::mir::mono::Instance as InstanceStable;
+use stable_mir::ty::{
+    Binder, DynKind, ExistentialPredicate, ExistentialProjection, Region, RegionKind, RigidTy,
+    Ty as StableTy,
+};
 use tracing::{debug, trace, warn};
 
 /// Map the unit type to an empty struct
@@ -254,8 +258,7 @@ impl<'tcx> GotocCtx<'tcx> {
             .is_sized(*self.tcx.at(rustc_span::DUMMY_SP), ty::TypingEnv::fully_monomorphized())
     }
 
-    /// Generates the type for a single field for a dynamic vtable.
-    /// In particular, these fields are function pointers.
+    /// Generates the type for a supertrait vtable pointer field for a vtable.
     fn trait_method_vtable_field_type(
         &mut self,
         instance: Instance<'tcx>,
@@ -272,6 +275,44 @@ impl<'tcx> GotocCtx<'tcx> {
         let vtable_field_name = self.vtable_field_name(idx);
 
         DatatypeComponent::field(vtable_field_name, fn_ptr)
+    }
+
+    pub fn trait_ref_to_dyn_trait(
+        &self,
+        trait_ref: TraitRef<'tcx>,
+        projections: Vec<Binder<ExistentialProjection>>,
+    ) -> StableTy {
+        let existential_trait_ref =
+            rustc_internal::stable(ExistentialTraitRef::erase_self_ty(self.tcx, trait_ref));
+        let binder = Binder::dummy(ExistentialPredicate::Trait(existential_trait_ref));
+
+        let mut predictates = vec![binder];
+        predictates.extend(
+            projections.into_iter().map(|proj| proj.map_bound(ExistentialPredicate::Projection)),
+        );
+        let rigid =
+            RigidTy::Dynamic(predictates, Region { kind: RegionKind::ReErased }, DynKind::Dyn);
+
+        stable_mir::ty::Ty::from_rigid_kind(rigid)
+    }
+
+    /// Generates the type for a single field for a dynamic vtable.
+    /// In particular, these fields are function pointers.
+    fn trait_vptr_vtable_field_type(
+        &mut self,
+        idx: usize,
+        trait_ref: TraitRef<'tcx>,
+        projections: Vec<Binder<ExistentialProjection>>,
+    ) -> DatatypeComponent {
+        let dyn_trait = self.trait_ref_to_dyn_trait(trait_ref, projections);
+        let vtable_ty =
+            self.codegen_trait_vtable_type(rustc_internal::internal(self.tcx, dyn_trait));
+        let vtable_ptr = vtable_ty.to_pointer();
+
+        // vtable field name, i.e., 3_vol (idx_method)
+        let vtable_field_name = self.vtable_field_name(idx);
+
+        DatatypeComponent::field(vtable_field_name, vtable_ptr)
     }
 
     /// Generates a vtable that looks like this:
@@ -383,9 +424,11 @@ impl<'tcx> GotocCtx<'tcx> {
                         VtblEntry::Method(instance) => {
                             Some(self.trait_method_vtable_field_type(instance, idx))
                         }
-                        // TODO: trait upcasting
-                        // https://github.com/model-checking/kani/issues/358
-                        VtblEntry::TraitVPtr(..) => None,
+                        VtblEntry::TraitVPtr(trait_ref) => Some(self.trait_vptr_vtable_field_type(
+                            idx,
+                            trait_ref,
+                            binder.projection_bounds().map(rustc_internal::stable).collect(),
+                        )),
                         VtblEntry::MetadataDropInPlace
                         | VtblEntry::MetadataSize
                         | VtblEntry::MetadataAlign
@@ -1505,11 +1548,11 @@ impl<'tcx> GotocCtx<'tcx> {
                     // components as parameters with a special naming convention
                     // so that we can "retuple" them in the function prelude.
                     // See: compiler/rustc_codegen_llvm/src/gotoc/mod.rs:codegen_function_prelude
-                    if let Some(spread) = body.spread_arg() {
-                        if lc >= spread {
-                            let (name, _) = self.codegen_spread_arg_name(&lc);
-                            ident = name;
-                        }
+                    if let Some(spread) = body.spread_arg()
+                        && lc >= spread
+                    {
+                        let (name, _) = self.codegen_spread_arg_name(&lc);
+                        ident = name;
                     }
                     Some(
                         self.codegen_ty_stable(ty)

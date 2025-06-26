@@ -1,19 +1,22 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-//! Provide different static analysis to be performed in the crate under compilation
+//! Provide passes that perform intra-function analysis on the crate under compilation
 
 use crate::info;
 use csv::WriterBuilder;
 use graph_cycles::Cycles;
 use petgraph::graph::Graph;
+use rustc_middle::ty::TyCtxt;
+use rustc_smir::rustc_internal;
 use serde::{Serialize, Serializer, ser::SerializeStruct};
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::visit::{Location, PlaceContext, PlaceRef};
 use stable_mir::mir::{
-    BasicBlock, Body, MirVisitor, Mutability, ProjectionElem, Safety, Terminator, TerminatorKind,
+    BasicBlock, Body, CastKind, MirVisitor, Mutability, NonDivergingIntrinsic, ProjectionElem,
+    Rvalue, Safety, Statement, StatementKind, Terminator, TerminatorKind,
 };
-use stable_mir::ty::{AdtDef, AdtKind, FnDef, GenericArgs, MirConst, RigidTy, Ty, TyKind};
+use stable_mir::ty::{Abi, AdtDef, AdtKind, FnDef, GenericArgs, MirConst, RigidTy, Ty, TyKind};
 use stable_mir::visitor::{Visitable, Visitor};
 use stable_mir::{CrateDef, CrateItem};
 use std::collections::{HashMap, HashSet};
@@ -23,7 +26,7 @@ use std::path::{Path, PathBuf};
 #[derive(Clone, Debug)]
 pub struct OverallStats {
     /// The key and value of each counter.
-    counters: Vec<(&'static str, usize)>,
+    pub counters: Vec<(&'static str, usize)>,
     /// TODO: Group stats per function.
     fn_stats: HashMap<CrateItem, FnStats>,
 }
@@ -35,6 +38,7 @@ struct FnStats {
     has_unsafe_ops: Option<bool>,
     has_unsupported_input: Option<bool>,
     has_loop_or_iterator: Option<bool>,
+    is_public: Option<bool>,
 }
 
 impl FnStats {
@@ -45,7 +49,14 @@ impl FnStats {
             has_unsafe_ops: None,
             has_unsupported_input: None,
             has_loop_or_iterator: None,
+            is_public: None,
         }
+    }
+}
+
+impl Default for OverallStats {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -61,12 +72,12 @@ impl OverallStats {
     }
 
     pub fn store_csv(&self, base_path: PathBuf, file_stem: &str) {
-        let filename = format!("{}_overall", file_stem);
+        let filename = format!("{file_stem}_overall");
         let mut out_path = base_path.parent().map_or(PathBuf::default(), Path::to_path_buf);
         out_path.set_file_name(filename);
         dump_csv(out_path, &self.counters);
 
-        let filename = format!("{}_functions", file_stem);
+        let filename = format!("{file_stem}_functions");
         let mut out_path = base_path.parent().map_or(PathBuf::default(), Path::to_path_buf);
         out_path.set_file_name(filename);
         dump_csv(out_path, &self.fn_stats.values().collect::<Vec<_>>());
@@ -222,34 +233,57 @@ impl OverallStats {
                 .map(|def| {
                     (
                         def.name(),
-                        if recursions.recursive_fns.contains(&def) { "recursive" } else { "" },
+                        if recursions.recursive_fns.contains(def) { "recursive" } else { "" },
                     )
                 })
                 .collect::<Vec<_>>(),
         );
     }
+
+    /// Iterate over all functions defined in this crate and log public vs private
+    pub fn public_fns(&mut self, tcx: &TyCtxt) {
+        let all_items = stable_mir::all_local_items();
+        let (public_fns, private_fns) = all_items
+            .into_iter()
+            .filter_map(|item| {
+                let kind = item.ty().kind();
+                if !kind.is_fn() {
+                    return None;
+                };
+                let int_def_id = rustc_internal::internal(*tcx, item.def_id());
+                let is_public = tcx.visibility(int_def_id).is_public()
+                    || tcx.visibility(int_def_id).is_visible_locally();
+                self.fn_stats.get_mut(&item).unwrap().is_public = Some(is_public);
+                Some((item, is_public))
+            })
+            .partition::<Vec<(CrateItem, bool)>, _>(|(_, is_public)| *is_public);
+        self.counters.extend_from_slice(&[
+            ("public_fns", public_fns.len()),
+            ("private_fns", private_fns.len()),
+        ]);
+    }
 }
 
 macro_rules! fn_props {
     ($(#[$attr:meta])*
-    struct $name:ident {
+    $vis:vis struct $name:ident {
         $(
             $(#[$prop_attr:meta])*
             $prop:ident,
         )+
     }) => {
         #[derive(Debug)]
-        struct $name {
+        $vis struct $name {
             fn_name: String,
             $($(#[$prop_attr])* $prop: usize,)+
         }
 
         impl $name {
-            const fn num_props() -> usize {
+            $vis const fn num_props() -> usize {
                 [$(stringify!($prop),)+].len()
             }
 
-            fn new(fn_name: String) -> Self {
+            $vis fn new(fn_name: String) -> Self {
                 Self { fn_name, $($prop: 0,)+}
             }
         }
@@ -369,7 +403,7 @@ impl Visitor for TypeVisitor<'_> {
     }
 }
 
-fn dump_csv<T: Serialize>(mut out_path: PathBuf, data: &[T]) {
+pub(crate) fn dump_csv<T: Serialize>(mut out_path: PathBuf, data: &[T]) {
     out_path.set_extension("csv");
     info(format!("Write file: {out_path:?}"));
     let mut writer = WriterBuilder::new().delimiter(b';').from_path(&out_path).unwrap();
@@ -379,17 +413,23 @@ fn dump_csv<T: Serialize>(mut out_path: PathBuf, data: &[T]) {
 }
 
 fn_props! {
-    struct FnUnsafeOperations {
+    pub struct FnUnsafeOperations {
         inline_assembly,
         /// Dereference a raw pointer.
         /// This is also counted when we access a static variable since it gets translated to a raw pointer.
         unsafe_dereference,
-        /// Call an unsafe function or method.
+        /// Call an unsafe function or method including C-FFI.
         unsafe_call,
         /// Access or modify a mutable static variable.
         unsafe_static_access,
         /// Access fields of unions.
         unsafe_union_access,
+        /// Invoke external functions (this is a subset of `unsafe_call`.
+        extern_call,
+        /// Transmute operations.
+        transmute,
+        /// Cast raw pointer to reference.
+        unsafe_cast,
     }
 }
 
@@ -419,15 +459,53 @@ impl MirVisitor for BodyVisitor<'_> {
     fn visit_terminator(&mut self, term: &Terminator, location: Location) {
         match &term.kind {
             TerminatorKind::Call { func, .. } => {
-                let fn_sig = func.ty(self.body.locals()).unwrap().kind().fn_sig().unwrap();
-                if fn_sig.value.safety == Safety::Unsafe {
+                let TyKind::RigidTy(RigidTy::FnDef(fn_def, _)) =
+                    func.ty(self.body.locals()).unwrap().kind()
+                else {
+                    return self.super_terminator(term, location);
+                };
+                let fn_sig = fn_def.fn_sig().skip_binder();
+                if fn_sig.safety == Safety::Unsafe {
                     self.props.unsafe_call += 1;
+                    if !matches!(fn_sig.abi, Abi::Rust | Abi::RustCold | Abi::RustCall)
+                        && !fn_def.has_body()
+                    {
+                        self.props.extern_call += 1;
+                    }
                 }
             }
             TerminatorKind::InlineAsm { .. } => self.props.inline_assembly += 1,
             _ => { /* safe */ }
         }
         self.super_terminator(term, location)
+    }
+
+    fn visit_rvalue(&mut self, rvalue: &Rvalue, location: Location) {
+        if let Rvalue::Cast(cast_kind, operand, ty) = rvalue {
+            match cast_kind {
+                CastKind::Transmute => {
+                    self.props.transmute += 1;
+                }
+                _ => {
+                    let operand_ty = operand.ty(self.body.locals()).unwrap();
+                    if ty.kind().is_ref() && operand_ty.kind().is_raw_ptr() {
+                        self.props.unsafe_cast += 1;
+                    }
+                }
+            }
+        };
+        self.super_rvalue(rvalue, location);
+    }
+
+    fn visit_statement(&mut self, stmt: &Statement, location: Location) {
+        if matches!(
+            &stmt.kind,
+            StatementKind::Intrinsic(NonDivergingIntrinsic::CopyNonOverlapping(_))
+        ) {
+            // Treat this as invoking the copy intrinsic.
+            self.props.unsafe_call += 1;
+        }
+        self.super_statement(stmt, location)
     }
 
     fn visit_projection_elem(
@@ -674,9 +752,9 @@ impl Recursion {
     }
 }
 
-struct FnCallVisitor<'a> {
-    body: &'a Body,
-    fns: Vec<FnDef>,
+pub struct FnCallVisitor<'a> {
+    pub body: &'a Body,
+    pub fns: Vec<FnDef>,
 }
 
 impl MirVisitor for FnCallVisitor<'_> {

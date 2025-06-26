@@ -335,7 +335,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     let typ = self.codegen_ty_stable(ty);
                     let operation_name = "C string literal";
                     self.codegen_unimplemented_expr(
-                        &operation_name,
+                        operation_name,
                         typ,
                         loc,
                         "https://github.com/model-checking/kani/issues/2549",

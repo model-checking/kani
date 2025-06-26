@@ -214,7 +214,7 @@ impl<'a> UninitInstrumenter<'a> {
         let ptr_operand = operation.mk_operand(body, &mut statements, source);
         let terminator = match pointee_info.layout() {
             PointeeLayout::Sized { layout } => {
-                let layout_operand = mk_layout_operand(body, &mut statements, source, &layout);
+                let layout_operand = mk_layout_operand(body, &mut statements, source, layout);
                 // Depending on whether accessing the known number of elements in the slice, need to
                 // pass is as an argument.
                 let (diagnostic, args) = match &operation {
@@ -232,7 +232,7 @@ impl<'a> UninitInstrumenter<'a> {
                     _ => unreachable!(),
                 };
                 let is_ptr_initialized_instance = resolve_mem_init_fn(
-                    get_mem_init_fn_def(diagnostic, &mut self.mem_init_fn_cache),
+                    get_mem_init_fn_def(diagnostic, self.mem_init_fn_cache),
                     layout.len(),
                     *pointee_info.ty(),
                 );
@@ -263,12 +263,12 @@ impl<'a> UninitInstrumenter<'a> {
                     _ => unreachable!(),
                 };
                 let is_ptr_initialized_instance = resolve_mem_init_fn(
-                    get_mem_init_fn_def(diagnostic, &mut self.mem_init_fn_cache),
+                    get_mem_init_fn_def(diagnostic, self.mem_init_fn_cache),
                     element_layout.len(),
                     slicee_ty,
                 );
                 let layout_operand =
-                    mk_layout_operand(body, &mut statements, source, &element_layout);
+                    mk_layout_operand(body, &mut statements, source, element_layout);
                 Terminator {
                     kind: TerminatorKind::Call {
                         func: Operand::Copy(Place::from(body.new_local(
@@ -342,7 +342,7 @@ impl<'a> UninitInstrumenter<'a> {
         let value = operation.expect_value();
         let terminator = match pointee_info.layout() {
             PointeeLayout::Sized { layout } => {
-                let layout_operand = mk_layout_operand(body, &mut statements, source, &layout);
+                let layout_operand = mk_layout_operand(body, &mut statements, source, layout);
                 // Depending on whether writing to the known number of elements in the slice, need to
                 // pass is as an argument.
                 let (diagnostic, args) = match &operation {
@@ -376,7 +376,7 @@ impl<'a> UninitInstrumenter<'a> {
                     _ => unreachable!(),
                 };
                 let set_ptr_initialized_instance = resolve_mem_init_fn(
-                    get_mem_init_fn_def(diagnostic, &mut self.mem_init_fn_cache),
+                    get_mem_init_fn_def(diagnostic, self.mem_init_fn_cache),
                     layout.len(),
                     *pointee_info.ty(),
                 );
@@ -407,12 +407,12 @@ impl<'a> UninitInstrumenter<'a> {
                     _ => unreachable!(),
                 };
                 let set_ptr_initialized_instance = resolve_mem_init_fn(
-                    get_mem_init_fn_def(diagnostic, &mut self.mem_init_fn_cache),
+                    get_mem_init_fn_def(diagnostic, self.mem_init_fn_cache),
                     element_layout.len(),
                     slicee_ty,
                 );
                 let layout_operand =
-                    mk_layout_operand(body, &mut statements, source, &element_layout);
+                    mk_layout_operand(body, &mut statements, source, element_layout);
                 Terminator {
                     kind: TerminatorKind::Call {
                         func: Operand::Copy(Place::from(body.new_local(
@@ -471,7 +471,7 @@ impl<'a> UninitInstrumenter<'a> {
                     }),
                 ];
                 let set_ptr_initialized_instance = resolve_mem_init_fn(
-                    get_mem_init_fn_def(diagnostic, &mut self.mem_init_fn_cache),
+                    get_mem_init_fn_def(diagnostic, self.mem_init_fn_cache),
                     layout.len(),
                     *pointee_info.ty(),
                 );
@@ -509,7 +509,7 @@ impl<'a> UninitInstrumenter<'a> {
         };
         let layout_size = pointee_info.layout().maybe_size().unwrap();
         let copy_init_state_instance = resolve_mem_init_fn(
-            get_mem_init_fn_def(KANI_COPY_INIT_STATE, &mut self.mem_init_fn_cache),
+            get_mem_init_fn_def(KANI_COPY_INIT_STATE, self.mem_init_fn_cache),
             layout_size,
             *pointee_info.ty(),
         );
@@ -547,7 +547,7 @@ impl<'a> UninitInstrumenter<'a> {
             _ => unreachable!(),
         };
         let argument_operation_instance = resolve_mem_init_fn(
-            get_mem_init_fn_def(diagnostic, &mut self.mem_init_fn_cache),
+            get_mem_init_fn_def(diagnostic, self.mem_init_fn_cache),
             layout_size,
             *pointee_info.ty(),
         );
@@ -595,7 +595,7 @@ impl<'a> UninitInstrumenter<'a> {
         let mut statements = vec![];
         let layout_size = pointee_info.layout().maybe_size().unwrap();
         let copy_init_state_instance = resolve_mem_init_fn(
-            get_mem_init_fn_def(KANI_COPY_INIT_STATE_SINGLE, &mut self.mem_init_fn_cache),
+            get_mem_init_fn_def(KANI_COPY_INIT_STATE_SINGLE, self.mem_init_fn_cache),
             layout_size,
             *pointee_info.ty(),
         );

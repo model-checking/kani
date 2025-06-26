@@ -6,6 +6,7 @@
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::codegen_cprover_gotoc::codegen::block::reverse_postorder;
 use cbmc::InternString;
+use cbmc::InternedString;
 use cbmc::goto_program::{Expr, Stmt, Symbol};
 use stable_mir::CrateDef;
 use stable_mir::mir::mono::Instance;
@@ -20,7 +21,7 @@ impl GotocCtx<'_> {
     /// - Index 0 represents the return value.
     /// - Indices [1, N] represent the function parameters where N is the number of parameters.
     /// - Indices that are greater than N represent local variables.
-    fn codegen_declare_variables(&mut self, body: &Body) {
+    fn codegen_declare_variables(&mut self, body: &Body, function_name: InternedString) {
         let ldecls = body.local_decls();
         let num_args = body.arg_locals().len();
         for (lc, ldata) in ldecls {
@@ -35,12 +36,22 @@ impl GotocCtx<'_> {
             let loc = self.codegen_span_stable(ldata.span);
             // Indices [1, N] represent the function parameters where N is the number of parameters.
             // Except that ZST fields are not included as parameters.
-            let sym =
-                Symbol::variable(name, base_name, var_type, self.codegen_span_stable(ldata.span))
-                    .with_is_hidden(!self.is_user_variable(&lc))
-                    .with_is_parameter((lc > 0 && lc <= num_args) && !self.is_zst_stable(ldata.ty));
+            let sym = Symbol::variable(
+                name.clone(),
+                base_name,
+                var_type,
+                self.codegen_span_stable(ldata.span),
+            )
+            .with_is_hidden(!self.is_user_variable(&lc))
+            .with_is_parameter((lc > 0 && lc <= num_args) && !self.is_zst_stable(ldata.ty));
             let sym_e = sym.to_expr();
             self.symbol_table.insert(sym);
+
+            // Store the parameter symbols of the function, which will be used for function
+            // inlining.
+            if lc > 0 && lc <= num_args {
+                self.symbol_table.insert_parameter(function_name, name);
+            }
 
             // Index 0 represents the return value, which does not need to be
             // declared in the first block
@@ -64,7 +75,7 @@ impl GotocCtx<'_> {
             self.set_current_fn(instance, &body);
             self.print_instance(instance, &body);
             self.codegen_function_prelude(&body);
-            self.codegen_declare_variables(&body);
+            self.codegen_declare_variables(&body, name.clone().into());
 
             // Get the order from internal body for now.
             reverse_postorder(&body).for_each(|bb| self.codegen_block(bb, &body.blocks[bb]));
@@ -247,6 +258,24 @@ pub mod rustc_smir {
         region_from_coverage(tcx, bcb, instance)
     }
 
+    pub fn merge_source_region(source_regions: Vec<SourceRegion>) -> SourceRegion {
+        let start_line = source_regions.iter().map(|sr| sr.start_line).min().unwrap();
+        let start_col = source_regions
+            .iter()
+            .filter(|sr| sr.start_line == start_line)
+            .map(|sr| sr.start_col)
+            .min()
+            .unwrap();
+        let end_line = source_regions.iter().map(|sr| sr.end_line).max().unwrap();
+        let end_col = source_regions
+            .iter()
+            .filter(|sr| sr.end_line == end_line)
+            .map(|sr| sr.end_col)
+            .max()
+            .unwrap();
+        SourceRegion { start_line, start_col, end_line, end_col }
+    }
+
     /// Retrieves the `SourceRegion` associated with a `BasicCoverageBlock` object.
     ///
     /// Note: This function could be in the internal `rustc` impl for `Coverage`.
@@ -258,21 +287,24 @@ pub mod rustc_smir {
         // We need to pull the coverage info from the internal MIR instance.
         let instance_def = rustc_smir::rustc_internal::internal(tcx, instance.def.def_id());
         let body = tcx.instance_mir(rustc_middle::ty::InstanceKind::Item(instance_def));
-
+        let filename = rustc_internal::stable(body.span).get_filename();
         // Some functions, like `std` ones, may not have coverage info attached
         // to them because they have been compiled without coverage flags.
         if let Some(cov_info) = &body.function_coverage_info {
             // Iterate over the coverage mappings and match with the coverage term.
+            let mut source_regions: Vec<SourceRegion> = Vec::new();
             for mapping in &cov_info.mappings {
                 let Code { bcb } = mapping.kind else { unreachable!() };
                 let source_map = tcx.sess.source_map();
                 let file = source_map.lookup_source_file(mapping.span.lo());
-                if bcb == coverage {
-                    return Some((
-                        make_source_region(source_map, &file, mapping.span).unwrap(),
-                        rustc_internal::stable(mapping.span).get_filename(),
-                    ));
+                if bcb == coverage
+                    && let Some(source_region) = make_source_region(source_map, &file, mapping.span)
+                {
+                    source_regions.push(source_region);
                 }
+            }
+            if !source_regions.is_empty() {
+                return Some((merge_source_region(source_regions), filename));
             }
         }
         None
