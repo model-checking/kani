@@ -164,6 +164,69 @@ fn contract_proof() {
 
 When loop contracts and function contracts are both enabled (by flags `-Z loop-contracts -Z function-contracts`), 
 Kani automatically contracts (instead of unwinds) all loops in the functions that we want to prove contracts for.
+
+## Loop assigns clauses: 
+We allow users to manually specified the `loop_assigns` clauses for memory allocated addresses which can be assigned inside the loop body.
+The concept is very similar to the `__CPROVER_assigns` clause of CBMC (https://diffblue.github.io/cbmc/contracts-assigns.html).
+However, in Kani, the CBMC target is replaced by three Rust types which can be used in the `loop_assigns` clauses:
+1. `RawPtr`: We don't allow variable names as targets. Users must use pointers to them instead, which also allows checking assigns using borrowed references and aliases.
+```Rust
+#[kani::proof]
+fn main() {
+    let mut i = 0;
+    #[kani::loop_invariant(i <= 20)]
+    #[kani::loop_assigns(&i as *const _)]
+    while i < 20 {
+        i = i + 1;
+    }
+}
+```
+2. `Reference`: Similar to RawPtr, but we also can use it to replace  `__CPROVER_object_whole(ptr-expr)`,
+Example 
+```Rust
+#[kani::proof]
+fn main() {
+    let mut i = 0;
+    let mut a: [u8; 20] = kani::any();
+    #[kani::loop_invariant(i <= 20)]
+    #[kani::loop_assigns(&i, &a)]
+    while i < 20 {
+        a[i] = 1;
+        i = i + 1;
+    }
+}
+```
+3. `FatPtr (Slice)`: We use this to replace `__CPROVER_object_from(ptr-expr)`, and `__CPROVER_object_upto(ptr-expr, uint-expr)`.
+```Rust
+#[kani::proof]
+fn main() {
+    let mut i = 3;
+    let mut a: [u8; 100] = kani::any();
+    #[kani::loop_invariant(i >=3 && i <= 20)]
+    #[kani::loop_assigns(&i , &a[3..20])]
+    while i < 20 {
+        a[i] = 1;
+        i = i + 1;
+    }
+}
+```
+or
+
+```Rust
+use std::ptr::slice_from_raw_parts;
+#[kani::proof]
+fn main() {
+    let mut i = 0;
+    let mut a: [u8; 100] = kani::any();
+    #[kani::loop_invariant(i <= 20)]
+    #[kani::loop_assigns(&i , slice_from_raw_parts(a.as_ptr(), 20))]
+    while i < 20 {
+        a[i] = 1;
+        i = i + 1;
+    }
+}
+```
+
 ## Limitations
 
 Loop contracts comes with the following limitations.
