@@ -915,31 +915,48 @@ fn find_closure_call_expr(instance: &Instance, gcx: &mut GotocCtx, loc: Location
 /// `align_offset`'s documentation, which states: "It is permissible for the implementation to
 /// always return usize::MAX. Only your algorithm’s performance can depend on getting a usable
 /// offset here, not its correctness."
-pub struct AlignOffset;
+struct AlignOffset;
 
-impl<'tcx> GotocHook<'tcx> for AlignOffset {
-    fn hook_applies(&self, tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> bool {
-        let name = with_no_trimmed_paths!(tcx.def_path_str(instance.def_id()));
-        name == "std::ptr::align_offset"
+impl GotocHook for AlignOffset {
+    fn hook_applies(&self, _tcx: TyCtxt, instance: Instance) -> bool {
+        let full_name = instance.name();
+        full_name.starts_with("std::ptr::align_offset::<")
     }
 
     fn handle(
         &self,
-        tcx: &mut GotocCtx<'tcx>,
-        _instance: Instance<'tcx>,
-        mut _fargs: Vec<Expr>,
-        assign_to: Place<'tcx>,
-        target: Option<BasicBlock>,
-        span: Option<Span>,
+        gcx: &mut GotocCtx,
+        _instance: Instance,
+        mut fargs: Vec<Expr>,
+        assign_to: &Place,
+        target: Option<BasicBlockIdx>,
+        span: Span,
     ) -> Stmt {
-        let loc = tcx.codegen_span_option(span);
-        let target = target.unwrap();
-        let place_expr =
-            unwrap_or_return_codegen_unimplemented_stmt!(tcx, tcx.codegen_place(&assign_to))
-                .goto_expr;
+        assert_eq!(fargs.len(), 2);
+        let _ptr = fargs.remove(0);
+        let align = fargs.remove(0);
+        // test power-of-two: align > 0 && (align & (align - 1)) == 0
+        let zero = Expr::int_constant(0, align.typ().clone());
+        let one = Expr::int_constant(1, align.typ().clone());
+        let cond = align
+            .clone()
+            .gt(zero.clone())
+            .and(align.clone().bitand(align.clone().sub(one)).eq(zero));
+        let loc = gcx.codegen_span_stable(span);
+        let safety_check = gcx.codegen_assert_assume(
+            cond,
+            PropertyClass::SafetyCheck,
+            "align_offset: align is not a power-of-two",
+            loc,
+        );
+        let place_expr = unwrap_or_return_codegen_unimplemented_stmt!(
+            gcx,
+            gcx.codegen_place_stable(&assign_to, loc)
+        )
+        .goto_expr;
         let rhs = Expr::int_constant(usize::MAX, place_expr.typ().clone());
-        let code = place_expr.assign(rhs, loc).with_location(loc);
-        Stmt::block(vec![code, Stmt::goto(tcx.current_fn().find_label(&target), loc)], loc)
+        let assign = place_expr.assign(rhs, loc).with_location(loc);
+        Stmt::block(vec![safety_check, assign, Stmt::goto(bb_label(target.unwrap()), loc)], loc)
     }
 }
 
