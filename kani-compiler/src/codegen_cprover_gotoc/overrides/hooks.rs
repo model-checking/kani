@@ -951,7 +951,7 @@ impl GotocHook for AlignOffset {
         );
         let place_expr = unwrap_or_return_codegen_unimplemented_stmt!(
             gcx,
-            gcx.codegen_place_stable(&assign_to, loc)
+            gcx.codegen_place_stable(assign_to, loc)
         )
         .goto_expr;
         let rhs = Expr::int_constant(usize::MAX, place_expr.typ().clone());
