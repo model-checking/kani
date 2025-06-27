@@ -1,0 +1,12 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+[package]
+name = "defs"
+version = "0.1.0"
+edition = "2021"
+description = "define a few fake unstable APIs used in other tests"
+
+[dependencies]
+
+[package.metadata.kani.flags]
+only-codegen = true

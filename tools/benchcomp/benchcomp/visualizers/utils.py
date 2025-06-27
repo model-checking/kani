@@ -96,10 +96,26 @@ class Generator:
     """Generate all visualizations in a config file given a dict of results"""
 
     config: benchcomp.ConfigFile
+    except_for: list
+    only: list
 
 
     def __call__(self, results):
-        for viz in self.config["visualize"]:
+        visualizations = self.config["visualize"]
+
+        if self.except_for:
+            for viz_name in self.except_for:
+                vizs = [v for v in visualizations if v["type"] == viz_name]
+                for viz in vizs:
+                    visualizations.remove(viz)
+        if self.only:
+            for viz_name in [v["type"] for v in visualizations]:
+                if viz_name not in self.only:
+                    vizs = [v for v in visualizations if v["type"] == viz_name]
+                    for viz in vizs:
+                        visualizations.remove(viz)
+
+        for viz in visualizations:
             viz_type = viz.pop("type")
             klass = getattr(benchcomp.visualizers, viz_type)
             visualize = klass(**viz)

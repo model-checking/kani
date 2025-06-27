@@ -1,1 +1,1 @@
-error: the `unwind` attribute also requires the '#[kani::proof]' attribute
+error: the `unwind` attribute also requires the `#[kani::proof]` attribute

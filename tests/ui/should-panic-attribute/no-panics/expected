@@ -1,4 +1,5 @@
-- Status: SUCCESS\
-- Description: "assertion failed: 1 + 1 == 2"
- ** 0 of 1 failed
+check.assertion\
+SUCCESS\
+assertion failed: 1 + 1 == 2
+
 VERIFICATION:- FAILED (encountered no panics, but at least one was expected)

@@ -31,7 +31,7 @@ macro_rules! test_rotate_right {
         let n: u32 = kani::any();
         // Limit `n` to `u8::MAX` to avoid overflows
         kani::assume(n <= u8::MAX as u32);
-        let y: $ty = rotate_right(x, n as $ty);
+        let y: $ty = rotate_right(x, n);
         // Check that the rotation is correct
         $fn_name(x, y, n);
         // Check that the stable version returns the same value

@@ -34,7 +34,7 @@ wget -O "$FILE" "$URL"
 tar -xvzf $FILE
 DIR_NAME="kissat-rel-${KISSAT_VERSION}"
 cd $DIR_NAME
-./configure && make kissat && sudo install build/kissat /usr/local/bin
+./configure --safe && make kissat && sudo install build/kissat /usr/local/bin
 cd -
 
 # Clean up on success

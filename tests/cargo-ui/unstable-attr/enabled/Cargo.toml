@@ -1,0 +1,12 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+[package]
+name = "enabled"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+defs = {path = "../defs"}
+
+[package.metadata.kani.unstable]
+gen-c = true

@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
-// kani-flags: --harness check_stub --enable-unstable --enable-stubbing
+// kani-flags: --harness check_stub -Z stubbing
 //! Test that stub can solve glob cycles.
 
 pub mod mod_a {

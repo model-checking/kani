@@ -3,16 +3,21 @@
 
 //! Module used to configure a compiler session.
 
-use crate::parser;
-use clap::ArgMatches;
+use crate::args::Arguments;
 use rustc_errors::{
-    emitter::Emitter, emitter::HumanReadableErrorType, fallback_fluent_bundle, json::JsonEmitter,
-    ColorConfig, Diagnostic, TerminalUrl,
+    ColorConfig, DiagInner, emitter::Emitter, emitter::HumanReadableErrorType,
+    fallback_fluent_bundle, json::JsonEmitter, registry::Registry as ErrorRegistry,
 };
+use rustc_session::EarlyDiagCtxt;
+use rustc_session::config::ErrorOutputType;
+use rustc_span::source_map::FilePathMapping;
+use rustc_span::source_map::SourceMap;
+use std::io;
+use std::io::IsTerminal;
 use std::panic;
-use std::str::FromStr;
+use std::sync::Arc;
 use std::sync::LazyLock;
-use tracing_subscriber::{filter::Directive, layer::SubscriberExt, EnvFilter, Registry};
+use tracing_subscriber::{EnvFilter, Registry, layer::SubscriberExt};
 use tracing_tree::HierarchicalLayer;
 
 /// Environment variable used to control this session log tracing.
@@ -24,7 +29,7 @@ const BUG_REPORT_URL: &str =
 
 // Custom panic hook when running under user friendly message format.
 #[allow(clippy::type_complexity)]
-static PANIC_HOOK: LazyLock<Box<dyn Fn(&panic::PanicInfo<'_>) + Sync + Send + 'static>> =
+static PANIC_HOOK: LazyLock<Box<dyn Fn(&panic::PanicHookInfo<'_>) + Sync + Send + 'static>> =
     LazyLock::new(|| {
         let hook = panic::take_hook();
         panic::set_hook(Box::new(|info| {
@@ -41,40 +46,38 @@ static PANIC_HOOK: LazyLock<Box<dyn Fn(&panic::PanicInfo<'_>) + Sync + Send + 's
 
 // Custom panic hook when executing under json error format `--error-format=json`.
 #[allow(clippy::type_complexity)]
-static JSON_PANIC_HOOK: LazyLock<Box<dyn Fn(&panic::PanicInfo<'_>) + Sync + Send + 'static>> =
+static JSON_PANIC_HOOK: LazyLock<Box<dyn Fn(&panic::PanicHookInfo<'_>) + Sync + Send + 'static>> =
     LazyLock::new(|| {
         let hook = panic::take_hook();
         panic::set_hook(Box::new(|info| {
             // Print stack trace.
             let msg = format!("Kani unexpectedly panicked at {info}.",);
             let fallback_bundle =
-                fallback_fluent_bundle(rustc_errors::DEFAULT_LOCALE_RESOURCES, false);
-            let mut emitter = JsonEmitter::basic(
-                false,
-                HumanReadableErrorType::Default(ColorConfig::Never),
-                None,
+                fallback_fluent_bundle(rustc_driver::DEFAULT_LOCALE_RESOURCES.to_vec(), false);
+            let mut emitter = JsonEmitter::new(
+                Box::new(io::BufWriter::new(io::stderr())),
+                #[allow(clippy::arc_with_non_send_sync)]
+                Some(Arc::new(SourceMap::new(FilePathMapping::empty()))),
                 fallback_bundle,
-                None,
                 false,
-                false,
-                TerminalUrl::No,
+                HumanReadableErrorType::Default,
+                ColorConfig::Never,
             );
-            let diagnostic = Diagnostic::new(rustc_errors::Level::Bug, msg);
-            emitter.emit_diagnostic(&diagnostic);
+            let registry = ErrorRegistry::new(&[]);
+            let diagnostic = DiagInner::new(rustc_errors::Level::Bug, msg);
+            emitter.emit_diagnostic(diagnostic, &registry);
             (*JSON_PANIC_HOOK)(info);
         }));
         hook
     });
 
 /// Initialize compiler session.
-pub fn init_session(args: &ArgMatches, json_hook: bool) {
+pub fn init_session(args: &Arguments, json_hook: bool) {
     // Initialize the rustc logger using value from RUSTC_LOG. We keep the log control separate
     // because we cannot control the RUSTC log format unless if we match the exact tracing
     // version used by RUSTC.
-    // TODO: Enable rustc log when we upgrade the toolchain.
-    // <https://github.com/model-checking/kani/issues/2283>
-    //
-    // rustc_driver::init_rustc_env_logger();
+    let handler = EarlyDiagCtxt::new(ErrorOutputType::default());
+    rustc_driver::init_rustc_env_logger(&handler);
 
     // Install Kani panic hook.
     if json_hook {
@@ -86,15 +89,15 @@ pub fn init_session(args: &ArgMatches, json_hook: bool) {
 }
 
 /// Initialize the logger using the KANI_LOG environment variable and the --log-level argument.
-fn init_logger(args: &ArgMatches) {
+fn init_logger(args: &Arguments) {
     let filter = EnvFilter::from_env(LOG_ENV_VAR);
-    let filter = if let Some(log_level) = args.get_one::<String>(parser::LOG_LEVEL) {
-        filter.add_directive(Directive::from_str(log_level).unwrap())
+    let filter = if let Some(log_level) = &args.log_level {
+        filter.add_directive(log_level.clone())
     } else {
         filter
     };
 
-    if args.get_flag(parser::JSON_OUTPUT) {
+    if args.json_output {
         json_logs(filter);
     } else {
         hier_logs(args, filter);
@@ -109,8 +112,8 @@ fn json_logs(filter: EnvFilter) {
 }
 
 /// Configure global logger to use a hierarchical view.
-fn hier_logs(args: &ArgMatches, filter: EnvFilter) {
-    let use_colors = atty::is(atty::Stream::Stdout) || args.get_flag(parser::COLOR_OUTPUT);
+fn hier_logs(args: &Arguments, filter: EnvFilter) {
+    let use_colors = std::io::stdout().is_terminal() || args.color_output;
     let subscriber = Registry::default().with(filter);
     let subscriber = subscriber.with(
         HierarchicalLayer::default()

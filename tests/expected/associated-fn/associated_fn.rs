@@ -1,14 +1,14 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-flags: --enable-unstable --function new
-//! This ensures our public functions reachability module works for associated functions.
+//! This ensures a harness can be an associated function. We don't have any oficial restriction
+//! today.
 
 struct Dummy {
     c: char,
 }
 
 impl Dummy {
-    #[no_mangle]
+    #[kani::proof]
     pub fn new() -> Self {
         Dummy { c: ' ' }
     }

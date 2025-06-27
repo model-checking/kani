@@ -1,0 +1,7 @@
+Checking harness check_foo_b...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness check_foo_a...
+VERIFICATION:- SUCCESSFUL
+
+Complete - 2 successfully verified harnesses, 0 failures, 2 total

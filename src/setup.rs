@@ -8,7 +8,7 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 
 use crate::cmd::AutoRun;
 use crate::os_hacks;
@@ -53,8 +53,27 @@ pub fn appears_setup() -> bool {
     kani_dir().expect("couldn't find kani directory").exists()
 }
 
+// Ensure that the tar file does not exist, essentially using its presence
+// to detect setup completion as if it were a lock file.
+pub fn appears_incomplete() -> Option<PathBuf> {
+    let kani_dir = kani_dir().expect("couldn't find kani directory");
+    let kani_dir_parent = kani_dir.parent().unwrap();
+
+    for entry in std::fs::read_dir(kani_dir_parent).ok()?.flatten() {
+        if let Some(file_name) = entry.file_name().to_str() {
+            if file_name.ends_with(".tar.gz") {
+                return Some(kani_dir_parent.join(file_name));
+            }
+        }
+    }
+    None
+}
+
 /// Sets up Kani by unpacking/installing to `~/.kani/kani-VERSION`
-pub fn setup(use_local_bundle: Option<OsString>) -> Result<()> {
+pub fn setup(
+    use_local_bundle: Option<OsString>,
+    use_local_toolchain: Option<OsString>,
+) -> Result<()> {
     let kani_dir = kani_dir()?;
     let os = os_info::get();
 
@@ -65,9 +84,7 @@ pub fn setup(use_local_bundle: Option<OsString>) -> Result<()> {
 
     setup_kani_bundle(&kani_dir, use_local_bundle)?;
 
-    setup_rust_toolchain(&kani_dir)?;
-
-    setup_python_deps(&kani_dir, &os)?;
+    setup_rust_toolchain(&kani_dir, use_local_toolchain)?;
 
     os_hacks::setup_os_hacks(&kani_dir, &os)?;
 
@@ -91,15 +108,18 @@ fn setup_kani_bundle(kani_dir: &Path, use_local_bundle: Option<OsString>) -> Res
             .arg("--strip-components=1")
             .arg("-zxf")
             .arg(&path)
-            .current_dir(&kani_dir)
-            .run()?;
+            .current_dir(kani_dir)
+            .run()
+            .context(
+                "Failed to extract tar file, try removing Kani setup located in .kani in your home directory and restarting",
+            )?;
     } else {
         let filename = download_filename();
         println!("[2/5] Downloading Kani release bundle: {}", &filename);
         fail_if_unsupported_target()?;
         let bundle = base_dir.join(filename);
         Command::new("curl")
-            .args(&["-sSLf", "-o"])
+            .args(["-sSLf", "-o"])
             .arg(&bundle)
             .arg(download_url())
             .run()
@@ -119,39 +139,46 @@ pub(crate) fn get_rust_toolchain_version(kani_dir: &Path) -> Result<String> {
         .context("Reading release bundle rust-toolchain-version")
 }
 
-/// Install the Rust toolchain version we require
-fn setup_rust_toolchain(kani_dir: &Path) -> Result<String> {
-    // Currently this means we require the bundle to have been unpacked first!
-    let toolchain_version = get_rust_toolchain_version(kani_dir)?;
-    println!("[3/5] Installing rust toolchain version: {}", &toolchain_version);
-    Command::new("rustup").args(&["toolchain", "install", &toolchain_version]).run()?;
-
-    let toolchain = home::rustup_home()?.join("toolchains").join(&toolchain_version);
-
-    symlink_rust_toolchain(&toolchain, kani_dir)?;
-    Ok(toolchain_version)
+pub(crate) fn get_rustc_version_from_build(kani_dir: &Path) -> Result<String> {
+    std::fs::read_to_string(kani_dir.join("rustc-version"))
+        .context("Reading release bundle rustc-version")
 }
 
-/// Install into the pyroot the python dependencies we need
-fn setup_python_deps(kani_dir: &Path, os: &os_info::Info) -> Result<()> {
-    println!("[4/5] Installing Kani python dependencies...");
-    let pyroot = kani_dir.join("pyroot");
+/// Install the Rust toolchain version we require
+fn setup_rust_toolchain(kani_dir: &Path, use_local_toolchain: Option<OsString>) -> Result<String> {
+    // Currently this means we require the bundle to have been unpacked first!
+    let toolchain_version = get_rust_toolchain_version(kani_dir)?;
+    let rustc_version = get_rustc_version_from_build(kani_dir)?.trim().to_string();
 
-    // TODO: this is a repetition of versions from kani/kani-dependencies
-    let pkg_versions = &["cbmc-viewer==3.8"];
+    // Symlink to a local toolchain if the user explicitly requests
+    if let Some(local_toolchain_path) = use_local_toolchain {
+        let toolchain_path = Path::new(&local_toolchain_path);
 
-    if os_hacks::should_apply_ubuntu_18_04_python_hack(os)? {
-        os_hacks::setup_python_deps_on_ubuntu_18_04(&pyroot, pkg_versions)?;
-        return Ok(());
+        let custom_toolchain_rustc_version =
+            get_rustc_version_from_local_toolchain(local_toolchain_path.clone())?;
+
+        if rustc_version == custom_toolchain_rustc_version {
+            symlink_rust_toolchain(toolchain_path, kani_dir)?;
+            println!(
+                "[3/5] Installing rust toolchain from path provided: {}",
+                &toolchain_path.to_string_lossy()
+            );
+            return Ok(toolchain_version);
+        } else {
+            bail!(
+                "The toolchain with rustc {:?} being used to setup is not the same as the one Kani used in its release bundle {:?}. Try to setup with the same version as the bundle.",
+                custom_toolchain_rustc_version,
+                rustc_version,
+            );
+        }
     }
 
-    Command::new("python3")
-        .args(&["-m", "pip", "install", "--target"])
-        .arg(&pyroot)
-        .args(pkg_versions)
-        .run()?;
-
-    Ok(())
+    // This is the default behaviour when no explicit path to a toolchain is mentioned
+    println!("[3/5] Installing rust toolchain version: {}", &toolchain_version);
+    Command::new("rustup").args(["toolchain", "install", &toolchain_version]).run()?;
+    let toolchain = home::rustup_home()?.join("toolchains").join(&toolchain_version);
+    symlink_rust_toolchain(&toolchain, kani_dir)?;
+    Ok(toolchain_version)
 }
 
 // This ends the setup steps above.
@@ -161,6 +188,27 @@ fn setup_python_deps(kani_dir: &Path, os: &os_info::Info) -> Result<()> {
 /// The filename of the release bundle
 fn download_filename() -> String {
     format!("kani-{VERSION}-{TARGET}.tar.gz")
+}
+
+/// Get the version of rustc that is being used to setup kani by the user
+fn get_rustc_version_from_local_toolchain(path: OsString) -> Result<String> {
+    let path = Path::new(&path);
+    let rustc_path = path.join("bin").join("rustc");
+
+    let output = Command::new(rustc_path).arg("--version").output();
+
+    match output {
+        Ok(output) => {
+            if output.status.success() {
+                Ok(String::from_utf8(output.stdout).map(|s| s.trim().to_string())?)
+            } else {
+                bail!(
+                    "Could not parse rustc version string. Toolchain installation likely invalid. "
+                );
+            }
+        }
+        Err(_) => bail!("Could not get rustc version. Toolchain installation likely invalid"),
+    }
 }
 
 /// The download URL for this version of Kani
@@ -175,7 +223,10 @@ fn download_url() -> String {
 fn fail_if_unsupported_target() -> Result<()> {
     // This is basically going to be reduced to a compile-time constant
     match TARGET {
-        "x86_64-unknown-linux-gnu" | "x86_64-apple-darwin" | "aarch64-apple-darwin" => Ok(()),
+        "x86_64-unknown-linux-gnu"
+        | "x86_64-apple-darwin"
+        | "aarch64-unknown-linux-gnu"
+        | "aarch64-apple-darwin" => Ok(()),
         _ => bail!("Kani does not support this platform (Rust target {})", TARGET),
     }
 }

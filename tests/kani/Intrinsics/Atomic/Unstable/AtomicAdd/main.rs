@@ -5,10 +5,7 @@
 // expected result.
 
 #![feature(core_intrinsics)]
-use std::intrinsics::{
-    atomic_xadd_acqrel, atomic_xadd_acquire, atomic_xadd_relaxed, atomic_xadd_release,
-    atomic_xadd_seqcst,
-};
+use std::intrinsics::{AtomicOrdering, atomic_xadd};
 
 #[kani::proof]
 fn main() {
@@ -28,11 +25,11 @@ fn main() {
     let c = 1 as u8;
 
     unsafe {
-        let x1 = atomic_xadd_seqcst(ptr_a1, b);
-        let x2 = atomic_xadd_acquire(ptr_a2, b);
-        let x3 = atomic_xadd_acqrel(ptr_a3, b);
-        let x4 = atomic_xadd_release(ptr_a4, b);
-        let x5 = atomic_xadd_relaxed(ptr_a5, b);
+        let x1 = atomic_xadd::<_, { AtomicOrdering::SeqCst }>(ptr_a1, b);
+        let x2 = atomic_xadd::<_, { AtomicOrdering::Acquire }>(ptr_a2, b);
+        let x3 = atomic_xadd::<_, { AtomicOrdering::AcqRel }>(ptr_a3, b);
+        let x4 = atomic_xadd::<_, { AtomicOrdering::Release }>(ptr_a4, b);
+        let x5 = atomic_xadd::<_, { AtomicOrdering::Relaxed }>(ptr_a5, b);
 
         assert!(x1 == 0);
         assert!(x2 == 0);

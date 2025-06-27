@@ -27,13 +27,13 @@ use anyhow::Result;
 use console::style;
 use pathdiff::diff_paths;
 use rustc_demangle::demangle;
-use serde::{Deserialize, Deserializer};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use std::env;
-use std::io::{BufRead, BufReader};
 use std::os::unix::process::ExitStatusExt;
 use std::path::PathBuf;
-use std::process::{Child, ChildStdout};
+use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::process::{Child, ChildStdout};
 
 const RESULT_ITEM_PREFIX: &str = "  {\n    \"result\":";
 
@@ -95,10 +95,16 @@ pub struct PropertyId {
 }
 
 impl Property {
-    const COVER_PROPERTY_CLASS: &str = "cover";
+    const COVER_PROPERTY_CLASS: &'static str = "cover";
+    const COVERAGE_PROPERTY_CLASS: &'static str = "code_coverage";
 
     pub fn property_class(&self) -> String {
         self.property_id.class.clone()
+    }
+
+    // Returns true if this is a code_coverage check
+    pub fn is_code_coverage_property(&self) -> bool {
+        self.property_id.class == Self::COVERAGE_PROPERTY_CLASS
     }
 
     /// Returns true if this is a cover property
@@ -281,9 +287,7 @@ fn filepath(file: String) -> String {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TraceItem {
-    pub thread: u32,
     pub step_type: String,
-    pub hidden: bool,
     pub lhs: Option<String>,
     pub source_location: Option<SourceLocation>,
     pub value: Option<TraceValue>,
@@ -292,13 +296,20 @@ pub struct TraceItem {
 /// Struct that represents a trace value.
 ///
 /// Note: this struct can have a lot of different fields depending on the value type.
-/// The fields included right now are relevant to primitive types.
+/// The fields included right now are relevant to primitive types and arrays.
 #[derive(Clone, Debug, Deserialize)]
 pub struct TraceValue {
-    pub name: String,
     pub binary: Option<String>,
     pub data: Option<TraceData>,
     pub width: Option<u32>,
+    // Invariant: elements is Some iff binary, data, and width are None.
+    pub elements: Option<Vec<TraceArrayValue>>,
+}
+
+/// Struct that represents an element of an array in a trace.
+#[derive(Clone, Debug, Deserialize)]
+pub struct TraceArrayValue {
+    pub value: TraceValue,
 }
 
 /// Enum that represents a trace data item.
@@ -318,15 +329,18 @@ impl std::fmt::Display for TraceData {
     }
 }
 
-#[derive(Copy, Clone, Debug, Deserialize, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum CheckStatus {
     Failure,
-    Satisfied, // for cover properties only
+    Covered,   // for `code_coverage` properties only
+    Satisfied, // for `cover` properties only
     Success,
     Undetermined,
+    Unknown,
     Unreachable,
-    Unsatisfiable, // for cover properties only
+    Uncovered,     // for `code_coverage` properties only
+    Unsatisfiable, // for `cover` properties only
 }
 
 impl std::fmt::Display for CheckStatus {
@@ -334,9 +348,14 @@ impl std::fmt::Display for CheckStatus {
         let check_str = match self {
             CheckStatus::Satisfied => style("SATISFIED").green(),
             CheckStatus::Success => style("SUCCESS").green(),
+            CheckStatus::Covered => style("COVERED").green(),
+            CheckStatus::Uncovered => style("UNCOVERED").red(),
             CheckStatus::Failure => style("FAILURE").red(),
             CheckStatus::Unreachable => style("UNREACHABLE").yellow(),
             CheckStatus::Undetermined => style("UNDETERMINED").yellow(),
+            // CBMC 6+ uses UNKNOWN when another property of undefined behavior failed, making it
+            // impossible to definitively conclude whether other properties hold or not.
+            CheckStatus::Unknown => style("UNDETERMINED").yellow(),
             CheckStatus::Unsatisfiable => style("UNSATISFIABLE").yellow(),
         };
         write!(f, "{check_str}")
@@ -349,9 +368,8 @@ enum Action {
     ProcessItem,
 }
 
-/// A parser for CBMC output, whose state is determined by:
-///  1. The input accumulator, required to process items on the fly.
-///  2. The buffer, which is accessed to retrieve more lines.
+/// A parser for CBMC output, whose state is determined by
+/// the input accumulator, required to process items on the fly.
 ///
 /// CBMC's JSON output is defined as a JSON array which contains:
 ///  1. One program at the beginning (i.e., a message with CBMC's version).
@@ -366,14 +384,13 @@ enum Action {
 /// There is a feature request for serde_json which would obsolete this if
 /// it ever lands: <https://github.com/serde-rs/json/issues/404>
 /// (Would provide a streaming iterator over a json array.)
-struct Parser<'a, 'b> {
+struct Parser {
     pub input_so_far: String,
-    pub buffer: &'a mut BufReader<&'b mut ChildStdout>,
 }
 
-impl<'a, 'b> Parser<'a, 'b> {
-    fn new(buffer: &'a mut BufReader<&'b mut ChildStdout>) -> Self {
-        Parser { input_so_far: String::new(), buffer }
+impl Parser {
+    fn new() -> Self {
+        Parser { input_so_far: String::new() }
     }
 
     /// Triggers an action based on the input:
@@ -468,16 +485,16 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
         None
     }
-}
 
-/// The iterator implementation for `Parser` reads the buffer line by line,
-/// and determines if it must return an item based on processing each line.
-impl<'a, 'b> Iterator for Parser<'a, 'b> {
-    type Item = ParserItem;
-    fn next(&mut self) -> Option<Self::Item> {
+    /// Read the process output and return when an item is found in the output
+    /// or the EOF is reached
+    async fn read_output(
+        &mut self,
+        buffer: &mut BufReader<&mut ChildStdout>,
+    ) -> Option<ParserItem> {
         loop {
             let mut input = String::new();
-            match self.buffer.read_line(&mut input) {
+            match buffer.read_line(&mut input).await {
                 Ok(len) => {
                     if len == 0 {
                         return None;
@@ -511,17 +528,24 @@ pub struct VerificationOutput {
 /// then formatted (according to the output format) and print.
 ///
 /// The cbmc process status is returned, along with the (post-filter) items.
-pub fn process_cbmc_output(
-    mut process: Child,
-    eager_filter: impl FnMut(ParserItem) -> Option<ParserItem>,
+pub async fn process_cbmc_output(
+    process: &mut Child,
+    mut eager_filter: impl FnMut(ParserItem) -> Option<ParserItem>,
 ) -> Result<VerificationOutput> {
     let stdout = process.stdout.as_mut().unwrap();
     let mut stdout_reader = BufReader::new(stdout);
-    let parser = Parser::new(&mut stdout_reader);
-    // This should run until stdout is closed (which should mean the process exited)
-    let processed_items: Vec<_> = parser.filter_map(eager_filter).collect();
+    let mut parser = Parser::new();
+    // This should run until stdout is closed (which should mean the process
+    // exited) or the specified timeout is reached
+    let mut processed_items = Vec::new();
+    while let Some(item) = parser.read_output(&mut stdout_reader).await {
+        if let Some(item) = eager_filter(item) {
+            processed_items.push(item);
+        }
+    }
+
     // This will get us the process's exit code
-    let status = process.wait()?;
+    let status = process.wait().await?;
 
     let process_status = match (status.code(), status.signal()) {
         // normal unix exit codes (cbmc uses currently 0-10)
@@ -749,8 +773,8 @@ mod tests {
                 }
             ]
         }"#;
-        let parser_item: Result<ParserItem, _> = serde_json::from_str(&data);
-        let result_struct: Result<ResultStruct, _> = serde_json::from_str(&data);
+        let parser_item: Result<ParserItem, _> = serde_json::from_str(data);
+        let result_struct: Result<ResultStruct, _> = serde_json::from_str(data);
         assert!(parser_item.is_ok());
         assert!(result_struct.is_ok());
     }

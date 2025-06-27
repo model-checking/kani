@@ -1,0 +1,9 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+[package]
+name = "crate-with-harness"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+crate-with-bug = { path = "../crate-with-bug" }

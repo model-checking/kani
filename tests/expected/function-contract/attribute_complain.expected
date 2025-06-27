@@ -1,0 +1,1 @@
+error: Using the proof_for_contract attribute requires activating the unstable `function-contracts` feature

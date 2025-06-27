@@ -3,28 +3,28 @@
 
 //! Checks that Kani triggers an error when the result type doesn't have the
 //! subtype expected from a `simd_shuffle` call.
-#![feature(repr_simd, platform_intrinsics)]
+#![feature(repr_simd, core_intrinsics)]
+use std::intrinsics::simd::simd_shuffle;
 
 #[repr(simd)]
 #[allow(non_camel_case_types)]
 #[derive(Clone, Copy, PartialEq)]
-pub struct i64x2(i64, i64);
+pub struct i64x2([i64; 2]);
 
 #[repr(simd)]
 #[allow(non_camel_case_types)]
 #[derive(Clone, Copy, PartialEq)]
-pub struct f64x2(f64, f64);
+pub struct f64x2([f64; 2]);
 
-extern "platform-intrinsic" {
-    fn simd_shuffle2<T, U>(x: T, y: T, idx: [u32; 2]) -> U;
-}
+#[repr(simd)]
+struct SimdShuffleIdx<const LEN: usize>([u32; LEN]);
 
 #[kani::proof]
 fn main() {
-    let y = i64x2(0, 1);
-    let z = i64x2(1, 2);
-    const I: [u32; 2] = [1, 2];
-    let x: f64x2 = unsafe { simd_shuffle2(y, z, I) };
+    let y = i64x2([0, 1]);
+    let z = i64x2([1, 2]);
+    const I: SimdShuffleIdx<2> = SimdShuffleIdx([1, 2]);
+    let x: f64x2 = unsafe { simd_shuffle(y, z, I) };
     // ^^^^ The code above fails to type-check in Rust with the error:
     // ```
     // error[E0511]: invalid monomorphization of `simd_shuffle2` intrinsic: expected return element type `i64` (element of input `i64x2`), found `f64x2` with element type `f64`

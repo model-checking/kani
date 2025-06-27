@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// kani-flags: --enable-unstable --concrete-playback=print
+// kani-flags: -Zconcrete-playback --concrete-playback=print
 
 //! Multiple harnesses with the same name but under different modules.
 

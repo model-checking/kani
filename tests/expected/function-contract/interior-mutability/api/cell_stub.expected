@@ -1,0 +1,9 @@
+assertion\
+- Status: SUCCESS\
+- Description: "|_| old(im.x.get() + im.x.get()) == im.x.get()"\
+
+assertion\
+- Status: SUCCESS\
+- Description: "|_| old(im.x.get() + im.x.get() + im.x.get() + im.x.get()) == im.x.get()"\
+
+VERIFICATION:- SUCCESSFUL

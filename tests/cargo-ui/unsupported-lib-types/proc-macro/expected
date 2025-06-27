@@ -1,2 +1,2 @@
-Skipped the following unsupported targets: 'lib'.
+Skipped verification of the following unsupported targets: 'lib'.
 error: No supported targets were found.

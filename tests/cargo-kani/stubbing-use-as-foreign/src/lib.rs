@@ -5,9 +5,9 @@
 //! YYY;`) referring to external code when resolving paths in `kani::stub`
 //! attributes.
 
+use other_crate::MyType as MyFavoriteType;
 use other_crate::inner_mod::magic_number42 as forty_two;
 use other_crate::magic_number13 as thirteen;
-use other_crate::MyType as MyFavoriteType;
 
 #[kani::proof]
 #[kani::stub(zero, thirteen)]

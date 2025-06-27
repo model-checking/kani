@@ -9,7 +9,7 @@
 #![feature(ptr_metadata)]
 
 use std::any::Any;
-use std::io::{sink, Write};
+use std::io::{Write, sink};
 use std::ptr::DynMetadata;
 
 include!("../Helpers/vtable_utils_ignore.rs");

@@ -4,20 +4,17 @@
 //! This test checks that we emit an error when the return type for
 //! `simd_extract` has a type different to the first argument's (i.e., the
 //! vector) base type.
-#![feature(repr_simd, platform_intrinsics)]
+#![feature(repr_simd, core_intrinsics)]
+use std::intrinsics::simd::simd_extract;
 
 #[repr(simd)]
 #[allow(non_camel_case_types)]
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub struct i64x2(i64, i64);
-
-extern "platform-intrinsic" {
-    fn simd_extract<T, U>(x: T, idx: u32) -> U;
-}
+pub struct i64x2([i64; 2]);
 
 #[kani::proof]
 fn main() {
-    let y = i64x2(0, 1);
+    let y = i64x2([0, 1]);
     let res: i32 = unsafe { simd_extract(y, 1) };
     // ^^^^ The code above fails to type-check in Rust with the error:
     // ```

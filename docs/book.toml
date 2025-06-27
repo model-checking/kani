@@ -15,3 +15,5 @@ edit-url-template = "https://github.com/model-checking/kani/edit/main/docs/{path
 
 [output.html.playground]
 runnable = false
+
+[preprocessor.graphviz]

@@ -1,4 +1,4 @@
-Failed Checks: concat! ("Panic: {} code: ", 10), msg
+Failed Checks: concat!("Panic: {} code: ", 10), msg
 Failed Checks: msg
 Failed Checks: explicit panic
 Failed Checks: Panic message

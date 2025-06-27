@@ -1,0 +1,25 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+[package]
+name = "lib_pkg"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "../src/lib.rs"
+
+[[bin]]
+name = "foo"
+path = "../src/bin/foo.rs"
+
+[[bin]]
+name = "bar"
+path = "../src/bin/bar.rs"
+
+[[test]]
+name = "integ"
+path = "../tests/integ.rs"
+
+[package.metadata.kani.flags]
+lib=true
+tests=true

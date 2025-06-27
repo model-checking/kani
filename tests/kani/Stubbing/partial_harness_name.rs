@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
-// kani-flags: --harness mod2::harness --enable-unstable --enable-stubbing
+// kani-flags: --harness mod2::harness -Z stubbing
 //
 //! This tests whether we correctly find harnesses during stubbing that are
 //! specified with a partially qualified name.

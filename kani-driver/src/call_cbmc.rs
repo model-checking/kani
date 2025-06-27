@@ -1,22 +1,36 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use kani_metadata::{CbmcSolver, HarnessMetadata};
+use regex::Regex;
+use rustc_demangle::demangle;
+use std::collections::BTreeMap;
+use std::collections::btree_map::Entry;
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::path::Path;
-use std::process::Command;
+use std::sync::OnceLock;
 use std::time::{Duration, Instant};
+use strum_macros::Display;
+use tokio::process::Command as TokioCommand;
 
-use crate::args::{KaniArgs, OutputFormat};
+use crate::args::common::Verbosity;
+use crate::args::{OutputFormat, VerificationArgs};
 use crate::cbmc_output_parser::{
-    extract_results, process_cbmc_output, CheckStatus, ParserItem, Property, VerificationOutput,
+    CheckStatus, Property, VerificationOutput, extract_results, process_cbmc_output,
 };
-use crate::cbmc_property_renderer::{format_result, kani_cbmc_output_filter};
+use crate::cbmc_property_renderer::{format_coverage, format_result, kani_cbmc_output_filter};
+use crate::coverage::cov_results::{CoverageCheck, CoverageResults};
+use crate::coverage::cov_results::{CoverageRegion, CoverageTerm};
 use crate::session::KaniSession;
+use crate::util::render_command;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// We will use Cadical by default since it performed better than MiniSAT in our analysis.
+/// Note: Kissat was marginally better, but it is an external solver which could be more unstable.
+static DEFAULT_SOLVER: CbmcSolver = CbmcSolver::Cadical;
+
+#[derive(Clone, Copy, Debug, Display, PartialEq, Eq)]
 pub enum VerificationStatus {
     Success,
     Failure,
@@ -34,6 +48,15 @@ pub enum FailedProperties {
     Other,
 }
 
+/// The possible CBMC exit statuses
+#[derive(Clone, Copy, Debug)]
+pub enum ExitStatus {
+    Timeout,
+    OutOfMemory,
+    /// the integer is the process exit status
+    Other(i32),
+}
+
 /// Our (kani-driver) notions of CBMC results.
 #[derive(Debug)]
 pub struct VerificationResult {
@@ -41,18 +64,17 @@ pub struct VerificationResult {
     pub status: VerificationStatus,
     /// The compact representation for failed properties
     pub failed_properties: FailedProperties,
-    /// The parsed output, message by message, of CBMC. However, the `Result` message has been
-    /// removed and is available in `results` instead.
-    pub messages: Option<Vec<ParserItem>>,
     /// The `Result` properties in detail or the exit_status of CBMC.
     /// Note: CBMC process exit status is only potentially useful if `status` is `Failure`.
     /// Kani will see CBMC report "failure" that's actually success (interpreting "failed"
     /// checks like coverage as expected and desirable.)
-    pub results: Result<Vec<Property>, i32>,
+    pub results: Result<Vec<Property>, ExitStatus>,
     /// The runtime duration of this CBMC invocation.
     pub runtime: Duration,
     /// Whether concrete playback generated a test
     pub generated_concrete_test: bool,
+    /// The coverage results
+    pub coverage_results: Option<CoverageResults>,
 }
 
 impl KaniSession {
@@ -61,57 +83,89 @@ impl KaniSession {
         let args: Vec<OsString> = self.cbmc_flags(file, harness)?;
 
         // TODO get cbmc path from self
-        let mut cmd = Command::new("cbmc");
+        let mut cmd = TokioCommand::new("cbmc");
         cmd.args(args);
 
-        let start_time = Instant::now();
-
-        let mut verification_results = if self.args.output_format == crate::args::OutputFormat::Old
-        {
-            if self.run_terminal(cmd).is_err() {
+        let verification_results = if self.args.output_format == crate::args::OutputFormat::Old {
+            if self.run_terminal_timeout(cmd).is_err() {
                 VerificationResult::mock_failure()
             } else {
                 VerificationResult::mock_success()
             }
         } else {
             // Add extra argument to receive the output in JSON format.
-            // Done here because `--visualize` uses the XML format instead.
+            // Done here because now removed `--visualize` used the XML format instead.
+            // TODO: move this now that we don't use --visualize
             cmd.arg("--json-ui");
 
-            // Spawn the CBMC process and process its output below
-            let cbmc_process_opt = self.run_piped(cmd)?;
-            let cbmc_process = cbmc_process_opt.ok_or(anyhow::Error::msg("Failed to run cbmc"))?;
-            let output = process_cbmc_output(cbmc_process, |i| {
-                kani_cbmc_output_filter(
-                    i,
-                    self.args.extra_pointer_checks,
-                    self.args.quiet,
-                    &self.args.output_format,
-                )
-            })?;
-
-            VerificationResult::from(output, harness.attributes.should_panic, start_time)
+            self.runtime.block_on(self.run_cbmc_piped(cmd, harness))?
         };
 
-        self.gen_and_add_concrete_playback(harness, &mut verification_results)?;
         Ok(verification_results)
     }
 
-    /// used by call_cbmc_viewer, invokes different variants of CBMC.
-    // TODO: this could use some cleanup and refactoring.
-    pub fn call_cbmc(&self, args: Vec<OsString>, output: &Path) -> Result<()> {
-        // TODO get cbmc path from self
-        let mut cmd = Command::new("cbmc");
-        cmd.args(args);
-
-        let result = self.run_redirect(cmd, output)?;
-
-        if !result.success() {
-            bail!("cbmc exited with status {}", result);
+    async fn run_cbmc_piped(
+        &self,
+        mut cmd: TokioCommand,
+        harness: &HarnessMetadata,
+    ) -> Result<VerificationResult> {
+        if self.args.common_args.verbose() {
+            println!("[Kani] Running: `{}`", render_command(cmd.as_std()).to_string_lossy());
         }
-        // TODO: We 'bail' above, but then ignore it in 'call_cbmc_viewer' ...
+        // Spawn the CBMC process and process its output below
+        let mut cbmc_process = cmd
+            .stdout(std::process::Stdio::piped())
+            .spawn()
+            .map_err(|_| anyhow::Error::msg("Failed to run cbmc"))?;
 
-        Ok(())
+        let start_time = Instant::now();
+
+        let res = if let Some(timeout) = self.args.harness_timeout {
+            tokio::time::timeout(
+                timeout.into(),
+                process_cbmc_output(&mut cbmc_process, |i| {
+                    kani_cbmc_output_filter(
+                        i,
+                        self.args.extra_pointer_checks,
+                        self.args.common_args.quiet,
+                        &self.args.output_format,
+                    )
+                }),
+            )
+            .await
+        } else {
+            Ok(process_cbmc_output(&mut cbmc_process, |i| {
+                kani_cbmc_output_filter(
+                    i,
+                    self.args.extra_pointer_checks,
+                    self.args.common_args.quiet,
+                    &self.args.output_format,
+                )
+            })
+            .await)
+        };
+
+        let verification_results = if res.is_err() {
+            // An error occurs if the timeout was reached
+
+            // Kill the process
+            cbmc_process.kill().await?;
+
+            VerificationResult {
+                status: VerificationStatus::Failure,
+                failed_properties: FailedProperties::None,
+                results: Err(ExitStatus::Timeout),
+                runtime: start_time.elapsed(),
+                generated_concrete_test: false,
+                coverage_results: None,
+            }
+        } else {
+            // The timeout wasn't reached
+            let output = res.unwrap()?;
+            VerificationResult::from(output, harness.attributes.should_panic, start_time)
+        };
+
+        Ok(verification_results)
     }
 
     /// "Internal," but also used by call_cbmc_viewer
@@ -139,10 +193,7 @@ impl KaniSession {
             args.push("--validate-ssa-equation".into());
         }
 
-        if !self.args.visualize
-            && self.args.concrete_playback.is_none()
-            && !self.args.no_slice_formula
-        {
+        if self.args.concrete_playback.is_none() && !self.args.no_slice_formula {
             args.push("--slice-formula".into());
         }
 
@@ -154,6 +205,11 @@ impl KaniSession {
 
         args.push(file.to_owned().into_os_string());
 
+        // Make CBMC verbose by default to tell users about unwinding progress. This should be
+        // reviewed as CBMC's verbosity defaults evolve.
+        args.push("--verbosity".into());
+        args.push("9".into());
+
         Ok(args)
     }
 
@@ -161,19 +217,24 @@ impl KaniSession {
     pub fn cbmc_check_flags(&self) -> Vec<OsString> {
         let mut args = Vec::new();
 
-        if self.args.checks.memory_safety_on() {
-            args.push("--bounds-check".into());
-            args.push("--pointer-check".into());
+        // We assume that malloc cannot fail, see https://github.com/model-checking/kani/issues/891
+        args.push("--no-malloc-may-fail".into());
+
+        // With PR #2630 we generate the appropriate checks directly rather than relying on CBMC's
+        // checks (which are for C semantics).
+        args.push("--no-undefined-shift-check".into());
+        // With PR #647 we use Rust's `-C overflow-checks=on` instead of:
+        // --unsigned-overflow-check
+        // --signed-overflow-check
+        // So these options are deliberately skipped to avoid erroneously re-checking operations.
+        args.push("--no-signed-overflow-check".into());
+
+        if !self.args.checks.memory_safety_on() {
+            args.push("--no-bounds-check".into());
+            args.push("--no-pointer-check".into());
         }
         if self.args.checks.overflow_on() {
-            args.push("--div-by-zero-check".into());
-            args.push("--float-overflow-check".into());
             args.push("--nan-check".into());
-            args.push("--undefined-shift-check".into());
-            // With PR #647 we use Rust's `-C overflow-checks=on` instead of:
-            // --unsigned-overflow-check
-            // --signed-overflow-check
-            // So these options are deliberately skipped to avoid erroneously re-checking operations.
 
             // TODO: Implement conversion checks as an optional check.
             // They are a well defined operation in rust, but they may yield unexpected results to
@@ -181,10 +242,14 @@ impl KaniSession {
             // We might want to create a transformation pass instead of enabling CBMC since Kani
             // compiler sometimes rely on the bitwise conversion of signed <-> unsigned.
             // args.push("--conversion-check".into());
+        } else {
+            args.push("--no-div-by-zero-check".into());
         }
 
-        if self.args.checks.unwinding_on() {
-            args.push("--unwinding-assertions".into());
+        if !self.args.checks.unwinding_on() {
+            args.push("--no-unwinding-assertions".into());
+        } else {
+            args.push("--no-self-loops-to-assumptions".into());
         }
 
         if self.args.extra_pointer_checks {
@@ -192,7 +257,8 @@ impl KaniSession {
             // still catch any invalid dereference with --pointer-check. Thus, only enable them
             // if the user explicitly request them.
             args.push("--pointer-overflow-check".into());
-            args.push("--pointer-primitive-check".into());
+        } else {
+            args.push("--no-pointer-primitive-check".into());
         }
 
         args
@@ -209,8 +275,7 @@ impl KaniSession {
         } else if let Some(solver) = harness_solver {
             solver
         } else {
-            // Nothing to do
-            return Ok(());
+            &DEFAULT_SOLVER
         };
 
         match solver {
@@ -245,37 +310,43 @@ impl VerificationResult {
     ///
     /// NOTE: We actually ignore the CBMC exit status, in favor of two checks:
     ///   1. Examining the actual results of CBMC properties.
-    ///       (CBMC will regularly report "failure" but that's just our cover checks.)
+    ///      (CBMC will regularly report "failure" but that's just our cover checks.)
     ///   2. Positively checking for the presence of results.
-    ///       (Do not mistake lack of results for success: report it as failure.)
+    ///      (Do not mistake lack of results for success: report it as failure.)
     fn from(
         output: VerificationOutput,
         should_panic: bool,
         start_time: Instant,
     ) -> VerificationResult {
         let runtime = start_time.elapsed();
-        let (items, results) = extract_results(output.processed_items);
+        let (_, results) = extract_results(output.processed_items);
 
         if let Some(results) = results {
             let (status, failed_properties) =
                 verification_outcome_from_properties(&results, should_panic);
+            let coverage_results = coverage_results_from_properties(&results);
             VerificationResult {
                 status,
                 failed_properties,
-                messages: Some(items),
                 results: Ok(results),
                 runtime,
                 generated_concrete_test: false,
+                coverage_results,
             }
         } else {
             // We never got results from CBMC - something went wrong (e.g. crash) so it's failure
+            let exit_status = if output.process_status == 137 {
+                ExitStatus::OutOfMemory
+            } else {
+                ExitStatus::Other(output.process_status)
+            };
             VerificationResult {
                 status: VerificationStatus::Failure,
                 failed_properties: FailedProperties::Other,
-                messages: Some(items),
-                results: Err(output.process_status),
+                results: Err(exit_status),
                 runtime,
                 generated_concrete_test: false,
+                coverage_results: None,
             }
         }
     }
@@ -284,10 +355,10 @@ impl VerificationResult {
         VerificationResult {
             status: VerificationStatus::Success,
             failed_properties: FailedProperties::None,
-            messages: None,
             results: Ok(vec![]),
             runtime: Duration::from_secs(0),
             generated_concrete_test: false,
+            coverage_results: None,
         }
     }
 
@@ -295,13 +366,13 @@ impl VerificationResult {
         VerificationResult {
             status: VerificationStatus::Failure,
             failed_properties: FailedProperties::Other,
-            messages: None,
             // on failure, exit codes in theory might be used,
             // but `mock_failure` should never be used in a context where they will,
             // so again use something weird:
-            results: Err(42),
+            results: Err(ExitStatus::Other(42)),
             runtime: Duration::from_secs(0),
             generated_concrete_test: false,
+            coverage_results: None,
         }
     }
 
@@ -311,27 +382,46 @@ impl VerificationResult {
                 let status = self.status;
                 let failed_properties = self.failed_properties;
                 let show_checks = matches!(output_format, OutputFormat::Regular);
-                let mut result =
-                    format_result(results, status, should_panic, failed_properties, show_checks);
+
+                let mut result = if let Some(cov_results) = &self.coverage_results {
+                    format_coverage(
+                        results,
+                        cov_results,
+                        status,
+                        should_panic,
+                        failed_properties,
+                        show_checks,
+                    )
+                } else {
+                    format_result(results, status, should_panic, failed_properties, show_checks)
+                };
                 writeln!(result, "Verification Time: {}s", self.runtime.as_secs_f32()).unwrap();
                 result
             }
             Err(exit_status) => {
                 let verification_result = console::style("FAILED").red();
+                let (header, explanation) = match exit_status {
+                    ExitStatus::OutOfMemory => (
+                        String::from("CBMC failed"),
+                        "CBMC appears to have run out of memory. You may want to rerun your proof in \
+                    an environment with additional memory or use stubbing to reduce the size of the \
+                    code the verifier reasons about.\n",
+                    ),
+                    ExitStatus::Timeout => (
+                        String::from("CBMC failed"),
+                        "CBMC timed out. You may want to rerun your proof with a larger timeout \
+                    or use stubbing to reduce the size of the code the verifier reasons about.\n",
+                    ),
+                    ExitStatus::Other(exit_status) => {
+                        (format!("CBMC failed with status {exit_status}"), "")
+                    }
+                };
                 format!(
-                    "\nCBMC failed with status {exit_status}\nVERIFICATION:- {verification_result}\n",
+                    "\n{header}\n\
+                    VERIFICATION:- {verification_result}\n\
+                    {explanation}",
                 )
             }
-        }
-    }
-
-    /// Find the failed properties from this verification run
-    pub fn failed_properties(&self) -> Vec<&Property> {
-        if let Ok(properties) = &self.results {
-            properties.iter().filter(|prop| prop.status == CheckStatus::Failure).collect()
-        } else {
-            debug_assert!(false, "expected error to be handled before invoking this function");
-            vec![]
         }
     }
 }
@@ -376,8 +466,73 @@ fn determine_failed_properties(properties: &[Property]) -> FailedProperties {
     }
 }
 
+fn coverage_results_from_properties(properties: &[Property]) -> Option<CoverageResults> {
+    let cov_properties: Vec<&Property> =
+        properties.iter().filter(|p| p.is_code_coverage_property()).collect();
+
+    if cov_properties.is_empty() {
+        return None;
+    }
+
+    // Postprocessing the coverage results involves matching on the descriptions
+    // of code coverage properties with the `counter_re` regex. These are two
+    // real examples of such descriptions:
+    //
+    // ```
+    // CounterIncrement(0) $test_cov$ - src/main.rs:5:1 - 6:15
+    // ExpressionUsed(0) $test_cov$ - src/main.rs:6:19 - 6:28
+    // ```
+    //
+    // The span is further processed to extract the code region attributes.
+    // Ideally, we should have coverage mappings (i.e., the relation between
+    // counters and code regions) available in the coverage metadata:
+    // <https://github.com/model-checking/kani/issues/3445>. If that were the
+    // case, we would not need the spans in these descriptions.
+    let counter_re = {
+        static COUNTER_RE: OnceLock<Regex> = OnceLock::new();
+        COUNTER_RE.get_or_init(|| {
+            Regex::new(
+                r#"^(?<kind>VirtualCounter\(bcb)(?<counter_num>[0-9]+)\) \$(?<func_name>[^\$]+)\$ - (?<span>.+)"#,
+            )
+            .unwrap()
+        })
+    };
+
+    let mut coverage_results: BTreeMap<String, Vec<CoverageCheck>> = BTreeMap::default();
+
+    for prop in cov_properties {
+        let mut prop_processed = false;
+        if let Some(captures) = counter_re.captures(&prop.description) {
+            let counter_num = &captures["counter_num"];
+            let function = demangle(&captures["func_name"]).to_string();
+            let status = prop.status;
+            let span = captures["span"].to_string();
+
+            let counter_id = counter_num.parse().unwrap();
+            let term = CoverageTerm::Counter(counter_id);
+            let region = CoverageRegion::from_str(span);
+
+            let cov_check = CoverageCheck::new(function, term, region, status);
+            let file = cov_check.region.file.clone();
+
+            if let Entry::Vacant(e) = coverage_results.entry(file.clone()) {
+                e.insert(vec![cov_check]);
+            } else {
+                coverage_results.entry(file).and_modify(|checks| checks.push(cov_check));
+            }
+            prop_processed = true;
+        }
+
+        assert!(prop_processed, "error: coverage property not processed\n{prop:?}");
+    }
+
+    Some(CoverageResults::new(coverage_results))
+}
 /// Solve Unwind Value from conflicting inputs of unwind values. (--default-unwind, annotation-unwind, --unwind)
-pub fn resolve_unwind_value(args: &KaniArgs, harness_metadata: &HarnessMetadata) -> Option<u32> {
+pub fn resolve_unwind_value(
+    args: &VerificationArgs,
+    harness_metadata: &HarnessMetadata,
+) -> Option<u32> {
     // Check for which flag is being passed and prioritize extracting unwind from the
     // respective flag/annotation.
     args.unwind.or(harness_metadata.attributes.unwind_value).or(args.default_unwind)
@@ -386,7 +541,7 @@ pub fn resolve_unwind_value(args: &KaniArgs, harness_metadata: &HarnessMetadata)
 #[cfg(test)]
 mod tests {
     use crate::args;
-    use crate::metadata::mock_proof_harness;
+    use crate::metadata::tests::mock_proof_harness;
     use clap::Parser;
 
     use super::*;
@@ -400,12 +555,12 @@ mod tests {
         let args_both =
             ["kani", "x.rs", "--default-unwind", "2", "--unwind", "1", "--harness", "check_one"];
 
-        let harness_none = mock_proof_harness("check_one", None, None);
-        let harness_some = mock_proof_harness("check_one", Some(3), None);
+        let harness_none = mock_proof_harness("check_one", None, None, None);
+        let harness_some = mock_proof_harness("check_one", Some(3), None, None);
 
         fn resolve(args: &[&str], harness: &HarnessMetadata) -> Option<u32> {
             resolve_unwind_value(
-                &args::StandaloneArgs::try_parse_from(args).unwrap().common_opts,
+                &args::StandaloneArgs::try_parse_from(args).unwrap().verify_opts,
                 harness,
             )
         }

@@ -1,2 +1,2 @@
 FAILURE\
-shift distance too large
+attempt simd_shr with excessive shift distance

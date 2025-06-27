@@ -1,0 +1,6 @@
+Checking harness check_drop_foo...
+
+Status: SATISFIED\
+Description: "DropFoo"
+
+1 of 1 cover properties satisfied

@@ -1,0 +1,4 @@
+error: Kani currently does not support stubbing trait implementations.
+error: failed to resolve `<Bar as Foo>::bar`: unable to find `bar` inside trait `Foo`
+
+error: aborting due to 4 previous errors

@@ -1,0 +1,25 @@
+Checking harness verify::check_no_stub...
+Status: SUCCESS\
+Description: "assertion failed: config == StubConfig::NoStub"
+VERIFICATION:- SUCCESSFUL
+
+Checking harness verify::check_stub_1...
+Status: SUCCESS\
+Description: "assertion failed: config == StubConfig::Stub1"
+VERIFICATION:- SUCCESSFUL
+
+Checking harness verify_top::check_no_stub...
+Status: SUCCESS\
+Description: "assertion failed: stub_id() == None"
+VERIFICATION:- SUCCESSFUL
+
+Checking harness verify_top::check_stub_1...
+Status: SUCCESS\
+Description: "assertion failed: stub_id() == Some(1)"
+VERIFICATION:- SUCCESSFUL
+
+Checking harness verify_top::check_stub_2...
+Status: SUCCESS\
+Description: "assertion failed: stub_id() == Some(2)"
+
+Complete - 5 successfully verified harnesses, 0 failures, 5 total.

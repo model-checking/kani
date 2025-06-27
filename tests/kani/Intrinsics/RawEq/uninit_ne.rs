@@ -6,7 +6,7 @@
 // is uninitialized
 #![feature(core_intrinsics)]
 use std::intrinsics::raw_eq;
-use std::mem::{zeroed, MaybeUninit};
+use std::mem::{MaybeUninit, zeroed};
 
 #[kani::proof]
 fn main() {

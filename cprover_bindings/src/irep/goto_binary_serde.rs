@@ -1,24 +1,103 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! GOTO binary serializer.
+//!
+//! # Design overview
+//!
+//! When saving a [SymbolTable] to a binary file, the [Irep] describing each
+//! symbol's type, value and source location are structurally hashed and
+//! uniquely numbered so that structurally identical [Irep] only get written
+//! in full to the file the first time they are encountered and that ulterior
+//! occurrences are referenced by their unique number instead.
+//! The key concept at play is that of a numbering, ie a function that assigns
+//! numbers to values of a given type.
+//!
+//! The [IrepNumbering] struct offers high-level methods to number
+//! [InternedString], [IrepId] and [Irep] values:
+//! - [InternedString] objects get mapped to [NumberedString] objects based on
+//!   the characters they contain.
+//! - [IrepId] objects get mapped to [NumberedString] objects based on the
+//!   characters of their string representation, in the same number space
+//!   as [InternedString].
+//! - [Irep] objects get mapped to [NumberedIrep] based on:
+//!     + the unique numbers assigned to their [Irep::id] attribute,
+//!     + the unique numbers of [Irep] found in their [Irep::sub] attribute,
+//!     + the pairs of unique numbers assigned to the ([IrepId],[Irep]) pairs
+//!       found in their [Ipre::named_sub] attribute.
+//!
+//! In order to assign the same number to structurally identical [Irep] objects,
+//! [IrepNumbering] essentially implements a cache where each [NumberedIrep] is
+//! keyed under an [IrepKey] that describes its internal structure.
+//!
+//! An [IrepKey] is simply the vector of unique numbers describing the
+//! `id`, `sub` and `named_sub` attributes of a [Irep].
+//!
+//! A [NumberedIrep] is conceptually a pair made of the [IrepKey] itself and the
+//! unique number assigned to that key.
+//!
+//! The cache implemented by [IrepNumbering] is bidirectional. It lets you
+//! compute the [NumberedIrep] of an [Irep], and lets you fetch a numbered
+//! [NumberedIrep] from its unique number.
+//!
+//! In practice:
+//! - the forward directon from [IrepKey] to unique numbers is implemented using a `HashMap<IrepKey,usize>`
+//! - the inverse direction from unique numbers to [NumberedIrep] is implemented usign a `Vec<NumberedIrep>`
+//!   called the `index` that stores [NumberedIrep] under their unique number.
+//!
+//! Earlier we said that an [NumberedIrep] is conceptually a pair formed of
+//! an [IrepKey] and its unique number. It is represented using only
+//! a pair formed of a `usize` representing the unique number, and a `usize`
+//! representing the index at which the key can be found inside a single vector
+//! of type `Vec<usize>` called `keys` where all [IrepKey] are concatenated when
+//! they first get numbered. The inverse map of keys is represented this way
+//! because the Rust hash map that implements the forward cache owns
+//! its keys which would make it difficult to store keys references in inverse
+//! cache, which would introduce circular dependencies and require `Rc` and
+//! liftetimes annotations everywhere.
+//!
+//! Numberig an [Irep] consists in recursively traversing it and numbering its
+//! contents in a bottom-up fashion, then assembling its [IrepKey] and querying
+//! the cache to either return an existing [NumberedIrep] or creating a new one
+//! (in case that key has never been seen before).
+//!
+//! The [GotoBinarySerializer] internally uses a [IrepNumbering] and a cache
+//! of [NumberedIrep] and [NumberedString] it has already written to file.
+//!
+//! When given an [InternedString], [IrepId] or [Irep] to serialize,
+//! the [GotoBinarySerializer] first numbers that object using its internal
+//! [IrepNumbering] instance. Then it looks up that unique number in its cache
+//! of already written objects. If the object was seen before, only the unique
+//! number of that object is written to file. If the object was never seen
+//! before, then the unique number of that object is written to file, followed
+//! by the objects describing its contents (themselves only being written fully
+//! if they have never been seen before, or only referenced if they have been
+//! seen before, etc.)
+//!
+//! The [GotoBinaryDeserializer] also uses an [IrepNumbering] and a cache
+//! of [NumberedIrep] and [NumberedString] it has already read from file.
+//! Dually to the serializer, it will only attempt to decode the contents of an
+//! object from the byte stream on the first occurrence.
 
 use crate::irep::{Irep, IrepId, Symbol, SymbolTable};
 use crate::{InternString, InternedString};
+#[cfg(not(test))]
+use fxhash::FxHashMap;
+#[cfg(test)]
 use std::collections::HashMap;
 use std::fs::File;
 use std::hash::Hash;
 use std::io::{self, BufReader};
-use std::io::{BufWriter, Bytes, Error, ErrorKind, Read, Write};
-use std::path::PathBuf;
+use std::io::{BufWriter, Bytes, Error, Read, Write};
+use std::path::Path;
 
-/// Writes a symbol table to a file in goto binary format in version 5.
+/// Writes a symbol table to a file in goto binary format in version 6.
 ///
 /// In CBMC, the serialization rules are defined in :
 /// - src/goto-programs/write_goto_binary.h
 /// - src/util/irep_serialization.h
 /// - src/util/irep_hash_container.h
 /// - src/util/irep_hash.h
-pub fn write_goto_binary_file(filename: &PathBuf, source: &crate::goto_program::SymbolTable) {
+pub fn write_goto_binary_file(filename: &Path, source: &crate::goto_program::SymbolTable) {
     let out_file = File::create(filename).unwrap();
     let mut writer = BufWriter::new(out_file);
     let mut serializer = GotoBinarySerializer::new(&mut writer);
@@ -26,97 +105,19 @@ pub fn write_goto_binary_file(filename: &PathBuf, source: &crate::goto_program::
     serializer.write_file(irep_symbol_table);
 }
 
-/// Reads a symbol table from a file expected to be in goto binary format in version 5.
+/// Reads a symbol table from a file expected to be in goto binary format in version 6.
 //
 /// In CBMC, the deserialization rules are defined in :
 /// - src/goto-programs/read_goto_binary.h
 /// - src/util/irep_serialization.h
 /// - src/util/irep_hash_container.h
 /// - src/util/irep_hash.h
-pub fn read_goto_binary_file(filename: &PathBuf) -> io::Result<()> {
+pub fn read_goto_binary_file(filename: &Path) -> io::Result<()> {
     let file = File::open(filename)?;
     let reader = BufReader::new(file);
     let mut deserializer = GotoBinaryDeserializer::new(reader);
     deserializer.read_file()
 }
-
-/// # Design overview
-///
-/// When saving a [SymbolTable] to a binary file, the [Irep] describing each
-/// symbol's type, value and source location are structurally hashed and
-/// uniquely numbered so that structurally identical [Irep] only get written
-/// in full to the file the first time they are encountered and that ulterior
-/// occurrences are referenced by their unique number instead.
-/// The key concept at play is that of a numbering, ie a function that assigns
-/// numbers to values of a given type.
-///
-/// The [IrepNumbering] struct offers high-level methods to number
-/// [InternedString], [IrepId] and [Irep] values:
-/// - [InternedString] objects get mapped to [NumberedString] objects based on
-///   the characters they contain.
-/// - [IrepId] objects get mapped to [NumberedString] objects based on the
-///   characters of their string representation, in the same number space
-///   as [InternedString].
-/// - [Irep] objects get mapped to [NumberedIrep] based on:
-///     + the unique numbers assigned to their [Irep::id] attribute,
-///     + the unique numbers of [Irep] found in their [Irep::sub] attribute,
-///     + the pairs of unique numbers assigned to the ([IrepId],[Irep]) pairs
-///       found in their [Ipre::named_sub] attribute.
-///
-/// In order to assign the same number to structurally identical [Irep] objects,
-/// [IrepNumbering] essentially implements a cache where each [NumberedIrep] is
-/// keyed under an [IrepKey] that describes its internal structure.
-///
-/// An [IrepKey] is simply the vector of unique numbers describing the
-/// `id`, `sub` and `named_sub` attributes of a [Irep].
-///
-/// A [NumberedIrep] is conceptually a pair made of the [IrepKey] itself and the
-/// unique number assigned to that key.
-///
-/// The cache implemented by [IrepNumbering] is bidirectional. It lets you
-/// compute the [NumberedIrep] of an [Irep], and lets you fetch a numbered
-/// [NumberedIrep] from its unique number.
-///
-/// In practice:
-/// - the forward directon from [IrepKey] to unique numbers is
-/// implemented using a `HashMap<IrepKey,usize>`
-/// - the inverse direction from unique numbers to [NumberedIrep] is implemented
-/// using a `Vec<NumberedIrep>` called the `index` that stores [NumberedIrep]
-/// under their unique number.
-///
-/// Earlier we said that an [NumberedIrep] is conceptually a pair formed of
-/// an [IrepKey] and its unique number. It is represented using only
-/// a pair formed of a `usize` representing the unique number, and a `usize`
-/// representing the index at which the key can be found inside a single vector
-/// of type `Vec<usize>` called `keys` where all [IrepKey] are concatenated when
-/// they first get numbered. The inverse map of keys is represented this way
-/// because the Rust hash map that implements the forward cache owns
-/// its keys which would make it difficult to store keys references in inverse
-/// cache, which would introduce circular dependencies and require `Rc` and
-/// liftetimes annotations everywhere.
-///
-/// Numberig an [Irep] consists in recursively traversing it and numbering its
-/// contents in a bottom-up fashion, then assembling its [IrepKey] and querying
-/// the cache to either return an existing [NumberedIrep] or creating a new one
-/// (in case that key has never been seen before).
-///
-/// The [GotoBinarySerializer] internally uses a [IrepNumbering] and a cache
-/// of [NumberedIrep] and [NumberedString] it has already written to file.
-///
-/// When given an [InternedString], [IrepId] or [Irep] to serialize,
-/// the [GotoBinarySerializer] first numbers that object using its internal
-/// [IrepNumbering] instance. Then it looks up that unique number in its cache
-/// of already written objects. If the object was seen before, only the unique
-/// number of that object is written to file. If the object was never seen
-/// before, then the unique number of that object is written to file, followed
-/// by the objects describing its contents (themselves only being written fully
-/// if they have never been seen before, or only referenced if they have been
-/// seen before, etc.)
-///
-/// The [GotoBinaryDeserializer] also uses an [IrepNumbering] and a cache
-/// of [NumberedIrep] and [NumberedString] it has already read from file.
-/// Dually to the serializer, it will only attempt to decode the contents of an
-/// object from the byte stream on the first occurrence.
 
 /// A numbered [InternedString]. The number is guaranteed to be in [0,N].
 /// Had to introduce this indirection because [InternedString] does not let you
@@ -201,7 +202,28 @@ impl IrepNumberingInv {
     }
 }
 
+#[cfg(not(test))]
 /// A numbering of [InternedString], [IrepId] and [Irep] based on their contents.
+/// Note that using [FxHashMap] makes our caches faster, but we still have to use
+/// the default [HashMap] in a test context as only it implements the
+/// `memuse::DynamicUsage` trait we need for memory profiling under test.
+struct IrepNumbering {
+    /// Map from [InternedString] to their unique numbers.
+    string_cache: FxHashMap<InternedString, usize>,
+
+    /// Inverse string cache.
+    inv_string_cache: Vec<NumberedString>,
+
+    /// Map from [IrepKey] to their unique numbers.
+    cache: FxHashMap<IrepKey, usize>,
+
+    /// Inverse cache, allows to get a NumberedIrep from its unique number.
+    inv_cache: IrepNumberingInv,
+}
+
+#[cfg(test)]
+/// A numbering of [InternedString], [IrepId] and [Irep] based on their contents.
+/// See above for explanation of why this definition is only used in a test context.
 struct IrepNumbering {
     /// Map from [InternedString] to their unique numbers.
     string_cache: HashMap<InternedString, usize>,
@@ -216,16 +238,31 @@ struct IrepNumbering {
     inv_cache: IrepNumberingInv,
 }
 
+#[cfg(not(test))]
 impl IrepNumbering {
     fn new() -> Self {
         IrepNumbering {
-            string_cache: HashMap::new(),
+            string_cache: FxHashMap::default(),
             inv_string_cache: Vec::new(),
-            cache: HashMap::new(),
+            cache: FxHashMap::default(),
             inv_cache: IrepNumberingInv::new(),
         }
     }
+}
 
+#[cfg(test)]
+impl IrepNumbering {
+    fn new() -> Self {
+        IrepNumbering {
+            string_cache: HashMap::default(),
+            inv_string_cache: Vec::new(),
+            cache: HashMap::default(),
+            inv_cache: IrepNumberingInv::new(),
+        }
+    }
+}
+
+impl IrepNumbering {
     /// Returns a [NumberedString] from its number if it exists, None otherwise.
     fn numbered_string_from_number(&mut self, string_number: usize) -> Option<NumberedString> {
         self.inv_string_cache.get(string_number).copied()
@@ -250,7 +287,7 @@ impl IrepNumbering {
     /// Turns a [IrepId] to a [NumberedString]. The [IrepId] gets the number of its
     /// string representation.
     fn number_irep_id(&mut self, irep_id: &IrepId) -> NumberedString {
-        self.number_string(&irep_id.to_string().intern())
+        self.number_string(&irep_id.to_string_cow().intern())
     }
 
     /// Turns an [Irep] into a [NumberedIrep]. The [Irep] is recursively traversed
@@ -266,20 +303,18 @@ impl IrepNumbering {
             .map(|(key, value)| (self.number_irep_id(key).number, self.number_irep(value).number))
             .collect();
         let key = IrepKey::new(id, &sub, &named_sub);
-        self.get_or_insert(&key)
+        self.get_or_insert(key)
     }
 
     /// Gets the existing [NumberedIrep] from the [IrepKey] or inserts a fresh
     /// one and returns it.
-    fn get_or_insert(&mut self, key: &IrepKey) -> NumberedIrep {
-        if let Some(number) = self.cache.get(key) {
-            // Return the NumberedIrep from the inverse cache
-            return self.inv_cache.index[*number];
-        }
-        // This is where the key gets its unique number assigned.
-        let number = self.inv_cache.add_key(&key);
-        self.cache.insert(key.clone(), number);
-        self.inv_cache.index[number]
+    fn get_or_insert(&mut self, key: IrepKey) -> NumberedIrep {
+        let number = self.cache.entry(key).or_insert_with_key(|key| {
+            // This is where the key gets its unique number assigned.
+            self.inv_cache.add_key(key)
+        });
+
+        self.inv_cache.index[*number]
     }
 
     /// Returns the unique number of the `id` field of the given [NumberedIrep].
@@ -451,17 +486,17 @@ where
         self.write_usize_varenc(num);
 
         if self.is_first_write_irep(num) {
-            let id = &self.numbering.id(&irep);
+            let id = &self.numbering.id(irep);
             self.write_numbered_string_ref(id);
 
-            for sub_idx in 0..(self.numbering.nof_sub(&irep)) {
+            for sub_idx in 0..(self.numbering.nof_sub(irep)) {
                 self.write_u8(b'S');
-                self.write_numbered_irep_ref(&self.numbering.sub(&irep, sub_idx));
+                self.write_numbered_irep_ref(&self.numbering.sub(irep, sub_idx));
             }
 
-            for named_sub_idx in 0..(self.numbering.nof_named_sub(&irep)) {
+            for named_sub_idx in 0..(self.numbering.nof_named_sub(irep)) {
                 self.write_u8(b'N');
-                let (k, v) = self.numbering.named_sub(&irep, named_sub_idx);
+                let (k, v) = self.numbering.named_sub(irep, named_sub_idx);
                 self.write_numbered_string_ref(&k);
                 self.write_numbered_irep_ref(&v);
             }
@@ -542,7 +577,7 @@ where
         assert!(written == 4);
 
         // Write goto binary version
-        self.write_usize_varenc(5);
+        self.write_usize_varenc(6);
     }
 
     /// Writes the symbol table using the GOTO binary file format to the byte stream.
@@ -559,7 +594,7 @@ where
     R: Read,
 {
     /// Stream of bytes from which GOTO objects are read.
-    bytes: Bytes<R>,
+    bytes: Bytes<BufReader<R>>,
 
     /// Numbering for ireps
     numbering: IrepNumbering,
@@ -586,8 +621,9 @@ where
     /// Constructor. The reader is moved into this object and cannot be used
     /// afterwards.
     fn new(reader: R) -> Self {
+        let buffered_reader = BufReader::new(reader);
         GotoBinaryDeserializer {
-            bytes: reader.bytes(),
+            bytes: buffered_reader.bytes(),
             numbering: IrepNumbering::new(),
             string_count: Vec::new(),
             string_map: Vec::new(),
@@ -599,12 +635,9 @@ where
     /// Returns Err if the found value is not the expected value.
     fn expect<T: Eq + std::fmt::Display>(found: T, expected: T) -> io::Result<T> {
         if found != expected {
-            return Err(Error::new(
-                ErrorKind::Other,
-                format!(
-                    "Invalid goto binary input: expected {expected} in byte stream, found {found} instead)"
-                ),
-            ));
+            return Err(Error::other(format!(
+                "Invalid goto binary input: expected {expected} in byte stream, found {found} instead)"
+            )));
         }
         Ok(found)
     }
@@ -662,10 +695,7 @@ where
         match self.bytes.next() {
             Some(Ok(u)) => Ok(u),
             Some(Err(error)) => Err(error),
-            None => Err(Error::new(
-                ErrorKind::Other,
-                "Invalid goto binary input: unexpected end of input",
-            )),
+            None => Err(Error::other("Invalid goto binary input: unexpected end of input")),
         }
     }
 
@@ -679,8 +709,7 @@ where
             match self.bytes.next() {
                 Some(Ok(u)) => {
                     if shift >= max_shift {
-                        return Err(Error::new(
-                            ErrorKind::Other,
+                        return Err(Error::other(
                             "Invalid goto binary input: serialized value is too large to fit in usize",
                         ));
                     };
@@ -694,10 +723,7 @@ where
                     return Err(error);
                 }
                 None => {
-                    return Err(Error::new(
-                        ErrorKind::Other,
-                        "Invalid goto binary input: unexpected end of input",
-                    ));
+                    return Err(Error::other("Invalid goto binary input: unexpected end of input"));
                 }
             }
         }
@@ -706,10 +732,7 @@ where
     /// Reads a reference encoded string from the byte stream.
     fn read_numbered_string_ref(&mut self) -> io::Result<NumberedString> {
         let string_number_result = self.read_usize_varenc();
-        let string_number = match string_number_result {
-            Ok(number) => number,
-            Err(error) => return Err(error),
-        };
+        let string_number = string_number_result?;
         if self.is_first_read_string(string_number) {
             // read raw string
             let mut string_buf: Vec<u8> = Vec::new();
@@ -726,10 +749,7 @@ where
                                         return Ok(numbered);
                                     }
                                     Err(error) => {
-                                        return Err(Error::new(
-                                            ErrorKind::Other,
-                                            error.to_string(),
-                                        ));
+                                        return Err(Error::other(error.to_string()));
                                     }
                                 }
                             }
@@ -743,8 +763,7 @@ where
                                         return Err(error);
                                     }
                                     None => {
-                                        return Err(Error::new(
-                                            ErrorKind::Other,
+                                        return Err(Error::other(
                                             "Invalid goto binary input: unexpected end of input",
                                         ));
                                     }
@@ -762,8 +781,7 @@ where
                     }
                     None => {
                         // No more bytes left
-                        return Err(Error::new(
-                            ErrorKind::Other,
+                        return Err(Error::other(
                             "Invalid goto binary input: unexpected end of input",
                         ));
                     }
@@ -781,10 +799,7 @@ where
     /// Reads a NumberedIrep from the byte stream.
     fn read_numbered_irep_ref(&mut self) -> io::Result<NumberedIrep> {
         let irep_number_result = self.read_usize_varenc();
-        let irep_number = match irep_number_result {
-            Ok(number) => number,
-            Err(error) => return Err(error),
-        };
+        let irep_number = irep_number_result?;
 
         if self.is_first_read_irep(irep_number) {
             let id = self.read_numbered_string_ref()?.number;
@@ -797,8 +812,7 @@ where
                 match c {
                     b'S' => {
                         if sub_done {
-                            return Err(Error::new(
-                                ErrorKind::Other,
+                            return Err(Error::other(
                                 "Invalid goto binary input: incorrect binary structure",
                             ));
                         }
@@ -817,20 +831,17 @@ where
                         let key = IrepKey::new(id, &sub, &named_sub);
 
                         // Insert key in the numbering
-                        let numbered = self.numbering.get_or_insert(&key);
+                        let numbered = self.numbering.get_or_insert(key);
 
                         // Map number from the binary to new number
                         self.add_irep_mapping(irep_number, numbered.number);
                         return Ok(numbered);
                     }
                     other => {
-                        return Err(Error::new(
-                            ErrorKind::Other,
-                            format!(
-                                "Invalid goto binary input: unexpected character in input stream {}",
-                                other as char
-                            ),
-                        ));
+                        return Err(Error::other(format!(
+                            "Invalid goto binary input: unexpected character in input stream {}",
+                            other as char
+                        )));
                     }
                 }
             }
@@ -885,8 +896,7 @@ where
         let shifted_flags = flags >> 16;
 
         if shifted_flags != 0 {
-            return Err(Error::new(
-                ErrorKind::Other,
+            return Err(Error::other(
                 "incorrect binary format: true bits remain in decoded symbol flags",
             ));
         }
@@ -923,14 +933,11 @@ where
 
         // Read goto binary version
         let goto_binary_version = self.read_usize_varenc()?;
-        if goto_binary_version != 5 {
-            return Err(Error::new(
-                ErrorKind::Other,
-                format!(
-                    "Unsupported GOTO binary version: {}. Supported version: {}",
-                    goto_binary_version, 5
-                ),
-            ));
+        if goto_binary_version != 6 {
+            return Err(Error::other(format!(
+                "Unsupported GOTO binary version: {}. Supported version: {}",
+                goto_binary_version, 6
+            )));
         }
         Ok(())
     }
@@ -944,9 +951,9 @@ where
     }
 }
 
-////////////////////////////////////////
-//// Dynamic memory usage computation
-////////////////////////////////////////
+// ==================================
+//  Dynamic memory usage computation
+// ==================================
 
 #[cfg(test)]
 mod sharing_stats {
@@ -1040,7 +1047,7 @@ mod sharing_stats {
         }
     }
 
-    impl<'a, W> DynamicUsage for GotoBinarySerializer<'a, W>
+    impl<W> DynamicUsage for GotoBinarySerializer<'_, W>
     where
         W: Write,
     {
@@ -1135,9 +1142,9 @@ mod sharing_stats {
                     max_count = *count;
                     max_id = Some(id);
                 };
-                nof_unique = nof_unique + 1;
+                nof_unique += 1;
                 let incr = (*count as f64 - avg_count) / (nof_unique as f64);
-                avg_count = avg_count + incr;
+                avg_count += incr;
             }
             SharingStats {
                 _nof_unique: nof_unique,
@@ -1164,7 +1171,7 @@ mod sharing_stats {
     }
 
     impl GotoBinarySharingStats {
-        fn from_serializer<'a, W: Write>(s: &GotoBinarySerializer<'a, W>) -> Self {
+        fn from_serializer<W: Write>(s: &GotoBinarySerializer<'_, W>) -> Self {
             GotoBinarySharingStats {
                 _allocated_bytes: s.dynamic_usage(),
                 _string_stats: SharingStats::new(&s.string_count),
@@ -1181,7 +1188,7 @@ mod sharing_stats {
         }
     }
 
-    impl<'a, W> GotoBinarySerializer<'a, W>
+    impl<W> GotoBinarySerializer<'_, W>
     where
         W: Write,
     {
@@ -1207,12 +1214,12 @@ mod sharing_stats {
 mod tests {
     use super::GotoBinarySerializer;
     use super::IrepNumbering;
+    use crate::InternedString;
     use crate::cbmc_string::InternString;
-    use crate::irep::goto_binary_serde::GotoBinaryDeserializer;
     use crate::irep::Irep;
     use crate::irep::IrepId;
+    use crate::irep::goto_binary_serde::GotoBinaryDeserializer;
     use crate::linear_map;
-    use crate::InternedString;
     use linear_map::LinearMap;
     use std::io::BufWriter;
     /// Utility function : creates a Irep representing a single symbol.
@@ -1285,13 +1292,13 @@ mod tests {
             let mut writer = BufWriter::new(&mut vec);
             let mut serializer = GotoBinarySerializer::new(&mut writer);
 
-            for u in std::u8::MIN..std::u8::MAX {
+            for u in u8::MIN..u8::MAX {
                 serializer.write_u8(u);
             }
         }
 
         // read back from byte stream
-        for u in std::u8::MIN..std::u8::MAX {
+        for u in u8::MIN..u8::MAX {
             assert_eq!(vec[u as usize], u);
         }
     }
@@ -1360,7 +1367,7 @@ mod tests {
         let foo = String::from("foo").intern();
         let bar = String::from("bar").intern();
         let baz = String::from("baz").intern();
-        let strings = vec![foo, bar, foo, bar, foo, baz, baz, bar, foo];
+        let strings = [foo, bar, foo, bar, foo, baz, baz, bar, foo];
 
         let mut vec: Vec<u8> = Vec::new();
 
@@ -1369,7 +1376,7 @@ mod tests {
             let mut writer = BufWriter::new(&mut vec);
             let mut serializer = GotoBinarySerializer::new(&mut writer);
             for string in strings.iter() {
-                serializer.write_string_ref(&string);
+                serializer.write_string_ref(string);
             }
             println!("Serializer stats {:?}", serializer.get_stats());
         }
@@ -1395,12 +1402,12 @@ mod tests {
             let mut serializer = GotoBinarySerializer::new(&mut writer);
 
             // Number an irep
-            let num1 = serializer.numbering.number_irep(&irep1);
+            let num1 = serializer.numbering.number_irep(irep1);
 
             // Number an structurally different irep
             let identifiers2 = vec!["foo", "bar", "baz", "different", "zab", "rab", "oof"];
             let irep2 = &fold_with_op(&identifiers2, IrepId::And);
-            let num2 = serializer.numbering.number_irep(&irep2);
+            let num2 = serializer.numbering.number_irep(irep2);
 
             // Check that they have the different numbers.
             assert_ne!(num1, num2);

@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+
+# This is a fake `rustfmt` for testing what happens when rustfmt is not found
+# or overridden.
+
+exit 1

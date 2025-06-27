@@ -10,8 +10,8 @@
 
 extern crate test;
 
-use crate::common::{output_base_dir, output_relative_path};
 use crate::common::{Config, Mode, TestPaths};
+use crate::common::{output_base_dir, output_relative_path};
 use crate::util::{logv, print_msg, top_level};
 use getopts::Options;
 use std::env;
@@ -22,6 +22,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::{Duration, SystemTime};
 use test::ColorConfig;
+use test::test::TestTimeOptions;
 use tracing::*;
 use walkdir::WalkDir;
 
@@ -90,6 +91,14 @@ pub fn parse_config(args: Vec<String>) -> Config {
         .optflag("", "dry-run", "don't actually run the tests")
         .optflag("", "fix-expected",
         "override all expected files that did not match the output. Tests will NOT fail when there is a mismatch")
+        .optflag("", "report-time",
+                 "report the time of each test. Configuration is done via env variables, like \
+                 rust unit tests.")
+        .optmulti("", "kani-flag",
+                  "pass extra flags to Kani. Note that this may cause spurious failures if the \
+                  passed flag conflicts with the test configuration. Only works for `kani`, \
+                  `cargo-kani`, and `expected` modes."
+                  , "ARG")
     ;
 
     let (argv0, args_) = args.split_first().unwrap();
@@ -116,9 +125,9 @@ pub fn parse_config(args: Vec<String>) -> Config {
         match m.opt_str(nm) {
             Some(s) => PathBuf::from(&s),
             None => {
-                let mut root_folder = top_level().expect(
-                    format!("Cannot find root directory. Please provide --{nm} option.").as_str(),
-                );
+                let mut root_folder = top_level().unwrap_or_else(|| {
+                    panic!("Cannot find root directory. Please provide --{nm} option.")
+                });
                 default.iter().for_each(|f| root_folder.push(f));
                 root_folder
             }
@@ -138,10 +147,9 @@ pub fn parse_config(args: Vec<String>) -> Config {
     let run_ignored = matches.opt_present("ignored");
     let mode = matches.opt_str("mode").unwrap().parse().expect("invalid mode");
     let timeout = matches.opt_str("timeout").map(|val| {
-        Duration::from_secs(
-            u64::from_str(&val)
-                .expect("Unexpected timeout format. Expected a positive number but found {val}"),
-        )
+        Duration::from_secs(u64::from_str(&val).unwrap_or_else(|_| {
+            panic!("Unexpected timeout format. Expected a positive number but found {val}")
+        }))
     });
 
     Config {
@@ -164,6 +172,10 @@ pub fn parse_config(args: Vec<String>) -> Config {
         dry_run: matches.opt_present("dry-run"),
         fix_expected: matches.opt_present("fix-expected"),
         timeout,
+        time_opts: matches
+            .opt_present("report-time")
+            .then_some(TestTimeOptions::new_from_env(false)),
+        extra_args: matches.opt_strs("kani-flag"),
     }
 }
 
@@ -292,7 +304,7 @@ pub fn test_opts(config: &Config) -> test::TestOpts {
         skip: vec![],
         list: false,
         options: test::Options::new(),
-        time_options: None,
+        time_options: config.time_opts,
         fail_fast: config.fail_fast,
         force_run_in_process: false,
     }
@@ -336,7 +348,7 @@ fn collect_tests_from_dir(
     tests: &mut Vec<test::TestDescAndFn>,
 ) -> io::Result<()> {
     match config.mode {
-        Mode::CargoKani | Mode::CargoKaniTest => {
+        Mode::CargoCoverage | Mode::CargoKani | Mode::CargoKaniTest => {
             collect_expected_tests_from_dir(config, dir, relative_dir_path, inputs, tests)
         }
         Mode::Exec => collect_exec_tests_from_dir(config, dir, relative_dir_path, inputs, tests),
@@ -365,7 +377,11 @@ fn collect_expected_tests_from_dir(
     // output directory corresponding to each to avoid race conditions during
     // the testing phase. We immediately return after adding the tests to avoid
     // treating `*.rs` files as tests.
-    assert!(config.mode == Mode::CargoKani || config.mode == Mode::CargoKaniTest);
+    assert!(
+        config.mode == Mode::CargoCoverage
+            || config.mode == Mode::CargoKani
+            || config.mode == Mode::CargoKaniTest
+    );
 
     let has_cargo_toml = dir.join("Cargo.toml").exists();
     for file in fs::read_dir(dir)? {
@@ -375,7 +391,7 @@ fn collect_expected_tests_from_dir(
             && (file_path.to_str().unwrap().ends_with(".expected")
                 || "expected" == file_path.file_name().unwrap())
         {
-            fs::create_dir_all(&build_dir.join(file_path.file_stem().unwrap())).unwrap();
+            fs::create_dir_all(build_dir.join(file_path.file_stem().unwrap())).unwrap();
             let paths =
                 TestPaths { file: file_path, relative_dir: relative_dir_path.to_path_buf() };
             tests.push(make_test(config, &paths, inputs));
@@ -433,7 +449,7 @@ fn collect_exec_tests_from_dir(
         }
 
         // Create directory for test and add it to the tests to be run
-        fs::create_dir_all(&build_dir.join(file_path.file_stem().unwrap())).unwrap();
+        fs::create_dir_all(build_dir.join(file_path.file_stem().unwrap())).unwrap();
         let paths = TestPaths { file: file_path, relative_dir: relative_dir_path.to_path_buf() };
         tests.push(make_test(config, &paths, inputs));
     }
@@ -454,7 +470,7 @@ fn collect_rs_tests_from_dir(
     // tests themselves, they race for the privilege of
     // creating the directories and sometimes fail randomly.
     let build_dir = output_relative_path(config, relative_dir_path);
-    fs::create_dir_all(&build_dir).unwrap();
+    fs::create_dir_all(build_dir).unwrap();
 
     // Add each `.rs` file as a test, and recurse further on any
     // subdirectories we find, except for `aux` directories.
@@ -558,7 +574,7 @@ fn make_test_name(config: &Config, testpaths: &TestPaths) -> test::TestName {
     //    ui/foo/bar/baz.rs
     let path = PathBuf::from(config.src_base.file_name().unwrap())
         .join(&testpaths.relative_dir)
-        .join(&testpaths.file.file_name().unwrap());
+        .join(testpaths.file.file_name().unwrap());
 
     test::DynTestName(format!("[{}] {}", config.mode, path.display()))
 }

@@ -1,0 +1,9 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+
+[package]
+name = "no_codegen"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]

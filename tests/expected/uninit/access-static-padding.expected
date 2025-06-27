@@ -1,0 +1,12 @@
+Checking harness check_read_assoc_const_padding_fails...
+Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `*const [u8; 32]`
+
+Checking harness check_read_static_padding_fails...
+Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `*const [u8; 8]`
+
+Checking harness check_read_const_padding_fails...
+Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `*const [u8; 4]`
+
+Verification failed for - check_read_assoc_const_padding_fails
+Verification failed for - check_read_static_padding_fails
+Verification failed for - check_read_const_padding_fails

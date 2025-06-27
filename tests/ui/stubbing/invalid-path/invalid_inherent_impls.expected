@@ -1,0 +1,18 @@
+error: Failed to resolve replacement function NonZero::unchecked_mul: there are multiple implementations of unchecked_mul in struct `NonZero`. Found:
+       NonZero::<u32>::unchecked_mul
+       NonZero::<i32>::unchecked_mul
+invalid_inherent_impls.rs
+   |
+   | #[kani::stub_verified(NonZero::unchecked_mul)]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: Replace NonZero::unchecked_mul with a specific implementation.
+
+error: Failed to resolve replacement function NonZero::<g32>::unchecked_mul: the generic arguments ::<g32> are invalid. The available implementations are: 
+       NonZero::<u32>::unchecked_mul
+       NonZero::<i32>::unchecked_mul
+invalid_inherent_impls.rs
+   |
+   | #[kani::stub_verified(NonZero::<g32>::unchecked_mul)]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |

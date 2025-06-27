@@ -1,12 +1,12 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use super::super::codegen::TypeExt;
-use crate::codegen_cprover_gotoc::codegen::typ::{is_pointer, pointee_type};
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::{Expr, ExprValue, Location, SymbolTable, Type};
-use cbmc::{btree_string_map, InternedString};
-use rustc_middle::ty::layout::LayoutOf;
-use rustc_middle::ty::{Instance, Ty};
+use cbmc::{InternedString, btree_string_map};
+use rustc_middle::ty::TyCtxt;
+use rustc_smir::rustc_internal;
+use stable_mir::ty::Span;
 use tracing::debug;
 
 // Should move into rvalue
@@ -19,22 +19,7 @@ pub fn dynamic_fat_ptr(typ: Type, data: Expr, vtable: Expr, symbol_table: &Symbo
     Expr::struct_expr(typ, btree_string_map![("data", data), ("vtable", vtable)], symbol_table)
 }
 
-impl<'tcx> GotocCtx<'tcx> {
-    /// Generates an expression `(ptr as usize) % align_of(T) == 0`
-    /// to determine if a pointer `ptr` with pointee type `T` is aligned.
-    pub fn is_ptr_aligned(&mut self, typ: Ty<'tcx>, ptr: Expr) -> Expr {
-        // Ensure `typ` is a pointer, then extract the pointee type
-        assert!(is_pointer(typ));
-        let pointee_type = pointee_type(typ).unwrap();
-        // Obtain the alignment for the pointee type `T`
-        let layout = self.layout_of(pointee_type);
-        let align = Expr::int_constant(layout.align.abi.bytes(), Type::size_t());
-        // Cast the pointer to `usize` and return the alignment expression
-        let cast_ptr = ptr.cast_to(Type::size_t());
-        let zero = Type::size_t().zero();
-        cast_ptr.rem(align).eq(zero)
-    }
-
+impl GotocCtx<'_> {
     pub fn unsupported_msg(item: &str, url: Option<&str>) -> String {
         let mut s = format!("{item} is not currently supported by Kani");
         if let Some(url) = url {
@@ -86,14 +71,7 @@ impl<'tcx> GotocCtx<'tcx> {
 /// Members traverse path to get to the raw pointer of a box (b.0.pointer.pointer).
 const RAW_PTR_FROM_BOX: [&str; 3] = ["0", "pointer", "pointer"];
 
-impl<'tcx> GotocCtx<'tcx> {
-    /// Given an "instance" find the crate it came from
-    pub fn get_crate(&self, instance: Instance<'tcx>) -> String {
-        self.tcx.crate_name(instance.def_id().krate).to_string()
-    }
-}
-
-impl<'tcx> GotocCtx<'tcx> {
+impl GotocCtx<'_> {
     /// Dereference a boxed type `std::boxed::Box<T>` to get a `*T`.
     ///
     /// WARNING: This is based on a manual inspection of how boxed types are currently
@@ -147,7 +125,7 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 
     /// Best effort check if the struct represents a rust `std::marker::PhantomData`
-    fn assert_is_rust_phantom_data_like(&self, t: &Type) {
+    pub fn assert_is_rust_phantom_data_like(&self, t: &Type) {
         // TODO: A `std::marker::PhantomData` appears to be an empty struct, in the cases we've seen.
         // Is there something smarter we can do here?
         assert!(t.is_struct_like());
@@ -213,4 +191,8 @@ impl<'tcx> GotocCtx<'tcx> {
         assert_eq!(component.name().to_string().as_str(), "pointer");
         assert!(component.typ().is_pointer() || component.typ().is_rust_fat_ptr(&self.symbol_table))
     }
+}
+
+pub fn span_err(tcx: TyCtxt, span: Span, msg: String) {
+    tcx.dcx().span_err(rustc_internal::internal(tcx, span), msg);
 }

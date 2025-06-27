@@ -1,0 +1,9 @@
+assertion\
+- Status: SUCCESS\
+- Description: "|result| old(*ptr + *ptr) == *ptr"\
+
+assertion\
+- Status: SUCCESS\
+- Description: "|result| old(*ptr + *ptr + *ptr + *ptr) == *ptr"\
+
+VERIFICATION:- SUCCESSFUL

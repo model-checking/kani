@@ -1,0 +1,15 @@
+[TEST] Generate test...
+Checking harness verify::try_nz_u8_replica
+Checking harness verify::try_nz_u8_replica
+
+Checking harness verify::try_nz_u8_replica
+Checking harness verify::try_nz_u8_replica
+
+already found in source code, so skipping modification.
+already found in source code, so skipping modification.
+
+Building modified.rs
+playback_multi_harness_multi_inject/kani_concrete_playback
+
+[TEST] Run test...
+test result: ok. 4 passed; 0 failed;

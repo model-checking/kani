@@ -1,0 +1,2 @@
+error: Use of unstable feature 'stubbing' in harness `main`.
+To enable stubbing, pass option `-Z stubbing`

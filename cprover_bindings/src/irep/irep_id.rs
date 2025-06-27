@@ -8,6 +8,8 @@ use crate::cbmc_string::InternedString;
 use crate::utils::NumUtils;
 use num::bigint::{BigInt, BigUint, Sign};
 
+use std::borrow::Cow;
+
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
 pub enum IrepId {
     /// In addition to the standard enums defined below, CBMC also allows ids to be strings.
@@ -281,6 +283,8 @@ pub enum IrepId {
     Short,
     Long,
     Float,
+    Float16,
+    Float128,
     Double,
     Byte,
     Boolean,
@@ -362,7 +366,7 @@ pub enum IrepId {
     Div,
     Power,
     FactorialPower,
-    PrettyName,
+    CPrettyName,
     CClass,
     CField,
     CInterface,
@@ -593,6 +597,7 @@ pub enum IrepId {
     CSpecLoopInvariant,
     CSpecRequires,
     CSpecEnsures,
+    CSpecAssigns,
     VirtualFunction,
     ElementType,
     WorkingDirectory,
@@ -830,6 +835,7 @@ pub enum IrepId {
     VectorLe,
     VectorGt,
     VectorLt,
+    FloatbvRoundToIntegral,
 }
 
 impl IrepId {
@@ -871,18 +877,34 @@ impl IrepId {
     }
 }
 
+// Implementing `ToString` rather than `Display` because display only has the interface
+// to write to a formatter which seems to be slower when you just need the string.
+#[allow(clippy::to_string_trait_impl)]
 impl ToString for IrepId {
     fn to_string(&self) -> String {
-        match self {
-            IrepId::FreeformString(s) => return s.to_string(),
-            IrepId::FreeformInteger(i) => return i.to_string(),
-            IrepId::FreeformBitPattern(i) => {
-                return format!("{i:X}");
-            }
-            _ => (),
-        }
+        self.to_string_cow().into_owned()
+    }
+}
 
-        let s = match self {
+impl IrepId {
+    pub fn to_string_cow(&self) -> Cow<'_, str> {
+        match self.to_owned_string() {
+            Some(owned) => Cow::Owned(owned),
+            None => Cow::Borrowed(self.to_static_string()),
+        }
+    }
+
+    fn to_owned_string(&self) -> Option<String> {
+        match self {
+            IrepId::FreeformString(s) => Some(s.to_string()),
+            IrepId::FreeformInteger(i) => Some(i.to_string()),
+            IrepId::FreeformBitPattern(i) => Some(format!("{i:X}")),
+            _ => None,
+        }
+    }
+
+    fn to_static_string(&self) -> &'static str {
+        match self {
             IrepId::FreeformString(_)
             | IrepId::FreeformInteger(_)
             | IrepId::FreeformBitPattern { .. } => unreachable!(),
@@ -1150,6 +1172,8 @@ impl ToString for IrepId {
             IrepId::Short => "short",
             IrepId::Long => "long",
             IrepId::Float => "float",
+            IrepId::Float16 => "float16",
+            IrepId::Float128 => "float128",
             IrepId::Double => "double",
             IrepId::Byte => "byte",
             IrepId::Boolean => "boolean",
@@ -1231,7 +1255,7 @@ impl ToString for IrepId {
             IrepId::Div => "/",
             IrepId::Power => "**",
             IrepId::FactorialPower => "factorial_power",
-            IrepId::PrettyName => "pretty_name",
+            IrepId::CPrettyName => "#pretty_name",
             IrepId::CClass => "#class",
             IrepId::CField => "#field",
             IrepId::CInterface => "#interface",
@@ -1462,6 +1486,7 @@ impl ToString for IrepId {
             IrepId::CSpecLoopInvariant => "#spec_loop_invariant",
             IrepId::CSpecRequires => "#spec_requires",
             IrepId::CSpecEnsures => "#spec_ensures",
+            IrepId::CSpecAssigns => "#spec_assigns",
             IrepId::VirtualFunction => "virtual_function",
             IrepId::ElementType => "element_type",
             IrepId::WorkingDirectory => "working_directory",
@@ -1705,8 +1730,8 @@ impl ToString for IrepId {
             IrepId::VectorLe => "vector-<=",
             IrepId::VectorGt => "vector->",
             IrepId::VectorLt => "vector-<",
-        };
-        s.to_string()
+            IrepId::FloatbvRoundToIntegral => "floatbv_round_to_integral",
+        }
     }
 }
 

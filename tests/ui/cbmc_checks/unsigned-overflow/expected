@@ -1,7 +1,7 @@
 Failed Checks: attempt to divide by zero
 Failed Checks: attempt to calculate the remainder with a divisor of zero
-Failed Checks: arithmetic overflow on unsigned addition
-Failed Checks: arithmetic overflow on unsigned subtraction
-Failed Checks: arithmetic overflow on unsigned multiplication
-Failed Checks: shift distance too large
-Failed Checks: shift distance too large
+Failed Checks: attempt to add with overflow
+Failed Checks: attempt to subtract with overflow
+Failed Checks: attempt to multiply with overflow
+Failed Checks: attempt to shift right with overflow
+Failed Checks: attempt to shift left with overflow

@@ -4,8 +4,8 @@
 // See GitHub history for details.
 
 use std::fs::File;
-use std::io::prelude::*;
 use std::io::BufReader;
+use std::io::prelude::*;
 use std::path::Path;
 
 use tracing::*;
@@ -24,6 +24,12 @@ pub struct TestProps {
     pub kani_panic_step: Option<KaniFailStep>,
 }
 
+impl Default for TestProps {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TestProps {
     pub fn new() -> Self {
         TestProps {
@@ -37,7 +43,7 @@ impl TestProps {
     pub fn from_file(testfile: &Path, config: &Config) -> Self {
         let mut props = TestProps::new();
         props.load_from(testfile, config);
-
+        props.kani_flags.extend(config.extra_args.iter().cloned());
         props
     }
 
@@ -233,5 +239,11 @@ pub fn make_test_description<R: Read>(
         compile_fail: false,
         no_run: false,
         test_type: test::TestType::Unknown,
+        // Enter dummy values since the test doesn't have a line per-se.
+        source_file: "unknown_file",
+        start_line: 0,
+        start_col: 0,
+        end_line: 0,
+        end_col: 0,
     }
 }

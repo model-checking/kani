@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 // Check that an offset (computed with `wrapping_offset`) that overflows an
-// `isize::MAX` triggers a verification failure.
+// `isize::MAX` does NOT trigger a verification failure as the operation is
+// always safe:
+// https://doc.rust-lang.org/std/primitive.pointer.html#method.wrapping_offset
 use std::convert::TryInto;
 
 #[kani::proof]

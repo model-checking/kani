@@ -9,5 +9,6 @@
 fn main() {
     let a: u32 = kani::any();
     let b: u32 = kani::any();
-    unsafe { std::intrinsics::unchecked_shr(a, b) };
+    // Black box this so it doesn't get pruned by the compiler.
+    std::hint::black_box(unsafe { std::intrinsics::unchecked_shr(a, b) });
 }

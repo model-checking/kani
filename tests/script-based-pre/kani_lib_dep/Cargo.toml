@@ -1,0 +1,10 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+[package]
+name = "kani_lib_dep"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+kani_core = { path = "../../../library/kani_core" }
+kani = { path = "../../../library/kani" }

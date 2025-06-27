@@ -6,17 +6,22 @@
 
 mod assert;
 mod block;
+mod foreign_function;
 mod function;
 mod intrinsic;
 mod operand;
 mod place;
 mod rvalue;
+mod source_region;
 mod span;
 mod statement;
 mod static_var;
 
 // Visible for all codegen module.
+pub mod contract;
+mod ty_stable;
 pub(super) mod typ;
 
 pub use assert::PropertyClass;
+pub use block::bb_label;
 pub use typ::TypeExt;

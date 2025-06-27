@@ -1,9 +1,11 @@
-- **Feature Name:** Function and method stubbing (`function_stubbing`)
+- **Feature Name:** Function and method stubbing (`function-stubbing`)
 - **Feature Request Issue:** <https://github.com/model-checking/kani/issues/1695>
 - **RFC PR:** <https://github.com/model-checking/kani/pull/1723> 
-- **Status:** Under Review
+- **Status:** Unstable
 - **Version:** 1
 - **Proof-of-concept:** <https://github.com/aaronbembenek-aws/kani/tree/mir_transform>
+
+-------------------
 
 ## Summary
 

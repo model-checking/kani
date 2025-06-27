@@ -1,6 +1,7 @@
 # Copyright Kani Contributors
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 name: Setup Kani Dependencies
+description: "Setup the machine to run Kani. Install rustup, dependencies and sync submodules."
 inputs:
   os:
     description: In which Operating System is this running
@@ -12,12 +13,24 @@ inputs:
 runs:
   using: composite
   steps:
-      - name: Install dependencies
-        run: cd ${{ inputs.kani_dir }} && ./scripts/setup/${{ inputs.os }}/install_deps.sh
+      - name: Remove unnecessary software to free up disk space
+        if: contains(fromJSON('["ubuntu-20.04","ubuntu-22.04"]'), inputs.os)
         shell: bash
+        run: |
+          # inspired by https://github.com/easimon/maximize-build-space/blob/master/action.yml
+          df -h
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /usr/local/.ghcup
+          df -h
 
       - name: Install Rust toolchain
-        run: cd ${{ inputs.kani_dir }} && ./scripts/setup/install_rustup.sh
+        run: |
+          cd ${{ inputs.kani_dir }}
+          ./scripts/setup/install_rustup.sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+        shell: bash
+
+      - name: Install dependencies
+        run: cd ${{ inputs.kani_dir }} && ./scripts/setup/${{ inputs.os }}/install_deps.sh
         shell: bash
 
       - name: Update submodules

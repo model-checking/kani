@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
-// kani-flags: --harness harness --enable-unstable --enable-stubbing
+// kani-flags: --harness harness -Z stubbing
 //
 //! Tests to make sure that, when we are resolving paths in `kani::stub`
 //! attributes, we prioritize those that do not come from glob imports.

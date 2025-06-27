@@ -17,9 +17,6 @@ Acknowledgement:
      Computer Science Department, University of Oxford
      Computer Science Department, Carnegie Mellon University
 
-cbmc-viewer: https://github.com/model-checking/cbmc-viewer
-License: Apache-2.0
-
 ## Notable Python dependencies
 
 voluptuous: https://github.com/alecthomas/voluptuous

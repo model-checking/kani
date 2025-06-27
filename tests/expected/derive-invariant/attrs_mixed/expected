@@ -1,0 +1,9 @@
+Check 1: check_safety_constraint_cfg.assertion.1\
+         - Status: SUCCESS\
+         - Description: "assertion failed: pos_point.x >= 0"
+
+Check 2: check_safety_constraint_cfg.assertion.2\
+         - Status: SUCCESS\
+         - Description: "assertion failed: pos_point.y >= 0"
+
+Complete - 1 successfully verified harnesses, 0 failures, 1 total.

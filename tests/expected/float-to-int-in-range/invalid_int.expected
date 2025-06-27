@@ -1,0 +1,5 @@
+error[E0277]: the trait bound `f32: std::convert::FloatToInt<bool>` is not satisfied
+invalid_int.rs:
+|     let _c = kani::float::float_to_int_in_range::<f32, bool>(f);
+|                                                   ^^^ the trait `std::convert::FloatToInt<bool>` is not implemented for `f32`
+|

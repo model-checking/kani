@@ -11,13 +11,16 @@ use std::str::FromStr;
 
 use std::time::Duration;
 use test::ColorConfig;
+use test::test::TestTimeOptions;
 
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]
 pub enum Mode {
     Kani,
     KaniFixme,
+    CargoCoverage,
     CargoKani,
     CargoKaniTest, // `cargo kani --tests`. This is temporary and should be removed when s2n-quic moves --tests to `Cargo.toml`.
+    CoverageBased,
     Exec,
     Expected,
     Stub,
@@ -31,6 +34,8 @@ impl FromStr for Mode {
             "kani-fixme" => Ok(KaniFixme),
             "cargo-kani" => Ok(CargoKani),
             "cargo-kani-test" => Ok(CargoKaniTest),
+            "coverage-based" => Ok(CoverageBased),
+            "cargo-coverage" => Ok(CargoCoverage),
             "exec" => Ok(Exec),
             "expected" => Ok(Expected),
             "stub-tests" => Ok(Stub),
@@ -44,8 +49,10 @@ impl fmt::Display for Mode {
         let s = match *self {
             Kani => "kani",
             KaniFixme => "kani-fixme",
+            CargoCoverage => "cargo-coverage",
             CargoKani => "cargo-kani",
             CargoKaniTest => "cargo-kani-test",
+            CoverageBased => "coverage-based",
             Exec => "exec",
             Expected => "expected",
             Stub => "stub-tests",
@@ -145,6 +152,14 @@ pub struct Config {
     /// updating multiple tests. Users should still manually edit the files after to only keep
     /// relevant expectations.
     pub fix_expected: bool,
+
+    /// Whether we should measure and limit the time of a test.
+    pub time_opts: Option<TestTimeOptions>,
+
+    /// Extra arguments to be passed to Kani in this regression.
+    /// Note that there is no validation done whether these flags conflict with existing flags.
+    /// For example, one could add `--kani-flag=--only-codegen` to only compile all tests.
+    pub extra_args: Vec<String>,
 }
 
 #[derive(Debug, Clone)]

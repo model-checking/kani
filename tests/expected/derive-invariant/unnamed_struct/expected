@@ -1,0 +1,2 @@
+         - Status: SUCCESS\
+         - Description: "assertion failed: point.is_safe()"

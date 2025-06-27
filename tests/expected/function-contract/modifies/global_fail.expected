@@ -1,0 +1,9 @@
+assigns\
+- Status: FAILURE\
+- Description: "Check that *var_3 is assignable"\
+in function modify
+
+Failed Checks: Check that *var_3 is assignable\
+in modify
+
+VERIFICATION:- FAILED

@@ -1,0 +1,7 @@
+Checking harness verify::foo_harness...
+
+Status: SATISFIED\
+Description: "Cover `foo`"
+
+** 1 of 1 cover properties satisfied
+

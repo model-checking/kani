@@ -1,0 +1,10 @@
+SUCCESS\
+address must be a multiple of its type's alignment
+SUCCESS\
+pointer NULL
+SUCCESS\
+pointer invalid
+SUCCESS\
+deallocated dynamic object
+FAILURE\
+dead object

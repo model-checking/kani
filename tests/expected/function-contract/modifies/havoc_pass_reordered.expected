@@ -1,0 +1,13 @@
+copy_replace.assertion\
+- Status: SUCCESS\
+- Description: "equality"\
+in function copy_replace
+
+VERIFICATION:- SUCCESSFUL
+
+copy.assigns\
+- Status: SUCCESS\
+- Description: "Check that *dst is assignable"\
+in function copy
+
+VERIFICATION:- SUCCESSFUL

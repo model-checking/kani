@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
-// kani-flags: --harness my_mod::harness --enable-unstable --enable-stubbing
+// kani-flags: --harness my_mod::harness -Z stubbing
 //
 //! This tests whether we take into account simple local uses (`use XXX;`) when
 //! resolving paths in `kani::stub` attributes.
@@ -20,8 +20,8 @@ impl MyType {
 
 mod my_mod {
     use self::inner_mod::magic_number42;
-    use super::magic_number13;
     use super::MyType;
+    use super::magic_number13;
 
     mod inner_mod {
         pub fn magic_number42() -> u32 {

@@ -3,7 +3,7 @@
 
 [package]
 name = "kani-verifier"
-version = "0.26.0"
+version = "0.63.0"
 edition = "2021"
 description = "A bit-precise model checker for Rust."
 readme = "README.md"
@@ -32,20 +32,27 @@ path = "src/bin/cargo_kani.rs"
 [profile.release]
 strip = "debuginfo"
 
+[profile.profiling]
+inherits = "release"
+debug = true
+strip = "none"
+lto = "off"
+
 # Below is the workspace (vs above is "kani-verifier" crate) config:
 
 [workspace]
 members = [
   "library/kani",
   "library/std",
-  "tools/bookrunner",
   "tools/compiletest",
   "tools/build-kani",
+  "tools/kani-cov",
+  "tools/scanner",
+  "tools/compile-timer",
   "kani-driver",
   "kani-compiler",
   "kani_metadata",
-  # `librustdoc` is still needed by bookrunner.
-  "tools/bookrunner/librustdoc",
+  "library/kani_core",
 ]
 
 # This indicates what package to e.g. build with 'cargo build' without --workspace
@@ -57,6 +64,7 @@ default-members = [
 
 exclude = [
   "build",
+  "charon",
   "target",
   # dependency tests have their own workspace
   "tests/kani-dependency-test/dependency3",
@@ -65,6 +73,15 @@ exclude = [
   "tests/perf",
   "tests/cargo-ui",
   "tests/slow",
-  "tests/assess-scan-test-scaffold",
+  "tests/std-checks",
   "tests/script-based-pre",
+  "tests/script-based-pre/build-cache-bin/target/new_dep",
+  "tests/script-based-pre/build-cache-dirty/target/new_dep",
+  "tests/script-based-pre/verify_std_cmd/tmp_dir/target/kani_verify_std",
+  "tests/script-based-pre/kani_lib_dep",
+  "tests/script-based-pre/no_codegen",
+  "tests/script-based-pre/no_codegen_error",
 ]
+
+[workspace.lints.clippy]
+too_long_first_doc_paragraph = "allow"

@@ -31,18 +31,18 @@ cd $(dirname $0)
 
 echo "Running single-file check..."
 rm -rf *.c
-kani --gen-c --enable-unstable singlefile.rs >& kani.log || \
+kani --gen-c -Z unstable-options singlefile.rs >& kani.log || \
     { ret=$?; echo "== Failed to run Kani"; cat kani.log; rm kani.log; exit 1; }
 rm -f kani.log
-if ! [ -e singlefile.for-main.c ]
+if ! [ -e singlefile_*main.c ]
 then
-    echo "Error: no GotoC file generated. Expected: singlefile.for-main.c"
+    echo "Error: no GotoC file generated. Expected: singlefile_*main.c"
     exit 1
 fi
 
-if ! [ -e singlefile.for-main.demangled.c ]
+if ! [ -e singlefile_*main.demangled.c ]
 then
-    echo "Error: no demangled GotoC file generated. Expected singlefile.for-main.demangled.c."
+    echo "Error: no demangled GotoC file generated. Expected singlefile_*main.demangled.c."
     exit 1
 fi
 
@@ -57,9 +57,9 @@ declare -a PATTERNS=(
 )
 
 for val in "${PATTERNS[@]}"; do
-    if ! grep -Fq "$val" singlefile.for-main.demangled.c;
+    if ! grep -Fq "$val" singlefile_*main.demangled.c;
     then
-        echo "Error: demangled file singlefile.for-main.demangled.c did not contain expected pattern '$val'."
+        echo "Error: demangled file singlefile_*main.demangled.c did not contain expected pattern '$val'."
         exit 1
     fi
 done
@@ -70,22 +70,22 @@ echo
 (cd multifile
 echo "Running multi-file check..."
 rm -rf build
-cargo kani --target-dir build --gen-c --enable-unstable >& kani.log || \
+cargo kani --target-dir build --gen-c -Z unstable-options >& kani.log || \
     { ret=$?; echo "== Failed to run Kani"; cat kani.log; rm kani.log; exit 1; }
 rm -f kani.log
 cd build/kani/${TARGET}/debug/deps/
 
-mangled=$(ls multifile*.for-main.c)
+mangled=$(ls multifile*main.c)
 if ! [ -e "${mangled}" ]
 then
-    echo "Error: no GotoC file found. Expected: build/${TARGET}/debug/deps/multifile*.for-main.c"
+    echo "Error: no GotoC file found. Expected: build/kani/${TARGET}/debug/deps/multifile*main.c"
     exit 1
 fi
 
-demangled=$(ls multifile*.for-main.demangled.c)
+demangled=$(ls multifile*main.demangled.c)
 if ! [ -e "${demangled}" ]
 then
-    echo "Error: no demangled GotoC file found. Expected build/${TARGET}/debug/deps/multifile*.for-main.demangled.c."
+    echo "Error: no demangled GotoC file found. Expected build/kani/${TARGET}/debug/deps/multifile*main.demangled.c."
     exit 1
 fi
 

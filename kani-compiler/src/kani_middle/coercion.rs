@@ -15,10 +15,13 @@
 
 use rustc_hir::lang_items::LangItem;
 use rustc_middle::traits::{ImplSource, ImplSourceUserDefinedData};
+use rustc_middle::ty::TraitRef;
 use rustc_middle::ty::adjustment::CustomCoerceUnsized;
-use rustc_middle::ty::TypeAndMut;
-use rustc_middle::ty::{self, ParamEnv, Ty, TyCtxt};
-use rustc_span::symbol::Symbol;
+use rustc_middle::ty::{PseudoCanonicalInput, Ty, TyCtxt, TypingEnv};
+use rustc_smir::rustc_internal;
+use rustc_span::DUMMY_SP;
+use stable_mir::Symbol;
+use stable_mir::ty::{RigidTy, Ty as TyStable, TyKind};
 use tracing::trace;
 
 /// Given an unsized coercion (e.g. from `&u8` to `&dyn Debug`), extract the pair of
@@ -57,6 +60,22 @@ use tracing::trace;
 ///    - Extract the tail element of the struct which are of type `T` and `U`, respectively.
 /// 4. Coercion between smart pointers of wrapper structs.
 ///    - Apply the logic from item 2 then item 3.
+pub fn extract_unsize_casting_stable(
+    tcx: TyCtxt,
+    src_ty: TyStable,
+    dst_ty: TyStable,
+) -> CoercionBaseStable {
+    let CoercionBase { src_ty, dst_ty } = extract_unsize_casting(
+        tcx,
+        rustc_internal::internal(tcx, src_ty),
+        rustc_internal::internal(tcx, dst_ty),
+    );
+    CoercionBaseStable {
+        src_ty: rustc_internal::stable(src_ty),
+        dst_ty: rustc_internal::stable(dst_ty),
+    }
+}
+
 pub fn extract_unsize_casting<'tcx>(
     tcx: TyCtxt<'tcx>,
     src_ty: Ty<'tcx>,
@@ -64,21 +83,25 @@ pub fn extract_unsize_casting<'tcx>(
 ) -> CoercionBase<'tcx> {
     trace!(?src_ty, ?dst_ty, "extract_unsize_casting");
     // Iterate over the pointer structure to find the builtin pointer that will store the metadata.
-    let coerce_info = CoerceUnsizedIterator::new(tcx, src_ty, dst_ty).last().unwrap();
+    let coerce_info = CoerceUnsizedIterator::new(
+        tcx,
+        rustc_internal::stable(src_ty),
+        rustc_internal::stable(dst_ty),
+    )
+    .last()
+    .unwrap();
     // Extract the pointee type that is being coerced.
-    let src_pointee_ty = extract_pointee(coerce_info.src_ty).expect(&format!(
-        "Expected source to be a pointer. Found {:?} instead",
-        coerce_info.src_ty
-    ));
-    let dst_pointee_ty = extract_pointee(coerce_info.dst_ty).expect(&format!(
-        "Expected destination to be a pointer. Found {:?} instead",
-        coerce_info.dst_ty
-    ));
+    let src_pointee_ty = extract_pointee(tcx, coerce_info.src_ty).unwrap_or_else(|| {
+        panic!("Expected source to be a pointer. Found {:?} instead", coerce_info.src_ty)
+    });
+    let dst_pointee_ty = extract_pointee(tcx, coerce_info.dst_ty).unwrap_or_else(|| {
+        panic!("Expected destination to be a pointer. Found {:?} instead", coerce_info.dst_ty)
+    });
     // Find the tail of the coercion that determines the type of metadata to be stored.
-    let (src_base_ty, dst_base_ty) = tcx.struct_lockstep_tails_erasing_lifetimes(
+    let (src_base_ty, dst_base_ty) = tcx.struct_lockstep_tails_for_codegen(
         src_pointee_ty,
         dst_pointee_ty,
-        ParamEnv::reveal_all(),
+        TypingEnv::fully_monomorphized(),
     );
     trace!(?src_base_ty, ?dst_base_ty, "extract_unsize_casting result");
     assert!(
@@ -100,6 +123,11 @@ pub struct CoercionBase<'tcx> {
     pub dst_ty: Ty<'tcx>,
 }
 
+#[derive(Debug)]
+pub struct CoercionBaseStable {
+    pub src_ty: TyStable,
+    pub dst_ty: TyStable,
+}
 /// Iterates over the coercion path of a structure that implements `CoerceUnsized<T>` trait.
 /// The `CoerceUnsized<T>` trait indicates that this is a pointer or a wrapper for one, where
 /// unsizing can be performed on the pointee. More details:
@@ -117,26 +145,26 @@ pub struct CoercionBase<'tcx> {
 /// After unsized element has been found, the iterator will return `None`.
 pub struct CoerceUnsizedIterator<'tcx> {
     tcx: TyCtxt<'tcx>,
-    src_ty: Option<Ty<'tcx>>,
-    dst_ty: Option<Ty<'tcx>>,
+    src_ty: Option<TyStable>,
+    dst_ty: Option<TyStable>,
 }
 
 /// Represent the information about a coercion.
-#[derive(Debug, Clone, PartialOrd, PartialEq)]
-pub struct CoerceUnsizedInfo<'tcx> {
+#[derive(Debug, Clone, PartialEq)]
+pub struct CoerceUnsizedInfo {
     /// The name of the field from the current types that differs between each other.
     pub field: Option<Symbol>,
     /// The type being coerced.
-    pub src_ty: Ty<'tcx>,
+    pub src_ty: TyStable,
     /// The type that is the result of the coercion.
-    pub dst_ty: Ty<'tcx>,
+    pub dst_ty: TyStable,
 }
 
 impl<'tcx> CoerceUnsizedIterator<'tcx> {
     pub fn new(
         tcx: TyCtxt<'tcx>,
-        src_ty: Ty<'tcx>,
-        dst_ty: Ty<'tcx>,
+        src_ty: TyStable,
+        dst_ty: TyStable,
     ) -> CoerceUnsizedIterator<'tcx> {
         CoerceUnsizedIterator { tcx, src_ty: Some(src_ty), dst_ty: Some(dst_ty) }
     }
@@ -160,8 +188,8 @@ impl<'tcx> CoerceUnsizedIterator<'tcx> {
 ///   dst_ty: Ty, // *const &dyn Debug
 /// }
 /// ```
-impl<'tcx> Iterator for CoerceUnsizedIterator<'tcx> {
-    type Item = CoerceUnsizedInfo<'tcx>;
+impl Iterator for CoerceUnsizedIterator<'_> {
+    type Item = CoerceUnsizedInfo;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.src_ty.is_none() {
@@ -173,27 +201,34 @@ impl<'tcx> Iterator for CoerceUnsizedIterator<'tcx> {
         // the conversion.
         let src_ty = self.src_ty.take().unwrap();
         let dst_ty = self.dst_ty.take().unwrap();
-        let field = match (&src_ty.kind(), &dst_ty.kind()) {
-            (&ty::Adt(src_def, src_substs), &ty::Adt(dst_def, dst_substs)) => {
+        let field = match (src_ty.kind(), dst_ty.kind()) {
+            (
+                TyKind::RigidTy(RigidTy::Adt(src_def, ref src_args)),
+                TyKind::RigidTy(RigidTy::Adt(dst_def, ref dst_args)),
+            ) => {
                 // Handle smart pointers by using CustomCoerceUnsized to find the field being
                 // coerced.
                 assert_eq!(src_def, dst_def);
-                let src_fields = &src_def.non_enum_variant().fields;
-                let dst_fields = &dst_def.non_enum_variant().fields;
+                let src_fields = &src_def.variants_iter().next().unwrap().fields();
+                let dst_fields = &dst_def.variants_iter().next().unwrap().fields();
                 assert_eq!(src_fields.len(), dst_fields.len());
 
-                let CustomCoerceUnsized::Struct(coerce_index) =
-                    custom_coerce_unsize_info(self.tcx, src_ty, dst_ty);
+                let CustomCoerceUnsized::Struct(coerce_index) = custom_coerce_unsize_info(
+                    self.tcx,
+                    rustc_internal::internal(self.tcx, src_ty),
+                    rustc_internal::internal(self.tcx, dst_ty),
+                );
+                let coerce_index = coerce_index.as_usize();
                 assert!(coerce_index < src_fields.len());
 
-                self.src_ty = Some(src_fields[coerce_index].ty(self.tcx, src_substs));
-                self.dst_ty = Some(dst_fields[coerce_index].ty(self.tcx, dst_substs));
-                Some(src_fields[coerce_index].name)
+                self.src_ty = Some(src_fields[coerce_index].ty_with_args(src_args));
+                self.dst_ty = Some(dst_fields[coerce_index].ty_with_args(dst_args));
+                Some(src_fields[coerce_index].name.clone())
             }
             _ => {
                 // Base case is always a pointer (Box, raw_pointer or reference).
                 assert!(
-                    extract_pointee(src_ty).is_some(),
+                    extract_pointee(self.tcx, src_ty).is_some(),
                     "Expected a pointer, but found {src_ty:?}"
                 );
                 None
@@ -211,15 +246,16 @@ fn custom_coerce_unsize_info<'tcx>(
     source_ty: Ty<'tcx>,
     target_ty: Ty<'tcx>,
 ) -> CustomCoerceUnsized {
-    let def_id = tcx.require_lang_item(LangItem::CoerceUnsized, None);
+    let def_id = tcx.require_lang_item(LangItem::CoerceUnsized, DUMMY_SP);
 
-    let trait_ref = ty::Binder::dummy(
-        tcx.mk_trait_ref(def_id, tcx.mk_substs_trait(source_ty, [target_ty.into()])),
-    );
+    let trait_ref = TraitRef::new(tcx, def_id, tcx.mk_args_trait(source_ty, [target_ty.into()]));
 
-    match tcx.codegen_select_candidate((ParamEnv::reveal_all(), trait_ref)) {
+    match tcx.codegen_select_candidate(PseudoCanonicalInput {
+        typing_env: TypingEnv::fully_monomorphized(),
+        value: trait_ref,
+    }) {
         Ok(ImplSource::UserDefined(ImplSourceUserDefinedData { impl_def_id, .. })) => {
-            tcx.coerce_unsized_info(impl_def_id).custom_kind.unwrap()
+            tcx.coerce_unsized_info(impl_def_id).unwrap().custom_kind.unwrap()
         }
         impl_source => {
             unreachable!("invalid `CoerceUnsized` impl_source: {:?}", impl_source);
@@ -228,6 +264,6 @@ fn custom_coerce_unsize_info<'tcx>(
 }
 
 /// Extract pointee type from builtin pointer types.
-fn extract_pointee(typ: Ty) -> Option<Ty> {
-    typ.builtin_deref(true).map(|TypeAndMut { ty, .. }| ty)
+fn extract_pointee(tcx: TyCtxt<'_>, typ: TyStable) -> Option<Ty<'_>> {
+    rustc_internal::internal(tcx, typ).builtin_deref(true)
 }

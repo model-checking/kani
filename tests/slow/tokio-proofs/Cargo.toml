@@ -19,3 +19,6 @@ tokio-util = { version = "0.7.3", features = ["io"] }
 async-stream = "0.3.3"
 # mockall = "0.11.1"
 # async-stream = "0.3"
+
+[kani.unstable]
+async-lib = true

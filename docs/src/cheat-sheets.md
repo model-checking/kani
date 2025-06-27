@@ -19,7 +19,7 @@ cargo build-dev
 ### Test
 
 ```bash
-# Full regression suite (does not run bookrunner)
+# Full regression suite
 ./scripts/kani-regression.sh
 ```
 
@@ -37,12 +37,6 @@ rm -r build/x86_64-apple-darwin/tests/
 # Test suite run (we can only run one at a time)
 # cargo run -p compiletest -- --suite ${suite} --mode ${mode}
 cargo run -p compiletest -- --suite kani --mode kani
-```
-
-```bash
-# Run bookrunner
-./scripts/setup/install_bookrunner_deps.sh
-cargo run -p bookrunner
 ```
 
 ```bash
@@ -79,6 +73,22 @@ kani --gen-c file.rs
 # Generate a ${INPUT}.kani.mir file with a human friendly MIR dump
 # for all items that are compiled to the respective goto-program.
 RUSTFLAGS="--emit mir" kani ${INPUT}.rs
+```
+
+The `KANI_REACH_DEBUG` environment variable can be used to debug Kani's reachability analysis.
+If defined, Kani will generate a DOT graph `${INPUT}.dot` with the graph traversed during reachability analysis.
+If defined and not empty, the graph will be filtered to end at functions that contains the substring
+from `KANI_REACH_DEBUG`.
+
+Note that this will only work on debug builds.
+
+```bash
+# Generate a DOT graph ${INPUT}.dot with the graph traversed during reachability analysis
+KANI_REACH_DEBUG= kani ${INPUT}.rs
+
+# Generate a DOT graph ${INPUT}.dot with the sub-graph traversed during the reachability analysis
+# that connect to the given target.
+KANI_REACH_DEBUG="${TARGET_ITEM}" kani ${INPUT}.rs
 ```
 
 ## CBMC

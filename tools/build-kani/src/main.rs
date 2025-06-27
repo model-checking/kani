@@ -10,8 +10,10 @@
 mod parser;
 mod sysroot;
 
-use crate::sysroot::{build_bin, build_lib, kani_sysroot_lib};
-use anyhow::{bail, Result};
+use crate::sysroot::{
+    build_bin, build_lib, build_tools, kani_no_core_lib, kani_playback_lib, kani_sysroot_lib,
+};
+use anyhow::{Result, bail};
 use clap::Parser;
 use std::{ffi::OsString, path::Path, process::Command};
 
@@ -20,8 +22,11 @@ fn main() -> Result<()> {
 
     match args.subcommand {
         parser::Commands::BuildDev(build_parser) => {
-            build_lib();
-            build_bin(&build_parser.args);
+            let bin_folder = &build_bin(&build_parser.args)?;
+            if !build_parser.skip_libs {
+                build_lib(bin_folder)?;
+            }
+            Ok(())
         }
         parser::Commands::Bundle(bundle_parser) => {
             let version_string = bundle_parser.version;
@@ -38,17 +43,16 @@ fn main() -> Result<()> {
             bundle_kani(dir)?;
             bundle_cbmc(dir)?;
             bundle_kissat(dir)?;
-            // cbmc-viewer isn't bundled, it's pip install'd on first-time setup
 
             create_release_bundle(dir, &bundle_name)?;
 
             std::fs::remove_dir_all(dir)?;
 
             println!("\nSuccessfully built release bundle: {bundle_name}");
+
+            Ok(())
         }
     }
-
-    Ok(())
 }
 
 /// Ensures everything is good to go before we begin to build the release bundle.
@@ -69,11 +73,11 @@ fn prebundle(dir: &Path) -> Result<()> {
         bail!("Couldn't find the 'cbmc' binary to include in the release bundle.");
     }
 
+    build_tools(&["--release"])?;
+
     // Before we begin, ensure Kani is built successfully in release mode.
-    build_bin(&["--release"]);
     // And that libraries have been built too.
-    build_lib();
-    Ok(())
+    build_lib(&build_bin(&["--release"])?)
 }
 
 /// Copy Kani files into `dir`
@@ -85,10 +89,11 @@ fn bundle_kani(dir: &Path) -> Result<()> {
     let release = Path::new("./target/release");
     cp(&release.join("kani-driver"), &bin)?;
     cp(&release.join("kani-compiler"), &bin)?;
+    cp(&release.join("kani-cov"), &bin)?;
 
     // 2. Kani scripts
     let scripts = dir.join("scripts");
-    std::fs::create_dir(&scripts)?;
+    std::fs::create_dir(scripts)?;
 
     // 3. Kani libraries
     let library = dir.join("library");
@@ -100,9 +105,12 @@ fn bundle_kani(dir: &Path) -> Result<()> {
 
     // 4. Pre-compiled library files
     cp_dir(&kani_sysroot_lib(), dir)?;
+    cp_dir(kani_playback_lib().parent().unwrap(), dir)?;
+    cp_dir(kani_no_core_lib().parent().unwrap(), dir)?;
 
-    // 5. Record the exact toolchain we use
+    // 5. Record the exact toolchain and rustc version we use
     std::fs::write(dir.join("rust-toolchain-version"), env!("RUSTUP_TOOLCHAIN"))?;
+    std::fs::write(dir.join("rustc-version"), get_rustc_version()?)?;
 
     // 6. Include a licensing note
     cp(Path::new("tools/build-kani/license-notes.txt"), dir)?;
@@ -130,8 +138,6 @@ fn bundle_cbmc(dir: &Path) -> Result<()> {
     cp(&which::which("cbmc")?, &bin)?;
     cp(&which::which("goto-instrument")?, &bin)?;
     cp(&which::which("goto-cc")?, &bin)?;
-    cp(&which::which("symtab2gb")?, &bin)?;
-    // cbmc-viewer invokes this
     cp(&which::which("goto-analyzer")?, &bin)?;
 
     Ok(())
@@ -152,7 +158,7 @@ fn bundle_kissat(dir: &Path) -> Result<()> {
 /// This should include all files as `dir/<path>` in the tarball.
 /// e.g. `kani-1.0/bin/kani-compiler` not just `bin/kani-compiler`.
 fn create_release_bundle(dir: &Path, bundle: &str) -> Result<()> {
-    Command::new("tar").args(&["zcf", bundle]).arg(dir).run()
+    Command::new("tar").args(["zcf", bundle]).arg(dir).run()
 }
 
 /// Helper trait to fallibly run commands
@@ -183,6 +189,13 @@ fn cp(src: &Path, dst: &Path) -> Result<()> {
     let dst = dst.join(src.file_name().unwrap());
     std::fs::copy(src, dst)?;
     Ok(())
+}
+
+/// Record version of rustc being used to build Kani
+fn get_rustc_version() -> Result<String> {
+    let output = Command::new("rustc").arg("--version").output();
+    let rustc_version = String::from_utf8(output.unwrap().stdout)?;
+    Ok(rustc_version)
 }
 
 /// Copy files from `src` to  `dst` that respect the given pattern.

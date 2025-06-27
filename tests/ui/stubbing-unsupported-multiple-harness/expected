@@ -1,1 +1,0 @@
-error: Failed to apply stubs. Harnesses with stubs must be verified separately. Found: `check_no_stub`, `check_stub_bar`, `check_stub_foo`

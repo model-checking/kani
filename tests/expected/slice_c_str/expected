@@ -1,0 +1,7 @@
+warning: Found the following unsupported constructs:
+- C string literal
+
+Checking harness check_c_str...
+Failed Checks: C string literal is not currently supported by Kani.
+
+VERIFICATION:- FAILED

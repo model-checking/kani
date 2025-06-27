@@ -4,7 +4,9 @@
 use self::BuiltinFn::*;
 use super::{Expr, Location, Symbol, Type};
 
-#[derive(Debug, Clone, Copy)]
+use std::fmt::Display;
+
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BuiltinFn {
     Abort,
     Assert,
@@ -17,6 +19,8 @@ pub enum BuiltinFn {
     Copysignf,
     Cos,
     Cosf,
+    Error,
+    ErrorNoLocation,
     Exp,
     Exp2,
     Exp2f,
@@ -45,6 +49,7 @@ pub enum BuiltinFn {
     Memset,
     Nearbyint,
     Nearbyintf,
+    Posixmemalign,
     Pow,
     Powf,
     Powi,
@@ -58,13 +63,15 @@ pub enum BuiltinFn {
     Sinf,
     Sqrt,
     Sqrtf,
+    Sysconf,
     Trunc,
     Truncf,
+    Unlink,
 }
 
-impl ToString for BuiltinFn {
-    fn to_string(&self) -> String {
-        match self {
+impl Display for BuiltinFn {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let func = match self {
             Abort => "abort",
             Assert => "assert",
             CProverAssume => "__CPROVER_assume",
@@ -76,6 +83,8 @@ impl ToString for BuiltinFn {
             Copysignf => "copysignf",
             Cos => "cos",
             Cosf => "cosf",
+            Error => "__error",
+            ErrorNoLocation => "__errno_location",
             Exp => "exp",
             Exp2 => "exp2",
             Exp2f => "exp2f",
@@ -104,6 +113,7 @@ impl ToString for BuiltinFn {
             Memset => "memset",
             Nearbyint => "nearbyint",
             Nearbyintf => "nearbyintf",
+            Posixmemalign => "posix_memalign",
             Pow => "pow",
             Powf => "powf",
             Powi => "__builtin_powi",
@@ -117,10 +127,12 @@ impl ToString for BuiltinFn {
             Sinf => "sinf",
             Sqrt => "sqrt",
             Sqrtf => "sqrtf",
+            Sysconf => "sysconf",
             Trunc => "trunc",
             Truncf => "truncf",
-        }
-        .to_string()
+            Unlink => "unlink",
+        };
+        write!(f, "{func}")
     }
 }
 
@@ -139,6 +151,8 @@ impl BuiltinFn {
             Copysignf => vec![Type::float(), Type::float()],
             Cos => vec![Type::double()],
             Cosf => vec![Type::float()],
+            Error => vec![],
+            ErrorNoLocation => vec![],
             Exp => vec![Type::double()],
             Exp2 => vec![Type::double()],
             Exp2f => vec![Type::float()],
@@ -165,6 +179,7 @@ impl BuiltinFn {
             Memset => vec![Type::void_pointer(), Type::c_int(), Type::size_t()],
             Nearbyint => vec![Type::double()],
             Nearbyintf => vec![Type::float()],
+            Posixmemalign => vec![Type::void_pointer(), Type::size_t(), Type::size_t()],
             Powf => vec![Type::float(), Type::float()],
             Powi => vec![Type::double(), Type::c_int()],
             Powif => vec![Type::float(), Type::c_int()],
@@ -177,8 +192,10 @@ impl BuiltinFn {
             Sinf => vec![Type::float()],
             Sqrt => vec![Type::double()],
             Sqrtf => vec![Type::float()],
+            Sysconf => vec![Type::c_int()],
             Trunc => vec![Type::double()],
             Truncf => vec![Type::float()],
+            Unlink => vec![Type::c_char().to_pointer()],
         }
     }
 
@@ -195,6 +212,8 @@ impl BuiltinFn {
             Copysignf => Type::float(),
             Cos => Type::double(),
             Cosf => Type::float(),
+            Error => Type::c_int().to_pointer(),
+            ErrorNoLocation => Type::c_int().to_pointer(),
             Exp => Type::double(),
             Exp2 => Type::double(),
             Exp2f => Type::float(),
@@ -223,6 +242,7 @@ impl BuiltinFn {
             Memset => Type::void_pointer(),
             Nearbyint => Type::double(),
             Nearbyintf => Type::float(),
+            Posixmemalign => Type::c_int(),
             Pow => Type::double(),
             Powf => Type::float(),
             Powi => Type::double(),
@@ -236,8 +256,10 @@ impl BuiltinFn {
             Sinf => Type::float(),
             Sqrt => Type::double(),
             Sqrtf => Type::float(),
+            Sysconf => Type::c_long_int(),
             Trunc => Type::double(),
             Truncf => Type::float(),
+            Unlink => Type::c_int(),
         }
     }
 
@@ -254,6 +276,8 @@ impl BuiltinFn {
             Copysignf,
             Cos,
             Cosf,
+            Error,
+            ErrorNoLocation,
             Exp,
             Exp2,
             Exp2f,
@@ -282,6 +306,7 @@ impl BuiltinFn {
             Memset,
             Nearbyint,
             Nearbyintf,
+            Posixmemalign,
             Pow,
             Powf,
             Powi,
@@ -295,8 +320,10 @@ impl BuiltinFn {
             Sinf,
             Sqrt,
             Sqrtf,
+            Sysconf,
             Trunc,
             Truncf,
+            Unlink,
         ]
     }
 }
@@ -304,7 +331,7 @@ impl BuiltinFn {
 /// Converters: build symbols and expressions from Builtins
 impl BuiltinFn {
     pub fn as_symbol(&self) -> Symbol {
-        Symbol::builtin_function(&self.to_string(), self.param_types(), self.return_type())
+        Symbol::builtin_function(self.to_string(), self.param_types(), self.return_type())
     }
 
     pub fn as_expr(&self) -> Expr {

@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
-// kani-flags: --enable-unstable --extra-pointer-checks
+// kani-flags:-Z unstable-options --extra-pointer-checks
 // kani-verify-fail
 
 #[kani::proof]

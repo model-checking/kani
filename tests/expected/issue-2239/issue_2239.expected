@@ -1,0 +1,5 @@
+test_trivial_bounds.unreachable.1\
+- Status: FAILURE\
+- Description: "unreachable code"
+
+VERIFICATION:- FAILED

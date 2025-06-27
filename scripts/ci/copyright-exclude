@@ -10,7 +10,7 @@ Cargo.lock
 LICENSE-APACHE
 LICENSE-MIT
 editorconfig
-expected
+expected$
 gitattributes
 gitignore
 gitmodules

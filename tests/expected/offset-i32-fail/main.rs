@@ -12,6 +12,6 @@ fn test_offset() {
     let ptr: *const i32 = arr.as_ptr();
 
     unsafe {
-        let x = *offset(ptr, 3);
+        let x = *offset(ptr, 3isize);
     }
 }

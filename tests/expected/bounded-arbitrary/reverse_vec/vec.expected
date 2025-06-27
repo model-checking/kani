@@ -1,0 +1,8 @@
+Checking harness check_reverse_is_its_own_inverse_should_fail...\
+
+Checking harness check_reverse_is_its_own_inverse_incomplete...\
+
+Checking harness check_reverse_is_its_own_inverse...\
+
+Verification failed for - check_reverse_is_its_own_inverse_should_fail
+Complete - 2 successfully verified harnesses, 1 failures, 3 total.

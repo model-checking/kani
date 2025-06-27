@@ -1,0 +1,52 @@
+delayed_ub_trigger_copy.safety_check.\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u128`"\
+
+delayed_ub_structs.safety_check.\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `U`"
+
+delayed_ub_double_copy.safety_check.\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u128`"\
+
+delayed_ub_copy.safety_check.\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u128`"
+
+delayed_ub_closure_capture_laundered.safety_check.\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u128`"
+
+delayed_ub_closure_laundered.safety_check.\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u128`"
+
+delayed_ub_laundered.safety_check.\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u128`"
+
+delayed_ub_static.safety_check.\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u128`"
+
+delayed_ub_transmute.safety_check.\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u128`"
+
+delayed_ub.safety_check.\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u128`"
+
+Summary:
+Verification failed for - delayed_ub_trigger_copy
+Verification failed for - delayed_ub_structs
+Verification failed for - delayed_ub_double_copy
+Verification failed for - delayed_ub_copy
+Verification failed for - delayed_ub_closure_capture_laundered
+Verification failed for - delayed_ub_closure_laundered
+Verification failed for - delayed_ub_laundered
+Verification failed for - delayed_ub_static
+Verification failed for - delayed_ub_transmute
+Verification failed for - delayed_ub
+Complete - 0 successfully verified harnesses, 10 failures, 10 total.

@@ -4,9 +4,20 @@
 use crate::CbmcSolver;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use strum_macros::Display;
+
+/// A CBMC-level `assigns` contract that needs to be enforced on a function.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct AssignsContract {
+    /// The target of the contract
+    pub contracted_function_name: String,
+    /// A static global variable used to track recursion that must not be havocked.
+    /// This is only needed if the function is tagged with `#[kani::recursive]`
+    pub recursion_tracker: Option<String>,
+}
 
 /// We emit this structure for each annotated proof harness (`#[kani::proof]`) we find.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct HarnessMetadata {
     /// The fully qualified name the user gave to the function (i.e. includes the module path).
     pub pretty_name: String,
@@ -24,13 +35,19 @@ pub struct HarnessMetadata {
     pub goto_file: Option<PathBuf>,
     /// The `#[kani::<>]` attributes added to a harness.
     pub attributes: HarnessAttributes,
+    /// A CBMC-level assigns contract that should be enforced when running this harness.
+    pub contract: Option<AssignsContract>,
+    /// If the harness contains some usage of loop contracts.
+    pub has_loop_contracts: bool,
+    /// If the harness was automatically generated or manually written.
+    pub is_automatically_generated: bool,
 }
 
 /// The attributes added by the user to control how a harness is executed.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct HarnessAttributes {
     /// Whether the harness has been annotated with proof.
-    pub proof: bool,
+    pub kind: HarnessKind,
     /// Whether the harness is expected to panic or not.
     pub should_panic: bool,
     /// Optional data to store solver.
@@ -39,10 +56,44 @@ pub struct HarnessAttributes {
     pub unwind_value: Option<u32>,
     /// The stubs used in this harness.
     pub stubs: Vec<Stub>,
+    /// The name of the functions being stubbed by their contract.
+    pub verified_stubs: Vec<String>,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, Display, Serialize, Deserialize)]
+pub enum HarnessKind {
+    /// Function was annotated with `#[kani::proof]`.
+    #[strum(serialize = "#[kani::proof]")]
+    Proof,
+    /// Function was annotated with `#[kani::proof_for_contract(target_fn)]`.
+    #[strum(serialize = "#[kani::proof_for_contract]")]
+    ProofForContract { target_fn: String },
+    /// This is a test harness annotated with `#[test]`.
+    #[strum(serialize = "#[test]")]
+    Test,
+}
+
+impl HarnessAttributes {
+    /// Create a new harness of the provided kind.
+    pub fn new(kind: HarnessKind) -> HarnessAttributes {
+        HarnessAttributes {
+            kind,
+            should_panic: false,
+            solver: None,
+            unwind_value: None,
+            stubs: vec![],
+            verified_stubs: vec![],
+        }
+    }
+
+    /// Return whether this is a proof harness.
+    pub fn is_proof_harness(&self) -> bool {
+        matches!(self.kind, HarnessKind::Proof | HarnessKind::ProofForContract { .. })
+    }
 }
 
 /// The stubbing type.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Stub {
     pub original: String,
     pub replacement: String,

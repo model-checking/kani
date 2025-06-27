@@ -62,7 +62,16 @@ run:
               anyof:
                 - schema:
                     type: {}
-filter: {}
+filters:
+    type: list
+    default: []
+    schema:
+        type: dict
+        keysrules:
+            type: string
+            allowed: ["command_line"]
+        valuesrules:
+            type: string
 visualize: {}
 """)
 

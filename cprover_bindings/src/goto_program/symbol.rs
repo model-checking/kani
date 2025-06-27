@@ -4,8 +4,12 @@ use super::super::utils::aggr_tag;
 use super::{DatatypeComponent, Expr, Location, Parameter, Stmt, Type};
 use crate::{InternStringOption, InternedString};
 
+use std::fmt::Display;
+
 /// Based off the CBMC symbol implementation here:
 /// <https://github.com/diffblue/cbmc/blob/develop/src/util/symbol.h>
+///
+/// TODO: We should consider using BitFlags for all the boolean flags.
 #[derive(Clone, Debug)]
 pub struct Symbol {
     /// Unique identifier. Mangled name from compiler `foo12_bar17_x@1`
@@ -13,8 +17,8 @@ pub struct Symbol {
     pub location: Location,
     pub typ: Type,
     pub value: SymbolValues,
-
-    /// Optional debugging information
+    /// Contracts to be enforced (only supported for functions)
+    pub contract: Option<Box<FunctionContract>>,
 
     /// Local name `x`
     pub base_name: Option<InternedString>,
@@ -42,6 +46,65 @@ pub struct Symbol {
     pub is_thread_local: bool,
     pub is_volatile: bool,
     pub is_weak: bool,
+
+    /// This flag marks a variable as constant (IrepId: `ID_C_constant`).
+    ///
+    /// In CBMC, this is a property of the type or expression. However, we keep it here to avoid
+    /// having to propagate the attribute to all variants of `Type` and `Expr`.
+    ///
+    /// During contract verification, CBMC will not havoc static variables marked as constant.
+    pub is_static_const: bool,
+}
+
+/// The equivalent of a "mathematical function" in CBMC. Semantically this is an
+/// anonymous function object, similar to a closure, but without closing over an
+/// environment.
+///
+/// This is only valid for use as a function contract. It may not perform side
+/// effects, a property that is enforced on the CBMC side.
+///
+/// The precise nomenclature is that in CBMC a contract value has *type*
+/// `mathematical_function` and values of that type are `lambda`s. Since this
+/// struct represents such values it is named `Lambda`.
+#[derive(Debug, Clone)]
+pub struct Lambda {
+    pub arguments: Vec<Parameter>,
+    pub body: Expr,
+}
+
+impl Lambda {
+    pub fn as_contract_for(
+        fn_ty: &Type,
+        return_var_name: Option<InternedString>,
+        body: Expr,
+    ) -> Self {
+        let arguments = match fn_ty {
+            Type::Code { parameters, return_type } => {
+                [Parameter::new(None, return_var_name, (**return_type).clone())]
+                    .into_iter()
+                    .chain(parameters.iter().cloned())
+                    .collect()
+            }
+            _ => panic!(
+                "Contract lambdas can only be generated for `Code` types, received {fn_ty:?}"
+            ),
+        };
+        Self { arguments, body }
+    }
+}
+
+/// The CBMC representation of a function contract. Represents
+/// https://diffblue.github.io/cbmc/contracts-user.html but currently only assigns clauses are
+/// supported.
+#[derive(Clone, Debug)]
+pub struct FunctionContract {
+    pub(crate) assigns: Vec<Lambda>,
+}
+
+impl FunctionContract {
+    pub fn new(assigns: Vec<Lambda>) -> Self {
+        Self { assigns }
+    }
 }
 
 /// Currently, only C is understood by CBMC.
@@ -84,6 +147,7 @@ impl Symbol {
             base_name,
             pretty_name,
 
+            contract: None,
             module: None,
             mode: SymbolModes::C,
             // global properties
@@ -101,9 +165,26 @@ impl Symbol {
             is_lvalue: false,
             is_parameter: false,
             is_static_lifetime: false,
+            is_static_const: false,
             is_thread_local: false,
             is_volatile: false,
             is_weak: false,
+        }
+    }
+
+    pub fn update(&mut self, value: SymbolValues) {
+        self.value = value;
+    }
+
+    /// Add this contract to the symbol (symbol must be a function) or fold the
+    /// conditions into an existing contract.
+    pub fn attach_contract(&mut self, contract: FunctionContract) {
+        assert!(self.typ.is_code());
+        match self.contract {
+            Some(ref mut prior) => {
+                prior.assigns.extend(contract.assigns);
+            }
+            None => self.contract = Some(Box::new(contract)),
         }
     }
 
@@ -295,6 +376,11 @@ impl Symbol {
         self
     }
 
+    pub fn set_is_static_const(&mut self, v: bool) -> &mut Symbol {
+        self.is_static_const = v;
+        self
+    }
+
     pub fn with_is_state_var(mut self, v: bool) -> Symbol {
         self.is_state_var = v;
         self
@@ -315,8 +401,24 @@ impl Symbol {
         self
     }
 
+    pub fn set_pretty_name<T: Into<InternedString>>(&mut self, pretty_name: T) -> &mut Symbol {
+        self.pretty_name = Some(pretty_name.into());
+        self
+    }
+
     pub fn with_is_hidden(mut self, hidden: bool) -> Symbol {
         self.is_auxiliary = hidden;
+        self
+    }
+
+    pub fn set_is_hidden(&mut self, hidden: bool) -> &mut Symbol {
+        self.is_auxiliary = hidden;
+        self
+    }
+
+    /// Set `is_property`.
+    pub fn with_is_property(mut self, v: bool) -> Self {
+        self.is_property = v;
         self
     }
 }
@@ -380,14 +482,13 @@ impl SymbolValues {
     }
 }
 
-/// ToString
-
-impl ToString for SymbolModes {
-    fn to_string(&self) -> String {
-        match self {
+/// Display
+impl Display for SymbolModes {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mode = match self {
             SymbolModes::C => "C",
             SymbolModes::Rust => "Rust",
-        }
-        .to_string()
+        };
+        write!(f, "{mode}")
     }
 }

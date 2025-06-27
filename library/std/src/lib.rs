@@ -12,12 +12,7 @@
 // re-export all std symbols
 pub use std::*;
 
-// Bind `core::assert` to a different name to avoid possible name conflicts if a
-// crate uses `extern crate std as core`. See
-// https://github.com/model-checking/kani/issues/1949
-#[allow(unused_imports)]
-use core::assert as __kani__workaround_core_assert;
-
+#[cfg(not(feature = "concrete_playback"))]
 // Override process calls with stubs.
 pub mod process;
 
@@ -41,14 +36,22 @@ pub mod process;
 /// ```
 /// the assert message will be:
 /// "The sum of {} and {} is {}", a, b, c
+#[cfg(not(feature = "concrete_playback"))]
 #[macro_export]
 macro_rules! assert {
     ($cond:expr $(,)?) => {
         // The double negation is to resolve https://github.com/model-checking/kani/issues/2108
         kani::assert(!!$cond, concat!("assertion failed: ", stringify!($cond)));
     };
-    ($cond:expr, $($arg:tt)+) => {{
-        kani::assert(!!$cond, concat!(stringify!($($arg)+)));
+    // Before edition 2021, the `assert!` macro could take a single argument
+    // that wasn't a string literal. This is not supported in edition 2021 and above.
+    // Because we reexport the 2021 edition macro, we need to support this
+    // case. For this, if there is a single argument we do the following:
+    // If it is a literal: Just pass it through and stringify it.
+    // If it isn't a literal: We add a default format
+    // specifier to the macro (see https://github.com/model-checking/kani/issues/1375).
+    ($cond:expr, $first:literal $(,)?) => {{
+        kani::assert(!!$cond, stringify!($first));
         // Process the arguments of the assert inside an unreachable block. This
         // is to make sure errors in the arguments (e.g. an unknown variable or
         // an argument that does not implement the Display or Debug traits) are
@@ -61,7 +64,21 @@ macro_rules! assert {
         // strategy, which is tracked in
         // https://github.com/model-checking/kani/issues/692
         if false {
-            __kani__workaround_core_assert!(true, $($arg)+);
+            kani::__kani__workaround_core_assert!(true, "{}", $first);
+        }
+    }};
+    ($cond:expr, $first:expr $(,)?) => {{
+        kani::assert(!!$cond, stringify!($first));
+        // See comment above
+        if false {
+            kani::__kani__workaround_core_assert!(true, "{}", $first);
+        }
+    }};
+    ($cond:expr, $($arg:tt)+) => {{
+        kani::assert(!!$cond, concat!(stringify!($($arg)+)));
+        // See comment above
+        if false {
+            kani::__kani__workaround_core_assert!(true, $($arg)+);
         }
     }};
 }
@@ -77,6 +94,7 @@ macro_rules! assert {
 //    (see https://github.com/model-checking/kani/issues/13)
 // 3. Call kani::assert so that any instrumentation that it does (e.g. injecting
 //    reachability checks) is done for assert_eq and assert_ne
+#[cfg(not(feature = "concrete_playback"))]
 #[macro_export]
 macro_rules! assert_eq {
     ($left:expr, $right:expr $(,)?) => ({
@@ -89,6 +107,7 @@ macro_rules! assert_eq {
     });
 }
 
+#[cfg(not(feature = "concrete_playback"))]
 #[macro_export]
 macro_rules! assert_ne {
     ($left:expr, $right:expr $(,)?) => ({
@@ -102,16 +121,19 @@ macro_rules! assert_ne {
 }
 
 // Treat the debug assert macros same as non-debug ones
+#[cfg(not(feature = "concrete_playback"))]
 #[macro_export]
 macro_rules! debug_assert {
     ($($x:tt)*) => ({ $crate::assert!($($x)*); })
 }
 
+#[cfg(not(feature = "concrete_playback"))]
 #[macro_export]
 macro_rules! debug_assert_eq {
     ($($x:tt)*) => ({ $crate::assert_eq!($($x)*); })
 }
 
+#[cfg(not(feature = "concrete_playback"))]
 #[macro_export]
 macro_rules! debug_assert_ne {
     ($($x:tt)*) => ({ $crate::assert_ne!($($x)*); })
@@ -119,28 +141,33 @@ macro_rules! debug_assert_ne {
 
 // Override the print macros to skip all the printing functionality (which
 // is not relevant for verification)
+#[cfg(not(feature = "concrete_playback"))]
 #[macro_export]
 macro_rules! print {
     ($($x:tt)*) => {{ let _ = format_args!($($x)*); }};
 }
 
+#[cfg(not(feature = "concrete_playback"))]
 #[macro_export]
 macro_rules! eprint {
     ($($x:tt)*) => {{ let _ = format_args!($($x)*); }};
 }
 
+#[cfg(not(feature = "concrete_playback"))]
 #[macro_export]
 macro_rules! println {
-    () => { };
+    () => { $crate::print!("\n") };
     ($($x:tt)*) => {{ let _ = format_args!($($x)*); }};
 }
 
+#[cfg(not(feature = "concrete_playback"))]
 #[macro_export]
 macro_rules! eprintln {
-    () => { };
+    () => { $crate::eprint!("\n") };
     ($($x:tt)*) => {{ let _ = format_args!($($x)*); }};
 }
 
+#[cfg(not(feature = "concrete_playback"))]
 #[macro_export]
 macro_rules! unreachable {
     // The argument, if present, is a literal that represents the error message, i.e.:
@@ -165,12 +192,13 @@ macro_rules! unreachable {
     // handle.
     ($fmt:expr, $($arg:tt)*) => {{
         if false {
-            __kani__workaround_core_assert!(true, $fmt, $($arg)+);
+            kani::__kani__workaround_core_assert!(true, $fmt, $($arg)+);
         }
         kani::panic(concat!("internal error: entered unreachable code: ",
         stringify!($fmt, $($arg)*)))}};
 }
 
+#[cfg(not(feature = "concrete_playback"))]
 #[macro_export]
 macro_rules! panic {
     // No argument is given.
@@ -180,7 +208,10 @@ macro_rules! panic {
     // The argument is a literal that represents the error message, i.e.:
     // `panic!("Error message")`
     ($msg:literal $(,)?) => ({
-        kani::panic(concat!($msg));
+        if false {
+            kani::__kani__workaround_core_assert!(true, $msg);
+        }
+        kani::panic(concat!($msg))
     });
     // The argument is an expression, such as a variable.
     // ```
@@ -197,7 +228,7 @@ macro_rules! panic {
     // `panic!("Error: {}", code);`
     ($($arg:tt)+) => {{
         if false {
-            __kani__workaround_core_assert!(true, $($arg)+);
+            kani::__kani__workaround_core_assert!(true, $($arg)+);
         }
         kani::panic(stringify!($($arg)+));
     }};

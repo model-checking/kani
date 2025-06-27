@@ -2,57 +2,89 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use crate::codegen_cprover_gotoc::GotocCtx;
+use cbmc::InternedString;
 use cbmc::goto_program::Stmt;
-use rustc_middle::mir::BasicBlock;
-use rustc_middle::mir::Body;
-use rustc_middle::ty::Instance;
-use rustc_middle::ty::PolyFnSig;
+use rustc_middle::ty::Instance as InstanceInternal;
+use rustc_smir::rustc_internal;
+use stable_mir::CrateDef;
+use stable_mir::mir::mono::Instance;
+use stable_mir::mir::{Body, Local, LocalDecl, Rvalue, visit::Location, visit::MirVisitor};
+use std::collections::{HashMap, HashSet};
 
 /// This structure represents useful data about the function we are currently compiling.
 #[derive(Debug)]
 pub struct CurrentFnCtx<'tcx> {
     /// The GOTO block we are compiling into
     block: Vec<Stmt>,
-    /// The current MIR basic block
-    current_bb: Option<BasicBlock>,
     /// The codegen instance for the current function
-    instance: Instance<'tcx>,
+    instance: Instance,
     /// The crate this function is from
     krate: String,
-    /// The goto labels for all blocks
-    labels: Vec<String>,
-    /// The mir for the current instance
-    mir: &'tcx Body<'tcx>,
+    /// The current instance. This is using the internal representation.
+    instance_internal: InstanceInternal<'tcx>,
+    /// A list of local declarations used to retrieve MIR component types.
+    locals: Vec<LocalDecl>,
+    /// A list of pretty names for locals that corrspond to user variables.
+    local_names: HashMap<Local, InternedString>,
+    /// Collection of variables that are used in a reference or address-of expression.
+    address_taken_locals: HashSet<Local>,
     /// The symbol name of the current function
     name: String,
     /// A human readable pretty name for the current function
     readable_name: String,
-    /// The signature of the current function
-    sig: PolyFnSig<'tcx>,
     /// A counter to enable creating temporary variables
     temp_var_counter: u64,
 }
 
+struct AddressTakenLocalsCollector {
+    /// Locals that appear in `Rvalue::Ref` or `Rvalue::AddressOf` expressions.
+    address_taken_locals: HashSet<Local>,
+}
+
+impl MirVisitor for AddressTakenLocalsCollector {
+    fn visit_rvalue(&mut self, rvalue: &Rvalue, _location: Location) {
+        match rvalue {
+            Rvalue::Ref(_, _, p) | Rvalue::AddressOf(_, p) => {
+                if p.projection.is_empty() {
+                    self.address_taken_locals.insert(p.local);
+                }
+            }
+            _ => (),
+        }
+    }
+}
+
 /// Constructor
 impl<'tcx> CurrentFnCtx<'tcx> {
-    pub fn new(instance: Instance<'tcx>, gcx: &GotocCtx<'tcx>, labels: Vec<String>) -> Self {
+    pub fn new(instance: Instance, gcx: &GotocCtx<'tcx>, body: &Body) -> Self {
+        let instance_internal = rustc_internal::internal(gcx.tcx, instance);
+        let readable_name = instance.name();
+        let name = instance.mangled_name();
+        let locals = body.locals().to_vec();
+        let local_names = body
+            .var_debug_info
+            .iter()
+            .filter_map(|info| info.local().map(|local| (local, (&info.name).into())))
+            .collect::<HashMap<_, _>>();
+        let mut visitor = AddressTakenLocalsCollector { address_taken_locals: HashSet::new() };
+        visitor.visit_body(body);
         Self {
             block: vec![],
-            current_bb: None,
             instance,
-            krate: gcx.get_crate(instance),
-            labels,
-            mir: gcx.tcx.instance_mir(instance.def),
-            name: gcx.symbol_name(instance),
-            readable_name: gcx.readable_instance_name(instance),
-            sig: gcx.fn_sig_of_instance(instance),
+            instance_internal,
+            krate: instance.def.krate().name,
+            locals,
+            local_names,
+            address_taken_locals: visitor.address_taken_locals,
+            name,
+            readable_name,
             temp_var_counter: 0,
         }
     }
 }
 
 /// Setters
-impl<'tcx> CurrentFnCtx<'tcx> {
+impl CurrentFnCtx<'_> {
     /// Returns the current block, replacing it with an empty vector.
     pub fn extract_block(&mut self) -> Vec<Stmt> {
         std::mem::take(&mut self.block)
@@ -67,31 +99,17 @@ impl<'tcx> CurrentFnCtx<'tcx> {
     pub fn push_onto_block(&mut self, s: Stmt) {
         self.block.push(s)
     }
-
-    pub fn reset_current_bb(&mut self) {
-        self.current_bb = None;
-    }
-
-    pub fn set_current_bb(&mut self, bb: BasicBlock) {
-        self.current_bb = Some(bb);
-    }
 }
 
 /// Getters
 impl<'tcx> CurrentFnCtx<'tcx> {
     /// The function we are currently compiling
-    pub fn instance(&self) -> Instance<'tcx> {
+    pub fn instance(&self) -> InstanceInternal<'tcx> {
+        self.instance_internal
+    }
+
+    pub fn instance_stable(&self) -> Instance {
         self.instance
-    }
-
-    /// The crate that function came from
-    pub fn krate(&self) -> String {
-        self.krate.to_string()
-    }
-
-    /// The MIR for the function we are currently compiling
-    pub fn mir(&self) -> &'tcx Body<'tcx> {
-        self.mir
     }
 
     /// The name of the function we are currently compiling
@@ -104,9 +122,16 @@ impl<'tcx> CurrentFnCtx<'tcx> {
         &self.readable_name
     }
 
-    /// The signature of the function we are currently compiling
-    pub fn sig(&self) -> PolyFnSig<'tcx> {
-        self.sig
+    pub fn locals(&self) -> &[LocalDecl] {
+        &self.locals
+    }
+
+    pub fn local_name(&self, local: Local) -> Option<InternedString> {
+        self.local_names.get(&local).copied()
+    }
+
+    pub fn is_address_taken_local(&self, local: Local) -> bool {
+        self.address_taken_locals.contains(&local)
     }
 }
 
@@ -115,9 +140,5 @@ impl CurrentFnCtx<'_> {
     /// Is the current function from the `std` crate?
     pub fn is_std(&self) -> bool {
         self.krate == "std" || self.krate == "core"
-    }
-
-    pub fn find_label(&self, bb: &BasicBlock) -> String {
-        self.labels[bb.index()].clone()
     }
 }

@@ -10,5 +10,5 @@ edition = "2021"
 [dependencies]
 other_crate = { path = "other_crate" }
 
-[package.metadata.kani]
-flags = { enable-unstable=true, enable-stubbing=true }
+[package.metadata.kani.unstable]
+stubbing = true

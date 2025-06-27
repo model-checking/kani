@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// kani-flags: --no-restrict-vtable
+// kani-flags: --no-restrict-vtable -Z restrict-vtable
 // Tracking issue for the need for this flag:
 // https://github.com/model-checking/kani/issues/802
 

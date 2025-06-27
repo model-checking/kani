@@ -8,7 +8,7 @@
 fn main() {}
 
 #[kani::proof(foo)]
-async fn test_async_proof_with_arguments() {}
+async fn test_async_proof_with_options() {}
 
 #[kani::proof]
-async fn test_async_proof_on_function_with_inputs(_: ()) {}
+async fn test_async_proof_on_function_with_arguments(_: ()) {}

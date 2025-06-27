@@ -1,2 +1,2 @@
 expected return type with integer elements, found `f32x2` with non-integer `f32`
-error: aborting due to previous error
+error: aborting due to 1 previous error

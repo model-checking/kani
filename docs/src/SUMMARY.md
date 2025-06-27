@@ -7,17 +7,25 @@
   - [Using Kani](./usage.md)
   - [Verification results](./verification-results.md)
 
+- [Crates Documentation](./crates/index.md)
+
 - [Tutorial](./kani-tutorial.md)
   - [First steps](./tutorial-first-steps.md)
   - [Failures that Kani can spot](./tutorial-kinds-of-failure.md)
   - [Loop unwinding](./tutorial-loop-unwinding.md)
   - [Nondeterministic variables](./tutorial-nondeterministic-variables.md)
-  - [Debugging verification failures](./debugging-verification-failures.md)
 
 - [Reference](./reference.md)
   - [Attributes](./reference/attributes.md)
-  - [Stubbing](./reference/stubbing.md)
-
+  - [Bounded Non-deterministic variables](./reference/bounded_arbitrary.md)
+  - [Experimental features](./reference/experimental/experimental-features.md)
+    - [Automatic Harness Generation](./reference/experimental/autoharness.md)
+    - [Coverage](./reference/experimental/coverage.md)
+    - [Stubbing](./reference/experimental/stubbing.md)
+    - [Contracts](./reference/experimental/contracts.md)
+    - [Loop Contracts](./reference/experimental/loop-contracts.md)
+    - [Concrete Playback](./reference/experimental/concrete-playback.md)
+    - [Quantifiers](./reference/experimental/quantifiers.md)
 - [Application](./application.md)
   - [Comparison with other tools](./tool-comparison.md)
   - [Where to start on real code](./tutorial-real-code.md)
@@ -26,12 +34,15 @@
   - [Coding conventions](./conventions.md)
   - [Working with CBMC](./cbmc-hacks.md)
   - [Working with `rustc`](./rustc-hacks.md)
+  - [Migrating to StableMIR](./stable-mir.md)
   - [Command cheat sheets](./cheat-sheets.md)
-  - [cargo kani assess](./dev-assess.md)
   - [Testing](./testing.md)
     - [Regression testing](./regression-testing.md)
-    - [Book runner](./bookrunner.md)
-    - [(Experimental) Testing with a Large Number of Repositories](./repo-crawl.md)
+  - [Performance comparisons](./performance-comparisons.md)
+    - [`benchcomp` command line](./benchcomp-cli.md)
+    - [`benchcomp` configuration file](./benchcomp-conf.md)
+    - [Custom parsers](./benchcomp-parse.md)
+  - [Profiling Kani](./profiling.md)
 
 - [Limitations](./limitations.md)
   - [Undefined behaviour](./undefined-behaviour.md)
@@ -39,8 +50,6 @@
     - [Intrinsics](./rust-feature-support/intrinsics.md)
     - [Unstable features](./rust-feature-support/unstable.md)
   - [Overrides](./overrides.md)
-
-- [Crates Documentation](./crates/index.md)
 
 ---
 

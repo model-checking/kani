@@ -1,0 +1,11 @@
+   1|     | // Copyright Kani Contributors\
+   2|     | // SPDX-License-Identifier: Apache-2.0 OR MIT\
+   3|     | \
+   4|    1| fn div(x: u16, y: u16) -> u16 {\
+   5|    1|     if y != 0 { x / y } else { ```0''' }\
+   6|     | }\
+   7|     | \
+   8|     | #[kani::proof]\
+   9|    1| fn main() {\
+  10|    1|     div(11, 3);\
+  11|     | }\

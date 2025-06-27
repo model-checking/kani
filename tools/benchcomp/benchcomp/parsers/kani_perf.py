@@ -2,9 +2,14 @@
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
 
+import os
 import pathlib
-import textwrap
 import re
+import textwrap
+
+import yaml
+
+import benchcomp.parsers
 
 
 def get_description():
@@ -25,6 +30,19 @@ def _get_metrics():
             "pat": re.compile(r"Runtime Solver: (?P<value>[-e\d\.]+)s"),
             "parse": float,
         },
+        "removed_program_steps": {
+            "pat": re.compile(r"slicing removed (?P<value>\d+) assignments"),
+            "parse": int,
+        },
+        "number_program_steps": {
+            "pat": re.compile(r"size of program expression: (?P<value>\d+) steps"),
+            "parse": int,
+        },
+        "number_vccs": {
+            "pat": re.compile(
+                r"Generated \d+ VCC\(s\), (?P<value>\d+) remaining after simplification"),
+            "parse": int,
+        },
         "symex_runtime": {
             "pat": re.compile(r"Runtime Symex: (?P<value>[-e\d\.]+)s"),
             "parse": float,
@@ -41,6 +59,11 @@ def get_metrics():
     for metric, info in metrics.items():
         for field in ("pat", "parse"):
             info.pop(field)
+
+    # This is not a metric we return; it is used to find the correct value for
+    # the number_program_steps metric
+    metrics.pop("removed_program_steps", None)
+
     return metrics
 
 
@@ -76,7 +99,26 @@ def main(root_dir):
                         benchmarks[bench_name]["metrics"][metric] = parse(m["value"])
                     break
 
+    for bench_name, bench_info in benchmarks.items():
+        try:
+            n_steps = bench_info["metrics"]["number_program_steps"]
+            rm_steps = bench_info["metrics"]["removed_program_steps"]
+            bench_info["metrics"]["number_program_steps"] = n_steps - rm_steps
+            bench_info["metrics"].pop("removed_program_steps", None)
+        except KeyError:
+            pass
+
     return {
         "metrics": get_metrics(),
         "benchmarks": benchmarks,
     }
+
+
+if __name__ == "__main__":
+    try:
+        result = main(os.getcwd())
+        print(yaml.dump(result, default_flow_style=False))
+    except BaseException:
+        print(yaml.dump(
+            benchcomp.parsers.get_empty_parser_result(),
+            default_flow_style=False))

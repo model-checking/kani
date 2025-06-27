@@ -7,7 +7,8 @@ use std::mem::size_of_val;
 
 /// Structure with a raw string (i.e.: [char]).
 struct MyStr {
-    header: u16,
+    header_0: u8,
+    header_1: u8,
     data: str,
 }
 
@@ -26,7 +27,6 @@ impl MyStr {
 fn sanity_check_my_str() {
     let mut buf = String::from("123456");
     let my_str = MyStr::new(&mut buf);
-    my_str.header = 0;
 
     assert_eq!(size_of_val(my_str), 6);
     assert_eq!(my_str.data.len(), 4);
@@ -54,6 +54,6 @@ fn check_size_of_val() {
     let mut buf_1 = String::from("001");
     let my_slice = &[MyStr::new(&mut buf_0), MyStr::new(&mut buf_1)];
     assert_eq!(size_of_val(my_slice), 32); // Slice of 2 fat pointers.
-    assert_eq!(size_of_val(my_slice[0]), 4); // Size of a fat pointer.
+    assert_eq!(size_of_val(my_slice[0]), 3); // Size of a fat pointer.
     assert_eq!(size_of_val(&my_slice[0].data), 1); // Size of str.
 }

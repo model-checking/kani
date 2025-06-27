@@ -3,6 +3,7 @@
 name: Kani Format Check
 on:
   pull_request:
+  merge_group:
   push:
     # Not just any push, as that includes tags.
     # We don't want to re-trigger this workflow when tagging an existing commit.
@@ -14,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Kani
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Execute copyright check
         run: ./scripts/ci/run-copyright-check.sh
@@ -30,15 +31,15 @@ jobs:
           ./scripts/run-autopep8.sh
 
   clippy-check:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout Kani
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
         with:
-          os: ubuntu-20.04
+          os: ubuntu-24.04
 
       - name: 'Install jq for parsing.'
         run: |
@@ -46,7 +47,8 @@ jobs:
 
       - name: 'Run Clippy'
         run: |
-          cargo clippy --all -- -D warnings
+          cargo clippy --workspace --tests -- -D warnings
+          RUSTFLAGS="--cfg=kani_sysroot" cargo clippy --workspace -- -D warnings
 
       - name: 'Print Clippy Statistics'
         run: |

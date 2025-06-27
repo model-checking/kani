@@ -9,5 +9,6 @@
 fn main() {
     let a: i32 = kani::any();
     let b: i32 = kani::any();
-    unsafe { std::intrinsics::unchecked_sub(a, b) };
+    // Black box this so it doesn't get pruned by the compiler.
+    std::hint::black_box(unsafe { std::intrinsics::unchecked_sub(a, b) });
 }

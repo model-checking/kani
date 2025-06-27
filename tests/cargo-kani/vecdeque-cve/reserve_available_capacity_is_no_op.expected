@@ -1,16 +1,16 @@
-fixed::VecDeque::<u8>::handle_capacity_increase.assertion.7\
+fixed::VecDeque::<u8>::handle_capacity_increase.assertion\
 Status: UNREACHABLE\
 Description: "assertion failed: self.head < self.tail"
 
-fixed::VecDeque::<u8>::handle_capacity_increase.assertion.8\
+fixed::VecDeque::<u8>::handle_capacity_increase.assertion\
 Status: UNREACHABLE\
 Description: "assertion failed: self.head < self.cap()"
 
-fixed::VecDeque::<u8>::handle_capacity_increase.assertion.9\
+fixed::VecDeque::<u8>::handle_capacity_increase.assertion\
 Status: UNREACHABLE\
 Description: "assertion failed: self.tail < self.cap()"
 
-fixed::VecDeque::<u8>::handle_capacity_increase.assertion.10\
+fixed::VecDeque::<u8>::handle_capacity_increase.assertion\
 Status: UNREACHABLE\
 Description: "assertion failed: self.cap().count_ones() == 1"
 

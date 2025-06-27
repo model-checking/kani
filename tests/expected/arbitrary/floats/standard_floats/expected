@@ -1,0 +1,58 @@
+Checking harness check_f64...
+
+Status: SATISFIED\
+Description: "This may be true"\
+in function check_f64
+
+Status: SATISFIED\
+Description: "This may also be true"\
+in function check_f64
+
+Status: SATISFIED\
+Description: "NaN should be valid float"\
+in function check_f64
+
+Status: SATISFIED\
+Description: "Subnormal should be valid float"\
+in function check_f64
+
+Status: SATISFIED\
+Description: "Normal should be valid float"\
+in function check_f64
+
+Status: SATISFIED\
+Description: "Non-finite numbers are valid float"\
+in function check_f64
+
+
+Checking harness check_f32...
+
+Status: SATISFIED\
+Description: "This may be true"\
+in function check_f32
+
+Status: SATISFIED\
+Description: "This may also be true"\
+in function check_f32
+
+Status: SATISFIED\
+Description: "NaN should be valid float"\
+in function check_f32
+
+Status: SATISFIED\
+Description: "Subnormal should be valid float"\
+in function check_f32
+
+Status: SATISFIED\
+Description: "Normal should be valid float"\
+in function check_f32
+
+Status: SATISFIED\
+Description: "Non-finite numbers are valid float"\
+in function check_f32
+
+ ** 6 of 6 cover properties satisfied
+
+VERIFICATION:- SUCCESSFUL
+
+Complete - 2 successfully verified harnesses, 0 failures, 2 total.

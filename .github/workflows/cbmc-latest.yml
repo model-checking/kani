@@ -19,10 +19,10 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macos-11, ubuntu-20.04, ubuntu-22.04]
+        os: [macos-13, ubuntu-22.04, ubuntu-24.04]
     steps:
       - name: Checkout Kani under "kani"
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           path: kani
 
@@ -32,21 +32,27 @@ jobs:
           os: ${{ matrix.os }}
           kani_dir: 'kani'
 
-      - name: Build Kani
-        working-directory: ./kani
-        run: cargo build-dev
-
       - name: Checkout CBMC under "cbmc"
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: diffblue/cbmc
           path: cbmc
 
-      - name: Build CBMC
+      - name: Build CBMC (Linux)
+        if: ${{ startsWith(matrix.os, 'ubuntu') }}
         working-directory: ./cbmc
         run: |
-          make -C src minisat2-download cadical-download
-          make -C src -j4 MINISAT2=../../minisat-2.2.1 CADICAL=../../cadical
+          cmake -S . -Bbuild -DWITH_JBMC=OFF -Dsat_impl="minisat2;cadical"
+          cmake --build build -- -j 4
+          # Prepend the bin directory to $PATH
+          echo "${GITHUB_WORKSPACE}/cbmc/build/bin" >> $GITHUB_PATH
+
+      - name: Build CBMC (macOS)
+        if: ${{ startsWith(matrix.os, 'macos') }}
+        working-directory: ./cbmc
+        run: |
+          cmake -S . -Bbuild -DWITH_JBMC=OFF -Dsat_impl="minisat2;cadical" -DCMAKE_CXX_COMPILER=$(which clang++)
+          cmake --build build -- -j 4
           # Prepend the bin directory to $PATH
           echo "${GITHUB_WORKSPACE}/cbmc/build/bin" >> $GITHUB_PATH
 
@@ -55,17 +61,17 @@ jobs:
         run: ./scripts/kani-regression.sh
 
   perf:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout Kani under "kani"
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           path: kani
 
       - name: Setup Kani Dependencies
         uses: ./kani/.github/actions/setup
         with:
-          os: ubuntu-20.04
+          os: ubuntu-24.04
           kani_dir: 'kani'
 
       - name: Build Kani using release mode
@@ -73,7 +79,7 @@ jobs:
         run: cargo build-dev -- --release
 
       - name: Checkout CBMC under "cbmc"
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: diffblue/cbmc
           path: cbmc
@@ -81,7 +87,7 @@ jobs:
       - name: Build CBMC
         working-directory: ./cbmc
         run: |
-          cmake -S . -Bbuild -DWITH_JBMC=OFF
+          cmake -S . -Bbuild -DWITH_JBMC=OFF -Dsat_impl="minisat2;cadical"
           cmake --build build -- -j 4
           # Prepend the bin directory to $PATH
           echo "${GITHUB_WORKSPACE}/cbmc/build/bin" >> $GITHUB_PATH

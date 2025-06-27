@@ -10,12 +10,9 @@ RUN echo $' \n\
 with import <nixpkgs> {}; \n\
 mkShell { \n\
   packages = [ \n\
-    ctags \n\
     curl \n\
     gcc \n\
     patchelf \n\
-    python310 \n\
-    python310Packages.pip \n\
     rustup \n\
   ]; \n\
 }' >> ./default.nix

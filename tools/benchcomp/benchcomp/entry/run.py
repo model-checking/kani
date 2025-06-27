@@ -10,17 +10,19 @@
 
 
 import dataclasses
-import importlib
 import logging
 import os
 import pathlib
+import re
 import shutil
 import subprocess
+import typing
 import uuid
 
 import yaml
 
 import benchcomp
+import benchcomp.parsers
 
 
 @dataclasses.dataclass
@@ -30,7 +32,7 @@ class _SingleInvocation:
     suite_id: str
     variant_id: str
 
-    parser: str
+    parse: typing.Any
 
     suite_yaml_out_dir: pathlib.Path
     copy_benchmarks_dir: bool
@@ -38,6 +40,7 @@ class _SingleInvocation:
     command_line: str
     directory: pathlib.Path
 
+    cleanup_directory: bool
     env: dict = dataclasses.field(default_factory=dict)
     timeout: int = None
     memout: int = None
@@ -51,9 +54,10 @@ class _SingleInvocation:
         else:
             self.working_copy = pathlib.Path(self.directory)
 
+
     def __call__(self):
-        env = dict(os.environ)
-        env.update(self.env)
+        update_environment_with = _EnvironmentUpdater()
+        env = update_environment_with(self.env)
 
         if self.copy_benchmarks_dir:
             shutil.copytree(
@@ -73,9 +77,7 @@ class _SingleInvocation:
                 "Invocation of suite %s with variant %s failed", self.suite_id,
                 self.variant_id)
 
-        parser_mod_name = f"benchcomp.parsers.{self.parser}"
-        parser = importlib.import_module(parser_mod_name)
-        suite = parser.main(self.working_copy)
+        suite = self.parse(self.working_copy)
 
         suite["suite_id"] = self.suite_id
         suite["variant_id"] = self.variant_id
@@ -85,6 +87,9 @@ class _SingleInvocation:
                 self.suite_yaml_out_dir / out_file, "w",
                 encoding="utf-8") as handle:
             yaml.dump(suite, handle, default_flow_style=False)
+
+        if self.cleanup_directory and self.copy_benchmarks_dir:
+            shutil.rmtree(self.working_copy)
 
 
 @dataclasses.dataclass
@@ -96,6 +101,7 @@ class _Run:
     out_dir: str
     out_symlink: str
     copy_benchmarks_dir: bool
+    cleanup_directory: bool
     result: dict = None
 
     def __call__(self):
@@ -103,14 +109,15 @@ class _Run:
         out_path.mkdir(parents=True)
 
         for suite_id, suite in self.config["run"]["suites"].items():
+            parse = benchcomp.parsers.get_parser(suite["parser"])
             for variant_id in suite["variants"]:
                 variant = self.config["variants"][variant_id]
                 config = dict(variant).pop("config")
                 invoke = _SingleInvocation(
                     suite_id, variant_id,
-                    suite["parser"]["module"],
-                    suite_yaml_out_dir=out_path,
+                    parse, suite_yaml_out_dir=out_path,
                     copy_benchmarks_dir=self.copy_benchmarks_dir,
+                    cleanup_directory=self.cleanup_directory,
                     **config)
                 invoke()
 
@@ -121,6 +128,44 @@ class _Run:
         tmp_symlink.parent.mkdir(exist_ok=True)
         tmp_symlink.symlink_to(out_path)
         tmp_symlink.rename(self.out_symlink)
+
+
+
+@dataclasses.dataclass
+class _EnvironmentUpdater:
+    """Update the OS environment with keys and values containing variables
+
+    When called, this class returns the operating environment updated with new
+    keys and values. The values can contain variables of the form '${var_name}'.
+    The class evaluates those variables using values already in the environment.
+    """
+
+    os_environment: dict = dataclasses.field(
+        default_factory=lambda : dict(os.environ))
+    pattern: re.Pattern = re.compile(r"\$\{(\w+?)\}")
+
+
+    def _evaluate(self, key, value):
+        """Evaluate all ${var} in value using self.os_environment"""
+        old_value = value
+
+        for variable in re.findall(self.pattern, value):
+            if variable not in self.os_environment:
+                logging.error(
+                    "Couldn't evaluate ${%s} in the value '%s' for environment "
+                    "variable '%s'. Ensure the environment variable $%s is set",
+                    variable, old_value, key, variable)
+                sys.exit(1)
+            value = re.sub(
+                r"\$\{" + variable + "\}", self.os_environment[variable], value)
+        return value
+
+
+    def __call__(self, new_environment):
+        ret = dict(self.os_environment)
+        for key, value in new_environment.items():
+            ret[key] = self._evaluate(key, value)
+        return ret
 
 
 def get_default_out_symlink():
@@ -138,6 +183,6 @@ def get_default_out_prefix():
 def main(args):
     run = _Run(
         args.config, args.out_prefix, args.out_dir, args.out_symlink,
-        args.copy_benchmarks_dir)
+        args.copy_benchmarks_dir, args.cleanup_directory)
     run()
     return run

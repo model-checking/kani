@@ -1,0 +1,3 @@
+Status: FAILURE\
+Description: "dereference failure: dead object"\
+in function crate_with_bug::fn_with_bug

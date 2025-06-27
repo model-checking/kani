@@ -1,0 +1,75 @@
+Checking harness check_zst_deref...
+
+Status: FAILURE\
+Description: "dereference failure: pointer invalid"\
+in function zst_deref
+
+VERIFICATION:- FAILED
+
+Checking harness check_equal_size_deref...
+
+Status: SUCCESS\
+Description: "dereference failure: pointer invalid"\
+in function equal_size_deref
+
+Status: SUCCESS\
+Description: "dereference failure: pointer invalid"\
+in function equal_size_deref
+
+VERIFICATION:- SUCCESSFUL
+
+Checking harness check_smaller_deref...
+
+Status: SUCCESS\
+Description: "dereference failure: pointer invalid"\
+in function smaller_deref
+
+Status: SUCCESS\
+Description: "dereference failure: pointer invalid"\
+in function smaller_deref
+
+VERIFICATION:- SUCCESSFUL
+
+Checking harness check_larger_deref_struct...
+
+Status: FAILURE\
+Description: "dereference failure: pointer invalid"\
+in function larger_deref_struct
+
+VERIFICATION:- FAILED
+
+Checking harness check_larger_deref_into_ptr...
+
+Status: FAILURE\
+Description: "dereference failure: pointer invalid"\
+in function larger_deref_into_ptr
+
+VERIFICATION:- FAILED
+
+Checking harness check_larger_deref...
+
+Status: FAILURE\
+Description: "dereference failure: pointer invalid"\
+in function larger_deref
+
+VERIFICATION:- FAILED
+
+Checking harness check_store...
+
+Status: FAILURE\
+Description: "dereference failure: pointer invalid"\
+in function Store::<'_, 3>::from
+
+Status: SUCCESS\
+Description: "assertion failed: broken.data.len() == 3"\
+in function check_store
+
+VERIFICATION:- FAILED
+
+Summary:
+Verification failed for - check_zst_deref
+Verification failed for - check_larger_deref_struct
+Verification failed for - check_larger_deref_into_ptr
+Verification failed for - check_larger_deref
+Verification failed for - check_store
+Complete - 2 successfully verified harnesses, 5 failures, 7 total.

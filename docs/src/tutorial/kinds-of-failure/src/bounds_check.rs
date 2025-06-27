@@ -13,7 +13,7 @@ fn get_wrapped(i: usize, a: &[u32]) -> u32 {
 // ANCHOR_END: code
 
 // Alternative unsafe return for the above function:
-// return unsafe { *a.get_unchecked(i % a.len() + 1) };
+// return unsafe { *a.as_ptr().add(i % a.len() + 1) };
 
 #[cfg(test)]
 mod tests {

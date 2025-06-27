@@ -3,7 +3,7 @@
 //! To run this test, do
 //! kani main.rs -- lib.c
 
-// kani-flags: --enable-unstable --c-lib tests/kani/ForeignItems/lib.c
+// kani-flags: -Z c-ffi --c-lib tests/kani/ForeignItems/lib.c
 
 #[repr(C)]
 pub struct Foo {
@@ -57,7 +57,9 @@ fn main() {
         assert!(takes_struct(f) == 19);
 
         let f2 = Foo2 { i: 12, c: 7, i2: 8 };
+        // f2.i + f2.c
         assert!(takes_struct_ptr2(&f2) == 19);
+        // f2.i + f2.i2
         assert!(takes_struct2(f2) == 20);
     }
 }

@@ -1,0 +1,22 @@
+Kani generated automatic harnesses for 1 function(s):
++--------------------------------+-------------------+
+| Crate                          | Selected Function |
++====================================================+
+| cargo_autoharness_dependencies | yes_harness       |
++--------------------------------+-------------------+
+
+Skipped Functions: None. Kani generated automatic harnesses for all functions in the available crate(s).
+
+Autoharness: Checking function yes_harness against all possible inputs...
+VERIFICATION:- SUCCESSFUL
+
+Manual Harness Summary:
+No proof harnesses (functions with #[kani::proof]) were found to verify.
+
+Autoharness Summary:
++--------------------------------+-------------------+---------------------------+---------------------+
+| Crate                          | Selected Function | Kind of Automatic Harness | Verification Result |
++======================================================================================================+
+| cargo_autoharness_dependencies | yes_harness       | #[kani::proof]            | Success             |
++--------------------------------+-------------------+---------------------------+---------------------+
+Complete - 1 successfully verified functions, 0 failures, 1 total.

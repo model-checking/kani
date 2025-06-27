@@ -9,7 +9,8 @@ fn check(s: &[u8]) {
 
 #[kani::proof]
 fn main() {
-    // returns a slice of length between 0 and 5 with non-det content
-    let slice: kani::slice::AnySlice<u8, 5> = kani::slice::any_slice();
+    let arr: [u8; 5] = kani::any();
+    // returns a slice of length between 0 and 5
+    let slice = kani::slice::any_slice_of_array(&arr);
     check(&slice);
 }

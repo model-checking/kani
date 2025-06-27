@@ -5,10 +5,7 @@
 // expected result.
 
 #![feature(core_intrinsics)]
-use std::intrinsics::{
-    atomic_nand_acqrel, atomic_nand_acquire, atomic_nand_relaxed, atomic_nand_release,
-    atomic_nand_seqcst,
-};
+use std::intrinsics::{AtomicOrdering, atomic_nand};
 
 #[kani::proof]
 fn main() {
@@ -27,11 +24,11 @@ fn main() {
     let b = u8::MAX as u8;
 
     unsafe {
-        let x1 = atomic_nand_seqcst(ptr_a1, b);
-        let x2 = atomic_nand_acquire(ptr_a2, b);
-        let x3 = atomic_nand_acqrel(ptr_a3, b);
-        let x4 = atomic_nand_release(ptr_a4, b);
-        let x5 = atomic_nand_relaxed(ptr_a5, b);
+        let x1 = atomic_nand::<_, { AtomicOrdering::SeqCst }>(ptr_a1, b);
+        let x2 = atomic_nand::<_, { AtomicOrdering::Acquire }>(ptr_a2, b);
+        let x3 = atomic_nand::<_, { AtomicOrdering::AcqRel }>(ptr_a3, b);
+        let x4 = atomic_nand::<_, { AtomicOrdering::Release }>(ptr_a4, b);
+        let x5 = atomic_nand::<_, { AtomicOrdering::Relaxed }>(ptr_a5, b);
 
         assert!(x1 == 0);
         assert!(x2 == 0);
@@ -45,11 +42,11 @@ fn main() {
         assert!(*ptr_a4 == b);
         assert!(*ptr_a5 == b);
 
-        let x1 = atomic_nand_seqcst(ptr_a1, b);
-        let x2 = atomic_nand_acquire(ptr_a2, b);
-        let x3 = atomic_nand_acqrel(ptr_a3, b);
-        let x4 = atomic_nand_release(ptr_a4, b);
-        let x5 = atomic_nand_relaxed(ptr_a5, b);
+        let x1 = atomic_nand::<_, { AtomicOrdering::SeqCst }>(ptr_a1, b);
+        let x2 = atomic_nand::<_, { AtomicOrdering::Acquire }>(ptr_a2, b);
+        let x3 = atomic_nand::<_, { AtomicOrdering::AcqRel }>(ptr_a3, b);
+        let x4 = atomic_nand::<_, { AtomicOrdering::Release }>(ptr_a4, b);
+        let x5 = atomic_nand::<_, { AtomicOrdering::Relaxed }>(ptr_a5, b);
 
         assert!(x1 == b);
         assert!(x2 == b);

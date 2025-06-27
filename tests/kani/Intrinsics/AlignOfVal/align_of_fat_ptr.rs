@@ -19,7 +19,7 @@ fn check_align_simple() {
     let a = A { id: 0 };
     let t: &dyn T = &a;
     #[cfg(target_arch = "x86_64")]
-    assert_eq!(align_of_val(t), 8);
+    assert_eq!(align_of_val(t), 16);
     #[cfg(target_arch = "aarch64")]
     assert_eq!(align_of_val(t), 16);
     assert_eq!(align_of_val(&t), 8);

@@ -3,4 +3,4 @@ test.rs:\
 |\
 | #[kani::solver(123)]\
 | ^^^^^^^^^^^^^^^^^^^^
-error: aborting due to previous error
+error: aborting due to 1 previous error

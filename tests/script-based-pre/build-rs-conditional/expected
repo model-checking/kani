@@ -1,0 +1,16 @@
+[TEST] Run verification...
+Checking harness verify::check_kani...
+Complete - 1 successfully verified harnesses, 0 failures, 1 total
+
+[TEST] Run playback...
+running 1 test\
+test verify::kani_concrete_playback_check_kani_\
+\
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out
+
+[TEST] Run test...
+running 1 test\
+test test::check_not_kani ... ok\
+\
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+

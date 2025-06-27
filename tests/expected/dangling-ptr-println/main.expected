@@ -1,0 +1,29 @@
+Checking harness unsafe_block...
+
+Status: FAILURE\
+Description: "dereference failure: pointer invalid"\
+in function unsafe_block
+
+VERIFICATION:- FAILED
+
+Checking harness general_unsafe...
+
+Status: FAILURE\
+Description: "dereference failure: pointer invalid"\
+in function general_unsafe
+
+VERIFICATION:- FAILED
+
+Checking harness local_unsafe...
+
+Status: FAILURE\
+Description: "dereference failure: dead object"\
+in function local_unsafe
+
+VERIFICATION:- FAILED
+
+Summary:
+Verification failed for - unsafe_block
+Verification failed for - general_unsafe
+Verification failed for - local_unsafe
+Complete - 0 successfully verified harnesses, 3 failures, 3 total.

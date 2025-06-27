@@ -3,7 +3,7 @@
 
 // Calling realloc with a null pointer fails
 
-use std::alloc::{realloc, Layout};
+use std::alloc::{Layout, realloc};
 
 #[kani::proof]
 fn main() {

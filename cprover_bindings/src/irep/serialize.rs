@@ -1,10 +1,10 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! This crate implements irep serialization using serde Serializer.
-use crate::irep::{Irep, IrepId, Symbol, SymbolTable};
 use crate::InternedString;
-use serde::ser::{SerializeMap, Serializer};
+use crate::irep::{Irep, IrepId, Symbol, SymbolTable};
 use serde::Serialize;
+use serde::ser::{SerializeMap, Serializer};
 
 impl Serialize for Irep {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -57,7 +57,7 @@ impl Serialize for crate::goto_program::SymbolTable {
     }
 }
 struct StreamingSymbols<'a>(&'a crate::goto_program::SymbolTable);
-impl<'a> Serialize for StreamingSymbols<'a> {
+impl Serialize for StreamingSymbols<'_> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -92,7 +92,7 @@ impl<'de> serde::Deserialize<'de> for InternedString {
     }
 }
 
-impl<'de> serde::de::Visitor<'de> for InternedStringVisitor {
+impl serde::de::Visitor<'_> for InternedStringVisitor {
     type Value = InternedString;
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -145,7 +145,7 @@ impl Serialize for Symbol {
 #[cfg(test)]
 mod test {
     use super::*;
-    use serde_test::{assert_ser_tokens, Token};
+    use serde_test::{Token, assert_ser_tokens};
     #[test]
     fn serialize_irep() {
         let irep = Irep::empty();

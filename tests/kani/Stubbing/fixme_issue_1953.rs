@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
-// kani-flags: --enable-unstable --enable-stubbing --harness main
+// kani-flags: -Z stubbing --harness main
 //
 // We currently require a stub and the original/function method to have the same
 // names for generic parameters; instead, we should allow for renaming.

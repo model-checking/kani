@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 static STATIC: [&str; 1] = ["FOO"];
 #[kani::proof]
-fn main() {
+fn check_static() {
     let x = STATIC[0];
     let bytes = x.as_bytes();
     assert!(bytes.len() == 3);

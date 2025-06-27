@@ -15,11 +15,21 @@ use std::collections::BTreeMap;
 use std::fmt::Debug;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
-/// Datatypes
+// Datatypes
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 /// An `Expr` represents an expression type: i.e. a computation that returns a value.
-/// Every expression has a type, a value, and a location (which may be `None`).
+/// Every expression has a type, a value, and a location (which may be `None`). An expression may
+/// also include a type annotation (`size_of_annotation`), which states that the expression is the
+/// result of computing `size_of(type)`.
+///
+/// The `size_of_annotation` is eventually picked up by CBMC's symbolic execution when simulating
+/// heap allocations: for a requested allocation of N bytes, CBMC can either create a byte array of
+/// size N, or, when a type T is annotated and N is a multiple of the size of T, an array of
+/// N/size_of(T) elements. The latter will facilitate updates using member operations (when T is an
+/// aggregate type), and pointer-typed members can be tracked more precisely. Note that this is
+/// merely a hint: failing to provide such an annotation may hamper performance, but will never
+/// affect correctness.
 ///
 /// The fields of `Expr` are kept private, and there are no getters that return mutable references.
 /// This means that the only way to create and update `Expr`s is using the constructors and setters.
@@ -41,6 +51,7 @@ pub struct Expr {
     value: Box<ExprValue>,
     typ: Type,
     location: Location,
+    size_of_annotation: Option<Type>,
 }
 
 /// The different kinds of values an expression can have.
@@ -87,7 +98,11 @@ pub enum ExprValue {
     // {}
     EmptyUnion,
     /// `1.0f`
+    Float16Constant(f16),
+    /// `1.0f`
     FloatConstant(f32),
+    /// `Float 128 example`
+    Float128Constant(f128),
     /// `function(arguments)`
     FunctionCall {
         function: Expr,
@@ -115,6 +130,10 @@ pub enum ExprValue {
     Nondet,
     /// `NULL`
     PointerConstant(u64),
+    ReadOk {
+        ptr: Expr,
+        size: Expr,
+    },
     // `op++` etc
     SelfOp {
         op: SelfOperator,
@@ -125,13 +144,14 @@ pub enum ExprValue {
     /// `({ op1; op2; ...})`
     StatementExpression {
         statements: Vec<Stmt>,
+        location: Location,
     },
     /// A raw string constant. Note that you normally actually want a pointer to the first element.
     /// `"s"`
     StringConstant {
         s: InternedString,
     },
-    /// Struct initializer  
+    /// Struct initializer
     /// `struct foo the_foo = >>> {field1, field2, ... } <<<`
     Struct {
         values: Vec<Expr>,
@@ -142,7 +162,7 @@ pub enum ExprValue {
     },
     /// `(typ) self`. Target type is in the outer `Expr` struct.
     Typecast(Expr),
-    /// Union initializer  
+    /// Union initializer
     /// `union foo the_foo = >>> {.field = value } <<<`
     Union {
         value: Expr,
@@ -157,6 +177,14 @@ pub enum ExprValue {
     Vector {
         elems: Vec<Expr>,
     },
+    Forall {
+        variable: Expr, // symbol
+        domain: Expr,   // where
+    },
+    Exists {
+        variable: Expr, // symbol
+        domain: Expr,   // where
+    },
 }
 
 /// Binary operators. The names are the same as in the Irep representation.
@@ -170,6 +198,7 @@ pub enum BinaryOperator {
     Bitxor,
     Div,
     Equal,
+    FloatbvRoundToIntegral,
     Ge,
     Gt,
     IeeeFloatEqual,
@@ -275,7 +304,7 @@ pub fn arithmetic_overflow_result_type(operand_type: Type) -> Type {
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
-/// Implementations
+// Implementations
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 /// Getters
@@ -291,6 +320,10 @@ impl Expr {
 
     pub fn value(&self) -> &ExprValue {
         &self.value
+    }
+
+    pub fn size_of_annotation(&self) -> Option<&Type> {
+        self.size_of_annotation.as_ref()
     }
 
     /// If the expression is an Int constant type, return its value
@@ -370,6 +403,7 @@ impl Expr {
             source.is_integer() || source.is_pointer() || source.is_bool()
         } else if target.is_integer() {
             source.is_c_bool()
+                || source.is_bool()
                 || source.is_integer()
                 || source.is_floating_point()
                 || source.is_pointer()
@@ -404,12 +438,19 @@ impl Expr {
     }
 }
 
+impl Expr {
+    pub fn with_size_of_annotation(mut self, ty: Type) -> Self {
+        self.size_of_annotation = Some(ty);
+        self
+    }
+}
+
 /// Private constructor. Making this a macro allows multiple reference to self in the same call.
 macro_rules! expr {
     ( $value:expr,  $typ:expr) => {{
         let typ = $typ;
         let value = Box::new($value);
-        Expr { value, typ, location: Location::none() }
+        Expr { value, typ, location: Location::none(), size_of_annotation: None }
     }};
 }
 
@@ -486,13 +527,13 @@ impl Expr {
 
     /// `(typ) self`.
     pub fn cast_to(self, typ: Type) -> Self {
-        assert!(self.can_cast_to(&typ), "Can't cast\n\n{self:?} ({:?})\n\n{typ:?}", self.typ);
         if self.typ == typ {
             self
         } else if typ.is_bool() {
             let zero = self.typ.zero();
             self.neq(zero)
         } else {
+            assert!(self.can_cast_to(&typ), "Can't cast\n\n{self:?} ({:?})\n\n{typ:?}", self.typ);
             expr!(Typecast(self), typ)
         }
     }
@@ -553,6 +594,28 @@ impl Expr {
         expr!(EmptyUnion, typ)
     }
 
+    /// `3.14f`
+    pub fn float16_constant(c: f16) -> Self {
+        expr!(Float16Constant(c), Type::float16())
+    }
+
+    /// `union {_Float16 f; uint16_t bp} u = {.bp = 0x1234}; >>> u.f <<<`
+    pub fn float16_constant_from_bitpattern(bp: u16) -> Self {
+        let c = f16::from_bits(bp);
+        Self::float16_constant(c)
+    }
+
+    /// `3.14159265358979323846264338327950288L`
+    pub fn float128_constant(c: f128) -> Self {
+        expr!(Float128Constant(c), Type::float128())
+    }
+
+    /// `union {_Float128 f; __uint128_t bp} u = {.bp = 0x1234}; >>> u.f <<<`
+    pub fn float128_constant_from_bitpattern(bp: u128) -> Self {
+        let c = f128::from_bits(bp);
+        Self::float128_constant(c)
+    }
+
     /// `1.0f`
     pub fn float_constant(c: f32) -> Self {
         expr!(FloatConstant(c), Type::float())
@@ -605,6 +668,34 @@ impl Expr {
         expr!(IntConstant(i), typ)
     }
 
+    pub fn ssize_constant(i: i128, symbol_table: &SymbolTable) -> Self {
+        match symbol_table.machine_model().pointer_width {
+            32 => {
+                let val = BigInt::from(i as i32);
+                expr!(IntConstant(val), Type::ssize_t())
+            }
+            64 => {
+                let val = BigInt::from(i as i64);
+                expr!(IntConstant(val), Type::ssize_t())
+            }
+            i => unreachable!("Expected 32 or 64 bits pointer width, but got `{i}`"),
+        }
+    }
+
+    pub fn size_constant(i: u128, symbol_table: &SymbolTable) -> Self {
+        match symbol_table.machine_model().pointer_width {
+            32 => {
+                let val = BigInt::from(i as u32);
+                expr!(IntConstant(val), Type::size_t())
+            }
+            64 => {
+                let val = BigInt::from(i as u64);
+                expr!(IntConstant(val), Type::size_t())
+            }
+            i => unreachable!("Expected 32 or 64 bits pointer width, but got `{i}`"),
+        }
+    }
+
     pub fn typecheck_call(function: &Expr, arguments: &[Expr]) -> bool {
         // For variadic functions, all named arguments must match the type of their formal param.
         // Extra arguments (e.g the ... args) can have any type.
@@ -638,7 +729,8 @@ impl Expr {
     pub fn call(self, arguments: Vec<Expr>) -> Self {
         assert!(
             Expr::typecheck_call(&self, &arguments),
-            "Function call does not type check:\nfunc: {self:?}\nargs: {arguments:?}"
+            "Function call does not type check:\nfunc params: {:?}\nargs: {arguments:?}",
+            self.typ().parameters().unwrap_or(&vec![])
         );
         let typ = self.typ().return_type().unwrap().clone();
         expr!(FunctionCall { function: self, arguments }, typ)
@@ -666,6 +758,14 @@ impl Expr {
         expr!(Nondet, typ)
     }
 
+    /// `read_ok(ptr, size)`
+    pub fn read_ok(ptr: Expr, size: Expr) -> Self {
+        assert_eq!(*ptr.typ(), Type::void_pointer());
+        assert_eq!(*size.typ(), Type::size_t());
+
+        expr!(ReadOk { ptr, size }, Type::bool())
+    }
+
     /// `e.g. NULL`
     pub fn pointer_constant(c: u64, typ: Type) -> Self {
         assert!(typ.is_pointer());
@@ -675,13 +775,13 @@ impl Expr {
     /// <https://gcc.gnu.org/onlinedocs/gcc/Statement-Exprs.html>
     /// e.g. `({ int y = foo (); int z; if (y > 0) z = y; else z = - y; z; })`
     /// `({ op1; op2; ...})`
-    pub fn statement_expression(ops: Vec<Stmt>, typ: Type) -> Self {
+    pub fn statement_expression(ops: Vec<Stmt>, typ: Type, loc: Location) -> Self {
         assert!(!ops.is_empty());
         assert_eq!(ops.last().unwrap().get_expression().unwrap().typ, typ);
-        expr!(StatementExpression { statements: ops }, typ)
+        expr!(StatementExpression { statements: ops, location: loc }, typ).with_location(loc)
     }
 
-    /// Internal helper function for Struct initalizer  
+    /// Internal helper function for Struct initalizer
     /// `struct foo the_foo = >>> {.field1 = val1, .field2 = val2, ... } <<<`
     /// ALL fields must be given, including padding
     fn struct_expr_with_explicit_padding(
@@ -698,7 +798,7 @@ impl Expr {
         expr!(Struct { values }, typ)
     }
 
-    /// Struct initializer  
+    /// Struct initializer
     /// `struct foo the_foo = >>> {.field1 = val1, .field2 = val2, ... } <<<`
     /// Note that only the NON padding fields should be explicitly given.
     /// Padding fields are automatically inserted using the type from the `SymbolTable`
@@ -764,7 +864,7 @@ impl Expr {
         Expr::struct_expr_from_values(typ, values, symbol_table)
     }
 
-    /// Struct initializer  
+    /// Struct initializer
     /// `struct foo the_foo = >>> {field1, field2, ... } <<<`
     /// Note that only the NON padding fields should be explicitly given.
     /// Padding fields are automatically inserted using the type from the `SymbolTable`
@@ -800,7 +900,7 @@ impl Expr {
         Expr::struct_expr_with_explicit_padding(typ, fields, values)
     }
 
-    /// Struct initializer  
+    /// Struct initializer
     /// `struct foo the_foo = >>> {field1, padding2, field3, ... } <<<`
     /// Note that padding fields should be explicitly given.
     /// This would be used when the values and padding have already been combined,
@@ -827,6 +927,13 @@ impl Expr {
         );
 
         Expr::struct_expr_with_explicit_padding(typ, fields, values)
+    }
+
+    /// Initializer for a zero sized type (ZST).
+    /// Since this is a ZST, we call nondet to simplify everything.
+    pub fn init_unit(typ: Type, symbol_table: &SymbolTable) -> Self {
+        assert_eq!(typ.sizeof_in_bits(symbol_table), 0);
+        Expr::nondet(typ)
     }
 
     /// `identifier`
@@ -859,7 +966,7 @@ impl Expr {
         self.transmute_to(t, st)
     }
 
-    /// Union initializer  
+    /// Union initializer
     /// `union foo the_foo = >>> {.field = value } <<<`
     pub fn union_expr<T: Into<InternedString>>(
         typ: Type,
@@ -872,6 +979,16 @@ impl Expr {
         assert_eq!(typ.lookup_field_type(field, symbol_table).as_ref(), Some(value.typ()));
         let typ = typ.aggr_tag().unwrap();
         expr!(Union { value, field }, typ)
+    }
+
+    pub fn forall_expr(typ: Type, variable: Expr, domain: Expr) -> Expr {
+        assert!(variable.is_symbol());
+        expr!(Forall { variable, domain }, typ)
+    }
+
+    pub fn exists_expr(typ: Type, variable: Expr, domain: Expr) -> Expr {
+        assert!(variable.is_symbol());
+        expr!(Exists { variable, domain }, typ)
     }
 }
 
@@ -918,11 +1035,12 @@ impl Expr {
             IeeeFloatEqual | IeeeFloatNotequal => lhs.typ == rhs.typ && lhs.typ.is_floating_point(),
             // Overflow flags
             OverflowMinus | OverflowResultMinus => {
-                (lhs.typ == rhs.typ && (lhs.typ.is_pointer() || lhs.typ.is_numeric()))
+                (lhs.typ == rhs.typ
+                    && (lhs.typ.is_pointer() || lhs.typ.is_numeric() || lhs.typ.is_vector()))
                     || (lhs.typ.is_pointer() && rhs.typ.is_integer())
             }
             OverflowMult | OverflowPlus | OverflowResultMult | OverflowResultPlus => {
-                (lhs.typ == rhs.typ && lhs.typ.is_integer())
+                (lhs.typ == rhs.typ && (lhs.typ.is_numeric() || lhs.typ.is_vector()))
                     || (lhs.typ.is_pointer() && rhs.typ.is_integer())
             }
             ROk => lhs.typ.is_pointer() && rhs.typ.is_c_size_t(),
@@ -931,6 +1049,7 @@ impl Expr {
                     "vector comparison operators must be typechecked by `typecheck_vector_cmp_expr`"
                 )
             }
+            FloatbvRoundToIntegral => lhs.typ.is_floating_point() && rhs.typ.is_integer(),
         }
     }
 
@@ -971,6 +1090,11 @@ impl Expr {
                     "return type for vector comparison operators depends on the place type"
                 )
             }
+            FloatbvRoundToIntegral => {
+                unreachable!(
+                    "return type for float-to-integer rounding operator depends on the place type"
+                )
+            }
         }
     }
 
@@ -984,6 +1108,7 @@ impl Expr {
     ///     <https://github.com/rust-lang/rfcs/blob/master/text/1199-simd-infrastructure.md#comparisons>).
     ///     The signedness doesn't matter, as the result for each element is
     ///     either "all ones" (true) or "all zeros" (false).
+    ///
     /// For example, one can use `simd_eq` on two `f64x4` vectors and assign the
     /// result to a `u64x4` vector. But it's not possible to assign it to: (1) a
     /// `u64x2` because they don't have the same length; or (2) another `f64x4`
@@ -1212,6 +1337,11 @@ impl Expr {
         let cmp = self.clone().gt(e.clone());
         cmp.ternary(self, e)
     }
+
+    /// floating-point to integer rounding
+    pub fn floatbv_round_to_integral(f: Expr, rm: Expr, ret_typ: Type) -> Expr {
+        expr!(BinOp { op: FloatbvRoundToIntegral, lhs: f, rhs: rm }, ret_typ)
+    }
 }
 
 /// Constructors for self operations
@@ -1260,11 +1390,11 @@ impl Expr {
     fn unop_return_type(op: UnaryOperator, arg: &Expr) -> Type {
         match op {
             Bitnot | BitReverse | Bswap | UnaryMinus => arg.typ.clone(),
-            CountLeadingZeros { .. } | CountTrailingZeros { .. } => arg.typ.clone(),
+            CountLeadingZeros { .. } | CountTrailingZeros { .. } => Type::unsigned_int(32),
             ObjectSize | PointerObject => Type::size_t(),
             PointerOffset => Type::ssize_t(),
             IsDynamicObject | IsFinite | Not => Type::bool(),
-            Popcount => arg.typ.clone(),
+            Popcount => Type::unsigned_int(32),
         }
     }
     /// Private helper function to make unary operators
@@ -1381,9 +1511,9 @@ impl Expr {
         ArithmeticOverflowResult { result, overflowed }
     }
 
-    /// Uses CBMC's add-with-overflow operation that performs a single addition
+    /// Uses CBMC's \[binop\]-with-overflow operation that performs a single arithmetic
     /// operation
-    /// `struct (T, bool) overflow(+, self, e)` where `T` is the type of `self`
+    /// `struct (T, bool) overflow(binop, self, e)` where `T` is the type of `self`
     /// Pseudocode:
     /// ```
     /// struct overflow_result_t {
@@ -1395,6 +1525,14 @@ impl Expr {
     /// overflow_result.overflowed = raw_result > maximum value of T;
     /// return overflow_result;
     /// ```
+    pub fn overflow_op(self, op: BinaryOperator, e: Expr) -> Expr {
+        assert!(
+            matches!(op, OverflowResultMinus | OverflowResultMult | OverflowResultPlus),
+            "Expected an overflow operation, but found: `{op:?}`"
+        );
+        self.binop(op, e)
+    }
+
     pub fn add_overflow_result(self, e: Expr) -> Expr {
         self.binop(OverflowResultPlus, e)
     }
@@ -1426,6 +1564,8 @@ impl Expr {
 
     /// `ArithmeticOverflowResult r; >>>r.overflowed = builtin_sub_overflow(self, e, &r.result)<<<`
     pub fn mul_overflow(self, e: Expr) -> ArithmeticOverflowResult {
+        // TODO: We should replace these calls by *overflow_result.
+        // https://github.com/model-checking/kani/issues/1483
         let result = self.clone().mul(e.clone());
         let overflowed = self.mul_overflow_p(e);
         ArithmeticOverflowResult { result, overflowed }
@@ -1584,7 +1724,7 @@ impl Expr {
                         continue;
                     }
                     let name = field.name();
-                    exprs.insert(name, self.clone().member(&name.to_string(), symbol_table));
+                    exprs.insert(name, self.clone().member(name.to_string(), symbol_table));
                 }
             }
         }

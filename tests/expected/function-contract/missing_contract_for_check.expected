@@ -1,0 +1,9 @@
+error: Failed to check contract: Function `harness` has no contract.
+  |
+7 | #[kani::proof_for_contract(no_contract)]
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+note: Try adding a contract to this function.
+  |
+5 | fn no_contract() {}
+  | ^^^^^^^^^^^^^^^^

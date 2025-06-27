@@ -1,0 +1,20 @@
+multiple_instrumentations_different_vars.safety_check\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u128`"
+
+multiple_instrumentations_different_vars.safety_check\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u64`"
+
+multiple_instrumentations.safety_check\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u128`"
+
+multiple_instrumentations.safety_check\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u128`"
+
+Summary:
+Verification failed for - multiple_instrumentations_different_vars
+Verification failed for - multiple_instrumentations
+Complete - 0 successfully verified harnesses, 2 failures, 2 total.
