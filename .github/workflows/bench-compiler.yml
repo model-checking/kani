@@ -37,6 +37,18 @@ jobs:
           ref: ${{ env.NEW_REF }}
           fetch-depth: 1
 
+      - name: Cache Kani build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          shared-key: "kani-rust-cache-bench"
+          workspaces: |
+            new
+            new/tools/compile-timer
+            old
+            old/tools/compile-timer
+          cache-directories: "~/.rustup"
+
       - name: Set up Kani Dependencies (old variant)
         uses: ./old/.github/actions/setup
         with:
@@ -100,6 +112,18 @@ jobs:
           path: ./new
           ref: ${{ env.NEW_REF }}
           fetch-depth: 1
+
+      - name: Cache Kani build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          shared-key: "kani-rust-cache-bench"
+          workspaces: |
+            new
+            new/tools/compile-timer
+            old
+            old/tools/compile-timer
+          cache-directories: "~/.rustup"
 
       - name: Set up Kani Dependencies (old variant)
         uses: ./old/.github/actions/setup
