@@ -42,6 +42,7 @@ members = [
   "tools/build-kani",
   "tools/kani-cov",
   "tools/scanner",
+  "tools/compile-timer",
   "kani-driver",
   "kani-compiler",
   "kani_metadata",
