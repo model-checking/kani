@@ -65,7 +65,8 @@ impl GlobalPass for DelayedUbPass {
         starting_items: &[MonoItem],
         instances: Vec<Instance>,
         transformer: &mut BodyTransformation,
-    ) {
+    ) -> bool {
+        let mut modified = false;
         // Collect all analysis targets (pointers to places reading and writing from which should be
         // tracked).
         let targets: HashSet<_> = instances
@@ -138,11 +139,13 @@ impl GlobalPass for DelayedUbPass {
                 );
                 // If some instrumentation has been performed, update the cached body in the local transformer.
                 if instrumentation_added {
+                    modified = true;
                     transformer.cache.entry(instance).and_modify(|transformation_result| {
                         *transformation_result = TransformationResult::Modified(body);
                     });
                 }
             }
         }
+        modified
     }
 }
