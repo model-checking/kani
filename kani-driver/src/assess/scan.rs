@@ -72,11 +72,11 @@ pub(crate) fn assess_scan_main(session: KaniSession, args: &ScanArgs) -> Result<
     for workspace in &project_metadata {
         let workspace_root = workspace.workspace_root.as_std_path();
         for package in workspace.workspace_packages() {
-            if let Some(filter) = &package_filter {
-                if !filter.contains(&package.name) {
-                    println!("Skipping filtered-out package {}", package.name);
-                    continue;
-                }
+            if let Some(filter) = &package_filter
+                && !filter.contains(&package.name)
+            {
+                println!("Skipping filtered-out package {}", package.name);
+                continue;
             }
             // This is a hack. Some repos contains workspaces with "examples" (not actually cargo examples, but
             // full packages as workspace members) that are named after other crates.

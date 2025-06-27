@@ -76,7 +76,7 @@ pub fn resolve_ty<'tcx>(
             let elems = tuple
                 .elems
                 .iter()
-                .map(|elem| resolve_ty(tcx, current_module, &elem))
+                .map(|elem| resolve_ty(tcx, current_module, elem))
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(Ty::new_tuple(&elems))
         }
@@ -191,12 +191,11 @@ pub(super) fn is_type_primitive(typ: &syn::Type) -> bool {
 /// Parse the length of the array.
 /// We currently only support a constant length.
 fn parse_len(len: &Expr) -> Result<usize, String> {
-    if let Expr::Lit(ExprLit { lit: Lit::Int(lit), .. }) = len {
-        if matches!(lit.suffix(), "" | "usize")
-            && let Ok(val) = usize::from_str(lit.base10_digits())
-        {
-            return Ok(val);
-        }
+    if let Expr::Lit(ExprLit { lit: Lit::Int(lit), .. }) = len
+        && matches!(lit.suffix(), "" | "usize")
+        && let Ok(val) = usize::from_str(lit.base10_digits())
+    {
+        return Ok(val);
     }
     Err(format!("Expected a `usize` constant, but found `{}`", len.to_token_stream()))
 }

@@ -146,7 +146,7 @@ pub enum StandaloneSubcommand {
     VerifyStd(Box<std_args::VerifyStdArgs>),
     /// List contracts and harnesses.
     List(Box<list_args::StandaloneListArgs>),
-    /// Scan the input file for functions eligible for automatic (i.e., harness-free) verification and verify them.
+    /// Create and run harnesses automatically for eligible functions. Implies -Z function-contracts and -Z loop-contracts.
     Autoharness(Box<autoharness_args::StandaloneAutoharnessArgs>),
 }
 
@@ -177,7 +177,8 @@ pub enum CargoKaniSubcommand {
     /// List contracts and harnesses.
     List(Box<list_args::CargoListArgs>),
 
-    /// Scan the crate for functions eligible for automatic (i.e., harness-free) verification and verify them.
+    /// Create and run harnesses automatically for eligible functions. Implies -Z function-contracts and -Z loop-contracts.
+    /// See https://model-checking.github.io/kani/reference/experimental/autoharness.html for documentation.
     Autoharness(Box<autoharness_args::CargoAutoharnessArgs>),
 }
 
@@ -241,6 +242,11 @@ pub struct VerificationArgs {
     /// Kani will only compile the crate. No verification will be performed
     #[arg(long, hide_short_help = true)]
     pub only_codegen: bool,
+
+    /// Run Kani without codegen. Useful for quick feedback on whether the code would compile successfully (similar to `cargo check`).
+    /// This feature is unstable and requires `-Z unstable-options` to be used
+    #[arg(long, hide_short_help = true)]
+    pub no_codegen: bool,
 
     /// Specify the value used for loop unwinding in CBMC
     #[arg(long)]
@@ -479,7 +485,7 @@ fn check_no_cargo_opt(is_set: bool, name: &str) -> Result<(), Error> {
     if is_set {
         Err(Error::raw(
             ErrorKind::UnknownArgument,
-            format!("argument `{}` cannot be used with standalone Kani.", name),
+            format!("argument `{name}` cannot be used with standalone Kani."),
         ))
     } else {
         Ok(())
@@ -510,16 +516,16 @@ impl ValidateArgs for StandaloneArgs {
         check_no_cargo_opt(!self.verify_opts.cargo.exclude.is_empty(), "--exclude")?;
         check_no_cargo_opt(self.verify_opts.cargo.workspace, "--workspace")?;
         check_no_cargo_opt(self.verify_opts.cargo.manifest_path.is_some(), "--manifest-path")?;
-        if let Some(input) = &self.input {
-            if !input.is_file() {
-                return Err(Error::raw(
-                    ErrorKind::InvalidValue,
-                    format!(
-                        "Invalid argument: Input invalid. `{}` is not a regular file.",
-                        input.display()
-                    ),
-                ));
-            }
+        if let Some(input) = &self.input
+            && !input.is_file()
+        {
+            return Err(Error::raw(
+                ErrorKind::InvalidValue,
+                format!(
+                    "Invalid argument: Input invalid. `{}` is not a regular file.",
+                    input.display()
+                ),
+            ));
         }
         Ok(())
     }
@@ -628,16 +634,17 @@ impl ValidateArgs for VerificationArgs {
                 "Conflicting options: --jobs requires `--output-format=terse`",
             ));
         }
-        if let Some(out_dir) = &self.target_dir {
-            if out_dir.exists() && !out_dir.is_dir() {
-                return Err(Error::raw(
-                    ErrorKind::InvalidValue,
-                    format!(
-                        "Invalid argument: `--target-dir` argument `{}` is not a directory",
-                        out_dir.display()
-                    ),
-                ));
-            }
+        if let Some(out_dir) = &self.target_dir
+            && out_dir.exists()
+            && !out_dir.is_dir()
+        {
+            return Err(Error::raw(
+                ErrorKind::InvalidValue,
+                format!(
+                    "Invalid argument: `--target-dir` argument `{}` is not a directory",
+                    out_dir.display()
+                ),
+            ));
         }
 
         self.common_args.check_unstable(
@@ -657,6 +664,12 @@ impl ValidateArgs for VerificationArgs {
         self.common_args.check_unstable(
             !self.cbmc_args.is_empty(),
             "--cbmc-args",
+            UnstableFeature::UnstableOptions,
+        )?;
+
+        self.common_args.check_unstable(
+            self.no_codegen,
+            "--no-codegen",
             UnstableFeature::UnstableOptions,
         )?;
 
@@ -945,12 +958,12 @@ mod tests {
     }
 
     fn check(args: &str, feature: Option<UnstableFeature>, pred: fn(StandaloneArgs) -> bool) {
-        let mut res = parse_unstable_disabled(&args);
+        let mut res = parse_unstable_disabled(args);
         if let Some(unstable) = feature {
             // Should fail without -Z unstable-options.
             assert_eq!(res.unwrap_err().kind(), ErrorKind::MissingRequiredArgument);
             // Should succeed with -Z unstable-options.
-            res = parse_unstable_enabled(&args, unstable);
+            res = parse_unstable_enabled(args, unstable);
         }
         assert!(res.is_ok());
         assert!(pred(res.unwrap()));
@@ -1004,7 +1017,7 @@ mod tests {
         args: &str,
         unstable: UnstableFeature,
     ) -> Result<StandaloneArgs, Error> {
-        let args = format!("kani -Z {} file.rs {args}", unstable);
+        let args = format!("kani -Z {unstable} file.rs {args}");
         let parse_res = StandaloneArgs::try_parse_from(args.split(' '))?;
         parse_res.verify_opts.validate()?;
         Ok(parse_res)

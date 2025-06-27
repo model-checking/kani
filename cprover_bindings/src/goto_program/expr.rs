@@ -177,6 +177,14 @@ pub enum ExprValue {
     Vector {
         elems: Vec<Expr>,
     },
+    Forall {
+        variable: Expr, // symbol
+        domain: Expr,   // where
+    },
+    Exists {
+        variable: Expr, // symbol
+        domain: Expr,   // where
+    },
 }
 
 /// Binary operators. The names are the same as in the Irep representation.
@@ -972,6 +980,16 @@ impl Expr {
         let typ = typ.aggr_tag().unwrap();
         expr!(Union { value, field }, typ)
     }
+
+    pub fn forall_expr(typ: Type, variable: Expr, domain: Expr) -> Expr {
+        assert!(variable.is_symbol());
+        expr!(Forall { variable, domain }, typ)
+    }
+
+    pub fn exists_expr(typ: Type, variable: Expr, domain: Expr) -> Expr {
+        assert!(variable.is_symbol());
+        expr!(Exists { variable, domain }, typ)
+    }
 }
 
 /// Constructors for Binary Operations
@@ -1017,11 +1035,12 @@ impl Expr {
             IeeeFloatEqual | IeeeFloatNotequal => lhs.typ == rhs.typ && lhs.typ.is_floating_point(),
             // Overflow flags
             OverflowMinus | OverflowResultMinus => {
-                (lhs.typ == rhs.typ && (lhs.typ.is_pointer() || lhs.typ.is_numeric()))
+                (lhs.typ == rhs.typ
+                    && (lhs.typ.is_pointer() || lhs.typ.is_numeric() || lhs.typ.is_vector()))
                     || (lhs.typ.is_pointer() && rhs.typ.is_integer())
             }
             OverflowMult | OverflowPlus | OverflowResultMult | OverflowResultPlus => {
-                (lhs.typ == rhs.typ && lhs.typ.is_integer())
+                (lhs.typ == rhs.typ && (lhs.typ.is_numeric() || lhs.typ.is_vector()))
                     || (lhs.typ.is_pointer() && rhs.typ.is_integer())
             }
             ROk => lhs.typ.is_pointer() && rhs.typ.is_c_size_t(),

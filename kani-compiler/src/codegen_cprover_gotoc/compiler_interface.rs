@@ -29,7 +29,7 @@ use rustc_codegen_ssa::back::archive::{
 };
 use rustc_codegen_ssa::back::link::link_binary;
 use rustc_codegen_ssa::traits::CodegenBackend;
-use rustc_codegen_ssa::{CodegenResults, CrateInfo};
+use rustc_codegen_ssa::{CodegenResults, CrateInfo, TargetConfig};
 use rustc_data_structures::fx::{FxHashMap, FxIndexMap};
 use rustc_errors::DEFAULT_LOCALE_RESOURCE;
 use rustc_hir::def_id::{DefId as InternalDefId, LOCAL_CRATE};
@@ -41,9 +41,10 @@ use rustc_session::Session;
 use rustc_session::config::{CrateType, OutputFilenames, OutputType};
 use rustc_session::output::out_filename;
 use rustc_smir::rustc_internal;
+use rustc_span::symbol::Symbol;
 use rustc_target::spec::PanicStrategy;
+use stable_mir::CrateDef;
 use stable_mir::mir::mono::{Instance, MonoItem};
-use stable_mir::{CrateDef, DefId};
 use std::any::Any;
 use std::collections::BTreeMap;
 use std::fmt::Write;
@@ -198,19 +199,42 @@ impl GotocCodegenBackend {
             None
         };
 
+        gcx.handle_quantifiers();
+
         // No output should be generated if user selected no_codegen.
         if !tcx.sess.opts.unstable_opts.no_codegen && tcx.sess.opts.output_types.should_codegen() {
             let pretty = self.queries.lock().unwrap().args().output_pretty_json;
-            write_file(&symtab_goto, ArtifactType::PrettyNameMap, &pretty_name_map, pretty);
+            write_file(symtab_goto, ArtifactType::PrettyNameMap, &pretty_name_map, pretty);
             write_goto_binary_file(symtab_goto, &gcx.symbol_table);
-            write_file(&symtab_goto, ArtifactType::TypeMap, &type_map, pretty);
+            write_file(symtab_goto, ArtifactType::TypeMap, &type_map, pretty);
             // If they exist, write out vtable virtual call function pointer restrictions
             if let Some(restrictions) = vtable_restrictions {
-                write_file(&symtab_goto, ArtifactType::VTableRestriction, &restrictions, pretty);
+                write_file(symtab_goto, ArtifactType::VTableRestriction, &restrictions, pretty);
             }
         }
 
         (gcx, items, contract_info)
+    }
+
+    /// Given a contract harness, get the DefId of its target.
+    /// For manual harnesses, extract it from the #[proof_for_contract] attribute.
+    /// For automatic harnesses, extract the target from the harness's GenericArgs.
+    fn target_def_id_for_harness(
+        &self,
+        tcx: TyCtxt,
+        harness: &Instance,
+        is_automatic_harness: bool,
+    ) -> Option<InternalDefId> {
+        if is_automatic_harness {
+            let kind = harness.args().0[0].expect_ty().kind();
+            let (fn_to_verify_def, _) = kind.fn_def().unwrap();
+            let def_id = fn_to_verify_def.def_id();
+            let attrs = KaniAttributes::for_def_id(tcx, def_id);
+            if attrs.has_contract() { Some(rustc_internal::internal(tcx, def_id)) } else { None }
+        } else {
+            let harness_attrs = KaniAttributes::for_def_id(tcx, harness.def.def_id());
+            harness_attrs.interpret_for_contract_attribute().map(|(_, id, _)| id)
+        }
     }
 }
 
@@ -226,6 +250,24 @@ impl CodegenBackend for GotocCodegenBackend {
     fn locale_resource(&self) -> &'static str {
         // We don't currently support multiple languages.
         DEFAULT_LOCALE_RESOURCE
+    }
+
+    fn target_config(&self, _sess: &Session) -> TargetConfig {
+        TargetConfig {
+            target_features: vec![],
+            unstable_target_features: vec![
+                Symbol::intern("sse"),
+                Symbol::intern("neon"),
+                Symbol::intern("x87"),
+                Symbol::intern("sse2"),
+            ],
+            // `true` is used as a default so backends need to acknowledge when they do not
+            // support the float types, rather than accidentally quietly skipping all tests.
+            has_reliable_f16: true,
+            has_reliable_f16_math: true,
+            has_reliable_f128: true,
+            has_reliable_f128_math: true,
+        }
     }
 
     fn codegen_crate(
@@ -273,10 +315,11 @@ impl CodegenBackend for GotocCodegenBackend {
                         // We reset the body cache for now because each codegen unit has different
                         // configurations that affect how we transform the instance body.
                         for harness in &unit.harnesses {
-                            let transformer = BodyTransformation::new(&queries, tcx, &unit);
+                            let transformer = BodyTransformation::new(&queries, tcx, unit);
                             let model_path = units.harness_model_path(*harness).unwrap();
+                            let is_automatic_harness = units.is_automatic_harness(harness);
                             let contract_metadata =
-                                contract_metadata_for_harness(tcx, harness.def.def_id());
+                                self.target_def_id_for_harness(tcx, harness, is_automatic_harness);
                             let (gcx, items, contract_info) = self.codegen_items(
                                 tcx,
                                 &[MonoItem::Fn(*harness)],
@@ -333,14 +376,15 @@ impl CodegenBackend for GotocCodegenBackend {
                     for (test_fn, test_desc) in harnesses.iter().zip(descriptions.iter()) {
                         let instance =
                             if let MonoItem::Fn(instance) = test_fn { instance } else { continue };
-                        let metadata =
-                            gen_test_metadata(tcx, *test_desc, *instance, &base_filename);
+                        let metadata = gen_test_metadata(tcx, *test_desc, *instance, base_filename);
                         let test_model_path = &metadata.goto_file.as_ref().unwrap();
-                        std::fs::copy(&model_path, test_model_path).expect(&format!(
-                            "Failed to copy {} to {}",
-                            model_path.display(),
-                            test_model_path.display()
-                        ));
+                        std::fs::copy(&model_path, test_model_path).unwrap_or_else(|_| {
+                            panic!(
+                                "Failed to copy {} to {}",
+                                model_path.display(),
+                                test_model_path.display()
+                            )
+                        });
                         results.harnesses.push(metadata);
                     }
                 }
@@ -383,7 +427,7 @@ impl CodegenBackend for GotocCodegenBackend {
                     // To avoid overriding the metadata for its verification, we skip this step when
                     // reachability is None, even because there is nothing to record.
                     write_file(
-                        &base_filename,
+                        base_filename,
                         ArtifactType::Metadata,
                         &results.generate_metadata(),
                         queries.args().output_pretty_json,
@@ -451,11 +495,6 @@ impl ArchiveBuilderBuilder for ArArchiveBuilderBuilder {
     fn new_archive_builder<'a>(&self, sess: &'a Session) -> Box<dyn ArchiveBuilder + 'a> {
         Box::new(ArArchiveBuilder::new(sess, &DEFAULT_OBJECT_READER))
     }
-}
-
-fn contract_metadata_for_harness(tcx: TyCtxt, def_id: DefId) -> Option<InternalDefId> {
-    let attrs = KaniAttributes::for_def_id(tcx, def_id);
-    attrs.interpret_for_contract_attribute().map(|(_, id, _)| id)
 }
 
 fn check_target(session: &Session) {

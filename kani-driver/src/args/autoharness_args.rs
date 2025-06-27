@@ -9,27 +9,28 @@ use crate::args::{ValidateArgs, VerificationArgs, validate_std_path};
 use clap::{Error, Parser, error::ErrorKind};
 use kani_metadata::UnstableFeature;
 
+// TODO: It would be nice if we could borrow --exact here from VerificationArgs to differentiate between partial/exact matches,
+// like --harnesses does. Sharing arguments with VerificationArgs doesn't work with our current structure, though.
 #[derive(Debug, Parser)]
 pub struct CommonAutoharnessArgs {
-    /// If specified, only autoharness functions that match this filter. This option can be provided
-    /// multiple times, which will verify all functions matching any of the filters.
-    /// Note that this filter will match against partial names, i.e., providing the name of a module will include all functions from that module.
-    /// Also note that if the function specified is unable to be automatically verified, this flag will have no effect.
-    #[arg(
-        long = "include-function",
-        num_args(1),
-        value_name = "FUNCTION",
-        conflicts_with = "exclude_function"
-    )]
-    pub include_function: Vec<String>,
+    /// Only create automatic harnesses for functions that match the given pattern.
+    /// This option can be provided multiple times, which will verify functions matching any of the patterns.
+    /// Kani considers a function to match the pattern if its fully qualified path contains PATTERN as a substring.
+    /// Example: `--include-pattern foo` matches all functions whose fully qualified paths contain the substring "foo".
+    #[arg(long = "include-pattern", num_args(1), value_name = "PATTERN")]
+    pub include_pattern: Vec<String>,
 
-    /// If specified, only autoharness functions that do not match this filter. This option can be provided
-    /// multiple times, which will verify all functions that do not match any of the filters.
-    /// Note that this filter will match against partial names, i.e., providing the name of a module will exclude all functions from that module.
-    #[arg(long = "exclude-function", num_args(1), value_name = "FUNCTION")]
-    pub exclude_function: Vec<String>,
-    // TODO: It would be nice if we could borrow --exact here from VerificationArgs to differentiate between partial/exact matches,
-    // like --harnesses does. Sharing arguments with VerificationArgs doesn't work with our current structure, though.
+    /// Only create automatic harnesses for functions that do not match the given pattern.
+    /// This option can be provided multiple times, which will verify functions that do not match any of the patterns.
+    /// Kani considers a function to match the pattern if its fully qualified path contains PATTERN as a substring.
+
+    /// This option takes precedence over `--include-pattern`, i.e., Kani will first select all functions that match `--include-pattern`,
+    /// then exclude those that match `--exclude-pattern.`
+    /// Example: `--include-pattern foo --exclude-pattern foo::bar` creates automatic harnesses for all functions whose paths contain "foo" without "foo::bar".
+    /// Example: `--include-pattern foo::bar --exclude-pattern foo` makes the `--include-pattern` a no-op, since the exclude pattern is a superset of the include pattern.
+    #[arg(long = "exclude-pattern", num_args(1), value_name = "PATTERN")]
+    pub exclude_pattern: Vec<String>,
+
     /// Run the `list` subcommand after generating the automatic harnesses. Requires -Z list. Note that this option implies --only-codegen.
     #[arg(long)]
     pub list: bool,
@@ -93,7 +94,8 @@ impl ValidateArgs for CargoAutoharnessArgs {
             ));
         }
 
-        if self.common_autoharness_args.format == Format::Pretty
+        if self.common_autoharness_args.list
+            && self.common_autoharness_args.format == Format::Pretty
             && self.verify_opts.common_args.quiet
         {
             return Err(Error::raw(
@@ -140,7 +142,8 @@ impl ValidateArgs for StandaloneAutoharnessArgs {
             ));
         }
 
-        if self.common_autoharness_args.format == Format::Pretty
+        if self.common_autoharness_args.list
+            && self.common_autoharness_args.format == Format::Pretty
             && self.verify_opts.common_args.quiet
         {
             return Err(Error::raw(

@@ -6,7 +6,7 @@
 
 use crate::metadata::from_json;
 use crate::session::KaniSession;
-use crate::util::crate_name;
+use crate::util::{crate_name, info_operation};
 use anyhow::{Context, Result};
 use kani_metadata::{
     ArtifactType, ArtifactType::*, HarnessMetadata, KaniMetadata, artifact::convert_type,
@@ -177,6 +177,13 @@ impl Artifact {
 /// be collected from the project.
 pub fn cargo_project(session: &mut KaniSession, keep_going: bool) -> Result<Project> {
     let outputs = session.cargo_build(keep_going)?;
+    if session.args.no_codegen {
+        info_operation(
+            "info:",
+            "Compilation succeeded up until codegen. Skipping codegen because of `--no-codegen` option. Rerun without `--no-codegen` to perform codegen.",
+        );
+        return Ok(Project::default());
+    }
     let outdir = outputs.outdir.canonicalize()?;
     // For the MIR Linker we know there is only one metadata per crate. Use that in our favor.
     let metadata =
@@ -225,7 +232,7 @@ impl<'a> StandaloneProjectBuilder<'a> {
         } else {
             input.canonicalize().unwrap().parent().unwrap().to_path_buf()
         };
-        let crate_name = if let Some(name) = krate_name { name } else { crate_name(&input) };
+        let crate_name = if let Some(name) = krate_name { name } else { crate_name(input) };
         let metadata = standalone_artifact(&outdir, &crate_name, Metadata);
         Ok(StandaloneProjectBuilder {
             outdir,

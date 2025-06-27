@@ -1,0 +1,11 @@
+- Status: FAILURE\
+- Description: "|ret|
+{
+    unsafe{
+        let ptr_x = xs.as_ptr(); let ptr_y = ys.as_ptr();
+        kani::forall!(| k in (0, 8)| *ptr_x.wrapping_byte_offset(k as isize)
+        == *ptr_y.wrapping_byte_offset(k as isize))
+    }
+}"
+
+VERIFICATION:- FAILED

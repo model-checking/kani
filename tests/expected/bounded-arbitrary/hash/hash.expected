@@ -1,0 +1,10 @@
+Checking harness check_hashset...
+
+ ** 2 of 2 cover properties satisfied
+
+Checking harness check_hashmap...
+
+ ** 2 of 2 cover properties satisfied
+
+Manual Harness Summary:
+Complete - 2 successfully verified harnesses, 0 failures, 2 total.

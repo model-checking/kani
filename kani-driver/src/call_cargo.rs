@@ -194,7 +194,7 @@ crate-type = ["lib"]
         // If you are adding a new `kani-compiler` argument, you likely want to put it `kani_compiler_flags()` instead,
         // unless there a reason it shouldn't be passed to dependencies.
         // (Note that at the time of writing, passing the other compiler args to dependencies is a no-op, since `--reachability=None` skips codegen anyway.)
-        self.pkg_args.push(self.reachability_arg());
+        let pkg_args = vec!["--".into(), self.reachability_arg()];
 
         let mut found_target = false;
         let packages = self.packages_to_verify(&self.args, &metadata)?;
@@ -206,7 +206,7 @@ crate-type = ["lib"]
                 cmd.args(&cargo_args)
                     .args(vec!["-p", &package.id.to_string()])
                     .args(verification_target.to_args())
-                    .args(&self.pkg_args)
+                    .args(&pkg_args)
                     .env("RUSTC", &self.kani_compiler)
                     // Use CARGO_ENCODED_RUSTFLAGS instead of RUSTFLAGS is preferred. See
                     // https://doc.rust-lang.org/cargo/reference/environment-variables.html
@@ -356,7 +356,13 @@ crate-type = ["lib"]
                     && t1.doc == t2.doc)
         }
 
+        let compile_start = std::time::Instant::now();
         let artifacts = self.run_build(cargo_cmd)?;
+        if std::env::var("TIME_COMPILER").is_ok() {
+            // conditionally print the compilation time for debugging & use by `compile-timer`
+            // doesn't just use the existing `--debug` flag because the number of prints significantly affects performance
+            println!("BUILT {} IN {:?}μs", target.name, compile_start.elapsed().as_micros());
+        }
         debug!(?artifacts, "run_build_target");
 
         // We generate kani specific artifacts only for the build target. The build target is

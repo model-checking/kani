@@ -1,0 +1,5 @@
+loop_with_old.loop_invariant_base.1\
+	 - Status: SUCCESS\
+	 - Description: "Check invariant before entry for loop loop_with_old.0"
+
+VERIFICATION:- SUCCESSFUL
