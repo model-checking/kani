@@ -28,7 +28,6 @@ jobs:
     name: Auto Label
     permissions:
       contents: read
-      issues: write
       pull-requests: write
     outputs:
       all-labels: ${{ steps.labeler.outputs.all-labels }}
