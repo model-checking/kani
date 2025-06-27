@@ -12,6 +12,7 @@ publish = false
 cbmc = { path = "../cprover_bindings", package = "cprover_bindings", optional = true }
 charon = { path = "../charon/charon", optional = true, default-features = false } 
 clap = { version = "4.4.11", features = ["derive", "cargo"] }
+fxhash = "0.2.1"
 itertools = "0.14"
 kani_metadata = { path = "../kani_metadata" }
 lazy_static = "1.5.0"
