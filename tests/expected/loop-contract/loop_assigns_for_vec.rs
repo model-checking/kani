@@ -3,7 +3,7 @@
 
 // kani-flags: -Z loop-contracts
 
-//! Check the use of loop_assigns for Rust's vec
+//! Check the use of loop_modifies for Rust's vec
 
 #![feature(proc_macro_hygiene)]
 #![feature(stmt_expr_attributes)]
@@ -19,7 +19,7 @@ fn main() {
     v.extend(a);
     //unsafe {(&v as *const Vec<u8>  as *const usize).add(2)} is the ptr to v.len
     #[kani::loop_invariant(i <= 3)]
-    #[kani::loop_assigns(&i, slice_from_raw_parts(v.as_ptr(), 12), unsafe {(&v as *const Vec<u8>  as *const usize).add(2)})]
+    #[kani::loop_modifies(&i, slice_from_raw_parts(v.as_ptr(), 12), unsafe {(&v as *const Vec<u8>  as *const usize).add(2)})]
     while i < 3 {
         unsafe {
             ptr::copy_nonoverlapping(v.as_ptr(), (v.as_mut_ptr()).add(i * 3 + 3), 3);

@@ -730,10 +730,10 @@ impl GotocHook for LoopInvariantRegister {
 
             let mut stmt = Stmt::goto(bb_label(target.unwrap()), loc)
                 .with_loop_contracts(func_exp.call(fargs).cast_to(Type::CInteger(CIntType::Bool)));
-            let assigns = gcx.current_loop_assigns.clone();
+            let assigns = gcx.current_loop_modifies.clone();
             if !assigns.is_empty() {
-                stmt = stmt.with_loop_assigns(assigns.clone());
-                gcx.current_loop_assigns.clear();
+                stmt = stmt.with_loop_modifies(assigns.clone());
+                gcx.current_loop_modifies.clear();
             }
 
             // Add `free(0)` to make sure the body of `free` won't be dropped to

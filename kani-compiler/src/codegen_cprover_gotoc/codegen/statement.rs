@@ -92,9 +92,9 @@ impl GotocCtx<'_> {
                 let lty = self.place_ty_stable(lhs);
                 let rty = self.rvalue_ty_stable(rhs);
                 let localname = self.codegen_var_name(&lhs.local);
-                if localname.contains("kani_loop_assigns") {
+                if localname.contains("kani_loop_modifies") {
                     let assigns = self.rvalue_to_assign_targets(rhs, location);
-                    self.current_loop_assigns = assigns.clone();
+                    self.current_loop_modifies = assigns.clone();
                     return Stmt::skip(location);
                 }
                 // we ignore assignment for all zero size types

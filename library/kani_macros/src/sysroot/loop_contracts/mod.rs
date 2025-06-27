@@ -394,11 +394,11 @@ fn generate_unique_id_from_span(stmt: &Stmt) -> String {
     format!("_{:?}_{:?}_{:?}_{:?}", start.line(), start.column(), end.line(), end.column())
 }
 
-pub fn loop_assigns(attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn loop_modifies(attr: TokenStream, item: TokenStream) -> TokenStream {
     let assigns = parse_macro_input!(attr with Punctuated::<Expr, Token![,]>::parse_terminated)
         .into_iter()
         .collect::<Vec<Expr>>();
-    let loop_assign_name: String = "kani_loop_assigns".to_owned();
+    let loop_assign_name: String = "kani_loop_modifies".to_owned();
     let loop_assign_ident = format_ident!("{}", loop_assign_name);
     let loop_assign_stmt: Stmt = parse_quote! {
         let #loop_assign_ident = (#(#assigns),*);

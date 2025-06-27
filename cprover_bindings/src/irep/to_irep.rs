@@ -548,11 +548,11 @@ impl ToIrep for StmtBody {
                     arguments_irep(arguments.iter(), mm),
                 ],
             ),
-            StmtBody::Goto { dest, loop_invariants, loop_assigns } => {
+            StmtBody::Goto { dest, loop_invariants, loop_modifies } => {
                 let inv = loop_invariants
                     .clone()
                     .map(|inv| inv.clone().and(Expr::bool_true()).to_irep(mm));
-                let assigns = loop_assigns.clone().map(|assigns| {
+                let assigns = loop_modifies.clone().map(|assigns| {
                     Irep::just_sub(vec![Irep::just_sub(
                         assigns.iter().map(|assign| assign.to_irep(mm)).collect(),
                     )])
