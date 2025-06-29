@@ -1,6 +1,7 @@
-error: The function specified in the `proof_for_contract` attribute, `foo`, was not found.\
-Make sure the function is reachable from the harness.
+error: The function specified in the `proof_for_contract` attribute, `foo`, is not reachable from the harness `check_foo`.\
 test.rs:\
-|\
-| #[kani::proof_for_contract(foo)]\
+|
+| fn check_foo() {
 | ^^^^^^^^^^^^^^
+|
+= help: Make sure that `check_foo` calls `foo`

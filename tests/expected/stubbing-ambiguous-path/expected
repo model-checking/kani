@@ -1,3 +1,7 @@
-error: failed to resolve `foo`: `foo` is ambiguous because of multiple glob imports in module `main`. Found:\
-mod2::foo\
-mod1::foo\
+error: failed to resolve `foo`: `foo` is ambiguous because of multiple glob imports in module `main`. Found:
+       mod2::foo\
+       mod1::foo
+|
+| #[kani::stub(foo, stub)]
+| ^^^^^^^^^^^^^^^^^^^^^^^^
+|
