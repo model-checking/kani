@@ -47,6 +47,20 @@ impl<'a> ContractConditionsHandler<'a> {
             #[kanitool::asserted_with = #assert_name]
             #[kanitool::modifies_wrapper = #modifies_name]
             #vis #sig {
+                // Dummy functions used to force the compiler to annotate Kani's
+                // closures as `FnOnce`. Without this, Rust infers the generated closures as `FnMut`,
+                // preventing us from writing contracts for functions returning mutable references.
+                // See https://github.com/model-checking/kani/issues/3764
+                #[inline(never)]
+                #[kanitool::fn_marker = "kani_force_fn_once"]
+                const fn kani_force_fn_once<T, F: FnOnce() -> T>(f: F) -> F {
+                    f
+                }
+                #[inline(never)]
+                #[kanitool::fn_marker = "kani_force_fn_once_with_args"]
+                const fn kani_force_fn_once_with_args<A, T, F: FnOnce(A) -> T>(f: F) -> F {
+                    f
+                }
                 // Dummy function used to force the compiler to capture the environment.
                 // We cannot call closures inside constant functions.
                 // This function gets replaced by `kani::internal::call_closure`.
@@ -125,7 +139,7 @@ impl<'a> ContractConditionsHandler<'a> {
         quote!(
             #[kanitool::is_contract_generated(recursion_check)]
             #[allow(dead_code, unused_variables, unused_mut)]
-            let mut #recursion_ident = || #output
+            let mut #recursion_ident = kani_force_fn_once(|| #output
             {
                 #[kanitool::recursion_tracker]
                 static mut REENTRY: bool = false;
@@ -139,7 +153,7 @@ impl<'a> ContractConditionsHandler<'a> {
                     unsafe { REENTRY = false };
                     #result
                 }
-            };
+            });
         )
     }
 
