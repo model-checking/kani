@@ -85,7 +85,9 @@ macro_rules! generate_models {
                         "Offset result and original pointer should point to the same allocation",
                     );
                     // The offset must fit in isize since this represents the same allocation.
-                    let offset_bytes = ptr1.addr().wrapping_sub(ptr2.addr()) as isize;
+                    let offset_bytes = kani::mem::pointer_offset(ptr1)
+                        .wrapping_sub(kani::mem::pointer_offset(ptr2))
+                        as isize;
                     let t_size = size_of::<T>() as isize;
                     kani::safety_check(
                         offset_bytes % t_size == 0,
