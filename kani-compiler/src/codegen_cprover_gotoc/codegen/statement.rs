@@ -317,25 +317,23 @@ impl GotocCtx<'_> {
                     if *expected { r } else { Expr::not(r) }
                 };
 
+                // Generate the message to print to the user and property class.
+                // For `msg`s with runtime values, replace them with static messages,
+                // since that's all that CBMC accepts.
                 let (msg, property_class) = match msg {
-                    AssertMessage::BoundsCheck { .. } => {
-                        // For bounds check the following panic message is generated at runtime:
-                        // "index out of bounds: the length is {len} but the index is {index}",
-                        // but CBMC only accepts static messages so we don't add values to the message.
-                        (
-                            "index out of bounds: the length is less than or equal to the given index",
-                            PropertyClass::Assertion,
-                        )
-                    }
-                    AssertMessage::MisalignedPointerDereference { .. } => {
-                        // Misaligned pointer dereference check messages is also a runtime messages.
-                        // Generate a generic one here.
-                        (
-                            "misaligned pointer dereference: address must be a multiple of its type's \
+                    AssertMessage::BoundsCheck { .. } => (
+                        "index out of bounds: the length is less than or equal to the given index",
+                        PropertyClass::Assertion,
+                    ),
+                    AssertMessage::InvalidEnumConstruction { .. } => (
+                        "invalid enum construction: value is not a valid discriminant for this enum",
+                        PropertyClass::SafetyCheck,
+                    ),
+                    AssertMessage::MisalignedPointerDereference { .. } => (
+                        "misaligned pointer dereference: address must be a multiple of its type's \
                     alignment",
-                            PropertyClass::SafetyCheck,
-                        )
-                    }
+                        PropertyClass::SafetyCheck,
+                    ),
                     // For all other assert kind we can get the static message.
                     AssertMessage::NullPointerDereference => {
                         (msg.description().unwrap(), PropertyClass::SafetyCheck)
