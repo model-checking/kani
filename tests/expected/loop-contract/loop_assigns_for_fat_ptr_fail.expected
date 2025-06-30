@@ -1,0 +1,7 @@
+main.assigns.1\
+	 - Status: FAILURE\
+	 - Description: "Check that a[var_15] is assignable"
+
+Failed Checks: Check that a[var_15] is assignable
+
+VERIFICATION:- FAILED
