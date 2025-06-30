@@ -552,6 +552,9 @@ impl RustcInternalMir for AssertMessage {
             AssertMessage::ResumedAfterDrop(coroutine_kind) => {
                 rustc_middle::mir::AssertMessage::ResumedAfterDrop(coroutine_kind.internal_mir(tcx))
             }
+            AssertMessage::InvalidEnumConstruction(source) => {
+                rustc_middle::mir::AssertMessage::InvalidEnumConstruction(source.internal_mir(tcx))
+            }
         }
     }
 }
