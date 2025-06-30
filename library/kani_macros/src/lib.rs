@@ -454,7 +454,7 @@ mod sysroot {
     mod loop_contracts;
 
     pub use contracts::{ensures, modifies, proof_for_contract, requires, stub_verified};
-    pub use loop_contracts::{loop_modifies, loop_invariant};
+    pub use loop_contracts::{loop_invariant, loop_modifies};
 
     use super::*;
 
