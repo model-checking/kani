@@ -514,31 +514,11 @@ impl RustcInternalMir for AssertMessage {
                     index: index.internal_mir(tcx),
                 }
             }
-            AssertMessage::Overflow(bin_op, left_operand, right_operand) => {
-                rustc_middle::mir::AssertMessage::Overflow(
-                    internal(tcx, bin_op),
-                    left_operand.internal_mir(tcx),
-                    right_operand.internal_mir(tcx),
-                )
-            }
-            AssertMessage::OverflowNeg(operand) => {
-                rustc_middle::mir::AssertMessage::OverflowNeg(operand.internal_mir(tcx))
-            }
             AssertMessage::DivisionByZero(operand) => {
                 rustc_middle::mir::AssertMessage::DivisionByZero(operand.internal_mir(tcx))
             }
-            AssertMessage::RemainderByZero(operand) => {
-                rustc_middle::mir::AssertMessage::RemainderByZero(operand.internal_mir(tcx))
-            }
-            AssertMessage::ResumedAfterReturn(coroutine_kind) => {
-                rustc_middle::mir::AssertMessage::ResumedAfterReturn(
-                    coroutine_kind.internal_mir(tcx),
-                )
-            }
-            AssertMessage::ResumedAfterPanic(coroutine_kind) => {
-                rustc_middle::mir::AssertMessage::ResumedAfterPanic(
-                    coroutine_kind.internal_mir(tcx),
-                )
+            AssertMessage::InvalidEnumConstruction(source) => {
+                rustc_middle::mir::AssertMessage::InvalidEnumConstruction(source.internal_mir(tcx))
             }
             AssertMessage::MisalignedPointerDereference { required, found } => {
                 rustc_middle::mir::AssertMessage::MisalignedPointerDereference {
@@ -549,11 +529,31 @@ impl RustcInternalMir for AssertMessage {
             AssertMessage::NullPointerDereference => {
                 rustc_middle::mir::AssertMessage::NullPointerDereference
             }
+            AssertMessage::Overflow(bin_op, left_operand, right_operand) => {
+                rustc_middle::mir::AssertMessage::Overflow(
+                    internal(tcx, bin_op),
+                    left_operand.internal_mir(tcx),
+                    right_operand.internal_mir(tcx),
+                )
+            }
+            AssertMessage::OverflowNeg(operand) => {
+                rustc_middle::mir::AssertMessage::OverflowNeg(operand.internal_mir(tcx))
+            }
+            AssertMessage::RemainderByZero(operand) => {
+                rustc_middle::mir::AssertMessage::RemainderByZero(operand.internal_mir(tcx))
+            }
             AssertMessage::ResumedAfterDrop(coroutine_kind) => {
                 rustc_middle::mir::AssertMessage::ResumedAfterDrop(coroutine_kind.internal_mir(tcx))
             }
-            AssertMessage::InvalidEnumConstruction(source) => {
-                rustc_middle::mir::AssertMessage::InvalidEnumConstruction(source.internal_mir(tcx))
+            AssertMessage::ResumedAfterPanic(coroutine_kind) => {
+                rustc_middle::mir::AssertMessage::ResumedAfterPanic(
+                    coroutine_kind.internal_mir(tcx),
+                )
+            }
+            AssertMessage::ResumedAfterReturn(coroutine_kind) => {
+                rustc_middle::mir::AssertMessage::ResumedAfterReturn(
+                    coroutine_kind.internal_mir(tcx),
+                )
             }
         }
     }
