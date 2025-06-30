@@ -179,7 +179,8 @@ pub(crate) trait GlobalPass: Debug {
     where
         Self: Sized;
 
-    /// Run a transformation pass on the whole codegen unit.
+    /// Run a transformation pass on the whole codegen unit, returning a bool
+    /// for whether modifications were made to the MIR that could affect reachability.
     fn transform(
         &mut self,
         tcx: TyCtxt,
@@ -187,7 +188,7 @@ pub(crate) trait GlobalPass: Debug {
         starting_items: &[MonoItem],
         instances: Vec<Instance>,
         transformer: &mut BodyTransformation,
-    );
+    ) -> bool;
 }
 
 /// The transformation result.
@@ -226,6 +227,7 @@ impl GlobalPasses {
     }
 
     /// Run all global passes and store the results in a cache that can later be queried by `body`.
+    /// Returns a boolean for if a pass has modified the MIR bodies.
     pub fn run_global_passes(
         &mut self,
         transformer: &mut BodyTransformation,
@@ -233,9 +235,17 @@ impl GlobalPasses {
         starting_items: &[MonoItem],
         instances: Vec<Instance>,
         call_graph: CallGraph,
-    ) {
-        for global_pass in self.global_passes.iter_mut() {
-            global_pass.transform(tcx, &call_graph, starting_items, instances.clone(), transformer);
+    ) -> bool {
+        let mut modified = false;
+        for global_pass in &mut self.global_passes {
+            modified |= global_pass.transform(
+                tcx,
+                &call_graph,
+                starting_items,
+                instances.clone(),
+                transformer,
+            );
         }
+        modified
     }
 }

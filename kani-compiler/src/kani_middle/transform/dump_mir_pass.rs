@@ -40,7 +40,7 @@ impl GlobalPass for DumpMirPass {
         starting_items: &[MonoItem],
         instances: Vec<Instance>,
         transformer: &mut BodyTransformation,
-    ) {
+    ) -> bool {
         // Create output buffer.
         let file_path = {
             let base_path = tcx.output_filenames(()).path(OutputType::Object);
@@ -65,5 +65,8 @@ impl GlobalPass for DumpMirPass {
             writeln!(writer, "// Item: {} ({})", instance.name(), instance.mangled_name()).unwrap();
             let _ = transformer.body(tcx, *instance).dump(&mut writer, &instance.name());
         }
+
+        // This pass just reads the MIR and thus never modifies it.
+        false
     }
 }
