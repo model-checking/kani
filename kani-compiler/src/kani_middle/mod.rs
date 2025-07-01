@@ -215,11 +215,11 @@ fn can_derive_arbitrary(
     kani_any_def: FnDef,
     ty_arbitrary_cache: &mut FxHashMap<Ty, bool>,
 ) -> bool {
-    let mut variants_can_derive = |def: AdtDef| {
+    let mut variants_can_derive = |def: AdtDef, args: GenericArgs| {
         for variant in def.variants_iter() {
             let fields = variant.fields();
             let mut fields_impl_arbitrary = true;
-            for ty in fields.iter().map(|field| field.ty()) {
+            for ty in fields.iter().map(|field| field.ty_with_args(&args)) {
                 fields_impl_arbitrary &= implements_arbitrary(ty, kani_any_def, ty_arbitrary_cache);
             }
             if !fields_impl_arbitrary {
@@ -229,16 +229,16 @@ fn can_derive_arbitrary(
         true
     };
 
-    if let TyKind::RigidTy(RigidTy::Adt(def, _)) = ty.kind() {
+    if let TyKind::RigidTy(RigidTy::Adt(def, args)) = ty.kind() {
         match def.kind() {
             AdtKind::Enum => {
                 // Enums with no variants cannot be instantiated
                 if def.num_variants() == 0 {
                     return false;
                 }
-                variants_can_derive(def)
+                variants_can_derive(def, args)
             }
-            AdtKind::Struct => variants_can_derive(def),
+            AdtKind::Struct => variants_can_derive(def, args),
             AdtKind::Union => false,
         }
     } else {

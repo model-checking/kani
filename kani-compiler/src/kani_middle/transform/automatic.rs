@@ -114,10 +114,10 @@ impl TransformPass for AutomaticArbitraryPass {
             return (false, body);
         }
 
-        if let TyKind::RigidTy(RigidTy::Adt(def, ..)) = ty.kind() {
+        if let TyKind::RigidTy(RigidTy::Adt(def, args)) = ty.kind() {
             match def.kind() {
-                AdtKind::Enum => (true, self.generate_enum_body(def, body)),
-                AdtKind::Struct => (true, self.generate_struct_body(def, body)),
+                AdtKind::Enum => (true, self.generate_enum_body(def, args, body)),
+                AdtKind::Struct => (true, self.generate_struct_body(def, args, body)),
                 AdtKind::Union => unexpected_ty(ty),
             }
         } else {
@@ -152,7 +152,8 @@ impl AutomaticArbitraryPass {
     /// This function will panic if a field type does not implement Arbitrary.
     fn call_kani_any_for_variant(
         &self,
-        def: AdtDef,
+        adt_def: AdtDef,
+        adt_args: &GenericArgs,
         body: &mut MutableBody,
         source: &mut SourceInstruction,
         variant: VariantDef,
@@ -161,7 +162,7 @@ impl AutomaticArbitraryPass {
         let mut field_locals = vec![];
 
         // Construct nondeterministic values for each of the variant's fields
-        for ty in fields.iter().map(|field| field.ty()) {
+        for ty in fields.iter().map(|field| field.ty_with_args(adt_args)) {
             let lcl = self.call_kani_any_for_ty(body, ty, source);
             field_locals.push(lcl);
         }
@@ -174,7 +175,7 @@ impl AutomaticArbitraryPass {
         );
         let mut assign_instr = SourceInstruction::Terminator { bb: source.bb() - 1 };
         let rvalue = Rvalue::Aggregate(
-            AggregateKind::Adt(def, variant.idx, GenericArgs(vec![]), None, None),
+            AggregateKind::Adt(adt_def, variant.idx, GenericArgs(vec![]), None, None),
             field_locals.into_iter().map(|lcl| Operand::Move(lcl.into())).collect(),
         );
         body.assign_to(Place::from(0), rvalue, &mut assign_instr, InsertPosition::Before);
@@ -194,7 +195,7 @@ impl AutomaticArbitraryPass {
     ///   _ => Enum::LastVariant
     /// }
     /// ```
-    fn generate_enum_body(&self, def: AdtDef, body: Body) -> Body {
+    fn generate_enum_body(&self, def: AdtDef, args: GenericArgs, body: Body) -> Body {
         // Autoharness only deems a function with an enum eligible if it has at least one variant, c.f. `can_derive_arbitrary`
         assert!(def.num_variants() > 0);
 
@@ -221,7 +222,7 @@ impl AutomaticArbitraryPass {
         let mut branches: Vec<(u128, BasicBlockIdx)> = vec![];
         for variant in def.variants_iter() {
             let target_bb =
-                self.call_kani_any_for_variant(def, &mut new_body, &mut source, variant);
+                self.call_kani_any_for_variant(def, &args, &mut new_body, &mut source, variant);
             branches.push((variant.idx.to_index() as u128, target_bb));
         }
 
@@ -247,7 +248,7 @@ impl AutomaticArbitraryPass {
     ///   ...
     /// }
     /// ```
-    fn generate_struct_body(&self, def: AdtDef, body: Body) -> Body {
+    fn generate_struct_body(&self, def: AdtDef, args: GenericArgs, body: Body) -> Body {
         assert_eq!(def.num_variants(), 1);
 
         let mut new_body = MutableBody::from(body);
@@ -255,7 +256,7 @@ impl AutomaticArbitraryPass {
         let mut source = SourceInstruction::Terminator { bb: 0 };
 
         let variant = def.variants()[0];
-        self.call_kani_any_for_variant(def, &mut new_body, &mut source, variant);
+        self.call_kani_any_for_variant(def, &args, &mut new_body, &mut source, variant);
 
         new_body.into()
     }
