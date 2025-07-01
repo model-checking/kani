@@ -1,13 +1,7 @@
-Kani generated automatic harnesses for 11 function(s):
+Kani generated automatic harnesses for 7 function(s):
 +------------------------------+-------------------------------------+
 | Crate                        | Selected Function                   |
 +====================================================================+
-| autoderive_arbitrary_structs | should_derive::AlignmentStruct      |
-|------------------------------+-------------------------------------|
-| autoderive_arbitrary_structs | should_derive::AnonMultipleStruct   |
-|------------------------------+-------------------------------------|
-| autoderive_arbitrary_structs | should_derive::AnonStruct           |
-|------------------------------+-------------------------------------|
 | autoderive_arbitrary_structs | should_derive::alignment_fail       |
 |------------------------------+-------------------------------------|
 | autoderive_arbitrary_structs | should_derive::alignment_pass       |
@@ -21,11 +15,9 @@ Kani generated automatic harnesses for 11 function(s):
 | autoderive_arbitrary_structs | should_derive::named_struct         |
 |------------------------------+-------------------------------------|
 | autoderive_arbitrary_structs | should_derive::unit_struct          |
-|------------------------------+-------------------------------------|
-| autoderive_arbitrary_structs | should_not_derive::RecursiveFoo     |
 +------------------------------+-------------------------------------+
 
-Kani did not generate automatic harnesses for 10 function(s).
+Kani did not generate automatic harnesses for 7 function(s).
 +------------------------------+-------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------+
 | Crate                        | Skipped Function                                                              | Reason for Skipping                                                                                                            |
 +===============================================================================================================================================================================================================================================+
@@ -36,12 +28,6 @@ Kani did not generate automatic harnesses for 10 function(s).
 | autoderive_arbitrary_structs | <should_derive::UnitStruct as std::cmp::Eq>::assert_receiver_is_total_eq      | Missing Arbitrary implementation for argument(s) self: &should_derive::UnitStruct                                              |
 |------------------------------+-------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------|
 | autoderive_arbitrary_structs | <should_derive::UnitStruct as std::cmp::PartialEq>::eq                        | Missing Arbitrary implementation for argument(s) self: &should_derive::UnitStruct, other: &should_derive::UnitStruct           |
-|------------------------------+-------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------|
-| autoderive_arbitrary_structs | should_not_derive::PtrStruct                                                  | Missing Arbitrary implementation for argument(s) _: *const i8                                                                  |
-|------------------------------+-------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------|
-| autoderive_arbitrary_structs | should_not_derive::RefStruct                                                  | Missing Arbitrary implementation for argument(s) _: &mut i32                                                                   |
-|------------------------------+-------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------|
-| autoderive_arbitrary_structs | should_not_derive::StrStruct                                                  | Missing Arbitrary implementation for argument(s) _: &str                                                                       |
 |------------------------------+-------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------|
 | autoderive_arbitrary_structs | should_not_derive::no_structs_eligible                                        | Missing Arbitrary implementation for argument(s) val: should_not_derive::StrStruct, val2: should_not_derive::PtrStruct         |
 |------------------------------+-------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------|
@@ -106,17 +92,9 @@ Autoharness Summary:
 +------------------------------+-------------------------------------+-----------------------------+---------------------+
 | Crate                        | Selected Function                   | Kind of Automatic Harness   | Verification Result |
 +========================================================================================================================+
-| autoderive_arbitrary_structs | should_derive::AlignmentStruct      | #[kani::proof]              | Success             |
-|------------------------------+-------------------------------------+-----------------------------+---------------------|
-| autoderive_arbitrary_structs | should_derive::AnonMultipleStruct   | #[kani::proof]              | Success             |
-|------------------------------+-------------------------------------+-----------------------------+---------------------|
-| autoderive_arbitrary_structs | should_derive::AnonStruct           | #[kani::proof]              | Success             |
-|------------------------------+-------------------------------------+-----------------------------+---------------------|
 | autoderive_arbitrary_structs | should_derive::alignment_pass       | #[kani::proof_for_contract] | Success             |
 |------------------------------+-------------------------------------+-----------------------------+---------------------|
 | autoderive_arbitrary_structs | should_derive::unit_struct          | #[kani::proof]              | Success             |
-|------------------------------+-------------------------------------+-----------------------------+---------------------|
-| autoderive_arbitrary_structs | should_not_derive::RecursiveFoo     | #[kani::proof]              | Success             |
 |------------------------------+-------------------------------------+-----------------------------+---------------------|
 | autoderive_arbitrary_structs | should_derive::alignment_fail       | #[kani::proof]              | Failure             |
 |------------------------------+-------------------------------------+-----------------------------+---------------------|
