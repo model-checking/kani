@@ -188,6 +188,10 @@ fn implements_arbitrary(
         return *v;
     }
 
+    if ty.kind().rigid().is_none() {
+        return false;
+    }
+
     let kani_any_body =
         Instance::resolve(kani_any_def, &GenericArgs(vec![GenericArgKind::Type(ty)]))
             .unwrap()
@@ -230,6 +234,12 @@ fn can_derive_arbitrary(
     };
 
     if let TyKind::RigidTy(RigidTy::Adt(def, args)) = ty.kind() {
+        for arg in &args.0 {
+            if let GenericArgKind::Lifetime(..) = arg {
+                return false;
+            }
+        }
+
         match def.kind() {
             AdtKind::Enum => {
                 // Enums with no variants cannot be instantiated
