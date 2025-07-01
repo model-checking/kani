@@ -78,6 +78,8 @@ pub struct GotocCtx<'tcx> {
     pub transformer: BodyTransformation,
     /// If there exist some usage of loop contracts int context.
     pub has_loop_contracts: bool,
+    /// Track loop assign clause
+    pub current_loop_modifies: Vec<Expr>,
 }
 
 /// Constructor
@@ -108,6 +110,7 @@ impl<'tcx> GotocCtx<'tcx> {
             concurrent_constructs: FxHashMap::default(),
             transformer,
             has_loop_contracts: false,
+            current_loop_modifies: Vec::new(),
         }
     }
 }

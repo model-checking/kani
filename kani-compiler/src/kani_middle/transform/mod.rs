@@ -26,7 +26,7 @@ use crate::kani_middle::transform::kani_intrinsics::IntrinsicGeneratorPass;
 use crate::kani_middle::transform::loop_contracts::LoopContractPass;
 use crate::kani_middle::transform::stubs::{ExternFnStubPass, FnStubPass};
 use crate::kani_queries::QueryDb;
-use automatic::AutomaticHarnessPass;
+use automatic::{AutomaticArbitraryPass, AutomaticHarnessPass};
 use dump_mir_pass::DumpMirPass;
 use rustc_middle::ty::TyCtxt;
 use stable_mir::mir::Body;
@@ -76,6 +76,7 @@ impl BodyTransformation {
         let unsupported_check_type = CheckType::new_unsupported_check_assert_assume_false(queries);
         // This has to come first, since creating harnesses affects later stubbing and contract passes.
         transformer.add_pass(queries, AutomaticHarnessPass::new(unit, queries));
+        transformer.add_pass(queries, AutomaticArbitraryPass::new(unit, queries));
         transformer.add_pass(queries, FnStubPass::new(&unit.stubs));
         transformer.add_pass(queries, ExternFnStubPass::new(&unit.stubs));
         transformer.add_pass(queries, FunctionWithContractPass::new(tcx, queries, unit));
@@ -178,7 +179,8 @@ pub(crate) trait GlobalPass: Debug {
     where
         Self: Sized;
 
-    /// Run a transformation pass on the whole codegen unit.
+    /// Run a transformation pass on the whole codegen unit, returning a bool
+    /// for whether modifications were made to the MIR that could affect reachability.
     fn transform(
         &mut self,
         tcx: TyCtxt,
@@ -186,7 +188,7 @@ pub(crate) trait GlobalPass: Debug {
         starting_items: &[MonoItem],
         instances: Vec<Instance>,
         transformer: &mut BodyTransformation,
-    );
+    ) -> bool;
 }
 
 /// The transformation result.
@@ -225,6 +227,7 @@ impl GlobalPasses {
     }
 
     /// Run all global passes and store the results in a cache that can later be queried by `body`.
+    /// Returns a boolean for if a pass has modified the MIR bodies.
     pub fn run_global_passes(
         &mut self,
         transformer: &mut BodyTransformation,
@@ -232,9 +235,17 @@ impl GlobalPasses {
         starting_items: &[MonoItem],
         instances: Vec<Instance>,
         call_graph: CallGraph,
-    ) {
-        for global_pass in self.global_passes.iter_mut() {
-            global_pass.transform(tcx, &call_graph, starting_items, instances.clone(), transformer);
+    ) -> bool {
+        let mut modified = false;
+        for global_pass in &mut self.global_passes {
+            modified |= global_pass.transform(
+                tcx,
+                &call_graph,
+                starting_items,
+                instances.clone(),
+                transformer,
+            );
         }
+        modified
     }
 }
