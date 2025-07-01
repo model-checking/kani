@@ -6,6 +6,7 @@
 use std::collections::HashSet;
 
 use crate::kani_queries::QueryDb;
+use fxhash::FxHashMap;
 use rustc_hir::{def::DefKind, def_id::DefId as InternalDefId, def_id::LOCAL_CRATE};
 use rustc_middle::ty::TyCtxt;
 use rustc_smir::rustc_internal;
@@ -178,7 +179,15 @@ pub fn stable_fn_def(tcx: TyCtxt, def_id: InternalDefId) -> Option<FnDef> {
 /// ```
 /// So we select the terminator that calls T::kani::Arbitrary::any(), then try to resolve it to an Instance.
 /// `T` implements Arbitrary iff we successfully resolve the Instance.
-fn implements_arbitrary(ty: Ty, kani_any_def: FnDef) -> bool {
+fn implements_arbitrary(
+    ty: Ty,
+    kani_any_def: FnDef,
+    ty_arbitrary_cache: &mut FxHashMap<Ty, bool>,
+) -> bool {
+    if let Some(v) = ty_arbitrary_cache.get(&ty) {
+        return *v;
+    }
+
     let kani_any_body =
         Instance::resolve(kani_any_def, &GenericArgs(vec![GenericArgKind::Type(ty)]))
             .unwrap()
@@ -192,20 +201,26 @@ fn implements_arbitrary(ty: Ty, kani_any_def: FnDef) -> bool {
         if let TyKind::RigidTy(RigidTy::FnDef(def, args)) =
             func.ty(kani_any_body.arg_locals()).unwrap().kind()
         {
-            return Instance::resolve(def, &args).is_ok();
+            let res = Instance::resolve(def, &args).is_ok();
+            ty_arbitrary_cache.insert(ty, res);
+            return res;
         }
     }
     false
 }
 
 /// Is `ty` a struct or enum whose fields/variants implement Arbitrary?
-fn can_derive_arbitrary(ty: Ty, kani_any_def: FnDef) -> bool {
-    let variants_can_derive = |def: AdtDef| {
+fn can_derive_arbitrary(
+    ty: Ty,
+    kani_any_def: FnDef,
+    ty_arbitrary_cache: &mut FxHashMap<Ty, bool>,
+) -> bool {
+    let mut variants_can_derive = |def: AdtDef| {
         for variant in def.variants_iter() {
             let fields = variant.fields();
             let mut fields_impl_arbitrary = true;
             for ty in fields.iter().map(|field| field.ty()) {
-                fields_impl_arbitrary &= implements_arbitrary(ty, kani_any_def);
+                fields_impl_arbitrary &= implements_arbitrary(ty, kani_any_def, ty_arbitrary_cache);
             }
             if !fields_impl_arbitrary {
                 return false;

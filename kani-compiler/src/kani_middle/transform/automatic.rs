@@ -14,6 +14,7 @@ use crate::kani_middle::kani_functions::{KaniHook, KaniIntrinsic, KaniModel};
 use crate::kani_middle::transform::body::{InsertPosition, MutableBody, SourceInstruction};
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
+use fxhash::FxHashMap;
 use rustc_middle::ty::TyCtxt;
 use stable_mir::CrateDef;
 use stable_mir::mir::mono::Instance;
@@ -109,7 +110,7 @@ impl TransformPass for AutomaticArbitraryPass {
         let binding = instance.args();
         let ty = binding.0[0].expect_ty();
 
-        if implements_arbitrary(*ty, self.kani_any) {
+        if implements_arbitrary(*ty, self.kani_any, &mut FxHashMap::default()) {
             return (false, body);
         }
 

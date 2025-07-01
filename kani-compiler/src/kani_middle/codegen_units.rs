@@ -445,12 +445,15 @@ fn automatic_harness_partition(
         // Note that we've already filtered out generic functions, so we know that each of these arguments has a concrete type.
         let mut problematic_args = vec![];
         for (idx, arg) in body.arg_locals().iter().enumerate() {
-            let implements_arbitrary = ty_arbitrary_cache.entry(arg.ty).or_insert_with(|| {
-                implements_arbitrary(arg.ty, kani_any_def)
-                    || can_derive_arbitrary(arg.ty, kani_any_def)
-            });
+            if !ty_arbitrary_cache.contains_key(&arg.ty) {
+                let impls_arbitrary =
+                    implements_arbitrary(arg.ty, kani_any_def, &mut ty_arbitrary_cache)
+                        || can_derive_arbitrary(arg.ty, kani_any_def, &mut ty_arbitrary_cache);
+                ty_arbitrary_cache.insert(arg.ty, impls_arbitrary);
+            }
+            let impls_arbitrary = ty_arbitrary_cache.get(&arg.ty).unwrap();
 
-            if !(*implements_arbitrary) {
+            if !impls_arbitrary {
                 // Find the name of the argument by referencing var_debug_info.
                 // Note that enumerate() starts at 0, while StableMIR argument_index starts at 1, hence the idx+1.
                 let arg_name = body
