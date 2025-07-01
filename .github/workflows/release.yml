@@ -41,8 +41,7 @@ jobs:
         id: bundle
         uses: ./.github/actions/build-bundle
         with:
-          os: macos-13
-          arch: x86_64-apple-darwin
+          platform: x86_64-apple-darwin
 
   build_bundle_macos_aarch64:
     name: BuildBundle-MacOs-ARM
@@ -65,8 +64,7 @@ jobs:
         id: bundle
         uses: ./.github/actions/build-bundle
         with:
-          os: macos-14
-          arch: aarch64-apple-darwin
+          platform: aarch64-apple-darwin
 
   build_bundle_linux:
     name: BuildBundle-Linux
@@ -89,15 +87,37 @@ jobs:
         id: bundle
         uses: ./.github/actions/build-bundle
         with:
-          os: linux
-          arch: x86_64-unknown-linux-gnu
+          platform: x86_64-unknown-linux-gnu
+
+  build_bundle_linux_arm:
+    name: BuildBundle-Linux-Arm
+    runs-on: ubuntu-24.04-arm
+    outputs:
+      version: ${{ steps.bundle.outputs.version }}
+      bundle: ${{ steps.bundle.outputs.bundle }}
+      package: ${{ steps.bundle.outputs.package }}
+      crate_version: ${{ steps.bundle.outputs.crate_version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Kani Dependencies
+        uses: ./.github/actions/setup
+        with:
+          os: ubuntu-24.04-arm
+
+      - name: Build bundle
+        id: bundle
+        uses: ./.github/actions/build-bundle
+        with:
+          platform: aarch64-unknown-linux-gnu
 
   test-use-local-toolchain:
     name: TestLocalToolchain
-    needs: [build_bundle_macos, build_bundle_linux]
+    needs: [build_bundle_macos, build_bundle_linux, build_bundle_linux_arm]
     strategy:
       matrix:
-        os: [macos-13, ubuntu-22.04, ubuntu-24.04]
+        os: [macos-13, ubuntu-22.04, ubuntu-24.04, ubuntu-24.04-arm]
         include:
         - os: macos-13
           rust_target: x86_64-apple-darwin
@@ -108,6 +128,9 @@ jobs:
         - os: ubuntu-24.04
           rust_target: x86_64-unknown-linux-gnu
           prev_job: ${{ needs.build_bundle_linux.outputs }}
+        - os: ubuntu-24.04-arm
+          rust_target: aarch64-unknown-linux-gnu
+          prev_job: ${{ needs.build_bundle_linux_arm.outputs }}
     runs-on: ${{ matrix.os }}
     steps:
       - name: Download bundle
@@ -194,15 +217,17 @@ jobs:
 
   test_bundle:
     name: TestBundle
-    needs: [build_bundle_macos, build_bundle_linux]
+    needs: [build_bundle_macos, build_bundle_linux, build_bundle_linux_arm]
     strategy:
       matrix:
-        os: [macos-13, ubuntu-22.04, ubuntu-24.04]
+        os: [macos-13, ubuntu-22.04, ubuntu-24.04, ubuntu-24.04-arm]
         include:
           # Stores the output of the previous job conditional to the OS
           - prev_job: ${{ needs.build_bundle_linux.outputs }}
           - os: macos-13
             prev_job: ${{ needs.build_bundle_macos.outputs }}
+          - os: ubuntu-24.04-arm
+            prev_job: ${{ needs.build_bundle_linux_arm.outputs }}
     runs-on: ${{ matrix.os }}
     steps:
       - name: Download bundle
@@ -242,7 +267,7 @@ jobs:
     if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/kani-') }}
     name: Release
     runs-on: ubuntu-24.04
-    needs: [build_bundle_macos, build_bundle_macos_aarch64, build_bundle_linux, test_bundle]
+    needs: [build_bundle_macos, build_bundle_macos_aarch64, build_bundle_linux, build_bundle_linux_arm, test_bundle]
     outputs:
       version: ${{ steps.versioning.outputs.version }}
       upload_url: ${{ steps.create_release.outputs.upload_url }}
@@ -282,6 +307,11 @@ jobs:
         with:
           name: ${{ needs.build_bundle_linux.outputs.bundle }}
 
+      - name: Download Linux Arm bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build_bundle_linux_arm.outputs.bundle }}
+
       - name: Create release
         id: create_release
         uses: ncipollo/release-action@v1.18.0
@@ -290,7 +320,7 @@ jobs:
         with:
           name: kani-${{ env.TAG_VERSION }}
           tag: kani-${{ env.TAG_VERSION }}
-          artifacts: "${{ needs.build_bundle_linux.outputs.bundle }},${{ needs.build_bundle_macos.outputs.bundle }},${{ needs.build_bundle_macos_aarch64.outputs.bundle }}"
+          artifacts: "${{ needs.build_bundle_linux.outputs.bundle }},${{ needs.build_bundle_linux_arm.outputs.bundle }},${{ needs.build_bundle_macos.outputs.bundle }},${{ needs.build_bundle_macos_aarch64.outputs.bundle }}"
           body: |
             Kani Rust verifier release bundle version ${{ env.TAG_VERSION }}.
           draft: true
