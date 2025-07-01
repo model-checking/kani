@@ -264,37 +264,21 @@ impl AutomaticArbitraryPass {
 /// Transform the dummy body of an automatic_harness Kani intrinsic to be a proof harness for a given function.
 #[derive(Debug)]
 pub struct AutomaticHarnessPass {
-    /// The FnDef of KaniModel::Any
     kani_any: FnDef,
     init_contracts_hook: Instance,
-    /// All of the automatic harness Instances that we generated in the CodegenUnits constructor
-    automatic_harnesses: Vec<Instance>,
+    kani_autoharness_intrinsic: FnDef,
 }
 
 impl AutomaticHarnessPass {
-    // FIXME: this is a bit clunky.
-    // Historically, in codegen_crate, we reset the BodyTransformation cache on a per-unit basis,
-    // so the BodyTransformation constructor only accepts a CodegenUnit and thus this constructor can only accept a unit.
-    // Later, we changed codegen to reset the cache on a per-harness basis (for uninitialized memory instrumentation).
-    // So BodyTransformation should really be changed to reflect that, so that this constructor can just save the one automatic harness it should transform
-    // and not all of the possibilities.
-    pub fn new(unit: &CodegenUnit, query_db: &QueryDb) -> Self {
+    pub fn new(query_db: &QueryDb) -> Self {
         let kani_fns = query_db.kani_functions();
-        let harness_intrinsic = *kani_fns.get(&KaniIntrinsic::AutomaticHarness.into()).unwrap();
+        let kani_autoharness_intrinsic =
+            *kani_fns.get(&KaniIntrinsic::AutomaticHarness.into()).unwrap();
         let kani_any = *kani_fns.get(&KaniModel::Any.into()).unwrap();
         let init_contracts_hook = *kani_fns.get(&KaniHook::InitContracts.into()).unwrap();
         let init_contracts_hook =
             Instance::resolve(init_contracts_hook, &GenericArgs(vec![])).unwrap();
-        let automatic_harnesses = unit
-            .harnesses
-            .iter()
-            .cloned()
-            .filter(|harness| {
-                let (def, _) = harness.ty().kind().fn_def().unwrap();
-                def == harness_intrinsic
-            })
-            .collect::<Vec<_>>();
-        Self { kani_any, init_contracts_hook, automatic_harnesses }
+        Self { kani_any, init_contracts_hook, kani_autoharness_intrinsic }
     }
 }
 
@@ -316,7 +300,7 @@ impl TransformPass for AutomaticHarnessPass {
     fn transform(&mut self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
         debug!(function=?instance.name(), "AutomaticHarnessPass::transform");
 
-        if !self.automatic_harnesses.contains(&instance) {
+        if instance.def.def_id() != self.kani_autoharness_intrinsic.def_id() {
             return (false, body);
         }
 
