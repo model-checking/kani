@@ -11,8 +11,8 @@ use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::token::AndAnd;
 use syn::{
-    BinOp, Block, Expr, ExprBinary, Ident, Stmt, Token, parse_macro_input, parse_quote,
-    visit_mut::VisitMut,
+    BinOp, Block, Expr, ExprBinary, ExprForLoop, Ident, Stmt, Token, parse_macro_input,
+    parse_quote, visit_mut::VisitMut,
 };
 
 /*
