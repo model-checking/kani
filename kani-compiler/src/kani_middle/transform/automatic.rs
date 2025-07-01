@@ -175,7 +175,7 @@ impl AutomaticArbitraryPass {
         );
         let mut assign_instr = SourceInstruction::Terminator { bb: source.bb() - 1 };
         let rvalue = Rvalue::Aggregate(
-            AggregateKind::Adt(adt_def, variant.idx, GenericArgs(vec![]), None, None),
+            AggregateKind::Adt(adt_def, variant.idx, adt_args.clone(), None, None),
             field_locals.into_iter().map(|lcl| Operand::Move(lcl.into())).collect(),
         );
         body.assign_to(Place::from(0), rvalue, &mut assign_instr, InsertPosition::Before);
