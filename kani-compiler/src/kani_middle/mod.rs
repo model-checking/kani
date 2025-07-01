@@ -224,7 +224,13 @@ fn can_derive_arbitrary(
             let fields = variant.fields();
             let mut fields_impl_arbitrary = true;
             for ty in fields.iter().map(|field| field.ty_with_args(&args)) {
-                fields_impl_arbitrary &= implements_arbitrary(ty, kani_any_def, ty_arbitrary_cache);
+                if let TyKind::RigidTy(RigidTy::Adt(..)) = ty.kind() {
+                    fields_impl_arbitrary &=
+                        can_derive_arbitrary(ty, kani_any_def, ty_arbitrary_cache);
+                } else {
+                    fields_impl_arbitrary &=
+                        implements_arbitrary(ty, kani_any_def, ty_arbitrary_cache);
+                }
             }
             if !fields_impl_arbitrary {
                 return false;
