@@ -519,10 +519,10 @@ impl GotocCtx<'_> {
                 assert!(self.place_ty_stable(place).kind().is_unit());
                 self.codegen_write_bytes(fargs, farg_types, loc)
             }
-            Intrinsic::PtrOffsetFrom
+            Intrinsic::AlignOfVal
+            | Intrinsic::PtrOffsetFrom
             | Intrinsic::PtrOffsetFromUnsigned
-            | Intrinsic::SizeOfVal
-            | Intrinsic::MinAlignOfVal => {
+            | Intrinsic::SizeOfVal => {
                 unreachable!("Intrinsic `{}` is handled before codegen", intrinsic_str)
             }
             // Unimplemented

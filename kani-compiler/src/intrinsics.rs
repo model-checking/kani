@@ -14,6 +14,7 @@ use stable_mir::{
 #[derive(Clone, Debug)]
 pub enum Intrinsic {
     AddWithOverflow,
+    AlignOfVal,
     ArithOffset,
     AssertInhabited,
     AssertMemUninitializedValid,
@@ -81,7 +82,6 @@ pub enum Intrinsic {
     LogF64,
     MaxNumF32,
     MaxNumF64,
-    MinAlignOfVal,
     MinNumF32,
     MinNumF64,
     MulWithOverflow,
@@ -182,7 +182,7 @@ impl Intrinsic {
             ),
             "align_of_val" => {
                 assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Not) => RigidTy::Uint(UintTy::Usize));
-                Self::MinAlignOfVal
+                Self::AlignOfVal
             }
             "arith_offset" => {
                 assert_sig_matches!(sig,
