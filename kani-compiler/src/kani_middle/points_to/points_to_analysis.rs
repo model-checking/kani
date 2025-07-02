@@ -611,6 +611,7 @@ impl<'tcx> PointsToAnalysis<'_, 'tcx> {
 fn is_identity_aliasing_intrinsic(intrinsic: Intrinsic) -> bool {
     match intrinsic {
         Intrinsic::AddWithOverflow
+        | Intrinsic::AlignOfVal
         | Intrinsic::ArithOffset
         | Intrinsic::AssertInhabited
         | Intrinsic::AssertMemUninitializedValid
@@ -659,12 +660,9 @@ fn is_identity_aliasing_intrinsic(intrinsic: Intrinsic) -> bool {
         | Intrinsic::LogF64
         | Intrinsic::MaxNumF32
         | Intrinsic::MaxNumF64
-        | Intrinsic::MinAlignOf
-        | Intrinsic::MinAlignOfVal
         | Intrinsic::MinNumF32
         | Intrinsic::MinNumF64
         | Intrinsic::MulWithOverflow
-        | Intrinsic::NeedsDrop
         | Intrinsic::PowF32
         | Intrinsic::PowF64
         | Intrinsic::PowIF32
@@ -691,8 +689,6 @@ fn is_identity_aliasing_intrinsic(intrinsic: Intrinsic) -> bool {
         | Intrinsic::Transmute
         | Intrinsic::TruncF32
         | Intrinsic::TruncF64
-        | Intrinsic::TypeId
-        | Intrinsic::TypeName
         | Intrinsic::UncheckedDiv
         | Intrinsic::UncheckedRem
         | Intrinsic::Unlikely

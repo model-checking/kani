@@ -180,8 +180,8 @@ impl MutMirVisitor for ReplaceIntrinsicCallVisitor<'_, '_> {
                 let intrinsic = Intrinsic::from_instance(&instance);
                 debug!(?intrinsic, "handle_terminator");
                 match intrinsic {
+                    Intrinsic::AlignOfVal => self.models[&KaniModel::AlignOfVal],
                     Intrinsic::SizeOfVal => self.models[&KaniModel::SizeOfVal],
-                    Intrinsic::MinAlignOfVal => self.models[&KaniModel::AlignOfVal],
                     Intrinsic::PtrOffsetFrom => self.models[&KaniModel::PtrOffsetFrom],
                     Intrinsic::PtrOffsetFromUnsigned => {
                         self.models[&KaniModel::PtrOffsetFromUnsigned]

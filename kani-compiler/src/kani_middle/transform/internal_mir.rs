@@ -424,10 +424,9 @@ impl RustcInternalMir for Statement {
     type T<'tcx> = rustc_middle::mir::Statement<'tcx>;
 
     fn internal_mir<'tcx>(&self, tcx: TyCtxt<'tcx>) -> Self::T<'tcx> {
-        rustc_middle::mir::Statement {
-            source_info: rustc_middle::mir::SourceInfo::outermost(internal(tcx, self.span)),
-            kind: self.kind.internal_mir(tcx),
-        }
+        let source_info = rustc_middle::mir::SourceInfo::outermost(internal(tcx, self.span));
+        let kind = self.kind.internal_mir(tcx);
+        rustc_middle::mir::Statement::new(source_info, kind)
     }
 }
 
@@ -654,14 +653,15 @@ impl RustcInternalMir for Body {
         let internal_basic_blocks = rustc_index::IndexVec::from_raw(
             self.blocks
                 .iter()
-                .map(|stable_basic_block| rustc_middle::mir::BasicBlockData {
-                    statements: stable_basic_block
+                .map(|stable_basic_block| {
+                    let statements = stable_basic_block
                         .statements
                         .iter()
                         .map(|statement| statement.internal_mir(tcx))
-                        .collect(),
-                    terminator: Some(stable_basic_block.terminator.internal_mir(tcx)),
-                    is_cleanup: false,
+                        .collect();
+                    let terminator = Some(stable_basic_block.terminator.internal_mir(tcx));
+                    let is_cleanup = false;
+                    rustc_middle::mir::BasicBlockData::new_stmts(statements, terminator, is_cleanup)
                 })
                 .collect(),
         );
