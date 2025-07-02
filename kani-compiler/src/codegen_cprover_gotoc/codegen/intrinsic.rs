@@ -200,19 +200,6 @@ impl GotocCtx<'_> {
             }};
         }
 
-        // Intrinsics which encode a value known during compilation
-        macro_rules! codegen_intrinsic_const {
-            () => {{
-                let place_ty = self.place_ty_stable(&place);
-                let stable_instance = instance;
-                let alloc = stable_instance.try_const_eval(place_ty).unwrap();
-                // We assume that the intrinsic has type checked at this point, so
-                // we can use the place type as the expression type.
-                let expr = self.codegen_allocation(&alloc, place_ty, loc);
-                self.codegen_expr_to_place_stable(&place, expr, loc)
-            }};
-        }
-
         // Most atomic intrinsics do:
         //   1. Perform an operation on a primary argument (e.g., addition)
         //   2. Return the previous value of the primary argument
@@ -406,7 +393,6 @@ impl GotocCtx<'_> {
             Intrinsic::LogF64 => codegen_simple_intrinsic!(Log),
             Intrinsic::MaxNumF32 => codegen_simple_intrinsic!(Fmaxf),
             Intrinsic::MaxNumF64 => codegen_simple_intrinsic!(Fmax),
-            Intrinsic::MinAlignOf => codegen_intrinsic_const!(),
             Intrinsic::MinNumF32 => codegen_simple_intrinsic!(Fminf),
             Intrinsic::MinNumF64 => codegen_simple_intrinsic!(Fmin),
             Intrinsic::MulWithOverflow => {

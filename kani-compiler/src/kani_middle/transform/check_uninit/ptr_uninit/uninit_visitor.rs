@@ -619,7 +619,6 @@ fn can_skip_intrinsic(intrinsic: Intrinsic) -> bool {
         | Intrinsic::LogF64
         | Intrinsic::MaxNumF32
         | Intrinsic::MaxNumF64
-        | Intrinsic::MinAlignOf
         | Intrinsic::MinAlignOfVal
         | Intrinsic::MinNumF32
         | Intrinsic::MinNumF64

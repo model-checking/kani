@@ -81,7 +81,6 @@ pub enum Intrinsic {
     LogF64,
     MaxNumF32,
     MaxNumF64,
-    MinAlignOf,
     MinAlignOfVal,
     MinNumF32,
     MinNumF64,
@@ -177,6 +176,13 @@ impl Intrinsic {
             "add_with_overflow" => {
                 assert_sig_matches!(sig, _, _ => RigidTy::Tuple(_));
                 Self::AddWithOverflow
+            }
+            "align_of" => unreachable!(
+                "Expected `core::intrinsics::align_of` to be handled by NullOp::SizeOf"
+            ),
+            "align_of_val" => {
+                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Not) => RigidTy::Uint(UintTy::Usize));
+                Self::MinAlignOfVal
             }
             "arith_offset" => {
                 assert_sig_matches!(sig,
@@ -306,14 +312,6 @@ impl Intrinsic {
                 assert_sig_matches!(sig, RigidTy::Bool => RigidTy::Bool);
                 Self::Likely
             }
-            "align_of" => {
-                assert_sig_matches!(sig, => RigidTy::Uint(UintTy::Usize));
-                Self::MinAlignOf
-            }
-            "align_of_val" => {
-                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Not) => RigidTy::Uint(UintTy::Usize));
-                Self::MinAlignOfVal
-            }
             "mul_with_overflow" => {
                 assert_sig_matches!(sig, _, _ => RigidTy::Tuple(_));
                 Self::MulWithOverflow
@@ -358,7 +356,9 @@ impl Intrinsic {
                 assert_sig_matches!(sig, _, _ => _);
                 Self::SaturatingSub
             }
-            "size_of" => unreachable!(),
+            "size_of" => {
+                unreachable!("Expected `core::intrinsics::size_of` to be handled by NullOp::SizeOf")
+            }
             "size_of_val" => {
                 assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Not) => RigidTy::Uint(UintTy::Usize));
                 Self::SizeOfVal
