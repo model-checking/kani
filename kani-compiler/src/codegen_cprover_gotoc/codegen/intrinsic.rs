@@ -412,7 +412,6 @@ impl GotocCtx<'_> {
             Intrinsic::MulWithOverflow => {
                 self.codegen_op_with_overflow(BinaryOperator::OverflowResultMult, fargs, place, loc)
             }
-            Intrinsic::NeedsDrop => codegen_intrinsic_const!(),
             Intrinsic::PowF32 => codegen_simple_intrinsic!(Powf),
             Intrinsic::PowF64 => codegen_simple_intrinsic!(Pow),
             Intrinsic::PowIF32 => codegen_simple_intrinsic!(Powif),
@@ -505,8 +504,6 @@ impl GotocCtx<'_> {
             Intrinsic::Transmute => self.codegen_intrinsic_transmute(fargs, ret_ty, place, loc),
             Intrinsic::TruncF32 => codegen_simple_intrinsic!(Truncf),
             Intrinsic::TruncF64 => codegen_simple_intrinsic!(Trunc),
-            Intrinsic::TypeId => codegen_intrinsic_const!(),
-            Intrinsic::TypeName => codegen_intrinsic_const!(),
             Intrinsic::TypedSwap => self.codegen_swap(fargs, farg_types, loc),
             Intrinsic::UnalignedVolatileLoad => {
                 unstable_codegen!(self.codegen_expr_to_place_stable(
