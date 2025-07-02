@@ -523,7 +523,7 @@ impl GotocCtx<'_> {
             | Intrinsic::PtrOffsetFrom
             | Intrinsic::PtrOffsetFromUnsigned
             | Intrinsic::SizeOfVal => {
-                unreachable!("Intrinsic `{}` is handled before codegen", intrinsic_str)
+                unreachable!("Kani models the intrinsic `{}` before codegen", intrinsic_str)
             }
             // Unimplemented
             Intrinsic::Unimplemented { name, issue_link } => {
