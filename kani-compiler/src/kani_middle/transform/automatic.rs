@@ -14,6 +14,7 @@ use crate::kani_middle::kani_functions::{KaniHook, KaniIntrinsic, KaniModel};
 use crate::kani_middle::transform::body::{InsertPosition, MutableBody, SourceInstruction};
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
+use fxhash::FxHashMap;
 use rustc_middle::ty::TyCtxt;
 use stable_mir::CrateDef;
 use stable_mir::mir::mono::Instance;
@@ -109,14 +110,14 @@ impl TransformPass for AutomaticArbitraryPass {
         let binding = instance.args();
         let ty = binding.0[0].expect_ty();
 
-        if implements_arbitrary(*ty, self.kani_any) {
+        if implements_arbitrary(*ty, self.kani_any, &mut FxHashMap::default()) {
             return (false, body);
         }
 
-        if let TyKind::RigidTy(RigidTy::Adt(def, ..)) = ty.kind() {
+        if let TyKind::RigidTy(RigidTy::Adt(def, args)) = ty.kind() {
             match def.kind() {
-                AdtKind::Enum => (true, self.generate_enum_body(def, body)),
-                AdtKind::Struct => (true, self.generate_struct_body(def, body)),
+                AdtKind::Enum => (true, self.generate_enum_body(def, args, body)),
+                AdtKind::Struct => (true, self.generate_struct_body(def, args, body)),
                 AdtKind::Union => unexpected_ty(ty),
             }
         } else {
@@ -151,7 +152,8 @@ impl AutomaticArbitraryPass {
     /// This function will panic if a field type does not implement Arbitrary.
     fn call_kani_any_for_variant(
         &self,
-        def: AdtDef,
+        adt_def: AdtDef,
+        adt_args: &GenericArgs,
         body: &mut MutableBody,
         source: &mut SourceInstruction,
         variant: VariantDef,
@@ -160,7 +162,7 @@ impl AutomaticArbitraryPass {
         let mut field_locals = vec![];
 
         // Construct nondeterministic values for each of the variant's fields
-        for ty in fields.iter().map(|field| field.ty()) {
+        for ty in fields.iter().map(|field| field.ty_with_args(adt_args)) {
             let lcl = self.call_kani_any_for_ty(body, ty, source);
             field_locals.push(lcl);
         }
@@ -173,7 +175,7 @@ impl AutomaticArbitraryPass {
         );
         let mut assign_instr = SourceInstruction::Terminator { bb: source.bb() - 1 };
         let rvalue = Rvalue::Aggregate(
-            AggregateKind::Adt(def, variant.idx, GenericArgs(vec![]), None, None),
+            AggregateKind::Adt(adt_def, variant.idx, adt_args.clone(), None, None),
             field_locals.into_iter().map(|lcl| Operand::Move(lcl.into())).collect(),
         );
         body.assign_to(Place::from(0), rvalue, &mut assign_instr, InsertPosition::Before);
@@ -193,7 +195,7 @@ impl AutomaticArbitraryPass {
     ///   _ => Enum::LastVariant
     /// }
     /// ```
-    fn generate_enum_body(&self, def: AdtDef, body: Body) -> Body {
+    fn generate_enum_body(&self, def: AdtDef, args: GenericArgs, body: Body) -> Body {
         // Autoharness only deems a function with an enum eligible if it has at least one variant, c.f. `can_derive_arbitrary`
         assert!(def.num_variants() > 0);
 
@@ -220,7 +222,7 @@ impl AutomaticArbitraryPass {
         let mut branches: Vec<(u128, BasicBlockIdx)> = vec![];
         for variant in def.variants_iter() {
             let target_bb =
-                self.call_kani_any_for_variant(def, &mut new_body, &mut source, variant);
+                self.call_kani_any_for_variant(def, &args, &mut new_body, &mut source, variant);
             branches.push((variant.idx.to_index() as u128, target_bb));
         }
 
@@ -246,7 +248,7 @@ impl AutomaticArbitraryPass {
     ///   ...
     /// }
     /// ```
-    fn generate_struct_body(&self, def: AdtDef, body: Body) -> Body {
+    fn generate_struct_body(&self, def: AdtDef, args: GenericArgs, body: Body) -> Body {
         assert_eq!(def.num_variants(), 1);
 
         let mut new_body = MutableBody::from(body);
@@ -254,7 +256,7 @@ impl AutomaticArbitraryPass {
         let mut source = SourceInstruction::Terminator { bb: 0 };
 
         let variant = def.variants()[0];
-        self.call_kani_any_for_variant(def, &mut new_body, &mut source, variant);
+        self.call_kani_any_for_variant(def, &args, &mut new_body, &mut source, variant);
 
         new_body.into()
     }
@@ -262,37 +264,21 @@ impl AutomaticArbitraryPass {
 /// Transform the dummy body of an automatic_harness Kani intrinsic to be a proof harness for a given function.
 #[derive(Debug)]
 pub struct AutomaticHarnessPass {
-    /// The FnDef of KaniModel::Any
     kani_any: FnDef,
     init_contracts_hook: Instance,
-    /// All of the automatic harness Instances that we generated in the CodegenUnits constructor
-    automatic_harnesses: Vec<Instance>,
+    kani_autoharness_intrinsic: FnDef,
 }
 
 impl AutomaticHarnessPass {
-    // FIXME: this is a bit clunky.
-    // Historically, in codegen_crate, we reset the BodyTransformation cache on a per-unit basis,
-    // so the BodyTransformation constructor only accepts a CodegenUnit and thus this constructor can only accept a unit.
-    // Later, we changed codegen to reset the cache on a per-harness basis (for uninitialized memory instrumentation).
-    // So BodyTransformation should really be changed to reflect that, so that this constructor can just save the one automatic harness it should transform
-    // and not all of the possibilities.
-    pub fn new(unit: &CodegenUnit, query_db: &QueryDb) -> Self {
+    pub fn new(query_db: &QueryDb) -> Self {
         let kani_fns = query_db.kani_functions();
-        let harness_intrinsic = *kani_fns.get(&KaniIntrinsic::AutomaticHarness.into()).unwrap();
+        let kani_autoharness_intrinsic =
+            *kani_fns.get(&KaniIntrinsic::AutomaticHarness.into()).unwrap();
         let kani_any = *kani_fns.get(&KaniModel::Any.into()).unwrap();
         let init_contracts_hook = *kani_fns.get(&KaniHook::InitContracts.into()).unwrap();
         let init_contracts_hook =
             Instance::resolve(init_contracts_hook, &GenericArgs(vec![])).unwrap();
-        let automatic_harnesses = unit
-            .harnesses
-            .iter()
-            .cloned()
-            .filter(|harness| {
-                let (def, _) = harness.ty().kind().fn_def().unwrap();
-                def == harness_intrinsic
-            })
-            .collect::<Vec<_>>();
-        Self { kani_any, init_contracts_hook, automatic_harnesses }
+        Self { kani_any, init_contracts_hook, kani_autoharness_intrinsic }
     }
 }
 
@@ -314,7 +300,7 @@ impl TransformPass for AutomaticHarnessPass {
     fn transform(&mut self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
         debug!(function=?instance.name(), "AutomaticHarnessPass::transform");
 
-        if !self.automatic_harnesses.contains(&instance) {
+        if instance.def.def_id() != self.kani_autoharness_intrinsic.def_id() {
             return (false, body);
         }
 

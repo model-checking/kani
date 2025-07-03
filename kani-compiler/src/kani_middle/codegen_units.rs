@@ -18,7 +18,7 @@ use crate::kani_middle::resolve::expect_resolve_fn;
 use crate::kani_middle::stubbing::{check_compatibility, harness_stub_map};
 use crate::kani_middle::{can_derive_arbitrary, implements_arbitrary};
 use crate::kani_queries::QueryDb;
-use fxhash::FxHashMap;
+use fxhash::{FxHashMap, FxHashSet};
 use kani_metadata::{
     ArtifactType, AssignsContract, AutoHarnessMetadata, AutoHarnessSkipReason, HarnessKind,
     HarnessMetadata, KaniMetadata,
@@ -390,8 +390,16 @@ fn automatic_harness_partition(
     crate_name: &str,
     kani_any_def: FnDef,
 ) -> (Vec<Instance>, BTreeMap<String, AutoHarnessSkipReason>) {
-    let crate_fns =
-        stable_mir::all_local_items().into_iter().filter(|item| item.ty().kind().is_fn());
+    let crate_fn_defs = stable_mir::local_crate().fn_defs().into_iter().collect::<FxHashSet<_>>();
+    // Filter out CrateItems that are functions, but not functions defined in the crate itself, i.e., rustc-inserted functions
+    // (c.f. https://github.com/model-checking/kani/issues/4189)
+    let crate_fns = stable_mir::all_local_items().into_iter().filter(|item| {
+        if let TyKind::RigidTy(RigidTy::FnDef(def, _)) = item.ty().kind() {
+            crate_fn_defs.contains(&def)
+        } else {
+            false
+        }
+    });
 
     let included_set = make_regex_set(args.autoharness_included_patterns.clone());
     let excluded_set = make_regex_set(args.autoharness_excluded_patterns.clone());
@@ -437,12 +445,15 @@ fn automatic_harness_partition(
         // Note that we've already filtered out generic functions, so we know that each of these arguments has a concrete type.
         let mut problematic_args = vec![];
         for (idx, arg) in body.arg_locals().iter().enumerate() {
-            let implements_arbitrary = ty_arbitrary_cache.entry(arg.ty).or_insert_with(|| {
-                implements_arbitrary(arg.ty, kani_any_def)
-                    || can_derive_arbitrary(arg.ty, kani_any_def)
-            });
+            if !ty_arbitrary_cache.contains_key(&arg.ty) {
+                let impls_arbitrary =
+                    implements_arbitrary(arg.ty, kani_any_def, &mut ty_arbitrary_cache)
+                        || can_derive_arbitrary(arg.ty, kani_any_def, &mut ty_arbitrary_cache);
+                ty_arbitrary_cache.insert(arg.ty, impls_arbitrary);
+            }
+            let impls_arbitrary = ty_arbitrary_cache.get(&arg.ty).unwrap();
 
-            if !(*implements_arbitrary) {
+            if !impls_arbitrary {
                 // Find the name of the argument by referencing var_debug_info.
                 // Note that enumerate() starts at 0, while StableMIR argument_index starts at 1, hence the idx+1.
                 let arg_name = body
