@@ -12,6 +12,7 @@
 #![feature(rustc_private)]
 #![feature(more_qualified_paths)]
 #![feature(iter_intersperse)]
+#![feature(let_chains)]
 #![feature(f128)]
 #![feature(f16)]
 #![feature(non_exhaustive_omitted_patterns_lint)]
