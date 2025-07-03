@@ -51,14 +51,14 @@ pub fn split_for_remembers(stmts: &[Stmt], contract_mode: ContractMode) -> (&[St
     };
 
     for stmt in stmts {
-        if let Stmt::Expr(Expr::Call(ExprCall { func, .. }), _) = stmt {
-            if let Expr::Path(ExprPath { path: Path { segments, .. }, .. }) = func.as_ref() {
-                let first_two_idents =
-                    segments.iter().take(2).map(|sgmt| sgmt.ident.to_string()).collect::<Vec<_>>();
+        if let Stmt::Expr(Expr::Call(ExprCall { func, .. }), _) = stmt
+            && let Expr::Path(ExprPath { path: Path { segments, .. }, .. }) = func.as_ref()
+        {
+            let first_two_idents =
+                segments.iter().take(2).map(|sgmt| sgmt.ident.to_string()).collect::<Vec<_>>();
 
-                if first_two_idents == vec!["kani", check_str] {
-                    pos += 1;
-                }
+            if first_two_idents == vec!["kani", check_str] {
+                pos += 1;
             }
         }
     }
