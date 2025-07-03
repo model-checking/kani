@@ -610,38 +610,37 @@ impl MirVisitor for IteratorVisitor<'_> {
             if let TyKind::RigidTy(RigidTy::FnDef(def, _)) = kind {
                 let fullname = def.name();
                 let names = fullname.split("::").collect::<Vec<_>>();
-                if let [.., s_last, last] = names.as_slice() {
-                    if *s_last == "Iterator"
-                        && [
-                            "for_each",
-                            "collect",
-                            "advance_by",
-                            "all",
-                            "any",
-                            "partition",
-                            "partition_in_place",
-                            "fold",
-                            "try_fold",
-                            "spec_fold",
-                            "spec_try_fold",
-                            "try_for_each",
-                            "for_each",
-                            "try_reduce",
-                            "reduce",
-                            "find",
-                            "find_map",
-                            "try_find",
-                            "position",
-                            "rposition",
-                            "nth",
-                            "count",
-                            "last",
-                            "find",
-                        ]
-                        .contains(last)
-                    {
-                        self.props.iterators += 1;
-                    }
+                if let [.., s_last, last] = names.as_slice()
+                    && *s_last == "Iterator"
+                    && [
+                        "for_each",
+                        "collect",
+                        "advance_by",
+                        "all",
+                        "any",
+                        "partition",
+                        "partition_in_place",
+                        "fold",
+                        "try_fold",
+                        "spec_fold",
+                        "spec_try_fold",
+                        "try_for_each",
+                        "for_each",
+                        "try_reduce",
+                        "reduce",
+                        "find",
+                        "find_map",
+                        "try_find",
+                        "position",
+                        "rposition",
+                        "nth",
+                        "count",
+                        "last",
+                        "find",
+                    ]
+                    .contains(last)
+                {
+                    self.props.iterators += 1;
                 }
             }
         }

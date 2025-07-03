@@ -451,7 +451,7 @@ impl GotocCtx<'_> {
     ) -> Stmt {
         match stmt.body() {
             StmtBody::Return(Some(expr)) => {
-                if let ExprValue::Symbol { ref identifier } = expr.value() {
+                if let ExprValue::Symbol { identifier } = expr.value() {
                     *return_symbol = Some(Expr::symbol_expression(*identifier, expr.typ().clone()));
                     Stmt::goto(*end_label, *stmt.location())
                 } else {

@@ -189,7 +189,7 @@ impl<T: OldTrigger> syn::visit_mut::VisitMut for OldVisitor<'_, T> {
         };
         if trigger {
             let span = ex.span();
-            let new_expr = if let Expr::Call(ExprCall { ref mut args, .. }) = ex {
+            let new_expr = if let Expr::Call(ExprCall { args, .. }) = ex {
                 self.t
                     .trigger(args.iter_mut().next().unwrap(), span, self.remembers_exprs)
                     .then(|| args.pop().unwrap().into_value())

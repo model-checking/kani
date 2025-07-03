@@ -114,7 +114,7 @@ impl<'a> ContractConditionsHandler<'a> {
         replace_closure: &TokenStream,
         check_closure: &TokenStream,
     ) -> TokenStream {
-        let ItemFn { ref sig, .. } = self.annotated_fn;
+        let ItemFn { sig, .. } = self.annotated_fn;
         let output = &sig.output;
         let span = Span::call_site();
         let result = Ident::new(INTERNAL_RESULT_IDENT, span);

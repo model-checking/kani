@@ -4,7 +4,7 @@
 [package]
 name = "cprover_bindings"
 version = "0.63.0"
-edition = "2021"
+edition = "2024"
 license = "MIT OR Apache-2.0"
 publish = false
 

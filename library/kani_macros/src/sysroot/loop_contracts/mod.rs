@@ -226,7 +226,7 @@ fn transform_break_continue(block: &mut Block) {
         return (true, None);
     };
     // Add semicolon to the last statement if it's an expression without semicolon
-    if let Some(Stmt::Expr(_, ref mut semi)) = block.stmts.last_mut() {
+    if let Some(&mut Stmt::Expr(_, ref mut semi)) = block.stmts.last_mut() {
         if semi.is_none() {
             *semi = Some(Default::default());
         }
@@ -300,9 +300,9 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
     register_name.push_str(&loop_id);
     let register_ident = format_ident!("{}", register_name);
 
-    match loop_stmt {
-        Stmt::Expr(ref mut e, _) => match e {
-            Expr::While(ref mut ew) => {
+    match &mut loop_stmt {
+        &mut Stmt::Expr(ref mut e, _) => match e {
+            &mut Expr::While(ref mut ew) => {
                 let new_cond: Expr = syn::parse(
                     quote!(
                         #register_ident(&||->bool{#inv_expr}, 0))
@@ -316,7 +316,7 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
                     right: ew.cond.clone(),
                 });
             }
-            Expr::Loop(ref mut el) => {
+            &mut Expr::Loop(ref mut el) => {
                 //let retexpr = get_return_statement(&el.body);
                 let invstmt: Stmt = syn::parse(quote!(if !(#register_ident(&||->bool{#inv_expr}, 0)) {assert!(false); unreachable!()};).into()).unwrap();
                 let mut new_stmts: Vec<Stmt> = Vec::new();

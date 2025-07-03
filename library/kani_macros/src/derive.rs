@@ -155,7 +155,7 @@ fn field_refs(ident: &Ident, data: &Data) -> TokenStream {
 /// references to the struct fields. See `field_refs` for more details.
 fn field_refs_inner(_ident: &Ident, fields: &Fields) -> TokenStream {
     match fields {
-        Fields::Named(ref fields) => {
+        Fields::Named(fields) => {
             let field_refs: Vec<TokenStream> = fields
                 .named
                 .iter()
@@ -187,7 +187,7 @@ fn safe_body_default(ident: &Ident, data: &Data) -> TokenStream {
 
 fn safe_body_default_inner(_ident: &Ident, fields: &Fields) -> TokenStream {
     match fields {
-        Fields::Named(ref fields) => {
+        Fields::Named(fields) => {
             let field_safe_calls: Vec<TokenStream> = fields
                 .named
                 .iter()
@@ -204,7 +204,7 @@ fn safe_body_default_inner(_ident: &Ident, fields: &Fields) -> TokenStream {
                 quote! { true }
             }
         }
-        Fields::Unnamed(ref fields) => {
+        Fields::Unnamed(fields) => {
             let field_safe_calls: Vec<TokenStream> = fields
                 .unnamed
                 .iter()
@@ -232,7 +232,7 @@ fn safe_body_default_inner(_ident: &Ident, fields: &Fields) -> TokenStream {
 /// For unit field, generate an empty initialization.
 fn init_symbolic_item(ident: &Ident, fields: &Fields) -> TokenStream {
     match fields {
-        Fields::Named(ref fields) => {
+        Fields::Named(fields) => {
             // Use the span of each `syn::Field`. This way if one of the field types does not
             // implement `Arbitrary` then the compiler's error message underlines which field it
             // is. An example is shown in the readme of the parent directory.
@@ -246,7 +246,7 @@ fn init_symbolic_item(ident: &Ident, fields: &Fields) -> TokenStream {
                 #ident {#( #init,)*}
             }
         }
-        Fields::Unnamed(ref fields) => {
+        Fields::Unnamed(fields) => {
             // Expands to an expression like
             // Self(kani::any(), kani::any(), ..., kani::any());
             let init = fields.unnamed.iter().map(|field| {
@@ -490,7 +490,7 @@ fn has_field_safety_constraints(ident: &Ident, data: &Data) -> bool {
 /// field.
 fn has_field_safety_constraints_inner(_ident: &Ident, fields: &Fields) -> bool {
     match fields {
-        Fields::Named(ref fields) => fields
+        Fields::Named(fields) => fields
             .named
             .iter()
             .any(|field| field.attrs.iter().any(|attr| attr.path().is_ident("safety_constraint"))),
@@ -570,7 +570,7 @@ fn safe_body_from_fields_attr_inner(ident: &Ident, fields: &Fields) -> TokenStre
         // Expands to the expression
         // `<safety_cond1> && <safety_cond2> && ..`
         // where `<safety_condN>` is the safety condition specified for the N-th field.
-        Fields::Named(ref fields) => {
+        Fields::Named(fields) => {
             let safety_conds: Vec<TokenStream> =
                 fields.named.iter().filter_map(|field| parse_safety_expr(ident, field)).collect();
             quote! { #(#safety_conds)&&* }
