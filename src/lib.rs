@@ -115,14 +115,18 @@ fn parse_args(args: Vec<OsString>) -> ArgsResult {
 /// hundreds of HTTP requests trying to download a non-existent release bundle.
 /// So if we positively detect a dev environment, raise an error early.
 fn fail_if_in_dev_environment() -> Result<()> {
-    if let Ok(exe) = std::env::current_exe()
-        && let Some(path) = exe.parent()
-        && (path.ends_with("target/debug") || path.ends_with("target/release"))
-    {
-        bail!(
-            "Running a release-only executable, {}, from a development environment. This is usually caused by PATH including 'target/release' erroneously.",
-            exe.file_name().unwrap().to_string_lossy()
-        )
+    // Don't collapse if as let_chains have only been stabilized in 1.88, which the target host
+    // installing Kani need not have just yet.
+    #[allow(clippy::collapsible_if)]
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(path) = exe.parent() {
+            if path.ends_with("target/debug") || path.ends_with("target/release") {
+                bail!(
+                    "Running a release-only executable, {}, from a development environment. This is usually caused by PATH including 'target/release' erroneously.",
+                    exe.file_name().unwrap().to_string_lossy()
+                )
+            }
+        }
     }
 
     Ok(())

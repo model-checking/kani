@@ -60,10 +60,13 @@ pub fn appears_incomplete() -> Option<PathBuf> {
     let kani_dir_parent = kani_dir.parent().unwrap();
 
     for entry in std::fs::read_dir(kani_dir_parent).ok()?.flatten() {
-        if let Some(file_name) = entry.file_name().to_str()
-            && file_name.ends_with(".tar.gz")
-        {
-            return Some(kani_dir_parent.join(file_name));
+        // Don't collapse if as let_chains have only been stabilized in 1.88, which the target host
+        // installing Kani need not have just yet.
+        #[allow(clippy::collapsible_if)]
+        if let Some(file_name) = entry.file_name().to_str() {
+            if file_name.ends_with(".tar.gz") {
+                return Some(kani_dir_parent.join(file_name));
+            }
         }
     }
     None
