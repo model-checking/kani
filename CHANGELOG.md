@@ -9,6 +9,7 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 ### Major Changes
 * Add support for loop modifies in loop contracts by @thanhnguyen-aws in https://github.com/model-checking/kani/pull/4174
 * Autoharness: Derive `Arbitrary` for structs and enums by @carolynzech in https://github.com/model-checking/kani/pull/4167, https://github.com/model-checking/kani/pull/4194
+* Remove `assess` subcommand by @carolynzech in https://github.com/model-checking/kani/pull/4111
 
 ### What's Changed
 * Fix static union value crash by @thanhnguyen-aws in https://github.com/model-checking/kani/pull/4112
@@ -20,7 +21,6 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 * Optimize reachability with non-mutating global passes by @AlexanderPortland in https://github.com/model-checking/kani/pull/4177
 * Stub panics during MIR transformation by @AlexanderPortland in https://github.com/model-checking/kani/pull/4169
 * BoundedArbitrary: Handle enums with zero or one variants by @zhassan-aws in https://github.com/model-checking/kani/pull/4171
-* Remove `assess` subcommand by @carolynzech in https://github.com/model-checking/kani/pull/4111
 * Upgrade toolchain to 2025-07-02 by @carolynzech, @tautschnig in https://github.com/model-checking/kani/pull/4195
 
 **Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.63.0...kani-0.64.0
