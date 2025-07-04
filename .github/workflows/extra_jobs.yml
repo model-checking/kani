@@ -15,7 +15,7 @@
 # Note that this also means that the workflow version run is the one currently in `main`,
 # not the one from the PR. This is only relevant if a PR is changing this workflow.
 #
-# See <https://github.com/actions/labeler/issues/121> for more details.
+# See https://github.com/actions/labeler?tab=readme-ov-file#recommended-permissions for more details.
 
 name: Kani Extra
 on:
