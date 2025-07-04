@@ -103,10 +103,10 @@ please add them to [this GitHub issue](https://github.com/model-checking/kani/is
 
 ## Limitations
 ### Arguments Implementing Arbitrary
-Kani will only generate an automatic harness for a function if it can determine that all of the function's arguments implement Arbitrary.
-It does not attempt to derive/implement Arbitrary for any types, even if those types could implement Arbitrary.
-For example, imagine a user defines `struct MyStruct { x: u8, y: u8}`, but does not derive or implement Arbitrary for `MyStruct`.
-Kani does not attempt to add such derivations itself, so it will not generate a harness for a function that takes `MyStruct` as input.
+Kani will only generate an automatic harness for a function if it can represent each of its arguments nondeterministically, without bounds.
+In technical terms, each of the arguments needs to implement the `Arbitrary` trait or be capable of deriving it.
+Kani will detect if a struct or enum could implement `Arbitrary` and derive it automatically.
+Note that this automatic derivation feature is only available for autoharness.
 
 ### Generic Functions
 The current implementation does not generate harnesses for generic functions.

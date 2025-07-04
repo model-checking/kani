@@ -51,10 +51,17 @@ fn add_kani_to_path() {
     let cwd = env::current_dir().unwrap();
     let kani_bin = cwd.join("target").join("debug");
     let kani_scripts = cwd.join("scripts");
-    env::set_var(
-        "PATH",
-        format!("{}:{}:{}", kani_scripts.display(), kani_bin.display(), env::var("PATH").unwrap()),
-    );
+    unsafe {
+        env::set_var(
+            "PATH",
+            format!(
+                "{}:{}:{}",
+                kani_scripts.display(),
+                kani_bin.display(),
+                env::var("PATH").unwrap()
+            ),
+        );
+    }
 }
 
 pub fn parse_config(args: Vec<String>) -> Config {
@@ -230,10 +237,14 @@ pub fn run_tests(config: Config) {
     }
     // Prevent issue #21352 UAC blocking .exe containing 'patch' etc. on Windows
     // If #11207 is resolved (adding manifest to .exe) this becomes unnecessary
-    env::set_var("__COMPAT_LAYER", "RunAsInvoker");
+    unsafe {
+        env::set_var("__COMPAT_LAYER", "RunAsInvoker");
+    }
 
     // Let tests know which target they're running as
-    env::set_var("TARGET", &config.target);
+    unsafe {
+        env::set_var("TARGET", &config.target);
+    }
 
     let opts = test_opts(&config);
 

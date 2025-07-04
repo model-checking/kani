@@ -150,7 +150,7 @@ fn resolve_path<'tcx>(
     path.segments.into_iter().try_fold(path.base, |base, segment| {
         let name = segment.ident.to_string();
         let def_kind = tcx.def_kind(base);
-        let next_item = match def_kind {
+        match def_kind {
             DefKind::ForeignMod | DefKind::Mod => resolve_in_module(tcx, base, &name),
             DefKind::Struct | DefKind::Enum | DefKind::Union => {
                 resolve_in_type_def(tcx, base, &path.base_path_args, &name)
@@ -160,8 +160,7 @@ fn resolve_path<'tcx>(
                 debug!(?base, ?kind, "resolve_path: unexpected item");
                 Err(ResolveError::UnexpectedType { tcx, item: base, expected: "module" })
             }
-        };
-        next_item
+        }
     })
 }
 

@@ -12,7 +12,7 @@
 macro_rules! kani_mem {
     ($core:tt) => {
         use super::kani_intrinsic;
-        use $core::marker::MetaSized;
+        use $core::marker::{MetaSized, PointeeSized};
         use $core::ptr::{DynMetadata, NonNull, Pointee};
 
         /// Check if the pointer is valid for write access according to [crate::mem] conditions 1, 2
@@ -117,12 +117,12 @@ macro_rules! kani_mem {
             reason = "experimental memory predicate API"
         )]
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
-        pub fn same_allocation<T: MetaSized>(ptr1: *const T, ptr2: *const T) -> bool {
+        pub fn same_allocation<T: PointeeSized>(ptr1: *const T, ptr2: *const T) -> bool {
             same_allocation_internal(ptr1, ptr2)
         }
 
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
-        pub(super) fn same_allocation_internal<T: MetaSized>(
+        pub(super) fn same_allocation_internal<T: PointeeSized>(
             ptr1: *const T,
             ptr2: *const T,
         ) -> bool {
@@ -241,19 +241,19 @@ macro_rules! kani_mem {
         /// - Users have to ensure that the pointed to memory is allocated.
         #[kanitool::fn_marker = "ValidValueIntrinsic"]
         #[inline(never)]
-        unsafe fn has_valid_value<T: MetaSized>(_ptr: *const T) -> bool {
+        unsafe fn has_valid_value<T: PointeeSized>(_ptr: *const T) -> bool {
             kani_intrinsic()
         }
 
         /// Check whether `len * size_of::<T>()` bytes are initialized starting from `ptr`.
         #[kanitool::fn_marker = "IsInitializedIntrinsic"]
         #[inline(never)]
-        pub(crate) fn is_initialized<T: MetaSized>(_ptr: *const T) -> bool {
+        pub(crate) fn is_initialized<T: PointeeSized>(_ptr: *const T) -> bool {
             kani_intrinsic()
         }
 
         /// A helper to assert `is_initialized` to use it as a part of other predicates.
-        fn assert_is_initialized<T: MetaSized>(ptr: *const T) -> bool {
+        fn assert_is_initialized<T: PointeeSized>(ptr: *const T) -> bool {
             super::internal::check(
                 is_initialized(ptr),
                 "Undefined Behavior: Reading from an uninitialized pointer",
@@ -281,7 +281,7 @@ macro_rules! kani_mem {
         #[doc(hidden)]
         #[kanitool::fn_marker = "PointerObjectHook"]
         #[inline(never)]
-        pub(crate) fn pointer_object<T: MetaSized>(_ptr: *const T) -> usize {
+        pub(crate) fn pointer_object<T: PointeeSized>(_ptr: *const T) -> usize {
             kani_intrinsic()
         }
 
@@ -289,7 +289,7 @@ macro_rules! kani_mem {
         #[doc(hidden)]
         #[kanitool::fn_marker = "PointerOffsetHook"]
         #[inline(never)]
-        pub(crate) fn pointer_offset<T: MetaSized>(_ptr: *const T) -> usize {
+        pub(crate) fn pointer_offset<T: PointeeSized>(_ptr: *const T) -> usize {
             kani_intrinsic()
         }
     };

@@ -14,6 +14,7 @@ use stable_mir::{
 #[derive(Clone, Debug)]
 pub enum Intrinsic {
     AddWithOverflow,
+    AlignOfVal,
     ArithOffset,
     AssertInhabited,
     AssertMemUninitializedValid,
@@ -81,12 +82,9 @@ pub enum Intrinsic {
     LogF64,
     MaxNumF32,
     MaxNumF64,
-    MinAlignOf,
-    MinAlignOfVal,
     MinNumF32,
     MinNumF64,
     MulWithOverflow,
-    NeedsDrop,
     PowF32,
     PowF64,
     PowIF32,
@@ -132,8 +130,6 @@ pub enum Intrinsic {
     Transmute,
     TruncF32,
     TruncF64,
-    TypeId,
-    TypeName,
     TypedSwap,
     UnalignedVolatileLoad,
     UncheckedDiv,
@@ -180,6 +176,13 @@ impl Intrinsic {
             "add_with_overflow" => {
                 assert_sig_matches!(sig, _, _ => RigidTy::Tuple(_));
                 Self::AddWithOverflow
+            }
+            "align_of" => unreachable!(
+                "Expected `core::intrinsics::align_of` to be handled by NullOp::SizeOf"
+            ),
+            "align_of_val" => {
+                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Not) => RigidTy::Uint(UintTy::Usize));
+                Self::AlignOfVal
             }
             "arith_offset" => {
                 assert_sig_matches!(sig,
@@ -309,22 +312,14 @@ impl Intrinsic {
                 assert_sig_matches!(sig, RigidTy::Bool => RigidTy::Bool);
                 Self::Likely
             }
-            "align_of" => {
-                assert_sig_matches!(sig, => RigidTy::Uint(UintTy::Usize));
-                Self::MinAlignOf
-            }
-            "align_of_val" => {
-                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Not) => RigidTy::Uint(UintTy::Usize));
-                Self::MinAlignOfVal
-            }
             "mul_with_overflow" => {
                 assert_sig_matches!(sig, _, _ => RigidTy::Tuple(_));
                 Self::MulWithOverflow
             }
-            "needs_drop" => {
-                assert_sig_matches!(sig, => RigidTy::Bool);
-                Self::NeedsDrop
-            }
+            // For const eval of nullary intrinsics, see https://github.com/rust-lang/rust/pull/142839
+            "needs_drop" => unreachable!(
+                "Expected nullary intrinsic `core::intrinsics::type_id` to be const-evaluated before codegen"
+            ),
             // As of https://github.com/rust-lang/rust/pull/110822 the `offset` intrinsic is lowered to `mir::BinOp::Offset`
             "offset" => unreachable!(
                 "Expected `core::intrinsics::unreachable` to be handled by `BinOp::OffSet`"
@@ -361,7 +356,9 @@ impl Intrinsic {
                 assert_sig_matches!(sig, _, _ => _);
                 Self::SaturatingSub
             }
-            "size_of" => unreachable!(),
+            "size_of" => {
+                unreachable!("Expected `core::intrinsics::size_of` to be handled by NullOp::SizeOf")
+            }
             "size_of_val" => {
                 assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Not) => RigidTy::Uint(UintTy::Usize));
                 Self::SizeOfVal
@@ -374,14 +371,12 @@ impl Intrinsic {
                 assert_sig_matches!(sig, _ => _);
                 Self::Transmute
             }
-            "type_id" => {
-                assert_sig_matches!(sig, => RigidTy::Uint(UintTy::U128));
-                Self::TypeId
-            }
-            "type_name" => {
-                assert_sig_matches!(sig, => RigidTy::Ref(_, _, Mutability::Not));
-                Self::TypeName
-            }
+            "type_id" => unreachable!(
+                "Expected nullary intrinsic `core::intrinsics::type_id` to be const-evaluated before codegen"
+            ),
+            "type_name" => unreachable!(
+                "Expected nullary intrinsic `core::intrinsics::type_name` to be const-evaluated before codegen"
+            ),
             "typed_swap_nonoverlapping" => {
                 assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), RigidTy::RawPtr(_, Mutability::Mut) => RigidTy::Tuple(_));
                 Self::TypedSwap
@@ -408,6 +403,9 @@ impl Intrinsic {
             }
             "unreachable" => unreachable!(
                 "Expected `std::intrinsics::unreachable` to be handled by `TerminatorKind::Unreachable`"
+            ),
+            "variant_count" => unreachable!(
+                "Expected nullary intrinsic `core::intrinsics::variant_count` to be const-evaluated before codegen"
             ),
             "volatile_copy_memory" => {
                 assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), RigidTy::RawPtr(_, Mutability::Not), RigidTy::Uint(UintTy::Usize) => RigidTy::Tuple(_));

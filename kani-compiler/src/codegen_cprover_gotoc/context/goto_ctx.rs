@@ -78,6 +78,8 @@ pub struct GotocCtx<'tcx> {
     pub transformer: BodyTransformation,
     /// If there exist some usage of loop contracts int context.
     pub has_loop_contracts: bool,
+    /// Track loop assign clause
+    pub current_loop_modifies: Vec<Expr>,
 }
 
 /// Constructor
@@ -108,6 +110,7 @@ impl<'tcx> GotocCtx<'tcx> {
             concurrent_constructs: FxHashMap::default(),
             transformer,
             has_loop_contracts: false,
+            current_loop_modifies: Vec::new(),
         }
     }
 }
@@ -448,7 +451,7 @@ impl GotocCtx<'_> {
     ) -> Stmt {
         match stmt.body() {
             StmtBody::Return(Some(expr)) => {
-                if let ExprValue::Symbol { ref identifier } = expr.value() {
+                if let ExprValue::Symbol { identifier } = expr.value() {
                     *return_symbol = Some(Expr::symbol_expression(*identifier, expr.typ().clone()));
                     Stmt::goto(*end_label, *stmt.location())
                 } else {

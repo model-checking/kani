@@ -424,10 +424,9 @@ impl RustcInternalMir for Statement {
     type T<'tcx> = rustc_middle::mir::Statement<'tcx>;
 
     fn internal_mir<'tcx>(&self, tcx: TyCtxt<'tcx>) -> Self::T<'tcx> {
-        rustc_middle::mir::Statement {
-            source_info: rustc_middle::mir::SourceInfo::outermost(internal(tcx, self.span)),
-            kind: self.kind.internal_mir(tcx),
-        }
+        let source_info = rustc_middle::mir::SourceInfo::outermost(internal(tcx, self.span));
+        let kind = self.kind.internal_mir(tcx);
+        rustc_middle::mir::Statement::new(source_info, kind)
     }
 }
 
@@ -514,31 +513,11 @@ impl RustcInternalMir for AssertMessage {
                     index: index.internal_mir(tcx),
                 }
             }
-            AssertMessage::Overflow(bin_op, left_operand, right_operand) => {
-                rustc_middle::mir::AssertMessage::Overflow(
-                    internal(tcx, bin_op),
-                    left_operand.internal_mir(tcx),
-                    right_operand.internal_mir(tcx),
-                )
-            }
-            AssertMessage::OverflowNeg(operand) => {
-                rustc_middle::mir::AssertMessage::OverflowNeg(operand.internal_mir(tcx))
-            }
             AssertMessage::DivisionByZero(operand) => {
                 rustc_middle::mir::AssertMessage::DivisionByZero(operand.internal_mir(tcx))
             }
-            AssertMessage::RemainderByZero(operand) => {
-                rustc_middle::mir::AssertMessage::RemainderByZero(operand.internal_mir(tcx))
-            }
-            AssertMessage::ResumedAfterReturn(coroutine_kind) => {
-                rustc_middle::mir::AssertMessage::ResumedAfterReturn(
-                    coroutine_kind.internal_mir(tcx),
-                )
-            }
-            AssertMessage::ResumedAfterPanic(coroutine_kind) => {
-                rustc_middle::mir::AssertMessage::ResumedAfterPanic(
-                    coroutine_kind.internal_mir(tcx),
-                )
+            AssertMessage::InvalidEnumConstruction(source) => {
+                rustc_middle::mir::AssertMessage::InvalidEnumConstruction(source.internal_mir(tcx))
             }
             AssertMessage::MisalignedPointerDereference { required, found } => {
                 rustc_middle::mir::AssertMessage::MisalignedPointerDereference {
@@ -549,8 +528,31 @@ impl RustcInternalMir for AssertMessage {
             AssertMessage::NullPointerDereference => {
                 rustc_middle::mir::AssertMessage::NullPointerDereference
             }
+            AssertMessage::Overflow(bin_op, left_operand, right_operand) => {
+                rustc_middle::mir::AssertMessage::Overflow(
+                    internal(tcx, bin_op),
+                    left_operand.internal_mir(tcx),
+                    right_operand.internal_mir(tcx),
+                )
+            }
+            AssertMessage::OverflowNeg(operand) => {
+                rustc_middle::mir::AssertMessage::OverflowNeg(operand.internal_mir(tcx))
+            }
+            AssertMessage::RemainderByZero(operand) => {
+                rustc_middle::mir::AssertMessage::RemainderByZero(operand.internal_mir(tcx))
+            }
             AssertMessage::ResumedAfterDrop(coroutine_kind) => {
                 rustc_middle::mir::AssertMessage::ResumedAfterDrop(coroutine_kind.internal_mir(tcx))
+            }
+            AssertMessage::ResumedAfterPanic(coroutine_kind) => {
+                rustc_middle::mir::AssertMessage::ResumedAfterPanic(
+                    coroutine_kind.internal_mir(tcx),
+                )
+            }
+            AssertMessage::ResumedAfterReturn(coroutine_kind) => {
+                rustc_middle::mir::AssertMessage::ResumedAfterReturn(
+                    coroutine_kind.internal_mir(tcx),
+                )
             }
         }
     }
@@ -651,14 +653,15 @@ impl RustcInternalMir for Body {
         let internal_basic_blocks = rustc_index::IndexVec::from_raw(
             self.blocks
                 .iter()
-                .map(|stable_basic_block| rustc_middle::mir::BasicBlockData {
-                    statements: stable_basic_block
+                .map(|stable_basic_block| {
+                    let statements = stable_basic_block
                         .statements
                         .iter()
                         .map(|statement| statement.internal_mir(tcx))
-                        .collect(),
-                    terminator: Some(stable_basic_block.terminator.internal_mir(tcx)),
-                    is_cleanup: false,
+                        .collect();
+                    let terminator = Some(stable_basic_block.terminator.internal_mir(tcx));
+                    let is_cleanup = false;
+                    rustc_middle::mir::BasicBlockData::new_stmts(statements, terminator, is_cleanup)
                 })
                 .collect(),
         );

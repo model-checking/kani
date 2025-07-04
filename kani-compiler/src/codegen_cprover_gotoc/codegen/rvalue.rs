@@ -857,7 +857,7 @@ impl GotocCtx<'_> {
                     NullOp::ContractChecks | NullOp::UbChecks => Expr::c_false(),
                 }
             }
-            Rvalue::ShallowInitBox(ref operand, content_ty) => {
+            Rvalue::ShallowInitBox(operand, content_ty) => {
                 // The behaviour of ShallowInitBox is simply transmuting *mut u8 to Box<T>.
                 // See https://github.com/rust-lang/compiler-team/issues/460 for more details.
                 let operand = self.codegen_operand_stable(operand);
@@ -947,7 +947,7 @@ impl GotocCtx<'_> {
                 let pt = self.place_ty_stable(p);
                 self.codegen_get_discriminant(place, pt, res_ty)
             }
-            Rvalue::Aggregate(ref k, operands) => {
+            Rvalue::Aggregate(k, operands) => {
                 self.codegen_rvalue_aggregate(k, operands, res_ty, loc)
             }
             Rvalue::ThreadLocalRef(def_id) => {

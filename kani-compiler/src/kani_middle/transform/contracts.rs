@@ -88,9 +88,7 @@ impl AnyModifiesPass {
         let kani_write_any_str = kani_fns.get(&KaniModel::WriteAnyStr.into()).copied();
         let target_fn = if let Some(harness) = unit.harnesses.first() {
             let attributes = KaniAttributes::for_instance(tcx, *harness);
-            let target_fn =
-                attributes.proof_for_contract().map(|symbol| symbol.unwrap().as_str().intern());
-            target_fn
+            attributes.proof_for_contract().map(|symbol| symbol.unwrap().as_str().intern())
         } else {
             None
         };
