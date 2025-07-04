@@ -6,7 +6,7 @@
 name = "scanner"
 description = "A rustc extension used to scan rust features in a crate"
 version = "0.0.0"
-edition = "2021"
+edition = "2024"
 license = "MIT OR Apache-2.0"
 publish = false
 

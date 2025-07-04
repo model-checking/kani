@@ -216,7 +216,7 @@ impl GotocCtx<'_> {
             // https://doc.rust-lang.org/beta/nightly-rustc/rustc_middle/mir/enum.NonDivergingIntrinsic.html#variant.Assume
             // Informs the optimizer that a condition is always true.
             // If the condition is false, the behavior is undefined.
-            StatementKind::Intrinsic(NonDivergingIntrinsic::Assume(ref op)) => {
+            StatementKind::Intrinsic(NonDivergingIntrinsic::Assume(op)) => {
                 let cond = self.codegen_operand_stable(op).cast_to(Type::bool());
                 self.codegen_assert_assume(
                     cond,

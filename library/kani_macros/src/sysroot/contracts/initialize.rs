@@ -19,10 +19,10 @@ impl<'a> TryFrom<&'a syn::Attribute> for ContractFunctionState {
     /// Find out if this attribute could be describing a "contract handling"
     /// state and if so return it.
     fn try_from(attribute: &'a syn::Attribute) -> Result<Self, Self::Error> {
-        if let syn::Meta::NameValue(nv) = &attribute.meta {
-            if matches_path(&nv.path, &["kanitool", "checked_with"]) {
-                return Ok(ContractFunctionState::Expanded);
-            }
+        if let syn::Meta::NameValue(nv) = &attribute.meta
+            && matches_path(&nv.path, &["kanitool", "checked_with"])
+        {
+            return Ok(ContractFunctionState::Expanded);
         }
         Err(None)
     }

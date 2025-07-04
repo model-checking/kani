@@ -115,6 +115,9 @@ fn parse_args(args: Vec<OsString>) -> ArgsResult {
 /// hundreds of HTTP requests trying to download a non-existent release bundle.
 /// So if we positively detect a dev environment, raise an error early.
 fn fail_if_in_dev_environment() -> Result<()> {
+    // Don't collapse if as let_chains have only been stabilized in 1.88, which the target host
+    // installing Kani need not have just yet.
+    #[allow(clippy::collapsible_if)]
     if let Ok(exe) = std::env::current_exe() {
         if let Some(path) = exe.parent() {
             if path.ends_with("target/debug") || path.ends_with("target/release") {
@@ -194,7 +197,9 @@ fn fixup_dynamic_linking_environment() {
         // unwrap safety: we're just filtering, so it should always succeed
         let new_val =
             env::join_paths(env::split_paths(&paths).filter(unlike_toolchain_path)).unwrap();
-        env::set_var(LOADER_PATH, new_val);
+        unsafe {
+            env::set_var(LOADER_PATH, new_val);
+        }
     }
 }
 
@@ -217,7 +222,9 @@ fn unlike_toolchain_path(path: &PathBuf) -> bool {
 /// down to children) with the toolchain Kani uses instead.
 fn set_kani_rust_toolchain(kani_dir: &Path) -> Result<()> {
     let toolchain_verison = setup::get_rust_toolchain_version(kani_dir)?;
-    env::set_var("RUSTUP_TOOLCHAIN", toolchain_verison);
+    unsafe {
+        env::set_var("RUSTUP_TOOLCHAIN", toolchain_verison);
+    }
     Ok(())
 }
 

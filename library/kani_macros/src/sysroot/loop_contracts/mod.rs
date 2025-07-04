@@ -137,20 +137,18 @@ impl VisitMut for CallReplacer {
         // Visit nested expressions first
         syn::visit_mut::visit_expr_mut(self, expr);
 
-        if let Expr::Call(call) = expr {
-            if let Expr::Path(expr_path) = &*call.func {
-                if self.should_replace(expr_path) {
-                    let replace_var =
-                        self.replacements.iter().find(|(e, _)| e == expr).map(|(_, v)| v);
-                    if let Some(var) = replace_var {
-                        *expr = syn::parse_quote!(#var);
-                    } else {
-                        let new_var = self.generate_var_name();
-                        self.replacements.push((expr.clone(), new_var.clone()));
-                        *expr = syn::parse_quote!(#new_var);
-                    };
-                }
-            }
+        if let Expr::Call(call) = expr
+            && let Expr::Path(expr_path) = &*call.func
+            && self.should_replace(expr_path)
+        {
+            let replace_var = self.replacements.iter().find(|(e, _)| e == expr).map(|(_, v)| v);
+            if let Some(var) = replace_var {
+                *expr = syn::parse_quote!(#var);
+            } else {
+                let new_var = self.generate_var_name();
+                self.replacements.push((expr.clone(), new_var.clone()));
+                *expr = syn::parse_quote!(#new_var);
+            };
         }
     }
 }
@@ -226,10 +224,10 @@ fn transform_break_continue(block: &mut Block) {
         return (true, None);
     };
     // Add semicolon to the last statement if it's an expression without semicolon
-    if let Some(Stmt::Expr(_, ref mut semi)) = block.stmts.last_mut() {
-        if semi.is_none() {
-            *semi = Some(Default::default());
-        }
+    if let Some(&mut Stmt::Expr(_, ref mut semi)) = block.stmts.last_mut()
+        && semi.is_none()
+    {
+        *semi = Some(Default::default());
     }
     block.stmts.push(return_stmt);
 }
@@ -300,8 +298,8 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
     register_name.push_str(&loop_id);
     let register_ident = format_ident!("{}", register_name);
 
-    match loop_stmt {
-        Stmt::Expr(ref mut e, _) => match e {
+    match &mut loop_stmt {
+        &mut Stmt::Expr(ref mut e, _) => match *e {
             Expr::While(ref mut ew) => {
                 let new_cond: Expr = syn::parse(
                     quote!(
