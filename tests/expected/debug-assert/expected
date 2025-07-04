@@ -1,0 +1,11 @@
+Check 1: foo.assertion.1\
+	 - Status: FAILURE\
+	 - Description: ""will fail""\
+
+Check 2: foo.assertion.2\
+	 - Status: FAILURE\
+	 - Description: ""will fail""\
+
+Check 3: foo.assertion.3\
+	 - Status: UNREACHABLE\
+	 - Description: ""not reached""
