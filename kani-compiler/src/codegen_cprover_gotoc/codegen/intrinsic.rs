@@ -1593,7 +1593,7 @@ impl GotocCtx<'_> {
         // [u32; n]: translated wrapped in a struct
         let indexes = fargs.remove(0);
 
-        let (in_type_len, vec_subtype) = self.simd_size_and_type(rust_arg_types[0]);
+        let (_, vec_subtype) = self.simd_size_and_type(rust_arg_types[0]);
         let (ret_type_len, ret_type_subtype) = self.simd_size_and_type(rust_ret_type);
         if ret_type_len != n {
             let err_msg = format!(
@@ -1617,24 +1617,20 @@ impl GotocCtx<'_> {
         // An unsigned type here causes an invariant violation in CBMC.
         // Issue: https://github.com/diffblue/cbmc/issues/6298
         let st_rep = Type::ssize_t();
-        let n_rep = Expr::int_constant(in_type_len, st_rep.clone());
 
-        // P = indexes.expanded_map(v -> if v < N then vec1[v] else vec2[v-N])
         let elems = (0..n)
             .map(|i| {
                 let idx = Expr::int_constant(i, st_rep.clone());
                 // Must not use `indexes.index(i)` directly, because codegen wraps arrays in struct
-                let v = self.codegen_idx_array(indexes.clone(), idx).cast_to(st_rep.clone());
-                let cond = v.clone().lt(n_rep.clone());
-                let t = vec1.clone().index(v.clone());
-                let e = vec2.clone().index(v.sub(n_rep.clone()));
-                cond.ternary(t, e)
+                self.codegen_idx_array(indexes.clone(), idx).cast_to(st_rep.clone())
             })
             .collect();
         self.tcx.dcx().abort_if_errors();
         let cbmc_ret_ty = self.codegen_ty_stable(rust_ret_type);
         let loc = self.codegen_span_stable(span);
-        self.codegen_expr_to_place_stable(p, Expr::vector_expr(cbmc_ret_ty, elems), loc)
+        let shuffle_vector = Expr::shuffle_vector(vec1, vec2, elems);
+        assert_eq!(*shuffle_vector.typ(), cbmc_ret_ty);
+        self.codegen_expr_to_place_stable(p, shuffle_vector, loc)
     }
 
     /// A volatile load of a memory location:
