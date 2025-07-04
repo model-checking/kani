@@ -17,7 +17,6 @@ use crate::args::ExtraChecks;
 use crate::kani_middle::transform::body::{
     CheckType, InsertPosition, MutableBody, SourceInstruction,
 };
-use crate::kani_middle::transform::check_values::SourceOp::UnsupportedCheck;
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
 use rustc_middle::ty::{Const, TyCtxt};
@@ -640,12 +639,6 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                         })
                     }
                 }
-                // `DynStar` is not currently supported in Kani.
-                // TODO: https://github.com/model-checking/kani/issues/1784
-                CastKind::DynStar => self.push_target(UnsupportedCheck {
-                    check: "Dyn*".to_string(),
-                    ty: (rvalue.ty(self.locals).unwrap()),
-                }),
                 CastKind::PointerExposeAddress
                 | CastKind::PointerWithExposedProvenance
                 | CastKind::PointerCoercion(_)

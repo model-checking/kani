@@ -791,15 +791,6 @@ impl GotocCtx<'_> {
                 e,
                 t,
             ) => self.codegen_misc_cast(e, *t),
-            Rvalue::Cast(CastKind::DynStar, _, _) => {
-                let ty = self.codegen_ty_stable(res_ty);
-                self.codegen_unimplemented_expr(
-                    "CastKind::DynStar",
-                    ty,
-                    loc,
-                    "https://github.com/model-checking/kani/issues/1784",
-                )
-            }
             Rvalue::Cast(CastKind::PointerCoercion(k), e, t) => {
                 self.codegen_pointer_cast(k, e, *t, loc)
             }
