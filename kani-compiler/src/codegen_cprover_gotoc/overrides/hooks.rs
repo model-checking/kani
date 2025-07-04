@@ -933,7 +933,7 @@ impl GotocHook for AlignOffset {
         span: Span,
     ) -> Stmt {
         assert_eq!(fargs.len(), 2);
-        let _ptr = fargs.remove(0);
+        let ptr = fargs.remove(0);
         let align = fargs.remove(0);
         // test power-of-two: align > 0 && (align & (align - 1)) == 0
         let zero = Expr::int_constant(0, align.typ().clone());
@@ -954,7 +954,13 @@ impl GotocHook for AlignOffset {
             gcx.codegen_place_stable(assign_to, loc)
         )
         .goto_expr;
-        let rhs = Expr::int_constant(usize::MAX, place_expr.typ().clone());
+        let pointer_offset = Expr::pointer_offset(ptr);
+        let trivially_aligned =
+            pointer_offset.clone().eq(Expr::int_constant(0, pointer_offset.typ().clone()));
+        let rhs = trivially_aligned.ternary(
+            Expr::int_constant(0, place_expr.typ().clone()),
+            Expr::int_constant(usize::MAX, place_expr.typ().clone()),
+        );
         let assign = place_expr.assign(rhs, loc).with_location(loc);
         Stmt::block(vec![safety_check, assign, Stmt::goto(bb_label(target.unwrap()), loc)], loc)
     }
