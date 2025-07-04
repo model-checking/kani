@@ -75,7 +75,7 @@ impl BodyTransformation {
         let safety_check_type = CheckType::new_safety_check_assert_assume(queries);
         let unsupported_check_type = CheckType::new_unsupported_check_assert_assume_false(queries);
         // This has to come first, since creating harnesses affects later stubbing and contract passes.
-        transformer.add_pass(queries, AutomaticHarnessPass::new(unit, queries));
+        transformer.add_pass(queries, AutomaticHarnessPass::new(queries));
         transformer.add_pass(queries, AutomaticArbitraryPass::new(unit, queries));
         transformer.add_pass(queries, FnStubPass::new(&unit.stubs));
         transformer.add_pass(queries, ExternFnStubPass::new(&unit.stubs));

@@ -15,6 +15,19 @@ mod should_derive {
         NamedMultipleVariant { num: i128, char: char },
     }
 
+    pub enum MultipleGenerics<T, U> {
+        First(T),
+        Second { val: U },
+        Both(T, U),
+        Neither,
+    }
+
+    pub enum PartiallyUsedGenerics<T, U> {
+        Data(T),
+        Count(usize),
+        Optional(Option<U>),
+    }
+
     fn foo(foo: Foo, divisor: i128) {
         match foo {
             Foo::UnitVariant
@@ -23,6 +36,27 @@ mod should_derive {
             | Foo::NamedVariant { .. } => {}
             Foo::NamedMultipleVariant { num, char } if num % divisor == 0 => {}
             _ => panic!("foo held an i28, but it didn't divide evenly"),
+        }
+    }
+
+    fn multiple_generics_test(foo: MultipleGenerics<usize, char>) -> usize {
+        match foo {
+            MultipleGenerics::First(n) => {
+                assert!(n % 2 > 0);
+                n % 2
+            }
+            _ => 0,
+        }
+    }
+
+    fn partially_used_generics_test(
+        foo: PartiallyUsedGenerics<Option<Option<(u64, u32)>>, bool>,
+    ) -> usize {
+        match foo {
+            PartiallyUsedGenerics::Data(opt) => {
+                opt.unwrap_or(Some((0, 0))).unwrap_or((0, 0)).1 as usize + 100
+            }
+            _ => 0,
         }
     }
 
@@ -56,10 +90,23 @@ mod should_derive {
         let int = 7;
         assert_eq!(std::mem::align_of_val(&int) % (align as usize), 0);
     }
+
+    enum RecursivelyEligible {
+        Foo(Foo),
+    }
+
+    enum ComplexGenerics<T, U, V> {
+        First(Result<T, V>),
+        Second(MultipleGenerics<U, V>),
+        Third((T, U)),
+    }
+
+    fn recursively_eligible(val: RecursivelyEligible) {}
+    fn generic_recursively_eligible(val: ComplexGenerics<char, u32, i8>) {}
 }
 
 mod should_not_derive {
-    use super::should_derive::Foo;
+    use super::should_derive::*;
     use std::marker::PhantomPinned;
 
     // Zero-variant enum
@@ -78,14 +125,20 @@ mod should_not_derive {
         Num(u32),
     }
 
-    // The enum can impl Arbitrary recursively, but we don't support that
-    enum RecursivelyEligible {
-        Foo(Foo),
+    // Generic enum with unsupported field type
+    enum UnsupportedGenericField<T> {
+        First(Vec<T>),
+        Second(T),
     }
 
     fn never(n: Never) {}
     fn no_variants_eligible(val: NoVariantsEligible) {}
     fn not_all_variants_eligible(val: NotAllVariantsEligible) {}
-    fn recursively_eligible(val: RecursivelyEligible) {}
-    fn some_arguments_support(foo: Foo, val: NotAllVariantsEligible) {}
+    fn some_arguments_support(
+        unsupported: Foo,
+        supported: MultipleGenerics<char, i8>,
+        unsupported_2: NotAllVariantsEligible,
+    ) {
+    }
+    fn generic_unsupported_arg(unsupported: UnsupportedGenericField<char>) {}
 }

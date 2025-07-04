@@ -6,6 +6,7 @@
 use std::collections::HashSet;
 
 use crate::kani_queries::QueryDb;
+use fxhash::FxHashMap;
 use rustc_hir::{def::DefKind, def_id::DefId as InternalDefId, def_id::LOCAL_CRATE};
 use rustc_middle::ty::TyCtxt;
 use rustc_smir::rustc_internal;
@@ -178,7 +179,19 @@ pub fn stable_fn_def(tcx: TyCtxt, def_id: InternalDefId) -> Option<FnDef> {
 /// ```
 /// So we select the terminator that calls T::kani::Arbitrary::any(), then try to resolve it to an Instance.
 /// `T` implements Arbitrary iff we successfully resolve the Instance.
-fn implements_arbitrary(ty: Ty, kani_any_def: FnDef) -> bool {
+fn implements_arbitrary(
+    ty: Ty,
+    kani_any_def: FnDef,
+    ty_arbitrary_cache: &mut FxHashMap<Ty, bool>,
+) -> bool {
+    if let Some(v) = ty_arbitrary_cache.get(&ty) {
+        return *v;
+    }
+
+    if ty.kind().rigid().is_none() {
+        return false;
+    }
+
     let kani_any_body =
         Instance::resolve(kani_any_def, &GenericArgs(vec![GenericArgKind::Type(ty)]))
             .unwrap()
@@ -192,20 +205,32 @@ fn implements_arbitrary(ty: Ty, kani_any_def: FnDef) -> bool {
         if let TyKind::RigidTy(RigidTy::FnDef(def, args)) =
             func.ty(kani_any_body.arg_locals()).unwrap().kind()
         {
-            return Instance::resolve(def, &args).is_ok();
+            let res = Instance::resolve(def, &args).is_ok();
+            ty_arbitrary_cache.insert(ty, res);
+            return res;
         }
     }
     false
 }
 
 /// Is `ty` a struct or enum whose fields/variants implement Arbitrary?
-fn can_derive_arbitrary(ty: Ty, kani_any_def: FnDef) -> bool {
-    let variants_can_derive = |def: AdtDef| {
+fn can_derive_arbitrary(
+    ty: Ty,
+    kani_any_def: FnDef,
+    ty_arbitrary_cache: &mut FxHashMap<Ty, bool>,
+) -> bool {
+    let mut variants_can_derive = |def: AdtDef, args: GenericArgs| {
         for variant in def.variants_iter() {
             let fields = variant.fields();
             let mut fields_impl_arbitrary = true;
-            for ty in fields.iter().map(|field| field.ty()) {
-                fields_impl_arbitrary &= implements_arbitrary(ty, kani_any_def);
+            for ty in fields.iter().map(|field| field.ty_with_args(&args)) {
+                if let TyKind::RigidTy(RigidTy::Adt(..)) = ty.kind() {
+                    fields_impl_arbitrary &=
+                        can_derive_arbitrary(ty, kani_any_def, ty_arbitrary_cache);
+                } else {
+                    fields_impl_arbitrary &=
+                        implements_arbitrary(ty, kani_any_def, ty_arbitrary_cache);
+                }
             }
             if !fields_impl_arbitrary {
                 return false;
@@ -214,16 +239,22 @@ fn can_derive_arbitrary(ty: Ty, kani_any_def: FnDef) -> bool {
         true
     };
 
-    if let TyKind::RigidTy(RigidTy::Adt(def, _)) = ty.kind() {
+    if let TyKind::RigidTy(RigidTy::Adt(def, args)) = ty.kind() {
+        for arg in &args.0 {
+            if let GenericArgKind::Lifetime(..) = arg {
+                return false;
+            }
+        }
+
         match def.kind() {
             AdtKind::Enum => {
                 // Enums with no variants cannot be instantiated
                 if def.num_variants() == 0 {
                     return false;
                 }
-                variants_can_derive(def)
+                variants_can_derive(def, args)
             }
-            AdtKind::Struct => variants_can_derive(def),
+            AdtKind::Struct => variants_can_derive(def, args),
             AdtKind::Union => false,
         }
     } else {

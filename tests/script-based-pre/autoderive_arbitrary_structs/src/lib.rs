@@ -19,6 +19,17 @@ mod should_derive {
         char: char,
     }
 
+    pub struct MultipleGenerics<T, U> {
+        first: T,
+        second: U,
+    }
+
+    pub struct PartiallyUsedGenerics<T, U> {
+        data: T,
+        count: usize,
+        optional: Option<U>,
+    }
+
     fn unit_struct(foo: UnitStruct, bar: UnitStruct) -> UnitStruct {
         assert_eq!(foo, bar);
         foo
@@ -46,6 +57,17 @@ mod should_derive {
         if foo.num % divisor != 0 {
             panic!("foo held an i28, but it didn't divide evenly");
         }
+    }
+
+    fn multiple_generics_test(foo: MultipleGenerics<usize, char>) -> usize {
+        assert!(foo.first % 2 > 0);
+        foo.first % 2
+    }
+
+    fn partially_used_generics_test(
+        foo: PartiallyUsedGenerics<Option<Option<(u64, u32)>>, bool>,
+    ) -> usize {
+        foo.data.unwrap_or(Some((0, 0))).unwrap_or((0, 0)).1 as usize + 100
     }
 
     #[derive(Eq, PartialEq)]
@@ -80,6 +102,16 @@ mod should_derive {
         let int = 7;
         assert_eq!(std::mem::align_of_val(&int) % align.0, 0);
     }
+
+    struct RecursiveFoo(NamedMultipleStruct);
+    pub struct ComplexGenerics<T, U, V> {
+        data: Result<T, V>,
+        mapping: MultipleGenerics<U, V>,
+        pair: (T, U),
+    }
+
+    fn recursively_eligible(val: RecursiveFoo) {}
+    fn generic_recursively_eligible(val: ComplexGenerics<char, u32, i8>) {}
 }
 
 mod should_not_derive {
@@ -88,9 +120,18 @@ mod should_not_derive {
     struct StrStruct(&'static str);
     struct PtrStruct(*const i8);
     struct RefStruct(&'static mut i32);
-    struct RecursiveFoo(NamedMultipleStruct);
+
+    pub struct UnsupportedGenericField<T> {
+        outer: T,
+        inner: Vec<T>,
+    }
 
     fn no_structs_eligible(val: StrStruct, val2: PtrStruct) {}
-    fn recursively_eligible(val: RecursiveFoo) {}
-    fn some_arguments_support(supported: NamedMultipleStruct, unsupported: RefStruct) {}
+    fn some_arguments_support(
+        supported: NamedMultipleStruct,
+        supported_2: MultipleGenerics<char, i8>,
+        unsupported: RefStruct,
+    ) {
+    }
+    fn generic_unsupported_arg(unsupported: UnsupportedGenericField<char>) {}
 }
