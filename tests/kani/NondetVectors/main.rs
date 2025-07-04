@@ -16,3 +16,20 @@ fn main() {
         assert!(_buf2[idx] == elt);
     }
 }
+
+#[kani::proof]
+fn minimal1() {
+    let v: Vec<i8> = vec![kani::any(); 0];
+}
+
+#[kani::proof]
+fn minimal2() {
+    let v: Vec<i8> = vec![5; 0];
+}
+
+#[kani::proof]
+fn vec3772() {
+    let value: u8 = 1; /* set to zero and it passes */
+    let count: u16 = kani::any();
+    let vector: Vec<u8> = vec![value; count as usize];
+}

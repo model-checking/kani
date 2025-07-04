@@ -1730,7 +1730,7 @@ impl GotocCtx<'_> {
 
         // Check that computing `count` in bytes would not overflow
         let (count_bytes, overflow_check) = self.count_in_bytes(
-            count,
+            count.clone(),
             pointee_type_stable(dst_typ).unwrap(),
             Type::size_t(),
             "write_bytes",
@@ -1738,7 +1738,12 @@ impl GotocCtx<'_> {
         );
 
         let memset_call = BuiltinFn::Memset.call(vec![dst, val, count_bytes], loc);
-        Stmt::block(vec![align_check, overflow_check, memset_call.as_stmt(loc)], loc)
+        Stmt::if_then_else(
+            count.clone().gt(Expr::int_constant(0, count.typ().clone())),
+            Stmt::block(vec![align_check, overflow_check, memset_call.as_stmt(loc)], loc),
+            None,
+            loc,
+        )
     }
 
     /// Computes (multiplies) the equivalent of a memory-related number (e.g., an offset) in bytes.
