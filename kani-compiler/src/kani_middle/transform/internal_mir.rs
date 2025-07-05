@@ -139,10 +139,6 @@ impl RustcInternalMir for CastKind {
                     CoercionSource::Implicit,
                 )
             }
-            CastKind::DynStar => rustc_middle::mir::CastKind::PointerCoercion(
-                rustc_ty::adjustment::PointerCoercion::DynStar,
-                CoercionSource::Implicit,
-            ),
             CastKind::IntToInt => rustc_middle::mir::CastKind::IntToInt,
             CastKind::FloatToInt => rustc_middle::mir::CastKind::FloatToInt,
             CastKind::FloatToFloat => rustc_middle::mir::CastKind::FloatToFloat,

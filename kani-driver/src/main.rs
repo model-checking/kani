@@ -1,6 +1,5 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-#![feature(let_chains)]
 use std::ffi::OsString;
 use std::process::ExitCode;
 
