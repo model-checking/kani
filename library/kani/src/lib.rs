@@ -32,6 +32,7 @@ pub mod bounded_arbitrary;
 mod concrete_playback;
 pub mod futures;
 pub mod invariant;
+pub mod iter;
 pub mod shadow;
 pub mod vec;
 
