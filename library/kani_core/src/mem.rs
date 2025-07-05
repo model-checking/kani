@@ -287,14 +287,9 @@ macro_rules! kani_mem {
 
         /// Get the object offset of the given pointer.
         #[doc(hidden)]
-        #[crate::kani::unstable_feature(
-            feature = "ghost-state",
-            issue = 3184,
-            reason = "experimental ghost state/shadow memory API"
-        )]
         #[kanitool::fn_marker = "PointerOffsetHook"]
         #[inline(never)]
-        pub fn pointer_offset<T: PointeeSized>(_ptr: *const T) -> usize {
+        pub(crate) fn pointer_offset<T: PointeeSized>(_ptr: *const T) -> usize {
             kani_intrinsic()
         }
     };
