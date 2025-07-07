@@ -32,42 +32,6 @@ pub struct LoopContractPass {
     new_loop_latches: HashMap<usize, usize>,
 }
 
-//Useful for debugging
-#[allow(dead_code)]
-pub fn print_stable_mir_body(body: &Body) {
-    println!("=== MIR Body Start ===");
-    // Print basic blocks
-    for (idx, block) in body.blocks.iter().enumerate() {
-        println!("bb{idx}: {{");
-        // Print statements
-        for stmt in &block.statements {
-            println!(" {stmt:?}");
-        }
-        // Print terminator
-        println!(" {:?}", block.terminator);
-        println!("}}");
-    }
-    println!("=== MIR Body End ===");
-}
-
-//Useful for debugging
-#[allow(dead_code)]
-pub fn print_mutablebody(body: &MutableBody) {
-    println!("=== MIR Body Start ===");
-    // Print basic blocks
-    for (idx, block) in body.blocks().iter().enumerate() {
-        println!("bb{idx}: {{");
-        // Print statements
-        for stmt in &block.statements {
-            println!(" {stmt:?}");
-        }
-        // Print terminator
-        println!(" {:?}", block.terminator);
-        println!("}}");
-    }
-    println!("=== MIR Body End ===");
-}
-
 impl TransformPass for LoopContractPass {
     /// The type of transformation that this pass implements.
     fn transformation_type() -> TransformationType
@@ -192,6 +156,9 @@ impl LoopContractPass {
         body.replace_statements(&SourceInstruction::Terminator { bb: bb_idx }, stmts);
     }
 
+    //Get all user defined variables in the function (not the compiler-generated ones)
+    //Note that there might be user defined variables with the same user defined names,
+    //but they are all have different MIR-generated names.
     fn get_user_defined_variables(&self, body: &MutableBody) -> Vec<usize> {
         let mut user_vars = Vec::new();
 
