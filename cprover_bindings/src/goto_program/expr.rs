@@ -139,6 +139,11 @@ pub enum ExprValue {
         op: SelfOperator,
         e: Expr,
     },
+    ShuffleVector {
+        vector1: Expr,
+        vector2: Expr,
+        indexes: Vec<Expr>,
+    },
     /// <https://gcc.gnu.org/onlinedocs/gcc/Statement-Exprs.html>
     /// e.g. `({ int y = foo (); int z; if (y > 0) z = y; else z = - y; z; })`
     /// `({ op1; op2; ...})`
@@ -371,6 +376,11 @@ impl Expr {
             If { c, t, e } => c.is_side_effect() || t.is_side_effect() || e.is_side_effect(),
             Index { array, index } => array.is_side_effect() || index.is_side_effect(),
             Member { lhs, field: _ } => lhs.is_side_effect(),
+            ShuffleVector { vector1, vector2, indexes } => {
+                vector1.is_side_effect()
+                    || vector2.is_side_effect()
+                    || indexes.iter().any(|e| e.is_side_effect())
+            }
             Struct { values } => values.iter().any(|e| e.is_side_effect()),
             Typecast(e) => e.is_side_effect(),
             Union { value, field: _ } => value.is_side_effect(),
@@ -989,6 +999,18 @@ impl Expr {
     pub fn exists_expr(typ: Type, variable: Expr, domain: Expr) -> Expr {
         assert!(variable.is_symbol());
         expr!(Exists { variable, domain }, typ)
+    }
+
+    pub fn shuffle_vector(vector1: Expr, vector2: Expr, indexes: Vec<Expr>) -> Expr {
+        assert!(vector1.typ.is_array_like());
+        assert!(vector2.typ.is_array_like());
+        expr!(
+            ShuffleVector { vector1, vector2, indexes },
+            Type::vector(
+                vector1.typ.base_type().unwrap().clone(),
+                indexes.len().try_into().unwrap()
+            )
+        )
     }
 }
 

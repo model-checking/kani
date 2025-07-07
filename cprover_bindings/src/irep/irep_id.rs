@@ -836,6 +836,7 @@ pub enum IrepId {
     VectorGt,
     VectorLt,
     FloatbvRoundToIntegral,
+    ShuffleVector,
 }
 
 impl IrepId {
@@ -1731,6 +1732,7 @@ impl IrepId {
             IrepId::VectorGt => "vector->",
             IrepId::VectorLt => "vector-<",
             IrepId::FloatbvRoundToIntegral => "floatbv_round_to_integral",
+            IrepId::ShuffleVector => "shuffle_vector",
         }
     }
 }
