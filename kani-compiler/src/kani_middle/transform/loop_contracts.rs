@@ -495,8 +495,6 @@ impl LoopContractPass {
         let loop_head_map = self.get_associated_loop_head_hashmap(&new_body, tcx);
         let found_local_list =
             self.move_storagelive_assign_to_loophead(&mut new_body, &loop_head_map);
-        //print_mutablebody(&new_body);
-        //assert!(1==0);
         let mut contain_loop_contracts: bool = false;
 
         // Visit basic blocks in control flow order (BFS).
