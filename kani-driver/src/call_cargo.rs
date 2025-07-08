@@ -77,7 +77,7 @@ crate-type = ["lib"]
     pub fn cargo_build_std(&self, std_path: &Path, krate_path: &Path) -> Result<Vec<Artifact>> {
         let lib_path = lib_no_core_folder().unwrap();
         let mut rustc_args = self.kani_rustc_flags(LibConfig::new_no_core(lib_path));
-        rustc_args.push(to_rustc_arg(self.kani_compiler_flags()).into());
+        rustc_args.push(to_rustc_arg(self.kani_compiler_local_flags()).into());
         // Ignore global assembly, since `compiler_builtins` has some.
         rustc_args.push(
             to_rustc_arg(vec!["--ignore-global-asm".to_string(), self.reachability_arg()]).into(),
@@ -193,14 +193,15 @@ crate-type = ["lib"]
         // This is the desired behavior because we only want to construct `CodegenUnits` for the target package;
         // i.e., if some dependency has harnesses, we don't want to run them.
 
-        // If you are adding a new `kani-compiler` argument, you likely want to put it `kani_compiler_flags()` instead,
-        // unless there a reason it shouldn't be passed to dependencies.
-        // (Note that at the time of writing, passing the other compiler args to dependencies is a no-op, since `--reachability=None` skips codegen anyway.)
+        // If you are adding a new `kani-compiler` argument, you likely want to put it here, unless there is a specific
+        // reason it would be used in dependencies that are skipping reachability and codegen.
+        // Note that passing compiler args to dependencies is a currently no-op, since `--reachability=None` skips codegen
+        // anyway. However, this will cause unneeded recompilation of dependencies should those args change, and thus
+        // should be avoided if possible.
         let mut kani_pkg_args = vec![self.reachability_arg()];
+        kani_pkg_args.extend(self.kani_compiler_local_flags());
 
-        kani_pkg_args.extend(self.kani_compiler_flags());
-
-        // convert to rust c for actual passing
+        // Convert package args to rustc args for passing
         let pkg_args = vec!["--".into(), to_rustc_arg(kani_pkg_args)];
 
         let mut found_target = false;

@@ -51,7 +51,7 @@ impl KaniSession {
         crate_name: &String,
         outdir: &Path,
     ) -> Result<()> {
-        let mut kani_args = self.kani_compiler_flags();
+        let mut kani_args = self.kani_compiler_local_flags();
         kani_args.push(format!("--reachability={}", self.reachability_mode()));
 
         let lib_path = lib_folder().unwrap();
@@ -98,6 +98,8 @@ impl KaniSession {
         format!("--reachability={}", self.reachability_mode())
     }
 
+    /// The `kani-compiler`-specific arguments that should be passed when building all crates,
+    /// including dependencies.
     pub fn kani_compiler_dependency_flags(&self) -> Vec<String> {
         let mut flags = vec![check_version()];
 
@@ -108,8 +110,9 @@ impl KaniSession {
         flags
     }
 
-    /// These arguments are arguments passed to kani-compiler that are `kani` compiler specific.
-    pub fn kani_compiler_flags(&self) -> Vec<String> {
+    /// The `kani-compiler`-specific arguments that should be passed only to the local crate
+    /// being compiled.
+    pub fn kani_compiler_local_flags(&self) -> Vec<String> {
         let mut flags = vec![];
 
         if self.args.common_args.debug {
