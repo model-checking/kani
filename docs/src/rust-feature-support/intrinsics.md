@@ -231,7 +231,7 @@ unchecked_shr | Yes | |
 unchecked_sub | Yes | |
 unlikely | Yes | |
 unreachable | Yes | |
-variant_count | No | |
+variant_count | Yes | |
 volatile_copy_memory | No | See [Notes - Concurrency](#concurrency) |
 volatile_copy_nonoverlapping_memory | No | See [Notes - Concurrency](#concurrency) |
 volatile_load | Partial | See [Notes - Concurrency](#concurrency) |

@@ -1,10 +1,8 @@
-Kani generated automatic harnesses for 7 function(s):
+Kani generated automatic harnesses for 6 function(s):
 +-----------------------------+---------------------------------------------+
 | Crate                       | Selected Function                           |
 +===========================================================================+
 | cargo_autoharness_contracts | should_fail::max                            |
-|-----------------------------+---------------------------------------------|
-| cargo_autoharness_contracts | should_pass::alignment::Alignment           |
 |-----------------------------+---------------------------------------------|
 | cargo_autoharness_contracts | should_pass::alignment::Alignment::as_usize |
 |-----------------------------+---------------------------------------------|
@@ -57,8 +55,6 @@ Autoharness Summary:
 +-----------------------------+---------------------------------------------+-----------------------------+---------------------+
 | Crate                       | Selected Function                           | Kind of Automatic Harness   | Verification Result |
 +===============================================================================================================================+
-| cargo_autoharness_contracts | should_pass::alignment::Alignment           | #[kani::proof]              | Success             |
-|-----------------------------+---------------------------------------------+-----------------------------+---------------------|
 | cargo_autoharness_contracts | should_pass::alignment::Alignment::as_usize | #[kani::proof_for_contract] | Success             |
 |-----------------------------+---------------------------------------------+-----------------------------+---------------------|
 | cargo_autoharness_contracts | should_pass::div                            | #[kani::proof_for_contract] | Success             |
@@ -73,4 +69,4 @@ Autoharness Summary:
 +-----------------------------+---------------------------------------------+-----------------------------+---------------------+
 Note that `kani autoharness` sets default --harness-timeout of 60s and --default-unwind of 20.
 If verification failed because of timing out or too low of an unwinding bound, try passing larger values for these arguments (or, if possible, writing a loop contract).
-Complete - 6 successfully verified functions, 1 failures, 7 total.
+Complete - 5 successfully verified functions, 1 failures, 6 total.

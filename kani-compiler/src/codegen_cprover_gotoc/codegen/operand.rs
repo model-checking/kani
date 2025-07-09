@@ -651,7 +651,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// Ensure that the given instance is in the symbol table, returning the symbol.
     fn codegen_func_symbol(&mut self, instance: Instance) -> &Symbol {
-        let sym = if instance.is_foreign_item() && !instance.has_body() {
+        if instance.is_foreign_item() && !instance.has_body() {
             // Get the symbol that represents a foreign instance.
             self.codegen_foreign_fn(instance)
         } else {
@@ -661,8 +661,7 @@ impl<'tcx> GotocCtx<'tcx> {
             self.symbol_table
                 .lookup(&func)
                 .unwrap_or_else(|| panic!("Function `{func}` should've been declared before usage"))
-        };
-        sym
+        }
     }
 
     /// Generate a goto expression that references the function identified by `instance`.

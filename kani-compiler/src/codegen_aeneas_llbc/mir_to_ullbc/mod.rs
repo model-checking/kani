@@ -418,7 +418,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                         name: rustc_span::Symbol::intern(&name.clone()),
                     };
                     let paramenv = TypingEnv::post_analysis(self.tcx, def_id_internal).param_env;
-                    let ty_internal = pc_internal.find_ty_from_env(paramenv);
+                    let ty_internal = pc_internal.find_const_ty_from_env(paramenv);
                     let ty_stable = rustc_internal::stable(ty_internal);
                     let trans_ty = self.translate_ty(ty_stable);
                     let lit_ty = match trans_ty.kind() {
@@ -486,7 +486,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                             index: paramtc.index,
                             name: rustc_span::Symbol::intern(&paramtc.name),
                         };
-                        let ty_internal = pc_internal.find_ty_from_env(paramenv);
+                        let ty_internal = pc_internal.find_const_ty_from_env(paramenv);
                         let ty_stable = rustc_internal::stable(ty_internal);
                         let trans_ty = self.translate_ty(ty_stable);
                         let lit_ty = match trans_ty.kind() {
@@ -568,7 +568,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                             index: paramtc.index,
                             name: rustc_span::Symbol::intern(&paramtc.name),
                         };
-                        let ty_internal = pc_internal.find_ty_from_env(paramenv);
+                        let ty_internal = pc_internal.find_const_ty_from_env(paramenv);
                         let ty_stable = rustc_internal::stable(ty_internal);
                         let trans_ty = self.translate_ty(ty_stable);
                         let lit_ty = match trans_ty.kind() {

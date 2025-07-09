@@ -153,120 +153,139 @@
 //! #[kanitool::recursion_check = "__kani_recursion_check_div"]
 //! #[kanitool::checked_with = "__kani_check_div"]
 //! #[kanitool::replaced_with = "__kani_replace_div"]
-//! #[kanitool::modifies_wrapper = "__kani_modifies_div"]
 //! #[kanitool::asserted_with = "__kani_assert_div"]
+//! #[kanitool::modifies_wrapper = "__kani_modifies_div"]
 //! fn div(dividend: u32, divisor: u32) -> u32 {
 //!     #[inline(never)]
-//!     #[kanitool::fn_marker = "kani_register_contract"]
-//!     pub const fn kani_register_contract<T, F: FnOnce() -> T>(f: F) -> T {
-//!         kani::panic("internal error: entered unreachable code: ")
+//!     #[kanitool::fn_marker = "kani_force_fn_once"]
+//!     const fn kani_force_fn_once<T, F: FnOnce() -> T>(f: F) -> F {
+//!         f
 //!     }
-//!     let kani_contract_mode = kani::internal::mode();
+//!     #[inline(never)]
+//!     #[kanitool::fn_marker = "kani_force_fn_once_with_args"]
+//!     const fn kani_force_fn_once_with_args<A, T, F: FnOnce(A) -> T>(f: F) -> F {
+//!         f
+//!     }
+//!     #[inline(never)]
+//!     #[kanitool::fn_marker = "kani_register_contract"]
+//!     const fn kani_register_contract<T, F: FnOnce() -> T>(f: F) -> T {
+//!         unreachable!()
+//!     }
+//!     #[inline(never)]
+//!     #[kanitool::fn_marker = "kani_contract_mode"]
+//!     const fn kani_contract_mode() -> kani::internal::Mode {
+//!         kani::internal::ORIGINAL
+//!     }
+//!     let kani_contract_mode = kani_contract_mode();
 //!     match kani_contract_mode {
 //!         kani::internal::RECURSION_CHECK => {
 //!             #[kanitool::is_contract_generated(recursion_check)]
 //!             #[allow(dead_code, unused_variables, unused_mut)]
-//!             let mut __kani_recursion_check_div =
-//!                 || -> u32
-//!                     {
-//!                         #[kanitool::recursion_tracker]
-//!                         static mut REENTRY: bool = false;
-//!                         if unsafe { REENTRY } {
-//!                                 #[kanitool::is_contract_generated(replace)]
-//!                                 #[allow(dead_code, unused_variables, unused_mut)]
-//!                                 let mut __kani_replace_div =
-//!                                     || -> u32
-//!                                         {
-//!                                             kani::assert(divisor != 0, "divisor != 0");
-//!                                             let result_kani_internal: u32 = kani::any_modifies();
-//!                                             kani::assume(kani::internal::apply_closure(|result: &u32|
-//!                                                         *result <= dividend, &result_kani_internal));
-//!                                             result_kani_internal
-//!                                         };
-//!                                 __kani_replace_div()
-//!                             } else {
-//!                                unsafe { REENTRY = true };
-//!                                #[kanitool::is_contract_generated(check)]
-//!                                #[allow(dead_code, unused_variables, unused_mut)]
-//!                                let mut __kani_check_div =
-//!                                    || -> u32
-//!                                        {
-//!                                            kani::assume(divisor != 0);
-//!                                            let _wrapper_arg = ();
-//!                                            #[kanitool::is_contract_generated(wrapper)]
-//!                                            #[allow(dead_code, unused_variables, unused_mut)]
-//!                                            let mut __kani_modifies_div =
-//!                                                |_wrapper_arg| -> u32 { dividend / divisor };
-//!                                            let result_kani_internal: u32 =
-//!                                                __kani_modifies_div(_wrapper_arg);
-//!                                            kani::assert(kani::internal::apply_closure(|result: &u32|
-//!                                                        *result <= dividend, &result_kani_internal),
-//!                                                "|result : &u32| *result <= dividend");
-//!                                            result_kani_internal
-//!                                        };
-//!                                let result_kani_internal = __kani_check_div();
-//!                                unsafe { REENTRY = false };
-//!                                result_kani_internal
-//!                            }
-//!                     };
-//!             ;
-//!             kani_register_contract(__kani_recursion_check_div)
-//!         }
-//!         kani::internal::REPLACE => {
-//!             #[kanitool::is_contract_generated(replace)]
-//!             #[allow(dead_code, unused_variables, unused_mut)]
-//!             let mut __kani_replace_div =
-//!                 || -> u32
-//!                     {
-//!                         kani::assert(divisor != 0, "divisor != 0");
+//!             let mut __kani_recursion_check_div = kani_force_fn_once(|| -> u32 {
+//!                 #[kanitool::recursion_tracker]
+//!                 static mut REENTRY: bool = false;
+//!                 if unsafe { REENTRY } {
+//!                     #[kanitool::is_contract_generated(replace)]
+//!                     #[allow(dead_code, unused_variables, unused_mut)]
+//!                     let mut __kani_replace_div = kani_force_fn_once(|| -> u32 {
+//!                         kani::assert(divisor != 0, stringify!(divisor != 0));
 //!                         let result_kani_internal: u32 = kani::any_modifies();
-//!                         kani::assume(kani::internal::apply_closure(|result: &u32|
-//!                                     *result <= dividend, &result_kani_internal));
+//!                         let dividend = dividend;
+//!                         let divisor = divisor;
+//!                         kani::assume(kani::internal::apply_closure(
+//!                             |result: &u32| *result <= dividend,
+//!                             &result_kani_internal,
+//!                         ));
 //!                         result_kani_internal
-//!                     };
-//!             ;
-//!             kani_register_contract(__kani_replace_div)
-//!         }
-//!         kani::internal::SIMPLE_CHECK => {
-//!             #[kanitool::is_contract_generated(check)]
-//!             #[allow(dead_code, unused_variables, unused_mut)]
-//!             let mut __kani_check_div =
-//!                 || -> u32
-//!                     {
+//!                     });
+//!                     __kani_replace_div()
+//!                 } else {
+//!                     unsafe { REENTRY = true };
+//!                     #[kanitool::is_contract_generated(check)]
+//!                     #[allow(dead_code, unused_variables, unused_mut)]
+//!                     let mut __kani_check_div = kani_force_fn_once(|| -> u32 {
 //!                         kani::assume(divisor != 0);
 //!                         let _wrapper_arg = ();
 //!                         #[kanitool::is_contract_generated(wrapper)]
 //!                         #[allow(dead_code, unused_variables, unused_mut)]
 //!                         let mut __kani_modifies_div =
-//!                             |_wrapper_arg| -> u32 { dividend / divisor };
-//!                         let result_kani_internal: u32 =
-//!                             __kani_modifies_div(_wrapper_arg);
-//!                         kani::assert(kani::internal::apply_closure(|result: &u32|
-//!                                     *result <= dividend, &result_kani_internal),
-//!                             "|result : &u32| *result <= dividend");
+//!                             kani_force_fn_once_with_args(|_wrapper_arg: _| -> u32 {
+//!                                 dividend / divisor
+//!                             });
+//!                         let result_kani_internal: u32 = __kani_modifies_div(_wrapper_arg);
+//!                         kani::assert(
+//!                             kani::internal::apply_closure(
+//!                                 |result: &u32| *result <= dividend,
+//!                                 &result_kani_internal,
+//!                             ),
+//!                             stringify!(|result: &u32| *result <= dividend),
+//!                         );
 //!                         result_kani_internal
-//!                     };
-//!             ;
+//!                     });
+//!                     let result_kani_internal = __kani_check_div();
+//!                     unsafe { REENTRY = false };
+//!                     result_kani_internal
+//!                 }
+//!             });
+//!             kani_register_contract(__kani_recursion_check_div)
+//!         }
+//!         kani::internal::REPLACE => {
+//!             #[kanitool::is_contract_generated(replace)]
+//!             #[allow(dead_code, unused_variables, unused_mut)]
+//!             let mut __kani_replace_div = kani_force_fn_once(|| -> u32 {
+//!                 kani::assert(divisor != 0, stringify!(divisor != 0));
+//!                 let result_kani_internal: u32 = kani::any_modifies();
+//!                 let dividend = dividend;
+//!                 let divisor = divisor;
+//!                 kani::assume(kani::internal::apply_closure(
+//!                     |result: &u32| *result <= dividend,
+//!                     &result_kani_internal,
+//!                 ));
+//!                 result_kani_internal
+//!             });
+//!             kani_register_contract(__kani_replace_div)
+//!         }
+//!         kani::internal::SIMPLE_CHECK => {
+//!             #[kanitool::is_contract_generated(check)]
+//!             #[allow(dead_code, unused_variables, unused_mut)]
+//!             let mut __kani_check_div = kani_force_fn_once(|| -> u32 {
+//!                 kani::assume(divisor != 0);
+//!                 let _wrapper_arg = ();
+//!                 #[kanitool::is_contract_generated(wrapper)]
+//!                 #[allow(dead_code, unused_variables, unused_mut)]
+//!                 let mut __kani_modifies_div =
+//!                     kani_force_fn_once_with_args(|_wrapper_arg: _| -> u32 { dividend / divisor });
+//!                 let result_kani_internal: u32 = __kani_modifies_div(_wrapper_arg);
+//!                 kani::assert(
+//!                     kani::internal::apply_closure(
+//!                         |result: &u32| *result <= dividend,
+//!                         &result_kani_internal,
+//!                     ),
+//!                     stringify!(|result: &u32| *result <= dividend),
+//!                 );
+//!                 result_kani_internal
+//!             });
 //!             kani_register_contract(__kani_check_div)
 //!         }
 //!         kani::internal::ASSERT => {
 //!             #[kanitool::is_contract_generated(assert)]
 //!             #[allow(dead_code, unused_variables, unused_mut)]
-//!             let mut __kani_assert_div =
-//!                 || -> u32
-//!                     {
-//!                         kani::assert(divisor != 0, "divisor != 0");
-//!                         let mut body_wrapper = || -> u32 { dividend / divisor };
-//!                         let result_kani_internal: u32 = body_wrapper();
-//!                         kani::assert(kani::internal::apply_closure(|result: &u32|
-//!                                     *result <= dividend, &result_kani_internal),
-//!                             "|result : &u32| *result <= dividend");
-//!                         result_kani_internal
-//!                     };
-//!             ;
+//!             let mut __kani_assert_div = kani_force_fn_once(|| -> u32 {
+//!                 kani::assert(divisor != 0, stringify!(divisor != 0));
+//!                 let mut body_wrapper = kani_force_fn_once(|| -> u32 { dividend / divisor });
+//!                 let result_kani_internal: u32 = body_wrapper();
+//!                 kani::assert(
+//!                     kani::internal::apply_closure(
+//!                         |result: &u32| *result <= dividend,
+//!                         &result_kani_internal,
+//!                     ),
+//!                     stringify!(|result: &u32| *result <= dividend),
+//!                 );
+//!                 result_kani_internal
+//!             });
 //!             kani_register_contract(__kani_assert_div)
 //!         }
-//!         _ => { dividend / divisor }
+//!         _ => dividend / divisor,
 //!     }
 //! }
 //! ```
@@ -304,153 +323,191 @@
 //! #[kanitool::recursion_check = "__kani_recursion_check_modify"]
 //! #[kanitool::checked_with = "__kani_check_modify"]
 //! #[kanitool::replaced_with = "__kani_replace_modify"]
-//! #[kanitool::modifies_wrapper = "__kani_modifies_modify"]
 //! #[kanitool::asserted_with = "__kani_assert_modify"]
+//! #[kanitool::modifies_wrapper = "__kani_modifies_modify"]
 //! fn modify(ptr: &mut u32) {
+//!    #[inline(never)]
+//!     #[kanitool::fn_marker = "kani_force_fn_once"]
+//!     const fn kani_force_fn_once<T, F: FnOnce() -> T>(f: F) -> F {
+//!         f
+//!     }
+//!     #[inline(never)]
+//!     #[kanitool::fn_marker = "kani_force_fn_once_with_args"]
+//!     const fn kani_force_fn_once_with_args<A, T, F: FnOnce(A) -> T>(f: F) -> F {
+//!         f
+//!     }
 //!     #[inline(never)]
 //!     #[kanitool::fn_marker = "kani_register_contract"]
-//!     pub const fn kani_register_contract<T, F: FnOnce() -> T>(f: F) -> T {
-//!         kani::panic("internal error: entered unreachable code: ")
+//!     const fn kani_register_contract<T, F: FnOnce() -> T>(f: F) -> T {
+//!         unreachable!()
 //!     }
-//!     let kani_contract_mode = kani::internal::mode();
+//!     #[inline(never)]
+//!     #[kanitool::fn_marker = "kani_contract_mode"]
+//!     const fn kani_contract_mode() -> kani::internal::Mode {
+//!         kani::internal::ORIGINAL
+//!     }
+//!     let kani_contract_mode = kani_contract_mode();
 //!     match kani_contract_mode {
 //!         kani::internal::RECURSION_CHECK => {
 //!             #[kanitool::is_contract_generated(recursion_check)]
 //!             #[allow(dead_code, unused_variables, unused_mut)]
-//!             let mut __kani_recursion_check_modify =
-//!                 ||
-//!                     {
-//!                         #[kanitool::recursion_tracker]
-//!                         static mut REENTRY: bool = false;
-//!                         if unsafe { REENTRY } {
-//!                                 #[kanitool::is_contract_generated(replace)]
-//!                                 #[allow(dead_code, unused_variables, unused_mut)]
-//!                                 let mut __kani_replace_modify =
-//!                                     ||
-//!                                         {
-//!                                             kani::assert(*ptr < 100, "*ptr < 100");
-//!                                             let remember_kani_internal_92cc419d8aca576c = *ptr + 1;
-//!                                             let remember_kani_internal_92cc419d8aca576c = *ptr + 1;
-//!                                             let result_kani_internal: () = kani::any_modifies();
-//!                                             *unsafe {
-//!                                                         kani::internal::Pointer::assignable(kani::internal::untracked_deref(&(ptr)))
-//!                                                     } = kani::any_modifies();
-//!                                             kani::assume(kani::internal::apply_closure(|result|
-//!                                                         (remember_kani_internal_92cc419d8aca576c) == *ptr,
-//!                                                     &result_kani_internal));
-//!                                             kani::assume(kani::internal::apply_closure(|result|
-//!                                                         (remember_kani_internal_92cc419d8aca576c) == *ptr,
-//!                                                     &result_kani_internal));
-//!                                             result_kani_internal
-//!                                         };
-//!                                 __kani_replace_modify()
-//!                             } else {
-//!                                unsafe { REENTRY = true };
-//!                                #[kanitool::is_contract_generated(check)]
-//!                                #[allow(dead_code, unused_variables, unused_mut)]
-//!                                let mut __kani_check_modify =
-//!                                    ||
-//!                                        {
-//!                                            kani::assume(*ptr < 100);
-//!                                            let remember_kani_internal_92cc419d8aca576c = *ptr + 1;
-//!                                            let remember_kani_internal_92cc419d8aca576c = *ptr + 1;
-//!                                            let _wrapper_arg = (ptr as *const _,);
-//!                                            #[kanitool::is_contract_generated(wrapper)]
-//!                                            #[allow(dead_code, unused_variables, unused_mut)]
-//!                                            let mut __kani_modifies_modify =
-//!                                                |_wrapper_arg| { *ptr += 1; };
-//!                                            let result_kani_internal: () =
-//!                                                __kani_modifies_modify(_wrapper_arg);
-//!                                            kani::assert(kani::internal::apply_closure(|result|
-//!                                                        (remember_kani_internal_92cc419d8aca576c) == *ptr,
-//!                                                    &result_kani_internal), "|result| old(*ptr + 1) == *ptr");
-//!                                            kani::assert(kani::internal::apply_closure(|result|
-//!                                                        (remember_kani_internal_92cc419d8aca576c) == *ptr,
-//!                                                    &result_kani_internal), "|result| old(*ptr + 1) == *ptr");
-//!                                            result_kani_internal
-//!                                        };
-//!                                let result_kani_internal = __kani_check_modify();
-//!                                unsafe { REENTRY = false };
-//!                                result_kani_internal
-//!                            }
-//!                     };
-//!             ;
+//!             let mut __kani_recursion_check_modify = kani_force_fn_once(|| {
+//!                 #[kanitool::recursion_tracker]
+//!                 static mut REENTRY: bool = false;
+//!                 if unsafe { REENTRY } {
+//!                     #[kanitool::is_contract_generated(replace)]
+//!                     #[allow(dead_code, unused_variables, unused_mut)]
+//!                     let mut __kani_replace_modify = kani_force_fn_once(|| {
+//!                         kani::assert(*ptr < 100, stringify!(*ptr < 100));
+//!                         let remember_kani_internal_2e780b148d45b5c8 = *ptr + 1;
+//!                         let remember_kani_internal_2e780b148d45b5c8 = *ptr + 1;
+//!                         let result_kani_internal: () = kani::any_modifies();
+//!                         unsafe {
+//!                             kani::internal::write_any(kani::internal::Pointer::assignable(
+//!                                 kani::internal::untracked_deref(&ptr),
+//!                             ))
+//!                         };
+//!                         let ptr = ptr;
+//!                         kani::assume(kani::internal::apply_closure(
+//!                             |result| (remember_kani_internal_2e780b148d45b5c8) == *ptr,
+//!                             &result_kani_internal,
+//!                         ));
+//!                         kani::assume(kani::internal::apply_closure(
+//!                             |result| (remember_kani_internal_2e780b148d45b5c8) == *ptr,
+//!                             &result_kani_internal,
+//!                         ));
+//!                         result_kani_internal
+//!                     });
+//!                     __kani_replace_modify()
+//!                 } else {
+//!                     unsafe { REENTRY = true };
+//!                     #[kanitool::is_contract_generated(check)]
+//!                     #[allow(dead_code, unused_variables, unused_mut)]
+//!                     let mut __kani_check_modify = kani_force_fn_once(|| {
+//!                         kani::assume(*ptr < 100);
+//!                         let remember_kani_internal_2e780b148d45b5c8 = *ptr + 1;
+//!                         let remember_kani_internal_2e780b148d45b5c8 = *ptr + 1;
+//!                         let _wrapper_arg = (ptr as *const _,);
+//!                         #[kanitool::is_contract_generated(wrapper)]
+//!                         #[allow(dead_code, unused_variables, unused_mut)]
+//!                         let mut __kani_modifies_modify =
+//!                             kani_force_fn_once_with_args(|_wrapper_arg: _| {
+//!                                 *ptr += 1;
+//!                             });
+//!                         let result_kani_internal: () = __kani_modifies_modify(_wrapper_arg);
+//!                         kani::assert(
+//!                             kani::internal::apply_closure(
+//!                                 |result| (remember_kani_internal_2e780b148d45b5c8) == *ptr,
+//!                                 &result_kani_internal,
+//!                             ),
+//!                             stringify!(|result| old(*ptr + 1) == *ptr),
+//!                         );
+//!                         kani::assert(
+//!                             kani::internal::apply_closure(
+//!                                 |result| (remember_kani_internal_2e780b148d45b5c8) == *ptr,
+//!                                 &result_kani_internal,
+//!                             ),
+//!                             stringify!(|result| old(*ptr + 1) == *ptr),
+//!                         );
+//!                         result_kani_internal
+//!                     });
+//!                     let result_kani_internal = __kani_check_modify();
+//!                     unsafe { REENTRY = false };
+//!                     result_kani_internal
+//!                 }
+//!             });
 //!             kani_register_contract(__kani_recursion_check_modify)
 //!         }
 //!         kani::internal::REPLACE => {
 //!             #[kanitool::is_contract_generated(replace)]
 //!             #[allow(dead_code, unused_variables, unused_mut)]
-//!             let mut __kani_replace_modify =
-//!                 ||
-//!                     {
-//!                         kani::assert(*ptr < 100, "*ptr < 100");
-//!                         let remember_kani_internal_92cc419d8aca576c = *ptr + 1;
-//!                         let remember_kani_internal_92cc419d8aca576c = *ptr + 1;
-//!                         let result_kani_internal: () = kani::any_modifies();
-//!                         *unsafe {
-//!                                     kani::internal::Pointer::assignable(kani::internal::untracked_deref(&(ptr)))
-//!                                 } = kani::any_modifies();
-//!                         kani::assume(kani::internal::apply_closure(|result|
-//!                                     (remember_kani_internal_92cc419d8aca576c) == *ptr,
-//!                                 &result_kani_internal));
-//!                         kani::assume(kani::internal::apply_closure(|result|
-//!                                     (remember_kani_internal_92cc419d8aca576c) == *ptr,
-//!                                 &result_kani_internal));
-//!                         result_kani_internal
-//!                     };
-//!             ;
+//!             let mut __kani_replace_modify = kani_force_fn_once(|| {
+//!                 kani::assert(*ptr < 100, stringify!(*ptr < 100));
+//!                 let remember_kani_internal_2e780b148d45b5c8 = *ptr + 1;
+//!                 let remember_kani_internal_2e780b148d45b5c8 = *ptr + 1;
+//!                 let result_kani_internal: () = kani::any_modifies();
+//!                 unsafe {
+//!                     kani::internal::write_any(kani::internal::Pointer::assignable(
+//!                         kani::internal::untracked_deref(&ptr),
+//!                     ))
+//!                 };
+//!                 let ptr = ptr;
+//!                 kani::assume(kani::internal::apply_closure(
+//!                     |result| (remember_kani_internal_2e780b148d45b5c8) == *ptr,
+//!                     &result_kani_internal,
+//!                 ));
+//!                 kani::assume(kani::internal::apply_closure(
+//!                     |result| (remember_kani_internal_2e780b148d45b5c8) == *ptr,
+//!                     &result_kani_internal,
+//!                 ));
+//!                 result_kani_internal
+//!             });
 //!             kani_register_contract(__kani_replace_modify)
 //!         }
 //!         kani::internal::SIMPLE_CHECK => {
 //!             #[kanitool::is_contract_generated(check)]
 //!             #[allow(dead_code, unused_variables, unused_mut)]
-//!             let mut __kani_check_modify =
-//!                 ||
-//!                     {
-//!                         kani::assume(*ptr < 100);
-//!                         let remember_kani_internal_92cc419d8aca576c = *ptr + 1;
-//!                         let remember_kani_internal_92cc419d8aca576c = *ptr + 1;
-//!                         let _wrapper_arg = (ptr as *const _,);
-//!                         #[kanitool::is_contract_generated(wrapper)]
-//!                         #[allow(dead_code, unused_variables, unused_mut)]
-//!                         let mut __kani_modifies_modify =
-//!                             |_wrapper_arg| { *ptr += 1; };
-//!                         let result_kani_internal: () =
-//!                             __kani_modifies_modify(_wrapper_arg);
-//!                         kani::assert(kani::internal::apply_closure(|result|
-//!                                     (remember_kani_internal_92cc419d8aca576c) == *ptr,
-//!                                 &result_kani_internal), "|result| old(*ptr + 1) == *ptr");
-//!                         kani::assert(kani::internal::apply_closure(|result|
-//!                                     (remember_kani_internal_92cc419d8aca576c) == *ptr,
-//!                                 &result_kani_internal), "|result| old(*ptr + 1) == *ptr");
-//!                         result_kani_internal
-//!                     };
-//!             ;
+//!             let mut __kani_check_modify = kani_force_fn_once(|| {
+//!                 kani::assume(*ptr < 100);
+//!                 let remember_kani_internal_2e780b148d45b5c8 = *ptr + 1;
+//!                 let remember_kani_internal_2e780b148d45b5c8 = *ptr + 1;
+//!                 let _wrapper_arg = (ptr as *const _,);
+//!                 #[kanitool::is_contract_generated(wrapper)]
+//!                 #[allow(dead_code, unused_variables, unused_mut)]
+//!                 let mut __kani_modifies_modify = kani_force_fn_once_with_args(|_wrapper_arg: _| {
+//!                     *ptr += 1;
+//!                 });
+//!                 let result_kani_internal: () = __kani_modifies_modify(_wrapper_arg);
+//!                 kani::assert(
+//!                     kani::internal::apply_closure(
+//!                         |result| (remember_kani_internal_2e780b148d45b5c8) == *ptr,
+//!                         &result_kani_internal,
+//!                     ),
+//!                     stringify!(|result| old(*ptr + 1) == *ptr),
+//!                 );
+//!                 kani::assert(
+//!                     kani::internal::apply_closure(
+//!                         |result| (remember_kani_internal_2e780b148d45b5c8) == *ptr,
+//!                         &result_kani_internal,
+//!                     ),
+//!                     stringify!(|result| old(*ptr + 1) == *ptr),
+//!                 );
+//!                 result_kani_internal
+//!             });
 //!             kani_register_contract(__kani_check_modify)
 //!         }
 //!         kani::internal::ASSERT => {
 //!             #[kanitool::is_contract_generated(assert)]
 //!             #[allow(dead_code, unused_variables, unused_mut)]
-//!             let mut __kani_assert_modify =
-//!                 ||
-//!                     {
-//!                         kani::assert(*ptr < 100, "*ptr < 100");
-//!                         let remember_kani_internal_92cc419d8aca576c = *ptr + 1;
-//!                         let remember_kani_internal_92cc419d8aca576c = *ptr + 1;
-//!                         let mut body_wrapper = || { *ptr += 1; };
-//!                         let result_kani_internal: () = body_wrapper();
-//!                         kani::assert(kani::internal::apply_closure(|result|
-//!                                     (remember_kani_internal_92cc419d8aca576c) == *ptr,
-//!                                 &result_kani_internal), "|result| old(*ptr + 1) == *ptr");
-//!                         kani::assert(kani::internal::apply_closure(|result|
-//!                                     (remember_kani_internal_92cc419d8aca576c) == *ptr,
-//!                                 &result_kani_internal), "|result| old(*ptr + 1) == *ptr");
-//!                         result_kani_internal
-//!                     };
-//!             ;
+//!             let mut __kani_assert_modify = kani_force_fn_once(|| {
+//!                 kani::assert(*ptr < 100, stringify!(*ptr < 100));
+//!                 let remember_kani_internal_2e780b148d45b5c8 = *ptr + 1;
+//!                 let remember_kani_internal_2e780b148d45b5c8 = *ptr + 1;
+//!                 let mut body_wrapper = kani_force_fn_once(|| {
+//!                     *ptr += 1;
+//!                 });
+//!                 let result_kani_internal: () = body_wrapper();
+//!                 kani::assert(
+//!                     kani::internal::apply_closure(
+//!                         |result| (remember_kani_internal_2e780b148d45b5c8) == *ptr,
+//!                         &result_kani_internal,
+//!                     ),
+//!                     stringify!(|result| old(*ptr + 1) == *ptr),
+//!                 );
+//!                 kani::assert(
+//!                     kani::internal::apply_closure(
+//!                         |result| (remember_kani_internal_2e780b148d45b5c8) == *ptr,
+//!                         &result_kani_internal,
+//!                     ),
+//!                     stringify!(|result| old(*ptr + 1) == *ptr),
+//!                 );
+//!                 result_kani_internal
+//!             });
 //!             kani_register_contract(__kani_assert_modify)
 //!         }
-//!         _ => { *ptr += 1; }
+//!         _ => {
+//!             *ptr += 1;
+//!         }
 //!     }
 //! }
 //! ```

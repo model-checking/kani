@@ -1754,7 +1754,7 @@ impl<'tcx> GotocCtx<'tcx> {
         &self,
         instance: InstanceStable,
         fn_abi: &'a FnAbi,
-    ) -> impl Iterator<Item = (usize, &'a ArgAbi)> {
+    ) -> impl Iterator<Item = (usize, &'a ArgAbi)> + use<'a> {
         let requires_caller_location = self.requires_caller_location(instance);
         let num_args = fn_abi.args.len();
         fn_abi.args.iter().enumerate().filter(move |(idx, arg_abi)| {

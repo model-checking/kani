@@ -87,6 +87,7 @@ pub enum StmtBody {
         // The loop invariants annotated to the goto, which can be
         // applied as loop contracts in CBMC if it is a backward goto.
         loop_invariants: Option<Expr>,
+        loop_modifies: Option<Vec<Expr>>,
     },
     /// `if (i) { t } else { e }`
     Ifthenelse {
@@ -288,7 +289,7 @@ impl Stmt {
     pub fn goto<T: Into<InternedString>>(dest: T, loc: Location) -> Self {
         let dest = dest.into();
         assert!(!dest.is_empty());
-        stmt!(Goto { dest, loop_invariants: None }, loc)
+        stmt!(Goto { dest, loop_invariants: None, loop_modifies: None }, loc)
     }
 
     /// `if (i) { t } else { e }` or `if (i) { t }`
@@ -333,11 +334,34 @@ impl Stmt {
 
     /// `goto dest;` with loop invariant
     pub fn with_loop_contracts(self, inv: Expr) -> Self {
-        if let Goto { dest, loop_invariants } = self.body() {
+        if let Goto { dest, loop_invariants, loop_modifies } = self.body() {
             assert!(loop_invariants.is_none());
-            stmt!(Goto { dest: *dest, loop_invariants: Some(inv) }, *self.location())
+            stmt!(
+                Goto {
+                    dest: *dest,
+                    loop_invariants: Some(inv),
+                    loop_modifies: loop_modifies.clone()
+                },
+                *self.location()
+            )
         } else {
             unreachable!("Loop contracts should be annotated only to goto stmt")
+        }
+    }
+
+    pub fn with_loop_modifies(self, asg: Vec<Expr>) -> Self {
+        if let Goto { dest, loop_invariants, loop_modifies } = self.body() {
+            assert!(loop_modifies.is_none());
+            stmt!(
+                Goto {
+                    dest: *dest,
+                    loop_invariants: loop_invariants.clone(),
+                    loop_modifies: Some(asg)
+                },
+                *self.location()
+            )
+        } else {
+            unreachable!("Loop assigns should be annotated only to goto stmt")
         }
     }
 }
