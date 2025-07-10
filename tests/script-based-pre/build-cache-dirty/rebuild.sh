@@ -9,8 +9,6 @@
 # - Add a dependency
 # Note: This should run in the folder where the script is.
 
-set -x
-
 OUT_DIR=target
 MANIFEST=${OUT_DIR}/target_lib/Cargo.toml
 LIB_SRC=${OUT_DIR}/target_lib/src/lib.rs
@@ -49,7 +47,7 @@ mkdir -p ${OUT_DIR}
 cp -r target_lib ${OUT_DIR}
 
 echo "Initial compilation"
-check_kani "--no-assertion-reach-checks" initial.log
+check_kani --no-assertion-reach-checks initial.log
 
 # Check that most codegen flags only recompile the target crate
 echo "Run with a new argument that doesn't affect dependency compilation"
