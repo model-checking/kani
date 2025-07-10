@@ -17,7 +17,7 @@ use rustc_smir::rustc_internal;
 use stable_mir::mir::ConstOperand;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::visit::{Location, MirVisitor};
-use stable_mir::ty::{FnDef, RigidTy, TyKind};
+use stable_mir::ty::{FnDef, GenericArgs, RigidTy, TyKind};
 use stable_mir::{CrateDef, CrateItem};
 
 use self::annotations::update_stub_mapping;
@@ -35,6 +35,22 @@ pub fn harness_stub_map(
         update_stub_mapping(tcx, def_id.expect_local(), stubs, &mut stub_pairs);
     }
     stub_pairs
+}
+
+/// For the purpose of stubbing, don't consider the `Self` argument.
+fn args_without_self(args: &GenericArgs) -> usize {
+    let len = args.0.len();
+    if len == 0 {
+        return len;
+    }
+    let has_self = args.0.iter().any(|arg| {
+        if let TyKind::Param(param_ty) = arg.expect_ty().kind() {
+            param_ty.name == "Self"
+        } else {
+            false
+        }
+    });
+    if has_self { len - 1 } else { len }
 }
 
 /// Checks whether the stub is compatible with the original function/method: do
@@ -70,14 +86,17 @@ pub fn check_compatibility(tcx: TyCtxt, old_def: FnDef, new_def: FnDef) -> Resul
         unreachable!("Expected function, but found {new_ty}")
     };
 
+    let old_args_len = args_without_self(&old_args);
+    let new_args_len = args_without_self(&new_args);
+
     // TODO: We should check for the parameter type too or replacement will fail.
-    if old_args.0.len() != new_args.0.len() {
+    if old_args_len != new_args_len {
         let msg = format!(
             "mismatch in the number of generic parameters: original function/method `{}` takes {} generic parameters(s), stub `{}` takes {}",
             old_def.name(),
-            old_args.0.len(),
+            old_args_len,
             new_def.name(),
-            new_args.0.len(),
+            new_args_len,
         );
         return Err(msg);
     }
