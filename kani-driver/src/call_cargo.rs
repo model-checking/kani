@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use crate::args::VerificationArgs;
-use crate::call_single_file::{LibConfig, to_rustc_arg};
+use crate::call_cargo::args::{CargoArg, CommandWrapper as _, KaniArg, to_rustc_arg};
+use crate::call_single_file::LibConfig;
 use crate::project::Artifact;
 use crate::session::{
     KaniSession, get_cargo_path, lib_folder, lib_no_core_folder, setup_cargo_command,
@@ -17,7 +18,6 @@ use cargo_metadata::{
 };
 use kani_metadata::{ArtifactType, CompilerArtifactStub};
 use std::collections::HashMap;
-use std::ffi::{OsStr, OsString};
 use std::fmt::{self, Display};
 use std::fs::{self, File};
 use std::io::IsTerminal;
@@ -35,6 +35,114 @@ pub struct CargoOutputs {
     pub metadata: Vec<Artifact>,
     /// Recording the cargo metadata from the build
     pub cargo_metadata: Metadata,
+}
+
+pub(crate) mod args {
+    use std::{
+        ffi::{OsStr, OsString},
+        process::Command,
+    };
+
+    #[derive(Clone, PartialEq)]
+    /// Kani-specific arguments passed to rustc and then used by `kani-compiler`.
+    /// This includes everything from the `Arguments` struct in `kani-compiler/src/args.rs`.
+    pub struct KaniArg(String);
+
+    #[derive(Clone, PartialEq)]
+    /// Arguments passed to rustc.
+    /// Basically anything that gets listed when running `rustc --help`.
+    /// This includes options like `--extern` for specify extern crates, `-L` for adding to the lib
+    /// search path or `--emit mir` for emitting MIR.
+    pub struct RustcArg(OsString);
+
+    #[derive(Clone, PartialEq)]
+    /// Arguments passed to Cargo.
+    /// Basically anything that gets listed when running `cargo --help`. This includes options like
+    /// all cargo subcommands, `--config`, `--target`, or any `-Z` unstable Cargo options.
+    pub struct CargoArg(OsString);
+
+    macro_rules! from_impl {
+        ($type:tt, $inner:ty) => {
+            impl<T> From<T> for $type
+            where
+                T: Into<$inner>,
+            {
+                fn from(value: T) -> Self {
+                    $type(value.into())
+                }
+            }
+        };
+    }
+
+    from_impl!(KaniArg, String);
+    from_impl!(RustcArg, OsString);
+    from_impl!(CargoArg, OsString);
+
+    /// This function can be used to convert Kani compiler specific arguments into a rustc one.
+    /// We currently pass Kani specific arguments using the `--llvm-args` structure which is the
+    /// hacky mechanism used by other rustc backend to receive arguments unknown to rustc.
+    ///
+    /// Note that Cargo caching mechanism takes the building context into consideration, which
+    /// includes the value of the rust flags. By using `--llvm-args`, we ensure that Cargo takes into
+    /// consideration all arguments that are used to configure Kani compiler. For example, enabling the
+    /// reachability checks will force recompilation if they were disabled in previous build.
+    /// For more details on this caching mechanism, see the
+    /// [fingerprint documentation](https://github.com/rust-lang/cargo/blob/82c3bb79e3a19a5164e33819ef81bfc2c984bc56/src/cargo/core/compiler/fingerprint/mod.rs)
+    pub fn to_rustc_arg(kani_args: &[KaniArg]) -> RustcArg {
+        format!(
+            r#"-Cllvm-args={}"#,
+            kani_args.iter().map(|a| a.0.to_string()).collect::<Vec<String>>().join(" ")
+        )
+        .into()
+    }
+
+    pub enum PassTo {
+        /// Only pass arguments for use in the local crate.
+        /// This will just pass them directly as arguments to the command.
+        OnlyLocalCrate,
+        /// Pass arguments for use when compiling all dependencies using the
+        /// `CARGO_ENCODED_RUSTFLAGS` environment variable.
+        AllDependencies,
+    }
+
+    pub trait CommandWrapper {
+        fn pass_cargo_args(&mut self, args: &[CargoArg]) -> &mut Self;
+        fn pass_rustc_args(&mut self, args: &[RustcArg], to: PassTo) -> &mut Self;
+        fn pass_kani_args(&mut self, args: &[KaniArg], to: PassTo) -> &mut Self;
+    }
+
+    impl CommandWrapper for Command {
+        /// Pass general arguments to cargo.
+        fn pass_cargo_args(&mut self, args: &[CargoArg]) -> &mut Self {
+            self.args(args.iter().map(|d| &d.0))
+        }
+
+        /// Pass rustc arguments to the compiler for use in certain dependencies.
+        fn pass_rustc_args(&mut self, args: &[RustcArg], to: PassTo) -> &mut Self {
+            match to {
+                // Since we also want to recursively pass these args to all dependencies,
+                // use an environment variable that gets checked for each dependency.
+                // Use of CARGO_ENCODED_RUSTFLAGS instead of RUSTFLAGS is preferred. See
+                // https://doc.rust-lang.org/cargo/reference/environment-variables.html
+                PassTo::AllDependencies => self.env(
+                    "CARGO_ENCODED_RUSTFLAGS",
+                    args.iter()
+                        .map(|d| d.0.clone())
+                        .collect::<Vec<OsString>>()
+                        .join(OsStr::new("\x1f")),
+                ),
+                // Since we just want to pass to the local crate, just add them as arguments to the command.
+                PassTo::OnlyLocalCrate => self.args(args.iter().map(|d| &d.0)),
+            }
+        }
+
+        /// Pass Kani-specific arguments to the compiler for use in certain dependencies.
+        /// This will convert them to rustc args using the `--llvm-args` structure before
+        /// adding them to the command to ensure they're properly parsed by the Kani compiler.
+        fn pass_kani_args(&mut self, args: &[KaniArg], to: PassTo) -> &mut Self {
+            self.pass_rustc_args(&[to_rustc_arg(args)], to)
+        }
+    }
 }
 
 impl KaniSession {
@@ -77,13 +185,12 @@ crate-type = ["lib"]
     pub fn cargo_build_std(&self, std_path: &Path, krate_path: &Path) -> Result<Vec<Artifact>> {
         let lib_path = lib_no_core_folder().unwrap();
         let mut rustc_args = self.kani_rustc_flags(LibConfig::new_no_core(lib_path));
-        rustc_args.push(to_rustc_arg(self.kani_compiler_local_flags()).into());
+        rustc_args.push(to_rustc_arg(&self.kani_compiler_local_flags()));
         // Ignore global assembly, since `compiler_builtins` has some.
-        rustc_args.push(
-            to_rustc_arg(vec!["--ignore-global-asm".to_string(), self.reachability_arg()]).into(),
-        );
+        rustc_args
+            .push(to_rustc_arg(&[KaniArg::from("--ignore-global-asm"), self.reachability_arg()]));
 
-        let mut cargo_args: Vec<OsString> = vec!["build".into()];
+        let mut cargo_args: Vec<CargoArg> = vec!["build".into()];
         cargo_args.append(&mut cargo_config_args());
 
         // Configuration needed to parse cargo compilation status.
@@ -103,12 +210,10 @@ crate-type = ["lib"]
 
         // Since we are verifying the standard library, we set the reachability to all crates.
         let mut cmd = setup_cargo_command()?;
-        cmd.args(&cargo_args)
+        cmd.pass_cargo_args(&cargo_args)
             .current_dir(krate_path)
             .env("RUSTC", &self.kani_compiler)
-            // Use CARGO_ENCODED_RUSTFLAGS instead of RUSTFLAGS is preferred. See
-            // https://doc.rust-lang.org/cargo/reference/environment-variables.html
-            .env("CARGO_ENCODED_RUSTFLAGS", rustc_args.join(OsStr::new("\x1f")))
+            .pass_rustc_args(&rustc_args, args::PassTo::AllDependencies)
             .env("CARGO_TERM_PROGRESS_WHEN", "never")
             .env("__CARGO_TESTS_ONLY_SRC_ROOT", full_path.as_os_str());
 
@@ -146,9 +251,9 @@ crate-type = ["lib"]
 
         let lib_path = lib_folder().unwrap();
         let mut rustc_args = self.kani_rustc_flags(LibConfig::new(lib_path));
-        rustc_args.push(to_rustc_arg(self.kani_compiler_dependency_flags()).into());
+        rustc_args.push(to_rustc_arg(&self.kani_compiler_dependency_flags()));
 
-        let mut cargo_args: Vec<OsString> = vec!["rustc".into()];
+        let mut cargo_args: Vec<CargoArg> = vec!["rustc".into()];
         if let Some(path) = &self.args.cargo.manifest_path {
             cargo_args.push("--manifest-path".into());
             cargo_args.push(path.into());
@@ -201,9 +306,6 @@ crate-type = ["lib"]
         let mut kani_pkg_args = vec![self.reachability_arg()];
         kani_pkg_args.extend(self.kani_compiler_local_flags());
 
-        // Convert package args to rustc args for passing
-        let pkg_args = vec!["--".into(), to_rustc_arg(kani_pkg_args)];
-
         let mut found_target = false;
         let packages = self.packages_to_verify(&self.args, &metadata)?;
         let mut artifacts = vec![];
@@ -212,14 +314,13 @@ crate-type = ["lib"]
             for verification_target in package_targets(&self.args, package) {
                 let mut cmd =
                     setup_cargo_command_inner(Some(verification_target.target().name.clone()))?;
-                cmd.args(&cargo_args)
+                cmd.pass_cargo_args(&cargo_args)
                     .args(vec!["-p", &package.id.to_string()])
                     .args(verification_target.to_args())
-                    .args(&pkg_args)
+                    .arg("--") // Add this delimiter so we start passing args to rustc and not Cargo
+                    .pass_kani_args(&kani_pkg_args, args::PassTo::OnlyLocalCrate)
                     .env("RUSTC", &self.kani_compiler)
-                    // Use CARGO_ENCODED_RUSTFLAGS instead of RUSTFLAGS is preferred. See
-                    // https://doc.rust-lang.org/cargo/reference/environment-variables.html
-                    .env("CARGO_ENCODED_RUSTFLAGS", rustc_args.join(OsStr::new("\x1f")))
+                    .pass_rustc_args(&rustc_args, args::PassTo::AllDependencies)
                     // This is only required for stable but is a no-op for nightly channels
                     .env("RUSTC_BOOTSTRAP", "1")
                     .env("CARGO_TERM_PROGRESS_WHEN", "never");
@@ -473,7 +574,7 @@ crate-type = ["lib"]
     }
 }
 
-pub fn cargo_config_args() -> Vec<OsString> {
+pub fn cargo_config_args() -> Vec<CargoArg> {
     [
         "--target",
         env!("TARGET"),
@@ -482,7 +583,7 @@ pub fn cargo_config_args() -> Vec<OsString> {
         "-Ztarget-applies-to-host",
         "--config=host.rustflags=[\"--cfg=kani_host\"]",
     ]
-    .map(OsString::from)
+    .map(CargoArg::from)
     .to_vec()
 }
 
