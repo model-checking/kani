@@ -12,9 +12,8 @@
 use tokio::io::AsyncReadExt;
 use tokio_test::assert_ok;
 
-#[cfg(disabled)] // because it timed out after 2h
 #[kani::proof]
-#[kani::unwind(2)]
+#[kani::unwind(12)]
 async fn chain() {
     let mut buf = Vec::new();
     let rd1: &[u8] = b"hello ";

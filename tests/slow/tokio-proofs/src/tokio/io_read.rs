@@ -71,11 +71,9 @@ impl AsyncRead for BadAsyncRead {
     }
 }
 
-#[cfg(disabled)] // because Kani does not support should_panic
 #[kani::proof]
 #[kani::unwind(2)]
-#[tokio::test]
-#[should_panic]
+#[kani::should_panic]
 async fn read_buf_bad_async_read() {
     let mut buf = Vec::with_capacity(10);
     BadAsyncRead::new().read_buf(&mut buf).await.unwrap();

@@ -30,7 +30,7 @@ macro_rules! assert_ready_none {
     };
 }
 
-#[cfg(disabled)] // because an assertion about unreachable code failed
+#[cfg(disabled)] // requires syscall
 #[kani::proof]
 #[kani::unwind(2)]
 async fn empty() {

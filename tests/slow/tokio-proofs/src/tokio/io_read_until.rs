@@ -13,7 +13,7 @@ use std::io::ErrorKind;
 use tokio::io::{AsyncBufReadExt, BufReader, Error};
 use tokio_test::{assert_ok, io::Builder};
 
-#[cfg(disabled)] // because it timed out after 2h
+#[cfg(disabled)] // requires memchr
 #[kani::proof]
 #[kani::unwind(2)]
 async fn read_until() {
@@ -33,7 +33,7 @@ async fn read_until() {
     assert_eq!(buf, []);
 }
 
-#[cfg(disabled)] // because it timed out after 2h
+#[cfg(disabled)] // CBMC consumes more than 10 GB
 #[kani::proof]
 #[kani::unwind(2)]
 async fn read_until_not_all_ready() {
@@ -62,7 +62,7 @@ async fn read_until_not_all_ready() {
     assert_eq!(chunk, b"2");
 }
 
-#[cfg(disabled)] // because it timed out after 2h
+#[cfg(disabled)] // CBMC consumes more than 10 GB
 #[kani::proof]
 #[kani::unwind(2)]
 async fn read_until_fail() {
