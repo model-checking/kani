@@ -3,7 +3,6 @@
 
 use anyhow::{Result, bail};
 use std::path::Path;
-// use tracing::{debug, trace};
 
 use kani_metadata::{
     HarnessMetadata, InternedString, TraitDefinedMethod, VtableCtxResults, find_proof_harnesses,
