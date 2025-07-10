@@ -18,13 +18,12 @@ extern crate rustc_interface;
 extern crate rustc_middle;
 extern crate rustc_session;
 #[macro_use]
-extern crate rustc_smir;
 extern crate stable_mir;
 
 use crate::analysis::OverallStats;
 use rustc_middle::ty::TyCtxt;
 use rustc_session::config::OutputType;
-use rustc_smir::run_with_tcx;
+use stable_mir::run_with_tcx;
 use stable_mir::CompilerError;
 use std::ops::ControlFlow;
 use std::path::{Path, PathBuf};
