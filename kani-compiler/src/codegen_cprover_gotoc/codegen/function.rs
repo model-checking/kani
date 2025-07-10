@@ -241,8 +241,8 @@ pub mod rustc_smir {
     use rustc_middle::mir::coverage::BasicCoverageBlock;
     use rustc_middle::mir::coverage::MappingKind::Code;
     use rustc_middle::ty::TyCtxt;
-    use stable_mir::rustc_internal;
     use stable_mir::mir::mono::Instance;
+    use stable_mir::rustc_internal;
     use stable_mir::{Filename, Opaque};
 
     type CoverageOpaque = stable_mir::Opaque;

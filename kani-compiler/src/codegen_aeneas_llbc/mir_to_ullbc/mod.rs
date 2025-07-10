@@ -56,17 +56,17 @@ use charon_lib::{error_assert, error_or_panic};
 use core::panic;
 use rustc_data_structures::fx::FxHashMap;
 use rustc_middle::ty::{TyCtxt, TypingEnv};
-use stable_mir::rustc_internal;
 use stable_mir::mir::mono::{Instance, InstanceDef};
 use stable_mir::mir::{
     AggregateKind, BasicBlock, BinOp, Body, BorrowKind, CastKind, ConstOperand, Local, Mutability,
     Operand, Place, ProjectionElem, Rvalue, Statement, StatementKind, SwitchTargets, Terminator,
     TerminatorKind, UnOp, VarDebugInfoContents,
 };
+use stable_mir::rustc_internal;
 use stable_mir::ty::{
     AdtDef, AdtKind, Allocation, ConstantKind, FnDef, GenericArgKind, GenericArgs,
-    GenericParamDefKind, IndexedVal, IntTy, MirConst, Region, RegionKind, RigidTy, Span, TraitDecl,
-    TraitDef, Ty, TyConst, TyConstKind, TyKind, UintTy,
+    GenericParamDefKind, IntTy, MirConst, Region, RegionKind, RigidTy, Span, TraitDecl, TraitDef,
+    Ty, TyConst, TyConstKind, TyKind, UintTy,
 };
 use stable_mir::{CrateDef, CrateDefType, DefId};
 use std::collections::HashMap;

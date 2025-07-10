@@ -9,11 +9,11 @@ use rustc_middle::{
     ty::{Instance, List, TyCtxt},
 };
 use rustc_mir_dataflow::{JoinSemiLattice, fmt::DebugWithContext};
-use stable_mir::rustc_internal;
 use stable_mir::mir::{
     Place as StablePlace,
     mono::{Instance as StableInstance, StaticDef},
 };
+use stable_mir::rustc_internal;
 use std::collections::{HashMap, HashSet, VecDeque};
 
 /// A node in the points-to graph, which could be a place on the stack, a heap allocation, or a static.

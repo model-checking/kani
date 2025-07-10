@@ -20,11 +20,11 @@ use rustc_middle::ty::{
 };
 use rustc_middle::ty::{ExistentialTraitRef, GenericArgsRef};
 use rustc_middle::ty::{List, TypeFoldable};
-use stable_mir::rustc_internal;
 use rustc_span::def_id::DefId;
 use stable_mir::abi::{ArgAbi, FnAbi, PassMode};
 use stable_mir::mir::Body;
 use stable_mir::mir::mono::Instance as InstanceStable;
+use stable_mir::rustc_internal;
 use stable_mir::ty::{
     Binder, DynKind, ExistentialPredicate, ExistentialProjection, Region, RegionKind, RigidTy,
     Ty as StableTy,

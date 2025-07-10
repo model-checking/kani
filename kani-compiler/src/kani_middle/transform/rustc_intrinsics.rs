@@ -14,12 +14,12 @@ use crate::kani_middle::transform::body::{
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
 use rustc_middle::ty::TyCtxt;
-use stable_mir::rustc_internal;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{
     BasicBlockIdx, BinOp, Body, ConstOperand, LocalDecl, Operand, Rvalue, StatementKind,
     Terminator, TerminatorKind,
 };
+use stable_mir::rustc_internal;
 use stable_mir::ty::{
     FnDef, GenericArgKind, GenericArgs, IntTy, MirConst, RigidTy, Span, Ty, TyKind, UintTy,
 };

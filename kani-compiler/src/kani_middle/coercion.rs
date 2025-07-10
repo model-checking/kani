@@ -18,9 +18,9 @@ use rustc_middle::traits::{ImplSource, ImplSourceUserDefinedData};
 use rustc_middle::ty::TraitRef;
 use rustc_middle::ty::adjustment::CustomCoerceUnsized;
 use rustc_middle::ty::{PseudoCanonicalInput, Ty, TyCtxt, TypingEnv};
-use stable_mir::rustc_internal;
 use rustc_span::DUMMY_SP;
 use stable_mir::Symbol;
+use stable_mir::rustc_internal;
 use stable_mir::ty::{RigidTy, Ty as TyStable, TyKind};
 use tracing::trace;
 

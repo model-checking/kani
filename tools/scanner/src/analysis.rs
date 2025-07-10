@@ -8,7 +8,6 @@ use csv::WriterBuilder;
 use graph_cycles::Cycles;
 use petgraph::graph::Graph;
 use rustc_middle::ty::TyCtxt;
-use stable_mir::rustc_internal;
 use serde::{Serialize, Serializer, ser::SerializeStruct};
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::visit::{Location, PlaceContext, PlaceRef};
@@ -16,6 +15,7 @@ use stable_mir::mir::{
     BasicBlock, Body, CastKind, MirVisitor, Mutability, NonDivergingIntrinsic, ProjectionElem,
     Rvalue, Safety, Statement, StatementKind, Terminator, TerminatorKind,
 };
+use stable_mir::rustc_internal;
 use stable_mir::ty::{Abi, AdtDef, AdtKind, FnDef, GenericArgs, MirConst, RigidTy, Ty, TyKind};
 use stable_mir::visitor::{Visitable, Visitor};
 use stable_mir::{CrateDef, CrateItem};
