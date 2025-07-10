@@ -11,7 +11,7 @@ use rustc_errors::ErrorGuaranteed;
 use rustc_hir::{AttrArgs, Attribute, def::DefKind, def_id::DefId};
 use rustc_middle::ty::{Instance, TyCtxt, TyKind};
 use rustc_session::Session;
-use rustc_smir::rustc_internal;
+use stable_mir::rustc_internal;
 use rustc_span::{Span, Symbol};
 use stable_mir::crate_def::Attribute as AttributeStable;
 use stable_mir::mir::mono::Instance as InstanceStable;

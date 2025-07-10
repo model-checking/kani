@@ -23,7 +23,7 @@ use rustc_data_structures::fx::FxHashSet;
 use rustc_data_structures::stable_hasher::{HashStable, StableHasher};
 use rustc_middle::ty::{TyCtxt, VtblEntry};
 use rustc_session::config::OutputType;
-use rustc_smir::rustc_internal;
+use stable_mir::rustc_internal;
 use stable_mir::CrateItem;
 use stable_mir::mir::alloc::{AllocId, GlobalAlloc};
 use stable_mir::mir::mono::{Instance, InstanceKind, MonoItem, StaticDef};

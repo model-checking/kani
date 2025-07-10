@@ -8,7 +8,7 @@ use csv::WriterBuilder;
 use graph_cycles::Cycles;
 use petgraph::graph::Graph;
 use rustc_middle::ty::TyCtxt;
-use rustc_smir::rustc_internal;
+use stable_mir::rustc_internal;
 use serde::{Serialize, Serializer, ser::SerializeStruct};
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::visit::{Location, PlaceContext, PlaceRef};

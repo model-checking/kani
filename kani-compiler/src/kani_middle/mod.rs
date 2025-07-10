@@ -9,7 +9,7 @@ use crate::kani_queries::QueryDb;
 use fxhash::FxHashMap;
 use rustc_hir::{def::DefKind, def_id::DefId as InternalDefId, def_id::LOCAL_CRATE};
 use rustc_middle::ty::TyCtxt;
-use rustc_smir::rustc_internal;
+use stable_mir::rustc_internal;
 use stable_mir::mir::TerminatorKind;
 use stable_mir::mir::mono::{Instance, MonoItem};
 use stable_mir::ty::{

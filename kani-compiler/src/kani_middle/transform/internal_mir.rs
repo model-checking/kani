@@ -9,7 +9,8 @@
 
 use rustc_middle::mir::CoercionSource;
 use rustc_middle::ty::{self as rustc_ty, TyCtxt};
-use rustc_smir::rustc_internal::internal;
+use stable_mir::rustc_internal;
+use stable_mir::rustc_internal::internal;
 use stable_mir::mir::{
     AggregateKind, AssertMessage, Body, BorrowKind, CastKind, ConstOperand, CopyNonOverlapping,
     CoroutineDesugaring, CoroutineKind, CoroutineSource, FakeBorrowKind, FakeReadCause, LocalDecl,

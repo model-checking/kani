@@ -5,7 +5,7 @@ use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::InternedString;
 use cbmc::goto_program::Stmt;
 use rustc_middle::ty::Instance as InstanceInternal;
-use rustc_smir::rustc_internal;
+use stable_mir::rustc_internal;
 use stable_mir::CrateDef;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{Body, Local, LocalDecl, Rvalue, visit::Location, visit::MirVisitor};

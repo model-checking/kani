@@ -20,7 +20,7 @@ use rustc_middle::ty::{
 };
 use rustc_middle::ty::{ExistentialTraitRef, GenericArgsRef};
 use rustc_middle::ty::{List, TypeFoldable};
-use rustc_smir::rustc_internal;
+use stable_mir::rustc_internal;
 use rustc_span::def_id::DefId;
 use stable_mir::abi::{ArgAbi, FnAbi, PassMode};
 use stable_mir::mir::Body;

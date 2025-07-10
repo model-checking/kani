@@ -27,7 +27,7 @@ use regex::RegexSet;
 use rustc_hir::def_id::DefId;
 use rustc_middle::ty::TyCtxt;
 use rustc_session::config::OutputType;
-use rustc_smir::rustc_internal;
+use stable_mir::rustc_internal;
 use stable_mir::mir::mono::Instance;
 use stable_mir::ty::{FnDef, GenericArgKind, GenericArgs, IndexedVal, RigidTy, Ty, TyKind};
 use stable_mir::{CrateDef, CrateItem};

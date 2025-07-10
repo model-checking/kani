@@ -6,7 +6,7 @@ use cbmc::goto_program::FunctionContract;
 use cbmc::goto_program::{Expr, Lambda, Location, Type};
 use kani_metadata::AssignsContract;
 use rustc_hir::def_id::DefId as InternalDefId;
-use rustc_smir::rustc_internal;
+use stable_mir::rustc_internal;
 use stable_mir::CrateDef;
 use stable_mir::mir::mono::{Instance, MonoItem};
 use stable_mir::mir::{Local, VarDebugInfoContents};

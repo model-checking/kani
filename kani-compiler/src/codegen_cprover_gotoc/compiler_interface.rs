@@ -37,7 +37,7 @@ use rustc_middle::util::Providers;
 use rustc_session::Session;
 use rustc_session::config::{CrateType, OutputFilenames, OutputType};
 use rustc_session::output::out_filename;
-use rustc_smir::rustc_internal;
+use stable_mir::rustc_internal;
 use rustc_span::{Symbol, sym};
 use rustc_target::spec::PanicStrategy;
 use stable_mir::CrateDef;

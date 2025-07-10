@@ -11,7 +11,7 @@ use crate::kani_queries::QueryDb;
 use cbmc::{InternString, InternedString};
 use rustc_hir::def_id::DefId as InternalDefId;
 use rustc_middle::ty::TyCtxt;
-use rustc_smir::rustc_internal;
+use stable_mir::rustc_internal;
 use rustc_span::Symbol;
 use stable_mir::CrateDef;
 use stable_mir::mir::mono::Instance;
