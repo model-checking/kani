@@ -13,6 +13,7 @@ In general, the following dependencies are required to build Kani from source.
 1. Cargo installed via [rustup](https://rustup.rs/)
 2. [CBMC](https://github.com/diffblue/cbmc) (latest release)
 3. [Kissat](https://github.com/arminbiere/kissat) (Release 4.0.1)
+3. [Z3](https://github.com/Z3Prover/z3/)
 
 Kani has been tested in [Ubuntu](#install-dependencies-on-ubuntu) and [macOS](##install-dependencies-on-macos) platforms.
 

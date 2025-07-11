@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// kani-flags: -Z loop-contracts
+// kani-flags: -Z loop-contracts -Z unstable-options --cbmc-args --z3
 
 //! Check the use of loop_modifies for Rust's vec
 
