@@ -205,6 +205,10 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             TyKind::RigidTy(RigidTy::Adt(adt, args)) if adt.kind().is_struct() => {
                 // Structs only have one variant.
+                if adt.name() == "std::any::TypeId" {
+                    let val = alloc.read_uint().unwrap();
+                    return Some(Expr::int_constant(val, Type::unsigned_int(128)));
+                }
                 let variant = adt.variants_iter().next().unwrap();
                 // There must be at least one field associated with the scalar data.
                 // Any additional fields correspond to ZSTs.
@@ -399,6 +403,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 let name = format!("{}::{alloc_id:?}", self.full_crate_name());
                 self.codegen_const_allocation(&alloc, Some(name), loc)
             }
+            GlobalAlloc::TypeId { ty: _ } => todo!(),
         };
         assert!(res_t.is_pointer() || res_t.is_transparent_type(&self.symbol_table));
         let offset_addr = base_addr

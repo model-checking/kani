@@ -24,11 +24,11 @@ use rustc_span::def_id::DefId;
 use stable_mir::abi::{ArgAbi, FnAbi, PassMode};
 use stable_mir::mir::Body;
 use stable_mir::mir::mono::Instance as InstanceStable;
-use stable_mir::rustc_internal;
 use stable_mir::ty::{
     Binder, DynKind, ExistentialPredicate, ExistentialProjection, Region, RegionKind, RigidTy,
     Ty as StableTy,
 };
+use stable_mir::{CrateDef, rustc_internal};
 use tracing::{debug, trace, warn};
 
 /// Map the unit type to an empty struct
@@ -618,7 +618,13 @@ impl<'tcx> GotocCtx<'tcx> {
             ty::Adt(def, subst) => {
                 debug!("variants are: {:?}", def.variants());
                 if def.is_struct() {
-                    self.codegen_struct(ty, def, subst)
+                    if let RigidTy::Adt(adt, _) = rustc_internal::stable(ty).kind().rigid().unwrap()
+                        && adt.name() == "std::any::TypeId"
+                    {
+                        self.codegen_uint(UintTy::U128)
+                    } else {
+                        self.codegen_struct(ty, def, subst)
+                    }
                 } else if def.is_union() {
                     self.codegen_union(ty, def, subst)
                 } else {

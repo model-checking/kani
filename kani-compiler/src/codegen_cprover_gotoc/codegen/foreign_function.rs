@@ -152,7 +152,7 @@ impl GotocCtx<'_> {
             .args
             .iter()
             .enumerate()
-            .filter(|&(_, arg)| (arg.mode != PassMode::Ignore))
+            .filter(|&(_, arg)| arg.mode != PassMode::Ignore)
             .map(|(idx, arg)| {
                 let arg_name = format!("{fn_name}::param_{idx}");
                 let base_name = format!("param_{idx}");
