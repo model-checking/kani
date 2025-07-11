@@ -13,7 +13,7 @@ use crate::kani_middle::transform::{
 };
 use crate::kani_queries::QueryDb;
 use rustc_middle::ty::TyCtxt;
-use rustc_smir::rustc_internal;
+use stable_mir::rustc_internal;
 use stable_mir::{
     CrateDef,
     mir::{Body, Mutability, Place, mono::Instance},

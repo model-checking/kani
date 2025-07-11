@@ -16,6 +16,7 @@ use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
 use fxhash::FxHashMap;
 use rustc_middle::ty::TyCtxt;
+use rustc_smir::IndexedVal;
 use stable_mir::CrateDef;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{
@@ -23,8 +24,7 @@ use stable_mir::mir::{
     Terminator, TerminatorKind,
 };
 use stable_mir::ty::{
-    AdtDef, AdtKind, FnDef, GenericArgKind, GenericArgs, IndexedVal, RigidTy, Ty, TyKind, UintTy,
-    VariantDef,
+    AdtDef, AdtKind, FnDef, GenericArgKind, GenericArgs, RigidTy, Ty, TyKind, UintTy, VariantDef,
 };
 use tracing::debug;
 

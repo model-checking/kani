@@ -241,8 +241,8 @@ pub mod rustc_smir {
     use rustc_middle::mir::coverage::BasicCoverageBlock;
     use rustc_middle::mir::coverage::MappingKind::Code;
     use rustc_middle::ty::TyCtxt;
-    use rustc_smir::rustc_internal;
     use stable_mir::mir::mono::Instance;
+    use stable_mir::rustc_internal;
     use stable_mir::{Filename, Opaque};
 
     type CoverageOpaque = stable_mir::Opaque;
@@ -285,7 +285,7 @@ pub mod rustc_smir {
         instance: Instance,
     ) -> Option<(SourceRegion, Filename)> {
         // We need to pull the coverage info from the internal MIR instance.
-        let instance_def = rustc_smir::rustc_internal::internal(tcx, instance.def.def_id());
+        let instance_def = rustc_internal::internal(tcx, instance.def.def_id());
         let body = tcx.instance_mir(rustc_middle::ty::InstanceKind::Item(instance_def));
         let filename = rustc_internal::stable(body.span).get_filename();
         // Some functions, like `std` ones, may not have coverage info attached

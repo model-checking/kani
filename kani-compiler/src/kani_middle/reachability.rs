@@ -23,7 +23,6 @@ use rustc_data_structures::fx::FxHashSet;
 use rustc_data_structures::stable_hasher::{HashStable, StableHasher};
 use rustc_middle::ty::{TyCtxt, VtblEntry};
 use rustc_session::config::OutputType;
-use rustc_smir::rustc_internal;
 use stable_mir::CrateItem;
 use stable_mir::mir::alloc::{AllocId, GlobalAlloc};
 use stable_mir::mir::mono::{Instance, InstanceKind, MonoItem, StaticDef};
@@ -31,6 +30,7 @@ use stable_mir::mir::{
     Body, CastKind, ConstOperand, MirVisitor, PointerCoercion, Rvalue, Terminator, TerminatorKind,
     visit::Location,
 };
+use stable_mir::rustc_internal;
 use stable_mir::ty::{Allocation, ClosureKind, ConstantKind, RigidTy, Ty, TyKind};
 use stable_mir::{CrateDef, ItemKind};
 use std::fmt::{Display, Formatter};
