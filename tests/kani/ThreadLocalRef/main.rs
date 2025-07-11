@@ -29,14 +29,16 @@ fn test_i32() {
     });
 }
 
-#[kani::proof]
-#[kani::unwind(7)]
-fn test_complex_data() {
-    COMPLEX_DATA.with(|c| {
-        assert_eq!(*c.borrow(), "before");
-        *c.borrow_mut() = "after"
-    });
-    COMPLEX_DATA.with(|c| {
-        assert_eq!(*c.borrow(), "after");
-    });
-}
+// TODO: This test exposes a bug in CBMC 6.7.1. It should be re-enabled once a version of CBMC that
+// includes https://github.com/diffblue/cbmc/pull/8678 has been released.
+// #[kani::proof]
+// #[kani::unwind(7)]
+// fn test_complex_data() {
+//     COMPLEX_DATA.with(|c| {
+//         assert_eq!(*c.borrow(), "before");
+//         *c.borrow_mut() = "after"
+//     });
+//     COMPLEX_DATA.with(|c| {
+//         assert_eq!(*c.borrow(), "after");
+//     });
+// }

@@ -13,6 +13,7 @@ use stable_mir::ty::{GenericArgs, MirConst, Span, Ty, UintTy};
 use std::fmt::Debug;
 use std::mem;
 
+#[derive(Debug)]
 /// This structure mimics a Body that can actually be modified.
 pub struct MutableBody {
     blocks: Vec<BasicBlock>,

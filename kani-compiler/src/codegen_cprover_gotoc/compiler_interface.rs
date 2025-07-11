@@ -37,11 +37,11 @@ use rustc_middle::util::Providers;
 use rustc_session::Session;
 use rustc_session::config::{CrateType, OutputFilenames, OutputType};
 use rustc_session::output::out_filename;
-use rustc_smir::rustc_internal;
 use rustc_span::{Symbol, sym};
 use rustc_target::spec::PanicStrategy;
 use stable_mir::CrateDef;
 use stable_mir::mir::mono::{Instance, MonoItem};
+use stable_mir::rustc_internal;
 use std::any::Any;
 use std::collections::BTreeMap;
 use std::fmt::Write;
@@ -87,7 +87,7 @@ impl GotocCodegenBackend {
         // disadvantage of not having a precomputed call graph for the global passes to use. The
         // call graph could be used, for example, in resolving function pointer or vtable calls for
         // global passes that need this.
-        let (items, call_graph) = with_timer(
+        let (mut items, call_graph) = with_timer(
             || collect_reachable_items(tcx, &mut transformer, starting_items),
             "codegen reachability analysis",
         );
@@ -107,7 +107,7 @@ impl GotocCodegenBackend {
 
         // Apply all transformation passes, including global passes.
         let mut global_passes = GlobalPasses::new(&self.queries.lock().unwrap(), tcx);
-        global_passes.run_global_passes(
+        let any_pass_modified = global_passes.run_global_passes(
             &mut transformer,
             tcx,
             starting_items,
@@ -117,10 +117,12 @@ impl GotocCodegenBackend {
 
         // Re-collect reachable items after global transformations were applied. This is necessary
         // since global pass could add extra calls to instrumentation.
-        let (items, _) = with_timer(
-            || collect_reachable_items(tcx, &mut transformer, starting_items),
-            "codegen reachability analysis (second pass)",
-        );
+        if any_pass_modified {
+            (items, _) = with_timer(
+                || collect_reachable_items(tcx, &mut transformer, starting_items),
+                "codegen reachability analysis (second pass)",
+            );
+        }
 
         // Follow rustc naming convention (cx is abbrev for context).
         // https://rustc-dev-guide.rust-lang.org/conventions.html#naming-conventions

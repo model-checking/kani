@@ -10,9 +10,9 @@ use crate::unwrap_or_return_codegen_unimplemented_stmt;
 use cbmc::goto_program::{BinaryOperator, BuiltinFn, Expr, Location, Stmt, Type};
 use rustc_middle::ty::TypingEnv;
 use rustc_middle::ty::layout::ValidityRequirement;
-use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{BasicBlockIdx, Operand, Place};
+use stable_mir::rustc_internal;
 use stable_mir::ty::{GenericArgs, RigidTy, Span, Ty, TyKind, UintTy};
 use tracing::debug;
 
@@ -197,19 +197,6 @@ impl GotocCtx<'_> {
             ($builtin: ident, $allow_zero: expr) => {{
                 let arg = fargs.remove(0);
                 self.codegen_expr_to_place_stable(place, arg.$builtin($allow_zero), loc)
-            }};
-        }
-
-        // Intrinsics which encode a value known during compilation
-        macro_rules! codegen_intrinsic_const {
-            () => {{
-                let place_ty = self.place_ty_stable(&place);
-                let stable_instance = instance;
-                let alloc = stable_instance.try_const_eval(place_ty).unwrap();
-                // We assume that the intrinsic has type checked at this point, so
-                // we can use the place type as the expression type.
-                let expr = self.codegen_allocation(&alloc, place_ty, loc);
-                self.codegen_expr_to_place_stable(&place, expr, loc)
             }};
         }
 
@@ -406,13 +393,11 @@ impl GotocCtx<'_> {
             Intrinsic::LogF64 => codegen_simple_intrinsic!(Log),
             Intrinsic::MaxNumF32 => codegen_simple_intrinsic!(Fmaxf),
             Intrinsic::MaxNumF64 => codegen_simple_intrinsic!(Fmax),
-            Intrinsic::MinAlignOf => codegen_intrinsic_const!(),
             Intrinsic::MinNumF32 => codegen_simple_intrinsic!(Fminf),
             Intrinsic::MinNumF64 => codegen_simple_intrinsic!(Fmin),
             Intrinsic::MulWithOverflow => {
                 self.codegen_op_with_overflow(BinaryOperator::OverflowResultMult, fargs, place, loc)
             }
-            Intrinsic::NeedsDrop => codegen_intrinsic_const!(),
             Intrinsic::PowF32 => codegen_simple_intrinsic!(Powf),
             Intrinsic::PowF64 => codegen_simple_intrinsic!(Pow),
             Intrinsic::PowIF32 => codegen_simple_intrinsic!(Powif),
@@ -505,8 +490,6 @@ impl GotocCtx<'_> {
             Intrinsic::Transmute => self.codegen_intrinsic_transmute(fargs, ret_ty, place, loc),
             Intrinsic::TruncF32 => codegen_simple_intrinsic!(Truncf),
             Intrinsic::TruncF64 => codegen_simple_intrinsic!(Trunc),
-            Intrinsic::TypeId => codegen_intrinsic_const!(),
-            Intrinsic::TypeName => codegen_intrinsic_const!(),
             Intrinsic::TypedSwap => self.codegen_swap(fargs, farg_types, loc),
             Intrinsic::UnalignedVolatileLoad => {
                 unstable_codegen!(self.codegen_expr_to_place_stable(
@@ -536,11 +519,11 @@ impl GotocCtx<'_> {
                 assert!(self.place_ty_stable(place).kind().is_unit());
                 self.codegen_write_bytes(fargs, farg_types, loc)
             }
-            Intrinsic::PtrOffsetFrom
+            Intrinsic::AlignOfVal
+            | Intrinsic::PtrOffsetFrom
             | Intrinsic::PtrOffsetFromUnsigned
-            | Intrinsic::SizeOfVal
-            | Intrinsic::MinAlignOfVal => {
-                unreachable!("Intrinsic `{}` is handled before codegen", intrinsic_str)
+            | Intrinsic::SizeOfVal => {
+                unreachable!("Kani models the intrinsic `{}` before codegen", intrinsic_str)
             }
             // Unimplemented
             Intrinsic::Unimplemented { name, issue_link } => {

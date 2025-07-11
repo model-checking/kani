@@ -17,11 +17,10 @@ use crate::args::ExtraChecks;
 use crate::kani_middle::transform::body::{
     CheckType, InsertPosition, MutableBody, SourceInstruction,
 };
-use crate::kani_middle::transform::check_values::SourceOp::UnsupportedCheck;
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
 use rustc_middle::ty::{Const, TyCtxt};
-use rustc_smir::rustc_internal;
+use rustc_smir::IndexedVal;
 use stable_mir::CrateDef;
 use stable_mir::abi::{FieldsShape, Scalar, TagEncoding, ValueAbi, VariantsShape, WrappingRange};
 use stable_mir::mir::mono::Instance;
@@ -31,8 +30,9 @@ use stable_mir::mir::{
     Mutability, NonDivergingIntrinsic, Operand, Place, ProjectionElem, RawPtrKind, Rvalue,
     Statement, StatementKind, Terminator, TerminatorKind,
 };
+use stable_mir::rustc_internal;
 use stable_mir::target::{MachineInfo, MachineSize};
-use stable_mir::ty::{AdtKind, IndexedVal, RigidTy, Span, Ty, TyKind, UintTy};
+use stable_mir::ty::{AdtKind, RigidTy, Span, Ty, TyKind, UintTy};
 use std::fmt::Debug;
 use strum_macros::AsRefStr;
 use tracing::{debug, trace};
@@ -640,12 +640,6 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                         })
                     }
                 }
-                // `DynStar` is not currently supported in Kani.
-                // TODO: https://github.com/model-checking/kani/issues/1784
-                CastKind::DynStar => self.push_target(UnsupportedCheck {
-                    check: "Dyn*".to_string(),
-                    ty: (rvalue.ty(self.locals).unwrap()),
-                }),
                 CastKind::PointerExposeAddress
                 | CastKind::PointerWithExposedProvenance
                 | CastKind::PointerCoercion(_)

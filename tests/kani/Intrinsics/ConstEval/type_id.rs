@@ -14,28 +14,28 @@ enum MyEnum {}
 fn main() {
     let type_ids = [
         // Scalar types
-        type_id::<i8>(),
-        type_id::<i16>(),
-        type_id::<i32>(),
-        type_id::<i64>(),
-        type_id::<i128>(),
-        type_id::<isize>(),
-        type_id::<u8>(),
-        type_id::<u16>(),
-        type_id::<u32>(),
-        type_id::<u64>(),
-        type_id::<u128>(),
-        type_id::<usize>(),
-        type_id::<f32>(),
-        type_id::<f64>(),
-        type_id::<bool>(),
-        type_id::<char>(),
+        const { type_id::<i8>() },
+        const { type_id::<i16>() },
+        const { type_id::<i32>() },
+        const { type_id::<i64>() },
+        const { type_id::<i128>() },
+        const { type_id::<isize>() },
+        const { type_id::<u8>() },
+        const { type_id::<u16>() },
+        const { type_id::<u32>() },
+        const { type_id::<u64>() },
+        const { type_id::<u128>() },
+        const { type_id::<usize>() },
+        const { type_id::<f32>() },
+        const { type_id::<f64>() },
+        const { type_id::<bool>() },
+        const { type_id::<char>() },
         // Compound types (tuple and array)
-        type_id::<(i32, i32)>(),
-        type_id::<[i32; 5]>(),
+        const { type_id::<(i32, i32)>() },
+        const { type_id::<[i32; 5]>() },
         // Custom data types (struct and enum)
-        type_id::<MyStruct>(),
-        type_id::<MyEnum>(),
+        const { type_id::<MyStruct>() },
+        const { type_id::<MyEnum>() },
     ];
 
     // Check that there are no duplicate type IDs

@@ -117,3 +117,9 @@ uint8_t *__rust_realloc(uint8_t *ptr, size_t old_size, size_t align, size_t new_
 
     return result;
 }
+
+// Function required by the linker, see https://github.com/rust-lang/rust/pull/141061
+struct Unit __rust_no_alloc_shim_is_unstable_v2(void)
+{
+    return VoidUnit;
+}

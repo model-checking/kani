@@ -6,11 +6,11 @@ use crate::kani_middle::is_anon_static;
 use crate::unwrap_or_return_codegen_unimplemented;
 use cbmc::goto_program::{DatatypeComponent, Expr, ExprValue, Location, Symbol, Type};
 use rustc_middle::ty::Const as ConstInternal;
-use rustc_smir::rustc_internal;
 use rustc_span::Span as SpanInternal;
 use stable_mir::mir::alloc::{AllocId, GlobalAlloc};
 use stable_mir::mir::mono::{Instance, StaticDef};
 use stable_mir::mir::{Mutability, Operand};
+use stable_mir::rustc_internal;
 use stable_mir::ty::{
     Allocation, ConstantKind, FloatTy, FnDef, GenericArgs, IntTy, MirConst, RigidTy, Size, Ty,
     TyConst, TyConstKind, TyKind, UintTy,
@@ -651,7 +651,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// Ensure that the given instance is in the symbol table, returning the symbol.
     fn codegen_func_symbol(&mut self, instance: Instance) -> &Symbol {
-        let sym = if instance.is_foreign_item() && !instance.has_body() {
+        if instance.is_foreign_item() && !instance.has_body() {
             // Get the symbol that represents a foreign instance.
             self.codegen_foreign_fn(instance)
         } else {
@@ -661,8 +661,7 @@ impl<'tcx> GotocCtx<'tcx> {
             self.symbol_table
                 .lookup(&func)
                 .unwrap_or_else(|| panic!("Function `{func}` should've been declared before usage"))
-        };
-        sym
+        }
     }
 
     /// Generate a goto expression that references the function identified by `instance`.
