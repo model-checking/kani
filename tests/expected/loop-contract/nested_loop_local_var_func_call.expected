@@ -1,0 +1,21 @@
+loop_invariant_base.1\
+	 - Status: SUCCESS\
+	 - Description: "Check invariant before entry for loop main.1"
+
+main.loop_assigns.2\
+	 - Status: SUCCESS\
+	 - Description: "Check assigns clause inclusion for loop main.0"
+
+main.assigns.1\
+	 - Status: SUCCESS\
+	 - Description: "Check that j is assignable"
+
+main.loop_invariant_base.2\
+	 - Status: SUCCESS\
+	 - Description: "Check invariant before entry for loop main.0"
+
+main.assertion.6\
+	 - Status: SUCCESS\
+	 - Description: "assertion failed: s == 100"
+
+VERIFICATION:- SUCCESSFUL
