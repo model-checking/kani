@@ -16,6 +16,7 @@ DEPS=(
   gpg-agent
   make
   patch
+  z3
   zlib1g
   zlib1g-dev
 )

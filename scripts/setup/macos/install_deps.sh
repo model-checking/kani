@@ -14,6 +14,8 @@ brew update
 brew install python@3 || true
 brew link --overwrite python@3
 
+brew install z3
+
 # Get the directory containing this script
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
