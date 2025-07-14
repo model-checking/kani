@@ -464,11 +464,6 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// Gives the vtable name for a type.
     /// In some cases, we have &T, in other cases T, so normalize.
-    ///
-    /// TODO: to handle trait upcasting, this will need to use a
-    /// poly existential trait type as a part of the key as well.
-    /// See compiler/rustc_middle/src/ty/vtable.rs
-    /// <https://github.com/model-checking/kani/issues/358>
     pub fn vtable_name(&self, t: Ty<'tcx>) -> String {
         format!("{}::vtable", self.normalized_trait_name(t))
     }
