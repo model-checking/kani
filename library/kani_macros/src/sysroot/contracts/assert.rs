@@ -29,7 +29,7 @@ impl<'a> ContractConditionsHandler<'a> {
         quote!(
             #[kanitool::is_contract_generated(assert)]
             #[allow(dead_code, unused_variables, unused_mut)]
-            let mut #assert_ident = || #output #body;
+            let mut #assert_ident = kani_force_fn_once(|| #output #body);
         )
     }
 
@@ -49,9 +49,9 @@ impl<'a> ContractConditionsHandler<'a> {
         let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
 
         parse_quote!(
-            let mut body_wrapper = || #output {
+            let mut body_wrapper = kani_force_fn_once(|| #output {
                 #(#stmts)*
-            };
+            });
             let #result : #return_type = #body_wrapper_ident();
             #result
         )

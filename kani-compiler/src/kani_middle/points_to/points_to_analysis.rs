@@ -41,9 +41,9 @@ use rustc_middle::{
     ty::{Instance, InstanceKind, List, TyCtxt, TyKind, TypingEnv},
 };
 use rustc_mir_dataflow::{Analysis, Forward, JoinSemiLattice};
-use rustc_smir::rustc_internal;
 use rustc_span::{DUMMY_SP, source_map::Spanned};
 use stable_mir::mir::{Body as StableBody, mono::Instance as StableInstance};
+use stable_mir::rustc_internal;
 use std::collections::HashSet;
 
 /// Main points-to analysis object.
@@ -611,6 +611,7 @@ impl<'tcx> PointsToAnalysis<'_, 'tcx> {
 fn is_identity_aliasing_intrinsic(intrinsic: Intrinsic) -> bool {
     match intrinsic {
         Intrinsic::AddWithOverflow
+        | Intrinsic::AlignOfVal
         | Intrinsic::ArithOffset
         | Intrinsic::AssertInhabited
         | Intrinsic::AssertMemUninitializedValid
@@ -659,12 +660,9 @@ fn is_identity_aliasing_intrinsic(intrinsic: Intrinsic) -> bool {
         | Intrinsic::LogF64
         | Intrinsic::MaxNumF32
         | Intrinsic::MaxNumF64
-        | Intrinsic::MinAlignOf
-        | Intrinsic::MinAlignOfVal
         | Intrinsic::MinNumF32
         | Intrinsic::MinNumF64
         | Intrinsic::MulWithOverflow
-        | Intrinsic::NeedsDrop
         | Intrinsic::PowF32
         | Intrinsic::PowF64
         | Intrinsic::PowIF32
@@ -691,8 +689,6 @@ fn is_identity_aliasing_intrinsic(intrinsic: Intrinsic) -> bool {
         | Intrinsic::Transmute
         | Intrinsic::TruncF32
         | Intrinsic::TruncF64
-        | Intrinsic::TypeId
-        | Intrinsic::TypeName
         | Intrinsic::UncheckedDiv
         | Intrinsic::UncheckedRem
         | Intrinsic::Unlikely

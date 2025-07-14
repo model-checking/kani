@@ -51,7 +51,7 @@ impl KaniSession {
         crate_name: &String,
         outdir: &Path,
     ) -> Result<()> {
-        let mut kani_args = self.kani_compiler_flags();
+        let mut kani_args = self.kani_compiler_local_flags();
         kani_args.push(format!("--reachability={}", self.reachability_mode()));
 
         let lib_path = lib_folder().unwrap();
@@ -81,6 +81,7 @@ impl KaniSession {
         let mut cmd = Command::new(&self.kani_compiler);
         let kani_compiler_args = to_rustc_arg(kani_args);
         cmd.arg(kani_compiler_args).args(rustc_args);
+
         // This is only required for stable but is a no-op for nightly channels
         cmd.env("RUSTC_BOOTSTRAP", "1");
 
@@ -94,12 +95,25 @@ impl KaniSession {
 
     /// Create a compiler option that represents the reachability mode.
     pub fn reachability_arg(&self) -> String {
-        to_rustc_arg(vec![format!("--reachability={}", self.reachability_mode())])
+        format!("--reachability={}", self.reachability_mode())
     }
 
-    /// These arguments are arguments passed to kani-compiler that are `kani` compiler specific.
-    pub fn kani_compiler_flags(&self) -> Vec<String> {
+    /// The `kani-compiler`-specific arguments that should be passed when building all crates,
+    /// including dependencies.
+    pub fn kani_compiler_dependency_flags(&self) -> Vec<String> {
         let mut flags = vec![check_version()];
+
+        if self.args.ignore_global_asm {
+            flags.push("--ignore-global-asm".into());
+        }
+
+        flags
+    }
+
+    /// The `kani-compiler`-specific arguments that should be passed only to the local crate
+    /// being compiled.
+    pub fn kani_compiler_local_flags(&self) -> Vec<String> {
+        let mut flags = vec![];
 
         if self.args.common_args.debug {
             flags.push("--log-level=debug".into());
@@ -115,9 +129,6 @@ impl KaniSession {
         }
         if self.args.assertion_reach_checks() {
             flags.push("--assertion-reach-checks".into());
-        }
-        if self.args.ignore_global_asm {
-            flags.push("--ignore-global-asm".into());
         }
 
         if self.args.is_stubbing_enabled() {

@@ -189,9 +189,11 @@ mod intrinsics {
             "Expected size of input and lanes to match",
         );
 
-        let data = &*(&input as *const T as *const [E; LANES]);
-        let mask = simd_bitmask_impl(data);
-        (&mask as *const [u8; mask_len(LANES)] as *const U).read()
+        unsafe {
+            let data = &*(&input as *const T as *const [E; LANES]);
+            let mask = simd_bitmask_impl(data);
+            (&mask as *const [u8; mask_len(LANES)] as *const U).read()
+        }
     }
 
     /// Structure used for sanity check our parameters.

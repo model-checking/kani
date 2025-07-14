@@ -12,7 +12,6 @@ use rustc_abi::Size;
 use rustc_abi::{FieldsShape, Primitive, TagEncoding, Variants};
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{List, TypingEnv};
-use rustc_smir::rustc_internal;
 use stable_mir::CrateDef;
 use stable_mir::abi::{ArgAbi, FnAbi, PassMode};
 use stable_mir::mir::mono::{Instance, InstanceKind};
@@ -20,6 +19,7 @@ use stable_mir::mir::{
     AssertMessage, BasicBlockIdx, CopyNonOverlapping, NonDivergingIntrinsic, Operand, Place,
     RETURN_LOCAL, Rvalue, Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind,
 };
+use stable_mir::rustc_internal;
 use stable_mir::ty::{Abi, RigidTy, Span, Ty, TyKind, VariantIdx};
 use tracing::{debug, debug_span, trace};
 
@@ -216,7 +216,7 @@ impl GotocCtx<'_> {
             // https://doc.rust-lang.org/beta/nightly-rustc/rustc_middle/mir/enum.NonDivergingIntrinsic.html#variant.Assume
             // Informs the optimizer that a condition is always true.
             // If the condition is false, the behavior is undefined.
-            StatementKind::Intrinsic(NonDivergingIntrinsic::Assume(ref op)) => {
+            StatementKind::Intrinsic(NonDivergingIntrinsic::Assume(op)) => {
                 let cond = self.codegen_operand_stable(op).cast_to(Type::bool());
                 self.codegen_assert_assume(
                     cond,

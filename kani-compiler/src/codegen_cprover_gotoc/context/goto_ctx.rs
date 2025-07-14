@@ -318,9 +318,11 @@ impl GotocCtx<'_> {
     pub fn handle_quantifiers(&mut self) {
         // Store the found quantifiers and the inlined results.
         let mut to_modify: BTreeMap<InternedString, SymbolValues> = BTreeMap::new();
+        let mut suffix_count: u16 = 0;
         for (key, symbol) in self.symbol_table.iter() {
             if let SymbolValues::Stmt(stmt) = &symbol.value {
-                let new_stmt_val = SymbolValues::Stmt(self.handle_quantifiers_in_stmt(stmt));
+                let new_stmt_val =
+                    SymbolValues::Stmt(self.handle_quantifiers_in_stmt(stmt, &mut suffix_count));
                 to_modify.insert(*key, new_stmt_val);
             }
         }
@@ -332,7 +334,7 @@ impl GotocCtx<'_> {
     }
 
     /// Find all quantifier expressions in `stmt` and recursively inline functions.
-    fn handle_quantifiers_in_stmt(&self, stmt: &Stmt) -> Stmt {
+    fn handle_quantifiers_in_stmt(&self, stmt: &Stmt, suffix_count: &mut u16) -> Stmt {
         match &stmt.body() {
             // According to the hook handling for quantifiers, quantifier expressions must be of form
             // lhs = typecast(qex, c_bool)
@@ -345,13 +347,13 @@ impl GotocCtx<'_> {
                             let mut visited_func_symbols: HashSet<InternedString> = HashSet::new();
                             // We count the number of function that we have inlined, and use the count to
                             // make inlined labeled unique.
-                            let mut suffix_count: u16 = 0;
+                            //let mut suffix_count: u16 = 0;
 
                             let end_stmt = Stmt::code_expression(
                                 self.inline_function_calls_in_expr(
                                     domain,
                                     &mut visited_func_symbols,
-                                    &mut suffix_count,
+                                    suffix_count,
                                 )
                                 .unwrap(),
                                 *domain.location(),
@@ -406,11 +408,14 @@ impl GotocCtx<'_> {
             }
             // Recursively find quantifier expressions.
             StmtBody::Block(stmts) => Stmt::block(
-                stmts.iter().map(|stmt| self.handle_quantifiers_in_stmt(stmt)).collect(),
+                stmts
+                    .iter()
+                    .map(|stmt| self.handle_quantifiers_in_stmt(stmt, suffix_count))
+                    .collect(),
                 *stmt.location(),
             ),
             StmtBody::Label { label, body } => {
-                self.handle_quantifiers_in_stmt(body).with_label(*label)
+                self.handle_quantifiers_in_stmt(body, suffix_count).with_label(*label)
             }
             _ => stmt.clone(),
         }
@@ -451,7 +456,7 @@ impl GotocCtx<'_> {
     ) -> Stmt {
         match stmt.body() {
             StmtBody::Return(Some(expr)) => {
-                if let ExprValue::Symbol { ref identifier } = expr.value() {
+                if let ExprValue::Symbol { identifier } = expr.value() {
                     *return_symbol = Some(Expr::symbol_expression(*identifier, expr.typ().clone()));
                     Stmt::goto(*end_label, *stmt.location())
                 } else {

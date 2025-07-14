@@ -11,7 +11,7 @@ pub struct Foo<T> {
 
 impl<T> Foo<T> {
     fn call_needs_drop(&self) -> bool {
-        return mem::needs_drop::<T>();
+        return const { mem::needs_drop::<T>() };
     }
 }
 

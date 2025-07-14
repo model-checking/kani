@@ -1,8 +1,4 @@
-struct_projection.loop_invariant_step.1\
-	 - Status: SUCCESS\
-	 - Description: "Check invariant after step for loop struct_projection.0"
-
-struct_projection.loop_invariant_step.2\
+struct_projection.loop_invariant_step.\
 	 - Status: SUCCESS\
 	 - Description: "Check invariant after step for loop struct_projection.0"
 
