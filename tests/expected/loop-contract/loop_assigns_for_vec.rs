@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// kani-flags: -Z loop-contracts -Z unstable-options --cbmc-args --z3
+// kani-flags: -Z loop-contracts
 
 //! Check the use of loop_modifies for Rust's vec
 
@@ -12,6 +12,7 @@ use std::ptr;
 use std::ptr::slice_from_raw_parts;
 
 #[kani::proof]
+#[kani::solver(z3)]
 fn main() {
     let mut i = 0;
     let a: [u8; 3] = kani::any();

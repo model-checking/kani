@@ -10,14 +10,23 @@ use strum_macros::{AsRefStr, EnumString, VariantNames};
 #[derive(Debug, Clone, AsRefStr, EnumString, VariantNames, PartialEq, Eq, Serialize, Deserialize)]
 #[strum(serialize_all = "snake_case")]
 pub enum CbmcSolver {
+    /// Bitwuzla SMT solver
+    Bitwuzla,
+
     /// CaDiCaL which is available in CBMC as of version 5.77.0
     Cadical,
+
+    /// cvc5 SMT solver
+    Bitwuzla,
 
     /// The kissat solver that is included in the Kani bundle
     Kissat,
 
     /// MiniSAT (CBMC's default solver)
     Minisat,
+
+    /// Z3 SMT solver
+    Z3,
 
     /// A solver binary variant whose argument gets passed to
     /// `--external-sat-solver`. The specified binary must exist in path.

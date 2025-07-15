@@ -1,6 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-flags: -Zfunction-contracts -Z unstable-options --cbmc-args --z3
+// kani-flags: -Zfunction-contracts
 
 // Test -Zfunction-contracts for asserting postconditions.
 
@@ -23,6 +23,7 @@ fn add_one(add_one_ptr: &mut u32) {
 }
 
 #[kani::proof_for_contract(add_three)]
+#[kani::solver(z3)]
 fn prove_add_three() {
     let mut i = kani::any();
     add_three(&mut i);
