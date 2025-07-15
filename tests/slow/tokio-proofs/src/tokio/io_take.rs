@@ -68,11 +68,9 @@ impl AsyncRead for BadReader {
     }
 }
 
-#[cfg(disabled)] //  because Kani does not support should_panic
 #[kani::proof]
 #[kani::unwind(2)]
-#[tokio::test]
-#[should_panic]
+#[kani::should_panic]
 async fn bad_reader_fails() {
     let mut buf = Vec::with_capacity(10);
 
