@@ -1556,7 +1556,8 @@ impl GotocCtx<'_> {
     }
 
     /// `simd_shuffle` constructs a new vector from the elements of two input
-    /// vectors, choosing values according to an input array of indexes.
+    /// vectors, choosing values according to an input array of indexes. See
+    /// https://doc.rust-lang.org/std/intrinsics/simd/fn.simd_shuffle.html
     ///
     /// We check that:
     ///  1. The return type length is equal to the expected length (`n`) of the
@@ -1571,13 +1572,6 @@ impl GotocCtx<'_> {
     /// TODO: Check that `indexes` contains constant values which are within the
     /// expected bounds. See
     /// <https://github.com/model-checking/kani/issues/1960> for more details.
-    ///
-    /// This code mimics CBMC's `shuffle_vector_exprt::lower()` here:
-    /// <https://github.com/diffblue/cbmc/blob/develop/src/ansi-c/c_expr.cpp>
-    ///
-    /// We can't use shuffle_vector_exprt because it's not understood by the CBMC backend,
-    /// it's immediately lowered by the C frontend.
-    /// Issue: <https://github.com/diffblue/cbmc/issues/6297>
     fn codegen_intrinsic_simd_shuffle(
         &mut self,
         mut fargs: Vec<Expr>,
