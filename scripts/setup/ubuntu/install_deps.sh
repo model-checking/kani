@@ -38,20 +38,9 @@ sudo unzip -o -j -d /usr/local/bin cvc5-Linux-${ARCH}-static.zip cvc5-Linux-${AR
 rm cvc5-Linux-${ARCH}-static.zip
 cvc5 --version
 
-# It would be nice to just use their binaries as follows, but turns out their
-# "static" binaries aren't statically linked, and Ubuntu 22.04 doesn't have
-# sufficiently recent glibc.
-# curl -L --remote-name https://github.com/bitwuzla/bitwuzla/releases/download/0.8.1/Bitwuzla-Linux-${ARCH}-static.zip
-# sudo unzip -o -j -d /usr/local/bin Bitwuzla-Linux-${ARCH}-static.zip Bitwuzla-Linux-${ARCH}-static/bin/bitwuzla
-# rm Bitwuzla-Linux-${ARCH}-static.zip
-curl -L --remote-name https://github.com/bitwuzla/bitwuzla/archive/refs/tags/0.8.1.tar.gz
-tar xzf 0.8.1.tar.gz
-cd bitwuzla-0.8.1
-./configure.py
-ninja -C build
-sudo cp build/src/main/bitwuzla /usr/local/bin/
-cd ..
-rm -r 0.8.1.tar.gz bitwuzla-0.8.1
+curl -L --remote-name https://github.com/bitwuzla/bitwuzla/releases/download/0.8.1/Bitwuzla-Linux-${ARCH}-static.zip
+sudo unzip -o -j -d /usr/local/bin Bitwuzla-Linux-${ARCH}-static.zip Bitwuzla-Linux-${ARCH}-static/bin/bitwuzla
+rm Bitwuzla-Linux-${ARCH}-static.zip
 bitwuzla --version
 
 # Get the directory containing this script
