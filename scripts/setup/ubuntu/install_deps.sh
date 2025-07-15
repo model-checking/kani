@@ -31,7 +31,7 @@ sudo apt-get --yes update
 
 sudo DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends --yes "${DEPS[@]}"
 
-ARCH=$(uname -m)
+ARCH=$(uname -m | sed 's/aarch64/arm64/')
 curl -L --remote-name https://github.com/cvc5/cvc5/releases/download/cvc5-1.3.0/cvc5-Linux-${ARCH}-static.zip
 sudo unzip -o -j -d /usr/local/bin cvc5-Linux-${ARCH}-static.zip cvc5-Linux-${ARCH}-static/bin/cvc5
 rm cvc5-Linux-${ARCH}-static.zip
