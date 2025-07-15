@@ -30,6 +30,7 @@ if [[ "${ARCH}" == "arm64" ]]; then
   sudo unzip -o -j -d /usr/local/bin Bitwuzla-macOS-${ARCH}-static.zip Bitwuzla-macOS-${ARCH}-static/bin/bitwuzla
   rm Bitwuzla-macOS-${ARCH}-static.zip
 else
+  brew install meson
   curl -L --remote-name https://github.com/bitwuzla/bitwuzla/archive/refs/tags/0.8.1.tar.gz
   tar xzf 0.8.1.tar.gz
   cd bitwuzla-0.8.1
