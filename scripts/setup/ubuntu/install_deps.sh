@@ -15,7 +15,6 @@ DEPS=(
   git
   gpg-agent
   make
-  meson
   patch
   z3
   zlib1g
