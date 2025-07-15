@@ -9,6 +9,7 @@ DEPS=(
   bison
   cmake
   curl
+  cvc5
   flex
   g++
   gcc
