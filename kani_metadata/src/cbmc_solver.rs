@@ -17,7 +17,7 @@ pub enum CbmcSolver {
     Cadical,
 
     /// cvc5 SMT solver
-    Bitwuzla,
+    Cvc5,
 
     /// The kissat solver that is included in the Kani bundle
     Kissat,
