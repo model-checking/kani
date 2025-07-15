@@ -28,8 +28,6 @@ if [[ "${ARCH}" == "arm64" ]]; then
   # Bitwuzla only publishes macOS binaries for arm64
   curl -L --remote-name https://github.com/bitwuzla/bitwuzla/releases/download/0.8.1/Bitwuzla-Linux-${ARCH}-static.zip
   sudo unzip -o -j -d /usr/local/bin Bitwuzla-Linux-${ARCH}-static.zip Bitwuzla-Linux-${ARCH}-static/bin/bitwuzla
-  ls -la /usr/local/bin/bitwuzla
-  file /usr/local/bin/bitwuzla
   rm Bitwuzla-Linux-${ARCH}-static.zip
 else
   curl -L --remote-name https://github.com/bitwuzla/bitwuzla/archive/refs/tags/0.8.1.tar.gz
