@@ -16,30 +16,11 @@ brew link --overwrite python@3
 
 # Install SMT solvers being used in regression tests
 brew install z3
-
 ARCH=$(uname -m)
-
 curl -L --remote-name https://github.com/cvc5/cvc5/releases/download/cvc5-1.3.0/cvc5-macOS-${ARCH}-static.zip
 sudo unzip -o -j -d /usr/local/bin cvc5-macOS-${ARCH}-static.zip cvc5-macOS-${ARCH}-static/bin/cvc5
 rm cvc5-macOS-${ARCH}-static.zip
 cvc5 --version
-
-if [[ "${ARCH}" == "arm64" ]]; then
-  # Bitwuzla only publishes macOS binaries for arm64
-  curl -L --remote-name https://github.com/bitwuzla/bitwuzla/releases/download/0.8.1/Bitwuzla-Linux-${ARCH}-static.zip
-  sudo unzip -o -j -d /usr/local/bin Bitwuzla-Linux-${ARCH}-static.zip Bitwuzla-Linux-${ARCH}-static/bin/bitwuzla
-  rm Bitwuzla-Linux-${ARCH}-static.zip
-else
-  curl -L --remote-name https://github.com/bitwuzla/bitwuzla/archive/refs/tags/0.8.1.tar.gz
-  tar xzf 0.8.1.tar.gz
-  cd bitwuzla-0.8.1
-  ./configure.py
-  ninja -C build
-  sudo cp build/src/main/bitwuzla /usr/local/bin/
-  cd ..
-  rm -r 0.8.1.tar.gz bitwuzla-0.8.1
-fi
-bitwuzla --version
 
 # Get the directory containing this script
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
