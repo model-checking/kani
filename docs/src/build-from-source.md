@@ -15,6 +15,7 @@ In general, the following dependencies are required to build Kani from source.
 3. [Kissat](https://github.com/arminbiere/kissat) (Release 4.0.1)
 3. [Z3](https://github.com/Z3Prover/z3)
 4. [cvc5](https://github.com/cvc5/cvc5)
+5. [Bitwuzla](https://github.com/bitwuzla/bitwuzla)
 
 Kani has been tested in [Ubuntu](#install-dependencies-on-ubuntu) and [macOS](##install-dependencies-on-macos) platforms.
 

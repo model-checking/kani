@@ -23,7 +23,7 @@ fn add_one(add_one_ptr: &mut u32) {
 }
 
 #[kani::proof_for_contract(add_three)]
-#[kani::solver(z3)]
+#[kani::solver(bitwuzla)]
 fn prove_add_three() {
     let mut i = kani::any();
     add_three(&mut i);
