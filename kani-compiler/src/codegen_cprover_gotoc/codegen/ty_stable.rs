@@ -10,9 +10,9 @@ use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::kani_middle::abi::LayoutOf;
 use cbmc::goto_program::Type;
 use rustc_middle::ty::layout::{LayoutOf as _, TyAndLayout};
-use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{Local, Operand, Place, Rvalue};
+use stable_mir::rustc_internal;
 use stable_mir::ty::{FnSig, RigidTy, Ty, TyKind};
 
 impl<'tcx> GotocCtx<'tcx> {

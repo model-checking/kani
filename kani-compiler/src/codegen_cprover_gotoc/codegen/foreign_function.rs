@@ -70,7 +70,6 @@ impl GotocCtx<'_> {
         } else if self.is_cffi_enabled() && instance.fn_abi().unwrap().conv == CallConvention::C {
             // When C-FFI feature is enabled, we just trust the rust declaration.
             // TODO: Add proper casting and clashing definitions check.
-            // https://github.com/model-checking/kani/issues/1350
             // https://github.com/model-checking/kani/issues/2426
             self.ensure(mangled_fn_name, |gcx, _| {
                 let typ = gcx.codegen_ffi_type(instance);
@@ -152,7 +151,7 @@ impl GotocCtx<'_> {
             .args
             .iter()
             .enumerate()
-            .filter(|&(_, arg)| (arg.mode != PassMode::Ignore))
+            .filter(|&(_, arg)| arg.mode != PassMode::Ignore)
             .map(|(idx, arg)| {
                 let arg_name = format!("{fn_name}::param_{idx}");
                 let base_name = format!("param_{idx}");

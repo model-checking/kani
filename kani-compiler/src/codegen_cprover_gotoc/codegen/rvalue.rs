@@ -20,12 +20,12 @@ use cbmc::{InternString, InternedString, btree_string_map};
 use num::bigint::BigInt;
 use rustc_abi::{FieldsShape, TagEncoding, Variants};
 use rustc_middle::ty::{TyCtxt, TypingEnv, VtblEntry};
-use rustc_smir::rustc_internal;
 use stable_mir::abi::{Primitive, Scalar, ValueAbi};
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{
     AggregateKind, BinOp, CastKind, NullOp, Operand, Place, PointerCoercion, Rvalue, UnOp,
 };
+use stable_mir::rustc_internal;
 use stable_mir::ty::{
     Binder, ClosureKind, ExistentialPredicate, IntTy, RigidTy, Size, Ty, TyConst, TyKind, UintTy,
     VariantIdx,
@@ -791,15 +791,6 @@ impl GotocCtx<'_> {
                 e,
                 t,
             ) => self.codegen_misc_cast(e, *t),
-            Rvalue::Cast(CastKind::DynStar, _, _) => {
-                let ty = self.codegen_ty_stable(res_ty);
-                self.codegen_unimplemented_expr(
-                    "CastKind::DynStar",
-                    ty,
-                    loc,
-                    "https://github.com/model-checking/kani/issues/1784",
-                )
-            }
             Rvalue::Cast(CastKind::PointerCoercion(k), e, t) => {
                 self.codegen_pointer_cast(k, e, *t, loc)
             }
