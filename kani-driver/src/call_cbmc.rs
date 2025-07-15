@@ -279,9 +279,15 @@ impl KaniSession {
         };
 
         match solver {
+            CbmcSolver::Bitwuzla => {
+                args.push("--bitwuzla".into());
+            }
             CbmcSolver::Cadical => {
                 args.push("--sat-solver".into());
                 args.push("cadical".into());
+            }
+            CbmcSolver::Cvc5 => {
+                args.push("--cvc5".into());
             }
             CbmcSolver::Kissat => {
                 args.push("--external-sat-solver".into());
@@ -290,6 +296,9 @@ impl KaniSession {
             CbmcSolver::Minisat => {
                 // Minisat is currently CBMC's default solver, so no need to
                 // pass any arguments
+            }
+            CbmcSolver::Z3 => {
+                args.push("--z3".into());
             }
             CbmcSolver::Binary(solver_binary) => {
                 // Check if the specified binary exists in path
