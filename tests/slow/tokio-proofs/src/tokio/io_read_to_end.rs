@@ -14,9 +14,8 @@ use std::task::{Context, Poll};
 use tokio::io::{AsyncRead, AsyncReadExt, ReadBuf};
 use tokio_test::assert_ok;
 
-#[cfg(disabled)] // because it timed out after 2h
 #[kani::proof]
-#[kani::unwind(2)]
+#[kani::unwind(12)]
 async fn read_to_end() {
     let mut buf = vec![];
     let mut rd: &[u8] = b"hello world";
@@ -75,9 +74,8 @@ impl AsyncRead for UninitTest {
     }
 }
 
-#[cfg(disabled)] // because it timed out after 2h
 #[kani::proof]
-#[kani::unwind(2)]
+#[kani::unwind(65)]
 async fn read_to_end_uninit() {
     let mut buf = Vec::with_capacity(64);
     let mut test = UninitTest { num_init: 0, state: State::Initializing };

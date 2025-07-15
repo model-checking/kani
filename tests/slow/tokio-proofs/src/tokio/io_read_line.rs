@@ -15,7 +15,7 @@ use tokio_test::{assert_ok, io::Builder};
 
 use std::io::Cursor;
 
-#[cfg(disabled)] // because it timed out after 2h
+#[cfg(disabled)] // requires pthread_key_create
 #[kani::proof]
 #[kani::unwind(2)]
 async fn read_line() {
@@ -39,7 +39,7 @@ async fn read_line() {
     assert_eq!(buf, "");
 }
 
-#[cfg(disabled)] // because it timed out after 2h
+#[cfg(disabled)] // CBMC consumes more than 10 GB
 #[kani::proof]
 #[kani::unwind(2)]
 async fn read_line_not_all_ready() {
@@ -68,7 +68,7 @@ async fn read_line_not_all_ready() {
     assert_eq!(line.as_str(), "2");
 }
 
-#[cfg(disabled)] // because it timed out after 2h
+#[cfg(disabled)] // CBMC consumes more than 10 GB
 #[kani::proof]
 #[kani::unwind(2)]
 async fn read_line_invalid_utf8() {
@@ -83,7 +83,7 @@ async fn read_line_invalid_utf8() {
     assert_eq!(line.as_str(), "Foo");
 }
 
-#[cfg(disabled)] // because it timed out after 2h
+#[cfg(disabled)] // CBMC consumes more than 10 GB
 #[kani::proof]
 #[kani::unwind(2)]
 async fn read_line_fail() {
@@ -101,7 +101,7 @@ async fn read_line_fail() {
     assert_eq!(line.as_str(), "FooHello Wor");
 }
 
-#[cfg(disabled)] // because it timed out after 2h
+#[cfg(disabled)] // CBMC consumes more than 10 GB
 #[kani::proof]
 #[kani::unwind(2)]
 async fn read_line_fail_and_utf8_fail() {
