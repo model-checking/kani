@@ -26,11 +26,9 @@ cvc5 --version
 
 if [[ "${ARCH}" == "arm64" ]]; then
   # Bitwuzla only publishes macOS binaries for arm64
-  curl -L --remote-name https://github.com/bitwuzla/bitwuzla/releases/download/0.8.1/Bitwuzla-Linux-${ARCH}-static.zip
-  sudo unzip -o -j -d /usr/local/bin Bitwuzla-Linux-${ARCH}-static.zip Bitwuzla-Linux-${ARCH}-static/bin/bitwuzla
-  ls -la /usr/local/bin/bitwuzla
-  file /usr/local/bin/bitwuzla
-  rm Bitwuzla-Linux-${ARCH}-static.zip
+  curl -L --remote-name https://github.com/bitwuzla/bitwuzla/releases/download/0.8.1/Bitwuzla-macOS-${ARCH}-static.zip
+  sudo unzip -o -j -d /usr/local/bin Bitwuzla-macOS-${ARCH}-static.zip Bitwuzla-macOS-${ARCH}-static/bin/bitwuzla
+  rm Bitwuzla-macOS-${ARCH}-static.zip
 else
   curl -L --remote-name https://github.com/bitwuzla/bitwuzla/archive/refs/tags/0.8.1.tar.gz
   tar xzf 0.8.1.tar.gz
