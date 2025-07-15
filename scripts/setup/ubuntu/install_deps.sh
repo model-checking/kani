@@ -33,7 +33,7 @@ sudo DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends --ye
 
 ARCH=$(uname -m)
 curl -L --remote-name https://github.com/cvc5/cvc5/releases/download/cvc5-1.3.0/cvc5-Linux-${ARCH}-static.zip
-sudo unzip -j -d /usr/local/bin cvc5-Linux-${ARCH}-static.zip cvc5-Linux-${ARCH}-static/bin/cvc5
+sudo unzip -o -j -d /usr/local/bin cvc5-Linux-${ARCH}-static.zip cvc5-Linux-${ARCH}-static/bin/cvc5
 rm cvc5-Linux-${ARCH}-static.zip
 cvc5 --version
 
