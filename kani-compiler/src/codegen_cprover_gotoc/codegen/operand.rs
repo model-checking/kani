@@ -6,11 +6,11 @@ use crate::kani_middle::is_anon_static;
 use crate::unwrap_or_return_codegen_unimplemented;
 use cbmc::goto_program::{DatatypeComponent, Expr, ExprValue, Location, Symbol, Type};
 use rustc_middle::ty::Const as ConstInternal;
-use rustc_smir::rustc_internal;
 use rustc_span::Span as SpanInternal;
 use stable_mir::mir::alloc::{AllocId, GlobalAlloc};
 use stable_mir::mir::mono::{Instance, StaticDef};
 use stable_mir::mir::{Mutability, Operand};
+use stable_mir::rustc_internal;
 use stable_mir::ty::{
     Allocation, ConstantKind, FloatTy, FnDef, GenericArgs, IntTy, MirConst, RigidTy, Size, Ty,
     TyConst, TyConstKind, TyKind, UintTy,
@@ -204,6 +204,13 @@ impl<'tcx> GotocCtx<'tcx> {
                 Some(self.codegen_const_ptr(alloc, ty, inner_ty, loc))
             }
             TyKind::RigidTy(RigidTy::Adt(adt, args)) if adt.kind().is_struct() => {
+                //Special struct that is used to handle type_id function
+                if adt.name().contains("any::TypeId") {
+                    let val = alloc.read_uint().unwrap();
+                    let u128_expr = Expr::int_constant(val, Type::unsigned_int(128));
+                    let typ = self.codegen_ty_stable(ty);
+                    return Some(u128_expr.transmute_to(typ, &self.symbol_table));
+                }
                 // Structs only have one variant.
                 let variant = adt.variants_iter().next().unwrap();
                 // There must be at least one field associated with the scalar data.
@@ -399,6 +406,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 let name = format!("{}::{alloc_id:?}", self.full_crate_name());
                 self.codegen_const_allocation(&alloc, Some(name), loc)
             }
+            GlobalAlloc::TypeId { ty: _ } => todo!(),
         };
         assert!(res_t.is_pointer() || res_t.is_transparent_type(&self.symbol_table));
         let offset_addr = base_addr

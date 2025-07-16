@@ -9,7 +9,6 @@
 
 use rustc_middle::mir::CoercionSource;
 use rustc_middle::ty::{self as rustc_ty, TyCtxt};
-use rustc_smir::rustc_internal::internal;
 use stable_mir::mir::{
     AggregateKind, AssertMessage, Body, BorrowKind, CastKind, ConstOperand, CopyNonOverlapping,
     CoroutineDesugaring, CoroutineKind, CoroutineSource, FakeBorrowKind, FakeReadCause, LocalDecl,
@@ -17,6 +16,7 @@ use stable_mir::mir::{
     Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind, UnwindAction,
     UserTypeProjection, Variance,
 };
+use stable_mir::rustc_internal::internal;
 
 pub trait RustcInternalMir {
     type T<'tcx>;
@@ -139,10 +139,6 @@ impl RustcInternalMir for CastKind {
                     CoercionSource::Implicit,
                 )
             }
-            CastKind::DynStar => rustc_middle::mir::CastKind::PointerCoercion(
-                rustc_ty::adjustment::PointerCoercion::DynStar,
-                CoercionSource::Implicit,
-            ),
             CastKind::IntToInt => rustc_middle::mir::CastKind::IntToInt,
             CastKind::FloatToInt => rustc_middle::mir::CastKind::FloatToInt,
             CastKind::FloatToFloat => rustc_middle::mir::CastKind::FloatToFloat,

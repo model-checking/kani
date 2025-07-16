@@ -12,7 +12,6 @@ use rustc_abi::Size;
 use rustc_abi::{FieldsShape, Primitive, TagEncoding, Variants};
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{List, TypingEnv};
-use rustc_smir::rustc_internal;
 use stable_mir::CrateDef;
 use stable_mir::abi::{ArgAbi, FnAbi, PassMode};
 use stable_mir::mir::mono::{Instance, InstanceKind};
@@ -20,6 +19,7 @@ use stable_mir::mir::{
     AssertMessage, BasicBlockIdx, CopyNonOverlapping, NonDivergingIntrinsic, Operand, Place,
     RETURN_LOCAL, Rvalue, Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind,
 };
+use stable_mir::rustc_internal;
 use stable_mir::ty::{Abi, RigidTy, Span, Ty, TyKind, VariantIdx};
 use tracing::{debug, debug_span, trace};
 
@@ -522,13 +522,6 @@ impl GotocCtx<'_> {
                         // The only argument should be a self reference
                         let args = vec![place_ref];
 
-                        // We have a known issue where nested Arc and Mutex objects result in
-                        // drop_in_place call implementations that fail to typecheck. Skipping
-                        // drop entirely causes unsound verification results in common cases
-                        // like vector extend, so for now, add a sound special case workaround
-                        // for calls that fail the typecheck.
-                        // https://github.com/model-checking/kani/issues/426
-                        // Unblocks: https://github.com/model-checking/kani/issues/435
                         func.call(args).as_stmt(loc)
                     }
                 }

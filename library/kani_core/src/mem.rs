@@ -61,9 +61,6 @@ macro_rules! kani_mem {
         /// and 3,
         /// and the value stored must respect the validity invariants for type `T`.
         ///
-        /// TODO: Kani should automatically add those checks when a de-reference happens.
-        /// <https://github.com/model-checking/kani/issues/2975>
-        ///
         /// This function will panic today if the pointer is not null, and it points to an unallocated or
         /// deallocated memory location. This is an existing Kani limitation.
         /// See <https://github.com/model-checking/kani/issues/2690> for more details.
@@ -287,14 +284,9 @@ macro_rules! kani_mem {
 
         /// Get the object offset of the given pointer.
         #[doc(hidden)]
-        #[crate::kani::unstable_feature(
-            feature = "ghost-state",
-            issue = 3184,
-            reason = "experimental ghost state/shadow memory API"
-        )]
         #[kanitool::fn_marker = "PointerOffsetHook"]
         #[inline(never)]
-        pub fn pointer_offset<T: PointeeSized>(_ptr: *const T) -> usize {
+        pub(crate) fn pointer_offset<T: PointeeSized>(_ptr: *const T) -> usize {
             kani_intrinsic()
         }
     };

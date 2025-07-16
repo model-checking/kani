@@ -2,8 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Z quantifiers
 
-//! FIXME: <https://github.com/model-checking/kani/issues/4020>
-
 use std::mem;
 
 #[kani::proof]

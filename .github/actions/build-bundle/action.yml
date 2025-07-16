@@ -1,12 +1,10 @@
 # Copyright Kani Contributors
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 name: Build bundle
-description: "Build the Kani bundle for the current architecture and OS. The inputs must match the worker architecture."
+description: "Build the Kani bundle for the current platform. The inputs must match the worker architecture."
 inputs:
-  arch:
-    description: "Current architecture tuple"
-  os:
-    description: "Current operating system"
+  platform:
+    description: "Current platform tuple"
 outputs:
   version:
     description: "The bundle version (latest or =crate_version)"
@@ -55,14 +53,14 @@ runs:
       shell: bash
       run: |
         cargo bundle -- ${{ env.VERSION }}
-        echo "BUNDLE=kani-${{ env.VERSION }}-${{ inputs.arch }}.tar.gz" >> $GITHUB_ENV
+        echo "BUNDLE=kani-${{ env.VERSION }}-${{ inputs.platform }}.tar.gz" >> $GITHUB_ENV
 
     - name: Build package
       shell: bash
       run: |
         cargo package -p kani-verifier
-        mv target/package/kani-verifier-${{ env.CRATE_VERSION }}.crate ${{ inputs.os }}-kani-verifier.crate
-        echo "PKG=${{ inputs.os }}-kani-verifier.crate" >> $GITHUB_ENV
+        mv target/package/kani-verifier-${{ env.CRATE_VERSION }}.crate ${{ inputs.platform }}-kani-verifier.crate
+        echo "PKG=${{ inputs.platform }}-kani-verifier.crate" >> $GITHUB_ENV
 
     - name: Upload bundle
       uses: actions/upload-artifact@v4

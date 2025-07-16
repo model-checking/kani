@@ -5,10 +5,11 @@
 
 use std::fmt::Display;
 
+use rustc_smir::IndexedVal;
 use stable_mir::{
     abi::{FieldsShape, Scalar, TagEncoding, ValueAbi, VariantsShape},
     target::{MachineInfo, MachineSize},
-    ty::{AdtKind, IndexedVal, RigidTy, Ty, TyKind, UintTy, VariantIdx},
+    ty::{AdtKind, RigidTy, Ty, TyKind, UintTy, VariantIdx},
 };
 
 /// Represents a chunk of data bytes in a data structure.
