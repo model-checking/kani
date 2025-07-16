@@ -92,6 +92,16 @@ impl<'a> ContractConditionsHandler<'a> {
                     #result
                 })
             }
+            ContractConditionsData::PanicsIf { attr } => {
+                let Self { attr_copy, .. } = self;
+                let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
+                quote!({
+                    kani::assert(!(#attr), concat!("Panic: ", stringify!(#attr_copy)));
+                    #(#before)*
+                    #(#after)*
+                    #result
+                })
+            }
             ContractConditionsData::Ensures { attr } => {
                 let (remembers, ensures_clause) = build_ensures(attr);
                 let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
