@@ -275,4 +275,4 @@
 //! Here, the value stored in `a` is precomputed and remembered after the function
 //! is called, even though the contents of `a` changed during the function execution.
 //!
-pub use super::{ensures, modifies, proof_for_contract, requires, stub_verified};
+pub use super::{ensures, modifies, panics_if, proof_for_contract, requires, stub_verified};
