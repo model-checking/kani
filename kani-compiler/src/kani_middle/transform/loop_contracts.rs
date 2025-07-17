@@ -210,20 +210,18 @@ impl LoopContractPass {
                     continue;
                 };
                 // Check if the function is `kani::internal::run_contract_fn`.
-                if fn_def.name().to_string() == "kani::KaniIter::first" {
+                if fn_def.name() == "kani::KaniIter::first" {
                     current_firstpat = dest.local;
                     current_firstpat_pos = blockid;
                 }
-                if fn_def.name().to_string() == "kani::KaniIter::indexing" {
-                    if current_firstpat != 0 {
-                        firstpats_and_indexpats.push((
-                            current_firstpat,
-                            dest.local,
-                            current_firstpat_pos,
-                            blockid,
-                        ));
-                        current_firstpat = 0
-                    }
+                if fn_def.name() == "kani::KaniIter::indexing" && current_firstpat != 0 {
+                    firstpats_and_indexpats.push((
+                        current_firstpat,
+                        dest.local,
+                        current_firstpat_pos,
+                        blockid,
+                    ));
+                    current_firstpat = 0
                 }
             }
         }
@@ -260,7 +258,7 @@ impl LoopContractPass {
                 func: terminator_func.clone(),
                 args: terminator_args.clone(),
                 destination: new_destination,
-                target: terminator_target.clone(),
+                target: *terminator_target,
                 unwind: *terminator_unwind,
             };
         }
@@ -279,7 +277,7 @@ impl LoopContractPass {
                 &SourceInstruction::Terminator { bb: first_blockid },
                 new_terminator,
             );
-            let span = body.blocks()[first_blockid].statements.first().unwrap().span.clone();
+            let span = body.blocks()[first_blockid].statements.first().unwrap().span;
             // Add the StorageLive(indexpat) statement at the begining of the same block
             let storagelive_stmt = Statement { kind: StatementKind::StorageLive(indexvar), span };
             body.insert_stmt(
@@ -339,7 +337,7 @@ impl LoopContractPass {
                     // There might be some without StorageLive statements
                     // So we just remove them and add a new one for each indexpat projection later
                     StatementKind::StorageLive(local) => {
-                        if firstprj_indexprj.get(&local).is_none() {
+                        if !firstprj_indexprj.contains_key(local) {
                             new_stmts.push(new_stmt);
                         }
                     }
@@ -350,7 +348,7 @@ impl LoopContractPass {
                         {
                             let storagelive_stmt = Statement {
                                 kind: StatementKind::StorageLive(*indexprj),
-                                span: stmt.span.clone(),
+                                span: stmt.span,
                             };
                             new_stmts.push(storagelive_stmt);
                             let mut indexpatplace = firstpatplace.clone();
@@ -418,7 +416,7 @@ impl LoopContractPass {
                         let new_rval = Rvalue::Aggregate(aggrkind.clone(), new_operands);
                         new_loophead_stmts.push(Statement {
                             kind: StatementKind::Assign(lhs.clone(), new_rval),
-                            span: stmt.span.clone(),
+                            span: stmt.span,
                         });
                     } else if let StatementKind::Assign(
                         lhs,
@@ -429,12 +427,12 @@ impl LoopContractPass {
                     {
                         let new_rval = Rvalue::Ref(
                             region.clone(),
-                            borrowkind.clone(),
+                            *borrowkind,
                             Place { local: *indexlocal, projection: projection.clone() },
                         );
                         new_loophead_stmts.push(Statement {
                             kind: StatementKind::Assign(lhs.clone(), new_rval),
-                            span: stmt.span.clone(),
+                            span: stmt.span,
                         });
                     } else {
                         new_loophead_stmts.push(stmt.clone());
@@ -692,11 +690,7 @@ impl LoopContractPass {
     }
 
     // Insert a list of blocks consecutively between the loop head and its next block
-    fn insert_blocks_from_loophead(
-        body: &mut MutableBody,
-        blocks: &Vec<BasicBlock>,
-        loophead: usize,
-    ) {
+    fn insert_blocks_from_loophead(body: &mut MutableBody, blocks: &[BasicBlock], loophead: usize) {
         for (i, block) in blocks.iter().enumerate() {
             if i == 0 {
                 let modified_block = Self::block_of_new_target(block, loophead);
@@ -723,7 +717,7 @@ impl LoopContractPass {
     // Insert a list of blocks consecutively at the end of the body then let the final one connect to the loop-head
     fn insert_blocks_from_at_bottom_connect_to_loophead(
         body: &mut MutableBody,
-        blocks: &Vec<BasicBlock>,
+        blocks: &[BasicBlock],
         loophead: usize,
     ) {
         for (i, block) in blocks.iter().enumerate() {
@@ -817,7 +811,7 @@ impl LoopContractPass {
         // For the performance benefits remove the re-assign statements of kaniiter variables
         // after adding the same one at loop head
         for block_idx in kaniiter_blocks {
-            let span = body.blocks()[block_idx].terminator.span.clone();
+            let span = body.blocks()[block_idx].terminator.span;
             body.replace_terminator(
                 &SourceInstruction::Terminator { bb: block_idx },
                 Terminator { kind: TerminatorKind::Goto { target: block_idx + 1 }, span },
