@@ -20,8 +20,8 @@ use rustc_smir::IndexedVal;
 use stable_mir::CrateDef;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{
-    AggregateKind, BasicBlockIdx, Body, Local, Mutability, Operand, Place, Rvalue, SwitchTargets,
-    Terminator, TerminatorKind,
+    AggregateKind, BasicBlockIdx, Body, BorrowKind, Local, Mutability, Operand, Place, Rvalue,
+    SwitchTargets, Terminator, TerminatorKind,
 };
 use stable_mir::ty::{
     AdtDef, AdtKind, FnDef, GenericArgKind, GenericArgs, RigidTy, Ty, TyKind, UintTy, VariantDef,
@@ -135,12 +135,44 @@ impl AutomaticArbitraryPass {
         ty: Ty,
         source: &mut SourceInstruction,
     ) -> Local {
-        let kani_any_inst =
-            Instance::resolve(self.kani_any, &GenericArgs(vec![GenericArgKind::Type(ty)]))
-                .unwrap_or_else(|_| panic!("expected a ty that implements Arbitrary, got {ty}"));
-        let lcl = body.new_local(ty, source.span(body.blocks()), Mutability::Not);
-        body.insert_call(&kani_any_inst, source, InsertPosition::Before, vec![], Place::from(lcl));
-        lcl
+        if let TyKind::RigidTy(RigidTy::Ref(region, inner_ty, Mutability::Not)) = ty.kind() {
+            let kani_any_inst = Instance::resolve(
+                self.kani_any,
+                &GenericArgs(vec![GenericArgKind::Type(inner_ty)]),
+            )
+            .unwrap_or_else(|_| panic!("expected a ty that implements Arbitrary, got {ty}"));
+            let inner_lcl = body.new_local(inner_ty, source.span(body.blocks()), Mutability::Not);
+            body.insert_call(
+                &kani_any_inst,
+                source,
+                InsertPosition::Before,
+                vec![],
+                Place::from(inner_lcl),
+            );
+            let ref_lcl = body.new_local(ty, source.span(body.blocks()), Mutability::Not);
+            body.assign_to(
+                Place::from(ref_lcl),
+                Rvalue::Ref(region, BorrowKind::Shared, Place::from(inner_lcl)),
+                source,
+                InsertPosition::Before,
+            );
+            ref_lcl
+        } else {
+            let kani_any_inst =
+                Instance::resolve(self.kani_any, &GenericArgs(vec![GenericArgKind::Type(ty)]))
+                    .unwrap_or_else(|_| {
+                        panic!("expected a ty that implements Arbitrary, got {ty}")
+                    });
+            let lcl = body.new_local(ty, source.span(body.blocks()), Mutability::Not);
+            body.insert_call(
+                &kani_any_inst,
+                source,
+                InsertPosition::Before,
+                vec![],
+                Place::from(lcl),
+            );
+            lcl
+        }
     }
 
     /// Insert the basic blocks for generating an arbitrary variant into `body`.
@@ -332,30 +364,66 @@ impl TransformPass for AutomaticHarnessPass {
             );
         }
 
-        let mut arg_locals = vec![];
-
         // For each argument of `fn_to_verify`, create a nondeterministic value of its type
         // by generating a kani::any() call and saving the result in `arg_local`.
-        for local_decl in fn_to_verify_body.arg_locals().iter() {
-            let arg_local = harness_body.new_local(
-                local_decl.ty,
-                source.span(harness_body.blocks()),
-                local_decl.mutability,
-            );
-            let kani_any_inst = Instance::resolve(
-                self.kani_any,
-                &GenericArgs(vec![GenericArgKind::Type(local_decl.ty)]),
-            )
-            .unwrap();
-            harness_body.insert_call(
-                &kani_any_inst,
-                &mut source,
-                InsertPosition::Before,
-                vec![],
-                Place::from(arg_local),
-            );
-            arg_locals.push(arg_local);
-        }
+        let arg_locals = fn_to_verify_body
+            .arg_locals()
+            .iter()
+            .map(|local_decl| {
+                if let TyKind::RigidTy(RigidTy::Ref(region, inner_ty, Mutability::Not)) =
+                    local_decl.ty.kind()
+                {
+                    let any_local = harness_body.new_local(
+                        inner_ty,
+                        source.span(harness_body.blocks()),
+                        Mutability::Not,
+                    );
+                    let kani_any_inst = Instance::resolve(
+                        self.kani_any,
+                        &GenericArgs(vec![GenericArgKind::Type(inner_ty)]),
+                    )
+                    .unwrap();
+                    harness_body.insert_call(
+                        &kani_any_inst,
+                        &mut source,
+                        InsertPosition::Before,
+                        vec![],
+                        Place::from(any_local),
+                    );
+                    let arg_local = harness_body.new_local(
+                        local_decl.ty,
+                        source.span(harness_body.blocks()),
+                        local_decl.mutability,
+                    );
+                    harness_body.assign_to(
+                        Place::from(arg_local),
+                        Rvalue::Ref(region, BorrowKind::Shared, Place::from(any_local)),
+                        &mut source,
+                        InsertPosition::Before,
+                    );
+                    arg_local
+                } else {
+                    let arg_local = harness_body.new_local(
+                        local_decl.ty,
+                        source.span(harness_body.blocks()),
+                        local_decl.mutability,
+                    );
+                    let kani_any_inst = Instance::resolve(
+                        self.kani_any,
+                        &GenericArgs(vec![GenericArgKind::Type(local_decl.ty)]),
+                    )
+                    .unwrap();
+                    harness_body.insert_call(
+                        &kani_any_inst,
+                        &mut source,
+                        InsertPosition::Before,
+                        vec![],
+                        Place::from(arg_local),
+                    );
+                    arg_local
+                }
+            })
+            .collect::<Vec<_>>();
 
         let func_to_verify_ret = fn_to_verify_body.ret_local();
         let ret_place = Place::from(harness_body.new_local(

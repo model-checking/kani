@@ -1,0 +1,11 @@
+Selected Functions: None. Kani did not generate automatic harnesses for any functions in the available crate(s).
+
++---------+--------------------------+---------------------------------------------------------------------------+\
+| Crate   | Skipped Function         | Reason for Skipping                                                       |\
++================================================================================================================+\
+| mutable | takes_mut_ref            | Missing Arbitrary implementation for argument(s) x: &mut i32              |\
+|---------+--------------------------+---------------------------------------------------------------------------|\
+| mutable | takes_mut_refs           | Missing Arbitrary implementation for argument(s) x: &mut i32, y: &mut i32 |\
+|---------+--------------------------+---------------------------------------------------------------------------|\
+| mutable | takes_mut_refs_and_other | Missing Arbitrary implementation for argument(s) y: &mut i32              |\
++---------+--------------------------+---------------------------------------------------------------------------+

@@ -70,6 +70,9 @@ mod should_derive {
         foo.data.unwrap_or(Some((0, 0))).unwrap_or((0, 0)).1 as usize + 100
     }
 
+    struct RefStruct(&'static i32);
+    fn ref_struct(foo: RefStruct) {}
+
     #[derive(Eq, PartialEq)]
     pub struct AlignmentStruct(usize);
 
