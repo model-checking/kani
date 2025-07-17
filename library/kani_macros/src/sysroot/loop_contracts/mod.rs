@@ -313,6 +313,11 @@ pub fn transform_for_to_loop(
         let #len_ident = kani::KaniIter::len(&#iter_ident);
     };
 
+    // It is very hard to handle "let mut" for tuples
+    // We instead use the shadowed "pat" ident in pat_assign_stmt
+    // Let's call the "pat" ident here the "firstpat" and the one in pat_assign_stmt the "indexpat"
+    // We will replace the "firstpat" with the "indexpat" (and all their projections)
+    // by the function replace_firstpat_by_indexingpat in kani_middle/transform/loop_contracts.rs
     let init_pat_stmt: Stmt = parse_quote! {
         let #pat = kani::KaniIter::first(&#iter_ident);
     };
@@ -330,6 +335,7 @@ pub fn transform_for_to_loop(
     };
 
     let pat_assign_stmt: Stmt = parse_quote! {
+        // See the comments in init_pat_stmt
         let #pat = kani::KaniIter::indexing(&#iter_ident, #index_ident);
     };
 
