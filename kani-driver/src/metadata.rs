@@ -3,9 +3,10 @@
 
 use anyhow::{Result, bail};
 use std::path::Path;
-use tracing::{debug, trace};
 
-use kani_metadata::{HarnessMetadata, InternedString, TraitDefinedMethod, VtableCtxResults};
+use kani_metadata::{
+    HarnessMetadata, InternedString, TraitDefinedMethod, VtableCtxResults, find_proof_harnesses,
+};
 use std::collections::{BTreeSet, HashMap};
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
@@ -91,39 +92,42 @@ impl KaniSession {
     /// Determine which function to use as entry point, based on command-line arguments and kani-metadata.
     pub fn determine_targets<'a>(
         &self,
-        all_harnesses: &[&'a HarnessMetadata],
+        compiler_filtered_harnesses: Vec<&'a HarnessMetadata>,
     ) -> Result<Vec<&'a HarnessMetadata>> {
-        let harnesses = BTreeSet::from_iter(self.args.harnesses.iter());
-        let total_harnesses = harnesses.len();
-        let all_targets = &harnesses;
+        let harness_filters = BTreeSet::from_iter(self.args.harnesses.iter());
 
-        if harnesses.is_empty() {
-            Ok(Vec::from(all_harnesses))
-        } else {
-            let harnesses_found: Vec<&HarnessMetadata> =
-                find_proof_harnesses(&harnesses, all_harnesses, self.args.exact);
-
-            // If even one harness was not found with --exact, return an error to user
-            if self.args.exact && harnesses_found.len() < total_harnesses {
-                let harness_found_names: BTreeSet<&String> =
-                    harnesses_found.iter().map(|&h| &h.pretty_name).collect();
-
-                // Check which harnesses are missing from the difference of targets and harnesses_found
-                let harnesses_missing: Vec<&String> =
-                    all_targets.difference(&harness_found_names).cloned().collect();
-                let joined_string = harnesses_missing
-                    .iter()
-                    .map(|&s| (*s).clone())
-                    .collect::<Vec<String>>()
-                    .join("`, `");
-
-                bail!(
-                    "Failed to match the following harness(es):\n{joined_string}\nPlease specify the fully-qualified name of a harness.",
-                );
-            }
-
-            Ok(harnesses_found)
+        // For dev builds, re-filter the harnesses to double check filtering in the compiler
+        // and ensure we're doing the minimal harness codegen possible. That filtering happens in
+        // the `kani-compiler/src/kani_middle/codegen_units.rs` file's `determine_targets` function.
+        if cfg!(debug_assertions) && !harness_filters.is_empty() {
+            let filtered_harnesses: Vec<&HarnessMetadata> = find_proof_harnesses(
+                &harness_filters,
+                compiler_filtered_harnesses.clone(),
+                self.args.exact,
+            );
+            assert_eq!(compiler_filtered_harnesses, filtered_harnesses);
         }
+
+        // If any of the `--harness` filters failed to find a harness (and thus the # of harnesses is less than the # of filters), report that to the user.
+        if self.args.exact && (compiler_filtered_harnesses.len() < self.args.harnesses.len()) {
+            let harness_found_names: BTreeSet<&String> =
+                compiler_filtered_harnesses.iter().map(|&h| &h.pretty_name).collect();
+
+            // Check which harnesses are missing from the difference of targets and all_harnesses
+            let harnesses_missing: Vec<&String> =
+                harness_filters.difference(&harness_found_names).cloned().collect();
+            let joined_string = harnesses_missing
+                .iter()
+                .map(|&s| (*s).clone())
+                .collect::<Vec<String>>()
+                .join("`, `");
+
+            bail!(
+                "Failed to match the following harness(es):\n{joined_string}\nPlease specify the fully-qualified name of a harness.",
+            );
+        }
+
+        Ok(compiler_filtered_harnesses)
     }
 }
 
@@ -140,44 +144,6 @@ pub fn sort_harnesses_by_loc<'a>(harnesses: &[&'a HarnessMetadata]) -> Vec<&'a H
             .then(harness1.original_start_line.cmp(&harness2.original_start_line).reverse())
     });
     harnesses_clone
-}
-
-/// Search for a proof harness with a particular name.
-/// At the present time, we use `no_mangle` so collisions shouldn't happen,
-/// but this function is written to be robust against that changing in the future.
-fn find_proof_harnesses<'a>(
-    targets: &BTreeSet<&String>,
-    all_harnesses: &[&'a HarnessMetadata],
-    exact_filter: bool,
-) -> Vec<&'a HarnessMetadata> {
-    debug!(?targets, "find_proof_harness");
-    let mut result = vec![];
-    for md in all_harnesses.iter() {
-        // --harnesses should not select automatic harnesses
-        if md.is_automatically_generated {
-            continue;
-        }
-        if exact_filter {
-            // Check for exact match only
-            if targets.contains(&md.pretty_name) {
-                // if exact match found, stop searching
-                result.push(*md);
-            } else {
-                trace!(skip = md.pretty_name, "find_proof_harnesses");
-            }
-        } else {
-            // Either an exact match, or a substring match. We check the exact first since it's cheaper.
-            if targets.contains(&md.pretty_name)
-                || targets.contains(&md.get_harness_name_unqualified().to_string())
-                || targets.iter().any(|target| md.pretty_name.contains(*target))
-            {
-                result.push(*md);
-            } else {
-                trace!(skip = md.pretty_name, "find_proof_harnesses");
-            }
-        }
-    }
-    result
 }
 
 #[cfg(test)]

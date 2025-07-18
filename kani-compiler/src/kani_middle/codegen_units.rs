@@ -21,7 +21,7 @@ use crate::kani_queries::QueryDb;
 use fxhash::{FxHashMap, FxHashSet};
 use kani_metadata::{
     ArtifactType, AssignsContract, AutoHarnessMetadata, AutoHarnessSkipReason, HarnessKind,
-    HarnessMetadata, KaniMetadata,
+    HarnessMetadata, KaniMetadata, find_proof_harnesses,
 };
 use regex::RegexSet;
 use rustc_hir::def_id::DefId;
@@ -75,7 +75,11 @@ impl CodegenUnits {
         let args = queries.args();
         match args.reachability_analysis {
             ReachabilityType::Harnesses => {
-                let all_harnesses = get_all_manual_harnesses(tcx, base_filename);
+                let all_harnesses = determine_targets(
+                    get_all_manual_harnesses(tcx, base_filename),
+                    &args.harnesses,
+                    args.exact,
+                );
                 // Even if no_stubs is empty we still need to store rustc metadata.
                 let units = group_by_stubs(tcx, &all_harnesses);
                 validate_units(tcx, &units);
@@ -83,7 +87,11 @@ impl CodegenUnits {
                 CodegenUnits { units, harness_info: all_harnesses, crate_info }
             }
             ReachabilityType::AllFns => {
-                let mut all_harnesses = get_all_manual_harnesses(tcx, base_filename);
+                let mut all_harnesses = determine_targets(
+                    get_all_manual_harnesses(tcx, base_filename),
+                    &args.harnesses,
+                    args.exact,
+                );
                 let mut units = group_by_stubs(tcx, &all_harnesses);
                 validate_units(tcx, &units);
 
@@ -326,6 +334,30 @@ fn get_all_manual_harnesses(
             (harness, metadata)
         })
         .collect::<HashMap<_, _>>()
+}
+
+/// Filter which harnesses to codegen based on user filters. Shares use of `find_proof_harnesses` with the `determine_targets` function
+/// in `kani-driver/src/metadata.rs` to ensure the filter is consistent and thus codegen is always done for the subset of harnesses we want
+/// to analyze.
+fn determine_targets(
+    all_harnesses: HashMap<Harness, HarnessMetadata>,
+    harness_filters: &[String],
+    exact_filter: bool,
+) -> HashMap<Harness, HarnessMetadata> {
+    if harness_filters.is_empty() {
+        return all_harnesses;
+    }
+
+    // If there are filters, only keep around harnesses that satisfy them.
+    let mut new_harnesses = all_harnesses.clone();
+    let valid_harnesses = find_proof_harnesses(
+        &BTreeSet::from_iter(harness_filters.iter()),
+        all_harnesses.values(),
+        exact_filter,
+    );
+
+    new_harnesses.retain(|_, metadata| valid_harnesses.contains(&&*metadata));
+    new_harnesses
 }
 
 /// For each function eligible for automatic verification,
