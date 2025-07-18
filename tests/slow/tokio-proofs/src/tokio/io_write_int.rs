@@ -15,7 +15,6 @@ use std::io;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-#[cfg(disabled)] // because it timed out after 2h
 #[kani::proof]
 #[kani::unwind(2)]
 async fn write_int_should_err_if_write_count_0() {

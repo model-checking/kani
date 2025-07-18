@@ -153,18 +153,11 @@ The semantics around some advanced features (traits, types, etc.) from Rust are
 not formally defined which makes it harder to ensure that we can properly model
 all their use cases.
 
-In particular, there are some outstanding issues to note here:
- * Sanity check `Variant` type in projections
-   [#448](https://github.com/model-checking/kani/issues/448).
- * Unexpected fat pointer results in
-   [#277](https://github.com/model-checking/kani/issues/277),
-   [#327](https://github.com/model-checking/kani/issues/327) and
-   [#676](https://github.com/model-checking/kani/issues/676).
-
-We are particularly interested in bug reports concerning
-these features, so please [file a bug
-report](https://github.com/model-checking/kani/issues/new?assignees=&labels=bug&template=bug_report.md)
-if you're aware of one.
+We are aware of a lack of sanity checking the `Variant` type in projections
+[#448](https://github.com/model-checking/kani/issues/448).
+If you become aware of other issues concerning
+these features, please [file a bug
+report](https://github.com/model-checking/kani/issues/new?assignees=&labels=bug&template=bug_report.md).
 
 ### Panic strategies
 

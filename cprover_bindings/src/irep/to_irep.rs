@@ -408,6 +408,19 @@ impl ToIrep for ExprValue {
                 ],
                 named_sub: linear_map![],
             },
+            ExprValue::ShuffleVector { vector1, vector2, indexes } => Irep {
+                id: IrepId::ShuffleVector,
+                sub: vec![
+                    vector1.to_irep(mm),
+                    vector2.to_irep(mm),
+                    Irep {
+                        id: IrepId::EmptyString,
+                        sub: indexes.iter().map(|x| x.to_irep(mm)).collect(),
+                        named_sub: linear_map![],
+                    },
+                ],
+                named_sub: linear_map![],
+            },
         }
     }
 }
