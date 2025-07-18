@@ -14,9 +14,9 @@ use tokio::io::AsyncReadExt;
 use tokio_test::assert_ok;
 use tokio_test::io::Builder;
 
-#[cfg(disabled)] // because it timed out after 2h
+#[cfg(disabled)] // CBMC takes more than 15 minutes
 #[kani::proof]
-#[kani::unwind(2)]
+#[kani::unwind(12)]
 async fn read_to_string() {
     let mut buf = String::new();
     let mut rd: &[u8] = b"hello world";
@@ -26,7 +26,7 @@ async fn read_to_string() {
     assert_eq!(buf[..], "hello world"[..]);
 }
 
-#[cfg(disabled)] // because it timed out after 2h
+#[cfg(disabled)] // CBMC consumes more than 10 GB
 #[kani::proof]
 #[kani::unwind(2)]
 async fn to_string_does_not_truncate_on_utf8_error() {
@@ -43,7 +43,7 @@ async fn to_string_does_not_truncate_on_utf8_error() {
     assert_eq!(s, "abc");
 }
 
-#[cfg(disabled)] // because it timed out after 2h
+#[cfg(disabled)] // CBMC consumes more than 10 GB
 #[kani::proof]
 #[kani::unwind(2)]
 async fn to_string_does_not_truncate_on_io_error() {
@@ -62,7 +62,7 @@ async fn to_string_does_not_truncate_on_io_error() {
     assert_eq!(s, "abc");
 }
 
-#[cfg(disabled)] // because it timed out after 2h
+#[cfg(disabled)] // CBMC consumes more than 10 GB
 #[kani::proof]
 #[kani::unwind(2)]
 async fn to_string_appends() {

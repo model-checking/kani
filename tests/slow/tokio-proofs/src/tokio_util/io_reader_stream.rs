@@ -43,7 +43,7 @@ impl AsyncRead for Reader {
     }
 }
 
-#[cfg(disabled)] // because it timed out after 2h
+#[cfg(disabled)] // CBMC takes more than 15 minutes
 #[kani::proof]
 #[kani::unwind(2)]
 async fn correct_behavior_on_errors() {

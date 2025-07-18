@@ -1556,7 +1556,8 @@ impl GotocCtx<'_> {
     }
 
     /// `simd_shuffle` constructs a new vector from the elements of two input
-    /// vectors, choosing values according to an input array of indexes.
+    /// vectors, choosing values according to an input array of indexes. See
+    /// https://doc.rust-lang.org/std/intrinsics/simd/fn.simd_shuffle.html
     ///
     /// We check that:
     ///  1. The return type length is equal to the expected length (`n`) of the
@@ -1571,13 +1572,6 @@ impl GotocCtx<'_> {
     /// TODO: Check that `indexes` contains constant values which are within the
     /// expected bounds. See
     /// <https://github.com/model-checking/kani/issues/1960> for more details.
-    ///
-    /// This code mimics CBMC's `shuffle_vector_exprt::lower()` here:
-    /// <https://github.com/diffblue/cbmc/blob/develop/src/ansi-c/c_expr.cpp>
-    ///
-    /// We can't use shuffle_vector_exprt because it's not understood by the CBMC backend,
-    /// it's immediately lowered by the C frontend.
-    /// Issue: <https://github.com/diffblue/cbmc/issues/6297>
     fn codegen_intrinsic_simd_shuffle(
         &mut self,
         mut fargs: Vec<Expr>,
@@ -1593,7 +1587,7 @@ impl GotocCtx<'_> {
         // [u32; n]: translated wrapped in a struct
         let indexes = fargs.remove(0);
 
-        let (in_type_len, vec_subtype) = self.simd_size_and_type(rust_arg_types[0]);
+        let (_, vec_subtype) = self.simd_size_and_type(rust_arg_types[0]);
         let (ret_type_len, ret_type_subtype) = self.simd_size_and_type(rust_ret_type);
         if ret_type_len != n {
             let err_msg = format!(
@@ -1617,24 +1611,20 @@ impl GotocCtx<'_> {
         // An unsigned type here causes an invariant violation in CBMC.
         // Issue: https://github.com/diffblue/cbmc/issues/6298
         let st_rep = Type::ssize_t();
-        let n_rep = Expr::int_constant(in_type_len, st_rep.clone());
 
-        // P = indexes.expanded_map(v -> if v < N then vec1[v] else vec2[v-N])
         let elems = (0..n)
             .map(|i| {
                 let idx = Expr::int_constant(i, st_rep.clone());
                 // Must not use `indexes.index(i)` directly, because codegen wraps arrays in struct
-                let v = self.codegen_idx_array(indexes.clone(), idx).cast_to(st_rep.clone());
-                let cond = v.clone().lt(n_rep.clone());
-                let t = vec1.clone().index(v.clone());
-                let e = vec2.clone().index(v.sub(n_rep.clone()));
-                cond.ternary(t, e)
+                self.codegen_idx_array(indexes.clone(), idx).cast_to(st_rep.clone())
             })
             .collect();
         self.tcx.dcx().abort_if_errors();
         let cbmc_ret_ty = self.codegen_ty_stable(rust_ret_type);
         let loc = self.codegen_span_stable(span);
-        self.codegen_expr_to_place_stable(p, Expr::vector_expr(cbmc_ret_ty, elems), loc)
+        let shuffle_vector = Expr::shuffle_vector(vec1, vec2, elems);
+        assert_eq!(*shuffle_vector.typ(), cbmc_ret_ty);
+        self.codegen_expr_to_place_stable(p, shuffle_vector, loc)
     }
 
     /// A volatile load of a memory location:
@@ -1730,7 +1720,7 @@ impl GotocCtx<'_> {
 
         // Check that computing `count` in bytes would not overflow
         let (count_bytes, overflow_check) = self.count_in_bytes(
-            count,
+            count.clone(),
             pointee_type_stable(dst_typ).unwrap(),
             Type::size_t(),
             "write_bytes",
@@ -1738,7 +1728,12 @@ impl GotocCtx<'_> {
         );
 
         let memset_call = BuiltinFn::Memset.call(vec![dst, val, count_bytes], loc);
-        Stmt::block(vec![align_check, overflow_check, memset_call.as_stmt(loc)], loc)
+        Stmt::if_then_else(
+            count.clone().gt(Expr::int_constant(0, count.typ().clone())),
+            Stmt::block(vec![align_check, overflow_check, memset_call.as_stmt(loc)], loc),
+            None,
+            loc,
+        )
     }
 
     /// Computes (multiplies) the equivalent of a memory-related number (e.g., an offset) in bytes.

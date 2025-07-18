@@ -12,6 +12,7 @@ use std::ptr;
 use std::ptr::slice_from_raw_parts;
 
 #[kani::proof]
+#[kani::solver(z3)]
 fn main() {
     let mut i = 0;
     let a: [u8; 3] = kani::any();

@@ -14,6 +14,14 @@ brew update
 brew install python@3 || true
 brew link --overwrite python@3
 
+# Install SMT solvers being used in regression tests
+brew install z3
+ARCH=$(uname -m)
+curl -L --remote-name https://github.com/cvc5/cvc5/releases/download/cvc5-1.3.0/cvc5-macOS-${ARCH}-static.zip
+sudo unzip -o -j -d /usr/local/bin cvc5-macOS-${ARCH}-static.zip cvc5-macOS-${ARCH}-static/bin/cvc5
+rm cvc5-macOS-${ARCH}-static.zip
+cvc5 --version
+
 # Get the directory containing this script
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
