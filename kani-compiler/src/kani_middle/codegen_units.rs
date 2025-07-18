@@ -339,20 +339,19 @@ fn get_all_manual_harnesses(
 /// in `kani-driver/src/metadata.rs` to ensure the filter is consistent and thus codegen is always done for the subset of harnesses we want
 /// to analyze.
 fn determine_targets(
-    harnesses: HashMap<Harness, HarnessMetadata>,
+    all_harnesses: HashMap<Harness, HarnessMetadata>,
     harness_filters: &[String],
     exact_filter: bool,
 ) -> HashMap<Harness, HarnessMetadata> {
-    // If there are no filters, nothing to do!
     if harness_filters.is_empty() {
-        return harnesses;
+        return all_harnesses;
     }
 
     // If there are filters, only keep around harnesses that satisfy them.
-    let mut new_harnesses = harnesses.clone();
+    let mut new_harnesses = all_harnesses.clone();
     let valid_harnesses = find_proof_harnesses(
         &BTreeSet::from_iter(harness_filters.iter()),
-        harnesses.values(),
+        all_harnesses.values(),
         exact_filter,
     );
 
