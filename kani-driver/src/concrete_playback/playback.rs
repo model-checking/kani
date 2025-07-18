@@ -5,10 +5,10 @@
 
 use crate::args::common::Verbosity;
 use crate::args::playback_args::{CargoPlaybackArgs, KaniPlaybackArgs, MessageFormat};
-use crate::call_cargo::args::{CargoArg, CommandWrapper, RustcArg};
 use crate::call_cargo::cargo_config_args;
 use crate::call_single_file::{LibConfig, base_rustc_flags};
 use crate::session::{InstallType, lib_playback_folder, setup_cargo_command};
+use crate::util::args::{CargoArg, CommandWrapper, PassTo, RustcArg};
 use crate::{session, util};
 use anyhow::Result;
 use std::ops::Deref;
@@ -84,7 +84,7 @@ fn build_test(install: &InstallType, args: &KaniPlaybackArgs) -> Result<PathBuf>
     }
 
     let mut cmd = Command::new(install.kani_compiler()?);
-    cmd.pass_rustc_args(&rustc_args, crate::call_cargo::args::PassTo::OnlyLocalCrate);
+    cmd.pass_rustc_args(&rustc_args, PassTo::OnlyLocalCrate);
 
     session::run_terminal(&args.playback.common_opts, cmd)?;
 
@@ -125,7 +125,7 @@ fn cargo_test(args: CargoPlaybackArgs) -> Result<()> {
     // Arguments that will only be passed to the target package.
     cmd.pass_cargo_args(&cargo_args)
         .env("RUSTC", &install.kani_compiler()?)
-        .pass_rustc_args(&rustc_args, crate::call_cargo::args::PassTo::AllDependencies)
+        .pass_rustc_args(&rustc_args, PassTo::AllCrates)
         .env("CARGO_TERM_PROGRESS_WHEN", "never");
 
     session::run_terminal(&args.playback.common_opts, cmd)?;

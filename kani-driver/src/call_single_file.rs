@@ -6,8 +6,8 @@ use kani_metadata::UnstableFeature;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::call_cargo::args::{CommandWrapper, KaniArg, RustcArg};
 use crate::session::{KaniSession, lib_folder};
+use crate::util::args::{CommandWrapper, KaniArg, PassTo, RustcArg};
 
 pub struct LibConfig {
     args: Vec<RustcArg>,
@@ -80,8 +80,8 @@ impl KaniSession {
         // rustc ones.
         let mut cmd = Command::new(&self.kani_compiler);
 
-        cmd.pass_kani_args(&kani_args, crate::call_cargo::args::PassTo::OnlyLocalCrate)
-            .pass_rustc_args(&rustc_args, crate::call_cargo::args::PassTo::OnlyLocalCrate);
+        cmd.pass_kani_args(&kani_args, PassTo::OnlyLocalCrate)
+            .pass_rustc_args(&rustc_args, PassTo::OnlyLocalCrate);
 
         // This is only required for stable but is a no-op for nightly channels
         cmd.env("RUSTC_BOOTSTRAP", "1");

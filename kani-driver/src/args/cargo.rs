@@ -3,7 +3,7 @@
 //! Module that define parsers that mimic Cargo options.
 
 use crate::args::ValidateArgs;
-use crate::call_cargo::args::CargoArg;
+use crate::util::args::CargoArg;
 use clap::error::Error;
 use std::path::PathBuf;
 
