@@ -9,7 +9,7 @@ use crate::session::{
     setup_cargo_command_inner,
 };
 use crate::util;
-use crate::util::args::{CargoArg, CommandWrapper as _, KaniArg, PassTo, to_rustc_arg};
+use crate::util::args::{CargoArg, CommandWrapper as _, KaniArg, PassTo, encode_as_rustc_arg};
 use anyhow::{Context, Result, bail};
 use cargo_metadata::diagnostic::{Diagnostic, DiagnosticLevel};
 use cargo_metadata::{
@@ -81,11 +81,13 @@ crate-type = ["lib"]
         // In theory, these could be passed just to the local crate rather than all crates,
         // but the `cargo build` command we use for building `std` doesn't allow you to pass `rustc`
         // arguments, so we have to pass them through the environment variable instead.
-        rustc_args.push(to_rustc_arg(&self.kani_compiler_local_flags()));
+        rustc_args.push(encode_as_rustc_arg(&self.kani_compiler_local_flags()));
 
         // Ignore global assembly, since `compiler_builtins` has some.
-        rustc_args
-            .push(to_rustc_arg(&[KaniArg::from("--ignore-global-asm"), self.reachability_arg()]));
+        rustc_args.push(encode_as_rustc_arg(&[
+            KaniArg::from("--ignore-global-asm"),
+            self.reachability_arg(),
+        ]));
 
         let mut cargo_args: Vec<CargoArg> = vec!["build".into()];
         cargo_args.append(&mut cargo_config_args());
@@ -148,7 +150,7 @@ crate-type = ["lib"]
 
         let lib_path = lib_folder().unwrap();
         let mut rustc_args = self.kani_rustc_flags(LibConfig::new(lib_path));
-        rustc_args.push(to_rustc_arg(&self.kani_compiler_dependency_flags()));
+        rustc_args.push(encode_as_rustc_arg(&self.kani_compiler_dependency_flags()));
 
         let mut cargo_args: Vec<CargoArg> = vec!["rustc".into()];
         if let Some(path) = &self.args.cargo.manifest_path {
@@ -217,7 +219,7 @@ crate-type = ["lib"]
                     .arg("--") // Add this delimiter so we start passing args to rustc and not Cargo
                     .env("RUSTC", &self.kani_compiler)
                     .pass_rustc_args(&rustc_args, PassTo::AllCrates)
-                    .pass_rustc_arg(to_rustc_arg(&kani_pkg_args), PassTo::OnlyLocalCrate)
+                    .pass_rustc_arg(encode_as_rustc_arg(&kani_pkg_args), PassTo::OnlyLocalCrate)
                     // This is only required for stable but is a no-op for nightly channels
                     .env("RUSTC_BOOTSTRAP", "1")
                     .env("CARGO_TERM_PROGRESS_WHEN", "never");

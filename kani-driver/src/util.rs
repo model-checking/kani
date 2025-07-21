@@ -165,10 +165,15 @@ pub(crate) mod args {
     /// reachability checks will force recompilation if they were disabled in previous build.
     /// For more details on this caching mechanism, see the
     /// [fingerprint documentation](https://github.com/rust-lang/cargo/blob/82c3bb79e3a19a5164e33819ef81bfc2c984bc56/src/cargo/core/compiler/fingerprint/mod.rs)
-    pub fn to_rustc_arg(kani_args: &[KaniArg]) -> RustcArg {
+    pub fn encode_as_rustc_arg<'a>(kani_args: impl IntoIterator<Item = &'a KaniArg>) -> RustcArg {
         format!(
             r#"-Cllvm-args={}"#,
-            kani_args.iter().map(KaniArg::as_inner).cloned().collect::<Vec<String>>().join(" ")
+            kani_args
+                .into_iter()
+                .map(KaniArg::as_inner)
+                .cloned()
+                .collect::<Vec<String>>()
+                .join(" ")
         )
         .into()
     }
