@@ -9,11 +9,14 @@
 
 ## Summary
 
-It can often be useful to subdivide an expensive proof harness so that different parts of the input space are verified separately. Adding the built-in ability to partition a proof harness into different pieces (that each make differing assumptions about their inputs) could reduce the cost of expensive proofs, while allowing us to automatically check that the partitions cover the entire input space and, thus, will not affect soundness.
+It can often be useful to subdivide an expensive proof harness so that different parts of the input space are verified separately.
+Adding the built-in ability to partition a proof harness into different pieces (that each make differing assumptions about their inputs) could reduce the cost of expensive proofs, while allowing us to automatically check that the partitions cover the entire input space and, thus, will not affect soundness.
 
 ## User Impact
 
-Imagine that you have a function to verify like the following (based on the example from [#3006](https://github.com/model-checking/kani/issues/3006)). Since there are two tricky to analyze function calls, but only one will ever be called on a given input, you might want to verify all inputs that will take the first branch separately from those that will take the second. This way, each solve would be smaller in isolation, and you'd be able to take advantage of CBMC's internal parallelism by running both proofs at once.
+Imagine that you have a function to verify like the following (based on the example from [#3006](https://github.com/model-checking/kani/issues/3006)).
+Since there are two tricky to analyze function calls, but only one will ever be called on a given input, you might want to verify all inputs that will take the first branch separately from those that will take the second.
+This way, each solve would be smaller in isolation, and you'd be able to take advantage of CBMC's internal parallelism by running both proofs at once.
 
 ```rust
 pub fn target_fn(input: i32) -> isize {
@@ -47,13 +50,15 @@ pub fn second_branch_harness() {
 }
 ```
 
-However, this can affect soundess, as there's no guarantee that your partitions will fully span the space of possible inputs. The only way to determine that a set of proofs like the one above are incorrect (as it forgets to account for when `i == 0`) is by manual inspection, which gets infeasible for proofs with complex types or partition rules.
+However, this can affect soundess, as there's no guarantee that your partitions will fully span the space of possible inputs.
+The only way to determine that a set of proofs like the one above are incorrect (as it forgets to account for when `i == 0`) is by manual inspection, which gets infeasible for proofs with complex types or partition rules.
 
 It would be helpful if Kani provided this as a built-in feature that could reason about given partition conditions to provide soundess guarantees.
 
 ## User Experience
 
-The current thought is for users to interact with this using a new `#[kani::partitioned_proof()]` attribute where they provide the conditions by which to partition the input space of their proof. Each condition must be of type `fn(&T) -> bool` (where `T` is the input type to the proof body that implements `kani::Arbitrary`) and is used to filter which values are part of that partition.
+The current thought is for users to interact with this using a new `#[kani::partitioned_proof()]` attribute where they provide the conditions by which to partition the input space of their proof.
+Each condition must be of type `fn(&T) -> bool` (where `T` is the input type to the proof body that implements `kani::Arbitrary`) and is used to filter which values are part of that partition.
 
 For example, the above would become
 
@@ -64,7 +69,8 @@ pub fn partitioned_harness(input: i32) {
 }
 ```
 
-And Kani would automatically handle checking the partition conditions for soundess and generating the partitioned proofs. Overlaps would be allowed as they don't affect soundess and may be useful in certain cases (see [below](#2-checking-for-overlapping-partitions) for more discussion).
+And Kani would automatically handle checking the partition conditions for soundess and generating the partitioned proofs.
+Overlaps would be allowed as they don't affect soundess and may be useful in certain cases (see [below](#2-checking-for-overlapping-partitions) for more discussion).
 
 Generally, use of this feature would look like the following (where `T` is an arbitrary input type).
 
@@ -79,7 +85,12 @@ pub fn harness(input: T) {
 
 A prototype of this design has been implemented locally [here](https://github.com/AlexanderPortland/kani/tree/harness-partitioning).
 
-It introduces the `#[kani::partitioned_proof()]` attribute as variant of `#[kani::proof]` that takes in a set of closures representing the partition bounds. With those bounds, it keeps the main harness function the same, but does not annotate it with the `#kani_attributes` that would typically mark it as an entrypoint for Kani's verification. Instead, for each partition, it will generate a new function definition for that portion of the proof. These functions are just wrappers that constrain an arbitrary value to be within the partition and then call the real harness that will contain the meat of the proof. Their names are derived from a hash of their condition closure for uniqueness (but see [below](#open-questions) for discussion on how to improve this). So, for the running example above, the call to `kani::partitioned_proof` generates:
+It introduces the `#[kani::partitioned_proof()]` attribute as variant of `#[kani::proof]` that takes in a set of closures representing the partition bounds.
+With those bounds, it keeps the main harness function the same, but does not annotate it with the `#kani_attributes` that would typically mark it as an entrypoint for Kani's verification.
+Instead, for each partition, it will generate a new function definition for that portion of the proof.
+These functions are just wrappers that constrain an arbitrary value to be within the partition and then call the real harness that will contain the meat of the proof.
+Their names are derived from a hash of their condition closure for uniqueness (but see [below](#open-questions) for discussion on how to improve this).
+So, for the running example above, the call to `kani::partitioned_proof` generates:
 
 ```rust
 #[kani::proof]
@@ -97,7 +108,8 @@ pub fn partitioned_harness_2423413845937420568() {
 }
 ```
 
-It will then also inject a new proof that has an assert to ensure that all possible values fall into one of the given partitions. In this case, it will fail to be verified (as `t` can be 0), telling the user that their partitions are not complete and could affect proof soundness.
+It will then also inject a new proof that has an assert to ensure that all possible values fall into one of the given partitions.
+In this case, it will fail to be verified (as `t` can be 0), telling the user that their partitions are not complete and could affect proof soundness.
 
 
 ```rust
@@ -111,20 +123,26 @@ pub fn partitioned_harness_missing_full_coverage() {
 ```
 
 ### Corner cases
-1. This current implementation could run into issues if the main proof harness & partition condition closures both don't specify concrete types (e.g. by using generics), as the compiler may not be able to determine what `T` to use `kani::any()` on. This should be fixed by explicitly enforcing the current implicit assumption that the input type is a concrete type.
-2. This implementation doesn't play nicely if your proof is intentionally only covers a subspace of inputs (e.g. if you're trying to partition a proof that initially used `kani::any_where(...)`). (see the open questions [below](#open-questions) for thoughts on how to fix this)
+1. This current implementation could run into issues if the main proof harness & partition condition closures both don't specify concrete types (e.g. by using generics), as the compiler may not be able to determine what `T` to use `kani::any()` on.
+This should be fixed by explicitly enforcing the current implicit assumption that the input type is a concrete type.
+
+2. This implementation doesn't play nicely if your proof is intentionally only covers a subspace of inputs (e.g. if you're trying to partition a proof that initially used `kani::any_where(...)`).
+(see the open questions [below](#open-questions) for thoughts on how to fix this)
 
 ## Rationale and alternatives
 
 ### 1. Alternative APIs
-The `kani::partition([i > 0, i < 0], || target_fn(input))` syntax suggested ([here](https://github.com/model-checking/kani/issues/3006#issue-2123964835)) in the initial issue is clear, but runs into some implementation issues irregardless of whether it's a function call or macro. The goal of this feature is to generate multiple proof harnesses from the single call to `partition`, and this is very difficult to do that from a macro that's already inside a function (as your codegen is limited to within that function's scope).
+The `kani::partition([i > 0, i < 0], || target_fn(input))` syntax suggested ([here](https://github.com/model-checking/kani/issues/3006#issue-2123964835)) in the initial issue is clear, but runs into some implementation issues irregardless of whether it's a function call or macro.
+The goal of this feature is to generate multiple proof harnesses from the single call to `partition`, and this is very difficult to do that from a macro that's already inside a function (as your codegen is limited to within that function's scope).
 
 The design described above is simpler as it is an attribute macro and, thus, has access to the program's global scope, allowing it to keep the proof body the same and simply generate additional function definition wrappers for each partitioned proof.
 
-This was also initially implemented as an addition to the existing `#[kani::proof]` attribute, where users would specify partition conditions with `kani::proof(partitions = [|a| a % 2 == 9, ...])`. However, since these kinds of proofs require that the annotated function take an input, while `#[kani::proof]` functions typically don't, it seemed more consistent to introduce a separate attribute macro.
+This was also initially implemented as an addition to the existing `#[kani::proof]` attribute, where users would specify partition conditions with `kani::proof(partitions = [|a| a % 2 == 9, ...])`.
+However, since these kinds of proofs require that the annotated function take an input, while `#[kani::proof]` functions typically don't, it seemed more consistent to introduce a separate attribute macro.
 
 ### 2. Checking for overlapping partitions
-As a corellary to checking that partitions span the space of all possible inputs, I had initially considered giving a warning if partitions are overlapping as overlap could indicate ill-defined bounds. However, I decided against this, as overlapping partitions may be useful in certain cases where the user wishes to purposefully oversimplify their partition conditions in a way that will cause overlap but make them easier to express.
+As a corellary to checking that partitions span the space of all possible inputs, I had initially considered giving a warning if partitions are overlapping as overlap could indicate ill-defined bounds.
+However, I decided against this, as overlapping partitions may be useful in certain cases where the user wishes to purposefully oversimplify their partition conditions in a way that will cause overlap but make them easier to express.
 
 ## Open questions
 
