@@ -88,6 +88,31 @@ pub fn info_operation(op: &str, msg: &str) {
     println!("{op_fmt} {msg_fmt}")
 }
 
+/// # Kani Argument Types
+///
+/// We have three different kinds of arguments we use to influence our compilation process.
+/// This module provides specific types, conversions and methods for each to codify the differences betweeen them
+/// and how they can be used.
+///
+/// [`KaniArg`](args::KaniArg) -- First, there are Kani-specific arguments that the `kani-compiler` uses to direct its codegen.
+/// (See the [`Arguments`] struct in `kani-compiler/src/args.rs` for how they are parsed.)
+///
+/// [`RustcArg`](args::RustcArg) -- Before codegen, the Kani compiler invokes `rustc` to compile Rust source to MIR,
+/// and we pass arguments to influence that compilation.
+/// See [`LibConfig`](crate::call_single_file::LibConfig) for how this is used in a typical Kani invocation.
+///
+/// [`CargoArg`](args::CargoArg) -- If we're calling Kani through `cargo kani`, we also want to pass arguments to Cargo itself.
+///
+///
+/// ## Usage
+/// * `CargoArg`s can be passed directly to a `&mut Command` using the `pass_cargo_args` method.
+/// * `RustcArg`s can also be passed directly to a `&mut Command` using the `pass_rustc_arg{s}` methods,
+///   with the added wrinkle that you have to specify whether they should be passed to all crates or just the local one.
+///   If passing to `AllCrates`, this uses an environment variable, meaning that it can only be called once for each Command.
+/// * Any `KaniArg`s must first be converted into a single `RustcArg` with the [`to_rustc_arg`](args::to_rustc_arg) function
+///   before being passed to commands the same way as other `RustcArg`s. We do this (rather than having a separate
+///   `pass_kani_args` function) because both kinds of arguments often have to share the same underlying `pass_rustc_args`
+///   call to ensure the environment variables for one doesn't get overwritten as mentioned above.
 pub(crate) mod args {
     use std::{
         ffi::{OsStr, OsString},
@@ -95,21 +120,15 @@ pub(crate) mod args {
     };
 
     #[derive(Clone, PartialEq)]
-    /// Kani-specific arguments passed to rustc and then used by `kani-compiler`.
-    /// This includes everything from the `Arguments` struct in `kani-compiler/src/args.rs`.
+    /// Kani-specific arguments passed to `rustc` and then used by `kani-compiler`.
     pub struct KaniArg(String);
 
     #[derive(Clone, PartialEq, Debug)]
-    /// Arguments passed to rustc.
-    /// Basically anything that gets listed when running `rustc --help`.
-    /// This includes options like `--extern` for specify extern crates, `-L` for adding to the lib
-    /// search path or `--emit mir` for emitting MIR.
+    /// Arguments passed to `rustc`.
     pub struct RustcArg(OsString);
 
     #[derive(Clone, PartialEq)]
     /// Arguments passed to Cargo.
-    /// Basically anything that gets listed when running `cargo --help`. This includes options like
-    /// all cargo subcommands, `--config`, `--target`, or any `-Z` unstable Cargo options.
     pub struct CargoArg(OsString);
 
     macro_rules! from_impl {
