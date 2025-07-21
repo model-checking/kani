@@ -99,7 +99,7 @@ pub(crate) mod args {
     /// This includes everything from the `Arguments` struct in `kani-compiler/src/args.rs`.
     pub struct KaniArg(String);
 
-    #[derive(Clone, PartialEq)]
+    #[derive(Clone, PartialEq, Debug)]
     /// Arguments passed to rustc.
     /// Basically anything that gets listed when running `rustc --help`.
     /// This includes options like `--extern` for specify extern crates, `-L` for adding to the lib
@@ -163,10 +163,11 @@ pub(crate) mod args {
         AllCrates,
     }
 
+    /// A wrapper trait that allows us to call these methods on a [Command].
     pub trait CommandWrapper {
         fn pass_cargo_args(&mut self, args: &[CargoArg]) -> &mut Self;
         fn pass_rustc_args(&mut self, args: &[RustcArg], to: PassTo) -> &mut Self;
-        fn pass_kani_args(&mut self, args: &[KaniArg], to: PassTo) -> &mut Self;
+        fn pass_rustc_arg(&mut self, args: RustcArg, to: PassTo) -> &mut Self;
     }
 
     impl CommandWrapper for Command {
@@ -175,31 +176,42 @@ pub(crate) mod args {
             self.args(args.iter().map(CargoArg::as_inner))
         }
 
+        fn pass_rustc_arg(&mut self, args: RustcArg, to: PassTo) -> &mut Self {
+            self.pass_rustc_args(&[args], to)
+        }
+
         /// Pass rustc arguments to the compiler for use in certain dependencies.
         fn pass_rustc_args(&mut self, args: &[RustcArg], to: PassTo) -> &mut Self {
             match to {
-                // Since we also want to recursively pass these args to all dependencies,
-                // use an environment variable that gets checked for each dependency.
-                // Use of CARGO_ENCODED_RUSTFLAGS instead of RUSTFLAGS is preferred. See
-                // https://doc.rust-lang.org/cargo/reference/environment-variables.html
-                PassTo::AllCrates => self.env(
-                    "CARGO_ENCODED_RUSTFLAGS",
-                    args.iter()
-                        .map(RustcArg::as_inner)
-                        .cloned()
-                        .collect::<Vec<OsString>>()
-                        .join(OsStr::new("\x1f")),
-                ),
                 // Since we just want to pass to the local crate, just add them as arguments to the command.
                 PassTo::OnlyLocalCrate => self.args(args.iter().map(RustcArg::as_inner)),
-            }
-        }
 
-        /// Pass Kani-specific arguments to the compiler for use in certain dependencies.
-        /// This will convert them to rustc args using the `--llvm-args` structure before
-        /// adding them to the command to ensure they're properly parsed by the Kani compiler.
-        fn pass_kani_args(&mut self, args: &[KaniArg], to: PassTo) -> &mut Self {
-            self.pass_rustc_args(&[to_rustc_arg(args)], to)
+                // Since we also want to recursively pass these args to all dependencies,
+                // use an environment variable that gets checked for each dependency.
+                PassTo::AllCrates => {
+                    // Use of CARGO_ENCODED_RUSTFLAGS instead of RUSTFLAGS is preferred. See
+                    // https://doc.rust-lang.org/cargo/reference/environment-variables.html
+                    let env_var = OsString::from("CARGO_ENCODED_RUSTFLAGS");
+
+                    // Ensure we wouldn't be overwriting an existing environment variable.
+                    let env_var_exists = self.get_envs().any(|(var, _)| var == env_var);
+                    assert!(
+                        !env_var_exists,
+                        "pass_rustc_args() uses an environment variable when called with `PassTo::AllCrates`, \
+                        so calling it multiple times in this way will overwrite all but the most recent call. \
+                        try combining the arguments you want to add and passing them to a single call instead."
+                    );
+
+                    self.env(
+                        "CARGO_ENCODED_RUSTFLAGS",
+                        args.iter()
+                            .map(RustcArg::as_inner)
+                            .cloned()
+                            .collect::<Vec<OsString>>()
+                            .join(OsStr::new("\x1f")),
+                    )
+                }
+            }
         }
     }
 }

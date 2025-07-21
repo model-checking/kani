@@ -77,7 +77,12 @@ crate-type = ["lib"]
     pub fn cargo_build_std(&self, std_path: &Path, krate_path: &Path) -> Result<Vec<Artifact>> {
         let lib_path = lib_no_core_folder().unwrap();
         let mut rustc_args = self.kani_rustc_flags(LibConfig::new_no_core(lib_path));
+
+        // In theory, these could be passed just to the local crate rather than all crates,
+        // but the `cargo build` command we use for building `std` doesn't allow you to pass `rustc`
+        // arguments, so we have to pass them through the environment variable instead.
         rustc_args.push(to_rustc_arg(&self.kani_compiler_local_flags()));
+
         // Ignore global assembly, since `compiler_builtins` has some.
         rustc_args
             .push(to_rustc_arg(&[KaniArg::from("--ignore-global-asm"), self.reachability_arg()]));
@@ -210,9 +215,9 @@ crate-type = ["lib"]
                     .args(vec!["-p", &package.id.to_string()])
                     .args(verification_target.to_args())
                     .arg("--") // Add this delimiter so we start passing args to rustc and not Cargo
-                    .pass_kani_args(&kani_pkg_args, PassTo::OnlyLocalCrate)
                     .env("RUSTC", &self.kani_compiler)
                     .pass_rustc_args(&rustc_args, PassTo::AllCrates)
+                    .pass_rustc_arg(to_rustc_arg(&kani_pkg_args), PassTo::OnlyLocalCrate)
                     // This is only required for stable but is a no-op for nightly channels
                     .env("RUSTC_BOOTSTRAP", "1")
                     .env("CARGO_TERM_PROGRESS_WHEN", "never");

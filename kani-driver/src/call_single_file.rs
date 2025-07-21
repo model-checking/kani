@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::session::{KaniSession, lib_folder};
-use crate::util::args::{CommandWrapper, KaniArg, PassTo, RustcArg};
+use crate::util::args::{CommandWrapper, KaniArg, PassTo, RustcArg, to_rustc_arg};
 
 pub struct LibConfig {
     args: Vec<RustcArg>,
@@ -80,7 +80,7 @@ impl KaniSession {
         // rustc ones.
         let mut cmd = Command::new(&self.kani_compiler);
 
-        cmd.pass_kani_args(&kani_args, PassTo::OnlyLocalCrate)
+        cmd.pass_rustc_arg(to_rustc_arg(&kani_args), PassTo::OnlyLocalCrate)
             .pass_rustc_args(&rustc_args, PassTo::OnlyLocalCrate);
 
         // This is only required for stable but is a no-op for nightly channels
