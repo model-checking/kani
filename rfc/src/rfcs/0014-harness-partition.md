@@ -15,8 +15,6 @@ Adding the built-in ability to partition a proof harness into different pieces (
 ## User Impact
 
 Imagine that you have a function to verify like the following (based on the example from [#3006](https://github.com/model-checking/kani/issues/3006)).
-Since there are two tricky to analyze function calls, but only one will ever be called on a given input, you might want to verify all inputs that will take the first branch separately from those that will take the second.
-This way, each solve would be smaller in isolation, and you'd be able to take advantage of CBMC's internal parallelism by running both proofs at once.
 
 ```rust
 pub fn target_fn(input: i32) -> isize {
@@ -34,7 +32,10 @@ pub fn proof_harness() {
 }
 ```
 
-The best way to currently do this would be to manually partition out these paths into two proof harnesses.
+Since there are two tricky to analyze function calls, but only one will ever be called on a given input, you might want to verify all values of `input` where `input > 0` that will take the first branch separately from those that will take the second.
+This way, each solve would be smaller in isolation, and you could use Kani's parallel proof runner to run both proofs at once.
+
+The best way to currently do this is by manually partitioning out these paths into two proof harnesses.
 
 ```rust
 #[kani::proof]
@@ -45,15 +46,17 @@ pub fn first_branch_harness() {
 
 #[kani::proof]
 pub fn second_branch_harness() {
-    let input = kani::any_where(|i: &i32| *i < 0i32); // This should've been i <= 0
+    let input = kani::any_where(|i: &i32| *i < 0i32); // ERROR: This should've been i <= 0
     assert!(target_fn(input) > 0)
 }
 ```
 
-However, this can affect soundess, as there's no guarantee that your partitions will fully span the space of possible inputs.
-The only way to determine that a set of proofs like the one above are incorrect (as it forgets to account for when `i == 0`) is by manual inspection, which gets infeasible for proofs with complex types or partition rules.
+However, this strategy:
+- **can affect soundness**--there's no guarantee that your partitions will fully span the space of possible inputs.
+The only way to determine that a set of proofs like the one above are incorrect (as it forgets to account for when `i == 0`) is by manual inspection, which gets infeasible for proofs with complex partition rules like those found in the [proofs for the standard library's unchecked multiplication](https://github.com/model-checking/verify-rust-std/blob/1c4ea17a99b9202f96608473083998b116bb6508/library/core/src/num/mod.rs#L1818-L1836).
+- **increases user burden**--instead of having to write and maintain a single proof, the user now has to handle a proof for each partition.
 
-It would be helpful if Kani provided this as a built-in feature that could reason about given partition conditions to provide soundess guarantees.
+Instead, Kani should provide a feature to specify partition conditions for a given harness, automatically checking that the partitioned harnesses cover the entire input space.
 
 ## User Experience
 
@@ -69,8 +72,8 @@ pub fn partitioned_harness(input: i32) {
 }
 ```
 
-And Kani would automatically handle checking the partition conditions for soundess and generating the partitioned proofs.
-Overlaps would be allowed as they don't affect soundess and may be useful in certain cases (see [below](#2-checking-for-overlapping-partitions) for more discussion).
+And Kani would automatically handle checking the partition conditions for soundness and generating the partitioned proofs.
+Overlaps would be allowed as they don't affect soundness and may be useful in certain cases (see [below](#2-checking-for-overlapping-partitions) for more discussion).
 
 Generally, use of this feature would look like the following (where `T` is an arbitrary input type).
 
@@ -150,7 +153,7 @@ However, I decided against this, as overlapping partitions may be useful in cert
 2. Can function names be generated more prettily while still remainging unique? (the current hashes are often opaque for users)
 3. Are there any additional correctness issues introduced by this approach?
 4. Is there a way to simplify the generated `..._full_coverage()` proof harness? The iteration seems to be instrumented by our code which adds additional checks.
-5. Is there a way to promote the fact that verification failed on the `..._full_coverage()` proof harness as an error that could affect soundess? If Kani's users tend to look into any failed checks, this may not be needed, but it may be possible for a single failure to get lost in big projects.
+5. Is there a way to promote the fact that verification failed on the `..._full_coverage()` proof harness as an error that could affect soundness? If Kani's users tend to look into any failed checks, this may not be needed, but it may be possible for a single failure to get lost in big projects.
 6. Would it be desirable to add an optional argument that specifies which subset of inputs you're trying to verify with the proof as a whole (if not provided just the whole input space)?
 
 [^unstable_feature]: This unique ident should be used to enable features proposed in the RFC using `-Z <ident>` until the feature has been stabilized.
