@@ -9,8 +9,8 @@ use crate::kani_queries::QueryDb;
 use fxhash::FxHashMap;
 use rustc_hir::{def::DefKind, def_id::DefId as InternalDefId, def_id::LOCAL_CRATE};
 use rustc_middle::ty::TyCtxt;
+use stable_mir::mir::TerminatorKind;
 use stable_mir::mir::mono::{Instance, MonoItem};
-use stable_mir::mir::{Mutability, TerminatorKind};
 use stable_mir::rustc_internal;
 use stable_mir::ty::{
     AdtDef, AdtKind, FnDef, GenericArgKind, GenericArgs, RigidTy, Span as SpanStable, Ty, TyKind,
@@ -192,7 +192,7 @@ fn implements_arbitrary(
         return false;
     }
 
-    if let TyKind::RigidTy(RigidTy::Ref(_, inner_ty, Mutability::Not)) = ty.kind() {
+    if let TyKind::RigidTy(RigidTy::Ref(_, inner_ty, _)) = ty.kind() {
         if let TyKind::RigidTy(RigidTy::Adt(..)) = inner_ty.kind() {
             return can_derive_arbitrary(inner_ty, kani_any_def, ty_arbitrary_cache);
         } else {
@@ -221,8 +221,8 @@ fn implements_arbitrary(
     false
 }
 
-/// Is `ty` a struct or enum whose fields/variants implement Arbitrary, or a non-mutable reference
-/// to such a type?
+/// Is `ty` a struct or enum whose fields/variants implement Arbitrary, or a reference to such a
+/// type?
 fn can_derive_arbitrary(
     ty: Ty,
     kani_any_def: FnDef,
@@ -266,7 +266,7 @@ fn can_derive_arbitrary(
             AdtKind::Struct => variants_can_derive(def, args),
             AdtKind::Union => false,
         }
-    } else if let TyKind::RigidTy(RigidTy::Ref(_, inner_ty, Mutability::Not)) = ty.kind() {
+    } else if let TyKind::RigidTy(RigidTy::Ref(_, inner_ty, _)) = ty.kind() {
         can_derive_arbitrary(inner_ty, kani_any_def, ty_arbitrary_cache)
     } else {
         false

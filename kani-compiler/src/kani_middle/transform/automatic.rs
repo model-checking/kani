@@ -20,8 +20,8 @@ use rustc_smir::IndexedVal;
 use stable_mir::CrateDef;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{
-    AggregateKind, BasicBlockIdx, Body, BorrowKind, Local, Mutability, Operand, Place, Rvalue,
-    SwitchTargets, Terminator, TerminatorKind,
+    AggregateKind, BasicBlockIdx, Body, BorrowKind, Local, MutBorrowKind, Mutability, Operand,
+    Place, Rvalue, SwitchTargets, Terminator, TerminatorKind,
 };
 use stable_mir::ty::{
     AdtDef, AdtKind, FnDef, GenericArgKind, GenericArgs, RigidTy, Ty, TyKind, UintTy, VariantDef,
@@ -135,13 +135,13 @@ impl AutomaticArbitraryPass {
         ty: Ty,
         source: &mut SourceInstruction,
     ) -> Local {
-        if let TyKind::RigidTy(RigidTy::Ref(region, inner_ty, Mutability::Not)) = ty.kind() {
+        if let TyKind::RigidTy(RigidTy::Ref(region, inner_ty, mutability)) = ty.kind() {
             let kani_any_inst = Instance::resolve(
                 self.kani_any,
                 &GenericArgs(vec![GenericArgKind::Type(inner_ty)]),
             )
             .unwrap_or_else(|_| panic!("expected a ty that implements Arbitrary, got {ty}"));
-            let inner_lcl = body.new_local(inner_ty, source.span(body.blocks()), Mutability::Not);
+            let inner_lcl = body.new_local(inner_ty, source.span(body.blocks()), mutability);
             body.insert_call(
                 &kani_any_inst,
                 source,
@@ -150,9 +150,14 @@ impl AutomaticArbitraryPass {
                 Place::from(inner_lcl),
             );
             let ref_lcl = body.new_local(ty, source.span(body.blocks()), Mutability::Not);
+            let borrow_kind = if mutability == Mutability::Not {
+                BorrowKind::Shared
+            } else {
+                BorrowKind::Mut { kind: MutBorrowKind::Default }
+            };
             body.assign_to(
                 Place::from(ref_lcl),
-                Rvalue::Ref(region, BorrowKind::Shared, Place::from(inner_lcl)),
+                Rvalue::Ref(region, borrow_kind, Place::from(inner_lcl)),
                 source,
                 InsertPosition::Before,
             );
@@ -370,13 +375,13 @@ impl TransformPass for AutomaticHarnessPass {
             .arg_locals()
             .iter()
             .map(|local_decl| {
-                if let TyKind::RigidTy(RigidTy::Ref(region, inner_ty, Mutability::Not)) =
+                if let TyKind::RigidTy(RigidTy::Ref(region, inner_ty, mutability)) =
                     local_decl.ty.kind()
                 {
                     let any_local = harness_body.new_local(
                         inner_ty,
                         source.span(harness_body.blocks()),
-                        Mutability::Not,
+                        mutability,
                     );
                     let kani_any_inst = Instance::resolve(
                         self.kani_any,
@@ -395,9 +400,14 @@ impl TransformPass for AutomaticHarnessPass {
                         source.span(harness_body.blocks()),
                         local_decl.mutability,
                     );
+                    let borrow_kind = if mutability == Mutability::Not {
+                        BorrowKind::Shared
+                    } else {
+                        BorrowKind::Mut { kind: MutBorrowKind::Default }
+                    };
                     harness_body.assign_to(
                         Place::from(arg_local),
-                        Rvalue::Ref(region, BorrowKind::Shared, Place::from(any_local)),
+                        Rvalue::Ref(region, borrow_kind, Place::from(any_local)),
                         &mut source,
                         InsertPosition::Before,
                     );

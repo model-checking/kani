@@ -2,3 +2,4 @@
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 script: run.sh
 expected: mutable.expected
+exit_code: 1

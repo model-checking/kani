@@ -43,7 +43,7 @@ Kani did not generate automatic harnesses for 3 function(s).
 |------------------------------+--------------------------------------------+------------------------------------------------------------------------------------------------------------------------|
 | autoderive_arbitrary_structs | should_not_derive::no_structs_eligible     | Missing Arbitrary implementation for argument(s) val: should_not_derive::StrStruct, val2: should_not_derive::PtrStruct |
 |------------------------------+--------------------------------------------+------------------------------------------------------------------------------------------------------------------------|
-| autoderive_arbitrary_structs | should_not_derive::some_arguments_support  | Missing Arbitrary implementation for argument(s) unsupported: should_not_derive::RefStruct                             |
+| autoderive_arbitrary_structs | should_not_derive::some_arguments_support  | Missing Arbitrary implementation for argument(s) unsupported: should_not_derive::PtrStruct                             |
 +------------------------------+--------------------------------------------+------------------------------------------------------------------------------------------------------------------------+
 
 should_derive::alignment_pass\

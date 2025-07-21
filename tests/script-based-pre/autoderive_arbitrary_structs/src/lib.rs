@@ -122,7 +122,6 @@ mod should_not_derive {
 
     struct StrStruct(&'static str);
     struct PtrStruct(*const i8);
-    struct RefStruct(&'static mut i32);
 
     pub struct UnsupportedGenericField<T> {
         outer: T,
@@ -133,7 +132,7 @@ mod should_not_derive {
     fn some_arguments_support(
         supported: NamedMultipleStruct,
         supported_2: MultipleGenerics<char, i8>,
-        unsupported: RefStruct,
+        unsupported: PtrStruct,
     ) {
     }
     fn generic_unsupported_arg(unsupported: UnsupportedGenericField<char>) {}
