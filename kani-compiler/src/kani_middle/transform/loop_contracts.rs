@@ -661,6 +661,9 @@ impl LoopContractPass {
                 let TyKind::RigidTy(RigidTy::Closure(_, genarg)) = arg_ty.kind() else {
                     return false;
                 };
+                // We look for the args' types of the kani_register_loop_contract function
+                // They are always stored in a tuple, which is next to the FnPtr generic args of kani_registered_loop_contract fn
+                // All the generic args before the FnPtr are from the outer function
                 let mut fnptrpos = 0;
                 for (i, arg) in genarg.0.iter().enumerate() {
                     if let GenericArgKind::Type(arg_ty) = arg
