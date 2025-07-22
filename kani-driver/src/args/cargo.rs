@@ -3,8 +3,8 @@
 //! Module that define parsers that mimic Cargo options.
 
 use crate::args::ValidateArgs;
+use crate::util::args::CargoArg;
 use clap::error::Error;
-use std::ffi::OsString;
 use std::path::PathBuf;
 
 /// Arguments that Kani pass down into Cargo essentially uninterpreted.
@@ -61,8 +61,8 @@ impl CargoCommonArgs {
 
     /// Convert the arguments back to a format that cargo can understand.
     /// Note that the `exclude` option requires special processing and it's not included here.
-    pub fn to_cargo_args(&self) -> Vec<OsString> {
-        let mut cargo_args: Vec<OsString> = vec![];
+    pub fn to_cargo_args(&self) -> Vec<CargoArg> {
+        let mut cargo_args: Vec<CargoArg> = vec![];
         if self.all_features {
             cargo_args.push("--all-features".into());
         }
@@ -117,12 +117,12 @@ pub struct CargoTargetArgs {
 
 impl CargoTargetArgs {
     /// Convert the arguments back to a format that cargo can understand.
-    pub fn to_cargo_args(&self) -> Vec<OsString> {
+    pub fn to_cargo_args(&self) -> Vec<CargoArg> {
         let mut cargo_args = self
             .bin
             .iter()
             .map(|binary| format!("--bin={binary}").into())
-            .collect::<Vec<OsString>>();
+            .collect::<Vec<CargoArg>>();
 
         if self.bins {
             cargo_args.push("--bins".into());
@@ -168,7 +168,7 @@ pub struct CargoTestArgs {
 
 impl CargoTestArgs {
     /// Convert the arguments back to a format that cargo can understand.
-    pub fn to_cargo_args(&self) -> Vec<OsString> {
+    pub fn to_cargo_args(&self) -> Vec<CargoArg> {
         let mut cargo_args = self.common.to_cargo_args();
         cargo_args.append(&mut self.target.to_cargo_args());
         cargo_args
