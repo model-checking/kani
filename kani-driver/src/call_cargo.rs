@@ -415,14 +415,14 @@ crate-type = ["lib"]
 
     /// Extract the packages that should be verified.
     ///
-    /// The result is built following these rules:
+    /// The result is built following these rules (mimicking cargo, see
+    /// https://github.com/rust-lang/cargo/blob/master/src/cargo/core/workspace.rs):
     /// - If `--package <pkg>` is given, return the list of packages selected.
     /// - If `--exclude <pkg>` is given, return the list of packages not excluded.
     /// - If `--workspace` is given, return the list of workspace members.
-    /// - If no argument provided, return the root package if there's one or all members.
-    ///   - I.e.: Do whatever cargo does when there's no `default_members`.
-    ///   - This is because `default_members` is not available in cargo metadata.
-    ///     See <https://github.com/rust-lang/cargo/issues/8033>.
+    /// - Else obtain the set of packages from cargo's default_workspace_members (i.e., if
+    ///   `default-members` is specified in Cargo.toml, use that list; else if a root package is
+    ///   specified use that; else use all members).
     ///
     /// In addition, if either `--package <pkg>` or `--exclude <pkg>` is given,
     /// validate that `<pkg>` is a package name in the workspace, or return an error
@@ -462,11 +462,10 @@ crate-type = ["lib"]
                 .into_iter()
                 .filter(|pkg| !pkg_ids.contains_key(&pkg.id))
                 .collect()
+        } else if args.cargo.workspace {
+            metadata.workspace_packages()
         } else {
-            match (args.cargo.workspace, metadata.root_package()) {
-                (true, _) | (_, None) => metadata.workspace_packages(),
-                (_, Some(root_pkg)) => vec![root_pkg],
-            }
+            metadata.workspace_default_packages()
         };
         trace!(?packages, "packages_to_verify result");
         Ok(packages)

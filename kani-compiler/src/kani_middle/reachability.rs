@@ -529,6 +529,7 @@ fn collect_alloc_items(tcx: TyCtxt, alloc_id: AllocId) -> Vec<MonoItem> {
             let vtable_id = vtable_alloc.vtable_allocation().unwrap();
             items = collect_alloc_items(tcx, vtable_id);
         }
+        GlobalAlloc::TypeId { ty: _ } => {}
     };
     items
 }

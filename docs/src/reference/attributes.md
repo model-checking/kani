@@ -206,6 +206,9 @@ At present, `<solver>` can be one of:
  - `minisat`: [MiniSat](http://minisat.se/).
  - `cadical` (default): [CaDiCaL](https://github.com/arminbiere/cadical).
  - `kissat`: [kissat](https://github.com/arminbiere/kissat).
+ - `z3`: [Z3](https://github.com/Z3Prover/z3/).
+ - `bitwuzla`: [Bitwuzla](https://github.com/bitwuzla/bitwuzla).
+ - `cvc5`: [cvc5](https://github.com/cvc5/cvc5).
  - `bin="<SAT_SOLVER_BINARY>"`: A custom solver binary, `"<SAT_SOLVER_BINARY>"`, that must be in path.
 
 ### Example

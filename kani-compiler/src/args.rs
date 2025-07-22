@@ -52,6 +52,16 @@ pub struct Arguments {
     /// Option name used to use json pretty-print for output files.
     #[clap(long = "pretty-json-files")]
     pub output_pretty_json: bool,
+    /// When specified, the harness filter will only match the exact fully qualified name of a harness.
+    // (Passed here directly from [CargoKaniArgs] in `args_toml.rs`)
+    #[arg(long, requires("harnesses"))]
+    pub exact: bool,
+    /// If specified, only run harnesses that match this filter. This option can be provided
+    /// multiple times, which will run all tests matching any of the filters.
+    /// If used with --exact, the harness filter will only match the exact fully qualified name of a harness.
+    // (Passed here directly from [CargoKaniArgs] in `args_toml.rs`)
+    #[arg(long = "harness", num_args(1), value_name = "HARNESS_FILTER")]
+    pub harnesses: Vec<String>,
     /// Option used for suppressing global ASM error.
     #[clap(long)]
     pub ignore_global_asm: bool,
