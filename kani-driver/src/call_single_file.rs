@@ -162,6 +162,14 @@ impl KaniSession {
             flags.push("--no-assert-contracts".into());
         }
 
+        for harness in &self.args.harnesses {
+            flags.push(format!("--harness {harness}"));
+        }
+
+        if self.args.exact {
+            flags.push("--exact".into());
+        }
+
         if let Some(args) = self.autoharness_compiler_flags.clone() {
             flags.extend(args);
         }
