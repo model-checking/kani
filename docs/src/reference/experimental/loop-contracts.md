@@ -147,7 +147,7 @@ In proof path 2, we prove properties after leaving the loop. As we leave the loo
 
 We support two notations for historic values in loop-invariants:
 1. `on_entry(expr)` : The value of the `expr` before entering the loop.
-2. `prev(expr)` : the value of `expr` in the previous iteration. Note that Kani will assert that the loop has at least one iteration of `prev` is used in loop-invariants.
+2. `prev(expr)` : the value of `expr` in the previous iteration. Note that Kani will assert that the loop has at least one iteration if `prev` is used in loop-invariants.
 
 Example:
 ```Rust
