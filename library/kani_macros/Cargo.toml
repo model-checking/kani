@@ -16,6 +16,8 @@ proc-macro2 = "1.0"
 proc-macro-error2 = { version = "2.0.0", features = ["nightly"] }
 quote = "1.0.20"
 syn = { version = "2.0.18", features = ["full", "visit-mut", "visit", "extra-traits"] }
+strum = "0.27.1"
+strum_macros = "0.27.1"
 
 [package.metadata.rust-analyzer]
 # This package uses rustc crates.

@@ -513,9 +513,10 @@
 //! ```
 
 use proc_macro::TokenStream;
-use proc_macro2::{Ident, TokenStream as TokenStream2};
+use proc_macro2::{Ident, Span, TokenStream as TokenStream2};
 use quote::quote;
-use syn::{Expr, ExprClosure, ItemFn, parse_macro_input, parse_quote};
+use strum_macros::Display;
+use syn::{Error, Expr, ExprClosure, ItemFn, TraitItemFn, parse_macro_input, parse_quote};
 
 mod assert;
 mod bootstrap;
@@ -613,7 +614,8 @@ struct ContractConditionsHandler<'a> {
 /// Which kind of contract attribute are we dealing with?
 ///
 /// Pre-parsing version of [`ContractConditionsData`].
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Display)]
+#[strum(serialize_all = "lowercase")]
 enum ContractConditionsType {
     Requires,
     Ensures,
@@ -667,6 +669,17 @@ fn contract_main(
     item: TokenStream,
     is_requires: ContractConditionsType,
 ) -> TokenStream {
+    // Contract expansion edits the body of the function,
+    // so we can't allow applying contract attributes to method decls without bodies.
+    if let Ok(trait_fn) = syn::parse::<TraitItemFn>(item.clone())
+        && trait_fn.default.is_none()
+    {
+        let error_msg = format!(
+            "#[kani::{is_requires}] cannot be applied to trait function declarations without default bodies.\n\
+             help: Apply this attribute to the implementation of the function instead.",
+        );
+        return Error::new(Span::call_site(), error_msg).into_compile_error().into();
+    }
     let attr_copy = TokenStream2::from(attr.clone());
     let mut item_fn = parse_macro_input!(item as ItemFn);
     let function_state = ContractFunctionState::from_attributes(&item_fn.attrs);
