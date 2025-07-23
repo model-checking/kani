@@ -234,7 +234,7 @@ is rewritten into:
 
 ```Rust
 let a : [u8,10] = kani::any();
-let kani_iter = a.into_iter();
+let mut kani_iter = a.into_iter();
 #[kani::loop_invariant(...)]
 loop {
   match kani_iter.next() {

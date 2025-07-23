@@ -3,7 +3,48 @@
 
 //! This macro generates implementations of the `KaniIntoIter` trait for various common types that are used in `for` loops.
 //! We use this trait to overwrite the Rust IntoIter trait to reduce call stacks and avoid complicated loop invariant specifications,
-//! while maintaining the semantics of the loop.
+//! while maintaining the semantics of the loop (see https://model-checking.github.io/kani/rfc/rfcs/0012-loop-contracts.html).
+
+/*
+The main idea is to override the Rust function into_iter by kani_into_iter(), so that instead of rewritting the for-loop as
+
+let mut kani_iter = a.into_iter();
+loop {
+  match kani_iter.next() {
+    Some (i) => {
+      ...  //loop body
+      }
+    None => {break; }
+  }
+}
+
+we rewrite it as:
+
+let kani_iter = kani::kani_into_iter(a);
+let mut kaniindex = 0;
+#[kani::loop_invariant(...)]
+while (kaniindex < kaniiterlen) {
+  i = kani_iter.indexing(kaniindex);
+  // loop_body
+  kaniindex += 1;
+}
+
+We ensure the semantic by ensuring that the value of `i` is the same in each iteration of the loop for both versions,
+while keeping the variable kani_iter immutable in our version.
+In other word, we replace the next function with the indexing function to get the current item of the Iterator.
+
+We overwrite the returned type R of Rust into_iter() for a type T by a corresponding Kani internal type K which implements KaniIter trait as follows:
+
+T: array ,  R: IntoIter,  K: KaniPtrIter
+T: slice ,  R: IntoIter,  K: KaniPtrIter
+T: Iter  ,  R: Iter,      K: KaniRefIter
+T: Range ,  R: Range,  K: Range
+T: StepBy ,  R: StepBy,  K: KaniStepBy
+T: Chain ,  R: Chain,  K: KaniChainIter
+T: Zip ,  R: Zip,  K: KaniZipIter
+T: Map ,  R: Map,  K: KaniMapIter
+T: Enumerate ,  R: Enumerate,  K: KaniEnumerateIter
+*/
 
 #[macro_export]
 #[allow(clippy::crate_in_macro_def)]
@@ -47,6 +88,7 @@ macro_rules! generate_iter {
                 unsafe { *self.ptr }
             }
             fn assumption(&self) -> bool {
+                //SAFETY: this call is safe as Rust compiler will complain if we write a for-loop for initnitialized object
                 unsafe { mem::is_allocated(self.ptr as *const (), self.len) }
             }
             fn len(&self) -> usize {
@@ -75,6 +117,7 @@ macro_rules! generate_iter {
                 unsafe { &*self.ptr }
             }
             fn assumption(&self) -> bool {
+                //SAFETY: this call is safe as Rust compiler will complain if we write a for-loop for initnitialized object
                 unsafe { mem::is_allocated(self.ptr as *const (), self.len) }
             }
             fn len(&self) -> usize {

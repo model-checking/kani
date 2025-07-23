@@ -101,7 +101,7 @@ Complete - 1 successfully verified harnesses, 0 failures, 1 total.
 > 
 > \#\[kani::loop_invariant\( [_Expression_](https://doc.rust-lang.org/reference/expressions.html) \)\]
 > 
->  `while` [_Expression_](https://doc.rust-lang.org/reference/expressions.html)<sub>_except struct expression_</sub> [_BlockExpression_](https://doc.rust-lang.org/reference/expressions/block-expr.html)
+>  [_LoopExpression_](https://doc.rust-lang.org/reference/expressions/loop-expr.html#grammar-LoopExpression)
 
 
 An invariant contract `#[kani::loop_invariant(cond)]` accepts a valid Boolean expression `cond` over the variables visible at the same scope as the loop.
