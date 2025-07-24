@@ -126,60 +126,41 @@ impl TransformPass for AutomaticArbitraryPass {
     }
 }
 
-impl AutomaticArbitraryPass {
-    /// Insert a call to kani::any::<ty>() in `body`; return the local storing the result.
-    /// Panics if `ty` does not implement Arbitrary.
-    fn call_kani_any_for_ty(
-        &self,
-        body: &mut MutableBody,
-        ty: Ty,
-        source: &mut SourceInstruction,
-    ) -> Local {
-        if let TyKind::RigidTy(RigidTy::Ref(region, inner_ty, mutability)) = ty.kind() {
-            let kani_any_inst = Instance::resolve(
-                self.kani_any,
-                &GenericArgs(vec![GenericArgKind::Type(inner_ty)]),
-            )
-            .unwrap_or_else(|_| panic!("expected a ty that implements Arbitrary, got {ty}"));
-            let inner_lcl = body.new_local(inner_ty, source.span(body.blocks()), mutability);
-            body.insert_call(
-                &kani_any_inst,
-                source,
-                InsertPosition::Before,
-                vec![],
-                Place::from(inner_lcl),
-            );
-            let ref_lcl = body.new_local(ty, source.span(body.blocks()), Mutability::Not);
-            let borrow_kind = if mutability == Mutability::Not {
-                BorrowKind::Shared
-            } else {
-                BorrowKind::Mut { kind: MutBorrowKind::Default }
-            };
-            body.assign_to(
-                Place::from(ref_lcl),
-                Rvalue::Ref(region, borrow_kind, Place::from(inner_lcl)),
-                source,
-                InsertPosition::Before,
-            );
-            ref_lcl
+/// Insert a call to kani::any::<ty>() in `body`; return the local storing the result.
+/// Panics if `ty` does not implement Arbitrary.
+fn call_kani_any_for_ty(
+    kani_any: FnDef,
+    body: &mut MutableBody,
+    ty: Ty,
+    mutability: Mutability,
+    source: &mut SourceInstruction,
+) -> Local {
+    if let TyKind::RigidTy(RigidTy::Ref(region, inner_ty, inner_mutability)) = ty.kind() {
+        let inner_lcl = call_kani_any_for_ty(kani_any, body, inner_ty, inner_mutability, source);
+        let ref_lcl = body.new_local(ty, source.span(body.blocks()), mutability);
+        let borrow_kind = if inner_mutability == Mutability::Not {
+            BorrowKind::Shared
         } else {
-            let kani_any_inst =
-                Instance::resolve(self.kani_any, &GenericArgs(vec![GenericArgKind::Type(ty)]))
-                    .unwrap_or_else(|_| {
-                        panic!("expected a ty that implements Arbitrary, got {ty}")
-                    });
-            let lcl = body.new_local(ty, source.span(body.blocks()), Mutability::Not);
-            body.insert_call(
-                &kani_any_inst,
-                source,
-                InsertPosition::Before,
-                vec![],
-                Place::from(lcl),
-            );
-            lcl
-        }
+            BorrowKind::Mut { kind: MutBorrowKind::Default }
+        };
+        body.assign_to(
+            Place::from(ref_lcl),
+            Rvalue::Ref(region, borrow_kind, Place::from(inner_lcl)),
+            source,
+            InsertPosition::Before,
+        );
+        ref_lcl
+    } else {
+        let kani_any_inst =
+            Instance::resolve(kani_any, &GenericArgs(vec![GenericArgKind::Type(ty)]))
+                .unwrap_or_else(|_| panic!("expected a ty that implements Arbitrary, got {ty}"));
+        let lcl = body.new_local(ty, source.span(body.blocks()), mutability);
+        body.insert_call(&kani_any_inst, source, InsertPosition::Before, vec![], Place::from(lcl));
+        lcl
     }
+}
 
+impl AutomaticArbitraryPass {
     /// Insert the basic blocks for generating an arbitrary variant into `body`.
     /// Return the index of the first inserted basic block.
     /// We generate an arbitrary variant by:
@@ -200,7 +181,7 @@ impl AutomaticArbitraryPass {
 
         // Construct nondeterministic values for each of the variant's fields
         for ty in fields.iter().map(|field| field.ty_with_args(adt_args)) {
-            let lcl = self.call_kani_any_for_ty(body, ty, source);
+            let lcl = call_kani_any_for_ty(self.kani_any, body, ty, Mutability::Not, source);
             field_locals.push(lcl);
         }
 
@@ -241,9 +222,11 @@ impl AutomaticArbitraryPass {
         let mut source = SourceInstruction::Terminator { bb: 0 };
 
         // Generate a nondet u128 to switch on
-        let discr_lcl = self.call_kani_any_for_ty(
+        let discr_lcl = call_kani_any_for_ty(
+            self.kani_any,
             &mut new_body,
             Ty::from_rigid_kind(RigidTy::Uint(UintTy::U128)),
+            Mutability::Not,
             &mut source,
         );
 
@@ -375,63 +358,13 @@ impl TransformPass for AutomaticHarnessPass {
             .arg_locals()
             .iter()
             .map(|local_decl| {
-                if let TyKind::RigidTy(RigidTy::Ref(region, inner_ty, mutability)) =
-                    local_decl.ty.kind()
-                {
-                    let any_local = harness_body.new_local(
-                        inner_ty,
-                        source.span(harness_body.blocks()),
-                        mutability,
-                    );
-                    let kani_any_inst = Instance::resolve(
-                        self.kani_any,
-                        &GenericArgs(vec![GenericArgKind::Type(inner_ty)]),
-                    )
-                    .unwrap();
-                    harness_body.insert_call(
-                        &kani_any_inst,
-                        &mut source,
-                        InsertPosition::Before,
-                        vec![],
-                        Place::from(any_local),
-                    );
-                    let arg_local = harness_body.new_local(
-                        local_decl.ty,
-                        source.span(harness_body.blocks()),
-                        local_decl.mutability,
-                    );
-                    let borrow_kind = if mutability == Mutability::Not {
-                        BorrowKind::Shared
-                    } else {
-                        BorrowKind::Mut { kind: MutBorrowKind::Default }
-                    };
-                    harness_body.assign_to(
-                        Place::from(arg_local),
-                        Rvalue::Ref(region, borrow_kind, Place::from(any_local)),
-                        &mut source,
-                        InsertPosition::Before,
-                    );
-                    arg_local
-                } else {
-                    let arg_local = harness_body.new_local(
-                        local_decl.ty,
-                        source.span(harness_body.blocks()),
-                        local_decl.mutability,
-                    );
-                    let kani_any_inst = Instance::resolve(
-                        self.kani_any,
-                        &GenericArgs(vec![GenericArgKind::Type(local_decl.ty)]),
-                    )
-                    .unwrap();
-                    harness_body.insert_call(
-                        &kani_any_inst,
-                        &mut source,
-                        InsertPosition::Before,
-                        vec![],
-                        Place::from(arg_local),
-                    );
-                    arg_local
-                }
+                call_kani_any_for_ty(
+                    self.kani_any,
+                    &mut harness_body,
+                    local_decl.ty,
+                    local_decl.mutability,
+                    &mut source,
+                )
             })
             .collect::<Vec<_>>();
 

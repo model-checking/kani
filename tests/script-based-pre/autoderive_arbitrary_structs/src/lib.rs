@@ -73,6 +73,9 @@ mod should_derive {
     struct RefStruct(&'static i32);
     fn ref_struct(foo: RefStruct) {}
 
+    struct RefRefStruct(&'static &'static i32);
+    fn ref_ref_struct(foo: RefRefStruct) {}
+
     #[derive(Eq, PartialEq)]
     pub struct AlignmentStruct(usize);
 
