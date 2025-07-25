@@ -69,6 +69,12 @@ impl<'a> ContractConditionsHandler<'a> {
                     #(#body_stmts)*
                 })
             }
+            ContractConditionsData::PanicsIf { attr } => {
+                quote!({
+                    kani::assert(!(#attr), concat!("Panic: ", stringify!(#attr_copy)));
+                    #(#body_stmts)*
+                })
+            }
             ContractConditionsData::Ensures { attr } => {
                 let (remembers, ensures_clause) = build_ensures(attr);
 

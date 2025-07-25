@@ -49,17 +49,20 @@ impl ContractFunctionState {
 
 impl<'a> ContractConditionsHandler<'a> {
     /// Initialize the handler. Constructs the required
-    /// [`ContractConditionsType`] depending on `is_requires`.
+    /// [`ContractConditionsType`] depending on `is_precondition`.
     pub fn new(
-        is_requires: ContractConditionsType,
+        condition_kind: ContractConditionsType,
         attr: TokenStream,
         annotated_fn: &'a mut ItemFn,
         attr_copy: TokenStream2,
     ) -> Result<Self, syn::Error> {
         let mut output = TokenStream2::new();
-        let condition_type = match is_requires {
+        let condition_type = match condition_kind {
             ContractConditionsType::Requires => {
                 ContractConditionsData::Requires { attr: syn::parse(attr)? }
+            }
+            ContractConditionsType::PanicsIf => {
+                ContractConditionsData::PanicsIf { attr: syn::parse(attr)? }
             }
             ContractConditionsType::Ensures => {
                 ContractConditionsData::Ensures { attr: syn::parse(attr)? }
