@@ -661,7 +661,19 @@ impl LoopContractPass {
                 let TyKind::RigidTy(RigidTy::Closure(_, genarg)) = arg_ty.kind() else {
                     return false;
                 };
-                let GenericArgKind::Type(arg_ty) = genarg.0[2] else { return false };
+                // We look for the args' types of the kani_register_loop_contract function
+                // They are always stored in a tuple, which is next to the FnPtr generic args of kani_registered_loop_contract fn
+                // All the generic args before the FnPtr are from the outer function
+                let mut fnptrpos = 0;
+                for (i, arg) in genarg.0.iter().enumerate() {
+                    if let GenericArgKind::Type(arg_ty) = arg
+                        && let TyKind::RigidTy(RigidTy::FnPtr(_)) = arg_ty.kind()
+                    {
+                        fnptrpos = i;
+                        break;
+                    }
+                }
+                let GenericArgKind::Type(arg_ty) = genarg.0[fnptrpos + 1] else { return false };
                 let TyKind::RigidTy(RigidTy::Tuple(args)) = arg_ty.kind() else { return false };
                 // Check if the invariant involves any local variable
                 if !args.is_empty() {
