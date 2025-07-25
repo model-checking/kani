@@ -2,7 +2,7 @@
 - **Feature Request Issue:** [#3006](https://github.com/model-checking/kani/issues/3006)
 - **RFC PR:** https://github.com/model-checking/kani/pull/4228
 - **Status:** Under Review
-- **Version:** 1
+- **Version:** 0
 - **Proof-of-concept:** None yet, the previous prototype uses an out of date API.
 
 -------------------
@@ -52,7 +52,9 @@ pub fn second_branch_harness() {
 }
 ```
 
-However, this strategy:
+One could also write preconditions for `very_complex_fn_{1_2}` that restrict `input` accordingly, write `proof_for_contract` harnesses for those, and then use `stub_verified` on the `target_fn` harness. 
+
+However, either of these strategies:
 - **can affect soundness**--there's no guarantee that your partitions will fully span the space of possible inputs.
 The only way to determine that a set of proofs like the one above are incorrect (as it forgets to verify the value of 0 for `input`) is by manual inspection.
 This gets infeasible for proofs with complex partition rules like those found in the [proofs for the standard library's unchecked multiplication](https://github.com/model-checking/verify-rust-std/blob/1c4ea17a99b9202f96608473083998b116bb6508/library/core/src/num/mod.rs#L1818-L1836).
@@ -62,8 +64,8 @@ Instead, Kani should provide a feature to automatically partition a proof based 
 
 ## User Experience
 
-The current thought is for users to set a `-Z partition-proof` flag which will allow them to use a new `kani::partition` function.
-When calling this function, they would provide the type of the partition variable to generate, as well as a set of partition conditions and a closure with the actual code to run on the partitioned variable (we'll call this the *partition closure*).
+Kani will introduce a new `kani::partition` function, gated behind an unstable feature flag.
+When calling this function, the user would provide the type of the partition variable, as well as a set of partition conditions and a closure with the actual code to run on the partitioned variable (we'll call this the *partition closure*).
 
 For example, the above would become
 
@@ -85,30 +87,30 @@ CBMC 6.7.1 (cbmc-6.7.1)
 /* MORE CBMC OUTPUT */
 RESULTS:
 Check 1: partitioned_proof_partition_1.assertion.1
-	 - Status: SUCCESS
-	 - Description: "assertion failed: target_fn(input) > 0"
-	 - Location: src/pre_partition.rs:8:5 in function partitioned_proof_partition_1
-     - Partition: #1 - *input > 0
+     - Status: SUCCESS
+     - Description: "assertion failed: target_fn(input) > 0"
+     - Location: src/pre_partition.rs:8:5 in function partitioned_proof_partition_1
 
 Checking partition #2 (*input < 0) of harness partitioned_proof...
 CBMC 6.7.1 (cbmc-6.7.1)
 /* MORE CBMC OUTPUT */
 RESULTS:
 Check 1: partitioned_proof_partition_2.assertion.1
-	 - Status: SUCCESS
-	 - Description: "assertion failed: target_fn(input) > 0"
-	 - Location: src/pre_partition.rs:8:5 in function partitioned_proof_partition_2
-     - Partition: #2 - *input < 0
+     - Status: SUCCESS
+     - Description: "assertion failed: target_fn(input) > 0"
+     - Location: src/pre_partition.rs:8:5 in function partitioned_proof_partition_2
 
 Checking coverage of partitions for harness partitioned_proof...
 CBMC 6.7.1 (cbmc-6.7.1)
 /* MORE CBMC OUTPUT */
 RESULTS:
 Check 1: partitioned_proof_coverage.assertion.1
-	 - Status: FAILURE
-	 - Description: "partitions for partitioned_proof do not cover all possible values of the i32 type."
-	 - Location: src/pre_partition.rs:11:5 in function partitioned_proof_coverage
+     - Status: FAILURE
+     - Description: "partitions for partitioned_proof do not cover all possible values of the i32 type."
+     - Location: src/pre_partition.rs:11:5 in function partitioned_proof_coverage
 ```
+
+Note that the coverage check fails, since we're missing the `i = 0` case.
 
 ## Software Design
 
@@ -141,7 +143,7 @@ In the above example, this would be along the lines of:
 /// (auto-generated partition of `input` for condition `|a| *a > 0`)
 pub fn partitioned_proof_partition_1() {
     /* OTHER CODE BEFORE THE CALL TO `kani::partition` IF THERE WAS ANY */
-    let partition_variable = kani::any();
+    let partition_variable = kani::any::<i32>();
     kani::assume((|a: &i32| *a > 0)(&partition_variable));
     (|input: i32| target_fn(input))(partition_variable);
 }
@@ -153,7 +155,7 @@ This would be along the lines of:
 ```rust
 pub fn partitioned_proof_coverage() {
     /* OTHER CODE BEFORE THE CALL TO `kani::partition` IF THERE WAS ANY */
-    let partition_variable = kani::any();
+    let partition_variable = kani::any::<i32>();
 
     // checks that any possible value of partition_variable will fall into at least one partition.
     let is_in_partitions = [|a: &i32| *a > 0, |a: &i32| *a < 0].into_iter().any(|cond| cond(&partition_variable));
@@ -162,7 +164,7 @@ pub fn partitioned_proof_coverage() {
 ```
 
 ### Corner cases
-Although the fact that the partition conditions are function pointers prevents them from capturing any local variables, their value can still be affected by non-deterministic values.
+Under the type signature of `kani::partition`, the user can generate the partition conditions conditionally, e.g.:
 
 ```rust
 #[kani::proof]
@@ -173,11 +175,11 @@ pub fn strange_partitioned_proof() {
         |a: &i32| *a < -2
     };
 
-    kani::partition([f, |a: &i32| *a < 0], ...);
+    kani::partition::<i32>([f, |a: &i32| *a < 0], ...);
 }
 ```
 
-The behavior of a partition in this case seems ill-defined, so any call to `kani::partition` with conditions that are not constant closures would be disallowed.
+The behavior of a partition in this case seems ill-defined, so Kani will detect cases where the partition conditions are not constant closures or function items and emit a compile error.
 
 ## Rationale and alternatives
 
@@ -193,7 +195,10 @@ However, this kind of overlap would not affect the correctness of the partition,
 3. Should verification fully panic if a partitioned proof is lacking full coverage or just have that one assertion fail verification?
 4. What's the best way to provide support for partitioning `BoundedArbitrary` types?
 Potentially through a separate function `partition_bounded` which would be generic over `T: BoundedArbitrary` and a `const N: usize` which would be used for the call to `kani::bounded_any()`.
-5. How should users be able to control our coverage checks? Does it make sense to provide another function that makes the user specify a smaller domain that we can still prove coverage for (or skips those checks entirely)?
+5. How should users be able to control our coverage checks?
+Users may only want to test a subset of the input space (e.g., only testing multiplication for certain integer ranges), but the current design mandates that they cover the whole input space.
+We could potentially introduce a separate API, e.g. `unsafe_partition`, that allows this, or some other mechanism to skip the coverage check.
 6. Should overlapping partition conditions be allowed?
+7. Can we tell the user which section(s) of the input space they're missing?
 
 [^unstable_feature]: This unique ident should be used to enable features proposed in the RFC using `-Z <ident>` until the feature has been stabilized.
