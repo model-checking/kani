@@ -37,6 +37,10 @@ pub enum ReachabilityType {
 /// with. Usually stored in and accessible via [`crate::kani_queries::QueryDb`].
 #[derive(Debug, Default, Clone, clap::Parser)]
 pub struct Arguments {
+    /// Compute verification results under the assumption that no panic occurs.
+    /// This feature is unstable, and it requires `-Z unstable-options` to be used
+    #[clap(long)]
+    pub assume_no_panic: bool,
     /// Option used to disable asserting function contracts.
     #[clap(long)]
     pub no_assert_contracts: bool,

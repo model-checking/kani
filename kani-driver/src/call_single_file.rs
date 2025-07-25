@@ -116,6 +116,10 @@ impl KaniSession {
     pub fn kani_compiler_local_flags(&self) -> Vec<KaniArg> {
         let mut flags: Vec<KaniArg> = vec![];
 
+        if self.args.assume_no_panic {
+            flags.push("--assume-no-panic".into());
+        }
+
         if self.args.common_args.debug {
             flags.push("--log-level=debug".into());
         } else if self.args.common_args.verbose {
