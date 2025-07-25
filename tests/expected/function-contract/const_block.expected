@@ -1,0 +1,9 @@
+assertion\
+	- Status: SUCCESS\
+	- Description: "|result| *result == Enum::Second"\
+
+assertion\
+	- Status: SUCCESS\
+	- Description: "|result| *result == Enum::First"\
+
+VERIFICATION:- SUCCESSFUL

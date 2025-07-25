@@ -24,6 +24,7 @@ impl GotocCtx<'_> {
             symbol_name,
             self.codegen_span_stable(def.span()),
             is_interior_mut(self.tcx, def.ty()),
+            false,
         );
     }
 
