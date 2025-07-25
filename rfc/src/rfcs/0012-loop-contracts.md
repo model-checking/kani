@@ -274,7 +274,7 @@ In order to contract the loop, the user must provide the loop-invariant for the 
 will be havoc. 
 The loop-invariant should include some propositions such as `kani_iter.inner.alive.start <= kani_iter.inner.alive.end`,
 `kani_iter.inner.data.as_ptr() == a.as_ptr()`, ... until the loop-invariant is successfully verified.
-The obvious tree disadvantages are:
+The obvious three disadvantages are:
 1. All the fields `inner`, `alive`, `start`, `end`, ... are private, so those propositions are not allowed by the Rust compiler.
 2. The users must know about the all implementation designs and related internal types that Rust standard library uses 
 to implement the `into_iter` function, and everything are different for the types that implements the `IntoIter` trait. 
