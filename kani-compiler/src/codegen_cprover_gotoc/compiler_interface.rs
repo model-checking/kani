@@ -5,6 +5,7 @@
 
 use crate::args::ReachabilityType;
 use crate::codegen_cprover_gotoc::GotocCtx;
+use crate::codegen_cprover_gotoc::utils::file_writing_pool::{FileDataToWrite, ThreadPool};
 use crate::kani_middle::analysis;
 use crate::kani_middle::attributes::KaniAttributes;
 use crate::kani_middle::check_reachable_items;
@@ -13,10 +14,9 @@ use crate::kani_middle::provide;
 use crate::kani_middle::reachability::{collect_reachable_items, filter_crate_items};
 use crate::kani_middle::transform::{BodyTransformation, GlobalPasses};
 use crate::kani_queries::QueryDb;
-use cbmc::RoundingMode;
 use cbmc::goto_program::Location;
-use cbmc::irep::goto_binary_serde::write_goto_binary_file;
 use cbmc::{InternedString, MachineModel};
+use cbmc::{RoundingMode, WithInterner};
 use kani_metadata::artifact::convert_type;
 use kani_metadata::{ArtifactType, HarnessMetadata, KaniMetadata, UnsupportedFeature};
 use kani_metadata::{AssignsContract, CompilerArtifactStub};
@@ -52,9 +52,11 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tracing::{debug, info};
 
+const NUM_FILE_EXPORT_THREADS: usize = 2;
+
 pub type UnsupportedConstructs = FxHashMap<InternedString, Vec<Location>>;
 
-#[derive(Clone)]
+// #[derive(Clone)]
 pub struct GotocCodegenBackend {
     /// The query is shared with `KaniCompiler` and it is initialized as part of `rustc`
     /// initialization, which may happen after this object is created.
@@ -71,7 +73,8 @@ impl GotocCodegenBackend {
     /// Generate code that is reachable from the given starting points.
     ///
     /// Invariant: iff `check_contract.is_some()` then `return.2.is_some()`
-    fn codegen_items<'tcx>(
+    #[allow(clippy::too_many_arguments)]
+    fn codegen_items<'tcx, const NUM_THREADS: usize>(
         &self,
         tcx: TyCtxt<'tcx>,
         starting_items: &[MonoItem],
@@ -79,6 +82,7 @@ impl GotocCodegenBackend {
         machine_model: &MachineModel,
         check_contract: Option<InternalDefId>,
         mut transformer: BodyTransformation,
+        thread_pool: &ThreadPool<NUM_THREADS>,
     ) -> (GotocCtx<'tcx>, Vec<MonoItem>, Option<AssignsContract>) {
         // This runs reachability analysis before global passes are applied.
         //
@@ -203,13 +207,23 @@ impl GotocCodegenBackend {
         // No output should be generated if user selected no_codegen.
         if !tcx.sess.opts.unstable_opts.no_codegen && tcx.sess.opts.output_types.should_codegen() {
             let pretty = self.queries.lock().unwrap().args().output_pretty_json;
-            write_file(symtab_goto, ArtifactType::PrettyNameMap, &pretty_name_map, pretty);
-            write_goto_binary_file(symtab_goto, &gcx.symbol_table);
-            write_file(symtab_goto, ArtifactType::TypeMap, &type_map, pretty);
-            // If they exist, write out vtable virtual call function pointer restrictions
-            if let Some(restrictions) = vtable_restrictions {
-                write_file(symtab_goto, ArtifactType::VTableRestriction, &restrictions, pretty);
-            }
+
+            // Save all the data needed to write this goto file
+            // so another thread can handle it in parallel.
+            let new_file_data = FileDataToWrite::new(
+                symtab_goto,
+                &gcx.symbol_table,
+                vtable_restrictions,
+                type_map,
+                pretty_name_map,
+                pretty,
+            );
+
+            // Package the file data with a copy of the string interner used to generate it.
+            let file_data_with_interner = WithInterner::new_with_current(new_file_data);
+
+            // Send everything to the thread pool for handling and move on.
+            thread_pool.send_work(file_data_with_interner).unwrap();
         }
 
         (gcx, items, contract_info)
@@ -329,6 +343,14 @@ impl CodegenBackend for GotocCodegenBackend {
             let base_filename = base_filepath.as_path();
             let reachability = queries.args().reachability_analysis;
             let mut results = GotoCodegenResults::new(tcx, reachability);
+
+            // If reachability is None, just return early as we'll do no codegen.
+            if reachability == ReachabilityType::None {
+                return codegen_results(tcx, &results.machine_model);
+            }
+
+            let export_thread_pool = ThreadPool::<NUM_FILE_EXPORT_THREADS>::new();
+
             match reachability {
                 ReachabilityType::AllFns | ReachabilityType::Harnesses => {
                     let mut units = CodegenUnits::new(&queries, tcx);
@@ -351,6 +373,7 @@ impl CodegenBackend for GotocCodegenBackend {
                                 &results.machine_model,
                                 contract_metadata,
                                 transformer,
+                                &export_thread_pool,
                             );
                             if gcx.has_loop_contracts {
                                 loop_contracts_instances.push(*harness);
@@ -365,7 +388,7 @@ impl CodegenBackend for GotocCodegenBackend {
                     units.store_loop_contracts(&loop_contracts_instances);
                     units.write_metadata(&queries, tcx);
                 }
-                ReachabilityType::None => {}
+                ReachabilityType::None => unreachable!(),
                 ReachabilityType::PubFns => {
                     let unit = CodegenUnit::default();
                     let transformer = BodyTransformation::new(&queries, tcx, &unit);
@@ -386,11 +409,15 @@ impl CodegenBackend for GotocCodegenBackend {
                         &results.machine_model,
                         Default::default(),
                         transformer,
+                        &export_thread_pool,
                     );
                     assert!(contract_info.is_none());
                     let _ = results.extend(gcx, items, None);
                 }
             }
+
+            // Worker threads should have only been initialized if we were doing codegen for this crate.
+            export_thread_pool.join_all();
 
             if reachability != ReachabilityType::None {
                 // Print compilation report.
