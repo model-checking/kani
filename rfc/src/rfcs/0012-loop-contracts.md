@@ -276,7 +276,7 @@ The loop-invariant should include some propositions such as `kani_iter.inner.ali
 `kani_iter.inner.data.as_ptr() == a.as_ptr()`, ... until the loop-invariant is successfully verified.
 The obvious three disadvantages are:
 1. All the fields `inner`, `alive`, `start`, `end`, ... are private, so those propositions are not allowed by the Rust compiler.
-2. The users must know about the all implementation designs and related internal types that Rust standard library uses 
+2. The users must know about all the implementation designs and related internal types that the Rust standard library uses 
 to implement the `into_iter` function, and everything are different for the types that implements the `IntoIter` trait. 
 Even then, it is so complicated and tedious to write the loop-invariant. 
 3. The long call stack will slow down the performance.
