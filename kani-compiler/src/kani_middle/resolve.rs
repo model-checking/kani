@@ -17,8 +17,8 @@ use rustc_hir::def_id::{CRATE_DEF_INDEX, DefId, LOCAL_CRATE, LocalDefId, LocalMo
 use rustc_hir::{ItemKind, UseKind};
 use rustc_middle::ty::TyCtxt;
 use rustc_middle::ty::fast_reject::{self, TreatParams};
-use rustc_smir::rustc_internal;
 use stable_mir::CrateDef;
+use stable_mir::rustc_internal;
 use stable_mir::ty::{FnDef, RigidTy, Ty, TyKind};
 use std::collections::HashSet;
 use std::fmt;
@@ -131,7 +131,7 @@ fn resolve_path<'tcx>(
     path.segments.into_iter().try_fold(path.base, |base, segment| {
         let name = segment.ident.to_string();
         let def_kind = tcx.def_kind(base);
-        let next_item = match def_kind {
+        match def_kind {
             DefKind::ForeignMod | DefKind::Mod => resolve_in_module(tcx, base, &name),
             DefKind::Struct | DefKind::Enum | DefKind::Union => {
                 resolve_in_type_def(tcx, base, &path.base_path_args, &name)
@@ -141,8 +141,7 @@ fn resolve_path<'tcx>(
                 debug!(?base, ?kind, "resolve_path: unexpected item");
                 Err(ResolveError::UnexpectedType { tcx, item: base, expected: "module" })
             }
-        };
-        next_item
+        }
     })
 }
 

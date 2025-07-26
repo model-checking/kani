@@ -20,11 +20,11 @@ use rustc_middle::ty::{
 };
 use rustc_middle::ty::{ExistentialTraitRef, GenericArgsRef};
 use rustc_middle::ty::{List, TypeFoldable};
-use rustc_smir::rustc_internal;
 use rustc_span::def_id::DefId;
 use stable_mir::abi::{ArgAbi, FnAbi, PassMode};
 use stable_mir::mir::Body;
 use stable_mir::mir::mono::Instance as InstanceStable;
+use stable_mir::rustc_internal;
 use stable_mir::ty::{
     Binder, DynKind, ExistentialPredicate, ExistentialProjection, Region, RegionKind, RigidTy,
     Ty as StableTy,
@@ -464,11 +464,6 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// Gives the vtable name for a type.
     /// In some cases, we have &T, in other cases T, so normalize.
-    ///
-    /// TODO: to handle trait upcasting, this will need to use a
-    /// poly existential trait type as a part of the key as well.
-    /// See compiler/rustc_middle/src/ty/vtable.rs
-    /// <https://github.com/model-checking/kani/issues/358>
     pub fn vtable_name(&self, t: Ty<'tcx>) -> String {
         format!("{}::vtable", self.normalized_trait_name(t))
     }
@@ -1754,7 +1749,7 @@ impl<'tcx> GotocCtx<'tcx> {
         &self,
         instance: InstanceStable,
         fn_abi: &'a FnAbi,
-    ) -> impl Iterator<Item = (usize, &'a ArgAbi)> {
+    ) -> impl Iterator<Item = (usize, &'a ArgAbi)> + use<'a> {
         let requires_caller_location = self.requires_caller_location(instance);
         let num_args = fn_abi.args.len();
         fn_abi.args.iter().enumerate().filter(move |(idx, arg_abi)| {

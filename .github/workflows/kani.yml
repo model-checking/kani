@@ -18,10 +18,17 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macos-13, ubuntu-22.04, ubuntu-24.04, macos-14]
+        os: [macos-13, ubuntu-22.04, ubuntu-24.04, macos-14, ubuntu-24.04-arm]
     steps:
       - name: Checkout Kani
         uses: actions/checkout@v4
+
+      - name: Cache Kani build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          shared-key: "kani-rust-cache-dev"
+          cache-directories: "~/.rustup"
 
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
@@ -43,6 +50,13 @@ jobs:
           sudo apt-get install -y python3-pip
           pushd tools/benchcomp && pip3 install -r requirements.txt
 
+      - name: Cache Kani build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          shared-key: "kani-rust-cache-release"
+          cache-directories: "~/.rustup"
+
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
         with:
@@ -60,6 +74,13 @@ jobs:
       - name: Checkout Kani
         uses: actions/checkout@v4
 
+      - name: Cache Kani build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          shared-key: "kani-rust-cache-release"
+          cache-directories: "~/.rustup"
+
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
         with:
@@ -75,6 +96,12 @@ jobs:
     steps:
       - name: Checkout Kani
         uses: actions/checkout@v4
+
+      - name: Cache Kani build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          cache-directories: "~/.rustup"
 
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup

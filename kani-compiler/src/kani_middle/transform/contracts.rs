@@ -10,13 +10,13 @@ use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
 use cbmc::{InternString, InternedString};
 use rustc_middle::ty::TyCtxt;
-use rustc_smir::rustc_internal;
 use rustc_span::Symbol;
 use stable_mir::CrateDef;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{
     Body, ConstOperand, Operand, Rvalue, Terminator, TerminatorKind, VarDebugInfoContents,
 };
+use stable_mir::rustc_internal;
 use stable_mir::ty::{ClosureDef, FnDef, MirConst, RigidTy, TyKind, TypeAndMut, UintTy};
 use std::collections::HashSet;
 use std::fmt::Debug;
@@ -87,9 +87,7 @@ impl AnyModifiesPass {
         let kani_write_any_str = kani_fns.get(&KaniModel::WriteAnyStr.into()).copied();
         let target_fn = if let Some(harness) = unit.harnesses.first() {
             let attributes = KaniAttributes::for_instance(tcx, *harness);
-            let target_fn =
-                attributes.proof_for_contract().map(|symbol| symbol.unwrap().as_str().intern());
-            target_fn
+            attributes.proof_for_contract().map(|symbol| symbol.unwrap().as_str().intern())
         } else {
             None
         };

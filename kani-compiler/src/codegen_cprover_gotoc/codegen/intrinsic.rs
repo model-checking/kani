@@ -10,9 +10,9 @@ use crate::unwrap_or_return_codegen_unimplemented_stmt;
 use cbmc::goto_program::{BinaryOperator, BuiltinFn, Expr, Location, Stmt, Type};
 use rustc_middle::ty::TypingEnv;
 use rustc_middle::ty::layout::ValidityRequirement;
-use rustc_smir::rustc_internal;
 use stable_mir::mir::mono::Instance;
 use stable_mir::mir::{BasicBlockIdx, Operand, Place};
+use stable_mir::rustc_internal;
 use stable_mir::ty::{GenericArgs, RigidTy, Span, Ty, TyKind, UintTy};
 use tracing::debug;
 
@@ -197,19 +197,6 @@ impl GotocCtx<'_> {
             ($builtin: ident, $allow_zero: expr) => {{
                 let arg = fargs.remove(0);
                 self.codegen_expr_to_place_stable(place, arg.$builtin($allow_zero), loc)
-            }};
-        }
-
-        // Intrinsics which encode a value known during compilation
-        macro_rules! codegen_intrinsic_const {
-            () => {{
-                let place_ty = self.place_ty_stable(&place);
-                let stable_instance = instance;
-                let alloc = stable_instance.try_const_eval(place_ty).unwrap();
-                // We assume that the intrinsic has type checked at this point, so
-                // we can use the place type as the expression type.
-                let expr = self.codegen_allocation(&alloc, place_ty, loc);
-                self.codegen_expr_to_place_stable(&place, expr, loc)
             }};
         }
 
@@ -406,13 +393,11 @@ impl GotocCtx<'_> {
             Intrinsic::LogF64 => codegen_simple_intrinsic!(Log),
             Intrinsic::MaxNumF32 => codegen_simple_intrinsic!(Fmaxf),
             Intrinsic::MaxNumF64 => codegen_simple_intrinsic!(Fmax),
-            Intrinsic::MinAlignOf => codegen_intrinsic_const!(),
             Intrinsic::MinNumF32 => codegen_simple_intrinsic!(Fminf),
             Intrinsic::MinNumF64 => codegen_simple_intrinsic!(Fmin),
             Intrinsic::MulWithOverflow => {
                 self.codegen_op_with_overflow(BinaryOperator::OverflowResultMult, fargs, place, loc)
             }
-            Intrinsic::NeedsDrop => codegen_intrinsic_const!(),
             Intrinsic::PowF32 => codegen_simple_intrinsic!(Powf),
             Intrinsic::PowF64 => codegen_simple_intrinsic!(Pow),
             Intrinsic::PowIF32 => codegen_simple_intrinsic!(Powif),
@@ -505,8 +490,6 @@ impl GotocCtx<'_> {
             Intrinsic::Transmute => self.codegen_intrinsic_transmute(fargs, ret_ty, place, loc),
             Intrinsic::TruncF32 => codegen_simple_intrinsic!(Truncf),
             Intrinsic::TruncF64 => codegen_simple_intrinsic!(Trunc),
-            Intrinsic::TypeId => codegen_intrinsic_const!(),
-            Intrinsic::TypeName => codegen_intrinsic_const!(),
             Intrinsic::TypedSwap => self.codegen_swap(fargs, farg_types, loc),
             Intrinsic::UnalignedVolatileLoad => {
                 unstable_codegen!(self.codegen_expr_to_place_stable(
@@ -536,11 +519,11 @@ impl GotocCtx<'_> {
                 assert!(self.place_ty_stable(place).kind().is_unit());
                 self.codegen_write_bytes(fargs, farg_types, loc)
             }
-            Intrinsic::PtrOffsetFrom
+            Intrinsic::AlignOfVal
+            | Intrinsic::PtrOffsetFrom
             | Intrinsic::PtrOffsetFromUnsigned
-            | Intrinsic::SizeOfVal
-            | Intrinsic::MinAlignOfVal => {
-                unreachable!("Intrinsic `{}` is handled before codegen", intrinsic_str)
+            | Intrinsic::SizeOfVal => {
+                unreachable!("Kani models the intrinsic `{}` before codegen", intrinsic_str)
             }
             // Unimplemented
             Intrinsic::Unimplemented { name, issue_link } => {
@@ -1573,7 +1556,8 @@ impl GotocCtx<'_> {
     }
 
     /// `simd_shuffle` constructs a new vector from the elements of two input
-    /// vectors, choosing values according to an input array of indexes.
+    /// vectors, choosing values according to an input array of indexes. See
+    /// https://doc.rust-lang.org/std/intrinsics/simd/fn.simd_shuffle.html
     ///
     /// We check that:
     ///  1. The return type length is equal to the expected length (`n`) of the
@@ -1588,13 +1572,6 @@ impl GotocCtx<'_> {
     /// TODO: Check that `indexes` contains constant values which are within the
     /// expected bounds. See
     /// <https://github.com/model-checking/kani/issues/1960> for more details.
-    ///
-    /// This code mimics CBMC's `shuffle_vector_exprt::lower()` here:
-    /// <https://github.com/diffblue/cbmc/blob/develop/src/ansi-c/c_expr.cpp>
-    ///
-    /// We can't use shuffle_vector_exprt because it's not understood by the CBMC backend,
-    /// it's immediately lowered by the C frontend.
-    /// Issue: <https://github.com/diffblue/cbmc/issues/6297>
     fn codegen_intrinsic_simd_shuffle(
         &mut self,
         mut fargs: Vec<Expr>,
@@ -1610,7 +1587,7 @@ impl GotocCtx<'_> {
         // [u32; n]: translated wrapped in a struct
         let indexes = fargs.remove(0);
 
-        let (in_type_len, vec_subtype) = self.simd_size_and_type(rust_arg_types[0]);
+        let (_, vec_subtype) = self.simd_size_and_type(rust_arg_types[0]);
         let (ret_type_len, ret_type_subtype) = self.simd_size_and_type(rust_ret_type);
         if ret_type_len != n {
             let err_msg = format!(
@@ -1634,24 +1611,20 @@ impl GotocCtx<'_> {
         // An unsigned type here causes an invariant violation in CBMC.
         // Issue: https://github.com/diffblue/cbmc/issues/6298
         let st_rep = Type::ssize_t();
-        let n_rep = Expr::int_constant(in_type_len, st_rep.clone());
 
-        // P = indexes.expanded_map(v -> if v < N then vec1[v] else vec2[v-N])
         let elems = (0..n)
             .map(|i| {
                 let idx = Expr::int_constant(i, st_rep.clone());
                 // Must not use `indexes.index(i)` directly, because codegen wraps arrays in struct
-                let v = self.codegen_idx_array(indexes.clone(), idx).cast_to(st_rep.clone());
-                let cond = v.clone().lt(n_rep.clone());
-                let t = vec1.clone().index(v.clone());
-                let e = vec2.clone().index(v.sub(n_rep.clone()));
-                cond.ternary(t, e)
+                self.codegen_idx_array(indexes.clone(), idx).cast_to(st_rep.clone())
             })
             .collect();
         self.tcx.dcx().abort_if_errors();
         let cbmc_ret_ty = self.codegen_ty_stable(rust_ret_type);
         let loc = self.codegen_span_stable(span);
-        self.codegen_expr_to_place_stable(p, Expr::vector_expr(cbmc_ret_ty, elems), loc)
+        let shuffle_vector = Expr::shuffle_vector(vec1, vec2, elems);
+        assert_eq!(*shuffle_vector.typ(), cbmc_ret_ty);
+        self.codegen_expr_to_place_stable(p, shuffle_vector, loc)
     }
 
     /// A volatile load of a memory location:
@@ -1747,7 +1720,7 @@ impl GotocCtx<'_> {
 
         // Check that computing `count` in bytes would not overflow
         let (count_bytes, overflow_check) = self.count_in_bytes(
-            count,
+            count.clone(),
             pointee_type_stable(dst_typ).unwrap(),
             Type::size_t(),
             "write_bytes",
@@ -1755,7 +1728,12 @@ impl GotocCtx<'_> {
         );
 
         let memset_call = BuiltinFn::Memset.call(vec![dst, val, count_bytes], loc);
-        Stmt::block(vec![align_check, overflow_check, memset_call.as_stmt(loc)], loc)
+        Stmt::if_then_else(
+            count.clone().gt(Expr::int_constant(0, count.typ().clone())),
+            Stmt::block(vec![align_check, overflow_check, memset_call.as_stmt(loc)], loc),
+            None,
+            loc,
+        )
     }
 
     /// Computes (multiplies) the equivalent of a memory-related number (e.g., an offset) in bytes.

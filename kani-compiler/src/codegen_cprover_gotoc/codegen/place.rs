@@ -14,8 +14,8 @@ use crate::unwrap_or_return_codegen_unimplemented;
 use cbmc::goto_program::{Expr, ExprValue, Location, Stmt, Type};
 use rustc_abi::{TagEncoding, Variants};
 use rustc_middle::ty::layout::LayoutOf;
-use rustc_smir::rustc_internal;
 use stable_mir::mir::{FieldIdx, Local, Mutability, Place, ProjectionElem};
+use stable_mir::rustc_internal;
 use stable_mir::ty::{RigidTy, Ty, TyKind, VariantDef, VariantIdx};
 use tracing::{debug, trace, warn};
 
@@ -176,13 +176,6 @@ impl ProjectedPlace {
                 "Unexpected type mismatch in projection:\n{goto_expr:?}\nExpr type\n{expr_ty:?}\nType from MIR\n{ty_from_mir:?}"
             );
             warn!("{}", msg);
-            // TODO: there's an expr type mismatch with the rust 2022-11-20 toolchain
-            // for simd:
-            // https://github.com/model-checking/kani/issues/1926
-            // Disabling it for this specific case.
-            if !(expr_ty.is_integer() && ty_from_mir.is_struct_tag()) {
-                debug_assert!(false, "{}", msg);
-            }
             return Err(Box::new(UnimplementedData::new(
                 "Projection mismatch",
                 "https://github.com/model-checking/kani/issues/277",

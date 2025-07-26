@@ -8,12 +8,17 @@ use kani_metadata::{CbmcSolver, HarnessAttributes, HarnessKind, Stub};
 use quote::ToTokens;
 use rustc_ast::{LitKind, MetaItem, MetaItemKind};
 use rustc_errors::ErrorGuaranteed;
-use rustc_hir::{AttrArgs, Attribute, def::DefKind, def_id::DefId, def_id::LocalDefId};
+use rustc_hir::{
+    AttrArgs, Attribute,
+    def::DefKind,
+    def_id::{DefId, LocalDefId},
+};
 use rustc_middle::ty::{Instance, TyCtxt, TyKind};
 use rustc_session::Session;
 use rustc_span::{Span, Symbol};
 use stable_mir::crate_def::Attribute as AttributeStable;
 use stable_mir::mir::mono::Instance as InstanceStable;
+use stable_mir::rustc_internal;
 use stable_mir::ty::FnDef as FnDefStable;
 use stable_mir::{CrateDef, DefId as DefIdStable, Symbol as SymbolStable};
 use std::str::FromStr;
