@@ -1,0 +1,22 @@
+Skipped Functions: None. Kani generated automatic harnesses for all functions in the available crate(s).
+
+Failed Checks: attempt to add with overflow
+
+Failed Checks: attempt to subtract with overflow
+
+Failed Checks: attempt to calculate the remainder with a divisor of zero
+Failed Checks: attempt to calculate the remainder with overflow
+Failed Checks: attempt to multiply with overflow
+
+Autoharness Summary:
++---------+--------------------------+---------------------------+---------------------+
+| Crate   | Selected Function        | Kind of Automatic Harness | Verification Result |
++======================================================================================+
+| mutable | takes_mut_ref            | #[kani::proof]            | Failure             |
+|---------+--------------------------+---------------------------+---------------------|
+| mutable | takes_mut_refs           | #[kani::proof]            | Failure             |
+|---------+--------------------------+---------------------------+---------------------|
+| mutable | takes_mut_refs_and_other | #[kani::proof]            | Failure             |
+|---------+--------------------------+---------------------------+---------------------|
+
+Complete - 0 successfully verified functions, 3 failures, 3 total.

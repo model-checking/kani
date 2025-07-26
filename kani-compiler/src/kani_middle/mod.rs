@@ -192,6 +192,14 @@ fn implements_arbitrary(
         return false;
     }
 
+    if let TyKind::RigidTy(RigidTy::Ref(_, inner_ty, _)) = ty.kind() {
+        if let TyKind::RigidTy(RigidTy::Adt(..)) = inner_ty.kind() {
+            return can_derive_arbitrary(inner_ty, kani_any_def, ty_arbitrary_cache);
+        } else {
+            return implements_arbitrary(inner_ty, kani_any_def, ty_arbitrary_cache);
+        }
+    }
+
     let kani_any_body =
         Instance::resolve(kani_any_def, &GenericArgs(vec![GenericArgKind::Type(ty)]))
             .unwrap()
@@ -213,7 +221,8 @@ fn implements_arbitrary(
     false
 }
 
-/// Is `ty` a struct or enum whose fields/variants implement Arbitrary?
+/// Is `ty` a struct or enum whose fields/variants implement Arbitrary, or a reference to such a
+/// type?
 fn can_derive_arbitrary(
     ty: Ty,
     kani_any_def: FnDef,
@@ -257,6 +266,8 @@ fn can_derive_arbitrary(
             AdtKind::Struct => variants_can_derive(def, args),
             AdtKind::Union => false,
         }
+    } else if let TyKind::RigidTy(RigidTy::Ref(_, inner_ty, _)) = ty.kind() {
+        can_derive_arbitrary(inner_ty, kani_any_def, ty_arbitrary_cache)
     } else {
         false
     }

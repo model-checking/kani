@@ -121,7 +121,7 @@ mod should_not_derive {
     // At least one of the variants doesn't impl Arbitrary
     enum NotAllVariantsEligible {
         Pin(PhantomPinned),
-        Ref(&'static mut i32),
+        Ptr(*const i8),
         Num(u32),
     }
 

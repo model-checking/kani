@@ -1,40 +1,40 @@
-Kani generated automatic harnesses for 7 function(s):
-+----------------------------+---------------------------------------------+
-| Crate                      | Selected Function                           |
-+==========================================================================+
-| autoderive_arbitrary_enums | should_derive::alignment_fail               |
-|----------------------------+---------------------------------------------|
-| autoderive_arbitrary_enums | should_derive::alignment_pass               |
-|----------------------------+---------------------------------------------|
-| autoderive_arbitrary_enums | should_derive::foo                          |
-|----------------------------+---------------------------------------------|
-| autoderive_arbitrary_enums | should_derive::generic_recursively_eligible |
-|----------------------------+---------------------------------------------|
-| autoderive_arbitrary_enums | should_derive::multiple_generics_test       |
-|----------------------------+---------------------------------------------|
-| autoderive_arbitrary_enums | should_derive::partially_used_generics_test |
-|----------------------------+---------------------------------------------|
-| autoderive_arbitrary_enums | should_derive::recursively_eligible         |
-+----------------------------+---------------------------------------------+          
+Kani generated automatic harnesses for 9 function(s):
++----------------------------+-----------------------------------------------------------------------------+
+| Crate                      | Selected Function                                                           |
++==========================================================================================================+
+| autoderive_arbitrary_enums | <should_derive::AlignmentEnum as std::cmp::Eq>::assert_receiver_is_total_eq |
+|----------------------------+-----------------------------------------------------------------------------|
+| autoderive_arbitrary_enums | <should_derive::AlignmentEnum as std::cmp::PartialEq>::eq                   |
+|----------------------------+-----------------------------------------------------------------------------|
+| autoderive_arbitrary_enums | should_derive::alignment_fail                                               |
+|----------------------------+-----------------------------------------------------------------------------|
+| autoderive_arbitrary_enums | should_derive::alignment_pass                                               |
+|----------------------------+-----------------------------------------------------------------------------|
+| autoderive_arbitrary_enums | should_derive::foo                                                          |
+|----------------------------+-----------------------------------------------------------------------------|
+| autoderive_arbitrary_enums | should_derive::generic_recursively_eligible                                 |
+|----------------------------+-----------------------------------------------------------------------------|
+| autoderive_arbitrary_enums | should_derive::multiple_generics_test                                       |
+|----------------------------+-----------------------------------------------------------------------------|
+| autoderive_arbitrary_enums | should_derive::partially_used_generics_test                                 |
+|----------------------------+-----------------------------------------------------------------------------|
+| autoderive_arbitrary_enums | should_derive::recursively_eligible                                         |
++----------------------------+-----------------------------------------------------------------------------+
 
-Kani did not generate automatic harnesses for 7 function(s).
-+----------------------------+-----------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
-| Crate                      | Skipped Function                                                            | Reason for Skipping                                                                                                        |
-+=======================================================================================================================================================================================================================================+
-| autoderive_arbitrary_enums | <should_derive::AlignmentEnum as std::cmp::Eq>::assert_receiver_is_total_eq | Missing Arbitrary implementation for argument(s) self: &should_derive::AlignmentEnum                                       |
-|----------------------------+-----------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------|
-| autoderive_arbitrary_enums | <should_derive::AlignmentEnum as std::cmp::PartialEq>::eq                   | Missing Arbitrary implementation for argument(s) self: &should_derive::AlignmentEnum, other: &should_derive::AlignmentEnum |
-|----------------------------+-----------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------|
-| autoderive_arbitrary_enums | should_not_derive::generic_unsupported_arg                                  | Missing Arbitrary implementation for argument(s) unsupported: should_not_derive::UnsupportedGenericField<char>             |
-|----------------------------+-----------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------|
-| autoderive_arbitrary_enums | should_not_derive::never                                                    | Missing Arbitrary implementation for argument(s) n: should_not_derive::Never                                               |
-|----------------------------+-----------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------|
-| autoderive_arbitrary_enums | should_not_derive::no_variants_eligible                                     | Missing Arbitrary implementation for argument(s) val: should_not_derive::NoVariantsEligible                                |
-|----------------------------+-----------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------|
-| autoderive_arbitrary_enums | should_not_derive::not_all_variants_eligible                                | Missing Arbitrary implementation for argument(s) val: should_not_derive::NotAllVariantsEligible                            |
-|----------------------------+-----------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------|
-| autoderive_arbitrary_enums | should_not_derive::some_arguments_support                                   | Missing Arbitrary implementation for argument(s) unsupported_2: should_not_derive::NotAllVariantsEligible                  |
-+----------------------------+-----------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
+Kani did not generate automatic harnesses for 5 function(s).
++----------------------------+----------------------------------------------+----------------------------------------------------------------------------------------------------------------+
+| Crate                      | Skipped Function                             | Reason for Skipping                                                                                            |
++============================================================================================================================================================================================+
+| autoderive_arbitrary_enums | should_not_derive::generic_unsupported_arg   | Missing Arbitrary implementation for argument(s) unsupported: should_not_derive::UnsupportedGenericField<char> |
+|----------------------------+----------------------------------------------+----------------------------------------------------------------------------------------------------------------|
+| autoderive_arbitrary_enums | should_not_derive::never                     | Missing Arbitrary implementation for argument(s) n: should_not_derive::Never                                   |
+|----------------------------+----------------------------------------------+----------------------------------------------------------------------------------------------------------------|
+| autoderive_arbitrary_enums | should_not_derive::no_variants_eligible      | Missing Arbitrary implementation for argument(s) val: should_not_derive::NoVariantsEligible                    |
+|----------------------------+----------------------------------------------+----------------------------------------------------------------------------------------------------------------|
+| autoderive_arbitrary_enums | should_not_derive::not_all_variants_eligible | Missing Arbitrary implementation for argument(s) val: should_not_derive::NotAllVariantsEligible                |
+|----------------------------+----------------------------------------------+----------------------------------------------------------------------------------------------------------------|
+| autoderive_arbitrary_enums | should_not_derive::some_arguments_support    | Missing Arbitrary implementation for argument(s) unsupported_2: should_not_derive::NotAllVariantsEligible      |
++----------------------------+----------------------------------------------+----------------------------------------------------------------------------------------------------------------+
 
 should_derive::alignment_pass\
 	 - Status: SUCCESS\
@@ -65,20 +65,24 @@ multiple_generics_test.assertion\
 	 - Description: "assertion failed: n % 2 > 0"
 
 Autoharness Summary:
-+----------------------------+---------------------------------------------+-----------------------------+---------------------+
-| Crate                      | Selected Function                           | Kind of Automatic Harness   | Verification Result |
-+==============================================================================================================================+
-| autoderive_arbitrary_enums | should_derive::alignment_pass               | #[kani::proof_for_contract] | Success             |
-|----------------------------+---------------------------------------------+-----------------------------+---------------------|
-| autoderive_arbitrary_enums | should_derive::generic_recursively_eligible | #[kani::proof]              | Success             |
-|----------------------------+---------------------------------------------+-----------------------------+---------------------|
-| autoderive_arbitrary_enums | should_derive::partially_used_generics_test | #[kani::proof]              | Success             |
-|----------------------------+---------------------------------------------+-----------------------------+---------------------|
-| autoderive_arbitrary_enums | should_derive::recursively_eligible         | #[kani::proof]              | Success             |
-|----------------------------+---------------------------------------------+-----------------------------+---------------------|
-| autoderive_arbitrary_enums | should_derive::alignment_fail               | #[kani::proof]              | Failure             |
-|----------------------------+---------------------------------------------+-----------------------------+---------------------|
-| autoderive_arbitrary_enums | should_derive::foo                          | #[kani::proof]              | Failure             |
-|----------------------------+---------------------------------------------+-----------------------------+---------------------|
-| autoderive_arbitrary_enums | should_derive::multiple_generics_test       | #[kani::proof]              | Failure             |
-+----------------------------+---------------------------------------------+-----------------------------+---------------------+
++----------------------------+-----------------------------------------------------------------------------+-----------------------------+---------------------+
+| Crate                      | Selected Function                                                           | Kind of Automatic Harness   | Verification Result |
++==============================================================================================================================================================+
+| autoderive_arbitrary_enums | <should_derive::AlignmentEnum as std::cmp::Eq>::assert_receiver_is_total_eq | #[kani::proof]              | Success             |
+|----------------------------+-----------------------------------------------------------------------------+-----------------------------+---------------------|
+| autoderive_arbitrary_enums | <should_derive::AlignmentEnum as std::cmp::PartialEq>::eq                   | #[kani::proof]              | Success             |
+|----------------------------+-----------------------------------------------------------------------------+-----------------------------+---------------------|
+| autoderive_arbitrary_enums | should_derive::alignment_pass                                               | #[kani::proof_for_contract] | Success             |
+|----------------------------+-----------------------------------------------------------------------------+-----------------------------+---------------------|
+| autoderive_arbitrary_enums | should_derive::generic_recursively_eligible                                 | #[kani::proof]              | Success             |
+|----------------------------+-----------------------------------------------------------------------------+-----------------------------+---------------------|
+| autoderive_arbitrary_enums | should_derive::partially_used_generics_test                                 | #[kani::proof]              | Success             |
+|----------------------------+-----------------------------------------------------------------------------+-----------------------------+---------------------|
+| autoderive_arbitrary_enums | should_derive::recursively_eligible                                         | #[kani::proof]              | Success             |
+|----------------------------+-----------------------------------------------------------------------------+-----------------------------+---------------------|
+| autoderive_arbitrary_enums | should_derive::alignment_fail                                               | #[kani::proof]              | Failure             |
+|----------------------------+-----------------------------------------------------------------------------+-----------------------------+---------------------|
+| autoderive_arbitrary_enums | should_derive::foo                                                          | #[kani::proof]              | Failure             |
+|----------------------------+-----------------------------------------------------------------------------+-----------------------------+---------------------|
+| autoderive_arbitrary_enums | should_derive::multiple_generics_test                                       | #[kani::proof]              | Failure             |
++----------------------------+-----------------------------------------------------------------------------+-----------------------------+---------------------+
