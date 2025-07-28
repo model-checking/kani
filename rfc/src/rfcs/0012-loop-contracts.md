@@ -241,7 +241,7 @@ loop {
     Some(i) => { 
       ...  //loop body
       }
-    None => {break; }
+    None => { break; }
   }
 }
 ```
