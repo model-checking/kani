@@ -17,7 +17,6 @@ extern crate rustc_driver;
 extern crate rustc_interface;
 extern crate rustc_middle;
 extern crate rustc_session;
-#[macro_use]
 extern crate rustc_public;
 
 use crate::analysis::OverallStats;
