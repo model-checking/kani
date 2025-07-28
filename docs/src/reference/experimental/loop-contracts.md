@@ -2,7 +2,7 @@
 
 ## Introduction
 
-Loop-invariants are used to specify invariants for loops for the sake of extending Kani's *bounded proofs* to *unbounded proofs*.
+Loop invariants are used to specify invariants for loops for the sake of extending Kani's *bounded proofs* to *unbounded proofs*.
 A [loop-invariant](https://en.wikipedia.org/wiki/Loop_invariant) is an expression that holds upon entering a loop and after every execution of the loop body.
 It captures something that does not change about every step of the loop.
 
