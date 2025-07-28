@@ -6,7 +6,7 @@ use crate::args::Arguments;
 use crate::kani_middle::kani_functions::{
     KaniFunction, find_kani_functions, validate_kani_functions,
 };
-use stable_mir::ty::FnDef;
+use rustc_public::ty::FnDef;
 use std::cell::OnceCell;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};

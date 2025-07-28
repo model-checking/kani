@@ -7,9 +7,9 @@
 
 use crate::kani_middle::kani_functions::KaniHook;
 use crate::kani_queries::QueryDb;
-use stable_mir::mir::mono::Instance;
-use stable_mir::mir::*;
-use stable_mir::ty::{GenericArgs, MirConst, Span, Ty, UintTy};
+use rustc_public::mir::mono::Instance;
+use rustc_public::mir::*;
+use rustc_public::ty::{GenericArgs, MirConst, Span, Ty, UintTy};
 use std::fmt::Debug;
 use std::mem;
 

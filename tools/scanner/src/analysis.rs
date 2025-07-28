@@ -8,17 +8,17 @@ use csv::WriterBuilder;
 use graph_cycles::Cycles;
 use petgraph::graph::Graph;
 use rustc_middle::ty::TyCtxt;
-use serde::{Serialize, Serializer, ser::SerializeStruct};
-use stable_mir::mir::mono::Instance;
-use stable_mir::mir::visit::{Location, PlaceContext, PlaceRef};
-use stable_mir::mir::{
+use rustc_public::mir::mono::Instance;
+use rustc_public::mir::visit::{Location, PlaceContext, PlaceRef};
+use rustc_public::mir::{
     BasicBlock, Body, CastKind, MirVisitor, Mutability, NonDivergingIntrinsic, ProjectionElem,
     Rvalue, Safety, Statement, StatementKind, Terminator, TerminatorKind,
 };
-use stable_mir::rustc_internal;
-use stable_mir::ty::{Abi, AdtDef, AdtKind, FnDef, GenericArgs, MirConst, RigidTy, Ty, TyKind};
-use stable_mir::visitor::{Visitable, Visitor};
-use stable_mir::{CrateDef, CrateItem};
+use rustc_public::rustc_internal;
+use rustc_public::ty::{Abi, AdtDef, AdtKind, FnDef, GenericArgs, MirConst, RigidTy, Ty, TyKind};
+use rustc_public::visitor::{Visitable, Visitor};
+use rustc_public::{CrateDef, CrateItem};
+use serde::{Serialize, Serializer, ser::SerializeStruct};
 use std::collections::{HashMap, HashSet};
 use std::ops::ControlFlow;
 use std::path::{Path, PathBuf};
@@ -62,7 +62,7 @@ impl Default for OverallStats {
 
 impl OverallStats {
     pub fn new() -> OverallStats {
-        let all_items = stable_mir::all_local_items();
+        let all_items = rustc_public::all_local_items();
         let fn_stats: HashMap<_, _> = all_items
             .into_iter()
             .filter_map(|item| item.ty().kind().is_fn().then_some((item, FnStats::new(item))))
@@ -85,7 +85,7 @@ impl OverallStats {
 
     /// Iterate over all functions defined in this crate and log generic vs monomorphic.
     pub fn generic_fns(&mut self) {
-        let all_items = stable_mir::all_local_items();
+        let all_items = rustc_public::all_local_items();
         let fn_items =
             all_items.into_iter().filter(|item| item.ty().kind().is_fn()).collect::<Vec<_>>();
         let (mono_fns, generics) = fn_items
@@ -97,7 +97,7 @@ impl OverallStats {
 
     /// Iterate over all functions defined in this crate and log safe vs unsafe.
     pub fn safe_fns(&mut self, _base_filename: PathBuf) {
-        let all_items = stable_mir::all_local_items();
+        let all_items = rustc_public::all_local_items();
         let (unsafe_fns, safe_fns) = all_items
             .into_iter()
             .filter_map(|item| {
@@ -117,7 +117,7 @@ impl OverallStats {
 
     /// Iterate over all functions defined in this crate and log the inputs.
     pub fn supported_inputs(&mut self, filename: PathBuf) {
-        let all_items = stable_mir::all_local_items();
+        let all_items = rustc_public::all_local_items();
         let (supported, unsupported) = all_items
             .into_iter()
             .filter_map(|item| {
@@ -141,7 +141,7 @@ impl OverallStats {
 
     /// Iterate over all functions defined in this crate and log any unsafe operation.
     pub fn unsafe_operations(&mut self, filename: PathBuf) {
-        let all_items = stable_mir::all_local_items();
+        let all_items = rustc_public::all_local_items();
         let (has_unsafe, no_unsafe) = all_items
             .into_iter()
             .filter_map(|item| {
@@ -169,7 +169,7 @@ impl OverallStats {
     ///
     /// A hidden loop is a call to a iterator function that has a loop inside.
     pub fn loops(&mut self, filename: PathBuf) {
-        let all_items = stable_mir::all_local_items();
+        let all_items = rustc_public::all_local_items();
         let (has_loops, no_loops) = all_items
             .clone()
             .into_iter()
@@ -219,7 +219,7 @@ impl OverallStats {
 
     /// Create a callgraph for this crate and try to find recursive calls.
     pub fn recursion(&mut self, filename: PathBuf) {
-        let all_items = stable_mir::all_local_items();
+        let all_items = rustc_public::all_local_items();
         let recursions = Recursion::collect(&all_items);
         self.counters.extend_from_slice(&[
             ("with_recursion", recursions.with_recursion.len()),
@@ -242,7 +242,7 @@ impl OverallStats {
 
     /// Iterate over all functions defined in this crate and log public vs private
     pub fn public_fns(&mut self, tcx: &TyCtxt) {
-        let all_items = stable_mir::all_local_items();
+        let all_items = rustc_public::all_local_items();
         let (public_fns, private_fns) = all_items
             .into_iter()
             .filter_map(|item| {

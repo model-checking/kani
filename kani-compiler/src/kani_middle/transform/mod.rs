@@ -29,8 +29,8 @@ use crate::kani_queries::QueryDb;
 use automatic::{AutomaticArbitraryPass, AutomaticHarnessPass};
 use dump_mir_pass::DumpMirPass;
 use rustc_middle::ty::TyCtxt;
-use stable_mir::mir::Body;
-use stable_mir::mir::mono::{Instance, MonoItem};
+use rustc_public::mir::Body;
+use rustc_public::mir::mono::{Instance, MonoItem};
 use std::collections::HashMap;
 use std::fmt::Debug;
 

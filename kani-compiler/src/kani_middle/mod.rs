@@ -9,14 +9,14 @@ use crate::kani_queries::QueryDb;
 use fxhash::FxHashMap;
 use rustc_hir::{def::DefKind, def_id::DefId as InternalDefId, def_id::LOCAL_CRATE};
 use rustc_middle::ty::TyCtxt;
-use stable_mir::mir::TerminatorKind;
-use stable_mir::mir::mono::{Instance, MonoItem};
-use stable_mir::rustc_internal;
-use stable_mir::ty::{
+use rustc_public::mir::TerminatorKind;
+use rustc_public::mir::mono::{Instance, MonoItem};
+use rustc_public::rustc_internal;
+use rustc_public::ty::{
     AdtDef, AdtKind, FnDef, GenericArgKind, GenericArgs, RigidTy, Span as SpanStable, Ty, TyKind,
 };
-use stable_mir::visitor::{Visitable, Visitor as TyVisitor};
-use stable_mir::{CrateDef, DefId};
+use rustc_public::visitor::{Visitable, Visitor as TyVisitor};
+use rustc_public::{CrateDef, DefId};
 use std::ops::ControlFlow;
 
 use self::attributes::KaniAttributes;

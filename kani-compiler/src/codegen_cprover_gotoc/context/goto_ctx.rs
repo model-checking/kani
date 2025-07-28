@@ -35,12 +35,12 @@ use rustc_middle::ty::layout::{
     LayoutOfHelpers, TyAndLayout,
 };
 use rustc_middle::ty::{self, Ty, TyCtxt};
+use rustc_public::mir::Body;
+use rustc_public::mir::mono::Instance;
+use rustc_public::ty::Allocation;
 use rustc_span::Span;
 use rustc_span::source_map::respan;
 use rustc_target::callconv::FnAbi;
-use stable_mir::mir::Body;
-use stable_mir::mir::mono::Instance;
-use stable_mir::ty::Allocation;
 use std::collections::{BTreeMap, HashSet};
 use std::fmt::Debug;
 
