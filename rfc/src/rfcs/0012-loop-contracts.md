@@ -223,7 +223,7 @@ Let's use the following example to demonstrate the disadvantages of rewriting
 using the original Rust `into_iter` function:
 
 ```Rust
-let a : [u8,10] = kani::any();
+let a: [u8; 10] = kani::any();
 #[kani::loop_invariant(...)]
 for i in a {
   ... //loop body
