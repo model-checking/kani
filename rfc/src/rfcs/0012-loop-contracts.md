@@ -271,7 +271,7 @@ where
 ```
 
 In order to contract the loop, the user must provide the loop-invariant for the variable `kani_iter`, which is modified and 
-will be havoc. 
+will be havocked. 
 The loop-invariant should include some propositions such as `kani_iter.inner.alive.start <= kani_iter.inner.alive.end`,
 `kani_iter.inner.data.as_ptr() == a.as_ptr()`, ... until the loop-invariant is successfully verified.
 The obvious three disadvantages are:
