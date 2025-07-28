@@ -238,7 +238,7 @@ let mut kani_iter = a.into_iter();
 #[kani::loop_invariant(...)]
 loop {
   match kani_iter.next() {
-    Some (i) => { 
+    Some(i) => { 
       ...  //loop body
       }
     None => {break; }
