@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use std::collections::BTreeMap;
-use std::convert::identity;
 use std::path::PathBuf;
 use std::sync::mpmc::{Receiver, Sender, channel};
 use std::sync::mpsc::TryRecvError;
@@ -50,34 +49,37 @@ impl FileDataToWrite {
 ///
 /// File data can be sent to the `work_queue`. This will wake a worker thread which will then serialize and write
 /// it to disk in parallel, allowing the main compiler thread to continue codegen.
-pub struct ThreadPool<const N: usize> {
-    pub(crate) work_queue: Sender<WithInterner<FileDataToWrite>>,
-    join_handles: [JoinHandle<WorkerReturn>; N],
+pub struct ThreadPool {
+    pub(crate) work_queue: Sender<WorkToSend>,
+    work_queue_recv: Receiver<WorkToSend>,
+    join_handles: Vec<JoinHandle<WorkerReturn>>,
 }
 
 type WorkerReturn = ();
 
 type WorkToSend = WithInterner<FileDataToWrite>;
-impl<const N: usize> ThreadPool<N> {
-    pub fn new() -> Self {
+impl ThreadPool {
+    pub fn empty() -> Self {
         let (work_queue_send, work_queue_recv) = channel();
+        ThreadPool { work_queue: work_queue_send, work_queue_recv, join_handles: Vec::new() }
+    }
 
-        // Spawn a thread for each worker, and pass it the recv end of the work queue.
-        let join_handles: [JoinHandle<()>; N] = core::array::from_fn(identity).map(|_| {
-            let new_work_queue_recv = work_queue_recv.clone();
-            std::thread::spawn(move || {
-                worker_loop(new_work_queue_recv);
-            })
-        });
+    fn new_worker(work_queue: &Receiver<WorkToSend>) -> JoinHandle<()> {
+        let new_work_queue = work_queue.clone();
+        std::thread::spawn(move || {
+            worker_loop(new_work_queue);
+        })
+    }
 
-        ThreadPool { work_queue: work_queue_send, join_handles }
+    pub fn add_workers(&mut self, count: usize) {
+        self.join_handles.extend((0..count).map(|_| Self::new_worker(&self.work_queue_recv)));
     }
 
     /// Try to send work to the work queue, or do it yourself if there's no worker threads.
     /// Will only fail if all recievers have disconnected.
     pub fn send_work(&self, work: WorkToSend) -> Result<(), &str> {
         // If we don't have any workers, just synchronously handle the work ourselves.
-        if N == 0 {
+        if self.join_handles.is_empty() {
             handle_file(work.into_inner());
             return Ok(());
         }

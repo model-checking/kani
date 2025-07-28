@@ -43,6 +43,7 @@ use stable_mir::CrateDef;
 use stable_mir::mir::mono::{Instance, MonoItem};
 use stable_mir::rustc_internal;
 use std::any::Any;
+use std::cmp::min;
 use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::fs::File;
@@ -74,7 +75,7 @@ impl GotocCodegenBackend {
     ///
     /// Invariant: iff `check_contract.is_some()` then `return.2.is_some()`
     #[allow(clippy::too_many_arguments)]
-    fn codegen_items<'tcx, const NUM_THREADS: usize>(
+    fn codegen_items<'tcx>(
         &self,
         tcx: TyCtxt<'tcx>,
         starting_items: &[MonoItem],
@@ -82,7 +83,7 @@ impl GotocCodegenBackend {
         machine_model: &MachineModel,
         check_contract: Option<InternalDefId>,
         mut transformer: BodyTransformation,
-        thread_pool: &ThreadPool<NUM_THREADS>,
+        thread_pool: &ThreadPool,
     ) -> (GotocCtx<'tcx>, Vec<MonoItem>, Option<AssignsContract>) {
         // This runs reachability analysis before global passes are applied.
         //
@@ -349,13 +350,24 @@ impl CodegenBackend for GotocCodegenBackend {
                 return codegen_results(tcx, &results.machine_model);
             }
 
-            let export_thread_pool = ThreadPool::<NUM_FILE_EXPORT_THREADS>::new();
+            // Create an empty thread pool. We will set the size later once we
+            // concretely know the # of harnesses we need to analyze.
+            let mut export_thread_pool = ThreadPool::empty();
 
             match reachability {
                 ReachabilityType::AllFns | ReachabilityType::Harnesses => {
                     let mut units = CodegenUnits::new(&queries, tcx);
                     let mut modifies_instances = vec![];
                     let mut loop_contracts_instances = vec![];
+
+                    // If we are verifying all harnesses, cap the number of threads at `[# of harnesses] - 1`.
+                    // This is just a common sense rule to keep us from spinning up threads that couldn't possibly
+                    // provide additional parallelism over existing threads. One thread can potentially work on each
+                    // harness' goto file but the main compiler thread can just handle the last file itself.
+                    let num_harnesses: usize = units.iter().map(|unit| unit.harnesses.len()).sum();
+                    export_thread_pool
+                        .add_workers(min(NUM_FILE_EXPORT_THREADS, num_harnesses.saturating_sub(1)));
+
                     // Cross-crate collecting of all items that are reachable from the crate harnesses.
                     for unit in units.iter() {
                         // We reset the body cache for now because each codegen unit has different
@@ -391,6 +403,11 @@ impl CodegenBackend for GotocCodegenBackend {
                 ReachabilityType::None => unreachable!(),
                 ReachabilityType::PubFns => {
                     let unit = CodegenUnit::default();
+
+                    // Here, it's more difficult to determine which functions will be analyzed,
+                    // so just use the max NUM_FILE_EXPORT_THREADS.
+                    export_thread_pool.add_workers(NUM_FILE_EXPORT_THREADS);
+
                     let transformer = BodyTransformation::new(&queries, tcx, &unit);
                     let main_instance =
                         stable_mir::entry_fn().map(|main_fn| Instance::try_from(main_fn).unwrap());
