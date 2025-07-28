@@ -26,7 +26,7 @@ fn simple_loop() {
 ```
 
 In this program, the loop repeatedly decrements `x` until it equals `1`. Because we haven't specified an upper bound for `x`, to verify this function,
-Kani needs to unwind the loop for `u64::MAX` iterations, which is computationally expensive. Loop invariants allow us to abstract the loop behavior, significantly reducing the verification cost.
+Kani needs to unwind the loop for `u64::MAX` iterations, which is intractable. Loop invariants allow us to abstract the loop behavior, significantly reducing the verification cost.
 
 With loop-invariants, we can specify the loop’s behavior using invariants. For example:
 
