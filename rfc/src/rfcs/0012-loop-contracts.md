@@ -255,7 +255,7 @@ pub struct IntoIter<T, const N: usize> {
 }
 ```
 
-where the dependences are:
+where the dependencies are:
 
 ```Rust
 type InnerSized<T, const N: usize> = iter_inner::PolymorphicIter<[MaybeUninit<T>; N]>;
