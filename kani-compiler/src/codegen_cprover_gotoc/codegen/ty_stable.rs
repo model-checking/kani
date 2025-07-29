@@ -109,14 +109,6 @@ impl<'tcx> GotocCtx<'tcx> {
         }
     }
 
-    /// Convert a type into a user readable type representation.
-    ///
-    /// This should be replaced by StableMIR `pretty_ty()` after
-    /// <https://github.com/rust-lang/rust/pull/118364> is merged.
-    pub fn pretty_ty(&self, ty: Ty) -> String {
-        ty.to_string()
-    }
-
     pub fn requires_caller_location(&self, instance: Instance) -> bool {
         let instance_internal = rustc_internal::internal(self.tcx, instance);
         instance_internal.def.requires_caller_location(self.tcx)
