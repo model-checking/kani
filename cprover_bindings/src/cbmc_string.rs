@@ -22,8 +22,8 @@ use string_interner::symbol::SymbolU32;
 #[derive(Clone, Hash, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct InternedString(SymbolU32);
 
-// This [StringInterner] is a thread local, letting us get away with less synchronization,
-// but having interesting consequences for multithreading. See the `sync` module below for a full explanation.
+// This [StringInterner] is a thread local, letting us get away with less synchronization.
+// See the `sync` module below for a full explanation of this choice's consequences.
 thread_local! {
     static INTERNER: RefCell<StringInterner<StringBackend>> =
         RefCell::new(StringInterner::default());
@@ -42,7 +42,6 @@ impl InternedString {
     /// Needed because exporting the &str backing the InternedString is blocked by lifetime rules.
     /// Instead, this allows users to operate on the &str when needed.
     pub fn map<T, F: FnOnce(&str) -> T>(&self, f: F) -> T {
-        // TODO: how crazy is resolve_unchecked here??
         INTERNER.with_borrow(|i| f(i.resolve(self.0).unwrap()))
     }
 

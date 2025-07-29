@@ -65,7 +65,6 @@ const MAX_SENSIBLE_FILE_EXPORT_THREADS: usize = 4;
 
 pub type UnsupportedConstructs = FxHashMap<InternedString, Vec<Location>>;
 
-// #[derive(Clone)]
 pub struct GotocCodegenBackend {
     /// The query is shared with `KaniCompiler` and it is initialized as part of `rustc`
     /// initialization, which may happen after this object is created.
@@ -213,7 +212,7 @@ impl GotocCodegenBackend {
 
         gcx.handle_quantifiers();
 
-        // Split ownership of the `gcx` so that the majority of fields can be saved to our results,
+        // Split ownership of the context so that the majority of fields can be saved to our results,
         // but the symbol table can be passed to the thread that handles exporting.
         let (min_gcx, symbol_table) = gcx.split();
 
@@ -456,7 +455,8 @@ impl CodegenBackend for GotocCodegenBackend {
                 }
             }
 
-            // Worker threads should have only been initialized if we were doing codegen for this crate.
+            // Join all the worker threads in the pool to ensure all goto files have been written before
+            // moving on to verification.
             export_thread_pool.join_all();
 
             if reachability != ReachabilityType::None {
