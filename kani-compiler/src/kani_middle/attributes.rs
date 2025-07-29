@@ -679,11 +679,23 @@ impl<'tcx> KaniAttributes<'tcx> {
                 span,
                 format!("failed to resolve `{}`: {resolve_err}", pretty_type_path(path)),
             );
-            if let ResolveError::AmbiguousPartialPath { .. } = resolve_err {
-                err = err.with_help(format!(
-                    "replace `{}` with a specific implementation.",
-                    pretty_type_path(path)
-                ));
+            match resolve_err {
+                ResolveError::AmbiguousPartialPath { .. } => {
+                    err = err.with_help(format!(
+                        "replace `{}` with a specific implementation.",
+                        pretty_type_path(path)
+                    ));
+                }
+                ResolveError::MissingTraitImpl { tcx: _, trait_fn_id, ty: _ } => {
+                    let generics = self.tcx.generics_of(trait_fn_id);
+                    if !generics.own_params.is_empty() {
+                        err = err.with_help(
+                            "Kani does not currently support stubs or function contracts on generic functions in traits.\n \
+                            See <ISSUE LINK> for more information.",
+                        );
+                    }
+                }
+                _ => {}
             }
             err.emit();
         }
