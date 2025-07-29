@@ -25,26 +25,6 @@ pub(crate) struct FileDataToWrite {
     pub pretty: bool,
 }
 
-impl FileDataToWrite {
-    pub fn new(
-        symtab_goto: &std::path::Path,
-        symbol_table: &cbmc::goto_program::SymbolTable,
-        vtable_restrictions: Option<kani_metadata::VtableCtxResults>,
-        type_map: BTreeMap<InternedString, InternedString>,
-        pretty_name_map: BTreeMap<InternedString, Option<InternedString>>,
-        pretty: bool,
-    ) -> Self {
-        FileDataToWrite {
-            symtab_goto: symtab_goto.to_path_buf(),
-            symbol_table: symbol_table.clone(),
-            vtable_restrictions,
-            type_map,
-            pretty_name_map,
-            pretty,
-        }
-    }
-}
-
 /// A thread pool of `N` worker threads specifically for writing Goto files in parallel.
 ///
 /// File data can be sent to the `work_queue`. This will wake a worker thread which will then serialize and write

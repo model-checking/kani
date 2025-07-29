@@ -4,8 +4,9 @@
 //! This file contains the code necessary to interface with the compiler backend
 
 use crate::args::ReachabilityType;
-use crate::codegen_cprover_gotoc::GotocCtx;
+use crate::codegen_cprover_gotoc::context::MinimalGotocCtx;
 use crate::codegen_cprover_gotoc::utils::file_writing_pool::{FileDataToWrite, ThreadPool};
+use crate::codegen_cprover_gotoc::{GotocCtx, context};
 use crate::kani_middle::analysis;
 use crate::kani_middle::attributes::KaniAttributes;
 use crate::kani_middle::check_reachable_items;
@@ -53,7 +54,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tracing::{debug, info};
 
-const NUM_FILE_EXPORT_THREADS: usize = 2;
+const NUM_FILE_EXPORT_THREADS: usize = 5;
 
 pub type UnsupportedConstructs = FxHashMap<InternedString, Vec<Location>>;
 
@@ -84,7 +85,7 @@ impl GotocCodegenBackend {
         check_contract: Option<InternalDefId>,
         mut transformer: BodyTransformation,
         thread_pool: &ThreadPool,
-    ) -> (GotocCtx<'tcx>, Vec<MonoItem>, Option<AssignsContract>) {
+    ) -> (MinimalGotocCtx, Vec<MonoItem>, Option<AssignsContract>) {
         // This runs reachability analysis before global passes are applied.
         //
         // Alternatively, we could run reachability only once after the global passes are applied
@@ -205,20 +206,24 @@ impl GotocCodegenBackend {
 
         gcx.handle_quantifiers();
 
+        // Split ownership of the `gcx` so that the majority of fields can be saved to our results,
+        // but the symbol table can be passed to the thread that handles exporting.
+        let (min_gcx, symbol_table) = gcx.split();
+
         // No output should be generated if user selected no_codegen.
         if !tcx.sess.opts.unstable_opts.no_codegen && tcx.sess.opts.output_types.should_codegen() {
             let pretty = self.queries.lock().unwrap().args().output_pretty_json;
 
             // Save all the data needed to write this goto file
             // so another thread can handle it in parallel.
-            let new_file_data = FileDataToWrite::new(
-                symtab_goto,
-                &gcx.symbol_table,
+            let new_file_data = FileDataToWrite {
+                symtab_goto: symtab_goto.to_path_buf(),
+                symbol_table,
                 vtable_restrictions,
                 type_map,
                 pretty_name_map,
                 pretty,
-            );
+            };
 
             // Package the file data with a copy of the string interner used to generate it.
             let file_data_with_interner = WithInterner::new_with_current(new_file_data);
@@ -227,7 +232,7 @@ impl GotocCodegenBackend {
             thread_pool.send_work(file_data_with_interner).unwrap();
         }
 
-        (gcx, items, contract_info)
+        (min_gcx, items, contract_info)
     }
 
     /// Given a contract harness, get the DefId of its target.
@@ -378,7 +383,7 @@ impl CodegenBackend for GotocCodegenBackend {
                             let is_automatic_harness = units.is_automatic_harness(harness);
                             let contract_metadata =
                                 self.target_def_id_for_harness(tcx, harness, is_automatic_harness);
-                            let (gcx, items, contract_info) = self.codegen_items(
+                            let (min_gcx, items, contract_info) = self.codegen_items(
                                 tcx,
                                 &[MonoItem::Fn(*harness)],
                                 model_path,
@@ -387,10 +392,10 @@ impl CodegenBackend for GotocCodegenBackend {
                                 transformer,
                                 &export_thread_pool,
                             );
-                            if gcx.has_loop_contracts {
+                            if min_gcx.has_loop_contracts {
                                 loop_contracts_instances.push(*harness);
                             }
-                            results.extend(gcx, items, None);
+                            results.extend(min_gcx, items, None);
                             if let Some(assigns_contract) = contract_info {
                                 modifies_instances.push((*harness, assigns_contract));
                             }
@@ -680,16 +685,16 @@ impl GotoCodegenResults {
 
     fn extend(
         &mut self,
-        gcx: GotocCtx,
+        min_gcx: context::MinimalGotocCtx,
         items: Vec<MonoItem>,
         metadata: Option<HarnessMetadata>,
     ) -> BodyTransformation {
         let mut items = items;
         self.harnesses.extend(metadata);
-        self.concurrent_constructs.extend(gcx.concurrent_constructs);
-        self.unsupported_constructs.extend(gcx.unsupported_constructs);
+        self.concurrent_constructs.extend(min_gcx.concurrent_constructs);
+        self.unsupported_constructs.extend(min_gcx.unsupported_constructs);
         self.items.append(&mut items);
-        gcx.transformer
+        min_gcx.transformer
     }
 
     /// Prints a report at the end of the compilation.
