@@ -49,12 +49,19 @@ use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::fs::File;
 use std::io::BufWriter;
+use std::num::NonZero;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
+use std::thread::available_parallelism;
 use std::time::Instant;
 use tracing::{debug, info};
 
-const NUM_FILE_EXPORT_THREADS: usize = 5;
+/// The maximum amount of threads it would be useful to have in the file-exporting thread pool.
+///
+/// This is constrained by the speed at which the single main compiler thread can codegen goto files for export. Right now,
+/// it can generate code for ~2 harnesses in the time it takes 1 to be exported. Thus, using any more than 4 threads for exporting
+/// would just increase contention on the shared work queue.
+const MAX_SENSIBLE_FILE_EXPORT_THREADS: usize = 4;
 
 pub type UnsupportedConstructs = FxHashMap<InternedString, Vec<Location>>;
 
@@ -235,6 +242,22 @@ impl GotocCodegenBackend {
         (min_gcx, items, contract_info)
     }
 
+    /// Determines the number of threads to add to the pool for goto binary exporting.
+    fn thread_pool_size(known_num_harnesses: Option<usize>) -> usize {
+        // Default to the available parallelism if # of threads isn't specified.
+        let mut max_total_threads = available_parallelism().map(NonZero::get).unwrap_or(1);
+
+        // If we know the # of harnesses upfront, cap the number of total threads at that.
+        // Multiple threads can't work on exporting the same harness, so any threads
+        // more than the # of harnesses cannot possibly provide an additional benefit.
+        if let Some(num_harnesses) = known_num_harnesses {
+            max_total_threads = min(max_total_threads, num_harnesses);
+        }
+
+        // One thread will be the main compiler thread, and we shouldn't have more than the max that would make sense.
+        min(max_total_threads.saturating_sub(1), MAX_SENSIBLE_FILE_EXPORT_THREADS)
+    }
+
     /// Given a contract harness, get the DefId of its target.
     /// For manual harnesses, extract it from the #[proof_for_contract] attribute.
     /// For automatic harnesses, extract the target from the harness's GenericArgs.
@@ -365,13 +388,9 @@ impl CodegenBackend for GotocCodegenBackend {
                     let mut modifies_instances = vec![];
                     let mut loop_contracts_instances = vec![];
 
-                    // If we are verifying all harnesses, cap the number of threads at `[# of harnesses] - 1`.
-                    // This is just a common sense rule to keep us from spinning up threads that couldn't possibly
-                    // provide additional parallelism over existing threads. One thread can potentially work on each
-                    // harness' goto file but the main compiler thread can just handle the last file itself.
+                    // We know the # of harnesses here, so provide them to the thread_pool size calculation.
                     let num_harnesses: usize = units.iter().map(|unit| unit.harnesses.len()).sum();
-                    export_thread_pool
-                        .add_workers(min(NUM_FILE_EXPORT_THREADS, num_harnesses.saturating_sub(1)));
+                    export_thread_pool.add_workers(Self::thread_pool_size(Some(num_harnesses)));
 
                     // Cross-crate collecting of all items that are reachable from the crate harnesses.
                     for unit in units.iter() {
@@ -409,9 +428,8 @@ impl CodegenBackend for GotocCodegenBackend {
                 ReachabilityType::PubFns => {
                     let unit = CodegenUnit::default();
 
-                    // Here, it's more difficult to determine which functions will be analyzed,
-                    // so just use the max NUM_FILE_EXPORT_THREADS.
-                    export_thread_pool.add_workers(NUM_FILE_EXPORT_THREADS);
+                    // Here, we don't know up front how many harnesses we will have to analyze, so pass None.
+                    export_thread_pool.add_workers(Self::thread_pool_size(None));
 
                     let transformer = BodyTransformation::new(&queries, tcx, &unit);
                     let main_instance = rustc_public::entry_fn()
