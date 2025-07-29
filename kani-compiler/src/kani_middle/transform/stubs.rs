@@ -97,7 +97,7 @@ impl TransformPass for ExternFnStubPass {
     /// Search for calls to extern functions that should be stubbed.
     ///
     /// We need to find function calls and function pointers.
-    /// We should replace this with a visitor once StableMIR includes a mutable one.
+    /// We should replace this with a visitor once rustc_public includes a mutable one.
     fn transform(&mut self, _tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
         trace!(function=?instance.name(), "transform");
         let mut new_body = MutableBody::from(body);

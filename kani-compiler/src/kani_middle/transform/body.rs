@@ -507,7 +507,7 @@ impl SourceInstruction {
 ///
 /// We removed many methods for simplicity.
 ///
-/// TODO: Contribute this to stable_mir.
+/// TODO: Contribute this to rustc_public.
 /// <https://github.com/rust-lang/project-stable-mir/issues/81>
 ///
 /// This code was based on the existing MirVisitor:

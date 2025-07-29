@@ -10,7 +10,7 @@
 //! applied multiple times, one per specialization.
 //!
 //! Another downside is that these modifications cannot be applied to concrete playback, since they
-//! are applied on the top of StableMIR body, which cannot be propagated back to rustc's backend.
+//! are applied on the top of rustc_public body, which cannot be propagated back to rustc's backend.
 //!
 //! # Warn
 //!

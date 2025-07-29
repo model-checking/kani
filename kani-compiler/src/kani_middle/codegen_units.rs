@@ -488,7 +488,7 @@ fn automatic_harness_partition(
 
             if !impls_arbitrary {
                 // Find the name of the argument by referencing var_debug_info.
-                // Note that enumerate() starts at 0, while StableMIR argument_index starts at 1, hence the idx+1.
+                // Note that enumerate() starts at 0, while rustc_public argument_index starts at 1, hence the idx+1.
                 let arg_name = body
                     .var_debug_info
                     .iter()

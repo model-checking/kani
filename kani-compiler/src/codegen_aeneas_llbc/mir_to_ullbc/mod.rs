@@ -157,7 +157,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
 
     //This function extract the traitrefs and their span from a def_id
     //Those information will be added into generic args of the type or the func with the def_id
-    //Note that Generic args of Charon contains trait_refs while those of stable_mir do not
+    //Note that Generic args of Charon contains trait_refs while those of rustc_public do not
     fn get_traitrefs_and_span_from_defid(
         &mut self,
         defid: DefId,

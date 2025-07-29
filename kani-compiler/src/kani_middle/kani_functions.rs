@@ -255,8 +255,8 @@ pub fn find_kani_functions() -> HashMap<KaniFunction, FnDef> {
 /// This is a utility function used to ensure that we have found all the expected functions, as well
 /// as to ensure that the cached IDs are up-to-date.
 ///
-/// The second condition is to ensure the cached StableMIR `FnDef` objects are still valid, i.e.:,
-/// that we are not storing them past the StableMIR `run` context.
+/// The second condition is to ensure the cached rustc_public `FnDef` objects are still valid, i.e.:,
+/// that we are not storing them past the rustc_public `run` context.
 pub fn validate_kani_functions(kani_funcs: &HashMap<KaniFunction, FnDef>) {
     let mut missing = 0u8;
     for func in KaniIntrinsic::iter()

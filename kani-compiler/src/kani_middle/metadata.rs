@@ -52,7 +52,7 @@ pub fn gen_contracts_metadata(
     tcx: TyCtxt,
     harness_info: &HashMap<Harness, HarnessMetadata>,
 ) -> Vec<ContractedFunction> {
-    // We work with `rustc_public::CrateItem` instead of `stable_mir::Instance` to include generic items
+    // We work with `rustc_public::CrateItem` instead of `rustc_public::Instance` to include generic items
     let crate_items: CrateItems = rustc_public::all_local_items();
 
     let mut fn_to_data: HashMap<DefId, ContractedFunction> = HashMap::new();

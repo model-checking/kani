@@ -14,7 +14,7 @@
 //!
 //! We have kept this module agnostic of any Kani code in case we can contribute this back to rustc.
 //!
-//! Note that this is a copy of `reachability.rs` that uses StableMIR but the public APIs are still
+//! Note that this is a copy of `reachability.rs` that uses rustc_public but the public APIs are still
 //! kept with internal APIs.
 use tracing::{debug, debug_span, trace};
 
