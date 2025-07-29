@@ -26,12 +26,12 @@ use kani_metadata::{
 use regex::RegexSet;
 use rustc_hir::def_id::DefId;
 use rustc_middle::ty::TyCtxt;
+use rustc_public::mir::mono::Instance;
+use rustc_public::rustc_internal;
+use rustc_public::ty::{FnDef, GenericArgKind, GenericArgs, RigidTy, Ty, TyKind};
+use rustc_public::{CrateDef, CrateItem};
+use rustc_public_bridge::IndexedVal;
 use rustc_session::config::OutputType;
-use rustc_smir::IndexedVal;
-use stable_mir::mir::mono::Instance;
-use stable_mir::rustc_internal;
-use stable_mir::ty::{FnDef, GenericArgKind, GenericArgs, RigidTy, Ty, TyKind};
-use stable_mir::{CrateDef, CrateItem};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs::File;
 use std::io::BufWriter;
@@ -69,7 +69,7 @@ pub struct CodegenUnit {
 
 impl CodegenUnits {
     pub fn new(queries: &QueryDb, tcx: TyCtxt) -> Self {
-        let crate_info = CrateInfo { name: stable_mir::local_crate().name.as_str().into() };
+        let crate_info = CrateInfo { name: rustc_public::local_crate().name.as_str().into() };
         let base_filepath = tcx.output_filenames(()).path(OutputType::Object);
         let base_filename = base_filepath.as_path();
         let args = queries.args();
@@ -423,10 +423,10 @@ fn automatic_harness_partition(
     crate_name: &str,
     kani_any_def: FnDef,
 ) -> (Vec<Instance>, BTreeMap<String, AutoHarnessSkipReason>) {
-    let crate_fn_defs = stable_mir::local_crate().fn_defs().into_iter().collect::<FxHashSet<_>>();
+    let crate_fn_defs = rustc_public::local_crate().fn_defs().into_iter().collect::<FxHashSet<_>>();
     // Filter out CrateItems that are functions, but not functions defined in the crate itself, i.e., rustc-inserted functions
     // (c.f. https://github.com/model-checking/kani/issues/4189)
-    let crate_fns = stable_mir::all_local_items().into_iter().filter(|item| {
+    let crate_fns = rustc_public::all_local_items().into_iter().filter(|item| {
         if let TyKind::RigidTy(RigidTy::FnDef(def, _)) = item.ty().kind() {
             crate_fn_defs.contains(&def)
         } else {
@@ -488,7 +488,7 @@ fn automatic_harness_partition(
 
             if !impls_arbitrary {
                 // Find the name of the argument by referencing var_debug_info.
-                // Note that enumerate() starts at 0, while StableMIR argument_index starts at 1, hence the idx+1.
+                // Note that enumerate() starts at 0, while rustc_public argument_index starts at 1, hence the idx+1.
                 let arg_name = body
                     .var_debug_info
                     .iter()

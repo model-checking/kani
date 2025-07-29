@@ -20,13 +20,13 @@ use cbmc::{InternString, InternedString, btree_string_map};
 use num::bigint::BigInt;
 use rustc_abi::{FieldsShape, TagEncoding, Variants};
 use rustc_middle::ty::{TyCtxt, TypingEnv, VtblEntry};
-use stable_mir::abi::{Primitive, Scalar, ValueAbi};
-use stable_mir::mir::mono::Instance;
-use stable_mir::mir::{
+use rustc_public::abi::{Primitive, Scalar, ValueAbi};
+use rustc_public::mir::mono::Instance;
+use rustc_public::mir::{
     AggregateKind, BinOp, CastKind, NullOp, Operand, Place, PointerCoercion, Rvalue, UnOp,
 };
-use stable_mir::rustc_internal;
-use stable_mir::ty::{
+use rustc_public::rustc_internal;
+use rustc_public::ty::{
     Binder, ClosureKind, ExistentialPredicate, IntTy, RigidTy, Size, Ty, TyConst, TyKind, UintTy,
     VariantIdx,
 };

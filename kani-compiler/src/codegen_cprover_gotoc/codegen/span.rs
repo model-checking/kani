@@ -7,9 +7,9 @@ use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::Location;
 use lazy_static::lazy_static;
 use rustc_hir::Attribute;
+use rustc_public::rustc_internal;
+use rustc_public::ty::Span as SpanStable;
 use rustc_span::Span;
-use stable_mir::rustc_internal;
-use stable_mir::ty::Span as SpanStable;
 use std::collections::HashMap;
 
 lazy_static! {

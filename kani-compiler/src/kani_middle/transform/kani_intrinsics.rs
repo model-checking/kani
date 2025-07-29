@@ -22,13 +22,13 @@ use crate::kani_middle::transform::check_values::{build_limits, ty_validity_per_
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
 use rustc_middle::ty::TyCtxt;
-use stable_mir::mir::mono::Instance;
-use stable_mir::mir::{
+use rustc_public::mir::mono::Instance;
+use rustc_public::mir::{
     AggregateKind, BasicBlock, BinOp, Body, ConstOperand, Local, Mutability, Operand, Place,
     RETURN_LOCAL, Rvalue, Statement, StatementKind, Terminator, TerminatorKind, UnOp, UnwindAction,
 };
-use stable_mir::target::MachineInfo;
-use stable_mir::ty::{
+use rustc_public::target::MachineInfo;
+use rustc_public::ty::{
     AdtDef, FnDef, GenericArgKind, GenericArgs, MirConst, RigidTy, Ty, TyKind, UintTy,
 };
 use std::collections::HashMap;

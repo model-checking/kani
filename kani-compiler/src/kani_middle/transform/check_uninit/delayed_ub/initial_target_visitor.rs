@@ -8,7 +8,7 @@ use crate::{
     intrinsics::Intrinsic,
     kani_middle::transform::check_uninit::ty_layout::tys_layout_equal_to_size,
 };
-use stable_mir::{
+use rustc_public::{
     mir::{
         Body, CastKind, LocalDecl, MirVisitor, NonDivergingIntrinsic, Operand, Place, Rvalue,
         Statement, StatementKind, Terminator, TerminatorKind,

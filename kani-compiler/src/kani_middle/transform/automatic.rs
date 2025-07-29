@@ -16,16 +16,16 @@ use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
 use fxhash::FxHashMap;
 use rustc_middle::ty::TyCtxt;
-use rustc_smir::IndexedVal;
-use stable_mir::CrateDef;
-use stable_mir::mir::mono::Instance;
-use stable_mir::mir::{
+use rustc_public::CrateDef;
+use rustc_public::mir::mono::Instance;
+use rustc_public::mir::{
     AggregateKind, BasicBlockIdx, Body, BorrowKind, Local, MutBorrowKind, Mutability, Operand,
     Place, Rvalue, SwitchTargets, Terminator, TerminatorKind,
 };
-use stable_mir::ty::{
+use rustc_public::ty::{
     AdtDef, AdtKind, FnDef, GenericArgKind, GenericArgs, RigidTy, Ty, TyKind, UintTy, VariantDef,
 };
+use rustc_public_bridge::IndexedVal;
 use tracing::debug;
 
 /// Generate `T::any()` implementations for `T`s that do not implement Arbitrary in source code.

@@ -9,14 +9,14 @@
 
 use rustc_middle::mir::CoercionSource;
 use rustc_middle::ty::{self as rustc_ty, TyCtxt};
-use stable_mir::mir::{
+use rustc_public::mir::{
     AggregateKind, AssertMessage, Body, BorrowKind, CastKind, ConstOperand, CopyNonOverlapping,
     CoroutineDesugaring, CoroutineKind, CoroutineSource, FakeBorrowKind, FakeReadCause, LocalDecl,
     MutBorrowKind, NonDivergingIntrinsic, NullOp, Operand, PointerCoercion, RetagKind, Rvalue,
     Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind, UnwindAction,
     UserTypeProjection, Variance,
 };
-use stable_mir::rustc_internal::internal;
+use rustc_public::rustc_internal::internal;
 
 pub trait RustcInternalMir {
     type T<'tcx>;

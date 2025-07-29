@@ -7,7 +7,7 @@ use std::intrinsics::simd::simd_shr;
 
 #[repr(simd)]
 #[allow(non_camel_case_types)]
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy)]
 pub struct i32x2([i32; 2]);
 
 #[kani::proof]
