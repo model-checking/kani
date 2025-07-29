@@ -8,10 +8,10 @@ use crate::codegen_cprover_gotoc::codegen::block::reverse_postorder;
 use cbmc::InternString;
 use cbmc::InternedString;
 use cbmc::goto_program::{Expr, Stmt, Symbol};
-use stable_mir::CrateDef;
-use stable_mir::mir::mono::Instance;
-use stable_mir::mir::{Body, Local};
-use stable_mir::ty::{RigidTy, TyKind};
+use rustc_public::CrateDef;
+use rustc_public::mir::mono::Instance;
+use rustc_public::mir::{Body, Local};
+use rustc_public::ty::{RigidTy, TyKind};
 use std::collections::BTreeMap;
 use tracing::{debug, debug_span};
 
@@ -235,17 +235,17 @@ impl GotocCtx<'_> {
     }
 }
 
-pub mod rustc_smir {
+pub mod rustc_public_bridge {
     use crate::codegen_cprover_gotoc::codegen::source_region::{SourceRegion, make_source_region};
-    use crate::stable_mir::CrateDef;
+    use crate::rustc_public::CrateDef;
     use rustc_middle::mir::coverage::BasicCoverageBlock;
     use rustc_middle::mir::coverage::MappingKind::Code;
     use rustc_middle::ty::TyCtxt;
-    use stable_mir::mir::mono::Instance;
-    use stable_mir::rustc_internal;
-    use stable_mir::{Filename, Opaque};
+    use rustc_public::mir::mono::Instance;
+    use rustc_public::rustc_internal;
+    use rustc_public::{Filename, Opaque};
 
-    type CoverageOpaque = stable_mir::Opaque;
+    type CoverageOpaque = rustc_public::Opaque;
 
     /// Retrieves the `SourceRegion` associated with the data in a
     /// `CoverageOpaque` object.

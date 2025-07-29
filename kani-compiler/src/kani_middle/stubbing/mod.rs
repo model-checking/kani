@@ -13,12 +13,12 @@ use kani_metadata::HarnessMetadata;
 use rustc_hir::def_id::DefId;
 use rustc_middle::mir::Const;
 use rustc_middle::ty::{self, EarlyBinder, TyCtxt, TypeFoldable, TypingEnv};
-use stable_mir::mir::ConstOperand;
-use stable_mir::mir::mono::Instance;
-use stable_mir::mir::visit::{Location, MirVisitor};
-use stable_mir::rustc_internal;
-use stable_mir::ty::{FnDef, RigidTy, TyKind};
-use stable_mir::{CrateDef, CrateItem};
+use rustc_public::mir::ConstOperand;
+use rustc_public::mir::mono::Instance;
+use rustc_public::mir::visit::{Location, MirVisitor};
+use rustc_public::rustc_internal;
+use rustc_public::ty::{FnDef, RigidTy, TyKind};
+use rustc_public::{CrateDef, CrateItem};
 
 use self::annotations::update_stub_mapping;
 

@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! This module contains code for handling type abi information.
 
-use stable_mir::abi::{FieldsShape, LayoutShape};
-use stable_mir::ty::{RigidTy, Ty, TyKind, UintTy};
+use rustc_public::abi::{FieldsShape, LayoutShape};
+use rustc_public::ty::{RigidTy, Ty, TyKind, UintTy};
 use tracing::debug;
 
 /// A struct to encapsulate the layout information for a given type
