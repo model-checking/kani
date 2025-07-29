@@ -10,10 +10,10 @@ use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::kani_middle::abi::LayoutOf;
 use cbmc::goto_program::Type;
 use rustc_middle::ty::layout::{LayoutOf as _, TyAndLayout};
-use stable_mir::mir::mono::Instance;
-use stable_mir::mir::{Local, Operand, Place, Rvalue};
-use stable_mir::rustc_internal;
-use stable_mir::ty::{FnSig, RigidTy, Ty, TyKind};
+use rustc_public::mir::mono::Instance;
+use rustc_public::mir::{Local, Operand, Place, Rvalue};
+use rustc_public::rustc_internal;
+use rustc_public::ty::{FnSig, RigidTy, Ty, TyKind};
 
 impl<'tcx> GotocCtx<'tcx> {
     pub fn place_ty_stable(&self, place: &Place) -> Ty {
@@ -107,14 +107,6 @@ impl<'tcx> GotocCtx<'tcx> {
         } else {
             Type::code_with_unnamed_parameters(params, self.codegen_ty_stable(sig.output()))
         }
-    }
-
-    /// Convert a type into a user readable type representation.
-    ///
-    /// This should be replaced by StableMIR `pretty_ty()` after
-    /// <https://github.com/rust-lang/rust/pull/118364> is merged.
-    pub fn pretty_ty(&self, ty: Ty) -> String {
-        ty.to_string()
     }
 
     pub fn requires_caller_location(&self, instance: Instance) -> bool {

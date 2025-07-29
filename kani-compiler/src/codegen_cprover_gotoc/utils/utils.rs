@@ -5,8 +5,8 @@ use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::{Expr, ExprValue, Location, SymbolTable, Type};
 use cbmc::{InternedString, btree_string_map};
 use rustc_middle::ty::TyCtxt;
-use stable_mir::rustc_internal;
-use stable_mir::ty::Span;
+use rustc_public::rustc_internal;
+use rustc_public::ty::Span;
 use tracing::debug;
 
 // Should move into rvalue

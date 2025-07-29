@@ -14,7 +14,7 @@
 //!
 //! We have kept this module agnostic of any Kani code in case we can contribute this back to rustc.
 //!
-//! Note that this is a copy of `reachability.rs` that uses StableMIR but the public APIs are still
+//! Note that this is a copy of `reachability.rs` that uses rustc_public but the public APIs are still
 //! kept with internal APIs.
 use tracing::{debug, debug_span, trace};
 
@@ -22,17 +22,17 @@ use rustc_data_structures::fingerprint::Fingerprint;
 use rustc_data_structures::fx::FxHashSet;
 use rustc_data_structures::stable_hasher::{HashStable, StableHasher};
 use rustc_middle::ty::{TyCtxt, VtblEntry};
-use rustc_session::config::OutputType;
-use stable_mir::CrateItem;
-use stable_mir::mir::alloc::{AllocId, GlobalAlloc};
-use stable_mir::mir::mono::{Instance, InstanceKind, MonoItem, StaticDef};
-use stable_mir::mir::{
+use rustc_public::CrateItem;
+use rustc_public::mir::alloc::{AllocId, GlobalAlloc};
+use rustc_public::mir::mono::{Instance, InstanceKind, MonoItem, StaticDef};
+use rustc_public::mir::{
     Body, CastKind, ConstOperand, MirVisitor, PointerCoercion, Rvalue, Terminator, TerminatorKind,
     visit::Location,
 };
-use stable_mir::rustc_internal;
-use stable_mir::ty::{Allocation, ClosureKind, ConstantKind, RigidTy, Ty, TyKind};
-use stable_mir::{CrateDef, ItemKind};
+use rustc_public::rustc_internal;
+use rustc_public::ty::{Allocation, ClosureKind, ConstantKind, RigidTy, Ty, TyKind};
+use rustc_public::{CrateDef, ItemKind};
+use rustc_session::config::OutputType;
 use std::fmt::{Display, Formatter};
 use std::{
     collections::{HashMap, HashSet},
@@ -79,19 +79,11 @@ pub fn filter_crate_items<F>(tcx: TyCtxt, predicate: F) -> Vec<Instance>
 where
     F: Fn(TyCtxt, Instance) -> bool,
 {
-    let crate_items = stable_mir::all_local_items();
+    let crate_items = rustc_public::all_local_items();
     // Filter regular items.
     crate_items
         .iter()
         .filter_map(|item| {
-            // avoid stable MIR panic
-            // https://github.com/model-checking/kani/issues/3919
-            if let Ok(instance) = Instance::try_from(*item) {
-                let int_def_id = rustc_internal::internal(tcx, instance.def.def_id());
-                if matches!(tcx.def_kind(int_def_id), rustc_hir::def::DefKind::GlobalAsm) {
-                    return None;
-                }
-            };
             // Only collect monomorphic items.
             matches!(item.kind(), ItemKind::Fn)
                 .then(|| {

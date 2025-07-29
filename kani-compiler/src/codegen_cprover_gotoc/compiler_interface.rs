@@ -34,14 +34,14 @@ use rustc_metadata::EncodedMetadata;
 use rustc_middle::dep_graph::{WorkProduct, WorkProductId};
 use rustc_middle::ty::TyCtxt;
 use rustc_middle::util::Providers;
+use rustc_public::CrateDef;
+use rustc_public::mir::mono::{Instance, MonoItem};
+use rustc_public::rustc_internal;
 use rustc_session::Session;
 use rustc_session::config::{CrateType, OutputFilenames, OutputType};
 use rustc_session::output::out_filename;
 use rustc_span::{Symbol, sym};
 use rustc_target::spec::PanicStrategy;
-use stable_mir::CrateDef;
-use stable_mir::mir::mono::{Instance, MonoItem};
-use stable_mir::rustc_internal;
 use std::any::Any;
 use std::cmp::min;
 use std::collections::BTreeMap;
@@ -315,8 +315,8 @@ impl CodegenBackend for GotocCodegenBackend {
             if queries.args().reachability_analysis != ReachabilityType::None
                 && queries.kani_functions().is_empty()
             {
-                if stable_mir::find_crates("std").is_empty()
-                    && stable_mir::find_crates("kani").is_empty()
+                if rustc_public::find_crates("std").is_empty()
+                    && rustc_public::find_crates("kani").is_empty()
                 {
                     // Special error for when not importing kani and using #[no_std].
                     // See here for more info: https://github.com/model-checking/kani/issues/3906#issuecomment-2932687768.
@@ -409,8 +409,8 @@ impl CodegenBackend for GotocCodegenBackend {
                     export_thread_pool.add_workers(NUM_FILE_EXPORT_THREADS);
 
                     let transformer = BodyTransformation::new(&queries, tcx, &unit);
-                    let main_instance =
-                        stable_mir::entry_fn().map(|main_fn| Instance::try_from(main_fn).unwrap());
+                    let main_instance = rustc_public::entry_fn()
+                        .map(|main_fn| Instance::try_from(main_fn).unwrap());
                     let local_reachable = filter_crate_items(tcx, |_, instance| {
                         let def_id = rustc_internal::internal(tcx, instance.def.def_id());
                         Some(instance) == main_instance || tcx.is_reachable_non_generic(def_id)

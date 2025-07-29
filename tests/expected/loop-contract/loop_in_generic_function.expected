@@ -1,0 +1,9 @@
+sum::<u8>.loop_invariant_base.1\
+	 - Status: SUCCESS\
+	 - Description: "Check invariant before entry for loop sum::<u8>.0"
+
+main.assertion.1\
+	 - Status: SUCCESS\
+	 - Description: "assertion failed: j <= 2560"
+
+VERIFICATION:- SUCCESSFUL
