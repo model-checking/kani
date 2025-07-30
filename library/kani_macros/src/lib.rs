@@ -356,6 +356,25 @@ pub fn requires(attr: TokenStream, item: TokenStream) -> TokenStream {
     attr_impl::requires(attr, item)
 }
 
+/// Add a panic-freedom precondition to this function.
+///
+/// This is part of the function contract API, for more general information see
+/// the [module-level documentation](../kani/contracts/index.html).
+///
+/// The contents of the attribute is a condition over the input values to the
+/// annotated function. All Rust syntax is supported, even calling other
+/// functions, but the computations must be side effect free, e.g. it cannot
+/// perform I/O or use mutable memory.
+///
+/// Kani requires each function that uses a contract (this attribute or
+/// [`requires`][macro@requires] or [`ensures`][macro@ensures]) to have at least one designated
+/// [`proof_for_contract`][macro@proof_for_contract] harness for checking the
+/// contract.
+#[proc_macro_attribute]
+pub fn panics_if(attr: TokenStream, item: TokenStream) -> TokenStream {
+    attr_impl::panics_if(attr, item)
+}
+
 /// Add a postcondition to this function.
 ///
 /// This is part of the function contract API, for more general information see
@@ -453,7 +472,9 @@ mod sysroot {
     mod contracts;
     mod loop_contracts;
 
-    pub use contracts::{ensures, modifies, proof_for_contract, requires, stub_verified};
+    pub use contracts::{
+        ensures, modifies, panics_if, proof_for_contract, requires, stub_verified,
+    };
     pub use loop_contracts::{loop_invariant, loop_modifies};
 
     use super::*;
@@ -628,6 +649,7 @@ mod regular {
     no_op!(unstable);
     no_op!(unwind);
     no_op!(requires);
+    no_op!(panics_if);
     no_op!(ensures);
     no_op!(modifies);
     no_op!(proof_for_contract);

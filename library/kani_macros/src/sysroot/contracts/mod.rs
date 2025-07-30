@@ -3,14 +3,14 @@
 
 //! Implementation of the function contracts code generation.
 //!
-//! The most exciting part is the handling of `requires` and `ensures`, the main
-//! entry point to which is [`requires_ensures_main`]. Most of the code
+//! The most exciting part is the handling of `requires`, `panics_if`,  and `ensures`, the main
+//! entry point to which is [`pre_post_main`]. Most of the code
 //! generation for that is implemented on [`ContractConditionsHandler`] with
 //! [`ContractFunctionState`] steering the code generation. The function state
 //! implements a state machine in order to be able to handle multiple attributes
 //! on the same function correctly.
 //!
-//! ## How the handling for `requires`, `modifies`, and `ensures` works.
+//! ## How the handling for `requires`, `panics_if`, `modifies`, and `ensures` works.
 //!
 //! Our aim is to generate a "check" function that can be used to verify the
 //! validity of the contract and a "replace" function that can be used as a
@@ -532,6 +532,10 @@ pub fn requires(attr: TokenStream, item: TokenStream) -> TokenStream {
     contract_main(attr, item, ContractConditionsType::Requires)
 }
 
+pub fn panics_if(attr: TokenStream, item: TokenStream) -> TokenStream {
+    contract_main(attr, item, ContractConditionsType::PanicsIf)
+}
+
 pub fn ensures(attr: TokenStream, item: TokenStream) -> TokenStream {
     contract_main(attr, item, ContractConditionsType::Ensures)
 }
@@ -616,6 +620,7 @@ struct ContractConditionsHandler<'a> {
 #[derive(Copy, Clone, Eq, PartialEq)]
 enum ContractConditionsType {
     Requires,
+    PanicsIf,
     Ensures,
     Modifies,
 }
@@ -625,6 +630,10 @@ enum ContractConditionsType {
 /// [`ContractConditionsType`] is the corresponding pre-parse version.
 enum ContractConditionsData {
     Requires {
+        /// The contents of the attribute.
+        attr: Expr,
+    },
+    PanicsIf {
         /// The contents of the attribute.
         attr: Expr,
     },
@@ -658,22 +667,23 @@ impl<'a> ContractConditionsHandler<'a> {
     }
 }
 
-/// The main meat of handling requires/ensures contracts.
+/// The main meat of handling requires/panics_if/ensures contracts.
 ///
 /// See the [module level documentation][self] for a description of how the code
 /// generation works.
 fn contract_main(
     attr: TokenStream,
     item: TokenStream,
-    is_requires: ContractConditionsType,
+    condition_kind: ContractConditionsType,
 ) -> TokenStream {
     let attr_copy = TokenStream2::from(attr.clone());
     let mut item_fn = parse_macro_input!(item as ItemFn);
     let function_state = ContractFunctionState::from_attributes(&item_fn.attrs);
-    let handler = match ContractConditionsHandler::new(is_requires, attr, &mut item_fn, attr_copy) {
-        Ok(handler) => handler,
-        Err(e) => return e.into_compile_error().into(),
-    };
+    let handler =
+        match ContractConditionsHandler::new(condition_kind, attr, &mut item_fn, attr_copy) {
+            Ok(handler) => handler,
+            Err(e) => return e.into_compile_error().into(),
+        };
 
     handler.dispatch_on(function_state).into()
 }
