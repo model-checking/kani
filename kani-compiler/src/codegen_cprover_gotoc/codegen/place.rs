@@ -14,9 +14,9 @@ use crate::unwrap_or_return_codegen_unimplemented;
 use cbmc::goto_program::{Expr, ExprValue, Location, Stmt, Type};
 use rustc_abi::{TagEncoding, Variants};
 use rustc_middle::ty::layout::LayoutOf;
-use stable_mir::mir::{FieldIdx, Local, Mutability, Place, ProjectionElem};
-use stable_mir::rustc_internal;
-use stable_mir::ty::{RigidTy, Ty, TyKind, VariantDef, VariantIdx};
+use rustc_public::mir::{FieldIdx, Local, Mutability, Place, ProjectionElem};
+use rustc_public::rustc_internal;
+use rustc_public::ty::{RigidTy, Ty, TyKind, VariantDef, VariantIdx};
 use tracing::{debug, trace, warn};
 
 /// A projection in Kani can either be to a type (the normal case),

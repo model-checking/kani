@@ -3,7 +3,7 @@
 use super::typ::FN_RETURN_VOID_VAR_NAME;
 use super::typ::TypeExt;
 use super::{PropertyClass, bb_label};
-use crate::codegen_cprover_gotoc::codegen::function::rustc_smir::region_from_coverage_opaque;
+use crate::codegen_cprover_gotoc::codegen::function::rustc_public_bridge::region_from_coverage_opaque;
 use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
 use cbmc::goto_program::ExprValue;
@@ -12,15 +12,15 @@ use rustc_abi::Size;
 use rustc_abi::{FieldsShape, Primitive, TagEncoding, Variants};
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{List, TypingEnv};
-use stable_mir::CrateDef;
-use stable_mir::abi::{ArgAbi, FnAbi, PassMode};
-use stable_mir::mir::mono::{Instance, InstanceKind};
-use stable_mir::mir::{
+use rustc_public::CrateDef;
+use rustc_public::abi::{ArgAbi, FnAbi, PassMode};
+use rustc_public::mir::mono::{Instance, InstanceKind};
+use rustc_public::mir::{
     AssertMessage, BasicBlockIdx, CopyNonOverlapping, NonDivergingIntrinsic, Operand, Place,
     RETURN_LOCAL, Rvalue, Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind,
 };
-use stable_mir::rustc_internal;
-use stable_mir::ty::{Abi, RigidTy, Span, Ty, TyKind, VariantIdx};
+use rustc_public::rustc_internal;
+use rustc_public::ty::{Abi, RigidTy, Span, Ty, TyKind, VariantIdx};
 use tracing::{debug, debug_span, trace};
 
 impl GotocCtx<'_> {

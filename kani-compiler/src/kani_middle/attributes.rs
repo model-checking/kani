@@ -14,13 +14,13 @@ use rustc_hir::{
     def_id::{DefId, LocalDefId},
 };
 use rustc_middle::ty::{Instance, TyCtxt, TyKind};
+use rustc_public::crate_def::Attribute as AttributeStable;
+use rustc_public::mir::mono::Instance as InstanceStable;
+use rustc_public::rustc_internal;
+use rustc_public::ty::FnDef as FnDefStable;
+use rustc_public::{CrateDef, DefId as DefIdStable, Symbol as SymbolStable};
 use rustc_session::Session;
 use rustc_span::{Span, Symbol};
-use stable_mir::crate_def::Attribute as AttributeStable;
-use stable_mir::mir::mono::Instance as InstanceStable;
-use stable_mir::rustc_internal;
-use stable_mir::ty::FnDef as FnDefStable;
-use stable_mir::{CrateDef, DefId as DefIdStable, Symbol as SymbolStable};
 use std::str::FromStr;
 use strum_macros::{AsRefStr, EnumString};
 use syn::parse::Parser;

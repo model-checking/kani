@@ -33,13 +33,13 @@ use rustc_metadata::EncodedMetadata;
 use rustc_middle::dep_graph::{WorkProduct, WorkProductId};
 use rustc_middle::ty::TyCtxt;
 use rustc_middle::util::Providers;
+use rustc_public::mir::mono::{Instance, MonoItem};
+use rustc_public::rustc_internal;
+use rustc_public::ty::FnDef;
+use rustc_public::{CrateDef, DefId};
 use rustc_session::Session;
 use rustc_session::config::{CrateType, OutputFilenames, OutputType};
 use rustc_session::output::out_filename;
-use stable_mir::mir::mono::{Instance, MonoItem};
-use stable_mir::rustc_internal;
-use stable_mir::ty::FnDef;
-use stable_mir::{CrateDef, DefId};
 use std::any::Any;
 use std::fs::File;
 use std::path::Path;
@@ -255,8 +255,8 @@ impl CodegenBackend for LlbcCodegenBackend {
                 ReachabilityType::PubFns => {
                     let unit = CodegenUnit::default();
                     let transformer = BodyTransformation::new(&queries, tcx, &unit);
-                    let main_instance =
-                        stable_mir::entry_fn().map(|main_fn| Instance::try_from(main_fn).unwrap());
+                    let main_instance = rustc_public::entry_fn()
+                        .map(|main_fn| Instance::try_from(main_fn).unwrap());
                     let local_reachable = filter_crate_items(tcx, |_, instance| {
                         let def_id = rustc_internal::internal(tcx, instance.def.def_id());
                         Some(instance) == main_instance || tcx.is_reachable_non_generic(def_id)

@@ -22,8 +22,8 @@ use super::source_region::SourceRegion;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::InternedString;
 use cbmc::goto_program::{Expr, Location, Stmt, Type};
-use stable_mir::mir::{Place, ProjectionElem};
-use stable_mir::ty::{Span as SpanStable, Ty};
+use rustc_public::mir::{Place, ProjectionElem};
+use rustc_public::ty::{Span as SpanStable, Ty};
 use strum_macros::{AsRefStr, EnumString};
 use tracing::debug;
 

@@ -11,8 +11,8 @@ use crate::kani_middle::{KaniAttributes, SourceLocation};
 use kani_metadata::ContractedFunction;
 use kani_metadata::{ArtifactType, HarnessAttributes, HarnessKind, HarnessMetadata};
 use rustc_middle::ty::TyCtxt;
-use stable_mir::mir::mono::Instance;
-use stable_mir::{CrateDef, CrateItems, DefId};
+use rustc_public::mir::mono::Instance;
+use rustc_public::{CrateDef, CrateItems, DefId};
 
 /// Create the harness metadata for a proof harness for a given function.
 pub fn gen_proof_metadata(tcx: TyCtxt, instance: Instance, base_name: &Path) -> HarnessMetadata {
@@ -51,8 +51,8 @@ pub fn gen_contracts_metadata(
     tcx: TyCtxt,
     harness_info: &HashMap<Harness, HarnessMetadata>,
 ) -> Vec<ContractedFunction> {
-    // We work with `stable_mir::CrateItem` instead of `stable_mir::Instance` to include generic items
-    let crate_items: CrateItems = stable_mir::all_local_items();
+    // We work with `rustc_public::CrateItem` instead of `rustc_public::Instance` to include generic items
+    let crate_items: CrateItems = rustc_public::all_local_items();
 
     let mut fn_to_data: HashMap<DefId, ContractedFunction> = HashMap::new();
 
