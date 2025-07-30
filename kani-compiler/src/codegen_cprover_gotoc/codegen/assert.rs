@@ -133,11 +133,18 @@ impl GotocCtx<'_> {
         message: &str,
         loc: Location,
     ) -> Stmt {
-        let property_name = property_class.as_str();
-        Stmt::block(
-            vec![Stmt::assert(cond.clone(), property_name, message, loc), Stmt::assume(cond, loc)],
-            loc,
-        )
+        if property_class == PropertyClass::Assertion && self.queries.args().prove_safety_only {
+            Stmt::assume(cond, loc)
+        } else {
+            let property_name = property_class.as_str();
+            Stmt::block(
+                vec![
+                    Stmt::assert(cond.clone(), property_name, message, loc),
+                    Stmt::assume(cond, loc),
+                ],
+                loc,
+            )
+        }
     }
 
     /// Generate code to cover the given condition at the current location

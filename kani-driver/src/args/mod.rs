@@ -330,6 +330,11 @@ pub struct VerificationArgs {
     #[arg(long, hide = true)]
     pub print_llbc: bool,
 
+    /// Compute verification results under the assumption that no panic occurs.
+    /// This feature is unstable, and it requires `-Z unstable-options` to be used
+    #[arg(long, hide_short_help = true)]
+    pub prove_safety_only: bool,
+
     /// Randomize the layout of structures. This option can help catching code that relies on
     /// a specific layout chosen by the compiler that is not guaranteed to be stable in the future.
     /// If a value is given, it will be used as the seed for randomization
@@ -724,6 +729,12 @@ impl ValidateArgs for VerificationArgs {
                 self.no_assert_contracts,
                 "no-assert",
                 UnstableFeature::FunctionContracts,
+            )?;
+
+            self.common_args.check_unstable(
+                self.prove_safety_only,
+                "prove-safety-only",
+                UnstableFeature::UnstableOptions,
             )?;
 
             Ok(())
