@@ -98,10 +98,10 @@ impl TyVisitor for FindUnsafeCell<'_> {
 pub fn check_reachable_items(tcx: TyCtxt, queries: &QueryDb, items: &[MonoItem]) {
     // Avoid printing the same error multiple times for different instantiations of the same item.
     let mut def_ids = HashSet::new();
-    let reachable_functions: HashSet<InternalDefId> = items
+    let reachable_functions: HashSet<DefId> = items
         .iter()
         .filter_map(|i| match i {
-            MonoItem::Fn(instance) => Some(rustc_internal::internal(tcx, instance.def.def_id())),
+            MonoItem::Fn(instance) => Some(instance.def.def_id()),
             _ => None,
         })
         .collect();
@@ -117,8 +117,8 @@ pub fn check_reachable_items(tcx: TyCtxt, queries: &QueryDb, items: &[MonoItem])
             let attributes = KaniAttributes::for_def_id(tcx, def_id);
             // Check if any unstable attribute was reached.
             attributes.check_unstable_features(&queries.args().unstable_features);
-            // Check whether all `proof_for_contract` functions are reachable
-            attributes.check_proof_for_contract(&reachable_functions);
+            // Check whether all `proof_for_contract` targets are reachable
+            attributes.check_proof_for_contract_reachability(&reachable_functions);
             def_ids.insert(def_id);
         }
     }
