@@ -366,7 +366,7 @@ represents the counter expressions that we just discussed.
 Other variants such as `SpanMarker` or `BlockMarker` are not relevant to this
 work since they should have been erased after the `InstrumentCoverage` pass.
 
-[^note-coverage-info]: It is important to note that the StableMIR interface does
+[^note-coverage-info]: It is important to note that the `rustc_public` interface does
    not include `FunctionCoverageInfo` in function bodies. Because of that, we
    need to pull it from the internal `rustc` function bodies.
 

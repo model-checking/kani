@@ -14,7 +14,7 @@ use crate::{
         },
     },
 };
-use stable_mir::{
+use rustc_public::{
     mir::{
         AggregateKind, CastKind, LocalDecl, MirVisitor, NonDivergingIntrinsic, Operand, Place,
         PointerCoercion, ProjectionElem, Rvalue, Statement, StatementKind, Terminator,

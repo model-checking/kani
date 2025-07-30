@@ -4,7 +4,7 @@
 //! This module contains utilities related to floating-point types
 
 use cbmc::{MachineModel, goto_program::Expr};
-use stable_mir::ty::{FloatTy, IntTy, RigidTy, UintTy};
+use rustc_public::ty::{FloatTy, IntTy, RigidTy, UintTy};
 
 /// This function creates a boolean expression that the given `float_expr` when truncated is in the range of `integral_ty`.
 ///

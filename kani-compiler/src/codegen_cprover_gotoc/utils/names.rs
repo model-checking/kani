@@ -8,7 +8,7 @@ use cbmc::InternedString;
 use rustc_hir::def_id::LOCAL_CRATE;
 use rustc_middle::mir::mono::CodegenUnitNameBuilder;
 use rustc_middle::ty::TyCtxt;
-use stable_mir::mir::Local;
+use rustc_public::mir::Local;
 
 impl GotocCtx<'_> {
     /// The full crate name including versioning info

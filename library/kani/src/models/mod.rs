@@ -247,7 +247,7 @@ mod test {
     }
 
     #[repr(simd)]
-    #[derive(Clone, Debug)]
+    #[derive(Copy, Clone, Debug)]
     struct CustomMask<T, const LANES: usize>([T; LANES]);
 
     /// Check that the bitmask model can handle odd size SIMD arrays.
@@ -276,15 +276,14 @@ mod test {
     /// Compare the value returned by our model and the simd_bitmask intrinsic.
     fn check_bitmask<T, U, E, const LANES: usize>(mask: T)
     where
-        T: Clone,
+        T: Clone + Copy,
         U: PartialEq + Debug,
         E: kani_intrinsic::MaskElement,
         [u8; kani_intrinsic::mask_len(LANES)]: Sized,
     {
-        assert_eq!(
-            unsafe { kani_intrinsic::simd_bitmask::<_, U, E, LANES>(mask.clone()) },
-            unsafe { simd_bitmask::<T, U>(mask) }
-        );
+        assert_eq!(unsafe { kani_intrinsic::simd_bitmask::<_, U, E, LANES>(mask) }, unsafe {
+            simd_bitmask::<T, U>(mask)
+        });
     }
 
     /// Similar to portable simd_harness.

@@ -41,9 +41,9 @@ use rustc_middle::{
     ty::{Instance, InstanceKind, List, TyCtxt, TyKind, TypingEnv},
 };
 use rustc_mir_dataflow::{Analysis, Forward, JoinSemiLattice};
+use rustc_public::mir::{Body as StableBody, mono::Instance as StableInstance};
+use rustc_public::rustc_internal;
 use rustc_span::{DUMMY_SP, source_map::Spanned};
-use stable_mir::mir::{Body as StableBody, mono::Instance as StableInstance};
-use stable_mir::rustc_internal;
 use std::collections::HashSet;
 
 /// Main points-to analysis object.
