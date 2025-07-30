@@ -4,7 +4,7 @@
 // kani-flags: --harness harness -Z stubbing
 // This stub should work, since the function signatures are identical,
 // but we do not yet support stubbing/contracts on trait fns with generic arguments
-// c.f. <ISSUE LINK>.
+// c.f. https://github.com/model-checking/kani/issues/1997#issuecomment-3134614734.
 // For now, test that we emit a nice error message.
 
 trait TraitX {

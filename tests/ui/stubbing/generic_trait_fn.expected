@@ -5,7 +5,7 @@ generic_trait_fn.rs\
 | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\
 |\
    = help: Kani does not currently support stubs or function contracts on generic functions in traits.\
-            See <ISSUE LINK> for more information.
+            See https://github.com/model-checking/kani/issues/1997#issuecomment-3134614734 for more information.
 
 error: failed to resolve `<TestStruct as TraitY>::generic_fn`: unable to find implementation of associated function `TraitY::generic_fn` for TestStruct\
 generic_trait_fn.rs\
@@ -14,6 +14,6 @@ generic_trait_fn.rs\
 | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\
 |\
    = help: Kani does not currently support stubs or function contracts on generic functions in traits.\
-            See <ISSUE LINK> for more information.
+            See https://github.com/model-checking/kani/issues/1997#issuecomment-3134614734 for more information.
 
 error: aborting due to 2 previous errors

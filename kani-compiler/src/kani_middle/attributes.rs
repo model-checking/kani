@@ -691,7 +691,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                     if !generics.own_params.is_empty() {
                         err = err.with_help(
                             "Kani does not currently support stubs or function contracts on generic functions in traits.\n \
-                            See <ISSUE LINK> for more information.",
+                            See https://github.com/model-checking/kani/issues/1997#issuecomment-3134614734 for more information.",
                         );
                     }
                 }

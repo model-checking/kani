@@ -696,7 +696,7 @@ fn resolve_in_trait_def_stable<'tcx>(
 }
 
 /// Resolves a function in a trait definition.
-/// TODO: remove this function in favor of `resolve_in_trait_def_stable`, c.f. <ISSUE LINK>
+/// TODO: remove this function in favor of `resolve_in_trait_def_stable`, c.f. https://github.com/model-checking/kani/issues/4252
 fn resolve_in_trait_def<'tcx>(
     tcx: TyCtxt<'tcx>,
     trait_id: DefId,
