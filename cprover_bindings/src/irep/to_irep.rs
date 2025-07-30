@@ -225,7 +225,7 @@ impl ToIrep for ExprValue {
                     IrepId::ByteExtractLittleEndian
                 },
                 sub: vec![e.to_irep(mm), Expr::int_constant(*offset, Type::ssize_t()).to_irep(mm)],
-                named_sub: linear_map![],
+                named_sub: linear_map![(IrepId::BitsPerByte, Irep::just_int_id(8u8))],
             },
             ExprValue::CBoolConstant(i) => Irep {
                 id: IrepId::Constant,
