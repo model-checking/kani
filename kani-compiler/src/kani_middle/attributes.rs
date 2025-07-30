@@ -688,8 +688,12 @@ impl<'tcx> KaniAttributes<'tcx> {
                 }
                 ResolveError::MissingTraitImpl { tcx: _, trait_fn_id, ty: _ } => {
                     let generics = self.tcx.generics_of(trait_fn_id);
-                    if !generics.own_params.is_empty() {
-                        err = err.with_help(
+                    let parent_generics =
+                        generics.parent.map(|parent| self.tcx.generics_of(parent));
+                    if !generics.own_params.is_empty()
+                        || parent_generics.is_some_and(|generics| !generics.own_params.is_empty())
+                    {
+                        err = err.with_note(
                             "Kani does not currently support stubs or function contracts on generic functions in traits.\n \
                             See https://github.com/model-checking/kani/issues/1997#issuecomment-3134614734 for more information.",
                         );
