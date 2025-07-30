@@ -37,10 +37,6 @@ pub enum ReachabilityType {
 /// with. Usually stored in and accessible via [`crate::kani_queries::QueryDb`].
 #[derive(Debug, Default, Clone, clap::Parser)]
 pub struct Arguments {
-    /// Compute verification results under the assumption that no panic occurs.
-    /// This feature is unstable, and it requires `-Z unstable-options` to be used
-    #[clap(long)]
-    pub assume_no_panic: bool,
     /// Option used to disable asserting function contracts.
     #[clap(long)]
     pub no_assert_contracts: bool,
@@ -69,6 +65,10 @@ pub struct Arguments {
     /// Option used for suppressing global ASM error.
     #[clap(long)]
     pub ignore_global_asm: bool,
+    /// Compute verification results under the assumption that no panic occurs.
+    /// This feature is unstable, and it requires `-Z unstable-options` to be used
+    #[clap(long)]
+    pub prove_safety_only: bool,
     /// Option name used to select which reachability analysis to perform.
     #[clap(long = "reachability", default_value = "none")]
     pub reachability_analysis: ReachabilityType,

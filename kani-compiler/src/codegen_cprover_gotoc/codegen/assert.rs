@@ -133,7 +133,7 @@ impl GotocCtx<'_> {
         message: &str,
         loc: Location,
     ) -> Stmt {
-        if property_class == PropertyClass::Assertion && self.queries.args().assume_no_panic {
+        if property_class == PropertyClass::Assertion && self.queries.args().prove_safety_only {
             Stmt::assume(cond, loc)
         } else {
             let property_name = property_class.as_str();

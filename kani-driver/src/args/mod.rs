@@ -212,11 +212,6 @@ pub enum CargoKaniSubcommand {
 #[derive(Debug, clap::Args)]
 #[clap(next_help_heading = "Verification Options")]
 pub struct VerificationArgs {
-    /// Compute verification results under the assumption that no panic occurs.
-    /// This feature is unstable, and it requires `-Z unstable-options` to be used
-    #[arg(long, hide_short_help = true)]
-    pub assume_no_panic: bool,
-
     /// Link external C files referenced by Rust code.
     /// This is an experimental feature and requires `-Z c-ffi` to be used
     #[arg(long, hide = true, num_args(1..))]
@@ -334,6 +329,11 @@ pub struct VerificationArgs {
     /// Print final LLBC for Lean backend. This requires the `-Z lean` option.
     #[arg(long, hide = true)]
     pub print_llbc: bool,
+
+    /// Compute verification results under the assumption that no panic occurs.
+    /// This feature is unstable, and it requires `-Z unstable-options` to be used
+    #[arg(long, hide_short_help = true)]
+    pub prove_safety_only: bool,
 
     /// Randomize the layout of structures. This option can help catching code that relies on
     /// a specific layout chosen by the compiler that is not guaranteed to be stable in the future.
@@ -640,12 +640,6 @@ impl ValidateArgs for VerificationArgs {
         // check_unstable() calls: for each unstable option, check that the requisite unstable feature is provided.
         let unstable = || -> Result<(), Error> {
             self.common_args.check_unstable(
-                self.assume_no_panic,
-                "assume-no-panic",
-                UnstableFeature::UnstableOptions,
-            )?;
-
-            self.common_args.check_unstable(
                 self.concrete_playback.is_some(),
                 "concrete-playback",
                 UnstableFeature::ConcretePlayback,
@@ -735,6 +729,12 @@ impl ValidateArgs for VerificationArgs {
                 self.no_assert_contracts,
                 "no-assert",
                 UnstableFeature::FunctionContracts,
+            )?;
+
+            self.common_args.check_unstable(
+                self.prove_safety_only,
+                "prove-safety-only",
+                UnstableFeature::UnstableOptions,
             )?;
 
             Ok(())
