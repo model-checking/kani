@@ -183,7 +183,7 @@ impl MirVisitor for StubConstChecker<'_> {
                         [one] => one.as_type().unwrap(),
                         _ => unreachable!(),
                     };
-                    let trait_ = tcx.trait_of_item(mono_const.def).unwrap();
+                    let trait_ = tcx.trait_of_assoc(mono_const.def).unwrap();
                     let msg = format!(
                         "Type `{implementor}` does not implement trait `{}`. \
         This is likely because `{}` is used as a stub but its \

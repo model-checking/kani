@@ -50,7 +50,7 @@ impl RustcInternalMir for AggregateKind {
                     internal(tcx, generic_args),
                 )
             }
-            AggregateKind::Coroutine(coroutine_def, generic_args, _) => {
+            AggregateKind::Coroutine(coroutine_def, generic_args) => {
                 rustc_middle::mir::AggregateKind::Coroutine(
                     internal(tcx, coroutine_def.0),
                     internal(tcx, generic_args),
