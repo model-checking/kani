@@ -8,7 +8,7 @@ use std::intrinsics::simd::simd_add;
 use std::simd::f32x4;
 
 #[repr(simd)]
-#[derive(Clone, PartialEq, kani::Arbitrary)]
+#[derive(Copy, Clone, kani::Arbitrary)]
 pub struct f32x2([f32; 2]);
 
 impl f32x2 {
@@ -23,7 +23,7 @@ fn check_sum() {
     let b = kani::any::<f32x2>();
     kani::assume(b.as_array()[0].is_normal());
     kani::assume(b.as_array()[1].is_normal());
-    let sum = unsafe { simd_add(a.clone(), b.clone()) };
+    let sum = unsafe { simd_add(a, b) };
     assert_eq!(sum.as_array(), b.as_array());
 }
 

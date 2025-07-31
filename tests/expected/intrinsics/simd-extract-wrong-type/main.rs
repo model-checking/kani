@@ -9,7 +9,7 @@ use std::intrinsics::simd::simd_extract;
 
 #[repr(simd)]
 #[allow(non_camel_case_types)]
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy)]
 pub struct i64x2([i64; 2]);
 
 #[kani::proof]

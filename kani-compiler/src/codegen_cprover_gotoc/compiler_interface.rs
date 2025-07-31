@@ -34,14 +34,15 @@ use rustc_metadata::EncodedMetadata;
 use rustc_middle::dep_graph::{WorkProduct, WorkProductId};
 use rustc_middle::ty::TyCtxt;
 use rustc_middle::util::Providers;
+use rustc_public::CrateDef;
+use rustc_public::mir::mono::{Instance, MonoItem};
+use rustc_public::rustc_internal;
+use rustc_public::ty::FnDef;
 use rustc_session::Session;
 use rustc_session::config::{CrateType, OutputFilenames, OutputType};
 use rustc_session::output::out_filename;
 use rustc_span::{Symbol, sym};
 use rustc_target::spec::PanicStrategy;
-use stable_mir::CrateDef;
-use stable_mir::mir::mono::{Instance, MonoItem};
-use stable_mir::rustc_internal;
 use std::any::Any;
 use std::collections::BTreeMap;
 use std::fmt::Write;
@@ -215,24 +216,23 @@ impl GotocCodegenBackend {
         (gcx, items, contract_info)
     }
 
-    /// Given a contract harness, get the DefId of its target.
+    /// Given a harness, return the DefId of its target if it's a contract harness.
     /// For manual harnesses, extract it from the #[proof_for_contract] attribute.
     /// For automatic harnesses, extract the target from the harness's GenericArgs.
-    fn target_def_id_for_harness(
+    fn target_if_contract_harness(
         &self,
         tcx: TyCtxt,
         harness: &Instance,
         is_automatic_harness: bool,
-    ) -> Option<InternalDefId> {
+    ) -> Option<FnDef> {
         if is_automatic_harness {
             let kind = harness.args().0[0].expect_ty().kind();
             let (fn_to_verify_def, _) = kind.fn_def().unwrap();
-            let def_id = fn_to_verify_def.def_id();
-            let attrs = KaniAttributes::for_def_id(tcx, def_id);
-            if attrs.has_contract() { Some(rustc_internal::internal(tcx, def_id)) } else { None }
+            let attrs = KaniAttributes::for_def_id(tcx, fn_to_verify_def.def_id());
+            if attrs.has_contract() { Some(fn_to_verify_def) } else { None }
         } else {
             let harness_attrs = KaniAttributes::for_def_id(tcx, harness.def.def_id());
-            harness_attrs.interpret_for_contract_attribute().map(|(_, id, _)| id)
+            harness_attrs.interpret_for_contract_attribute()
         }
     }
 }
@@ -300,8 +300,8 @@ impl CodegenBackend for GotocCodegenBackend {
             if queries.args().reachability_analysis != ReachabilityType::None
                 && queries.kani_functions().is_empty()
             {
-                if stable_mir::find_crates("std").is_empty()
-                    && stable_mir::find_crates("kani").is_empty()
+                if rustc_public::find_crates("std").is_empty()
+                    && rustc_public::find_crates("kani").is_empty()
                 {
                     // Special error for when not importing kani and using #[no_std].
                     // See here for more info: https://github.com/model-checking/kani/issues/3906#issuecomment-2932687768.
@@ -343,13 +343,14 @@ impl CodegenBackend for GotocCodegenBackend {
                             let model_path = units.harness_model_path(*harness).unwrap();
                             let is_automatic_harness = units.is_automatic_harness(harness);
                             let contract_metadata =
-                                self.target_def_id_for_harness(tcx, harness, is_automatic_harness);
+                                self.target_if_contract_harness(tcx, harness, is_automatic_harness);
                             let (gcx, items, contract_info) = self.codegen_items(
                                 tcx,
                                 &[MonoItem::Fn(*harness)],
                                 model_path,
                                 &results.machine_model,
-                                contract_metadata,
+                                contract_metadata
+                                    .map(|def| rustc_internal::internal(tcx, def.def_id())),
                                 transformer,
                             );
                             if gcx.has_loop_contracts {
@@ -369,8 +370,8 @@ impl CodegenBackend for GotocCodegenBackend {
                 ReachabilityType::PubFns => {
                     let unit = CodegenUnit::default();
                     let transformer = BodyTransformation::new(&queries, tcx, &unit);
-                    let main_instance =
-                        stable_mir::entry_fn().map(|main_fn| Instance::try_from(main_fn).unwrap());
+                    let main_instance = rustc_public::entry_fn()
+                        .map(|main_fn| Instance::try_from(main_fn).unwrap());
                     let local_reachable = filter_crate_items(tcx, |_, instance| {
                         let def_id = rustc_internal::internal(tcx, instance.def.def_id());
                         Some(instance) == main_instance || tcx.is_reachable_non_generic(def_id)

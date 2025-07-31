@@ -15,7 +15,7 @@ use crate::kani_middle::{
     },
 };
 use rustc_middle::ty::TyCtxt;
-use stable_mir::mir::{
+use rustc_public::mir::{
     MirVisitor, Operand, Place, Rvalue, Statement, Terminator,
     mono::Instance,
     visit::{Location, PlaceContext},

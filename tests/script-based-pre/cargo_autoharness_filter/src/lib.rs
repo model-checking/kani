@@ -217,6 +217,6 @@ mod no_harness {
         x
     }
     // Test that we correctly render the name of the argument "_" in the table of skipped functions
-    // (this argument will have no var_debug_info from StableMIR, unlike arguments with names)
+    // (this argument will have no var_debug_info from rustc_public, unlike arguments with names)
     fn unsupported_no_arg_name(_: &()) {}
 }

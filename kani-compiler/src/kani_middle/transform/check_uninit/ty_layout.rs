@@ -5,12 +5,12 @@
 
 use std::fmt::Display;
 
-use rustc_smir::IndexedVal;
-use stable_mir::{
+use rustc_public::{
     abi::{FieldsShape, Scalar, TagEncoding, ValueAbi, VariantsShape},
     target::{MachineInfo, MachineSize},
     ty::{AdtKind, RigidTy, Ty, TyKind, UintTy, VariantIdx},
 };
+use rustc_public_bridge::IndexedVal;
 
 /// Represents a chunk of data bytes in a data structure.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
@@ -394,7 +394,7 @@ fn data_bytes_for_ty(
                 RigidTy::FnDef(_, _)
                 | RigidTy::FnPtr(_)
                 | RigidTy::Closure(_, _)
-                | RigidTy::Coroutine(_, _, _)
+                | RigidTy::Coroutine(_, _)
                 | RigidTy::CoroutineClosure(_, _)
                 | RigidTy::CoroutineWitness(_, _)
                 | RigidTy::Foreign(_)

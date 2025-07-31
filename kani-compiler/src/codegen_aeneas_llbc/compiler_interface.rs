@@ -33,12 +33,13 @@ use rustc_metadata::EncodedMetadata;
 use rustc_middle::dep_graph::{WorkProduct, WorkProductId};
 use rustc_middle::ty::TyCtxt;
 use rustc_middle::util::Providers;
+use rustc_public::mir::mono::{Instance, MonoItem};
+use rustc_public::rustc_internal;
+use rustc_public::ty::FnDef;
+use rustc_public::{CrateDef, DefId};
 use rustc_session::Session;
 use rustc_session::config::{CrateType, OutputFilenames, OutputType};
 use rustc_session::output::out_filename;
-use stable_mir::mir::mono::{Instance, MonoItem};
-use stable_mir::rustc_internal;
-use stable_mir::{CrateDef, DefId};
 use std::any::Any;
 use std::fs::File;
 use std::path::Path;
@@ -233,7 +234,8 @@ impl CodegenBackend for LlbcCodegenBackend {
                                 tcx,
                                 &[MonoItem::Fn(*harness)],
                                 model_path,
-                                contract_metadata,
+                                contract_metadata
+                                    .map(|def| rustc_internal::internal(tcx, def.def_id())),
                                 transformer,
                             );
                             transformer = BodyTransformation::new(&queries, tcx, &unit);
@@ -253,8 +255,8 @@ impl CodegenBackend for LlbcCodegenBackend {
                 ReachabilityType::PubFns => {
                     let unit = CodegenUnit::default();
                     let transformer = BodyTransformation::new(&queries, tcx, &unit);
-                    let main_instance =
-                        stable_mir::entry_fn().map(|main_fn| Instance::try_from(main_fn).unwrap());
+                    let main_instance = rustc_public::entry_fn()
+                        .map(|main_fn| Instance::try_from(main_fn).unwrap());
                     let local_reachable = filter_crate_items(tcx, |_, instance| {
                         let def_id = rustc_internal::internal(tcx, instance.def.def_id());
                         Some(instance) == main_instance || tcx.is_reachable_non_generic(def_id)
@@ -351,9 +353,9 @@ impl ArchiveBuilderBuilder for ArArchiveBuilderBuilder {
 fn contract_metadata_for_harness(
     tcx: TyCtxt,
     def_id: DefId,
-) -> Result<Option<InternalDefId>, ErrorGuaranteed> {
+) -> Result<Option<FnDef>, ErrorGuaranteed> {
     let attrs = KaniAttributes::for_def_id(tcx, def_id);
-    Ok(attrs.interpret_for_contract_attribute().map(|(_, id, _)| id))
+    Ok(attrs.interpret_for_contract_attribute())
 }
 
 /// Return a struct that contains information about the codegen results as expected by `rustc`.
