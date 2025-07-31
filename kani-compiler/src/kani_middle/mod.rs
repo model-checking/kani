@@ -24,6 +24,7 @@ use self::attributes::KaniAttributes;
 pub mod abi;
 pub mod analysis;
 pub mod attributes;
+pub mod codegen_order;
 pub mod codegen_units;
 pub mod coercion;
 mod intrinsics;

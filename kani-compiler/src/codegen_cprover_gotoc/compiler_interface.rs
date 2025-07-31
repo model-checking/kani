@@ -8,6 +8,7 @@ use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::kani_middle::analysis;
 use crate::kani_middle::attributes::KaniAttributes;
 use crate::kani_middle::check_reachable_items;
+use crate::kani_middle::codegen_order::HeuristicOrderable;
 use crate::kani_middle::codegen_units::{CodegenUnit, CodegenUnits, Harness};
 use crate::kani_middle::provide;
 use crate::kani_middle::reachability::{
@@ -15,9 +16,10 @@ use crate::kani_middle::reachability::{
 };
 use crate::kani_middle::transform::{BodyTransformation, GlobalPasses};
 use crate::kani_queries::QueryDb;
+use cbmc::RoundingMode;
 use cbmc::goto_program::Location;
 use cbmc::irep::goto_binary_serde::write_goto_binary_file;
-use cbmc::{InternedString, MachineModel, RoundingMode};
+use cbmc::{InternedString, MachineModel};
 use kani_metadata::artifact::convert_type;
 use kani_metadata::{ArtifactType, HarnessMetadata, KaniMetadata, UnsupportedFeature};
 use kani_metadata::{AssignsContract, CompilerArtifactStub};
@@ -353,15 +355,14 @@ impl CodegenBackend for GotocCodegenBackend {
                     // First, do cross-crate collection of all items that are reachable from each harness. The resulting
                     // iterator has the reachability result for each harness, but also the transformer that harness used so
                     // we can reuse it during codegen.
-                    let harness_reachability = units
-                        .iter()
-                        .map(|unit| {
-                            unit.harnesses
-                                .iter()
-                                .map(reachability_analysis_fn_for_harness(unit, &queries, tcx))
-                                .collect::<Vec<_>>()
-                        })
-                        .flatten();
+                    let ordered_harnesses = units.iter().map(|unit| {
+                        unit.harnesses
+                            .iter()
+                            .map(reachability_analysis_fn_for_harness(unit, &queries, tcx))
+                            .collect::<Vec<_>>()
+                    })
+                    .apply_ordering_heuristic::<crate::kani_middle::codegen_order::MostReachableItems>()
+                    .flatten();
 
                     // This runs reachability analysis before global passes are applied in `codegen_items`.
                     //
@@ -372,7 +373,7 @@ impl CodegenBackend for GotocCodegenBackend {
                     // global passes that need this.
 
                     // Then, actually codegen those reachable items for each.
-                    for ((harness, reachability), transformer) in harness_reachability {
+                    for ((harness, reachability), transformer) in ordered_harnesses {
                         let harness_start = std::time::Instant::now();
                         let model_path = units.harness_model_path(*harness).unwrap();
                         let is_automatic_harness = units.is_automatic_harness(harness);
