@@ -374,7 +374,6 @@ impl CodegenBackend for GotocCodegenBackend {
 
                     // Then, actually codegen those reachable items for each.
                     for ((harness, reachability), transformer) in ordered_harnesses {
-                        let harness_start = std::time::Instant::now();
                         let model_path = units.harness_model_path(*harness).unwrap();
                         let is_automatic_harness = units.is_automatic_harness(harness);
                         let contract_metadata =
@@ -395,11 +394,6 @@ impl CodegenBackend for GotocCodegenBackend {
                         if let Some(assigns_contract) = contract_info {
                             modifies_instances.push((*harness, assigns_contract));
                         }
-                        println!(
-                            "working on harness {:?} took {:?}",
-                            harness.trimmed_name(),
-                            harness_start.elapsed()
-                        );
                     }
 
                     units.store_modifies(&modifies_instances);
