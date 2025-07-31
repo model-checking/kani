@@ -2,7 +2,7 @@
 
 ## Introduction
 
-Loop-invariants are used to specify invariants for loops for the sake of extending Kani's *bounded proofs* to *unbounded proofs*.
+Loop invariants are used to specify invariants for loops for the sake of extending Kani's *bounded proofs* to *unbounded proofs*.
 A [loop-invariant](https://en.wikipedia.org/wiki/Loop_invariant) is an expression that holds upon entering a loop and after every execution of the loop body.
 It captures something that does not change about every step of the loop.
 
@@ -26,7 +26,7 @@ fn simple_loop() {
 ```
 
 In this program, the loop repeatedly decrements `x` until it equals `1`. Because we haven't specified an upper bound for `x`, to verify this function,
-Kani needs to unwind the loop for `u64::MAX` iterations, which is computationally expensive. Loop invariants allow us to abstract the loop behavior, significantly reducing the verification cost.
+Kani needs to unwind the loop for `u64::MAX` iterations, which is intractable. Loop invariants allow us to abstract the loop behavior, significantly reducing the verification cost.
 
 With loop-invariants, we can specify the loop’s behavior using invariants. For example:
 

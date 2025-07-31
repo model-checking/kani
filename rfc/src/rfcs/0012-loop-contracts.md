@@ -223,7 +223,7 @@ Let's use the following example to demonstrate the disadvantages of rewriting
 using the original Rust `into_iter` function:
 
 ```Rust
-let a : [u8,10] = kani::any();
+let a: [u8; 10] = kani::any();
 #[kani::loop_invariant(...)]
 for i in a {
   ... //loop body
@@ -238,10 +238,10 @@ let mut kani_iter = a.into_iter();
 #[kani::loop_invariant(...)]
 loop {
   match kani_iter.next() {
-    Some (i) => { 
+    Some(i) => { 
       ...  //loop body
       }
-    None => {break; }
+    None => { break; }
   }
 }
 ```
@@ -255,7 +255,7 @@ pub struct IntoIter<T, const N: usize> {
 }
 ```
 
-where the dependences are:
+where the dependencies are:
 
 ```Rust
 type InnerSized<T, const N: usize> = iter_inner::PolymorphicIter<[MaybeUninit<T>; N]>;
@@ -271,7 +271,7 @@ where
 ```
 
 In order to contract the loop, the user must provide the loop-invariant for the variable `kani_iter`, which is modified and 
-will be havoc. 
+will be havocked. 
 The loop-invariant should include some propositions such as `kani_iter.inner.alive.start <= kani_iter.inner.alive.end`,
 `kani_iter.inner.data.as_ptr() == a.as_ptr()`, ... until the loop-invariant is successfully verified.
 The obvious three disadvantages are:
