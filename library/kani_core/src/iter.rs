@@ -52,7 +52,7 @@ macro_rules! generate_iter {
     () => {
         use core::iter::StepBy;
         use core_path::cmp::min;
-        use core_path::iter::{Chain, Enumerate, Map, Zip};
+        use core_path::iter::{Chain, Enumerate, Map, Take, Zip};
         use core_path::mem as stdmem;
         use core_path::ops::Range;
         use core_path::slice::Iter;
@@ -306,6 +306,34 @@ macro_rules! generate_iter {
             }
         }
 
+        pub struct KaniTakeIter<I: KaniIter> {
+            pub iter: I,
+            pub n: usize,
+        }
+
+        impl<I: KaniIter> KaniTakeIter<I> {
+            pub fn new(iter: I, n: usize) -> Self {
+                KaniTakeIter { iter, n }
+            }
+        }
+
+        impl<I: KaniIter> KaniIter for KaniTakeIter<I> {
+            type Item = I::Item;
+            fn indexing(&self, i: usize) -> Self::Item {
+                //assert!(i < self.n && i < self.iter.len());
+                self.iter.indexing(i)
+            }
+            fn first(&self) -> Self::Item {
+                self.iter.first()
+            }
+            fn assumption(&self) -> bool {
+                self.iter.assumption()
+            }
+            fn len(&self) -> usize {
+                self.iter.len()
+            }
+        }
+
         pub trait KaniIntoIter
         where
             Self: Sized,
@@ -342,12 +370,27 @@ macro_rules! generate_iter {
             }
         }
 
-        impl KaniIntoIter for Range<i32> {
-            type Iter = Range<i32>;
-            fn kani_into_iter(self) -> Self::Iter {
-                self
-            }
+        macro_rules! generate_impl_KaniIter_range {
+            ($t:ty) => {
+                impl KaniIntoIter for Range<$t> {
+                    type Iter = Range<$t>;
+                    fn kani_into_iter(self) -> Self::Iter {
+                        self
+                    }
+                }
+            };
         }
+
+        generate_impl_KaniIter_range!(i8);
+        generate_impl_KaniIter_range!(i16);
+        generate_impl_KaniIter_range!(i32);
+        generate_impl_KaniIter_range!(i64);
+        generate_impl_KaniIter_range!(isize);
+        generate_impl_KaniIter_range!(u8);
+        generate_impl_KaniIter_range!(u16);
+        generate_impl_KaniIter_range!(u32);
+        generate_impl_KaniIter_range!(u64);
+        generate_impl_KaniIter_range!(usize);
 
         impl<I: KaniIntoIter> KaniIntoIter for StepBy<I> {
             type Iter = KaniStepBy<I::Iter>;
@@ -424,6 +467,20 @@ macro_rules! generate_iter {
                 let ptr = &self as *const Enumerate<I> as *const EnumerateLayout<I>;
                 let iter = unsafe { (*ptr).iter.clone().kani_into_iter() };
                 KaniEnumerateIter::new(iter)
+            }
+        }
+
+        impl<I: KaniIntoIter + Clone> KaniIntoIter for Take<I> {
+            type Iter = KaniTakeIter<I::Iter>;
+            fn kani_into_iter(self) -> Self::Iter {
+                struct TakeLayout<I> {
+                    iter: I,
+                    n: usize,
+                }
+                let ptr = &self as *const Take<I> as *const TakeLayout<I>;
+                let iter = unsafe { (*ptr).iter.clone().kani_into_iter() };
+                let n = unsafe { (*ptr).n };
+                KaniTakeIter::new(iter, n)
             }
         }
     };
