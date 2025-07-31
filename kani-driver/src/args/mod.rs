@@ -486,39 +486,22 @@ pub enum OutputFormat {
 #[derive(Debug, clap::Args)]
 #[clap(next_help_heading = "Memory Checks")]
 pub struct CheckArgs {
-    // Rust argument parsers (/clap) don't have the convenient '--flag' and '--no-flag' boolean pairs, so approximate
-    // We're put both here then create helper functions to "intepret"
-    /// Turn on all default checks
-    #[arg(long, hide = true)]
-    pub default_checks: bool,
     /// Turn off all default checks
     #[arg(long)]
     pub no_default_checks: bool,
 
-    /// Turn on default memory safety checks
-    #[arg(long, hide = true)]
-    pub memory_safety_checks: bool,
     /// Turn off default memory safety checks
     #[arg(long)]
     pub no_memory_safety_checks: bool,
 
-    /// Turn on default overflow checks
-    #[arg(long, hide = true)]
-    pub overflow_checks: bool,
     /// Turn off default overflow checks
     #[arg(long)]
     pub no_overflow_checks: bool,
 
-    /// Turn on undefined function checks
-    #[arg(long, hide = true)]
-    pub undefined_function_checks: bool,
     /// Turn off undefined function checks
     #[arg(long)]
     pub no_undefined_function_checks: bool,
 
-    /// Turn on default unwinding checks
-    #[arg(long, hide = true)]
-    pub unwinding_checks: bool,
     /// Turn off default unwinding checks
     #[arg(long)]
     pub no_unwinding_checks: bool,
@@ -526,41 +509,16 @@ pub struct CheckArgs {
 
 impl CheckArgs {
     pub fn memory_safety_on(&self) -> bool {
-        !self.no_default_checks && !self.no_memory_safety_checks || self.memory_safety_checks
+        !self.no_default_checks && !self.no_memory_safety_checks
     }
     pub fn overflow_on(&self) -> bool {
-        !self.no_default_checks && !self.no_overflow_checks || self.overflow_checks
+        !self.no_default_checks && !self.no_overflow_checks
     }
     pub fn undefined_function_on(&self) -> bool {
         !self.no_default_checks && !self.no_undefined_function_checks
-            || self.undefined_function_checks
     }
     pub fn unwinding_on(&self) -> bool {
-        !self.no_default_checks && !self.no_unwinding_checks || self.unwinding_checks
-    }
-    pub fn print_deprecated(&self, verbosity: &CommonArgs) {
-        let deprecation_version = "0.63.0";
-        let alternative = "omitting the argument, since this is already the default behavior";
-        if self.default_checks {
-            print_deprecated(verbosity, "--default-checks", deprecation_version, alternative);
-        }
-        if self.memory_safety_checks {
-            print_deprecated(verbosity, "--memory-safety-checks", deprecation_version, alternative);
-        }
-        if self.overflow_checks {
-            print_deprecated(verbosity, "--overflow-checks", deprecation_version, alternative);
-        }
-        if self.undefined_function_checks {
-            print_deprecated(
-                verbosity,
-                "--undefined-function-checks",
-                deprecation_version,
-                alternative,
-            );
-        }
-        if self.unwinding_checks {
-            print_deprecated(verbosity, "--unwinding-checks", deprecation_version, alternative);
-        }
+        !self.no_default_checks && !self.no_unwinding_checks
     }
 }
 
@@ -820,7 +778,6 @@ impl ValidateArgs for VerificationArgs {
 
         // Check for any deprecated/obsolete options, or providing an unstable flag that has since been stabilized.
         let deprecated_stabilized_obsolete = || -> Result<(), Error> {
-            self.checks.print_deprecated(&self.common_args);
             if self.write_json_symtab {
                 return Err(Error::raw(
                     ErrorKind::ValueValidation,
