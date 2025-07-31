@@ -12,11 +12,12 @@ use crate::kani_middle::transform::TransformationType;
 use crate::kani_middle::transform::body::{InsertPosition, MutableBody, SourceInstruction};
 use crate::kani_queries::QueryDb;
 use crate::rustc_public::CrateDef;
+use itertools::Itertools;
 use rustc_middle::ty::TyCtxt;
 use rustc_public::mir::mono::Instance;
 use rustc_public::mir::{
-    AggregateKind, BasicBlock, BasicBlockIdx, Body, ConstOperand, Operand, Rvalue, Statement,
-    StatementKind, SwitchTargets, Terminator, TerminatorKind, VarDebugInfoContents,
+    AggregateKind, BasicBlock, BasicBlockIdx, Body, ConstOperand, Operand, Place, Rvalue,
+    Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind, VarDebugInfoContents,
 };
 use rustc_public::ty::{FnDef, GenericArgKind, MirConst, RigidTy, TyKind, UintTy};
 use rustc_span::Symbol;
