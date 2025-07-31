@@ -343,28 +343,44 @@ impl LoopContractPass {
                     }
                     // The assign statements of the projections
                     StatementKind::Assign(fprjplace, frval) => {
-                        if let Some(indexprj) = firstprj_indexprj.get(&fprjplace.local)
-                            && let Rvalue::Use(Operand::Copy(firstpatplace)) = frval
-                        {
-                            let storagelive_stmt = Statement {
-                                kind: StatementKind::StorageLive(*indexprj),
-                                span: stmt.span,
-                            };
-                            new_stmts.push(storagelive_stmt);
-                            let mut indexpatplace = firstpatplace.clone();
-                            indexpatplace.local = indexvar;
-                            let newrval = Rvalue::Use(Operand::Copy(indexpatplace));
-                            new_stmt.kind = StatementKind::Assign(
-                                Place {
-                                    local: *indexprj,
-                                    projection: fprjplace.projection.clone(),
-                                },
-                                newrval,
-                            );
-                            new_stmts.push(new_stmt);
-                        } else {
-                            new_stmts.push(new_stmt)
+                        match frval {
+                            Rvalue::Use(Operand::Copy(firstpatplace)) => {
+                                if firstpatplace.local == firstvar {
+                                    let indexprj = firstprj_indexprj.get(&fprjplace.local).unwrap();
+                                    let mut indexpatplace = firstpatplace.clone();
+                                    indexpatplace.local = indexvar;
+                                    let newrval = Rvalue::Use(Operand::Copy(indexpatplace));
+                                    new_stmt.kind = StatementKind::Assign(
+                                        Place {
+                                            local: *indexprj,
+                                            projection: fprjplace.projection.clone(),
+                                        },
+                                        newrval,
+                                    );
+                                }
+                            }
+                            Rvalue::CopyForDeref(firstpatplace) => {
+                                if firstpatplace.local == firstvar {
+                                    let mut indexpatplace = firstpatplace.clone();
+                                    indexpatplace.local = indexvar;
+                                    let newrval = Rvalue::CopyForDeref(indexpatplace);
+                                    new_stmt.kind =
+                                        StatementKind::Assign(fprjplace.clone(), newrval);
+                                }
+                            }
+                            _ => {
+                                if let Some(indexprj) = firstprj_indexprj.get(&fprjplace.local) {
+                                    new_stmt.kind = StatementKind::Assign(
+                                        Place {
+                                            local: *indexprj,
+                                            projection: fprjplace.projection.clone(),
+                                        },
+                                        frval.clone(),
+                                    )
+                                }
+                            }
                         }
+                        new_stmts.push(new_stmt);
                     }
                     _ => new_stmts.push(new_stmt),
                 }
