@@ -416,12 +416,25 @@ impl VerificationArgs {
         }
     }
 
-    /// Given an argument, warn if UnstableFeature::UnstableOptions is enabled.
+    /// Given the string representation of an option, warn if it's enabled UnstableFeature::UnstableOptions is enabled.
     /// This is for cases where the option was previously unstable but has since been stabilized.
+    /// Example invocation: self.check_unnecessary_unstable_option(self.jobs.is_some(), "jobs");
+    #[allow(dead_code)]
     pub fn check_unnecessary_unstable_option(&self, enabled: bool, option: &str) {
+        // Note that the body of this function is subject to change; an option
+        // will only be here if it has been stabilized *recently*, such that we should still warn about unstable-options.
+        // So a body of just `None` is fine, since that just means that no unstable options are currently in that in-between period.
+        // Example of an appropriate body:
+        // ```rust
+        //    match option {
+        //      "jobs" => Some("0.63.0".to_string()),
+        //      _ => None,
+        //    }
+        // ```
+        // for the unstable jobs option, which was stabilized in version 0.63.
+        #[allow(clippy::match_single_binding)]
         fn stabilization_version(option: &str) -> Option<String> {
             match option {
-                "jobs" => Some("0.63.0".to_string()),
                 _ => None,
             }
         }
@@ -808,8 +821,6 @@ impl ValidateArgs for VerificationArgs {
         // Check for any deprecated/obsolete options, or providing an unstable flag that has since been stabilized.
         let deprecated_stabilized_obsolete = || -> Result<(), Error> {
             self.checks.print_deprecated(&self.common_args);
-            self.check_unnecessary_unstable_option(self.jobs.is_some(), "jobs");
-
             if self.write_json_symtab {
                 return Err(Error::raw(
                     ErrorKind::ValueValidation,
