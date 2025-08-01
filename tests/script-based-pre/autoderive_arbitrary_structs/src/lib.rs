@@ -70,6 +70,12 @@ mod should_derive {
         foo.data.unwrap_or(Some((0, 0))).unwrap_or((0, 0)).1 as usize + 100
     }
 
+    struct RefStruct(&'static i32);
+    fn ref_struct(foo: RefStruct) {}
+
+    struct RefRefStruct(&'static &'static i32);
+    fn ref_ref_struct(foo: RefRefStruct) {}
+
     #[derive(Eq, PartialEq)]
     pub struct AlignmentStruct(usize);
 
@@ -119,7 +125,6 @@ mod should_not_derive {
 
     struct StrStruct(&'static str);
     struct PtrStruct(*const i8);
-    struct RefStruct(&'static mut i32);
 
     pub struct UnsupportedGenericField<T> {
         outer: T,
@@ -130,7 +135,7 @@ mod should_not_derive {
     fn some_arguments_support(
         supported: NamedMultipleStruct,
         supported_2: MultipleGenerics<char, i8>,
-        unsupported: RefStruct,
+        unsupported: PtrStruct,
     ) {
     }
     fn generic_unsupported_arg(unsupported: UnsupportedGenericField<char>) {}
