@@ -282,7 +282,7 @@ Even then, it is so complicated and tedious to write the loop-invariant.
 3. The long call stack will slow down the performance.
 
 To avoid those disadvantages, we override the `into_iter` function and `IntoIter` trait by our own version (`kani_into_iter()` and `KaniIntoIter`) 
-with simplified implementation but keeping the same semantics.
+with a simplified implementation but keeping the same semantics.
 Our rewritten version for the `for-loop` is as follows:
 
 ```Rust
