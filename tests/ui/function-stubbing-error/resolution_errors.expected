@@ -28,9 +28,28 @@ resolution_errors.rs
 | #[kani::stub(u8::foo, stub_foo)]
 | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-error: failed to resolve `<Bar>::foo`: unable to find `foo` inside struct `Bar`
+error: failed to resolve `<Bar as Foo>::bar`: unable to find `bar` inside trait `Foo`
 resolution_errors.rs
 |
-| #[kani::stub(<Bar>::foo, stub_foo)]
-| ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+| #[kani::stub(<Bar as Foo>::bar, stub_foo)]
+| ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+error: invalid stub: function does not have a body, but is not an extern function\
+resolution_errors.rs\
+|\
+| #[kani::stub(<X as A>::bar, B::bar)]\
+| ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+|\
+note: `B::bar` does not have a body\
+resolution_errors.rs\
+|\
+|     fn bar(&self) -> u32;\
+|     ^^^^^^^^^^^^^^^^^^^^^\
+   = help: if this stub refers to associated functions, try using fully-qualified syntax instead
+
+error: failed to resolve `X::bar`: unable to find `bar` inside struct `X`\
+resolution_errors.rs\
+|\
+| #[kani::stub(X::bar, A::bar)]\
+| ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\
+|

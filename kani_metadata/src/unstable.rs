@@ -85,8 +85,6 @@ pub enum UnstableFeature {
     GhostState,
     /// Enabled Lean backend (Aeneas/LLBC)
     Lean,
-    /// The list subcommand [RFC 13](https://model-checking.github.io/kani/rfc/rfcs/0013-list.html)
-    List,
     /// Enable loop contracts [RFC 12](https://model-checking.github.io/kani/rfc/rfcs/0012-loop-contracts.html)
     LoopContracts,
     /// Memory predicate APIs.
@@ -125,9 +123,19 @@ impl UnstableFeature {
 
     /// If this unstable feature has been stabilized, return the version it was stabilized in.
     /// Use this function to produce warnings that the unstable flag is no longer necessary.
+    /// Note that the body of this function is subject to change; a feature will only be here if it has been deprecated, but not yet removed.
+    /// So a body of just `None` is fine, since that just means that no unstable features are currently in that in-between period.
+    /// Example of an appropriate body:
+    /// ```ignore
+    ///    match self {
+    ///      UnstableFeature::List => Some("0.63.0".to_string()),
+    ///      _ => None,
+    ///    }
+    /// ```
+    /// for the unstable list feature, which was stabilized in version 0.63 and removed permanently in v0.66.
+    #[allow(clippy::match_single_binding)]
     pub fn stabilization_version(&self) -> Option<String> {
         match self {
-            UnstableFeature::List => Some("0.63.0".to_string()),
             _ => None,
         }
     }
