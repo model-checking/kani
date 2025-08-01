@@ -124,19 +124,19 @@ macro_rules! assert_ne {
 #[cfg(not(feature = "concrete_playback"))]
 #[macro_export]
 macro_rules! debug_assert {
-    ($($x:tt)*) => ({ $crate::assert!($($x)*); })
+    ($($x:tt)*) => ({ if cfg!(debug_assertions) { $crate::assert!($($x)*); } })
 }
 
 #[cfg(not(feature = "concrete_playback"))]
 #[macro_export]
 macro_rules! debug_assert_eq {
-    ($($x:tt)*) => ({ $crate::assert_eq!($($x)*); })
+    ($($x:tt)*) => ({ if cfg!(debug_assertions) { $crate::assert_eq!($($x)*); } })
 }
 
 #[cfg(not(feature = "concrete_playback"))]
 #[macro_export]
 macro_rules! debug_assert_ne {
-    ($($x:tt)*) => ({ $crate::assert_ne!($($x)*); })
+    ($($x:tt)*) => ({ if cfg!(debug_assertions) { $crate::assert_ne!($($x)*); } })
 }
 
 // Override the print macros to skip all the printing functionality (which
