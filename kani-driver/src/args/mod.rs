@@ -416,7 +416,8 @@ impl VerificationArgs {
         }
     }
 
-    /// Given the string representation of an option, warn if it's enabled UnstableFeature::UnstableOptions is enabled.
+    /// Given the string representation of an option, warn if it's enabled while
+    /// UnstableFeature::UnstableOptions is also enabled.
     /// This is for cases where the option was previously unstable but has since been stabilized.
     /// Example invocation: self.check_unnecessary_unstable_option(self.jobs.is_some(), "jobs");
     #[allow(dead_code)]
