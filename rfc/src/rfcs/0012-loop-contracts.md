@@ -233,7 +233,7 @@ for i in a {
 is rewritten into:
 
 ```Rust
-let a : [u8,10] = kani::any();
+let a: [u8; 10] = kani::any();
 let mut kani_iter = a.into_iter();
 #[kani::loop_invariant(...)]
 loop {
