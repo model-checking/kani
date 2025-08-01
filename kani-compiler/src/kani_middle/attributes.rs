@@ -171,7 +171,7 @@ impl<'tcx> KaniAttributes<'tcx> {
     }
 
     pub fn for_item(tcx: TyCtxt<'tcx>, def_id: DefId) -> Self {
-        let all_attributes = tcx.get_attrs_unchecked(def_id);
+        let all_attributes = tcx.get_all_attrs(def_id);
         let map = all_attributes.iter().fold(
             <BTreeMap<KaniAttributeKind, Vec<&'tcx Attribute>>>::default(),
             |mut result, attribute| {
@@ -767,7 +767,7 @@ fn has_kani_attribute<F: Fn(KaniAttributeKind) -> bool>(
     def_id: DefId,
     predicate: F,
 ) -> bool {
-    tcx.get_attrs_unchecked(def_id).iter().filter_map(|a| attr_kind(tcx, a)).any(predicate)
+    tcx.get_all_attrs(def_id).iter().filter_map(|a| attr_kind(tcx, a)).any(predicate)
 }
 
 /// Same as [`KaniAttributes::is_proof_harness`] but more efficient because less
