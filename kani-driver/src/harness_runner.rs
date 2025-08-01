@@ -8,7 +8,7 @@ use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 
-use crate::args::OutputFormat;
+use crate::args::{NumThreads, OutputFormat};
 use crate::call_cbmc::{VerificationResult, VerificationStatus};
 use crate::project::Project;
 use crate::session::{BUG_REPORT_URL, KaniSession};
@@ -60,8 +60,15 @@ impl<'pr> HarnessRunner<'_, 'pr> {
         let sorted_harnesses = crate::metadata::sort_harnesses_by_loc(harnesses);
         let pool = {
             let mut builder = rayon::ThreadPoolBuilder::new();
-            if let Some(x) = self.sess.args.jobs() {
-                builder = builder.num_threads(x);
+            match self.sess.args.jobs() {
+                NumThreads::UserSpecified(num_threads) => {
+                    builder = builder.num_threads(num_threads);
+                }
+                NumThreads::NoMultithreading => {
+                    builder = builder.num_threads(1);
+                }
+                NumThreads::ThreadPoolDefault => { /* rayon will automatically set num_threads to the default if not specified here */
+                }
             }
             builder.build()?
         };
