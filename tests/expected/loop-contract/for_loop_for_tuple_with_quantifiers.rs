@@ -16,7 +16,7 @@ fn forloop() {
     let mut sum: u32 = 0;
     let a: [(u8, u8); 10] = kani::any();
     kani::assume(kani::forall!(|i in (0,10)| sum_pair(a[i]) <= 10));
-    #[kani::loop_invariant( sum <= (kaniindex as u32 * 10 as u32) )]
+    #[kani::loop_invariant( sum <= (kani_index as u32 * 10 as u32) )]
     for (i, j) in a {
         sum = sum + (i as u32) + (j as u32);
     }

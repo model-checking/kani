@@ -12,7 +12,7 @@ fn forloop() {
     let mut sum: u32 = 0;
     let v: Vec<u8> = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
-    #[kani::loop_invariant( sum <= (kaniindex as u32 * 10) )]
+    #[kani::loop_invariant( sum <= (kani_index as u32 * 10) )]
     for j in v {
         sum = sum + (j as u32);
     }

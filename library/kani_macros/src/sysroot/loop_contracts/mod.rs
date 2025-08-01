@@ -244,15 +244,15 @@ is transformed into a `while` loop:
 
 ``` rust
 let kaniiter = kani::KaniIntoIter::kani_into_iter(expr); \\ init_iter_stmt
-let kaniiterlen = kani::KaniIter::len(&kaniiter); \\ init_len_stmt
-if kaniiterlen > 0 {
-    let mut kaniindex = 0; \\ init_index_stmt
+let kani_iter_len = kani::KaniIter::len(&kaniiter); \\ init_len_stmt
+if kani_iter_len > 0 {
+    let mut kani_index = 0; \\ init_index_stmt
     kani::assume (kani::KaniIter::assumption(&kaniiter)); \\ iter_assume_stmt
     let pat = kani::KaniIter::first(&kaniiter); \\ init_pat_stmt
-    while kaniindex < kaniiterlen {
+    while kani_index < kani_iter_len {
         kani::assume (kani::KaniIter::assumption(&kaniiter)); \\ iter_assume_stmt
-        let pat = kani::KaniIter::indexing(&kaniiter, kaniindex); \\ pat_assign_stmt
-        kaniindex = kaniindex + 1; \\ increase_iter_stmt
+        let pat = kani::KaniIter::indexing(&kaniiter, kani_index); \\ pat_assign_stmt
+        kani_index = kani_index + 1; \\ increase_iter_stmt
         body
     }
 }
@@ -265,7 +265,7 @@ Reason:
     b) Avoid types that cannot be havoc effectively (user cannot state the type invariant in the loop invariant due to private fields)
     c) There is no generic way to handle Rust's into_iter().
 
-2. The init_index_stmt and init_pat_stmt statements supports writing the loop-invariant properties that involve pat and kaniindex
+2. The init_index_stmt and init_pat_stmt statements supports writing the loop-invariant properties that involve pat and kani_index
 
 3. The iter_assume_stmt assumes some truths about allocation, so that the user does not neet to specify them in the loop invariant
 */
@@ -290,14 +290,14 @@ pub fn transform_for_to_loop(
     let body = for_loop.body;
 
     // Create an iterator variable name
-    let indexname = "kaniindex".to_owned();
+    let indexname = "kani_index".to_owned();
     let index_ident = format_ident!("{}", indexname);
 
     let mut itername = "kaniiter".to_owned();
     itername.push_str(loop_id);
     let iter_ident = format_ident!("{}", itername);
 
-    let lenname = "kaniiterlen".to_owned();
+    let lenname = "kani_iter_len".to_owned();
     let len_ident = format_ident!("{}", lenname);
 
     // Create initialization statement for the iterator
@@ -381,7 +381,7 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
     // expr of the loop invariant
     let mut inv_expr: Expr = syn::parse(attr).unwrap();
     if for_loop_extras.is_some() {
-        inv_expr = parse_quote! { kaniindex <= kaniiterlen && #inv_expr}
+        inv_expr = parse_quote! { kani_index <= kani_iter_len && #inv_expr}
     }
 
     // adding on_entry variables
@@ -483,7 +483,7 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
             {
             #init_iter_stmt
             #init_len_stmt
-            assert!(kaniiterlen > 0, "undefined prev when iter's length is zero");
+            assert!(kani_iter_len > 0, "undefined prev when iter's length is zero");
             {
             #init_index_stmt
             #iter_assume_stmt
@@ -518,7 +518,7 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
             {
             #init_iter_stmt
             #init_len_stmt
-            if kaniiterlen > 0
+            if kani_iter_len > 0
             {
             #init_index_stmt
             #iter_assume_stmt

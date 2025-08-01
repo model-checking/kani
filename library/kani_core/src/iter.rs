@@ -21,12 +21,12 @@ loop {
 we rewrite it as:
 
 let kani_iter = kani::kani_into_iter(a);
-let mut kaniindex = 0;
+let mut kani_index = 0;
 #[kani::loop_invariant(...)]
-while (kaniindex < kaniiterlen) {
-  i = kani_iter.indexing(kaniindex);
+while (kani_index < kani_iter_len) {
+  i = kani_iter.indexing(kani_index);
   // loop_body
-  kaniindex += 1;
+  kani_index += 1;
 }
 
 We ensure the semantic by ensuring that the value of `i` is the same in each iteration of the loop for both versions,

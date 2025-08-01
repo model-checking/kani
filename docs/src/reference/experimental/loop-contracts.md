@@ -3,13 +3,13 @@
 ## Introduction
 
 Loop invariants are used to specify invariants for loops for the sake of extending Kani's *bounded proofs* to *unbounded proofs*.
-A [loop-invariant](https://en.wikipedia.org/wiki/Loop_invariant) is an expression that holds upon entering a loop and after every execution of the loop body.
+A [loop invariant](https://en.wikipedia.org/wiki/Loop_invariant) is an expression that holds upon entering a loop and after every execution of the loop body.
 It captures something that does not change about every step of the loop.
 
 It is worth revisiting the discussion about [bounded proof](../../tutorial-loop-unwinding.md#bounded-proof) and
 [loop unwinding](../../tutorial-loop-unwinding.md#loops-unwinding-and-bounds). In short, bounds on the number of times Kani unwinds loops also bound the size of inputs,
 and hence result in a bounded proof.
-Loop-invariants are used to abstract out loops as non-loop blocks to avoid loop unwinding, and hence remove the bounds on the inputs.
+loop invariants are used to abstract out loops as non-loop blocks to avoid loop unwinding, and hence remove the bounds on the inputs.
 
 Consider the following example:
 
@@ -28,7 +28,7 @@ fn simple_loop() {
 In this program, the loop repeatedly decrements `x` until it equals `1`. Because we haven't specified an upper bound for `x`, to verify this function,
 Kani needs to unwind the loop for `u64::MAX` iterations, which is intractable. Loop invariants allow us to abstract the loop behavior, significantly reducing the verification cost.
 
-With loop-invariants, we can specify the loop’s behavior using invariants. For example:
+With loop invariants, we can specify the loop’s behavior using invariants. For example:
 
 ``` Rust
 #![feature(stmt_expr_attributes)]
@@ -46,10 +46,10 @@ fn simple_loop_with_loop_invariants() {
 }
 ```
 
-Here, the loop-invariant `#[kani::loop_invariant(x >= 1)]` specifies that the condition `x >= 1` must hold true at the start of each iteration before the loop guard is
-checked. Once Kani verifies that the loop-invariant is inductive, it will use the invariant to abstract the loop and avoid unwinding. 
+Here, the loop invariant `#[kani::loop_invariant(x >= 1)]` specifies that the condition `x >= 1` must hold true at the start of each iteration before the loop guard is
+checked. Once Kani verifies that the loop invariant is inductive, it will use the invariant to abstract the loop and avoid unwinding. 
 
-Now let's run the proof with loop-invariants through kani:
+Now let's run the proof with loop invariants through kani:
 ``` bash
 kani simple_loop_with_loop_invariants.rs  -Z loop-contracts
 ```
@@ -107,7 +107,7 @@ Complete - 1 successfully verified harnesses, 0 failures, 1 total.
 An invariant contract `#[kani::loop_invariant(cond)]` accepts a valid Boolean expression `cond` over the variables visible at the same scope as the loop.
 
 ### Semantics
-A loop-invariant expands to several assumptions and assertions:
+A loop invariant expands to several assumptions and assertions:
 1. The invariant is asserted just before the first iteration.
 2. The invariant is assumed on a non-deterministic state to model a non-deterministic iteration.
 3. The invariant is finally asserted again to establish its inductiveness.
@@ -118,25 +118,25 @@ must be sufficient to establish subsequent assertions. If it is not, the abstrac
 
 To illustrate the key idea, we show how Kani abstracts the loop in `simple_loop_with_loop_invariants` as a non-loop block:
 ``` Rust
-assert!(x >= 1) // check loop-invariant for the base case.
+assert!(x >= 1) // check loop invariant for the base case.
 x = kani::any();
 kani::assume(x >= 1);
 if x > 1 {
     // proof path 1:
-    //   both loop guard and loop-invariant are satisfied.
+    //   both loop guard and loop invariant are satisfied.
     x = x - 1;
-    assert!(x >= 1); // check that loop-invariant is inductive.
+    assert!(x >= 1); // check that loop invariant is inductive.
     kani::assume(false) // block this proof path.
 }
 // proof path 2:
-//   loop-invariant is satisfied and loop guard is violated.
+//   loop invariant is satisfied and loop guard is violated.
 assert!(x == 1);
 ```
-That is, we assume that we are in an arbitrary iteration after checking that the loop-invariant holds for the base case. With the inductive hypothesis (`kani::assume(x >= 1);`),
+That is, we assume that we are in an arbitrary iteration after checking that the loop invariant holds for the base case. With the inductive hypothesis (`kani::assume(x >= 1);`),
 we will either enter the loop (proof path 1) or leave the loop (proof path 2). We prove the two paths separately by killing path 1 with `kani::assume(false);`.
 Note that all assertions after `kani::assume(false)` will be ignored as `false => p` can be deduced as `true` for any `p`.
 
-In proof path 1, we prove properties inside the loop and at last check that the loop-invariant is inductive.
+In proof path 1, we prove properties inside the loop and at last check that the loop invariant is inductive.
 
 In proof path 2, we prove properties after leaving the loop. As we leave the loop only when the loop guard is violated, the post condition of the loop can be expressed as
 `!guard && inv`, which is `x <= 1 && x >= 1` in the example. The postcondition implies `x == 1`—the property we want to prove at the end of `simple_loop_with_loop_invariants`.
@@ -145,9 +145,9 @@ In proof path 2, we prove properties after leaving the loop. As we leave the loo
 
 ### Historic values
 
-We support two notations for historic values in loop-invariants:
+We support two notations for historic values in loop invariants:
 1. `on_entry(expr)` : The value of the `expr` before entering the loop.
-2. `prev(expr)` : the value of `expr` in the previous iteration. Note that Kani will assert that the loop has at least one iteration if `prev` is used in loop-invariants.
+2. `prev(expr)` : the value of `expr` in the previous iteration. Note that Kani will assert that the loop has at least one iteration if `prev` is used in loop invariants.
 
 Example:
 ```Rust
@@ -167,11 +167,11 @@ pub fn loop_with_old_and_prev() {
 
 ### Extra variables in `for` loop
 
-There are two extra variables that can be used in loop-invariants for `for` loops:
-1. `kaniindex` : the position (index) of the current iteration in the iterator.
-2. `kaniiterlen` : the length of the iterator.
+There are two extra variables that can be used in loop invariants for `for` loops:
+1. `kani_index` : the position (index) of the current iteration in the iterator.
+2. `kani_iter_len` : the length of the iterator.
 
-Note that the two extra variables above are only associated with the `for` loop right below the loop-invariant.
+Note that the two extra variables above are only associated with the `for` loop right below the loop invariant.
 
 Example:
 
@@ -181,7 +181,7 @@ fn forloop() {
     let mut sum: u32 = 0;
     let a: [u8; 10] = kani::any();
     kani::assume(kani::forall!(|i in (0,10)| a[i] <= 20));
-    #[kani::loop_invariant( i == kaniindex && i <= kaniiterlen && sum <= (kaniindex as u32 * 29) )]
+    #[kani::loop_invariant( i == kani_index && i <= kani_iter_len && sum <= (kani_index as u32 * 29) )]
     for (i, j) in a.iter().enumerate() {
         sum = sum + (i as u32) + (*j as u32);
     }
@@ -189,8 +189,8 @@ fn forloop() {
 }
 ```
 
-## Loop-invariants inside functions with contracts 
-Kani supports using loop-invariants together with function-contracts, as demonstrated in the following example:
+## loop invariants inside functions with contracts 
+Kani supports using loop invariants together with function-contracts, as demonstrated in the following example:
 ``` Rust
 #![feature(proc_macro_hygiene)]
 #![feature(stmt_expr_attributes)]
@@ -212,7 +212,7 @@ fn contract_proof() {
 }
 ```
 
-When loop-invariants and function-contracts are both enabled (by flags `-Z loop-contracts -Z function-contracts`), 
+When loop invariants and function-contracts are both enabled (by flags `-Z loop-contracts -Z function-contracts`), 
 Kani automatically contracts (instead of unwinds) all loops in the functions that we want to prove contracts for.
 
 ## Loop modifies clauses: 
@@ -279,7 +279,7 @@ fn main() {
 
 ## Limitations
 
-Loop-invariants comes with the following limitations.
+loop invariants comes with the following limitations.
 
 1. `while` loops, `loop` loops are supported. `for` loops are supported for array, slice, Iter, Vec, Range, StepBy, Chain, Zip, Map, and Enumerate. The other kinds of loops are not supported: [`while let` loops](https://doc.rust-lang.org/reference/expressions/loop-expr.html#predicate-pattern-loops).
 2. Kani infers *loop modifies* with alias analysis. Loop modifies are those variables we assume to be arbitrary in the inductive hypothesis, and should cover all memory locations that are written to during 
@@ -287,4 +287,4 @@ Loop-invariants comes with the following limitations.
    We observed this happens when some fields of structs are modified by some other functions called in the loops.
 3. Kani doesn't check if a loop will always terminate in proofs with loop contracts. So it could be that some properties are proved successfully with Kani but actually are unreachable due to the 
    non-termination of some loops.
-4. We don't check if loop-invariants are side-effect free. A loop-invariant with a side effect could lead to an unsound proof result. Make sure that the specified loop-invariants are side-effect free.
+4. We don't check if loop invariants are side-effect free. A loop invariant with a side effect could lead to an unsound proof result. Make sure that the specified loop invariants are side-effect free.

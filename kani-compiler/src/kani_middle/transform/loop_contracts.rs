@@ -509,7 +509,7 @@ impl LoopContractPass {
             let is_user_defined = body.var_debug_info().iter().any(|info| {
                 matches!(&info.value, VarDebugInfoContents::Place(place) if place.local == idx)
                     && info.name.contains("kaniiter")
-                    && !info.name.contains("kaniiterlen")
+                    && !info.name.contains("kani_iter_len")
             });
             if is_user_defined {
                 user_vars.push(idx);

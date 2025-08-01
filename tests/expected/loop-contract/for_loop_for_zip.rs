@@ -17,7 +17,7 @@ fn forloop() {
     let a: [u8; 10] = kani::any();
     let b: [u8; 15] = kani::any();
     kani::assume(kani::forall!(|i in (0,10)| incr_mul (a[i], b[i]) <= 100));
-    #[kani::loop_invariant( kaniindex <= 10 && sum <= (kaniindex as u32 * 99) )]
+    #[kani::loop_invariant( kani_index <= 10 && sum <= (kani_index as u32 * 99) )]
     for (i, j) in a.iter().zip(b.iter()) {
         sum = sum + (*i as u32) + (*j as u32);
     }

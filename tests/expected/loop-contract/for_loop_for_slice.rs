@@ -13,7 +13,7 @@ fn forloop() {
     let a: [u8; 10] = kani::any();
     let s = kani::slice::any_slice_of_array(&a);
     let len = s.len();
-    #[kani::loop_invariant( sum <= (kaniindex as u32 * u8::MAX as u32) )]
+    #[kani::loop_invariant( sum <= (kani_index as u32 * u8::MAX as u32) )]
     for j in s {
         sum = sum + (j as u32);
     }

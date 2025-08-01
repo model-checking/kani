@@ -11,7 +11,7 @@
 fn forloop() {
     let mut sum: u32 = 0;
     let a: [u8; 10] = kani::any();
-    #[kani::loop_invariant( sum <= (kaniindex as u32 * u8::MAX as u32) )]
+    #[kani::loop_invariant( sum <= (kani_index as u32 * u8::MAX as u32) )]
     for j in a {
         sum = sum + (j as u32);
     }
