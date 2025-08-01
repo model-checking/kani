@@ -338,8 +338,12 @@ impl CodegenBackend for GotocCodegenBackend {
                     for unit in units.iter() {
                         // We reset the body cache for now because each codegen unit has different
                         // configurations that affect how we transform the instance body.
+
+                        // Generate an empty 'template' transformer once per codegen unit and then clone for each harness within.
+                        // (They all share the same options.)
+                        let template_transformer = BodyTransformation::new(&queries, tcx, unit);
                         for harness in &unit.harnesses {
-                            let transformer = BodyTransformation::new(&queries, tcx, unit);
+                            let transformer = template_transformer.clone_empty();
                             let model_path = units.harness_model_path(*harness).unwrap();
                             let is_automatic_harness = units.is_automatic_harness(harness);
                             let contract_metadata =

@@ -31,7 +31,7 @@ use tracing::{debug, trace};
 /// depending on what the type of the input it
 ///
 /// any_modifies is replaced with any
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AnyModifiesPass {
     kani_any: Option<FnDef>,
     kani_any_modifies: Option<FnDef>,
@@ -265,7 +265,7 @@ impl AnyModifiesPass {
 ///    - Replace the non-used generated closures body with unreachable.
 /// 3. Replace the body of `kani_register_contract` by `kani::internal::run_contract_fn` to
 ///    invoke the closure.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct FunctionWithContractPass {
     /// Function that is being checked, if any.
     check_fn: Option<FnDef>,

@@ -28,7 +28,7 @@ mod uninit_visitor;
 
 /// Top-level pass that instruments the code with checks for uninitialized memory access through raw
 /// pointers.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct UninitPass {
     pub safety_check_type: CheckType,
     pub unsupported_check_type: CheckType,
