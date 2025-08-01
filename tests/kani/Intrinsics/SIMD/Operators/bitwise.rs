@@ -13,43 +13,91 @@ use std::intrinsics::simd::{simd_and, simd_or, simd_xor};
 
 #[repr(simd)]
 #[allow(non_camel_case_types)]
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy)]
 pub struct i8x2([i8; 2]);
 
+impl i8x2 {
+    fn into_array(self) -> [i8; 2] {
+        unsafe { std::mem::transmute(self) }
+    }
+}
+
 #[repr(simd)]
 #[allow(non_camel_case_types)]
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy)]
 pub struct i16x2([i16; 2]);
 
+impl i16x2 {
+    fn into_array(self) -> [i16; 2] {
+        unsafe { std::mem::transmute(self) }
+    }
+}
+
 #[repr(simd)]
 #[allow(non_camel_case_types)]
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy)]
 pub struct i32x2([i32; 2]);
 
+impl i32x2 {
+    fn into_array(self) -> [i32; 2] {
+        unsafe { std::mem::transmute(self) }
+    }
+}
+
 #[repr(simd)]
 #[allow(non_camel_case_types)]
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy)]
 pub struct i64x2([i64; 2]);
 
+impl i64x2 {
+    fn into_array(self) -> [i64; 2] {
+        unsafe { std::mem::transmute(self) }
+    }
+}
+
 #[repr(simd)]
 #[allow(non_camel_case_types)]
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy)]
 pub struct u8x2([u8; 2]);
 
+impl u8x2 {
+    fn into_array(self) -> [u8; 2] {
+        unsafe { std::mem::transmute(self) }
+    }
+}
+
 #[repr(simd)]
 #[allow(non_camel_case_types)]
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy)]
 pub struct u16x2([u16; 2]);
 
-#[repr(simd)]
-#[allow(non_camel_case_types)]
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub struct u32x2([u32; 2]);
+impl u16x2 {
+    fn into_array(self) -> [u16; 2] {
+        unsafe { std::mem::transmute(self) }
+    }
+}
 
 #[repr(simd)]
 #[allow(non_camel_case_types)]
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy)]
+pub struct u32x2([u32; 2]);
+
+impl u32x2 {
+    fn into_array(self) -> [u32; 2] {
+        unsafe { std::mem::transmute(self) }
+    }
+}
+
+#[repr(simd)]
+#[allow(non_camel_case_types)]
+#[derive(Clone, Copy)]
 pub struct u64x2([u64; 2]);
+
+impl u64x2 {
+    fn into_array(self) -> [u64; 2] {
+        unsafe { std::mem::transmute(self) }
+    }
+}
 
 macro_rules! compare_simd_op_with_normal_op {
     ($simd_op: ident, $normal_op: tt, $simd_type: ident) => {
@@ -58,8 +106,8 @@ macro_rules! compare_simd_op_with_normal_op {
         let x = $simd_type([tup_x.0, tup_x.1]);
         let y = $simd_type([tup_y.0, tup_y.1]);
         let res_and = unsafe { $simd_op(x, y) };
-        assert_eq!(tup_x.0 $normal_op tup_y.0, res_and.0[0]);
-        assert_eq!(tup_x.1 $normal_op tup_y.1, res_and.0[1]);
+        assert_eq!(tup_x.0 $normal_op tup_y.0, res_and.into_array()[0]);
+        assert_eq!(tup_x.1 $normal_op tup_y.1, res_and.into_array()[1]);
     };
 }
 

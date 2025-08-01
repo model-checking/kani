@@ -7,7 +7,7 @@ use std::intrinsics::simd::{simd_add, simd_mul, simd_sub};
 
 #[repr(simd)]
 #[allow(non_camel_case_types)]
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy)]
 pub struct i8x2([i8; 2]);
 
 #[kani::proof]

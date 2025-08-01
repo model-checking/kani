@@ -16,15 +16,14 @@ pub mod call_graph;
 extern crate rustc_driver;
 extern crate rustc_interface;
 extern crate rustc_middle;
+extern crate rustc_public;
 extern crate rustc_session;
-#[macro_use]
-extern crate stable_mir;
 
 use crate::analysis::OverallStats;
 use rustc_middle::ty::TyCtxt;
+use rustc_public::CompilerError;
+use rustc_public::run_with_tcx;
 use rustc_session::config::OutputType;
-use stable_mir::CompilerError;
-use stable_mir::run_with_tcx;
 use std::ops::ControlFlow;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -79,14 +78,14 @@ fn info(msg: String) {
 
 /// This function invoke the required analyses in the given order.
 fn analyze_crate(tcx: TyCtxt, analyses: &[Analysis]) -> ControlFlow<()> {
-    if stable_mir::local_crate().name == "build_script_build" {
+    if rustc_public::local_crate().name == "build_script_build" {
         return ControlFlow::Continue(());
     }
     let object_file = tcx.output_filenames(()).path(OutputType::Object);
     let base_path = object_file.as_path().to_path_buf();
     // Use name for now to make it more friendly. Change to base_path.file_stem() to avoid conflict.
     // let file_stem = base_path.file_stem().unwrap();
-    let file_stem = format!("{}_scan", stable_mir::local_crate().name);
+    let file_stem = format!("{}_scan", rustc_public::local_crate().name);
     let mut crate_stats = OverallStats::new();
     for analysis in analyses {
         let filename = format!("{}_{}", file_stem, analysis.as_ref());

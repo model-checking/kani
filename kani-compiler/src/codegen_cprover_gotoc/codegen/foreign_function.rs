@@ -15,11 +15,11 @@ use crate::unwrap_or_return_codegen_unimplemented_stmt;
 use cbmc::goto_program::{Expr, Location, Stmt, Symbol, Type};
 use cbmc::{InternString, InternedString};
 use lazy_static::lazy_static;
-use stable_mir::CrateDef;
-use stable_mir::abi::{CallConvention, PassMode};
-use stable_mir::mir::Place;
-use stable_mir::mir::mono::Instance;
-use stable_mir::ty::{RigidTy, TyKind};
+use rustc_public::CrateDef;
+use rustc_public::abi::{CallConvention, PassMode};
+use rustc_public::mir::Place;
+use rustc_public::mir::mono::Instance;
+use rustc_public::ty::{RigidTy, TyKind};
 use tracing::{debug, trace};
 
 lazy_static! {

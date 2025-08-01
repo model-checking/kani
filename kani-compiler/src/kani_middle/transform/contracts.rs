@@ -9,16 +9,15 @@ use crate::kani_middle::transform::body::{InsertPosition, MutableBody, SourceIns
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
 use cbmc::{InternString, InternedString};
-use rustc_hir::def_id::DefId as InternalDefId;
 use rustc_middle::ty::TyCtxt;
-use rustc_span::Symbol;
-use stable_mir::CrateDef;
-use stable_mir::mir::mono::Instance;
-use stable_mir::mir::{
+use rustc_public::CrateDef;
+use rustc_public::mir::mono::Instance;
+use rustc_public::mir::{
     Body, ConstOperand, Operand, Rvalue, Terminator, TerminatorKind, VarDebugInfoContents,
 };
-use stable_mir::rustc_internal;
-use stable_mir::ty::{ClosureDef, FnDef, MirConst, RigidTy, TyKind, TypeAndMut, UintTy};
+use rustc_public::rustc_internal;
+use rustc_public::ty::{ClosureDef, FnDef, MirConst, RigidTy, TyKind, TypeAndMut, UintTy};
+use rustc_span::Symbol;
 use std::collections::HashSet;
 use std::fmt::Debug;
 use tracing::{debug, trace};
@@ -269,9 +268,9 @@ impl AnyModifiesPass {
 #[derive(Debug, Default)]
 pub struct FunctionWithContractPass {
     /// Function that is being checked, if any.
-    check_fn: Option<InternalDefId>,
+    check_fn: Option<FnDef>,
     /// Functions that should be stubbed by their contract.
-    replace_fns: HashSet<InternalDefId>,
+    replace_fns: HashSet<FnDef>,
     /// Should we interpret contracts as assertions? (true iff the no-assert-contracts option is not passed)
     assert_contracts: bool,
     /// Functions annotated with contract attributes will contain contract closures even if they
@@ -351,19 +350,12 @@ impl FunctionWithContractPass {
                     let (fn_to_verify_def, _) = kind.fn_def().unwrap();
                     // For automatic harnesses, the target is the function to verify,
                     // and stubs are empty.
-                    (
-                        Some(rustc_internal::internal(tcx, fn_to_verify_def.def_id())),
-                        HashSet::default(),
-                    )
+                    (Some(fn_to_verify_def), HashSet::default())
                 } else {
                     let attrs = KaniAttributes::for_instance(tcx, *harness);
-                    let check_fn =
-                        attrs.interpret_for_contract_attribute().map(|(_, def_id, _)| def_id);
-                    let replace_fns: HashSet<_> = attrs
-                        .interpret_stub_verified_attribute()
-                        .iter()
-                        .map(|(_, def_id, _)| *def_id)
-                        .collect();
+                    let check_fn = attrs.interpret_for_contract_attribute();
+                    let replace_fns: HashSet<_> =
+                        attrs.interpret_stub_verified_attribute().into_iter().collect();
                     (check_fn, replace_fns)
                 }
             };
@@ -468,14 +460,13 @@ impl FunctionWithContractPass {
     fn contract_mode(&self, tcx: TyCtxt, fn_def: FnDef) -> Option<ContractMode> {
         let kani_attributes = KaniAttributes::for_def_id(tcx, fn_def.def_id());
         kani_attributes.has_contract().then(|| {
-            let fn_def_id = rustc_internal::internal(tcx, fn_def.def_id());
-            if self.check_fn == Some(fn_def_id) {
+            if self.check_fn == Some(fn_def) {
                 if kani_attributes.has_recursion() {
                     ContractMode::RecursiveCheck
                 } else {
                     ContractMode::SimpleCheck
                 }
-            } else if self.replace_fns.contains(&fn_def_id) {
+            } else if self.replace_fns.contains(&fn_def) {
                 ContractMode::Replace
             } else if self.assert_contracts {
                 ContractMode::Assert

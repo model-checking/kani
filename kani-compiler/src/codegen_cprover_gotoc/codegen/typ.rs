@@ -20,15 +20,15 @@ use rustc_middle::ty::{
 };
 use rustc_middle::ty::{ExistentialTraitRef, GenericArgsRef};
 use rustc_middle::ty::{List, TypeFoldable};
-use rustc_span::def_id::DefId;
-use stable_mir::abi::{ArgAbi, FnAbi, PassMode};
-use stable_mir::mir::Body;
-use stable_mir::mir::mono::Instance as InstanceStable;
-use stable_mir::rustc_internal;
-use stable_mir::ty::{
+use rustc_public::abi::{ArgAbi, FnAbi, PassMode};
+use rustc_public::mir::Body;
+use rustc_public::mir::mono::Instance as InstanceStable;
+use rustc_public::rustc_internal;
+use rustc_public::ty::{
     Binder, DynKind, ExistentialPredicate, ExistentialProjection, Region, RegionKind, RigidTy,
     Ty as StableTy,
 };
+use rustc_span::def_id::DefId;
 use tracing::{debug, trace, warn};
 
 /// Map the unit type to an empty struct
@@ -304,7 +304,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let rigid =
             RigidTy::Dynamic(predictates, Region { kind: RegionKind::ReErased }, DynKind::Dyn);
 
-        stable_mir::ty::Ty::from_rigid_kind(rigid)
+        rustc_public::ty::Ty::from_rigid_kind(rigid)
     }
 
     /// Generates the type for a single field for a dynamic vtable.

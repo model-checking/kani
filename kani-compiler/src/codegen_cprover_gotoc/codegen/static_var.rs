@@ -5,8 +5,8 @@
 
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::kani_middle::is_interior_mut;
-use stable_mir::CrateDef;
-use stable_mir::mir::mono::{Instance, StaticDef};
+use rustc_public::CrateDef;
+use rustc_public::mir::mono::{Instance, StaticDef};
 use tracing::debug;
 
 impl GotocCtx<'_> {

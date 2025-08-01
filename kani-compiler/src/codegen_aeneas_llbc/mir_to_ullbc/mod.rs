@@ -56,19 +56,19 @@ use charon_lib::{error_assert, error_or_panic};
 use core::panic;
 use rustc_data_structures::fx::FxHashMap;
 use rustc_middle::ty::{TyCtxt, TypingEnv};
-use stable_mir::mir::mono::{Instance, InstanceDef};
-use stable_mir::mir::{
+use rustc_public::mir::mono::{Instance, InstanceDef};
+use rustc_public::mir::{
     AggregateKind, BasicBlock, BinOp, Body, BorrowKind, CastKind, ConstOperand, Local, Mutability,
     Operand, Place, ProjectionElem, Rvalue, Statement, StatementKind, SwitchTargets, Terminator,
     TerminatorKind, UnOp, VarDebugInfoContents,
 };
-use stable_mir::rustc_internal;
-use stable_mir::ty::{
+use rustc_public::rustc_internal;
+use rustc_public::ty::{
     AdtDef, AdtKind, Allocation, ConstantKind, FnDef, GenericArgKind, GenericArgs,
     GenericParamDefKind, IntTy, MirConst, Region, RegionKind, RigidTy, Span, TraitDecl, TraitDef,
     Ty, TyConst, TyConstKind, TyKind, UintTy,
 };
-use stable_mir::{CrateDef, CrateDefType, DefId};
+use rustc_public::{CrateDef, CrateDefType, DefId};
 use std::collections::HashMap;
 use std::iter::zip;
 use std::path::PathBuf;
@@ -157,7 +157,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
 
     //This function extract the traitrefs and their span from a def_id
     //Those information will be added into generic args of the type or the func with the def_id
-    //Note that Generic args of Charon contains trait_refs while those of stable_mir do not
+    //Note that Generic args of Charon contains trait_refs while those of rustc_public do not
     fn get_traitrefs_and_span_from_defid(
         &mut self,
         defid: DefId,

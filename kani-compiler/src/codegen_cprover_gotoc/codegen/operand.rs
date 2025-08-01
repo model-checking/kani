@@ -6,16 +6,16 @@ use crate::kani_middle::is_anon_static;
 use crate::unwrap_or_return_codegen_unimplemented;
 use cbmc::goto_program::{DatatypeComponent, Expr, ExprValue, Location, Symbol, Type};
 use rustc_middle::ty::Const as ConstInternal;
-use rustc_span::Span as SpanInternal;
-use stable_mir::mir::alloc::{AllocId, GlobalAlloc};
-use stable_mir::mir::mono::{Instance, StaticDef};
-use stable_mir::mir::{Mutability, Operand};
-use stable_mir::rustc_internal;
-use stable_mir::ty::{
+use rustc_public::mir::alloc::{AllocId, GlobalAlloc};
+use rustc_public::mir::mono::{Instance, StaticDef};
+use rustc_public::mir::{Mutability, Operand};
+use rustc_public::rustc_internal;
+use rustc_public::ty::{
     Allocation, ConstantKind, FloatTy, FnDef, GenericArgs, IntTy, MirConst, RigidTy, Size, Ty,
     TyConst, TyConstKind, TyKind, UintTy,
 };
-use stable_mir::{CrateDef, CrateItem};
+use rustc_public::{CrateDef, CrateItem};
+use rustc_span::Span as SpanInternal;
 use tracing::{debug, trace};
 
 #[derive(Clone, Debug)]

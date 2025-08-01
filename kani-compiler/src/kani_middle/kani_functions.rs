@@ -21,8 +21,8 @@
 //! they fit in.
 
 use crate::kani_middle::attributes;
-use stable_mir::mir::mono::Instance;
-use stable_mir::ty::FnDef;
+use rustc_public::mir::mono::Instance;
+use rustc_public::ty::FnDef;
 use std::collections::HashMap;
 use std::str::FromStr;
 use strum::IntoEnumIterator;
@@ -220,10 +220,10 @@ impl TryFrom<Instance> for KaniFunction {
 /// If there's no Kani crate, look for the items in `core` since we could be using `kani_core`.
 /// Note that users could have other `kani` crates, so we look in all the ones we find.
 pub fn find_kani_functions() -> HashMap<KaniFunction, FnDef> {
-    let mut kani = stable_mir::find_crates("kani");
+    let mut kani = rustc_public::find_crates("kani");
     if kani.is_empty() {
         // In case we are using `kani_core`.
-        kani.extend(stable_mir::find_crates("core"));
+        kani.extend(rustc_public::find_crates("core"));
     }
     debug!(?kani, "find_kani_functions");
     let fns = kani
@@ -255,8 +255,8 @@ pub fn find_kani_functions() -> HashMap<KaniFunction, FnDef> {
 /// This is a utility function used to ensure that we have found all the expected functions, as well
 /// as to ensure that the cached IDs are up-to-date.
 ///
-/// The second condition is to ensure the cached StableMIR `FnDef` objects are still valid, i.e.:,
-/// that we are not storing them past the StableMIR `run` context.
+/// The second condition is to ensure the cached rustc_public `FnDef` objects are still valid, i.e.:,
+/// that we are not storing them past the rustc_public `run` context.
 pub fn validate_kani_functions(kani_funcs: &HashMap<KaniFunction, FnDef>) {
     let mut missing = 0u8;
     for func in KaniIntrinsic::iter()
