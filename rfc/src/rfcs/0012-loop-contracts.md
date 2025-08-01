@@ -288,13 +288,13 @@ Our rewritten version for the `for-loop` is as follows:
 ```Rust
 let a : [u8,10] = kani::any();
 let kani_iter_xxxx = kani::kani_into_iter(a);
-let kaniiterlen = kani_iter_xxxx.len();
+let kani_iter_len = kani_iter_xxxx.len();
 let mut i = kani_iter_xxxx.first()
-let mut kaniindex = 0;
+let mut kani_index = 0;
 #[kani::loop_invariant(...)]
-while (kaniindex < kaniiterlen) {
-  i = kani_iter_xxxx.indexing(kaniindex);
-  kaniindex += 1;
+while kani_index < kani_iter_len {
+  i = kani_iter_xxxx.indexing(kani_index);
+  kani_index += 1;
 }
 ```
 
