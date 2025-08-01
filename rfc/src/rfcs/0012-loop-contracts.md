@@ -286,7 +286,7 @@ with a simplified implementation but keeping the same semantics.
 Our rewritten version for the `for-loop` is as follows:
 
 ```Rust
-let a : [u8,10] = kani::any();
+let a: [u8; 10] = kani::any();
 let kani_iter_xxxx = kani::kani_into_iter(a);
 let kani_iter_len = kani_iter_xxxx.len();
 let mut i = kani_iter_xxxx.first()
