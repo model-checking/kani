@@ -687,7 +687,7 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                 // Only aggregate value.
                 AggregateKind::Array(_)
                 | AggregateKind::Closure(_, _)
-                | AggregateKind::Coroutine(_, _, _)
+                | AggregateKind::Coroutine(_, _)
                 | AggregateKind::CoroutineClosure(_, _)
                 | AggregateKind::RawPtr(_, _)
                 | AggregateKind::Tuple => {}
@@ -1057,7 +1057,7 @@ pub fn ty_validity_per_offset(
                 RigidTy::FnDef(_, _)
                 | RigidTy::FnPtr(_)
                 | RigidTy::Closure(_, _)
-                | RigidTy::Coroutine(_, _, _)
+                | RigidTy::Coroutine(_, _)
                 | RigidTy::CoroutineClosure(_, _)
                 | RigidTy::CoroutineWitness(_, _)
                 | RigidTy::Foreign(_)
