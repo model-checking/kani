@@ -286,7 +286,7 @@ pub struct VerificationArgs {
     /// Pass -j to run with the thread pool's default number of threads.
     /// Pass -j <N> to specify N threads.
     #[arg(short, long, hide_short_help = true)]
-    pub jobs: Option<Option<usize>>,
+    jobs: Option<Option<usize>>,
 
     /// Keep temporary files generated throughout Kani process. This is already the default
     /// behavior for `cargo-kani`.
@@ -396,6 +396,27 @@ pub struct VerificationArgs {
     pub target: CargoTargetArgs,
 }
 
+#[derive(PartialEq, Debug, Clone, Copy)]
+pub enum NumThreads {
+    /// The user specified a specific number of threads to use (the `-j [COUNT]` option).
+    UserSpecified(usize),
+    /// The user asked for multithreading, but didn't specify exactly how much (the `-j` option).
+    ThreadPoolDefault,
+    /// The user didn't ask for any multithreading (default).
+    NoMultithreading,
+}
+
+impl NumThreads {
+    /// Checks if this will spawn multiple threads in the pool.
+    pub fn will_multithread(&self) -> bool {
+        match self {
+            Self::UserSpecified(x) if *x != 1 => true,
+            Self::ThreadPoolDefault => true,
+            _ => false,
+        }
+    }
+}
+
 impl VerificationArgs {
     pub fn restrict_vtable(&self) -> bool {
         self.common_args.unstable_features.contains(UnstableFeature::RestrictVtable)
@@ -449,11 +470,11 @@ impl VerificationArgs {
     }
 
     /// Computes how many threads should be used to verify harnesses.
-    pub fn jobs(&self) -> Option<usize> {
+    pub fn jobs(&self) -> NumThreads {
         match self.jobs {
-            None => Some(1),          // no argument, default 1
-            Some(None) => None,       // -j
-            Some(Some(x)) => Some(x), // -j=x
+            None => NumThreads::NoMultithreading, // no argument, default 1
+            Some(None) => NumThreads::ThreadPoolDefault, // -j
+            Some(Some(x)) => NumThreads::UserSpecified(x), // -j=x
         }
     }
 
@@ -746,14 +767,14 @@ impl ValidateArgs for VerificationArgs {
                 --output-format=old.",
                 ));
             }
-            if self.concrete_playback.is_some() && self.jobs() != Some(1) {
+            if self.concrete_playback.is_some() && self.jobs().will_multithread() {
                 // Concrete playback currently embeds a lot of assumptions about the order in which harnesses get called.
                 return Err(Error::raw(
                     ErrorKind::ArgumentConflict,
-                    "Conflicting options: --concrete-playback isn't compatible with --jobs.",
+                    "Conflicting options: --concrete-playback isn't compatible with --jobs specifying multiple threads.",
                 ));
             }
-            if self.jobs.is_some() && self.output_format != OutputFormat::Terse {
+            if self.jobs().will_multithread() && self.output_format != OutputFormat::Terse {
                 // More verbose output formats make it hard to interpret output right now when run in parallel.
                 // This can be removed when we change up how results are printed.
                 return Err(Error::raw(

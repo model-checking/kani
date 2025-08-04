@@ -4,6 +4,7 @@
 //! This module provides utils used across Kani
 
 mod debug;
+pub(crate) mod file_writing_pool;
 mod float_utils;
 mod names;
 #[allow(clippy::module_inception)]
