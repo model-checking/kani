@@ -22,8 +22,8 @@ use super::source_region::SourceRegion;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::InternedString;
 use cbmc::goto_program::{Expr, Location, Stmt, Type};
-use stable_mir::mir::{Place, ProjectionElem};
-use stable_mir::ty::{Span as SpanStable, Ty};
+use rustc_public::mir::{Place, ProjectionElem};
+use rustc_public::ty::{Span as SpanStable, Ty};
 use strum_macros::{AsRefStr, EnumString};
 use tracing::debug;
 
@@ -133,11 +133,18 @@ impl GotocCtx<'_> {
         message: &str,
         loc: Location,
     ) -> Stmt {
-        let property_name = property_class.as_str();
-        Stmt::block(
-            vec![Stmt::assert(cond.clone(), property_name, message, loc), Stmt::assume(cond, loc)],
-            loc,
-        )
+        if property_class == PropertyClass::Assertion && self.queries.args().prove_safety_only {
+            Stmt::assume(cond, loc)
+        } else {
+            let property_name = property_class.as_str();
+            Stmt::block(
+                vec![
+                    Stmt::assert(cond.clone(), property_name, message, loc),
+                    Stmt::assume(cond, loc),
+                ],
+                loc,
+            )
+        }
     }
 
     /// Generate code to cover the given condition at the current location

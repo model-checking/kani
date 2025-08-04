@@ -3,7 +3,7 @@
 
 //! Single source of truth about which intrinsics we support.
 
-use stable_mir::{
+use rustc_public::{
     mir::{Mutability, mono::Instance},
     ty::{FloatTy, IntTy, RigidTy, TyKind, UintTy},
 };

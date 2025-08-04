@@ -13,12 +13,12 @@ use kani_metadata::HarnessMetadata;
 use rustc_hir::def_id::DefId;
 use rustc_middle::mir::Const;
 use rustc_middle::ty::{self, EarlyBinder, TyCtxt, TypeFoldable, TypingEnv};
-use stable_mir::mir::ConstOperand;
-use stable_mir::mir::mono::Instance;
-use stable_mir::mir::visit::{Location, MirVisitor};
-use stable_mir::rustc_internal;
-use stable_mir::ty::{FnDef, RigidTy, TyKind};
-use stable_mir::{CrateDef, CrateItem};
+use rustc_public::mir::ConstOperand;
+use rustc_public::mir::mono::Instance;
+use rustc_public::mir::visit::{Location, MirVisitor};
+use rustc_public::rustc_internal;
+use rustc_public::ty::{FnDef, GenericArgs, RigidTy, TyKind};
+use rustc_public::{CrateDef, CrateItem};
 
 use self::annotations::update_stub_mapping;
 
@@ -35,6 +35,37 @@ pub fn harness_stub_map(
         update_stub_mapping(tcx, def_id.expect_local(), stubs, &mut stub_pairs);
     }
     stub_pairs
+}
+
+/// For the purpose of checking generic argument length, don't consider the `Self` generic argument.
+/// The purpose is to allow stubbing out:
+/// ```rust
+/// pub trait Foo {
+///    fn foo(&self) -> bool {
+///        false
+///    }
+/// }
+/// ```
+/// with:
+/// ```rust
+/// pub fn stub_foo() -> bool {
+///    true
+/// }
+/// ```
+/// Since `rustc_public` APIs introduce a `Self` generic argument for trait functions
+fn generic_args_len_without_self(args: &GenericArgs) -> usize {
+    let len = args.0.len();
+    if len == 0 {
+        return len;
+    }
+    let has_self = args.0.iter().any(|arg| {
+        if let TyKind::Param(param_ty) = arg.expect_ty().kind() {
+            param_ty.name == "Self"
+        } else {
+            false
+        }
+    });
+    if has_self { len - 1 } else { len }
 }
 
 /// Checks whether the stub is compatible with the original function/method: do
@@ -70,14 +101,17 @@ pub fn check_compatibility(tcx: TyCtxt, old_def: FnDef, new_def: FnDef) -> Resul
         unreachable!("Expected function, but found {new_ty}")
     };
 
+    let old_args_len = generic_args_len_without_self(&old_args);
+    let new_args_len = generic_args_len_without_self(&new_args);
+
     // TODO: We should check for the parameter type too or replacement will fail.
-    if old_args.0.len() != new_args.0.len() {
+    if old_args_len != new_args_len {
         let msg = format!(
             "mismatch in the number of generic parameters: original function/method `{}` takes {} generic parameters(s), stub `{}` takes {}",
             old_def.name(),
-            old_args.0.len(),
+            old_args_len,
             new_def.name(),
-            new_args.0.len(),
+            new_args_len,
         );
         return Err(msg);
     }
@@ -183,7 +217,7 @@ impl MirVisitor for StubConstChecker<'_> {
                         [one] => one.as_type().unwrap(),
                         _ => unreachable!(),
                     };
-                    let trait_ = tcx.trait_of_item(mono_const.def).unwrap();
+                    let trait_ = tcx.trait_of_assoc(mono_const.def).unwrap();
                     let msg = format!(
                         "Type `{implementor}` does not implement trait `{}`. \
         This is likely because `{}` is used as a stub but its \

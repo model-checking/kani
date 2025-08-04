@@ -175,6 +175,10 @@ impl KaniSession {
             flags.extend(args.into_iter().map(KaniArg::from));
         }
 
+        if self.args.prove_safety_only {
+            flags.push("--prove-safety-only".into());
+        }
+
         flags.extend(self.args.common_args.unstable_features.as_arguments().map(KaniArg::from));
 
         flags
@@ -222,6 +226,11 @@ impl KaniSession {
 
         if self.args.coverage {
             flags.push("-Zmir-enable-passes=-SingleUseConsts".into());
+        }
+
+        if self.args.prove_safety_only {
+            flags.push("-C".into());
+            flags.push("debug-assertions=off".into());
         }
 
         // This argument will select the Kani flavour of the compiler. It will be removed before

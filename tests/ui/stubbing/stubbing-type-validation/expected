@@ -9,3 +9,7 @@ error: Cannot stub `i1` by `i2`.\
         - Expected return type `X`, but found `Y`
 
 error: arity mismatch: original function/method `f1` takes 1 argument(s), stub `f2` takes 0
+
+error: Cannot stub `<MyStruct as TraitA>::method_a` by `<MyStruct as TraitB>::method_b`.\
+        - Expected return type `i32`, but found `bool`\
+        - Expected type `std::string::String` for parameter 2, but found `i32`

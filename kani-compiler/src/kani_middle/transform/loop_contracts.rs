@@ -11,15 +11,15 @@ use crate::kani_middle::kani_functions::KaniModel;
 use crate::kani_middle::transform::TransformationType;
 use crate::kani_middle::transform::body::{InsertPosition, MutableBody, SourceInstruction};
 use crate::kani_queries::QueryDb;
-use crate::stable_mir::CrateDef;
+use crate::rustc_public::CrateDef;
 use rustc_middle::ty::TyCtxt;
-use rustc_span::Symbol;
-use stable_mir::mir::mono::Instance;
-use stable_mir::mir::{
+use rustc_public::mir::mono::Instance;
+use rustc_public::mir::{
     AggregateKind, BasicBlock, BasicBlockIdx, Body, ConstOperand, Operand, Rvalue, Statement,
     StatementKind, SwitchTargets, Terminator, TerminatorKind, VarDebugInfoContents,
 };
-use stable_mir::ty::{FnDef, GenericArgKind, MirConst, RigidTy, TyKind, UintTy};
+use rustc_public::ty::{FnDef, GenericArgKind, MirConst, RigidTy, TyKind, UintTy};
+use rustc_span::Symbol;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt::Debug;
 

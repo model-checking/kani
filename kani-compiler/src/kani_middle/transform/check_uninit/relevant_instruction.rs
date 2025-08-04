@@ -5,7 +5,7 @@
 //! character of instrumentation needed.
 
 use crate::kani_middle::transform::body::{InsertPosition, MutableBody, SourceInstruction};
-use stable_mir::{
+use rustc_public::{
     mir::{FieldIdx, Mutability, Operand, Place, RawPtrKind, Rvalue, Statement, StatementKind},
     ty::{RigidTy, Ty},
 };

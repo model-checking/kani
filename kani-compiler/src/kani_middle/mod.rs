@@ -9,14 +9,14 @@ use crate::kani_queries::QueryDb;
 use fxhash::FxHashMap;
 use rustc_hir::{def::DefKind, def_id::DefId as InternalDefId, def_id::LOCAL_CRATE};
 use rustc_middle::ty::TyCtxt;
-use stable_mir::mir::TerminatorKind;
-use stable_mir::mir::mono::{Instance, MonoItem};
-use stable_mir::rustc_internal;
-use stable_mir::ty::{
+use rustc_public::mir::TerminatorKind;
+use rustc_public::mir::mono::{Instance, MonoItem};
+use rustc_public::rustc_internal;
+use rustc_public::ty::{
     AdtDef, AdtKind, FnDef, GenericArgKind, GenericArgs, RigidTy, Span as SpanStable, Ty, TyKind,
 };
-use stable_mir::visitor::{Visitable, Visitor as TyVisitor};
-use stable_mir::{CrateDef, DefId};
+use rustc_public::visitor::{Visitable, Visitor as TyVisitor};
+use rustc_public::{CrateDef, DefId};
 use std::ops::ControlFlow;
 
 use self::attributes::KaniAttributes;
@@ -98,10 +98,10 @@ impl TyVisitor for FindUnsafeCell<'_> {
 pub fn check_reachable_items(tcx: TyCtxt, queries: &QueryDb, items: &[MonoItem]) {
     // Avoid printing the same error multiple times for different instantiations of the same item.
     let mut def_ids = HashSet::new();
-    let reachable_functions: HashSet<InternalDefId> = items
+    let reachable_functions: HashSet<DefId> = items
         .iter()
         .filter_map(|i| match i {
-            MonoItem::Fn(instance) => Some(rustc_internal::internal(tcx, instance.def.def_id())),
+            MonoItem::Fn(instance) => Some(instance.def.def_id()),
             _ => None,
         })
         .collect();
@@ -117,8 +117,8 @@ pub fn check_reachable_items(tcx: TyCtxt, queries: &QueryDb, items: &[MonoItem])
             let attributes = KaniAttributes::for_def_id(tcx, def_id);
             // Check if any unstable attribute was reached.
             attributes.check_unstable_features(&queries.args().unstable_features);
-            // Check whether all `proof_for_contract` functions are reachable
-            attributes.check_proof_for_contract(&reachable_functions);
+            // Check whether all `proof_for_contract` targets are reachable
+            attributes.check_proof_for_contract_reachability(&reachable_functions);
             def_ids.insert(def_id);
         }
     }
@@ -192,6 +192,14 @@ fn implements_arbitrary(
         return false;
     }
 
+    if let TyKind::RigidTy(RigidTy::Ref(_, inner_ty, _)) = ty.kind() {
+        if let TyKind::RigidTy(RigidTy::Adt(..)) = inner_ty.kind() {
+            return can_derive_arbitrary(inner_ty, kani_any_def, ty_arbitrary_cache);
+        } else {
+            return implements_arbitrary(inner_ty, kani_any_def, ty_arbitrary_cache);
+        }
+    }
+
     let kani_any_body =
         Instance::resolve(kani_any_def, &GenericArgs(vec![GenericArgKind::Type(ty)]))
             .unwrap()
@@ -213,7 +221,8 @@ fn implements_arbitrary(
     false
 }
 
-/// Is `ty` a struct or enum whose fields/variants implement Arbitrary?
+/// Is `ty` a struct or enum whose fields/variants implement Arbitrary, or a reference to such a
+/// type?
 fn can_derive_arbitrary(
     ty: Ty,
     kani_any_def: FnDef,
@@ -257,6 +266,8 @@ fn can_derive_arbitrary(
             AdtKind::Struct => variants_can_derive(def, args),
             AdtKind::Union => false,
         }
+    } else if let TyKind::RigidTy(RigidTy::Ref(_, inner_ty, _)) = ty.kind() {
+        can_derive_arbitrary(inner_ty, kani_any_def, ty_arbitrary_cache)
     } else {
         false
     }

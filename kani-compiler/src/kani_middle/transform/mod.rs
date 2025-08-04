@@ -10,7 +10,7 @@
 //! applied multiple times, one per specialization.
 //!
 //! Another downside is that these modifications cannot be applied to concrete playback, since they
-//! are applied on the top of StableMIR body, which cannot be propagated back to rustc's backend.
+//! are applied on the top of rustc_public body, which cannot be propagated back to rustc's backend.
 //!
 //! # Warn
 //!
@@ -29,8 +29,8 @@ use crate::kani_queries::QueryDb;
 use automatic::{AutomaticArbitraryPass, AutomaticHarnessPass};
 use dump_mir_pass::DumpMirPass;
 use rustc_middle::ty::TyCtxt;
-use stable_mir::mir::Body;
-use stable_mir::mir::mono::{Instance, MonoItem};
+use rustc_public::mir::Body;
+use rustc_public::mir::mono::{Instance, MonoItem};
 use std::collections::HashMap;
 use std::fmt::Debug;
 

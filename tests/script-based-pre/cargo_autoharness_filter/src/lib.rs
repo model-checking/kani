@@ -188,14 +188,15 @@ mod yes_harness {
     }
 
     fn empty_body(_x: u8, _y: u16) {}
+
+    fn f_ref(x: u32, _y: &i32) -> u32 {
+        x
+    }
 }
 
 mod no_harness {
     use crate::{DerivesArbitrary, DoesntImplementArbitrary};
     fn unsupported_generic<T>(x: u32, _y: T) -> u32 {
-        x
-    }
-    fn unsupported_ref(x: u32, _y: &i32) -> u32 {
         x
     }
     fn unsupported_const_pointer(x: u32, _y: *const i32) -> u32 {
@@ -217,6 +218,6 @@ mod no_harness {
         x
     }
     // Test that we correctly render the name of the argument "_" in the table of skipped functions
-    // (this argument will have no var_debug_info from StableMIR, unlike arguments with names)
-    fn unsupported_no_arg_name(_: &()) {}
+    // (this argument will have no var_debug_info from rustc_public, unlike arguments with names)
+    fn unsupported_no_arg_name(_: *const i32) {}
 }

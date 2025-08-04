@@ -21,12 +21,12 @@ use initial_target_visitor::{AnalysisTarget, InitialTargetVisitor};
 use instrumentation_visitor::InstrumentationVisitor;
 use rustc_middle::ty::TyCtxt;
 use rustc_mir_dataflow::JoinSemiLattice;
-use rustc_session::config::OutputType;
-use stable_mir::{
+use rustc_public::{
     mir::MirVisitor,
     mir::mono::{Instance, MonoItem},
     ty::FnDef,
 };
+use rustc_session::config::OutputType;
 
 mod initial_target_visitor;
 mod instrumentation_visitor;

@@ -6,14 +6,13 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use crate::kani_middle::attributes::KaniAttributes;
 use crate::kani_middle::codegen_units::Harness;
-use crate::kani_middle::{SourceLocation, stable_fn_def};
+use crate::kani_middle::{KaniAttributes, SourceLocation};
 use kani_metadata::ContractedFunction;
 use kani_metadata::{ArtifactType, HarnessAttributes, HarnessKind, HarnessMetadata};
 use rustc_middle::ty::TyCtxt;
-use stable_mir::mir::mono::Instance;
-use stable_mir::{CrateDef, CrateItems, DefId};
+use rustc_public::mir::mono::Instance;
+use rustc_public::{CrateDef, CrateItems, DefId};
 
 /// Create the harness metadata for a proof harness for a given function.
 pub fn gen_proof_metadata(tcx: TyCtxt, instance: Instance, base_name: &Path) -> HarnessMetadata {
@@ -52,8 +51,8 @@ pub fn gen_contracts_metadata(
     tcx: TyCtxt,
     harness_info: &HashMap<Harness, HarnessMetadata>,
 ) -> Vec<ContractedFunction> {
-    // We work with `stable_mir::CrateItem` instead of `stable_mir::Instance` to include generic items
-    let crate_items: CrateItems = stable_mir::all_local_items();
+    // We work with `rustc_public::CrateItem` instead of `rustc_public::Instance` to include generic items
+    let crate_items: CrateItems = rustc_public::all_local_items();
 
     let mut fn_to_data: HashMap<DefId, ContractedFunction> = HashMap::new();
 
@@ -66,11 +65,8 @@ pub fn gen_contracts_metadata(
             fn_to_data
                 .insert(item.def_id(), ContractedFunction { function, file, harnesses: vec![] });
         // This logic finds manual contract harnesses only (automatic harnesses are a Kani intrinsic, not crate items annotated with the proof_for_contract attribute).
-        } else if let Some((_, internal_def_id, _)) = attributes.interpret_for_contract_attribute()
-        {
-            let target_def_id = stable_fn_def(tcx, internal_def_id)
-                .expect("The target of a proof for contract should be a function definition")
-                .def_id();
+        } else if let Some(def) = attributes.interpret_for_contract_attribute() {
+            let target_def_id = def.def_id();
             if let Some(cf) = fn_to_data.get_mut(&target_def_id) {
                 cf.harnesses.push(function);
             } else {
