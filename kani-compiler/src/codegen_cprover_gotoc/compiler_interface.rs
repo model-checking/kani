@@ -151,14 +151,14 @@ impl GotocCodegenBackend {
                         MonoItem::Fn(instance) => {
                             gcx.call_with_panic_debug_info(
                                 |ctx| ctx.declare_function(instance),
-                                format!("declare_function: {}", instance.name()),
+                                move || format!("declare_function: {}", instance.name()),
                                 instance.def,
                             );
                         }
                         MonoItem::Static(def) => {
                             gcx.call_with_panic_debug_info(
                                 |ctx| ctx.declare_static(def),
-                                format!("declare_static: {}", def.name()),
+                                move || format!("declare_static: {}", def.name()),
                                 def,
                             );
                         }
@@ -172,18 +172,20 @@ impl GotocCodegenBackend {
                         MonoItem::Fn(instance) => {
                             gcx.call_with_panic_debug_info(
                                 |ctx| ctx.codegen_function(instance),
-                                format!(
-                                    "codegen_function: {}\n{}",
-                                    instance.name(),
-                                    instance.mangled_name()
-                                ),
+                                move || {
+                                    format!(
+                                        "codegen_function: {}\n{}",
+                                        instance.name(),
+                                        instance.mangled_name()
+                                    )
+                                },
                                 instance.def,
                             );
                         }
                         MonoItem::Static(def) => {
                             gcx.call_with_panic_debug_info(
                                 |ctx| ctx.codegen_static(def),
-                                format!("codegen_static: {}", def.name()),
+                                move || format!("codegen_static: {}", def.name()),
                                 def,
                             );
                         }
