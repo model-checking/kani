@@ -21,7 +21,7 @@ use crate::kani_middle::reachability::CallGraph;
 use crate::kani_middle::transform::body::CheckType;
 use crate::kani_middle::transform::check_uninit::{DelayedUbPass, UninitPass};
 use crate::kani_middle::transform::check_values::ValidValuePass;
-use crate::kani_middle::transform::clone::ClonableTransformPass;
+use crate::kani_middle::transform::clone::{ClonableGlobalPass, ClonableTransformPass};
 use crate::kani_middle::transform::contracts::{AnyModifiesPass, FunctionWithContractPass};
 use crate::kani_middle::transform::kani_intrinsics::IntrinsicGeneratorPass;
 use crate::kani_middle::transform::loop_contracts::LoopContractPass;
@@ -211,10 +211,11 @@ enum TransformationResult {
     NotModified,
 }
 
+#[derive(Clone)]
 pub struct GlobalPasses {
     /// The passes that operate on the whole codegen unit, they run after all previous passes are
     /// done.
-    global_passes: Vec<Box<dyn GlobalPass>>,
+    global_passes: Vec<Box<dyn ClonableGlobalPass>>,
 }
 
 impl GlobalPasses {
@@ -232,7 +233,7 @@ impl GlobalPasses {
         global_passes
     }
 
-    fn add_global_pass<P: GlobalPass + 'static>(&mut self, query_db: &QueryDb, pass: P) {
+    fn add_global_pass<P: ClonableGlobalPass + 'static>(&mut self, query_db: &QueryDb, pass: P) {
         if pass.is_enabled(query_db) {
             self.global_passes.push(Box::new(pass))
         }
@@ -269,32 +270,49 @@ mod clone {
     //! we set both up to have blanket implementations for all `T: TransformPass + Clone`, the compiler pieces them together properly
     //! and we can implement `Clone` directly using the pair!
 
-    use crate::kani_middle::transform::TransformPass;
+    /// Builds a new dyn compatible wrapper trait that's essentially equivalent to extending
+    /// `$extends` with `Clone`. Requires an ident for an intermediate trait for avoiding cycles
+    /// in the implementation.
+    macro_rules! implement_clone {
+        ($new_trait_name: ident, $intermediate_trait_name: ident, $extends: path) => {
+            #[allow(private_interfaces)]
+            pub(crate) trait $new_trait_name: $extends {
+                fn clone_there(&self) -> Box<dyn $intermediate_trait_name>;
+            }
 
-    /// A wrapper trait essentially equivalent to `TransformPass + Clone`
-    pub(crate) trait ClonableTransformPass: TransformPass {
-        fn clone_there(&self) -> Box<dyn CloneBackIntoPass>;
+            impl Clone for Box<dyn $new_trait_name> {
+                fn clone(&self) -> Self {
+                    self.clone_there().clone_back()
+                }
+            }
+
+            #[allow(private_interfaces)]
+            impl<T: $extends + Clone + 'static> $new_trait_name for T {
+                fn clone_there(&self) -> Box<dyn $intermediate_trait_name> {
+                    Box::new(self.clone())
+                }
+            }
+
+            trait $intermediate_trait_name {
+                fn clone_back(&self) -> Box<dyn $new_trait_name>;
+            }
+
+            impl<T: $extends + Clone + 'static> $intermediate_trait_name for T {
+                fn clone_back(&self) -> Box<dyn $new_trait_name> {
+                    Box::new(self.clone())
+                }
+            }
+        };
     }
 
-    impl Clone for Box<dyn ClonableTransformPass> {
-        fn clone(&self) -> Self {
-            self.clone_there().clone_back()
-        }
-    }
-
-    impl<T: TransformPass + Clone + 'static> ClonableTransformPass for T {
-        fn clone_there(&self) -> Box<dyn CloneBackIntoPass> {
-            Box::new(self.clone())
-        }
-    }
-
-    pub(crate) trait CloneBackIntoPass {
-        fn clone_back(&self) -> Box<dyn ClonableTransformPass>;
-    }
-
-    impl<T: TransformPass + Clone + 'static> CloneBackIntoPass for T {
-        fn clone_back(&self) -> Box<dyn ClonableTransformPass> {
-            Box::new(self.clone())
-        }
-    }
+    implement_clone!(
+        ClonableTransformPass,
+        ClonableTransformPassMid,
+        crate::kani_middle::transform::TransformPass
+    );
+    implement_clone!(
+        ClonableGlobalPass,
+        ClonableGlobalPassMid,
+        crate::kani_middle::transform::GlobalPass
+    );
 }

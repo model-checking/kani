@@ -72,6 +72,7 @@ impl GotocCodegenBackend {
     /// Generate code that is reachable from the given starting points.
     ///
     /// Invariant: iff `check_contract.is_some()` then `return.2.is_some()`
+    #[allow(clippy::too_many_arguments)]
     fn codegen_items<'tcx>(
         &self,
         tcx: TyCtxt<'tcx>,
@@ -79,6 +80,7 @@ impl GotocCodegenBackend {
         symtab_goto: &Path,
         machine_model: &MachineModel,
         check_contract: Option<InternalDefId>,
+        mut global_passes: GlobalPasses,
         mut transformer: BodyTransformation,
     ) -> (GotocCtx<'tcx>, Vec<MonoItem>, Option<AssignsContract>) {
         // This runs reachability analysis before global passes are applied.
@@ -107,7 +109,6 @@ impl GotocCodegenBackend {
             .collect();
 
         // Apply all transformation passes, including global passes.
-        let mut global_passes = GlobalPasses::new(&self.queries.lock().unwrap(), tcx);
         let any_pass_modified = global_passes.run_global_passes(
             &mut transformer,
             tcx,
@@ -334,6 +335,8 @@ impl CodegenBackend for GotocCodegenBackend {
                     let mut units = CodegenUnits::new(&queries, tcx);
                     let mut modifies_instances = vec![];
                     let mut loop_contracts_instances = vec![];
+
+                    let template_passes = GlobalPasses::new(&queries, tcx);
                     // Cross-crate collecting of all items that are reachable from the crate harnesses.
                     for unit in units.iter() {
                         // We reset the body cache for now because each codegen unit has different
@@ -343,7 +346,6 @@ impl CodegenBackend for GotocCodegenBackend {
                         // (They all share the same options.)
                         let template_transformer = BodyTransformation::new(&queries, tcx, unit);
                         for harness in &unit.harnesses {
-                            let transformer = template_transformer.clone_empty();
                             let model_path = units.harness_model_path(*harness).unwrap();
                             let is_automatic_harness = units.is_automatic_harness(harness);
                             let contract_metadata =
@@ -355,7 +357,8 @@ impl CodegenBackend for GotocCodegenBackend {
                                 &results.machine_model,
                                 contract_metadata
                                     .map(|def| rustc_internal::internal(tcx, def.def_id())),
-                                transformer,
+                                template_passes.clone(),
+                                template_transformer.clone_empty(),
                             );
                             if gcx.has_loop_contracts {
                                 loop_contracts_instances.push(*harness);
@@ -390,6 +393,7 @@ impl CodegenBackend for GotocCodegenBackend {
                         &model_path,
                         &results.machine_model,
                         Default::default(),
+                        GlobalPasses::new(&queries, tcx),
                         transformer,
                     );
                     assert!(contract_info.is_none());
