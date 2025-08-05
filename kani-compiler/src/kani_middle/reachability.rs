@@ -73,6 +73,26 @@ pub fn collect_reachable_items(
     (sorted_items, collector.call_graph)
 }
 
+pub struct ReachabilityInfo {
+    /// The initial items used as entrypoints for reachability analysis.
+    pub starting: Vec<MonoItem>,
+    /// All the items reachability analysis determined to be reachable from the `starting` items.
+    pub reachable: Vec<MonoItem>,
+    pub call_graph: CallGraph,
+}
+
+impl ReachabilityInfo {
+    pub fn generate_from(
+        tcx: TyCtxt,
+        transformer: &mut BodyTransformation,
+        starting_items: Vec<MonoItem>,
+    ) -> Self {
+        let (reachable_items, call_graph) =
+            collect_reachable_items(tcx, transformer, &starting_items);
+        ReachabilityInfo { starting: starting_items, reachable: reachable_items, call_graph }
+    }
+}
+
 /// Collect all (top-level) items in the crate that matches the given predicate.
 /// An item can only be a root if they are a non-generic function.
 pub fn filter_crate_items<F>(tcx: TyCtxt, predicate: F) -> Vec<Instance>
