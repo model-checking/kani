@@ -6,9 +6,8 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use crate::kani_middle::attributes::KaniAttributes;
 use crate::kani_middle::codegen_units::Harness;
-use crate::kani_middle::{SourceLocation, stable_fn_def};
+use crate::kani_middle::{KaniAttributes, SourceLocation};
 use kani_metadata::ContractedFunction;
 use kani_metadata::{ArtifactType, HarnessAttributes, HarnessKind, HarnessMetadata};
 use rustc_middle::ty::TyCtxt;
@@ -66,11 +65,8 @@ pub fn gen_contracts_metadata(
             fn_to_data
                 .insert(item.def_id(), ContractedFunction { function, file, harnesses: vec![] });
         // This logic finds manual contract harnesses only (automatic harnesses are a Kani intrinsic, not crate items annotated with the proof_for_contract attribute).
-        } else if let Some((_, internal_def_id, _)) = attributes.interpret_for_contract_attribute()
-        {
-            let target_def_id = stable_fn_def(tcx, internal_def_id)
-                .expect("The target of a proof for contract should be a function definition")
-                .def_id();
+        } else if let Some(def) = attributes.interpret_for_contract_attribute() {
+            let target_def_id = def.def_id();
             if let Some(cf) = fn_to_data.get_mut(&target_def_id) {
                 cf.harnesses.push(function);
             } else {

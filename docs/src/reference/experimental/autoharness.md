@@ -104,7 +104,9 @@ please add them to [this GitHub issue](https://github.com/model-checking/kani/is
 ## Limitations
 ### Arguments Implementing Arbitrary
 Kani will only generate an automatic harness for a function if it can represent each of its arguments nondeterministically, without bounds.
-In technical terms, each of the arguments needs to implement the `Arbitrary` trait or be capable of deriving it.
+In technical terms, each of the arguments needs to implement the `Arbitrary`
+trait or be capable of deriving it, or be a reference (mutable or immutable)
+where any of the prior requirements is fulfilled by the referenced type.
 Kani will detect if a struct or enum could implement `Arbitrary` and derive it automatically.
 Note that this automatic derivation feature is only available for autoharness.
 

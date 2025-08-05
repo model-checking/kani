@@ -1,0 +1,33 @@
+Checking harness stubbed_harness...
+
+Status: SUCCESS\
+Description: "assertion failed: x.foo() == 300"\
+function stubbed_harness
+
+Status: SUCCESS\
+Description: "assertion failed: A::bar(&x) == 300"\
+in function stubbed_harness
+
+Status: SUCCESS\
+Description: "assertion failed: <X as B>::bar(&x) == 300"\
+success.rs:60:5 in function stubbed_harness
+
+VERIFICATION:- SUCCESSFUL
+
+Checking harness harness...
+
+Status: SUCCESS\
+Description: "assertion failed: x.foo() == 0"\
+in function harness
+
+Status: SUCCESS\
+Description: "assertion failed: A::bar(&x) == 200"\
+in function harness
+
+Status: SUCCESS\
+Description: "assertion failed: <X as B>::bar(&x) == 300"\
+in function harness
+
+VERIFICATION:- SUCCESSFUL
+
+Complete - 2 successfully verified harnesses, 0 failures, 2 total.
