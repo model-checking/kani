@@ -13,9 +13,9 @@ publish = false
 
 [dependencies]
 kani_metadata = { path = "../kani_metadata" }
-cargo_metadata = "0.20"
+cargo_metadata = "0.21"
 anyhow = "1"
-console = "0.15.1"
+console = "0.16"
 once_cell = "1.19.0"
 to_markdown_table = "0.1.0"
 serde = { version = "1", features = ["derive"] }

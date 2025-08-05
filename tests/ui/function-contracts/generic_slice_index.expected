@@ -1,0 +1,11 @@
+error: failed to resolve `<usize as SliceIndex < [i32] >>::get_unchecked`: unable to find implementation of associated function `SliceIndex::get_unchecked` for usize\
+generic_slice_index.rs\
+|\
+| #[kani::proof_for_contract(<usize as SliceIndex<[i32]>>::get_unchecked)]\
+| ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\
+|\
+= note: Kani does not currently support stubs or function contracts on generic functions in traits.\
+    See https://github.com/model-checking/kani/issues/1997#issuecomment-3134614734 for more information.
+
+
+error: aborting due to 1 previous error

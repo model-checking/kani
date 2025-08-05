@@ -11,6 +11,6 @@ publish = false
 
 [dependencies]
 anyhow = "1"
-cargo_metadata = "0.20"
+cargo_metadata = "0.21"
 clap = { version = "4.4.11", features=["derive"] }
 which = "8"

@@ -1,0 +1,5 @@
+Status: SUCCESS\
+Description: "|result| *result == 100"\
+in function <MyStruct as MyTrait>::get_value
+
+Complete - 1 successfully verified harnesses, 0 failures, 1 total.

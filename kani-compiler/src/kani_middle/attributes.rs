@@ -171,7 +171,7 @@ impl<'tcx> KaniAttributes<'tcx> {
     }
 
     pub fn for_item(tcx: TyCtxt<'tcx>, def_id: DefId) -> Self {
-        let all_attributes = tcx.get_attrs_unchecked(def_id);
+        let all_attributes = tcx.get_all_attrs(def_id);
         let map = all_attributes.iter().fold(
             <BTreeMap<KaniAttributeKind, Vec<&'tcx Attribute>>>::default(),
             |mut result, attribute| {
@@ -679,11 +679,27 @@ impl<'tcx> KaniAttributes<'tcx> {
                 span,
                 format!("failed to resolve `{}`: {resolve_err}", pretty_type_path(path)),
             );
-            if let ResolveError::AmbiguousPartialPath { .. } = resolve_err {
-                err = err.with_help(format!(
-                    "replace `{}` with a specific implementation.",
-                    pretty_type_path(path)
-                ));
+            match resolve_err {
+                ResolveError::AmbiguousPartialPath { .. } => {
+                    err = err.with_help(format!(
+                        "replace `{}` with a specific implementation.",
+                        pretty_type_path(path)
+                    ));
+                }
+                ResolveError::MissingTraitImpl { tcx: _, trait_fn_id, ty: _ } => {
+                    let generics = self.tcx.generics_of(trait_fn_id);
+                    let parent_generics =
+                        generics.parent.map(|parent| self.tcx.generics_of(parent));
+                    if !generics.own_params.is_empty()
+                        || parent_generics.is_some_and(|generics| !generics.own_params.is_empty())
+                    {
+                        err = err.with_note(
+                            "Kani does not currently support stubs or function contracts on generic functions in traits.\n \
+                            See https://github.com/model-checking/kani/issues/1997#issuecomment-3134614734 for more information.",
+                        );
+                    }
+                }
+                _ => {}
             }
             err.emit();
         }
@@ -732,8 +748,43 @@ impl<'tcx> KaniAttributes<'tcx> {
             });
             match paths.as_slice() {
                 [orig, replace] => {
-                    let _ = self.resolve_path(current_module, orig, attr.span());
-                    let _ = self.resolve_path(current_module, replace, attr.span());
+                    let original_res = self.resolve_path(current_module, orig, attr.span()).map(|res| res.def());
+                    let replace_res = self.resolve_path(current_module, replace, attr.span()).map(|res| res.def());
+
+                    if let Ok(original_res) = original_res && let Ok(replace_res) = replace_res {
+                        // Emit an error if either function is local, yet doesn't have a body.
+                        // This can happen if a user specifies a trait fn without a default body, e.g. B::bar, where B is a trait.
+                        let o_bad = original_res.krate().is_local && !original_res.has_body();
+                        let r_bad = replace_res.krate().is_local && !replace_res.has_body();
+
+                        if o_bad || r_bad {
+                            let mut err = self.tcx.dcx().struct_span_err(
+                                attr.span(),
+                                "invalid stub: function does not have a body, but is not an extern function",
+                            );
+                            if o_bad {
+                                err = err.with_span_note(
+                                    rustc_internal::internal(self.tcx, original_res.span()),
+                                    format!(
+                                    "`{}` does not have a body",
+                                    original_res.name()
+                                ));
+                            }
+                            if r_bad {
+                                err = err.with_span_note(
+                                    rustc_internal::internal(self.tcx, replace_res.span()),
+                                    format!(
+                                    "`{}` does not have a body",
+                                    replace_res.name()
+                                ));
+                            }
+                            err = err.with_help(
+                                "if this stub refers to associated functions, try using fully-qualified syntax instead"
+                            );
+                            err.emit();
+                        }
+                    }
+
                     Some(Stub {
                         original: orig.to_token_stream().to_string(),
                         replacement: replace.to_token_stream().to_string(),
@@ -767,7 +818,7 @@ fn has_kani_attribute<F: Fn(KaniAttributeKind) -> bool>(
     def_id: DefId,
     predicate: F,
 ) -> bool {
-    tcx.get_attrs_unchecked(def_id).iter().filter_map(|a| attr_kind(tcx, a)).any(predicate)
+    tcx.get_all_attrs(def_id).iter().filter_map(|a| attr_kind(tcx, a)).any(predicate)
 }
 
 /// Same as [`KaniAttributes::is_proof_harness`] but more efficient because less
