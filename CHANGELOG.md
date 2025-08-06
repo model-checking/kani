@@ -4,6 +4,44 @@ This file contains notable changes (e.g. breaking changes, major changes, etc.) 
 
 This file was introduced starting Kani 0.23.0, so it only contains changes from version 0.23.0 onwards.
 
+## [0.65.0]
+
+## Major Changes
+* Added support for bitwuzla, cvc5, and z3 as solver attribute values, giving you more options for verification backends by @tautschnig in https://github.com/model-checking/kani/pull/4218
+* Improved support for contracts and stubs in trait implementations, expanding verification capabilities for trait-based code by @carolynzech in https://github.com/model-checking/kani/pull/4250
+* Added new `--prove-safety-only` option for focused safety verification, allowing you to concentrate on memory safety and undefined behavior detection by @tautschnig in https://github.com/model-checking/kani/pull/4239
+* Extended autoharness support to handle references, making it easier to automatically generate verification harnesses by @tautschnig in https://github.com/model-checking/kani/pull/4234
+* Multiple performance improvements including parallel goto binary writing, lazy debug info evaluation, and optimized quantifier handling for faster verification times
+* Removed unstable list feature and default memory checks by @carolynzech in https://github.com/model-checking/kani/pull/4258
+
+## What's Changed
+* Fixed contract closures to ensure they are FnOnce by @vonaka in https://github.com/model-checking/kani/pull/4151
+* Improved memory predicate hierarchy for better verification by @tautschnig in https://github.com/model-checking/kani/pull/4193
+* Enhanced pointer offset arithmetic for more accurate verification by @tautschnig in https://github.com/model-checking/kani/pull/4180
+* Fixed assign clause inference bug for nested loops by @thanhnguyen-aws in https://github.com/model-checking/kani/pull/4179
+* Fixed crash when using multiple quantifiers in one proof by @thanhnguyen-aws in https://github.com/model-checking/kani/pull/4221
+* Added support for Cargo.toml's default-members configuration by @tautschnig in https://github.com/model-checking/kani/pull/4201
+* Improved memset handling to avoid zero-count invocations by @tautschnig in https://github.com/model-checking/kani/pull/4205
+* Enhanced vector operations with CBMC's shuffle_vector expression by @tautschnig in https://github.com/model-checking/kani/pull/4204
+* Improved performance by skipping codegen for unneeded harnesses by @AlexanderPortland in https://github.com/model-checking/kani/pull/4213
+* Fixed loop contract unwinding bug in generic functions by @thanhnguyen-aws in https://github.com/model-checking/kani/pull/4232
+* Improved byte extraction with proper bits_per_byte setting by @tautschnig in https://github.com/model-checking/kani/pull/4255
+* Improved performance by disabling debug assertions under prove-safety-only by @tautschnig in https://github.com/model-checking/kani/pull/4262
+* Enhanced performance with parallel goto binary writing by @AlexanderPortland in https://github.com/model-checking/kani/pull/4236
+* Improved quantifier handling performance by avoiding irrelevant symbol updates by @AlexanderPortland in https://github.com/model-checking/kani/pull/4268
+* Enhanced performance with lazy debug info evaluation by @AlexanderPortland in https://github.com/model-checking/kani/pull/4269
+* Improved MIR constant handling by marking them as static constants by @vonaka in https://github.com/model-checking/kani/pull/4233
+
+## New Contributors
+* @vonaka made their first contribution in https://github.com/model-checking/kani/pull/4151
+
+## Version Updates
+* Updated to Rust edition 2024 by @tautschnig in https://github.com/model-checking/kani/pull/4197
+* Rust toolchain upgraded to 2025-08-06 by @tautschnig and @thanhnguyen-aws
+* Updated CBMC dependency to 6.7.1 by @tautschnig in https://github.com/model-checking/kani/pull/4178
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.64.0...kani-0.65.0
+
 ## [0.64.0]
 
 ### Major Changes
