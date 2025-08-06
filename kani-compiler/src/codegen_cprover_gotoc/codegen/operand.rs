@@ -131,7 +131,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // First try to generate the constant without allocating memory.
         let expr = self.try_codegen_constant(alloc, ty, loc).unwrap_or_else(|| {
             debug!("codegen_allocation try_fail");
-            let mem_var = self.codegen_const_allocation(alloc, None, loc);
+            let mem_var = self.codegen_const_allocation(alloc, None, loc, true);
             mem_var
                 .cast_to(Type::unsigned_int(8).to_pointer())
                 .cast_to(self.codegen_ty_stable(ty).to_pointer())
@@ -282,7 +282,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     let GlobalAlloc::Memory(data) = GlobalAlloc::from(alloc_id) else {
                         unreachable!()
                     };
-                    let mem_var = self.codegen_const_allocation(&data, None, loc);
+                    let mem_var = self.codegen_const_allocation(&data, None, loc, false);
 
                     // Extract identifier for static variable.
                     // codegen_allocation_auto_imm_name returns the *address* of
@@ -323,7 +323,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     let GlobalAlloc::Memory(data) = GlobalAlloc::from(alloc_id) else {
                         unreachable!()
                     };
-                    let mem_var = self.codegen_const_allocation(&data, None, loc);
+                    let mem_var = self.codegen_const_allocation(&data, None, loc, false);
                     let inner_typ = self.codegen_ty_stable(inner_ty);
                     let len = data.bytes.len() / inner_typ.sizeof(&self.symbol_table) as usize;
                     let data_expr = mem_var.cast_to(inner_typ.to_pointer());
@@ -394,7 +394,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 // crates do not conflict. The name alone is insufficient because Rust
                 // allows different versions of the same crate to be used.
                 let name = format!("{}::{alloc_id:?}", self.full_crate_name());
-                self.codegen_const_allocation(&alloc, Some(name), loc)
+                self.codegen_const_allocation(&alloc, Some(name), loc, false)
             }
             alloc @ GlobalAlloc::VTable(..) => {
                 // This is similar to GlobalAlloc::Memory but the type is opaque to rust and it
@@ -404,7 +404,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     unreachable!()
                 };
                 let name = format!("{}::{alloc_id:?}", self.full_crate_name());
-                self.codegen_const_allocation(&alloc, Some(name), loc)
+                self.codegen_const_allocation(&alloc, Some(name), loc, false)
             }
             GlobalAlloc::TypeId { ty: _ } => todo!(),
         };
@@ -486,6 +486,7 @@ impl<'tcx> GotocCtx<'tcx> {
         alloc: &Allocation,
         name: Option<String>,
         loc: Location,
+        is_definitely_const: bool,
     ) -> Expr {
         debug!(?name, ?alloc, "codegen_const_allocation");
         let alloc_name = match self.alloc_map.get(alloc) {
@@ -497,6 +498,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     alloc_name.clone(),
                     loc,
                     has_interior_mutabity,
+                    is_definitely_const,
                 );
                 alloc_name
             }
@@ -517,7 +519,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // The memory behind this allocation isn't constant, but codegen_alloc_in_memory (which codegen_const_allocation calls)
         // uses alloc's mutability field to set the const-ness of the allocation in CBMC's symbol table,
         // so we can reuse the code and without worrying that the allocation is set as immutable.
-        self.codegen_const_allocation(alloc, name, loc)
+        self.codegen_const_allocation(alloc, name, loc, false)
     }
 
     /// Insert an allocation into the goto symbol table, and generate an init value.
@@ -530,6 +532,7 @@ impl<'tcx> GotocCtx<'tcx> {
         name: String,
         loc: Location,
         has_interior_mutabity: bool,
+        is_definitely_const: bool,
     ) {
         debug!(?name, ?alloc, "codegen_alloc_in_memory");
         let struct_name = &format!("{name}::struct");
@@ -583,7 +586,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let _var = self.ensure_global_var_init(
             &name,
             false, //TODO is this correct?
-            alloc.mutability == Mutability::Not && !has_interior_mutabity,
+            (is_definitely_const || alloc.mutability == Mutability::Not) && !has_interior_mutabity,
             alloc_typ_ref.clone(),
             loc,
             init_fn,
