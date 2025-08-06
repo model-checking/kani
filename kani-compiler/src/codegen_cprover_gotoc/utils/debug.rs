@@ -16,7 +16,8 @@ use tracing::debug;
 // Use a thread-local global variable to track the current codegen item for debugging.
 // If Kani panics during codegen, we can grab this item to include the problematic
 // codegen item in the panic trace.
-thread_local!(static CURRENT_CODEGEN_ITEM: RefCell<(Option<String>, Option<Location>)> = const { RefCell::new((None, None)) });
+type FindCurrentItemFn = Box<dyn Fn() -> String>;
+thread_local!(static CURRENT_CODEGEN_ITEM: RefCell<(Option<FindCurrentItemFn>, Option<Location>)> = const { RefCell::new((None, None)) });
 
 pub fn init() {
     // Install panic hook
@@ -36,9 +37,9 @@ static DEFAULT_HOOK: LazyLock<Box<dyn Fn(&panic::PanicHookInfo<'_>) + Sync + Sen
 
             // Print the current function if available
             CURRENT_CODEGEN_ITEM.with(|cell| {
-                let t = cell.borrow().clone();
-                if let Some(current_item) = t.0 {
-                    eprintln!("[Kani] current codegen item: {current_item}");
+                let t = cell.borrow();
+                if let Some(get_current_item) = &t.0 {
+                    eprintln!("[Kani] current codegen item: {}", get_current_item());
                 } else {
                     eprintln!("[Kani] no current codegen item.");
                 }
@@ -55,14 +56,21 @@ static DEFAULT_HOOK: LazyLock<Box<dyn Fn(&panic::PanicHookInfo<'_>) + Sync + Sen
 impl<'tcx> GotocCtx<'tcx> {
     // Calls the closure while updating the tracked global variable marking the
     // codegen item for panic debugging.
-    pub fn call_with_panic_debug_info<D: CrateDef, F: FnOnce(&mut GotocCtx<'tcx>)>(
+    pub fn call_with_panic_debug_info<
+        D: CrateDef,
+        F: FnOnce(&mut GotocCtx<'tcx>),
+        S: Fn() -> String + 'static,
+    >(
         &mut self,
         call: F,
-        panic_debug: String,
+        debug_str_generator: S,
         def: D,
     ) {
         CURRENT_CODEGEN_ITEM.with(|odb_cell| {
-            odb_cell.replace((Some(panic_debug), Some(self.codegen_span_stable(def.span()))));
+            odb_cell.replace((
+                Some(Box::new(debug_str_generator)),
+                Some(self.codegen_span_stable(def.span())),
+            ));
             call(self);
             odb_cell.replace((None, None));
         });
