@@ -27,7 +27,7 @@ use std::collections::HashMap;
 use tracing::debug;
 
 /// Generate the body for a few Kani intrinsics.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RustcIntrinsicsPass {
     /// Used to cache FnDef lookups for intrinsics models.
     models: HashMap<KaniModel, FnDef>,

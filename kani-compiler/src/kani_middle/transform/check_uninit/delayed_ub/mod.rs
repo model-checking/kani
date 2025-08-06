@@ -31,7 +31,7 @@ use rustc_session::config::OutputType;
 mod initial_target_visitor;
 mod instrumentation_visitor;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DelayedUbPass {
     pub safety_check_type: CheckType,
     pub unsupported_check_type: CheckType,
