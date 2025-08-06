@@ -141,7 +141,7 @@ impl GlobalPass for DelayedUbPass {
                 if instrumentation_added {
                     modified = true;
                     transformer.cache.entry(instance).and_modify(|transformation_result| {
-                        *transformation_result = TransformationResult::Modified(body);
+                        *transformation_result = TransformationResult(body, true);
                     });
                 }
             }

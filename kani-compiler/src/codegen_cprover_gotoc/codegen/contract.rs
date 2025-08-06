@@ -91,7 +91,7 @@ impl GotocCtx<'_> {
         let contract_attrs =
             KaniAttributes::for_instance(self.tcx, instance).contract_attributes()?;
         let mut find_closure = |inside: Instance, name: &str| {
-            let body = self.transformer.body(self.tcx, inside);
+            let body = self.transformer.body_ref(self.tcx, inside);
             body.var_debug_info.iter().find_map(|var_info| {
                 if var_info.name.as_str() == name {
                     let ty = match &var_info.value {
