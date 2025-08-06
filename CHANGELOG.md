@@ -6,7 +6,7 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 
 ## [0.65.0]
 
-## Major Changes
+### Major Changes
 * Added support for bitwuzla, cvc5, and z3 as solver attribute values, giving you more options for verification backends by @tautschnig in https://github.com/model-checking/kani/pull/4218
 * Improved support for contracts and stubs in trait implementations, expanding verification capabilities for trait-based code by @carolynzech in https://github.com/model-checking/kani/pull/4250
 * Added new `--prove-safety-only` option for focused safety verification, allowing you to concentrate on memory safety and undefined behavior detection by @tautschnig in https://github.com/model-checking/kani/pull/4239
