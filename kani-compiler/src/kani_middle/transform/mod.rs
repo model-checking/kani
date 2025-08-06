@@ -141,17 +141,6 @@ impl BodyTransformation {
         self.body_ref(tcx, instance).clone()
     }
 
-    /// Clone an empty [BodyTransformation] for use within the same [CodegenUnit] and [TyCtxt] that were
-    /// used to create it. Will panic if the transformer has already been queried with `.body()`.
-    pub fn clone_empty(&self) -> Self {
-        debug_assert!(self.cache.is_empty());
-        BodyTransformation {
-            stub_passes: self.stub_passes.to_vec(),
-            inst_passes: self.inst_passes.to_vec(),
-            cache: HashMap::new(),
-        }
-    }
-
     fn add_pass<P: ClonableTransformPass + 'static>(&mut self, query_db: &QueryDb, pass: P) {
         if pass.is_enabled(query_db) {
             match P::transformation_type() {

@@ -96,7 +96,7 @@ impl TypeExt for Type {
 }
 
 /// Function signatures
-impl GotocCtx<'_> {
+impl GotocCtx<'_, '_> {
     /// This method prints the details of a GotoC type, for debugging purposes.
     #[allow(unused)]
     pub(crate) fn debug_print_type_recursively(&self, ty: &Type) -> String {
@@ -235,7 +235,7 @@ impl GotocCtx<'_> {
     }
 }
 
-impl<'tcx> GotocCtx<'tcx> {
+impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
     pub fn monomorphize<T>(&self, value: T) -> T
     where
         T: TypeFoldable<TyCtxt<'tcx>>,
@@ -1659,7 +1659,7 @@ impl<'tcx> GotocCtx<'tcx> {
 }
 
 /// Use maps instead of lists to manage mir struct components.
-impl<'tcx> GotocCtx<'tcx> {
+impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
     /// Extract a trait type from a `Struct<dyn T>`.
     /// Note that `T` must be the last element of the struct.
     /// This also handles nested cases: `Struct<Struct<dyn T>>` returns `dyn T`
@@ -1705,12 +1705,12 @@ impl<'tcx> GotocCtx<'tcx> {
         &'a self,
         typ: Ty<'tcx>,
     ) -> impl Iterator<Item = (String, Ty<'tcx>)> + 'a {
-        struct ReceiverIter<'tcx, 'a> {
+        struct ReceiverIter<'tcx, 'a, 'r> {
             pub curr: Ty<'tcx>,
-            pub ctx: &'a GotocCtx<'tcx>,
+            pub ctx: &'a GotocCtx<'tcx, 'r>,
         }
 
-        impl<'tcx> Iterator for ReceiverIter<'tcx, '_> {
+        impl<'tcx> Iterator for ReceiverIter<'tcx, '_, '_> {
             type Item = (String, Ty<'tcx>);
 
             fn next(&mut self) -> Option<Self::Item> {
@@ -1804,7 +1804,7 @@ fn normalize_type(ty: Ty) -> Ty {
     ty
 }
 
-impl<'tcx> GotocCtx<'tcx> {
+impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
     /// A pointer to the mir type should be a thin pointer.
     /// Use thin pointer if the type is sized or if the resulting pointer has no metadata.
     /// Note: Foreign items are unsized but it codegen as a thin pointer since there is no

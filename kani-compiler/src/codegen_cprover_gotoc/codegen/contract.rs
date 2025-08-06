@@ -12,7 +12,7 @@ use rustc_public::mir::{Local, VarDebugInfoContents};
 use rustc_public::rustc_internal;
 use rustc_public::ty::{FnDef, RigidTy, TyKind};
 
-impl GotocCtx<'_> {
+impl GotocCtx<'_, '_> {
     /// Given the `proof_for_contract` target `function_under_contract` and the reachable `items`,
     /// find or create the `AssignsContract` that needs to be enforced and attach it to the symbol
     /// for which it needs to be enforced.
