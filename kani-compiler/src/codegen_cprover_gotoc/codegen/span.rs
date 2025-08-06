@@ -4,7 +4,6 @@
 //! MIR Span related functions
 
 use crate::codegen_cprover_gotoc::GotocCtx;
-use crate::codegen_cprover_gotoc::context::SpanWrapper;
 use cbmc::goto_program::Location;
 use lazy_static::lazy_static;
 use rustc_hir::Attribute;
@@ -39,7 +38,7 @@ impl GotocCtx<'_> {
 
     pub fn codegen_span_stable(&self, sp: SpanStable) -> Location {
         // First query the cache to see if we've already done codegen for this span.
-        if let Some(cached_loc) = self.span_cache.borrow_mut().get(&SpanWrapper(sp)) {
+        if let Some(cached_loc) = self.span_cache.borrow_mut().get(&sp) {
             let mut new_loc = *cached_loc;
 
             // Recalculate the `current_fn` since it could be different than when we cached.
@@ -91,7 +90,7 @@ impl GotocCtx<'_> {
         );
 
         // Insert codegened Location into the cache and sanity check it doesn't already exist.
-        let existing = self.span_cache.borrow_mut().insert(SpanWrapper(sp), new_loc);
+        let existing = self.span_cache.borrow_mut().insert(sp, new_loc);
         debug_assert!(
             existing.is_none(),
             "if there was already an entry for this in the cache, we should've used that!"

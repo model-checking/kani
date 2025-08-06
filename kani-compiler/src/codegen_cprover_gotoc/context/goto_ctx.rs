@@ -63,19 +63,6 @@ pub struct MinimalGotocCtx {
     pub has_loop_contracts: bool,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub struct OurSpan(usize);
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub struct SpanWrapper(pub rustc_public::ty::Span);
-
-impl std::hash::Hash for SpanWrapper {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        let our_span: OurSpan = unsafe { std::mem::transmute(self.0) };
-        our_span.0.hash(state);
-    }
-}
-
 pub struct GotocCtx<'tcx> {
     /// the typing context
     pub tcx: TyCtxt<'tcx>,
@@ -92,7 +79,7 @@ pub struct GotocCtx<'tcx> {
     /// map a global allocation to a name in the symbol table
     pub alloc_map: FxHashMap<Allocation, String>,
     /// a cache of [Span](rustc_public::Span)s and their codegened [Location]s
-    pub span_cache: RefCell<FxHashMap<SpanWrapper, Location>>,
+    pub span_cache: RefCell<FxHashMap<rustc_public::ty::Span, Location>>,
     /// map (trait, method) pairs to possible implementations
     pub vtable_ctx: VtableCtx,
     pub current_fn: Option<CurrentFnCtx<'tcx>>,
