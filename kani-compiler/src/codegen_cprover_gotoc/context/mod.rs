@@ -10,5 +10,5 @@ mod current_fn;
 mod goto_ctx;
 mod vtable_ctx;
 
-pub use goto_ctx::{GotocCtx, MinimalGotocCtx};
+pub use goto_ctx::{GotocCtx, MinimalGotocCtx, SpanWrapper};
 pub use vtable_ctx::VtableCtx;

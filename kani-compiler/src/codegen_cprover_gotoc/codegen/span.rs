@@ -4,6 +4,7 @@
 //! MIR Span related functions
 
 use crate::codegen_cprover_gotoc::GotocCtx;
+use crate::codegen_cprover_gotoc::context::SpanWrapper;
 use cbmc::goto_program::Location;
 use lazy_static::lazy_static;
 use rustc_hir::Attribute;
@@ -37,6 +38,18 @@ impl GotocCtx<'_> {
     }
 
     pub fn codegen_span_stable(&self, sp: SpanStable) -> Location {
+        // First query the cache to see if we've already done codegen for this span.
+        if let Some(cached_loc) = self.span_cache.borrow_mut().get(&SpanWrapper(sp)) {
+            let mut new_loc = *cached_loc;
+
+            // Recalculate the `current_fn` since it could be different than when we cached.
+            new_loc
+                .try_set_function(self.current_fn.as_ref().map(|x| x.readable_name().to_string()))
+                .unwrap();
+
+            return new_loc;
+        }
+
         // Attribute to mark functions as where automatic pointer checks should not be generated.
         let should_skip_ptr_checks_attr = vec![
             rustc_span::symbol::Symbol::intern("kanitool"),
@@ -65,8 +78,9 @@ impl GotocCtx<'_> {
                 .collect::<Vec<_>>()
                 .leak() // This is to preserve `Location` being Copy, but could blow up the memory utilization of compiler. 
         };
+
         let loc = sp.get_lines();
-        Location::new(
+        let new_loc = Location::new(
             sp.get_filename().to_string(),
             self.current_fn.as_ref().map(|x| x.readable_name().to_string()),
             loc.start_line,
@@ -74,7 +88,16 @@ impl GotocCtx<'_> {
             loc.end_line,
             Some(loc.end_col),
             pragmas,
-        )
+        );
+
+        // Insert codegened Location into the cache and sanity check it doesn't already exist.
+        let existing = self.span_cache.borrow_mut().insert(SpanWrapper(sp), new_loc);
+        debug_assert!(
+            existing.is_none(),
+            "if there was already an entry for this in the cache, we should've used that!"
+        );
+
+        new_loc
     }
 
     pub fn codegen_caller_span_stable(&self, sp: SpanStable) -> Location {
