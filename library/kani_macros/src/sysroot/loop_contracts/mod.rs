@@ -233,25 +233,25 @@ fn transform_break_continue(block: &mut Block) {
 }
 
 fn while_let_rewrite(loopexpr: Stmt) -> Stmt {
-    if let Stmt::Expr(ref expr, _) = loopexpr {
-        if let Expr::While(ExprWhile { cond, body, .. }) = expr {
-            if let Expr::Let(ref let_expr) = **cond {
-                let pat = &let_expr.pat;
-                let scrutinee = &let_expr.expr;
+    if let Stmt::Expr(ref expr, _) = loopexpr
+        && let Expr::While(ExprWhile { cond, body, .. }) = expr
+        && let Expr::Let(ref let_expr) = **cond
+    {
+        let pat = &let_expr.pat;
+        let scrutinee = &let_expr.expr;
 
-                // Transform to loop with match
-                return parse_quote! {
-                    loop {
-                        match #scrutinee {
-                            #pat => #body,
-                            _ => break,
-                        }
-                    };
-                };
-            }
-        }
+        // Transform to loop with match
+        return parse_quote! {
+            loop {
+                match #scrutinee {
+                    #pat => #body,
+                    _ => break,
+                }
+            };
+        };
     }
-    return loopexpr.clone();
+
+    loopexpr.clone()
 }
 
 pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
