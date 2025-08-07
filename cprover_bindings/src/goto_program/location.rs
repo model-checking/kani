@@ -124,6 +124,23 @@ impl Location {
         }
     }
 
+    /// Tries to set the `function` field of a [Location::Loc], but returns `None` if the location
+    /// is of a different variant and the field couldn't be set.
+    pub fn try_set_function(
+        &mut self,
+        new_function: Option<impl Into<InternedString>>,
+    ) -> Option<()> {
+        if let Location::Loc { function, .. } = self {
+            if let Some(new_function) = new_function {
+                *function = Some(new_function.into());
+            }
+
+            Some(())
+        } else {
+            None
+        }
+    }
+
     /// Create a Property type Location
     pub fn property_location<T, U>(
         file: Option<U>,
