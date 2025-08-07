@@ -7,14 +7,14 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 ## [0.65.0]
 
 ### Breaking Changes
-* Added new `--prove-safety-only` option for focused safety verification, allowing you to concentrate on memory safety and undefined behavior detection by @tautschnig in https://github.com/model-checking/kani/pull/4239
-* Extended autoharness support to handle references, making it easier to automatically generate verification harnesses by @tautschnig in https://github.com/model-checking/kani/pull/4234
-* Multiple performance improvements including parallel goto binary writing, lazy debug info evaluation, and optimized quantifier handling for faster verification times
 * Removed unstable list feature and default memory checks by @carolynzech in https://github.com/model-checking/kani/pull/4258
 
 ### Major Changes
 * Added support for a few SMT solvers (bitwuzla, cvc5, and z3) as solver attribute values (**not** packaged with Kani) by @tautschnig in https://github.com/model-checking/kani/pull/4218
 * Improved support for contracts and stubs in trait implementations, expanding verification capabilities for trait-based code by @carolynzech in https://github.com/model-checking/kani/pull/4250
+* Added new `--prove-safety-only` option for focused safety verification, allowing you to concentrate on memory safety and undefined behavior detection by @tautschnig in https://github.com/model-checking/kani/pull/4239
+* Extended autoharness support to handle references, making it easier to automatically generate verification harnesses by @tautschnig in https://github.com/model-checking/kani/pull/4234
+* Multiple performance improvements including parallel goto binary writing, lazy debug info evaluation, and optimized quantifier handling for faster verification times
 
 ### What's Changed
 * Fixed issue related to the handling of contract closures which was preventing writing contracts for functions that return mutable references by @vonaka in https://github.com/model-checking/kani/pull/4151
