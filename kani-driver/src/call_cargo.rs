@@ -4,7 +4,10 @@
 use crate::args::VerificationArgs;
 use crate::call_single_file::{LibConfig, to_rustc_arg};
 use crate::project::Artifact;
-use crate::session::{KaniSession, lib_folder, lib_no_core_folder, setup_cargo_command};
+use crate::session::{
+    KaniSession, get_cargo_path, lib_folder, lib_no_core_folder, setup_cargo_command,
+    setup_cargo_command_inner,
+};
 use crate::util;
 use anyhow::{Context, Result, bail};
 use cargo_metadata::diagnostic::{Diagnostic, DiagnosticLevel};
@@ -32,8 +35,6 @@ pub struct CargoOutputs {
     pub metadata: Vec<Artifact>,
     /// Recording the cargo metadata from the build
     pub cargo_metadata: Metadata,
-    /// For build `keep_going` mode, we collect the targets that we failed to compile.
-    pub failed_targets: Option<Vec<String>>,
 }
 
 impl KaniSession {
@@ -202,7 +203,8 @@ crate-type = ["lib"]
         let mut failed_targets = vec![];
         for package in packages {
             for verification_target in package_targets(&self.args, package) {
-                let mut cmd = setup_cargo_command()?;
+                let mut cmd =
+                    setup_cargo_command_inner(Some(verification_target.target().name.clone()))?;
                 cmd.args(&cargo_args)
                     .args(vec!["-p", &package.id.to_string()])
                     .args(verification_target.to_args())
@@ -236,16 +238,15 @@ crate-type = ["lib"]
             bail!("No supported targets were found.");
         }
 
-        Ok(CargoOutputs {
-            outdir,
-            metadata: artifacts,
-            cargo_metadata: metadata,
-            failed_targets: keep_going.then_some(failed_targets),
-        })
+        Ok(CargoOutputs { outdir, metadata: artifacts, cargo_metadata: metadata })
     }
 
     pub fn cargo_metadata(&self, build_target: &str) -> Result<Metadata> {
         let mut cmd = MetadataCommand::new();
+
+        // Use Kani's toolchain when running `cargo metadata`
+        let cargo_path = get_cargo_path().unwrap();
+        cmd.cargo_path(cargo_path);
 
         // restrict metadata command to host platform. References:
         // https://github.com/rust-lang/rust-analyzer/issues/6908

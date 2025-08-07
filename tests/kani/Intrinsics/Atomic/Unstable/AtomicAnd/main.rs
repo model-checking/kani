@@ -5,10 +5,7 @@
 // expected result.
 
 #![feature(core_intrinsics)]
-use std::intrinsics::{
-    atomic_and_acqrel, atomic_and_acquire, atomic_and_relaxed, atomic_and_release,
-    atomic_and_seqcst,
-};
+use std::intrinsics::{AtomicOrdering, atomic_and};
 
 #[kani::proof]
 fn main() {
@@ -27,11 +24,11 @@ fn main() {
     let b = 0 as u8;
 
     unsafe {
-        let x1 = atomic_and_seqcst(ptr_a1, b);
-        let x2 = atomic_and_acquire(ptr_a2, b);
-        let x3 = atomic_and_acqrel(ptr_a3, b);
-        let x4 = atomic_and_release(ptr_a4, b);
-        let x5 = atomic_and_relaxed(ptr_a5, b);
+        let x1 = atomic_and::<_, { AtomicOrdering::SeqCst }>(ptr_a1, b);
+        let x2 = atomic_and::<_, { AtomicOrdering::Acquire }>(ptr_a2, b);
+        let x3 = atomic_and::<_, { AtomicOrdering::AcqRel }>(ptr_a3, b);
+        let x4 = atomic_and::<_, { AtomicOrdering::Release }>(ptr_a4, b);
+        let x5 = atomic_and::<_, { AtomicOrdering::Relaxed }>(ptr_a5, b);
 
         assert!(x1 == 1);
         assert!(x2 == 1);

@@ -4,6 +4,7 @@ use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::goto_program::{DatatypeComponent, Expr, Location, Parameter, Symbol, SymbolTable, Type};
 use cbmc::utils::aggr_tag;
 use cbmc::{InternString, InternedString};
+use kani_metadata::UnstableFeature;
 use rustc_abi::{
     BackendRepr::SimdVector, FieldIdx, FieldsShape, Float, Integer, LayoutData, Primitive, Size,
     TagEncoding, TyAndLayout, VariantIdx, Variants,
@@ -160,6 +161,11 @@ impl GotocCtx<'_> {
                                 debug_write_type(ctx, typ, out, indent + 2)?;
                                 writeln!(out, ",")?;
                             }
+                            DatatypeComponent::UnionField { name, typ, .. } => {
+                                write!(out, "{:indent$}{name}: ", "", indent = indent + 2)?;
+                                debug_write_type(ctx, typ, out, indent + 2)?;
+                                writeln!(out, ",")?;
+                            }
                             DatatypeComponent::Padding { bits, .. } => {
                                 writeln!(
                                     out,
@@ -192,6 +198,11 @@ impl GotocCtx<'_> {
                     for c in components {
                         match c {
                             DatatypeComponent::Field { name, typ } => {
+                                write!(out, "{:indent$}{name}: ", "", indent = indent + 2)?;
+                                debug_write_type(ctx, typ, out, indent + 2)?;
+                                writeln!(out, ",")?;
+                            }
+                            DatatypeComponent::UnionField { name, typ, .. } => {
                                 write!(out, "{:indent$}{name}: ", "", indent = indent + 2)?;
                                 debug_write_type(ctx, typ, out, indent + 2)?;
                                 writeln!(out, ",")?;
@@ -487,9 +498,20 @@ impl<'tcx> GotocCtx<'tcx> {
         // This is not a restriction because C can only access non-generic types anyway.
         // TODO: Skipping name mangling is likely insufficient if a dependent crate has two versions of
         // linked C libraries
-        // https://github.com/model-checking/kani/issues/450
+        // https://github.com/model-checking/kani/issues/450.
+        // Note that #[repr(C)] types are unmangled only if the unstable c-ffi feature is enabled; otherwise,
+        // we assume that this struct is a #[repr(C)] in Rust code and mangle it,
+        // c.f. https://github.com/model-checking/kani/issues/4007.
         match t.kind() {
-            TyKind::Adt(def, args) if args.is_empty() && def.repr().c() => {
+            TyKind::Adt(def, args)
+                if args.is_empty()
+                    && def.repr().c()
+                    && self
+                        .queries
+                        .args()
+                        .unstable_features
+                        .contains(&UnstableFeature::CFfi.to_string()) =>
+            {
                 // For non-generic #[repr(C)] types, use the literal path instead of mangling it.
                 self.tcx.def_path_str(def.did()).intern()
             }
@@ -902,7 +924,7 @@ impl<'tcx> GotocCtx<'tcx> {
                     pretty_name,
                     type_and_layout,
                     "DirectFields".into(),
-                    Some(*discriminant_field),
+                    Some((*discriminant_field).as_usize()),
                 ),
             };
             let mut fields = vec![direct_fields];
@@ -1183,15 +1205,36 @@ impl<'tcx> GotocCtx<'tcx> {
         def: &'tcx AdtDef,
         subst: &'tcx GenericArgsRef<'tcx>,
     ) -> Type {
+        let union_size = rustc_internal::stable(ty).layout().unwrap().shape().size.bits();
+        let union_name = self.ty_mangled_name(ty);
+        let union_pretty_name = self.ty_pretty_name(ty);
         self.ensure_union(self.ty_mangled_name(ty), self.ty_pretty_name(ty), |ctx, _| {
-            def.variants().raw[0]
+            let fields_info: Vec<(String, Type, u64)> = def.variants().raw[0]
                 .fields
                 .iter()
                 .map(|f| {
-                    DatatypeComponent::field(
-                        f.name.to_string(),
-                        ctx.codegen_ty(f.ty(ctx.tcx, subst)),
-                    )
+                    let ty = rustc_internal::stable(f.ty(ctx.tcx, subst));
+                    let ty_size = ty.layout().unwrap().shape().size.bits();
+                    let padding_size = union_size - ty_size;
+                    (f.name.to_string(), ctx.codegen_ty_stable(ty), padding_size as u64)
+                })
+                .collect();
+            fields_info
+                .iter()
+                .map(|(name, ty, padding)| {
+                    let struct_name = format!("{union_name}::{name}");
+                    let pretty_struct_name = format!("{union_pretty_name}::{name}");
+                    let pad_name = format!("{name}_padding");
+                    let padded_typ: Type = if *padding == 0 {
+                        ty.clone()
+                    } else {
+                        let pad =
+                            DatatypeComponent::Padding { name: pad_name.into(), bits: *padding };
+                        ctx.ensure_struct(struct_name, pretty_struct_name, |_ctx, _| {
+                            vec![DatatypeComponent::field(name, ty.clone()), pad.clone()]
+                        })
+                    };
+                    DatatypeComponent::unionfield(name, ty.clone(), padded_typ)
                 })
                 .collect()
         })
@@ -1265,7 +1308,7 @@ impl<'tcx> GotocCtx<'tcx> {
                 // Contrary to coroutines, currently enums have only one field (the discriminant), the rest are in the variants:
                 assert!(layout.fields.count() <= 1);
                 // Contrary to coroutines, the discriminant is the first (and only) field for enums:
-                assert_eq!(*tag_field, 0);
+                assert_eq!((*tag_field).as_usize(), 0);
                 match tag_encoding {
                     TagEncoding::Direct => {
                         self.ensure_struct(self.ty_mangled_name(ty), pretty_name, |gcx, name| {

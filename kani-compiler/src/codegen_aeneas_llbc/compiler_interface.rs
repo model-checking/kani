@@ -202,12 +202,7 @@ impl CodegenBackend for LlbcCodegenBackend {
         DEFAULT_LOCALE_RESOURCE
     }
 
-    fn codegen_crate(
-        &self,
-        tcx: TyCtxt,
-        rustc_metadata: EncodedMetadata,
-        _need_metadata_module: bool,
-    ) -> Box<dyn Any> {
+    fn codegen_crate(&self, tcx: TyCtxt) -> Box<dyn Any> {
         let ret_val = rustc_internal::run(tcx, || {
             // Queries shouldn't change today once codegen starts.
             let queries = self.queries.lock().unwrap().clone();
@@ -253,7 +248,7 @@ impl CodegenBackend for LlbcCodegenBackend {
                     units.store_modifies(&modifies_instances);
                     units.write_metadata(&queries, tcx);
                 }
-                ReachabilityType::Tests | ReachabilityType::AllFns => todo!(),
+                ReachabilityType::AllFns => todo!(),
                 ReachabilityType::None => {}
                 ReachabilityType::PubFns => {
                     let unit = CodegenUnit::default();
@@ -286,7 +281,7 @@ impl CodegenBackend for LlbcCodegenBackend {
                 // To avoid overriding the metadata for its verification, we skip this step when
                 // reachability is None, even because there is nothing to record.
             }
-            codegen_results(tcx, rustc_metadata)
+            codegen_results(tcx)
         });
         ret_val.unwrap()
     }
@@ -318,10 +313,16 @@ impl CodegenBackend for LlbcCodegenBackend {
     /// For cases where no metadata file was requested, we stub the file requested by writing the
     /// path of the `kani-metadata.json` file so `kani-driver` can safely find the latest metadata.
     /// See <https://github.com/model-checking/kani/issues/2234> for more details.
-    fn link(&self, sess: &Session, codegen_results: CodegenResults, outputs: &OutputFilenames) {
+    fn link(
+        &self,
+        sess: &Session,
+        codegen_results: CodegenResults,
+        rustc_metadata: EncodedMetadata,
+        outputs: &OutputFilenames,
+    ) {
         let requested_crate_types = &codegen_results.crate_info.crate_types.clone();
         let local_crate_name = codegen_results.crate_info.local_crate_name;
-        link_binary(sess, &ArArchiveBuilderBuilder, codegen_results, outputs);
+        link_binary(sess, &ArArchiveBuilderBuilder, codegen_results, rustc_metadata, outputs);
         for crate_type in requested_crate_types {
             let out_fname = out_filename(sess, *crate_type, outputs, local_crate_name);
             let out_path = out_fname.as_path();
@@ -356,14 +357,12 @@ fn contract_metadata_for_harness(
 }
 
 /// Return a struct that contains information about the codegen results as expected by `rustc`.
-fn codegen_results(tcx: TyCtxt, rustc_metadata: EncodedMetadata) -> Box<dyn Any> {
+fn codegen_results(tcx: TyCtxt) -> Box<dyn Any> {
     let work_products = FxIndexMap::<WorkProductId, WorkProduct>::default();
     Box::new((
         CodegenResults {
             modules: vec![],
             allocator_module: None,
-            metadata_module: None,
-            metadata: rustc_metadata,
             crate_info: CrateInfo::new(tcx, tcx.sess.target.arch.clone().to_string()),
         },
         work_products,

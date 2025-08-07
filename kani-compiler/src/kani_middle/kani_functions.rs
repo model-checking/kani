@@ -99,6 +99,8 @@ pub enum KaniModel {
     SetSliceChunkPtrInitialized,
     #[strum(serialize = "SetSlicePtrInitializedModel")]
     SetSlicePtrInitialized,
+    #[strum(serialize = "PanicStub")]
+    PanicStub,
     #[strum(serialize = "SetStrPtrInitializedModel")]
     SetStrPtrInitialized,
     #[strum(serialize = "SizeOfDynObjectModel")]
@@ -269,5 +271,9 @@ pub fn validate_kani_functions(kani_funcs: &HashMap<KaniFunction, FnDef>) {
             missing += 1;
         }
     }
-    assert_eq!(missing, 0, "Failed to find `{missing}` Kani functions");
+    // If this is failing for #[no_std] crates, try explicitly adding `extern crate kani` to the crate root.
+    // See https://github.com/model-checking/kani/issues/3906 for why this is required.
+    if missing != 0 {
+        tracing::error!("Failed to find `{missing}` Kani functions")
+    }
 }

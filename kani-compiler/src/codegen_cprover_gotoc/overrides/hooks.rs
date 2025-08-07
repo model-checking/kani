@@ -326,7 +326,12 @@ struct Panic;
 impl GotocHook for Panic {
     fn hook_applies(&self, tcx: TyCtxt, instance: Instance) -> bool {
         let def_id = rustc_internal::internal(tcx, instance.def.def_id());
-        Some(def_id) == tcx.lang_items().panic_fn()
+        let kani_tool_attr = attributes::fn_marker(instance.def);
+
+        // we check the attributes to make sure this hook applies to
+        // panic functions we've stubbed too
+        kani_tool_attr.is_some_and(|kani| kani.contains("PanicStub"))
+            || Some(def_id) == tcx.lang_items().panic_fn()
             || tcx.has_attr(def_id, rustc_span::sym::rustc_const_panic_str)
             || Some(def_id) == tcx.lang_items().panic_fmt()
             || Some(def_id) == tcx.lang_items().begin_panic_fn()
@@ -728,6 +733,14 @@ impl GotocHook for LoopInvariantRegister {
             // free(0)
             // goto target --- with loop contracts annotated.
 
+            let mut stmt = Stmt::goto(bb_label(target.unwrap()), loc)
+                .with_loop_contracts(func_exp.call(fargs).cast_to(Type::CInteger(CIntType::Bool)));
+            let assigns = gcx.current_loop_modifies.clone();
+            if !assigns.is_empty() {
+                stmt = stmt.with_loop_modifies(assigns.clone());
+                gcx.current_loop_modifies.clear();
+            }
+
             // Add `free(0)` to make sure the body of `free` won't be dropped to
             // satisfy the requirement of DFCC.
             Stmt::block(
@@ -735,9 +748,7 @@ impl GotocHook for LoopInvariantRegister {
                     BuiltinFn::Free
                         .call(vec![Expr::pointer_constant(0, Type::void_pointer())], loc)
                         .as_stmt(loc),
-                    Stmt::goto(bb_label(target.unwrap()), loc).with_loop_contracts(
-                        func_exp.call(fargs).cast_to(Type::CInteger(CIntType::Bool)),
-                    ),
+                    stmt,
                 ],
                 loc,
             )

@@ -80,6 +80,9 @@
 
 use crate::irep::{Irep, IrepId, Symbol, SymbolTable};
 use crate::{InternString, InternedString};
+#[cfg(not(test))]
+use fxhash::FxHashMap;
+#[cfg(test)]
 use std::collections::HashMap;
 use std::fs::File;
 use std::hash::Hash;
@@ -199,7 +202,28 @@ impl IrepNumberingInv {
     }
 }
 
+#[cfg(not(test))]
 /// A numbering of [InternedString], [IrepId] and [Irep] based on their contents.
+/// Note that using [FxHashMap] makes our caches faster, but we still have to use
+/// the default [HashMap] in a test context as only it implements the
+/// `memuse::DynamicUsage` trait we need for memory profiling under test.
+struct IrepNumbering {
+    /// Map from [InternedString] to their unique numbers.
+    string_cache: FxHashMap<InternedString, usize>,
+
+    /// Inverse string cache.
+    inv_string_cache: Vec<NumberedString>,
+
+    /// Map from [IrepKey] to their unique numbers.
+    cache: FxHashMap<IrepKey, usize>,
+
+    /// Inverse cache, allows to get a NumberedIrep from its unique number.
+    inv_cache: IrepNumberingInv,
+}
+
+#[cfg(test)]
+/// A numbering of [InternedString], [IrepId] and [Irep] based on their contents.
+/// See above for explanation of why this definition is only used in a test context.
 struct IrepNumbering {
     /// Map from [InternedString] to their unique numbers.
     string_cache: HashMap<InternedString, usize>,
@@ -214,16 +238,31 @@ struct IrepNumbering {
     inv_cache: IrepNumberingInv,
 }
 
+#[cfg(not(test))]
 impl IrepNumbering {
     fn new() -> Self {
         IrepNumbering {
-            string_cache: HashMap::new(),
+            string_cache: FxHashMap::default(),
             inv_string_cache: Vec::new(),
-            cache: HashMap::new(),
+            cache: FxHashMap::default(),
             inv_cache: IrepNumberingInv::new(),
         }
     }
+}
 
+#[cfg(test)]
+impl IrepNumbering {
+    fn new() -> Self {
+        IrepNumbering {
+            string_cache: HashMap::default(),
+            inv_string_cache: Vec::new(),
+            cache: HashMap::default(),
+            inv_cache: IrepNumberingInv::new(),
+        }
+    }
+}
+
+impl IrepNumbering {
     /// Returns a [NumberedString] from its number if it exists, None otherwise.
     fn numbered_string_from_number(&mut self, string_number: usize) -> Option<NumberedString> {
         self.inv_string_cache.get(string_number).copied()
@@ -248,7 +287,7 @@ impl IrepNumbering {
     /// Turns a [IrepId] to a [NumberedString]. The [IrepId] gets the number of its
     /// string representation.
     fn number_irep_id(&mut self, irep_id: &IrepId) -> NumberedString {
-        self.number_string(&irep_id.to_string().intern())
+        self.number_string(&irep_id.to_string_cow().intern())
     }
 
     /// Turns an [Irep] into a [NumberedIrep]. The [Irep] is recursively traversed
@@ -264,20 +303,18 @@ impl IrepNumbering {
             .map(|(key, value)| (self.number_irep_id(key).number, self.number_irep(value).number))
             .collect();
         let key = IrepKey::new(id, &sub, &named_sub);
-        self.get_or_insert(&key)
+        self.get_or_insert(key)
     }
 
     /// Gets the existing [NumberedIrep] from the [IrepKey] or inserts a fresh
     /// one and returns it.
-    fn get_or_insert(&mut self, key: &IrepKey) -> NumberedIrep {
-        if let Some(number) = self.cache.get(key) {
-            // Return the NumberedIrep from the inverse cache
-            return self.inv_cache.index[*number];
-        }
-        // This is where the key gets its unique number assigned.
-        let number = self.inv_cache.add_key(key);
-        self.cache.insert(key.clone(), number);
-        self.inv_cache.index[number]
+    fn get_or_insert(&mut self, key: IrepKey) -> NumberedIrep {
+        let number = self.cache.entry(key).or_insert_with_key(|key| {
+            // This is where the key gets its unique number assigned.
+            self.inv_cache.add_key(key)
+        });
+
+        self.inv_cache.index[*number]
     }
 
     /// Returns the unique number of the `id` field of the given [NumberedIrep].
@@ -794,7 +831,7 @@ where
                         let key = IrepKey::new(id, &sub, &named_sub);
 
                         // Insert key in the numbering
-                        let numbered = self.numbering.get_or_insert(&key);
+                        let numbered = self.numbering.get_or_insert(key);
 
                         // Map number from the binary to new number
                         self.add_irep_mapping(irep_number, numbered.number);

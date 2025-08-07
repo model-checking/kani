@@ -4,13 +4,15 @@
 // Test that the automatic harness generation feature filters functions correctly,
 // i.e., that it generates harnesses for a function iff:
 //   - It is not itself a harness
-//   - All of its arguments implement Arbitrary, either trivially or through a user-provided implementation
+//   - All of its arguments implement Arbitrary, either trivially,
+// through a user-provided implementation, or compiler-derived implementation.
 // The bodies of these functions are purposefully left as simple as possible;
 // the point is not to test the generated harnesses themselves,
 // but only that we generate the harnesses in the first place.
 
 #![feature(f16)]
 #![feature(f128)]
+#![allow(dead_code)]
 
 extern crate kani;
 use kani::Arbitrary;
@@ -31,14 +33,16 @@ impl Arbitrary for ManuallyImplementsArbitrary {
         Self { x: kani::any(), y: kani::any() }
     }
 }
-
-struct DoesntImplementArbitrary {
+struct CompilerDerivesArbitrary {
     x: u8,
     y: u32,
 }
-
+struct DoesntImplementArbitrary<'a> {
+    x: &'a u8,
+    y: u32,
+}
 mod yes_harness {
-    use crate::{DerivesArbitrary, ManuallyImplementsArbitrary};
+    use crate::{CompilerDerivesArbitrary, DerivesArbitrary, ManuallyImplementsArbitrary};
     use std::marker::{PhantomData, PhantomPinned};
     use std::mem::MaybeUninit;
     use std::num::NonZero;
@@ -164,6 +168,11 @@ mod yes_harness {
     fn f_derives_arbitrary(x: DerivesArbitrary) -> DerivesArbitrary {
         x
     }
+
+    fn f_compiler_derives_arbitrary(x: CompilerDerivesArbitrary) -> CompilerDerivesArbitrary {
+        x
+    }
+
     fn f_manually_implements_arbitrary(
         x: ManuallyImplementsArbitrary,
     ) -> ManuallyImplementsArbitrary {
