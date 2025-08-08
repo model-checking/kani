@@ -1,10 +1,5 @@
- ** 1 of 19 failed (2 unreachable)\
 Failed Checks: Kani currently doesn't support checking validity of `transmute` for `std::option::Option<std::num::NonZero<u8>>`
-
- ** 1 of 43 failed (2 unreachable)\
 Failed Checks: Kani currently doesn't support checking validity of `transmute` for `std::option::Option<std::num::NonZero<u8>>`
-
- ** 1 of 18 failed (1 unreachable)\
 Failed Checks: Kani currently doesn't support checking validity of `transmute` for `std::option::Option<std::num::NonZero<u8>>`
 
 Verification failed for - read_invalid_is_ub

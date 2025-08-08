@@ -5,17 +5,14 @@
 // can be processed.
 
 #![feature(core_intrinsics)]
-use std::intrinsics::{
-    atomic_singlethreadfence_acqrel, atomic_singlethreadfence_acquire,
-    atomic_singlethreadfence_release, atomic_singlethreadfence_seqcst,
-};
+use std::intrinsics::{AtomicOrdering, atomic_singlethreadfence};
 
 #[kani::proof]
 fn main() {
     unsafe {
-        atomic_singlethreadfence_seqcst();
-        atomic_singlethreadfence_acquire();
-        atomic_singlethreadfence_acqrel();
-        atomic_singlethreadfence_release();
+        atomic_singlethreadfence::<{ AtomicOrdering::SeqCst }>();
+        atomic_singlethreadfence::<{ AtomicOrdering::Acquire }>();
+        atomic_singlethreadfence::<{ AtomicOrdering::AcqRel }>();
+        atomic_singlethreadfence::<{ AtomicOrdering::Release }>();
     }
 }

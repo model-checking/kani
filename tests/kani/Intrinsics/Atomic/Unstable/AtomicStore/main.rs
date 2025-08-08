@@ -5,7 +5,7 @@
 // expected result.
 
 #![feature(core_intrinsics)]
-use std::intrinsics::{atomic_store_relaxed, atomic_store_release, atomic_store_seqcst};
+use std::intrinsics::{AtomicOrdering, atomic_store};
 
 #[kani::proof]
 fn main() {
@@ -18,9 +18,9 @@ fn main() {
     let ptr_a3: *mut u8 = &mut a3;
 
     unsafe {
-        atomic_store_seqcst(ptr_a1, 0);
-        atomic_store_release(ptr_a2, 0);
-        atomic_store_relaxed(ptr_a3, 0);
+        atomic_store::<_, { AtomicOrdering::SeqCst }>(ptr_a1, 0);
+        atomic_store::<_, { AtomicOrdering::Release }>(ptr_a2, 0);
+        atomic_store::<_, { AtomicOrdering::Relaxed }>(ptr_a3, 0);
 
         assert!(*ptr_a1 == 0);
         assert!(*ptr_a2 == 0);

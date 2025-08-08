@@ -35,6 +35,7 @@ lazy_static! {
             "__rust_alloc_zeroed".into(),
             "__rust_dealloc".into(),
             "__rust_realloc".into(),
+            "__rust_no_alloc_shim_is_unstable_v2".into(),
         ])
     };
 }

@@ -38,3 +38,15 @@ fn main() {
     let v = doswitch_bytes();
     assert!(v == 1);
 }
+
+// Check that Kani can codegen a SwitchInt that has no targets (only an otherwise)
+// c.f. https://github.com/model-checking/kani/issues/4103
+pub enum Reference {
+    ByName { alias: String },
+}
+
+#[kani::proof]
+fn check_nontrivial_drop() {
+    let result: Reference = Reference::ByName { alias: "foo".into() };
+    drop(result)
+}

@@ -99,6 +99,7 @@ pub enum CIntType {
 pub enum DatatypeComponent {
     Field { name: InternedString, typ: Type },
     Padding { name: InternedString, bits: u64 },
+    UnionField { name: InternedString, typ: Type, padded_typ: Type },
 }
 
 /// The formal parameters of a function.
@@ -120,6 +121,7 @@ impl DatatypeComponent {
     pub fn field_typ(&self) -> Option<&Type> {
         match self {
             Field { typ, .. } => Some(typ),
+            UnionField { typ, .. } => Some(typ),
             Padding { .. } => None,
         }
     }
@@ -127,6 +129,7 @@ impl DatatypeComponent {
     pub fn is_field(&self) -> bool {
         match self {
             Field { .. } => true,
+            UnionField { .. } => true,
             Padding { .. } => false,
         }
     }
@@ -134,19 +137,21 @@ impl DatatypeComponent {
     pub fn is_padding(&self) -> bool {
         match self {
             Field { .. } => false,
+            UnionField { .. } => false,
             Padding { .. } => true,
         }
     }
 
     pub fn name(&self) -> InternedString {
         match self {
-            Field { name, .. } | Padding { name, .. } => *name,
+            Field { name, .. } | UnionField { name, .. } | Padding { name, .. } => *name,
         }
     }
 
     pub fn sizeof_in_bits(&self, st: &SymbolTable) -> u64 {
         match self {
             Field { typ, .. } => typ.sizeof_in_bits(st),
+            UnionField { padded_typ, .. } => padded_typ.sizeof_in_bits(st),
             Padding { bits, .. } => *bits,
         }
     }
@@ -154,6 +159,7 @@ impl DatatypeComponent {
     pub fn typ(&self) -> Type {
         match self {
             Field { typ, .. } => typ.clone(),
+            UnionField { typ, .. } => typ.clone(),
             Padding { bits, .. } => Type::unsigned_int(*bits),
         }
     }
@@ -201,6 +207,15 @@ impl DatatypeComponent {
             "Illegal field.\n\tName: {name}\n\tType: {typ:?}"
         );
         Field { name, typ }
+    }
+
+    pub fn unionfield<T: Into<InternedString>>(name: T, typ: Type, padded_typ: Type) -> Self {
+        let name = name.into();
+        assert!(
+            Self::typecheck_datatype_field(&typ),
+            "Illegal field.\n\tName: {name}\n\tType: {typ:?}"
+        );
+        UnionField { name, typ, padded_typ }
     }
 
     pub fn padding<T: Into<InternedString>>(name: T, bits: u64) -> Self {
@@ -384,7 +399,7 @@ impl Type {
             StructTag(tag) => st.lookup(*tag).unwrap().typ.sizeof_in_bits(st),
             TypeDef { .. } => unreachable!("Expected concrete type."),
             Union { components, .. } => {
-                components.iter().map(|x| x.typ().sizeof_in_bits(st)).max().unwrap_or(0)
+                components.iter().map(|x| x.sizeof_in_bits(st)).max().unwrap_or(0)
             }
             UnionTag(tag) => st.lookup(*tag).unwrap().typ.sizeof_in_bits(st),
             Unsignedbv { width } => *width,
@@ -809,6 +824,7 @@ impl Type {
                     match &components[0] {
                         Padding { .. } => None,
                         Field { typ, .. } => recurse(typ, st),
+                        UnionField { typ, .. } => recurse(typ, st),
                     }
                 } else {
                     None

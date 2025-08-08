@@ -1,4 +1,3 @@
- ** 1 of 11 failed (1 unreachable)\
 Failed Checks: Undefined Behavior: Invalid value of type `char`
 
 Verification failed for - check_invalid_write

@@ -1,12 +1,13 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! Define arguments that should be common to all subcommands in Kani.
-use crate::args::{ValidateArgs, print_deprecated};
+use crate::args::{ValidateArgs, print_stabilized_feature_warning};
 use clap::{error::Error, error::ErrorKind};
 pub use kani_metadata::{EnabledUnstableFeatures, UnstableFeature};
 
 /// Common Kani arguments that we expect to be included in most subcommands.
 #[derive(Debug, clap::Args)]
+#[clap(next_help_heading = "Common Options")]
 pub struct CommonArgs {
     /// Produce full debug information
     #[arg(long)]
@@ -18,7 +19,7 @@ pub struct CommonArgs {
     #[arg(long, short, default_value_if("debug", "true", Some("true")))]
     pub verbose: bool,
     /// Enable usage of unstable options
-    #[arg(long, hide_short_help = true)]
+    #[arg(long, hide = true)]
     pub enable_unstable: bool,
 
     /// We no longer support dry-run. Use `--verbose` to see the commands being printed during
@@ -39,6 +40,21 @@ impl ValidateArgs for CommonArgs {
                 "The `--dry-run` option is obsolete. Use --verbose instead.",
             ));
         }
+        if self.enable_unstable {
+            return Err(Error::raw(
+                ErrorKind::ValueValidation,
+                "The `--enable-unstable` option is obsolete. Enable the appropriate unstable feature(s) with `-Z {feature}` instead.",
+            ));
+        }
+
+        // Warn if a deprecated unstable feature is enabled.
+        for feature in self.unstable_features.iter() {
+            let stabilization_version = feature.stabilization_version();
+            if let Some(version) = stabilization_version {
+                print_stabilized_feature_warning(self, *feature, &version);
+            }
+        }
+
         Ok(())
     }
 }
@@ -51,17 +67,13 @@ impl CommonArgs {
         required: UnstableFeature,
     ) -> Result<(), Error> {
         if enabled && !self.unstable_features.contains(required) {
-            let z_feature = format!("-Z {required}");
-            if self.enable_unstable {
-                print_deprecated(self, "--enable-unstable", &z_feature);
-            } else {
-                return Err(Error::raw(
-                    ErrorKind::MissingRequiredArgument,
-                    format!(
-                        "The `{argument}` argument is unstable and requires `{z_feature}` to be used.",
-                    ),
-                ));
-            }
+            return Err(Error::raw(
+                ErrorKind::MissingRequiredArgument,
+                format!(
+                    "The `--{argument}` option is unstable and requires `{}` to be used.",
+                    required.as_argument_string()
+                ),
+            ));
         }
         Ok(())
     }

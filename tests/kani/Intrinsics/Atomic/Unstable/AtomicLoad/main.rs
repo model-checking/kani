@@ -5,7 +5,7 @@
 // expected result.
 
 #![feature(core_intrinsics)]
-use std::intrinsics::{atomic_load_acquire, atomic_load_relaxed, atomic_load_seqcst};
+use std::intrinsics::{AtomicOrdering, atomic_load};
 
 #[kani::proof]
 fn main() {
@@ -18,9 +18,9 @@ fn main() {
     let ptr_a3: *const u8 = &a3;
 
     unsafe {
-        let x1 = atomic_load_seqcst(ptr_a1);
-        let x2 = atomic_load_acquire(ptr_a2);
-        let x3 = atomic_load_relaxed(ptr_a3);
+        let x1 = atomic_load::<_, { AtomicOrdering::SeqCst }>(ptr_a1);
+        let x2 = atomic_load::<_, { AtomicOrdering::Acquire }>(ptr_a2);
+        let x3 = atomic_load::<_, { AtomicOrdering::Relaxed }>(ptr_a3);
 
         assert!(x1 == 1);
         assert!(x2 == 1);

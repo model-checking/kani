@@ -1,6 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-flags: -Zfunction-contracts
+// kani-flags: -Zfunction-contracts -Z quantifiers
 
 /// Copy only first 7 elements and left the last one unchanged.
 #[kani::ensures(|ret| { unsafe{

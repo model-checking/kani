@@ -6,7 +6,6 @@ use std::path::PathBuf;
 
 use crate::args::{CommonArgs, ValidateArgs, validate_std_path};
 use clap::{Error, Parser, ValueEnum, error::ErrorKind};
-use kani_metadata::UnstableFeature;
 
 /// List information relevant to verification
 #[derive(Debug, Parser)]
@@ -57,10 +56,11 @@ pub enum Format {
 impl ValidateArgs for CargoListArgs {
     fn validate(&self) -> Result<(), Error> {
         self.common_args.validate()?;
-        if !self.common_args.unstable_features.contains(UnstableFeature::List) {
+
+        if self.format == Format::Pretty && self.common_args.quiet {
             return Err(Error::raw(
-                ErrorKind::MissingRequiredArgument,
-                "The `list` subcommand is unstable and requires -Z list",
+                ErrorKind::ArgumentConflict,
+                "The `--quiet` flag is not compatible with the `pretty` format, since `pretty` prints to the terminal. Either specify a different format or don't pass `--quiet`.",
             ));
         }
 
@@ -78,10 +78,11 @@ impl ValidateArgs for CargoListArgs {
 impl ValidateArgs for StandaloneListArgs {
     fn validate(&self) -> Result<(), Error> {
         self.common_args.validate()?;
-        if !self.common_args.unstable_features.contains(UnstableFeature::List) {
+
+        if self.format == Format::Pretty && self.common_args.quiet {
             return Err(Error::raw(
-                ErrorKind::MissingRequiredArgument,
-                "The `list` subcommand is unstable and requires -Z list",
+                ErrorKind::ArgumentConflict,
+                "The `--quiet` flag is not compatible with the `pretty` format, since `pretty` prints to the terminal. Either specify a different format or don't pass `--quiet`.",
             ));
         }
 

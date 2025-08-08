@@ -6,14 +6,11 @@
 use crate::args::ReachabilityType;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::kani_middle::analysis;
-use crate::kani_middle::attributes::{KaniAttributes, is_test_harness_description};
+use crate::kani_middle::attributes::KaniAttributes;
 use crate::kani_middle::check_reachable_items;
 use crate::kani_middle::codegen_units::{CodegenUnit, CodegenUnits};
-use crate::kani_middle::metadata::gen_test_metadata;
 use crate::kani_middle::provide;
-use crate::kani_middle::reachability::{
-    collect_reachable_items, filter_const_crate_items, filter_crate_items,
-};
+use crate::kani_middle::reachability::{collect_reachable_items, filter_crate_items};
 use crate::kani_middle::transform::{BodyTransformation, GlobalPasses};
 use crate::kani_queries::QueryDb;
 use cbmc::RoundingMode;
@@ -23,7 +20,7 @@ use cbmc::{InternedString, MachineModel};
 use kani_metadata::artifact::convert_type;
 use kani_metadata::{ArtifactType, HarnessMetadata, KaniMetadata, UnsupportedFeature};
 use kani_metadata::{AssignsContract, CompilerArtifactStub};
-use rustc_abi::Endian;
+use rustc_abi::{Align, Endian};
 use rustc_codegen_ssa::back::archive::{
     ArArchiveBuilder, ArchiveBuilder, ArchiveBuilderBuilder, DEFAULT_OBJECT_READER,
 };
@@ -41,7 +38,7 @@ use rustc_session::Session;
 use rustc_session::config::{CrateType, OutputFilenames, OutputType};
 use rustc_session::output::out_filename;
 use rustc_smir::rustc_internal;
-use rustc_span::symbol::Symbol;
+use rustc_span::{Symbol, sym};
 use rustc_target::spec::PanicStrategy;
 use stable_mir::CrateDef;
 use stable_mir::mir::mono::{Instance, MonoItem};
@@ -252,30 +249,41 @@ impl CodegenBackend for GotocCodegenBackend {
         DEFAULT_LOCALE_RESOURCE
     }
 
-    fn target_config(&self, _sess: &Session) -> TargetConfig {
+    fn target_config(&self, sess: &Session) -> TargetConfig {
+        // This code is adapted from the cranelift backend:
+        // https://github.com/rust-lang/rust/blob/a124fb3cb7291d75872934f411d81fe298379ace/compiler/rustc_codegen_cranelift/src/lib.rs#L184
+        let target_features = if sess.target.arch == "x86_64" && sess.target.os != "none" {
+            // x86_64 mandates SSE2 support and rustc requires the x87 feature to be enabled
+            vec![sym::sse, sym::sse2, Symbol::intern("x87")]
+        } else if sess.target.arch == "aarch64" {
+            match &*sess.target.os {
+                "none" => vec![],
+                // On macOS the aes, sha2 and sha3 features are enabled by default and ring
+                // fails to compile on macOS when they are not present.
+                "macos" => vec![sym::neon, sym::aes, sym::sha2, sym::sha3],
+                // AArch64 mandates Neon support
+                _ => vec![sym::neon],
+            }
+        } else {
+            vec![]
+        };
+        // FIXME do `unstable_target_features` properly
+        let unstable_target_features = target_features.clone();
+
+        let has_reliable_f128 = true;
+        let has_reliable_f16 = true;
+
         TargetConfig {
-            target_features: vec![],
-            unstable_target_features: vec![
-                Symbol::intern("sse"),
-                Symbol::intern("neon"),
-                Symbol::intern("x87"),
-                Symbol::intern("sse2"),
-            ],
-            // `true` is used as a default so backends need to acknowledge when they do not
-            // support the float types, rather than accidentally quietly skipping all tests.
-            has_reliable_f16: true,
-            has_reliable_f16_math: true,
-            has_reliable_f128: true,
-            has_reliable_f128_math: true,
+            target_features,
+            unstable_target_features,
+            has_reliable_f16,
+            has_reliable_f16_math: has_reliable_f16,
+            has_reliable_f128,
+            has_reliable_f128_math: has_reliable_f128,
         }
     }
 
-    fn codegen_crate(
-        &self,
-        tcx: TyCtxt,
-        rustc_metadata: EncodedMetadata,
-        _need_metadata_module: bool,
-    ) -> Box<dyn Any> {
+    fn codegen_crate(&self, tcx: TyCtxt) -> Box<dyn Any> {
         let ret_val = rustc_internal::run(tcx, || {
             super::utils::init();
 
@@ -290,9 +298,23 @@ impl CodegenBackend for GotocCodegenBackend {
             if queries.args().reachability_analysis != ReachabilityType::None
                 && queries.kani_functions().is_empty()
             {
-                tcx.sess.dcx().err(
-                    "Failed to detect Kani functions. Please check your installation is correct.",
-                );
+                if stable_mir::find_crates("std").is_empty()
+                    && stable_mir::find_crates("kani").is_empty()
+                {
+                    // Special error for when not importing kani and using #[no_std].
+                    // See here for more info: https://github.com/model-checking/kani/issues/3906#issuecomment-2932687768.
+                    tcx.sess.dcx().struct_err(
+                        "Failed to detect Kani functions."
+                    ).with_help(
+                        "This project seems to be using #[no_std] but does not import Kani. \
+                        Try adding `crate extern kani` to the crate root to explicitly import Kani."
+                    )
+                    .emit();
+                } else {
+                    tcx.sess.dcx().struct_err(
+                        "Failed to detect Kani functions. Please check your installation is correct."
+                    ).emit();
+                }
             }
 
             // Codegen all items that need to be processed according to the selected reachability mode:
@@ -341,53 +363,6 @@ impl CodegenBackend for GotocCodegenBackend {
                     units.store_loop_contracts(&loop_contracts_instances);
                     units.write_metadata(&queries, tcx);
                 }
-                ReachabilityType::Tests => {
-                    // We're iterating over crate items here, so what we have to codegen is the "test description" containing the
-                    // test closure that we want to execute
-                    // TODO: Refactor this code so we can guarantee that the pair (test_fn, test_desc) actually match.
-                    let unit = CodegenUnit::default();
-                    let mut transformer = BodyTransformation::new(&queries, tcx, &unit);
-                    let mut descriptions = vec![];
-                    let harnesses = filter_const_crate_items(tcx, &mut transformer, |_, item| {
-                        if is_test_harness_description(tcx, item.def) {
-                            descriptions.push(item.def);
-                            true
-                        } else {
-                            false
-                        }
-                    });
-                    // Codegen still takes a considerable amount, thus, we only generate one model for
-                    // all harnesses and copy them for each harness.
-                    // We will be able to remove this once we optimize all calls to CBMC utilities.
-                    // https://github.com/model-checking/kani/issues/1971
-                    let model_path = base_filename.with_extension(ArtifactType::SymTabGoto);
-                    let (gcx, items, contract_info) = self.codegen_items(
-                        tcx,
-                        &harnesses,
-                        &model_path,
-                        &results.machine_model,
-                        Default::default(),
-                        transformer,
-                    );
-                    results.extend(gcx, items, None);
-
-                    assert!(contract_info.is_none());
-
-                    for (test_fn, test_desc) in harnesses.iter().zip(descriptions.iter()) {
-                        let instance =
-                            if let MonoItem::Fn(instance) = test_fn { instance } else { continue };
-                        let metadata = gen_test_metadata(tcx, *test_desc, *instance, base_filename);
-                        let test_model_path = &metadata.goto_file.as_ref().unwrap();
-                        std::fs::copy(&model_path, test_model_path).unwrap_or_else(|_| {
-                            panic!(
-                                "Failed to copy {} to {}",
-                                model_path.display(),
-                                test_model_path.display()
-                            )
-                        });
-                        results.harnesses.push(metadata);
-                    }
-                }
                 ReachabilityType::None => {}
                 ReachabilityType::PubFns => {
                     let unit = CodegenUnit::default();
@@ -434,7 +409,7 @@ impl CodegenBackend for GotocCodegenBackend {
                     );
                 }
             }
-            codegen_results(tcx, rustc_metadata, &results.machine_model)
+            codegen_results(tcx, &results.machine_model)
         });
         ret_val.unwrap()
     }
@@ -460,12 +435,18 @@ impl CodegenBackend for GotocCodegenBackend {
     /// For other crate types, we stub the file requested by writing the
     /// path of the `kani-metadata.json` file so `kani-driver` can safely find the latest metadata.
     /// See <https://github.com/model-checking/kani/issues/2234> for more details.
-    fn link(&self, sess: &Session, codegen_results: CodegenResults, outputs: &OutputFilenames) {
+    fn link(
+        &self,
+        sess: &Session,
+        codegen_results: CodegenResults,
+        rustc_metadata: EncodedMetadata,
+        outputs: &OutputFilenames,
+    ) {
         let requested_crate_types = &codegen_results.crate_info.crate_types.clone();
         let local_crate_name = codegen_results.crate_info.local_crate_name;
         // Create the rlib if one was requested.
         if requested_crate_types.contains(&CrateType::Rlib) {
-            link_binary(sess, &ArArchiveBuilderBuilder, codegen_results, outputs);
+            link_binary(sess, &ArArchiveBuilderBuilder, codegen_results, rustc_metadata, outputs);
         }
 
         // But override all the other outputs.
@@ -531,10 +512,11 @@ fn check_options(session: &Session) {
     // a valid CBMC machine model in function `machine_model_from_session` from
     // src/kani-compiler/src/codegen_cprover_gotoc/context/goto_ctx.rs
     match session.target.options.min_global_align {
-        Some(1) => (),
+        Some(Align::ONE) => (),
         Some(align) => {
             let err_msg = format!(
-                "Kani requires the target architecture option `min_global_align` to be 1, but it is {align}."
+                "Kani requires the target architecture option `min_global_align` to be 1, but it is {}.",
+                align.bytes()
             );
             session.dcx().err(err_msg);
         }
@@ -560,18 +542,12 @@ fn check_options(session: &Session) {
 }
 
 /// Return a struct that contains information about the codegen results as expected by `rustc`.
-fn codegen_results(
-    tcx: TyCtxt,
-    rustc_metadata: EncodedMetadata,
-    machine: &MachineModel,
-) -> Box<dyn Any> {
+fn codegen_results(tcx: TyCtxt, machine: &MachineModel) -> Box<dyn Any> {
     let work_products = FxIndexMap::<WorkProductId, WorkProduct>::default();
     Box::new((
         CodegenResults {
             modules: vec![],
             allocator_module: None,
-            metadata_module: None,
-            metadata: rustc_metadata,
             crate_info: CrateInfo::new(tcx, machine.architecture.clone()),
         },
         work_products,
@@ -649,8 +625,8 @@ impl GotoCodegenResults {
             unsupported_features,
             test_harnesses: tests,
             // We don't collect the contracts metadata because the FunctionWithContractPass
-            // removes any contracts logic for ReachabilityType::Test or ReachabilityType::PubFns,
-            // which are the two ReachabilityTypes under which the compiler calls this function.
+            // removes any contracts logic for ReachabilityType::PubFns,
+            // which is the only ReachabilityType under which the compiler calls this function.
             contracted_functions: vec![],
             autoharness_md: None,
         }
@@ -725,7 +701,7 @@ fn new_machine_model(sess: &Session) -> MachineModel {
     // We check these options in function `check_options` from
     // src/kani-compiler/src/codegen_cprover_gotoc/compiler_interface.rs
     // and error if their values are not the ones we expect.
-    let alignment = sess.target.options.min_global_align.unwrap_or(1);
+    let alignment = sess.target.options.min_global_align.map_or(1, |align| align.bytes());
     let is_big_endian = match sess.target.options.endian {
         Endian::Little => false,
         Endian::Big => true,

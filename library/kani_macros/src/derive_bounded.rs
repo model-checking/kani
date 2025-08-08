@@ -53,13 +53,14 @@ pub(crate) fn expand_derive_bounded_arbitrary(
     };
 
     // add `T: Arbitrary` bounds for generics
-    let (generics, clauses) = quote_generics(&parsed.generics);
+    let clauses = quote_generics(&parsed.generics);
+    let (impl_generics, ty_generics, _) = parsed.generics.split_for_impl();
     let name = &parsed.ident;
 
     // generate the implementation
     let kani_path = kani_path();
     quote! {
-        impl #generics #kani_path::BoundedArbitrary for #name #generics
+        impl #impl_generics #kani_path::BoundedArbitrary for #name #ty_generics
             #clauses
         {
             fn bounded_any<const N: usize>() -> Self {
@@ -91,19 +92,40 @@ fn generate_type_constructor(type_name: TokenStream, fields: &syn::Fields) -> To
 /// Generates a `match` case to construct each variant of the given type. Uses a
 /// symbolic `usize` to decide which variant to construct.
 fn enum_constructor(ident: &syn::Ident, data_enum: &syn::DataEnum) -> TokenStream {
-    let variant_constructors = data_enum.variants.iter().map(|variant| {
+    if data_enum.variants.is_empty() {
+        let msg = format!(
+            "Cannot create symbolic enum `{ident}`. Enums with zero-variants cannot be instantiated"
+        );
+        quote! {
+            panic!(#msg)
+        }
+    } else if data_enum.variants.len() == 1 {
+        let variant = data_enum.variants.first().unwrap();
         let variant_name = &variant.ident;
-        generate_type_constructor(quote!(#ident::#variant_name), &variant.fields)
-    });
-    let n_variants = data_enum.variants.len();
-    let cases = variant_constructors.enumerate().map(|(idx, var_constr)| {
-        if idx < n_variants - 1 { quote!(#idx => #var_constr) } else { quote!(_ => #var_constr) }
-    });
+        let variant_constructor =
+            generate_type_constructor(quote!(#ident::#variant_name), &variant.fields);
+        quote! {
+            #variant_constructor
+        }
+    } else {
+        let variant_constructors = data_enum.variants.iter().map(|variant| {
+            let variant_name = &variant.ident;
+            generate_type_constructor(quote!(#ident::#variant_name), &variant.fields)
+        });
+        let n_variants = data_enum.variants.len();
+        let cases = variant_constructors.enumerate().map(|(idx, var_constr)| {
+            if idx < n_variants - 1 {
+                quote!(#idx => #var_constr)
+            } else {
+                quote!(_ => #var_constr)
+            }
+        });
 
-    let kani_path = kani_path();
-    quote! {
-        match #kani_path::any() {
-            #(#cases),* ,
+        let kani_path = kani_path();
+        quote! {
+            match #kani_path::any() {
+                #(#cases),* ,
+            }
         }
     }
 }
@@ -127,12 +149,14 @@ fn union_constructor(ident: &syn::Ident, _data_union: &syn::DataUnion) -> TokenS
 ///     ...
 /// }
 /// ```
-fn quote_generics(generics: &syn::Generics) -> (TokenStream, TokenStream) {
+fn quote_generics(generics: &syn::Generics) -> TokenStream {
     let kani_path = kani_path();
-    let params = generics.type_params().map(|param| quote!(#param)).collect::<Vec<_>>();
-    let where_clauses = generics.type_params().map(|param| quote!(#param : #kani_path::Arbitrary));
-    if !params.is_empty() {
-        (quote!(<#(#params),*>), quote!(where #(#where_clauses),*))
+    let where_clauses = generics.type_params().map(|param| {
+        let ident = &param.ident;
+        quote!(#ident : #kani_path::Arbitrary)
+    });
+    if generics.type_params().count() > 0 {
+        quote!(where #(#where_clauses),*)
     } else {
         Default::default()
     }

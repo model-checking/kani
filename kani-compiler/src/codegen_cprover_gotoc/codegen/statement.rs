@@ -6,6 +6,7 @@ use super::{PropertyClass, bb_label};
 use crate::codegen_cprover_gotoc::codegen::function::rustc_smir::region_from_coverage_opaque;
 use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
+use cbmc::goto_program::ExprValue;
 use cbmc::goto_program::{Expr, Location, Stmt, Type};
 use rustc_abi::Size;
 use rustc_abi::{FieldsShape, Primitive, TagEncoding, Variants};
@@ -17,12 +18,66 @@ use stable_mir::abi::{ArgAbi, FnAbi, PassMode};
 use stable_mir::mir::mono::{Instance, InstanceKind};
 use stable_mir::mir::{
     AssertMessage, BasicBlockIdx, CopyNonOverlapping, NonDivergingIntrinsic, Operand, Place,
-    RETURN_LOCAL, Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind,
+    RETURN_LOCAL, Rvalue, Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind,
 };
 use stable_mir::ty::{Abi, RigidTy, Span, Ty, TyKind, VariantIdx};
 use tracing::{debug, debug_span, trace};
 
 impl GotocCtx<'_> {
+    pub fn ty_to_assign_target(&self, ty: Ty, expr: &Expr) -> Expr {
+        match ty.kind() {
+            TyKind::RigidTy(RigidTy::Ref(_, unref_ty, _))
+            | TyKind::RigidTy(RigidTy::RawPtr(unref_ty, _)) => match unref_ty.kind() {
+                TyKind::RigidTy(RigidTy::Slice(slice_ty)) => {
+                    let size = slice_ty.layout().unwrap().shape().size.bytes();
+                    Expr::symbol_expression(
+                        "__CPROVER_object_upto",
+                        Type::code(
+                            vec![
+                                Type::empty().to_pointer().as_parameter(None, Some("ptr".into())),
+                                Type::size_t().as_parameter(None, Some("size".into())),
+                            ],
+                            Type::empty(),
+                        ),
+                    )
+                    .call(vec![
+                        expr.clone()
+                            .member("data", &self.symbol_table)
+                            .cast_to(Type::empty().to_pointer()),
+                        expr.clone()
+                            .member("len", &self.symbol_table)
+                            .mul(Expr::size_constant(size.try_into().unwrap(), &self.symbol_table)),
+                    ])
+                }
+                _ => expr.clone().dereference(),
+            },
+            _ => expr.clone().dereference(),
+        }
+    }
+
+    pub fn rvalue_to_assign_targets(&mut self, rvalue: &Rvalue, location: Location) -> Vec<Expr> {
+        let assigns = self.codegen_rvalue_stable(rvalue, location);
+        let assigns_value = assigns.value().clone();
+        let assign_exprs = if let ExprValue::Struct { values } = assigns_value {
+            values.clone()
+        } else {
+            vec![assigns.clone()]
+        };
+        match rvalue {
+            Rvalue::Aggregate(_agg_kind, operands) => {
+                let mut ptr_exprs = Vec::new();
+                for (operand, expr) in operands.iter().zip(assign_exprs.iter()) {
+                    let operand_ty = self.operand_ty_stable(operand);
+                    debug!("Ty {:?}", operand_ty);
+                    let ptr_expr = self.ty_to_assign_target(operand_ty, expr);
+                    ptr_exprs.push(ptr_expr)
+                }
+                ptr_exprs
+            }
+            _ => vec![assigns.dereference()],
+        }
+    }
+
     /// Generate Goto-C for MIR [Statement]s.
     /// This does not cover all possible "statements" because MIR distinguishes between ordinary
     /// statements and [Terminator]s, which can exclusively appear at the end of a basic block.
@@ -36,6 +91,12 @@ impl GotocCtx<'_> {
             StatementKind::Assign(lhs, rhs) => {
                 let lty = self.place_ty_stable(lhs);
                 let rty = self.rvalue_ty_stable(rhs);
+                let localname = self.codegen_var_name(&lhs.local);
+                if localname.contains("kani_loop_modifies") {
+                    let assigns = self.rvalue_to_assign_targets(rhs, location);
+                    self.current_loop_modifies = assigns.clone();
+                    return Stmt::skip(location);
+                }
                 // we ignore assignment for all zero size types
                 if self.is_zst_stable(lty) {
                     Stmt::skip(location)
@@ -497,32 +558,39 @@ impl GotocCtx<'_> {
         let switch_ty = v.typ().clone();
 
         // Switches with empty branches should've been eliminated already.
-        assert!(targets.len() > 1);
-        if targets.len() == 2 {
-            // Translate to a guarded goto
-            let (case, first_target) = targets.branches().next().unwrap();
-            Stmt::block(
-                vec![
-                    v.eq(Expr::int_constant(case, switch_ty)).if_then_else(
-                        Stmt::goto(bb_label(first_target), loc),
-                        None,
-                        loc,
-                    ),
-                    Stmt::goto(bb_label(targets.otherwise()), loc),
-                ],
-                loc,
-            )
-        } else {
-            let cases = targets
-                .branches()
-                .map(|(c, bb)| {
-                    Expr::int_constant(c, switch_ty.clone())
-                        .with_location(loc)
-                        .switch_case(Stmt::goto(bb_label(bb), loc))
-                })
-                .collect();
-            let default = Stmt::goto(bb_label(targets.otherwise()), loc);
-            v.switch(cases, Some(default), loc)
+        match targets.len() {
+            0 => unreachable!("switches have at least one target"),
+            1 => {
+                // Trivial switch.
+                Stmt::goto(bb_label(targets.otherwise()), loc)
+            }
+            2 => {
+                // Translate to a guarded goto
+                let (case, first_target) = targets.branches().next().unwrap();
+                Stmt::block(
+                    vec![
+                        v.eq(Expr::int_constant(case, switch_ty)).if_then_else(
+                            Stmt::goto(bb_label(first_target), loc),
+                            None,
+                            loc,
+                        ),
+                        Stmt::goto(bb_label(targets.otherwise()), loc),
+                    ],
+                    loc,
+                )
+            }
+            3.. => {
+                let cases = targets
+                    .branches()
+                    .map(|(c, bb)| {
+                        Expr::int_constant(c, switch_ty.clone())
+                            .with_location(loc)
+                            .switch_case(Stmt::goto(bb_label(bb), loc))
+                    })
+                    .collect();
+                let default = Stmt::goto(bb_label(targets.otherwise()), loc);
+                v.switch(cases, Some(default), loc)
+            }
         }
     }
 

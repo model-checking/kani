@@ -16,17 +16,20 @@ use crate::kani_middle::metadata::{
 use crate::kani_middle::reachability::filter_crate_items;
 use crate::kani_middle::resolve::expect_resolve_fn;
 use crate::kani_middle::stubbing::{check_compatibility, harness_stub_map};
+use crate::kani_middle::{can_derive_arbitrary, implements_arbitrary};
 use crate::kani_queries::QueryDb;
+use fxhash::FxHashMap;
 use kani_metadata::{
     ArtifactType, AssignsContract, AutoHarnessMetadata, AutoHarnessSkipReason, HarnessKind,
     HarnessMetadata, KaniMetadata,
 };
+use regex::RegexSet;
 use rustc_hir::def_id::DefId;
 use rustc_middle::ty::TyCtxt;
 use rustc_session::config::OutputType;
 use rustc_smir::rustc_internal;
-use stable_mir::mir::{TerminatorKind, mono::Instance};
-use stable_mir::ty::{FnDef, GenericArgKind, GenericArgs, IndexedVal, RigidTy, TyKind};
+use stable_mir::mir::mono::Instance;
+use stable_mir::ty::{FnDef, GenericArgKind, GenericArgs, IndexedVal, RigidTy, Ty, TyKind};
 use stable_mir::{CrateDef, CrateItem};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs::File;
@@ -356,6 +359,29 @@ fn get_all_automatic_harnesses(
         .collect::<HashMap<_, _>>()
 }
 
+fn make_regex_set(patterns: Vec<String>) -> Option<RegexSet> {
+    if patterns.is_empty() {
+        None
+    } else {
+        Some(RegexSet::new(patterns).unwrap_or_else(|e| {
+            panic!("Invalid regexes should have been caught during argument validation: {e}")
+        }))
+    }
+}
+
+/// A function is filtered out if 1) none of the include patterns match it or 2) one of the exclude patterns matches it.
+fn autoharness_filtered_out(
+    name: &str,
+    included_set: &Option<RegexSet>,
+    excluded_set: &Option<RegexSet>,
+) -> bool {
+    // A function is included if `--include-pattern` is not provided or if at least one of its regexes matches `name`
+    let included = included_set.as_ref().is_none_or(|set| set.is_match(name));
+    // A function is excluded if `--exclude-pattern` is provided and at least one of its regexes matches `name`
+    let excluded = excluded_set.as_ref().is_some_and(|set| set.is_match(name));
+    !included || excluded
+}
+
 /// Partition every function in the crate into (chosen, skipped), where `chosen` is a vector of the Instances for which we'll generate automatic harnesses,
 /// and `skipped` is a map of function names to the reason why we skipped them.
 fn automatic_harness_partition(
@@ -364,13 +390,19 @@ fn automatic_harness_partition(
     crate_name: &str,
     kani_any_def: FnDef,
 ) -> (Vec<Instance>, BTreeMap<String, AutoHarnessSkipReason>) {
-    // If `filter_list` contains `name`, either as an exact match or a substring.
-    let filter_contains = |name: &str, filter_list: &[String]| -> bool {
-        filter_list.iter().any(|filter_name| name.contains(filter_name))
-    };
+    let crate_fns =
+        stable_mir::all_local_items().into_iter().filter(|item| item.ty().kind().is_fn());
+
+    let included_set = make_regex_set(args.autoharness_included_patterns.clone());
+    let excluded_set = make_regex_set(args.autoharness_excluded_patterns.clone());
+
+    // Cache whether a type implements or can derive Arbitrary
+    let mut ty_arbitrary_cache: FxHashMap<Ty, bool> = FxHashMap::default();
 
     // If `func` is not eligible for an automatic harness, return the reason why; if it is eligible, return None.
-    let skip_reason = |fn_item: CrateItem| -> Option<AutoHarnessSkipReason> {
+    // Note that we only return one reason for ineligiblity, when there could be multiple;
+    // we can revisit this implementation choice in the future if users request more verbose output.
+    let mut skip_reason = |fn_item: CrateItem| -> Option<AutoHarnessSkipReason> {
         if KaniAttributes::for_def_id(tcx, fn_item.def_id()).is_kani_instrumentation() {
             return Some(AutoHarnessSkipReason::KaniImpl);
         }
@@ -397,59 +429,20 @@ fn automatic_harness_partition(
             return Some(AutoHarnessSkipReason::KaniImpl);
         }
 
-        match (
-            args.autoharness_included_patterns.is_empty(),
-            args.autoharness_excluded_patterns.is_empty(),
-        ) {
-            // If no filters were specified, then continue.
-            (true, true) => {}
-            // If only --exclude-pattern was provided, filter out the function if excluded_patterns contains its name.
-            (true, false) => {
-                if filter_contains(&name, &args.autoharness_excluded_patterns) {
-                    return Some(AutoHarnessSkipReason::UserFilter);
-                }
-            }
-            // If only --include-pattern was provided, filter out the function if included_patterns does not contain its name.
-            (false, true) => {
-                if !filter_contains(&name, &args.autoharness_included_patterns) {
-                    return Some(AutoHarnessSkipReason::UserFilter);
-                }
-            }
-            // If both are specified, filter out the function if included_patterns does not contain its name.
-            // Then, filter out any functions that excluded_patterns does match.
-            // This order is important, since it preserves the semantics described in kani_driver::autoharness_args where exclude takes precedence over include.
-            (false, false) => {
-                if !filter_contains(&name, &args.autoharness_included_patterns)
-                    || filter_contains(&name, &args.autoharness_excluded_patterns)
-                {
-                    return Some(AutoHarnessSkipReason::UserFilter);
-                }
-            }
+        if autoharness_filtered_out(&name, &included_set, &excluded_set) {
+            return Some(AutoHarnessSkipReason::UserFilter);
         }
 
         // Each argument of `instance` must implement Arbitrary.
         // Note that we've already filtered out generic functions, so we know that each of these arguments has a concrete type.
         let mut problematic_args = vec![];
         for (idx, arg) in body.arg_locals().iter().enumerate() {
-            let kani_any_body =
-                Instance::resolve(kani_any_def, &GenericArgs(vec![GenericArgKind::Type(arg.ty)]))
-                    .unwrap()
-                    .body()
-                    .unwrap();
+            let implements_arbitrary = ty_arbitrary_cache.entry(arg.ty).or_insert_with(|| {
+                implements_arbitrary(arg.ty, kani_any_def)
+                    || can_derive_arbitrary(arg.ty, kani_any_def)
+            });
 
-            let implements_arbitrary = if let TerminatorKind::Call { func, .. } =
-                &kani_any_body.blocks[0].terminator.kind
-            {
-                if let Some((def, args)) = func.ty(body.arg_locals()).unwrap().kind().fn_def() {
-                    Instance::resolve(def, args).is_ok()
-                } else {
-                    false
-                }
-            } else {
-                false
-            };
-
-            if !implements_arbitrary {
+            if !(*implements_arbitrary) {
                 // Find the name of the argument by referencing var_debug_info.
                 // Note that enumerate() starts at 0, while StableMIR argument_index starts at 1, hence the idx+1.
                 let arg_name = body
@@ -472,14 +465,6 @@ fn automatic_harness_partition(
     let mut chosen = vec![];
     let mut skipped = BTreeMap::new();
 
-    // FIXME: ideally, this filter would be matches!(item.kind(), ItemKind::Fn), since that would allow us to generate harnesses for top-level closures,
-    // c.f. https://github.com/model-checking/kani/issues/3832#issuecomment-2701671798.
-    // Note that filtering closures out here is a UX choice: we could instead call skip_reason() on closures,
-    // but the limitations in the linked issue would cause the user to be flooded with reports of "skipping" Kani instrumentation functions.
-    // Instead, we just pretend closures don't exist in our reporting of what we did and did not verify, which has the downside of also ignoring the user's top-level closures, but those are rare.
-    let crate_fns =
-        stable_mir::all_local_items().into_iter().filter(|item| item.ty().kind().is_fn());
-
     for func in crate_fns {
         if let Some(reason) = skip_reason(func) {
             skipped.insert(func.name(), reason);
@@ -489,4 +474,180 @@ fn automatic_harness_partition(
     }
 
     (chosen, skipped)
+}
+
+#[cfg(test)]
+mod autoharness_filter_tests {
+    use super::*;
+
+    #[test]
+    fn both_none() {
+        let included = None;
+        let excluded = None;
+        assert!(!autoharness_filtered_out("test_fn", &included, &excluded));
+    }
+
+    #[test]
+    fn only_included() {
+        let included = make_regex_set(vec!["test.*".to_string()]);
+        let excluded = None;
+
+        assert!(!autoharness_filtered_out("test_fn", &included, &excluded));
+        assert!(autoharness_filtered_out("other_fn", &included, &excluded));
+    }
+
+    #[test]
+    fn only_excluded() {
+        let included = None;
+        let excluded = make_regex_set(vec!["test.*".to_string()]);
+
+        assert!(autoharness_filtered_out("test_fn", &included, &excluded));
+        assert!(!autoharness_filtered_out("other_fn", &included, &excluded));
+    }
+
+    #[test]
+    fn both_matching() {
+        let included = make_regex_set(vec![".*_fn".to_string()]);
+        let excluded = make_regex_set(vec!["test.*".to_string()]);
+
+        assert!(autoharness_filtered_out("test_fn", &included, &excluded));
+        assert!(!autoharness_filtered_out("other_fn", &included, &excluded));
+    }
+
+    #[test]
+    fn multiple_include_patterns() {
+        let included = make_regex_set(vec!["test.*".to_string(), "other.*".to_string()]);
+        let excluded = None;
+
+        assert!(!autoharness_filtered_out("test_fn", &included, &excluded));
+        assert!(!autoharness_filtered_out("other_fn", &included, &excluded));
+        assert!(autoharness_filtered_out("different_fn", &included, &excluded));
+    }
+
+    #[test]
+    fn multiple_exclude_patterns() {
+        let included = None;
+        let excluded = make_regex_set(vec!["test.*".to_string(), "other.*".to_string()]);
+
+        assert!(autoharness_filtered_out("test_fn", &included, &excluded));
+        assert!(autoharness_filtered_out("other_fn", &included, &excluded));
+        assert!(!autoharness_filtered_out("different_fn", &included, &excluded));
+    }
+
+    #[test]
+    fn exclude_precedence_identical_patterns() {
+        let pattern = "test.*".to_string();
+        let included = make_regex_set(vec![pattern.clone()]);
+        let excluded = make_regex_set(vec![pattern]);
+
+        assert!(autoharness_filtered_out("test_fn", &included, &excluded));
+        assert!(autoharness_filtered_out("other_fn", &included, &excluded));
+    }
+
+    #[test]
+    fn exclude_precedence_overlapping_patterns() {
+        let included = make_regex_set(vec![".*_fn".to_string()]);
+        let excluded = make_regex_set(vec!["test_.*".to_string(), "other_.*".to_string()]);
+
+        assert!(autoharness_filtered_out("test_fn", &included, &excluded));
+        assert!(autoharness_filtered_out("other_fn", &included, &excluded));
+        assert!(!autoharness_filtered_out("different_fn", &included, &excluded));
+    }
+
+    #[test]
+    fn exact_match() {
+        let included = make_regex_set(vec!["^test_fn$".to_string()]);
+        let excluded = None;
+
+        assert!(!autoharness_filtered_out("test_fn", &included, &excluded));
+        assert!(autoharness_filtered_out("test_fn_extra", &included, &excluded));
+    }
+
+    #[test]
+    fn include_specific_module() {
+        let included = make_regex_set(vec!["module1::.*".to_string()]);
+        let excluded = None;
+
+        assert!(!autoharness_filtered_out("module1::test_fn", &included, &excluded));
+        assert!(!autoharness_filtered_out("crate::module1::test_fn", &included, &excluded));
+        assert!(autoharness_filtered_out("module2::test_fn", &included, &excluded));
+        assert!(autoharness_filtered_out("crate::module2::test_fn", &included, &excluded));
+    }
+
+    #[test]
+    fn exclude_specific_module() {
+        let included = None;
+        let excluded = make_regex_set(vec![".*::internal::.*".to_string()]);
+
+        assert!(autoharness_filtered_out("crate::internal::helper_fn", &included, &excluded));
+        assert!(autoharness_filtered_out("my_crate::internal::test_fn", &included, &excluded));
+        assert!(!autoharness_filtered_out("crate::public::test_fn", &included, &excluded));
+    }
+
+    #[test]
+    fn test_exact_match_with_crate() {
+        let included = make_regex_set(vec!["^lib::foo_function$".to_string()]);
+        let excluded = None;
+
+        assert!(!autoharness_filtered_out("lib::foo_function", &included, &excluded));
+        assert!(autoharness_filtered_out("lib::foo_function_extra", &included, &excluded));
+        assert!(autoharness_filtered_out("lib::other::foo_function", &included, &excluded));
+        assert!(autoharness_filtered_out("other::foo_function", &included, &excluded));
+        assert!(autoharness_filtered_out("foo_function", &included, &excluded));
+    }
+
+    #[test]
+    fn complex_path_patterns() {
+        let included = make_regex_set(vec![
+            "crate::module1::.*".to_string(),
+            "other_crate::tests::.*".to_string(),
+        ]);
+        let excluded =
+            make_regex_set(vec![".*::internal::.*".to_string(), ".*::private::.*".to_string()]);
+
+        assert!(!autoharness_filtered_out("crate::module1::test_fn", &included, &excluded));
+        assert!(!autoharness_filtered_out("other_crate::tests::test_fn", &included, &excluded));
+        assert!(autoharness_filtered_out(
+            "crate::module1::internal::test_fn",
+            &included,
+            &excluded
+        ));
+        assert!(autoharness_filtered_out(
+            "other_crate::tests::private::test_fn",
+            &included,
+            &excluded
+        ));
+        assert!(autoharness_filtered_out("crate::module2::test_fn", &included, &excluded));
+    }
+
+    #[test]
+    fn crate_specific_filtering() {
+        let included = make_regex_set(vec!["my_crate::.*".to_string()]);
+        let excluded = make_regex_set(vec!["other_crate::.*".to_string()]);
+
+        assert!(!autoharness_filtered_out("my_crate::test_fn", &included, &excluded));
+        assert!(!autoharness_filtered_out("my_crate::module::test_fn", &included, &excluded));
+        assert!(autoharness_filtered_out("other_crate::test_fn", &included, &excluded));
+        assert!(autoharness_filtered_out("third_crate::test_fn", &included, &excluded));
+    }
+
+    #[test]
+    fn root_crate_paths() {
+        let included = make_regex_set(vec!["^crate::.*".to_string()]);
+        let excluded = None;
+
+        assert!(!autoharness_filtered_out("crate::test_fn", &included, &excluded));
+        assert!(autoharness_filtered_out("other_crate::test_fn", &included, &excluded));
+        assert!(autoharness_filtered_out("test_fn", &included, &excluded));
+    }
+
+    #[test]
+    fn impl_paths_with_spaces() {
+        let included = make_regex_set(vec!["num::<impl.i8>::wrapping_.*".to_string()]);
+        let excluded = None;
+
+        assert!(!autoharness_filtered_out("num::<impl i8>::wrapping_sh", &included, &excluded));
+        assert!(!autoharness_filtered_out("num::<impl i8>::wrapping_add", &included, &excluded));
+        assert!(autoharness_filtered_out("num::<impl i16>::wrapping_sh", &included, &excluded));
+    }
 }

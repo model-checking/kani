@@ -19,6 +19,7 @@ use rustc_middle::ty::TraitRef;
 use rustc_middle::ty::adjustment::CustomCoerceUnsized;
 use rustc_middle::ty::{PseudoCanonicalInput, Ty, TyCtxt, TypingEnv};
 use rustc_smir::rustc_internal;
+use rustc_span::DUMMY_SP;
 use stable_mir::Symbol;
 use stable_mir::ty::{RigidTy, Ty as TyStable, TyKind};
 use tracing::trace;
@@ -245,7 +246,7 @@ fn custom_coerce_unsize_info<'tcx>(
     source_ty: Ty<'tcx>,
     target_ty: Ty<'tcx>,
 ) -> CustomCoerceUnsized {
-    let def_id = tcx.require_lang_item(LangItem::CoerceUnsized, None);
+    let def_id = tcx.require_lang_item(LangItem::CoerceUnsized, DUMMY_SP);
 
     let trait_ref = TraitRef::new(tcx, def_id, tcx.mk_args_trait(source_ty, [target_ty.into()]));
 

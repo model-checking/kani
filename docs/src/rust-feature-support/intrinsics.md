@@ -174,8 +174,8 @@ logf32 | Partial | Results are overapproximated |
 logf64 | Partial | Results are overapproximated |
 maxnumf32 | Yes | |
 maxnumf64 | Yes | |
-min_align_of | Yes | |
-min_align_of_val | Yes | |
+align_of | Yes | |
+align_of_val | Yes | |
 minnumf32 | Yes | |
 minnumf64 | Yes | |
 move_val_init | No | |
@@ -187,7 +187,6 @@ powf32 | Partial | Results are overapproximated |
 powf64 | Partial | Results are overapproximated |
 powif32 | Partial | Results are overapproximated |
 powif64 | Partial | Results are overapproximated |
-pref_align_of | Yes | |
 prefetch_read_data | No | |
 prefetch_read_instruction | No | |
 prefetch_write_data | No | |

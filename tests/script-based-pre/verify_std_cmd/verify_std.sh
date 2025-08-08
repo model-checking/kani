@@ -42,7 +42,7 @@ mod verify {
 
 echo "[TEST] Modify library"
 echo "${CORE_CODE}" >> ${TMP_DIR}/library/core/src/lib.rs
-echo "${STD_CODE}" >> ${TMP_DIR}/library/std/src/num.rs
+echo "${STD_CODE}" >> ${TMP_DIR}/library/std/src/num/mod.rs
 
 # Note: Prepending with sed doesn't work on MacOs the same way it does in linux.
 # sed -i '1s/^/#![cfg_attr(kani, feature(kani))]\n/' ${TMP_DIR}/library/std/src/lib.rs

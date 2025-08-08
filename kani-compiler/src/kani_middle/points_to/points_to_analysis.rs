@@ -218,7 +218,7 @@ impl<'tcx> Analysis<'tcx> for PointsToAnalysis<'_, 'tcx> {
                         }
                         // All `atomic_cxchg` intrinsics take `dst, old, src` as arguments.
                         // This is equivalent to `destination = *dst; *dst = src`.
-                        Intrinsic::AtomicCxchg(_) | Intrinsic::AtomicCxchgWeak(_) => {
+                        Intrinsic::AtomicCxchg | Intrinsic::AtomicCxchgWeak => {
                             let src_set = self.successors_for_operand(state, args[2].node.clone());
                             let dst_set = self.successors_for_deref(state, args[0].node.clone());
                             let destination_set = state.resolve_place(*destination, self.instance);
@@ -227,31 +227,31 @@ impl<'tcx> Analysis<'tcx> for PointsToAnalysis<'_, 'tcx> {
                         }
                         // All `atomic_load` intrinsics take `src` as an argument.
                         // This is equivalent to `destination = *src`.
-                        Intrinsic::AtomicLoad(_) => {
+                        Intrinsic::AtomicLoad => {
                             let src_set = self.successors_for_deref(state, args[0].node.clone());
                             let destination_set = state.resolve_place(*destination, self.instance);
                             state.extend(&destination_set, &state.successors(&src_set));
                         }
                         // All `atomic_store` intrinsics take `dst, val` as arguments.
                         // This is equivalent to `*dst = val`.
-                        Intrinsic::AtomicStore(_) => {
+                        Intrinsic::AtomicStore => {
                             let dst_set = self.successors_for_deref(state, args[0].node.clone());
                             let val_set = self.successors_for_operand(state, args[1].node.clone());
                             state.extend(&dst_set, &val_set);
                         }
                         // All other `atomic` intrinsics take `dst, src` as arguments.
                         // This is equivalent to `destination = *dst; *dst = src`.
-                        Intrinsic::AtomicAnd(_)
-                        | Intrinsic::AtomicMax(_)
-                        | Intrinsic::AtomicMin(_)
-                        | Intrinsic::AtomicNand(_)
-                        | Intrinsic::AtomicOr(_)
-                        | Intrinsic::AtomicUmax(_)
-                        | Intrinsic::AtomicUmin(_)
-                        | Intrinsic::AtomicXadd(_)
-                        | Intrinsic::AtomicXchg(_)
-                        | Intrinsic::AtomicXor(_)
-                        | Intrinsic::AtomicXsub(_) => {
+                        Intrinsic::AtomicAnd
+                        | Intrinsic::AtomicMax
+                        | Intrinsic::AtomicMin
+                        | Intrinsic::AtomicNand
+                        | Intrinsic::AtomicOr
+                        | Intrinsic::AtomicUmax
+                        | Intrinsic::AtomicUmin
+                        | Intrinsic::AtomicXadd
+                        | Intrinsic::AtomicXchg
+                        | Intrinsic::AtomicXor
+                        | Intrinsic::AtomicXsub => {
                             let src_set = self.successors_for_operand(state, args[1].node.clone());
                             let dst_set = self.successors_for_deref(state, args[0].node.clone());
                             let destination_set = state.resolve_place(*destination, self.instance);
@@ -669,7 +669,6 @@ fn is_identity_aliasing_intrinsic(intrinsic: Intrinsic) -> bool {
         | Intrinsic::PowF64
         | Intrinsic::PowIF32
         | Intrinsic::PowIF64
-        | Intrinsic::PrefAlignOf
         | Intrinsic::PtrGuaranteedCmp
         | Intrinsic::PtrOffsetFrom
         | Intrinsic::PtrOffsetFromUnsigned
@@ -728,7 +727,7 @@ fn is_identity_aliasing_intrinsic(intrinsic: Intrinsic) -> bool {
             /* SIMD operations */
             true
         }
-        Intrinsic::AtomicFence(_) | Intrinsic::AtomicSingleThreadFence(_) => {
+        Intrinsic::AtomicFence | Intrinsic::AtomicSingleThreadFence => {
             /* Atomic fences */
             true
         }
