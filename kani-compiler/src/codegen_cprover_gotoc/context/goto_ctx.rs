@@ -352,10 +352,10 @@ impl GotocCtx<'_> {
         let mut to_modify: BTreeMap<InternedString, SymbolValues> = BTreeMap::new();
         let mut suffix_count: u16 = 0;
         for (key, symbol) in self.symbol_table.iter() {
-            if let SymbolValues::Stmt(stmt) = &symbol.value {
-                let new_stmt_val =
-                    SymbolValues::Stmt(self.handle_quantifiers_in_stmt(stmt, &mut suffix_count));
-                to_modify.insert(*key, new_stmt_val);
+            if let SymbolValues::Stmt(stmt) = &symbol.value
+                && let Some(new_stmt) = self.handle_quantifiers_in_stmt(stmt, &mut suffix_count)
+            {
+                to_modify.insert(*key, SymbolValues::Stmt(new_stmt));
             }
         }
 
@@ -366,7 +366,8 @@ impl GotocCtx<'_> {
     }
 
     /// Find all quantifier expressions in `stmt` and recursively inline functions.
-    fn handle_quantifiers_in_stmt(&self, stmt: &Stmt, suffix_count: &mut u16) -> Stmt {
+    /// Returns a new [Stmt] if something has been changed (e.g. by inlining), or [None] if it should remain the same.
+    fn handle_quantifiers_in_stmt(&self, stmt: &Stmt, suffix_count: &mut u16) -> Option<Stmt> {
         match &stmt.body() {
             // According to the hook handling for quantifiers, quantifier expressions must be of form
             // lhs = typecast(qex, c_bool)
@@ -432,24 +433,44 @@ impl GotocCtx<'_> {
                             );
                             res.cast_to(Type::CInteger(CIntType::Bool))
                         }
-                        _ => rhs.clone(),
+                        _ => return None,
                     },
-                    _ => rhs.clone(),
+                    _ => return None,
                 };
-                Stmt::assign(lhs.clone(), new_rhs, *stmt.location())
+                Some(Stmt::assign(lhs.clone(), new_rhs, *stmt.location()))
             }
             // Recursively find quantifier expressions.
-            StmtBody::Block(stmts) => Stmt::block(
-                stmts
-                    .iter()
-                    .map(|stmt| self.handle_quantifiers_in_stmt(stmt, suffix_count))
-                    .collect(),
-                *stmt.location(),
-            ),
-            StmtBody::Label { label, body } => {
-                self.handle_quantifiers_in_stmt(body, suffix_count).with_label(*label)
+            StmtBody::Block(old_stmts) => {
+                let mut replaced_sub_stmts: FxHashMap<usize, Stmt> = FxHashMap::default();
+
+                // For each block, add it and its index to the map if it should be replaced.
+                for (i, stmt) in old_stmts.iter().enumerate() {
+                    if let Some(new_stmt) = self.handle_quantifiers_in_stmt(stmt, suffix_count) {
+                        replaced_sub_stmts.insert(i, new_stmt);
+                    }
+                }
+
+                if replaced_sub_stmts.is_empty() {
+                    // We can skip doing anything if none of the blocks have to be replaced.
+                    None
+                } else {
+                    // Take the replacement block if replaced, otherwise just clone the old value.
+                    Some(Stmt::block(
+                        old_stmts
+                            .iter()
+                            .enumerate()
+                            .map(|(i, old_stmt)| {
+                                replaced_sub_stmts.remove(&i).unwrap_or_else(|| old_stmt.clone())
+                            })
+                            .collect(),
+                        *stmt.location(),
+                    ))
+                }
             }
-            _ => stmt.clone(),
+            StmtBody::Label { label, body } => {
+                Some(self.handle_quantifiers_in_stmt(body, suffix_count)?.with_label(*label))
+            }
+            _ => None,
         }
     }
 

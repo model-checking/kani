@@ -3,7 +3,7 @@
 
 [package]
 name = "build-kani"
-version = "0.64.0"
+version = "0.65.0"
 edition = "2024"
 description = "Builds Kani, Sysroot and release bundle."
 license = "MIT OR Apache-2.0"
@@ -11,6 +11,6 @@ publish = false
 
 [dependencies]
 anyhow = "1"
-cargo_metadata = "0.20"
+cargo_metadata = "0.21"
 clap = { version = "4.4.11", features=["derive"] }
 which = "8"

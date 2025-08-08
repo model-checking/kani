@@ -6,12 +6,12 @@
 
 use proc_macro::TokenStream;
 use proc_macro_error2::abort_call_site;
-use quote::{format_ident, quote};
+use quote::{format_ident, quote, quote_spanned};
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::token::AndAnd;
 use syn::{
-    BinOp, Block, Expr, ExprBinary, ExprForLoop, Ident, Stmt, Token, parse_macro_input,
+    BinOp, Block, Expr, ExprBinary, ExprForLoop, ExprWhile, Ident, Stmt, Token, parse_macro_input,
     parse_quote, visit_mut::VisitMut,
 };
 
@@ -232,6 +232,28 @@ fn transform_break_continue(block: &mut Block) {
     block.stmts.push(return_stmt);
 }
 
+fn while_let_rewrite(loopexpr: Stmt) -> Stmt {
+    if let Stmt::Expr(ref expr, _) = loopexpr
+        && let Expr::While(ExprWhile { cond, body, .. }) = expr
+        && let Expr::Let(ref let_expr) = **cond
+    {
+        let pat = &let_expr.pat;
+        let scrutinee = &let_expr.expr;
+
+        // Transform to loop with match
+        return parse_quote! {
+            loop {
+                match #scrutinee {
+                    #pat => #body,
+                    _ => break,
+                }
+            };
+        };
+    }
+
+    loopexpr.clone()
+}
+
 /*
 `for` loop implementation:
 A for loop of the form
@@ -393,7 +415,7 @@ impl VisitMut for KaniIndexReplacer {
         if let Expr::Macro(expr_macro) = expr {
             let tokens_str = expr_macro.mac.tokens.to_string();
             let replaced = tokens_str.replace("kani::index", &self.kani_index.to_string());
-            
+
             if let Ok(new_tokens) = replaced.parse() {
                 expr_macro.mac.tokens = new_tokens;
             }
@@ -429,7 +451,7 @@ impl VisitMut for KaniIterLenReplacer {
         if let Expr::Macro(expr_macro) = expr {
             let tokens_str = expr_macro.mac.tokens.to_string();
             let replaced = tokens_str.replace("kani::iter_len", &self.kani_iter_len.to_string());
-            
+
             if let Ok(new_tokens) = replaced.parse() {
                 expr_macro.mac.tokens = new_tokens;
             }
@@ -442,6 +464,7 @@ impl VisitMut for KaniIterLenReplacer {
 pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
     // parse the stmt of the loop
     let mut loop_stmt: Stmt = syn::parse(item.clone()).unwrap();
+    loop_stmt = while_let_rewrite(loop_stmt);
     let loop_id = generate_unique_id_from_span(&loop_stmt);
     //We use Option to mark if the loop is a for loop.
     //i.e. if for_loop_extras.is_some() then it is a for loop
@@ -456,6 +479,7 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     // expr of the loop invariant
     let mut inv_expr: Expr = syn::parse(attr).unwrap();
+    let original_span = inv_expr.span();
     if for_loop_extras.is_some() {
         let kani_index = for_loop_extras.as_ref().unwrap().kani_index.clone();
         let kani_iter_len = for_loop_extras.as_ref().unwrap().kani_iter_len.clone();
@@ -523,7 +547,7 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
         &mut Stmt::Expr(ref mut e, _) => match *e {
             Expr::While(ref mut ew) => {
                 let new_cond: Expr = syn::parse(
-                    quote!(
+                    quote_spanned!(original_span =>
                         #register_ident(&||->bool{#inv_expr}, 0))
                     .into(),
                 )
@@ -536,7 +560,10 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
                 });
             }
             Expr::Loop(ref mut el) => {
-                let invstmt: Stmt = syn::parse(quote!(if !(#register_ident(&||->bool{#inv_expr}, 0)) {assert!(false); unreachable!()};).into()).unwrap();
+                //let retexpr = get_return_statement(&el.body);
+                let invstmt: Stmt = syn::parse(quote_spanned!(original_span =>
+                    if !(#register_ident(&||->bool{#inv_expr}, 0)) {assert!(false); unreachable!()};)
+                    .into()).unwrap();
                 let mut new_stmts: Vec<Stmt> = Vec::new();
                 new_stmts.push(invstmt);
                 new_stmts.extend(el.body.stmts.clone());
@@ -563,7 +590,7 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
     }) = for_loop_extras
     {
         if has_prev {
-            quote!(
+            quote_spanned!(original_span =>
             {
             #init_iter_stmt
             #init_len_stmt
@@ -598,7 +625,7 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
             })
             .into()
         } else {
-            quote!(
+            quote_spanned!(original_span =>
             {
             #init_iter_stmt
             #init_len_stmt
@@ -622,7 +649,7 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
             .into()
         }
     } else if has_prev {
-        quote!(
+        quote_spanned!(original_span =>
         {
         if (#loop_guard) {
         #(#onentry_decl_stms)*
@@ -651,7 +678,7 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
         })
         .into()
     } else {
-        quote!(
+        quote_spanned!(original_span =>
         {
         #(#onentry_decl_stms)*
         // Dummy function used to force the compiler to capture the environment.

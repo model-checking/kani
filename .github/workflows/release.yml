@@ -114,7 +114,7 @@ jobs:
 
   test-use-local-toolchain:
     name: TestLocalToolchain
-    needs: [build_bundle_macos_x86_64, build_bundle_macos_aarch64, build_bundle_linux, build_bundle_linux_arm]
+    needs: [build_bundle_macos_x86_64, build_bundle_macos_aarch64, build_bundle_linux_x86_64, build_bundle_linux_aarch64]
     strategy:
       matrix:
         os: [macos-13, macos-14, ubuntu-22.04, ubuntu-24.04, ubuntu-24.04-arm]

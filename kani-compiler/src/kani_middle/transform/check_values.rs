@@ -38,7 +38,7 @@ use strum_macros::AsRefStr;
 use tracing::{debug, trace};
 
 /// Instrument the code with checks for invalid values.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ValidValuePass {
     pub safety_check_type: CheckType,
     pub unsupported_check_type: CheckType,

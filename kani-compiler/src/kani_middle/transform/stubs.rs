@@ -22,7 +22,7 @@ use tracing::{debug, trace};
 ///
 /// This pass will replace the entire body, and it should only be applied to stubs
 /// that have a body.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FnStubPass {
     stubs: Stubs,
 }
@@ -74,7 +74,7 @@ impl FnStubPass {
 ///
 /// This pass will replace the function call, since one of the functions do not have a body to
 /// replace.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ExternFnStubPass {
     pub stubs: Stubs,
 }

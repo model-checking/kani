@@ -17,7 +17,7 @@ use std::io::Write;
 use super::BodyTransformation;
 
 /// Dump all MIR bodies.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DumpMirPass {
     enabled: bool,
 }

@@ -24,7 +24,7 @@ use rustc_span::Symbol;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt::Debug;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct LoopContractPass {
     /// Cache KaniRunContract function used to implement contracts.
     run_contract_fn: Option<FnDef>,

@@ -90,6 +90,7 @@ impl GotocCodegenBackend {
         symtab_goto: &Path,
         machine_model: &MachineModel,
         check_contract: Option<InternalDefId>,
+        mut global_passes: GlobalPasses,
         mut transformer: BodyTransformation,
         thread_pool: &ThreadPool,
     ) -> (MinimalGotocCtx, Vec<MonoItem>, Option<AssignsContract>) {
@@ -119,7 +120,6 @@ impl GotocCodegenBackend {
             .collect();
 
         // Apply all transformation passes, including global passes.
-        let mut global_passes = GlobalPasses::new(&self.queries.lock().unwrap(), tcx);
         let any_pass_modified = global_passes.run_global_passes(
             &mut transformer,
             tcx,
@@ -151,14 +151,14 @@ impl GotocCodegenBackend {
                         MonoItem::Fn(instance) => {
                             gcx.call_with_panic_debug_info(
                                 |ctx| ctx.declare_function(instance),
-                                format!("declare_function: {}", instance.name()),
+                                move || format!("declare_function: {}", instance.name()),
                                 instance.def,
                             );
                         }
                         MonoItem::Static(def) => {
                             gcx.call_with_panic_debug_info(
                                 |ctx| ctx.declare_static(def),
-                                format!("declare_static: {}", def.name()),
+                                move || format!("declare_static: {}", def.name()),
                                 def,
                             );
                         }
@@ -172,18 +172,20 @@ impl GotocCodegenBackend {
                         MonoItem::Fn(instance) => {
                             gcx.call_with_panic_debug_info(
                                 |ctx| ctx.codegen_function(instance),
-                                format!(
-                                    "codegen_function: {}\n{}",
-                                    instance.name(),
-                                    instance.mangled_name()
-                                ),
+                                move || {
+                                    format!(
+                                        "codegen_function: {}\n{}",
+                                        instance.name(),
+                                        instance.mangled_name()
+                                    )
+                                },
                                 instance.def,
                             );
                         }
                         MonoItem::Static(def) => {
                             gcx.call_with_panic_debug_info(
                                 |ctx| ctx.codegen_static(def),
-                                format!("codegen_static: {}", def.name()),
+                                move || format!("codegen_static: {}", def.name()),
                                 def,
                             );
                         }
@@ -391,12 +393,17 @@ impl CodegenBackend for GotocCodegenBackend {
                     let num_harnesses: usize = units.iter().map(|unit| unit.harnesses.len()).sum();
                     export_thread_pool.add_workers(Self::thread_pool_size(Some(num_harnesses)));
 
+                    let template_passes = GlobalPasses::new(&queries, tcx);
+
                     // Cross-crate collecting of all items that are reachable from the crate harnesses.
                     for unit in units.iter() {
                         // We reset the body cache for now because each codegen unit has different
                         // configurations that affect how we transform the instance body.
+
+                        // Generate an empty 'template' transformer once per codegen unit and then clone for each harness within.
+                        // (They all share the same options.)
+                        let template_transformer = BodyTransformation::new(&queries, tcx, unit);
                         for harness in &unit.harnesses {
-                            let transformer = BodyTransformation::new(&queries, tcx, unit);
                             let model_path = units.harness_model_path(*harness).unwrap();
                             let is_automatic_harness = units.is_automatic_harness(harness);
                             let contract_metadata =
@@ -408,7 +415,8 @@ impl CodegenBackend for GotocCodegenBackend {
                                 &results.machine_model,
                                 contract_metadata
                                     .map(|def| rustc_internal::internal(tcx, def.def_id())),
-                                transformer,
+                                template_passes.clone(),
+                                template_transformer.clone_empty(),
                                 &export_thread_pool,
                             );
                             if min_gcx.has_loop_contracts {
@@ -448,6 +456,7 @@ impl CodegenBackend for GotocCodegenBackend {
                         &model_path,
                         &results.machine_model,
                         Default::default(),
+                        GlobalPasses::new(&queries, tcx),
                         transformer,
                         &export_thread_pool,
                     );
