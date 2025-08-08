@@ -480,9 +480,7 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
     // expr of the loop invariant
     let mut inv_expr: Expr = syn::parse(attr).unwrap();
     let original_span = inv_expr.span();
-    if for_loop_extras.is_some() {
-        let kani_index = for_loop_extras.as_ref().unwrap().kani_index.clone();
-        let kani_iter_len = for_loop_extras.as_ref().unwrap().kani_iter_len.clone();
+    if let Some(ForLoopExtraStmts { ref kani_index, ref kani_iter_len, .. }) = for_loop_extras {
         let mut index_replacer = KaniIndexReplacer { kani_index: kani_index.clone() };
         index_replacer.visit_expr_mut(&mut inv_expr);
         let mut len_replacer = KaniIterLenReplacer { kani_iter_len: kani_iter_len.clone() };
