@@ -168,7 +168,7 @@ pub fn loop_with_old_and_prev() {
 ### Extra variables in `for` loop
 
 There are two extra variables that can be used in loop invariants for `for` loops:
-1. `kani_index` : the position (index) of the current iteration in the iterator.
+1. `kani::indexx` : the position (index) of the current iteration in the iterator.
 2. `kani_iter_len` : the length of the iterator.
 
 Note that the two extra variables above are only associated with the `for` loop right below the loop invariant.
@@ -181,7 +181,7 @@ fn forloop() {
     let mut sum: u32 = 0;
     let a: [u8; 10] = kani::any();
     kani::assume(kani::forall!(|i in (0,10)| a[i] <= 20));
-    #[kani::loop_invariant( i == kani_index && i <= kani_iter_len && sum <= (kani_index as u32 * 29) )]
+    #[kani::loop_invariant( i == kani::index && i <= kani_iter_len && sum <= (kani::index as u32 * 29) )]
     for (i, j) in a.iter().enumerate() {
         sum = sum + (i as u32) + (*j as u32);
     }

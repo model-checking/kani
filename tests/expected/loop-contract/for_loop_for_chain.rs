@@ -15,7 +15,7 @@ fn forloop() {
     let mut a: [u8; 10] = kani::any();
     let mut b: [u8; 5] = [5; 5];
     kani::assume(kani::forall!(|i in (0,10)| a[i] <= 10));
-    #[kani::loop_invariant( sum <= min(kani_index as u32, 10) * 10 + (kani_index as u32).saturating_sub(10) * 5 )]
+    #[kani::loop_invariant( sum <= min(kani::index as u32, 10) * 10 + (kani::index as u32).saturating_sub(10) * 5 )]
     for j in a.iter().chain(b.iter()) {
         sum = sum + (*j as u32);
     }

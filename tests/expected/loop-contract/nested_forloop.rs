@@ -14,9 +14,9 @@ fn forloop() {
     kani::assume(kani::forall!(|i in (0,10)| a[i] <= 20));
     let b: [u8; 20] = kani::any();
     kani::assume(kani::forall!(|i in (0,20)| b[i] <= 30));
-    #[kani::loop_invariant( sum <= (kani_index as u32 * 620) )]
+    #[kani::loop_invariant( sum <= (kani::index as u32 * 620) )]
     for i in a.iter() {
-        #[kani::loop_invariant( sum <= on_entry(sum) + (kani_index as u32 * 30) )]
+        #[kani::loop_invariant( sum <= on_entry(sum) + (kani::index as u32 * 30) )]
         for j in b.iter() {
             sum = sum + (*j as u32);
         }

@@ -277,6 +277,8 @@ pub struct ForLoopExtraStmts {
     init_index_stmt: Stmt,
     init_pat_stmt: Stmt,
     iter_assume_stmt: Stmt,
+    kani_index: Ident,
+    kani_iter_len: Ident,
 }
 
 //Transform a for loop into a while loop according to the mechanism mentioned above
@@ -290,15 +292,17 @@ pub fn transform_for_to_loop(
     let body = for_loop.body;
 
     // Create an iterator variable name
-    let indexname = "kani_index".to_owned();
-    let index_ident = format_ident!("{}", indexname);
+    let mut indexname = "kani_index".to_owned();
+    indexname.push_str(loop_id);
+    let kani_index = format_ident!("{}", indexname);
 
     let mut itername = "kaniiter".to_owned();
     itername.push_str(loop_id);
     let iter_ident = format_ident!("{}", itername);
 
-    let lenname = "kani_iter_len".to_owned();
-    let len_ident = format_ident!("{}", lenname);
+    let mut lenname = "kani_iter_len".to_owned();
+    lenname.push_str(loop_id);
+    let kani_iter_len = format_ident!("{}", lenname);
 
     // Create initialization statement for the iterator
     let init_iter_stmt: Stmt = parse_quote! {
@@ -306,11 +310,11 @@ pub fn transform_for_to_loop(
     };
 
     let init_index_stmt: Stmt = parse_quote! {
-        let mut #index_ident = 0;
+        let mut #kani_index = 0;
     };
 
     let init_len_stmt: Stmt = parse_quote! {
-        let #len_ident = kani::KaniIter::len(&#iter_ident);
+        let #kani_iter_len = kani::KaniIter::len(&#iter_ident);
     };
 
     // It is very hard to handle "let mut" for tuples
@@ -331,12 +335,12 @@ pub fn transform_for_to_loop(
 
     // Increase the iter
     let increase_iter_stmt: Stmt = parse_quote! {
-        #index_ident = #index_ident + 1;
+        #kani_index = #kani_index + 1;
     };
 
     let pat_assign_stmt: Stmt = parse_quote! {
         // See the comments in init_pat_stmt
-        let #pat = kani::KaniIter::indexing(&#iter_ident, #index_ident);
+        let #pat = kani::KaniIter::indexing(&#iter_ident, #kani_index);
     };
 
     new_body_stmts.push(iter_assume_stmt.clone());
@@ -348,7 +352,7 @@ pub fn transform_for_to_loop(
 
     // Create the final expression with the iterator initialization
     let loop_loop: Stmt = parse_quote! {
-            while (#index_ident < #len_ident) {
+            while (#kani_index < #kani_iter_len) {
                 #(#new_body_stmts)*
             }
     };
@@ -358,9 +362,65 @@ pub fn transform_for_to_loop(
         init_index_stmt,
         init_pat_stmt,
         iter_assume_stmt,
+        kani_index,
+        kani_iter_len,
     };
 
     (loop_loop, Some(for_loop_extras))
+}
+
+struct KaniIndexReplacer {
+    pub kani_index: Ident,
+}
+
+impl VisitMut for KaniIndexReplacer {
+    fn visit_expr_mut(&mut self, expr: &mut Expr) {
+        // println!("{}", kani_index);
+        // Check if this is a path expression like "kani::index"
+        let kani_index = self.kani_index.clone();
+        if let Expr::Path(expr_path) = expr
+            && expr_path.path.segments.len() == 2
+        {
+            let first = &expr_path.path.segments[0].ident;
+            let second = &expr_path.path.segments[1].ident;
+
+            if first == "kani" && second == "index" {
+                // Replace with single identifier "kani_index"
+                *expr = syn::parse_quote!(#kani_index);
+                return;
+            }
+        }
+
+        // Continue visiting nested expressions
+        syn::visit_mut::visit_expr_mut(self, expr);
+    }
+}
+
+struct KaniIterLenReplacer {
+    pub kani_iter_len: Ident,
+}
+
+impl VisitMut for KaniIterLenReplacer {
+    fn visit_expr_mut(&mut self, expr: &mut Expr) {
+        // println!("{}", kani_index);
+        // Check if this is a path expression like "kani::index"
+        let kani_iter_len = self.kani_iter_len.clone();
+        if let Expr::Path(expr_path) = expr
+            && expr_path.path.segments.len() == 2
+        {
+            let first = &expr_path.path.segments[0].ident;
+            let second = &expr_path.path.segments[1].ident;
+
+            if first == "kani" && second == "iter_len" {
+                // Replace with single identifier "kani_index"
+                *expr = syn::parse_quote!(#kani_iter_len);
+                return;
+            }
+        }
+
+        // Continue visiting nested expressions
+        syn::visit_mut::visit_expr_mut(self, expr);
+    }
 }
 
 pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -381,7 +441,13 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
     // expr of the loop invariant
     let mut inv_expr: Expr = syn::parse(attr).unwrap();
     if for_loop_extras.is_some() {
-        inv_expr = parse_quote! { kani_index <= kani_iter_len && #inv_expr}
+        let kani_index = for_loop_extras.as_ref().unwrap().kani_index.clone();
+        let kani_iter_len = for_loop_extras.as_ref().unwrap().kani_iter_len.clone();
+        let mut index_replacer = KaniIndexReplacer { kani_index: kani_index.clone() };
+        index_replacer.visit_expr_mut(&mut inv_expr);
+        let mut len_replacer = KaniIterLenReplacer { kani_iter_len: kani_iter_len.clone() };
+        len_replacer.visit_expr_mut(&mut inv_expr);
+        inv_expr = parse_quote! { #kani_index <= #kani_iter_len && #inv_expr};
     }
 
     // adding on_entry variables
@@ -476,6 +542,8 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
         init_index_stmt,
         init_pat_stmt,
         iter_assume_stmt,
+        kani_index: _,
+        kani_iter_len,
     }) = for_loop_extras
     {
         if has_prev {
@@ -483,7 +551,7 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
             {
             #init_iter_stmt
             #init_len_stmt
-            assert!(kani_iter_len > 0, "undefined prev when iter's length is zero");
+            assert!(#kani_iter_len > 0, "undefined prev when iter's length is zero");
             {
             #init_index_stmt
             #iter_assume_stmt
@@ -518,7 +586,7 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
             {
             #init_iter_stmt
             #init_len_stmt
-            if kani_iter_len > 0
+            if #kani_iter_len > 0
             {
             #init_index_stmt
             #iter_assume_stmt

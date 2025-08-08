@@ -14,7 +14,7 @@ fn forloop() {
     let a: [u8; 10] = kani::any();
     kani::assume(kani::forall!(|i in (0,10)| a[i] <= 10));
 
-    #[kani::loop_invariant( sum <= (kani_index as u32 * 10) )]
+    #[kani::loop_invariant( sum <= (kani::index as u32 * 10) )]
     for j in a.iter() {
         sum = sum + (*j as u32);
     }

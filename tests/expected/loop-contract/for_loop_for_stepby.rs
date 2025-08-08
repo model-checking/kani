@@ -10,7 +10,7 @@
 #[kani::proof]
 fn forloop() {
     let mut sum: u32 = 0;
-    #[kani::loop_invariant( kani_index <= 5 && sum <= (kani_index as u32 * 14 as u32) )]
+    #[kani::loop_invariant( kani::index <= 5 && sum <= (kani::index as u32 * 14 as u32) )]
     for i in (1..15).step_by(3) {
         sum = sum + (i as u32);
     }
