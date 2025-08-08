@@ -375,7 +375,6 @@ struct KaniIndexReplacer {
 
 impl VisitMut for KaniIndexReplacer {
     fn visit_expr_mut(&mut self, expr: &mut Expr) {
-        // println!("{}", kani_index);
         // Check if this is a path expression like "kani::index"
         let kani_index = self.kani_index.clone();
         if let Expr::Path(expr_path) = expr
@@ -390,6 +389,15 @@ impl VisitMut for KaniIndexReplacer {
                 return;
             }
         }
+        // Handle macro expressions
+        if let Expr::Macro(expr_macro) = expr {
+            let tokens_str = expr_macro.mac.tokens.to_string();
+            let replaced = tokens_str.replace("kani::index", &self.kani_index.to_string());
+            
+            if let Ok(new_tokens) = replaced.parse() {
+                expr_macro.mac.tokens = new_tokens;
+            }
+        }
 
         // Continue visiting nested expressions
         syn::visit_mut::visit_expr_mut(self, expr);
@@ -402,7 +410,6 @@ struct KaniIterLenReplacer {
 
 impl VisitMut for KaniIterLenReplacer {
     fn visit_expr_mut(&mut self, expr: &mut Expr) {
-        // println!("{}", kani_index);
         // Check if this is a path expression like "kani::index"
         let kani_iter_len = self.kani_iter_len.clone();
         if let Expr::Path(expr_path) = expr
@@ -418,6 +425,15 @@ impl VisitMut for KaniIterLenReplacer {
             }
         }
 
+        // Handle macro expressions
+        if let Expr::Macro(expr_macro) = expr {
+            let tokens_str = expr_macro.mac.tokens.to_string();
+            let replaced = tokens_str.replace("kani::iter_len", &self.kani_iter_len.to_string());
+            
+            if let Ok(new_tokens) = replaced.parse() {
+                expr_macro.mac.tokens = new_tokens;
+            }
+        }
         // Continue visiting nested expressions
         syn::visit_mut::visit_expr_mut(self, expr);
     }
