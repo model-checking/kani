@@ -53,12 +53,12 @@ static DEFAULT_HOOK: LazyLock<Box<dyn Fn(&panic::PanicHookInfo<'_>) + Sync + Sen
         hook
     });
 
-impl<'tcx> GotocCtx<'tcx> {
+impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
     // Calls the closure while updating the tracked global variable marking the
     // codegen item for panic debugging.
     pub fn call_with_panic_debug_info<
         D: CrateDef,
-        F: FnOnce(&mut GotocCtx<'tcx>),
+        F: FnOnce(&mut GotocCtx<'tcx, 'r>),
         S: Fn() -> String + 'static,
     >(
         &mut self,

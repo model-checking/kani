@@ -63,7 +63,7 @@ impl GlobalPass for DumpMirPass {
         // For each def_id, dump their MIR.
         for instance in instances.iter() {
             writeln!(writer, "// Item: {} ({})", instance.name(), instance.mangled_name()).unwrap();
-            let _ = transformer.body(tcx, *instance).dump(&mut writer, &instance.name());
+            let _ = transformer.body_ref(tcx, *instance).dump(&mut writer, &instance.name());
         }
 
         // This pass just reads the MIR and thus never modifies it.
