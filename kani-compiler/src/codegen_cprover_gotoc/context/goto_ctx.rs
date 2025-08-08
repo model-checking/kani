@@ -44,6 +44,24 @@ use rustc_target::callconv::FnAbi;
 use std::collections::{BTreeMap, HashSet};
 use std::fmt::Debug;
 
+/// A minimal context needed for recording our results. This allows us to move ownership of the
+/// other fields of a [GotocCtx] for use elsewhere by calling the `split()` method on it.
+///
+/// For example, we do not use the `symbol_table` field of a [GotocCtx] when recording results, so ownership
+/// can be directly moved to the thread handling file exporting, avoiding a clone!
+pub struct MinimalGotocCtx {
+    /// A map of unsupported constructs that were found while codegen
+    pub unsupported_constructs: UnsupportedConstructs,
+    /// A map of concurrency constructs that are treated sequentially.
+    /// We collect them and print one warning at the end if not empty instead of printing one
+    /// warning at each occurrence.
+    pub concurrent_constructs: UnsupportedConstructs,
+    /// The body transformation agent.
+    pub transformer: BodyTransformation,
+    /// If there exist some usage of loop contracts int context.
+    pub has_loop_contracts: bool,
+}
+
 pub struct GotocCtx<'tcx> {
     /// the typing context
     pub tcx: TyCtxt<'tcx>,
@@ -112,6 +130,20 @@ impl<'tcx> GotocCtx<'tcx> {
             has_loop_contracts: false,
             current_loop_modifies: Vec::new(),
         }
+    }
+
+    /// Split a full, owned [GotocCtx<'tcx>] into the [MinimalGotocCtx] needed for recording results,
+    /// and any other fields that need to be used separately.
+    pub fn split(self) -> (MinimalGotocCtx, SymbolTable) {
+        (
+            MinimalGotocCtx {
+                unsupported_constructs: self.unsupported_constructs,
+                concurrent_constructs: self.concurrent_constructs,
+                transformer: self.transformer,
+                has_loop_contracts: self.has_loop_contracts,
+            },
+            self.symbol_table,
+        )
     }
 }
 

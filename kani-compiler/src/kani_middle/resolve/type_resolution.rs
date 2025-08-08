@@ -32,7 +32,9 @@ pub fn resolve_ty<'tcx>(
     #[warn(non_exhaustive_omitted_patterns)]
     match typ {
         Type::Path(TypePath { qself, path }) => {
-            assert_eq!(*qself, None, "Unexpected qualified path");
+            if (*qself).is_some() {
+                return unsupported("nested qualified paths");
+            }
             if let Some(primitive) =
                 path.get_ident().and_then(|ident| PrimitiveIdent::from_str(&ident.to_string()).ok())
             {
