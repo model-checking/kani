@@ -189,7 +189,7 @@ fn forloop() {
 }
 ```
 
-## loop contracts inside functions with contracts 
+## Loop contracts inside functions with contracts 
 Kani supports using loop contracts together with function-contracts, as demonstrated in the following example:
 ``` Rust
 #![feature(proc_macro_hygiene)]
