@@ -52,7 +52,7 @@ macro_rules! generate_iter {
     () => {
         use core::iter::StepBy;
         use core_path::cmp::min;
-        use core_path::iter::{Chain, Enumerate, Map, Take, Zip};
+        use core_path::iter::{Chain, Enumerate, Map, Rev, Take, Zip};
         use core_path::mem as stdmem;
         use core_path::ops::Range;
         use core_path::slice::Iter;
@@ -330,6 +330,33 @@ macro_rules! generate_iter {
                 self.iter.assumption()
             }
             fn len(&self) -> usize {
+                min(self.iter.len(), self.n)
+            }
+        }
+
+        pub struct KaniRevIter<I: KaniIter> {
+            pub iter: I,
+        }
+
+        impl<I: KaniIter> KaniRevIter<I> {
+            pub fn new(iter: I) -> Self {
+                KaniRevIter { iter }
+            }
+        }
+
+        impl<I: KaniIter> KaniIter for KaniRevIter<I> {
+            type Item = I::Item;
+            fn indexing(&self, i: usize) -> Self::Item {
+                //assert!(i < self.n && i < self.iter.len());
+                self.iter.indexing(self.iter.len() - 1 - i)
+            }
+            fn first(&self) -> Self::Item {
+                self.iter.indexing(self.iter.len() - 1)
+            }
+            fn assumption(&self) -> bool {
+                self.iter.assumption()
+            }
+            fn len(&self) -> usize {
                 self.iter.len()
             }
         }
@@ -481,6 +508,18 @@ macro_rules! generate_iter {
                 let iter = unsafe { (*ptr).iter.clone().kani_into_iter() };
                 let n = unsafe { (*ptr).n };
                 KaniTakeIter::new(iter, n)
+            }
+        }
+
+        impl<I: KaniIntoIter + Clone> KaniIntoIter for Rev<I> {
+            type Iter = KaniRevIter<I::Iter>;
+            fn kani_into_iter(self) -> Self::Iter {
+                struct RevLayout<I> {
+                    iter: I,
+                }
+                let ptr = &self as *const Rev<I> as *const RevLayout<I>;
+                let iter = unsafe { (*ptr).iter.clone().kani_into_iter() };
+                KaniRevIter::new(iter)
             }
         }
     };
