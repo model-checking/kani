@@ -149,11 +149,13 @@ macro_rules! generate_iter {
         generate_impl_range!(i16);
         generate_impl_range!(i32);
         generate_impl_range!(i64);
+        generate_impl_range!(i128);
         generate_impl_range!(isize);
         generate_impl_range!(u8);
         generate_impl_range!(u16);
         generate_impl_range!(u32);
         generate_impl_range!(u64);
+        generate_impl_range!(u128);
         generate_impl_range!(usize);
 
         pub struct KaniStepBy<I: KaniIter> {
