@@ -171,7 +171,7 @@ There are two extra variables that can be used in loop contracts for `for` loops
 1. `kani::index` : the position (index) of the current iteration in the iterator.
 2. `kani_iter_len` : the length of the iterator.
 
-Note that the two extra variables above are only associated with the `for` loop right below the loop contract.
+Note that the two extra variables above are only associated with the `for` loop that immediately follows the loop contract.
 
 Example:
 
