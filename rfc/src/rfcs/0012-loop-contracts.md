@@ -216,7 +216,7 @@ havocing functions for the modifies targets.
 
 ### For-loop rewrite 
 
-When there is loop-invariant for `for-loop`, the `loop_invariant` procedural macros 
+When there is a loop invariant for a `for` loop, the `loop_invariant` procedural macro
 will rewrite `for-loop` into a `while-loop`, but not exactly the same way as 
 https://doc.rust-lang.org/reference/expressions/loop-expr.html#iterator-loops. 
 Let's use the following example to demonstrate the disadvantages of rewriting 

@@ -168,10 +168,10 @@ pub fn loop_with_old_and_prev() {
 ### Extra variables in `for` loop
 
 There are two extra variables that can be used in loop contracts for `for` loops:
-1. `kani::indexx` : the position (index) of the current iteration in the iterator.
+1. `kani::index` : the position (index) of the current iteration in the iterator.
 2. `kani_iter_len` : the length of the iterator.
 
-Note that the two extra variables above are only associated with the `for` loop right below the loop contract.
+Note that the two extra variables above are only associated with the `for` loop that immediately follows the loop contract.
 
 Example:
 
@@ -189,7 +189,7 @@ fn forloop() {
 }
 ```
 
-## loop contracts inside functions with contracts 
+## Loop contracts inside functions with contracts 
 Kani supports using loop contracts together with function-contracts, as demonstrated in the following example:
 ``` Rust
 #![feature(proc_macro_hygiene)]
