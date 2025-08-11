@@ -117,7 +117,7 @@ macro_rules! generate_iter {
                 unsafe { &*self.ptr }
             }
             fn assumption(&self) -> bool {
-                //SAFETY: this call is safe as Rust compiler will complain if we write a for-loop for initnitialized object
+                //SAFETY: this call is safe as Rust compiler will complain if we write a for-loop for uninitialized object
                 unsafe { mem::is_allocated(self.ptr as *const (), self.len) }
             }
             fn len(&self) -> usize {
