@@ -314,17 +314,17 @@ pub fn transform_for_to_loop(
     let body = for_loop.body;
 
     // Create an iterator variable name
-    let mut indexname = "kani_index".to_owned();
-    indexname.push_str(loop_id);
-    let kani_index = format_ident!("{}", indexname);
+    let mut index_name = "kani_index".to_owned();
+    index_name.push_str(loop_id);
+    let kani_index = format_ident!("{}", index_name);
 
-    let mut itername = "kaniiter".to_owned();
-    itername.push_str(loop_id);
-    let iter_ident = format_ident!("{}", itername);
+    let mut iter_name = "kaniiter".to_owned();
+    iter_name.push_str(loop_id);
+    let iter_ident = format_ident!("{}", iter_name);
 
-    let mut lenname = "kani_iter_len".to_owned();
-    lenname.push_str(loop_id);
-    let kani_iter_len = format_ident!("{}", lenname);
+    let mut len_name = "kani_iter_len".to_owned();
+    len_name.push_str(loop_id);
+    let kani_iter_len = format_ident!("{}", len_name);
 
     // Create initialization statement for the iterator
     let init_iter_stmt: Stmt = parse_quote! {
@@ -629,19 +629,19 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
             #init_len_stmt
             if #kani_iter_len > 0
             {
-            #init_index_stmt
-            #iter_assume_stmt
-            #init_pat_stmt
-            #(#onentry_decl_stms)*
-            // Dummy function used to force the compiler to capture the environment.
-            // We cannot call closures inside constant functions.
-            // This function gets replaced by `kani::internal::call_closure`.
-            #[inline(never)]
-            #[kanitool::fn_marker = "kani_register_loop_contract"]
-            const fn #register_ident<F: Fn() -> bool>(_f: &F, _transformed: usize) -> bool {
-                true
-            }
-            #loop_stmt
+                #init_index_stmt
+                #iter_assume_stmt
+                #init_pat_stmt
+                #(#onentry_decl_stms)*
+                // Dummy function used to force the compiler to capture the environment.
+                // We cannot call closures inside constant functions.
+                // This function gets replaced by `kani::internal::call_closure`.
+                #[inline(never)]
+                #[kanitool::fn_marker = "kani_register_loop_contract"]
+                const fn #register_ident<F: Fn() -> bool>(_f: &F, _transformed: usize) -> bool {
+                    true
+                }
+                #loop_stmt
             }
             })
             .into()
@@ -650,28 +650,28 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
         quote_spanned!(original_span =>
         {
         if (#loop_guard) {
-        #(#onentry_decl_stms)*
-        #(#prev_decl_stms)*
-        let mut #loop_body_closure = ||
-        #loop_body;
-        let (#loop_body_closure_ret_1, #loop_body_closure_ret_2) = #loop_body_closure ();
-        if #loop_body_closure_ret_2.is_some() {
-            return #loop_body_closure_ret_2.unwrap();
-        }
-        if #loop_body_closure_ret_1 {
-        // Dummy function used to force the compiler to capture the environment.
-        // We cannot call closures inside constant functions.
-        // This function gets replaced by `kani::internal::call_closure`.
+            #(#onentry_decl_stms)*
+            #(#prev_decl_stms)*
+            let mut #loop_body_closure = ||
+            #loop_body;
+            let (#loop_body_closure_ret_1, #loop_body_closure_ret_2) = #loop_body_closure ();
+            if #loop_body_closure_ret_2.is_some() {
+                return #loop_body_closure_ret_2.unwrap();
+            }
+            if #loop_body_closure_ret_1 {
+            // Dummy function used to force the compiler to capture the environment.
+            // We cannot call closures inside constant functions.
+            // This function gets replaced by `kani::internal::call_closure`.
             #[inline(never)]
             #[kanitool::fn_marker = "kani_register_loop_contract"]
-            const fn #register_ident<F: Fn() -> bool>(_f: &F, _transformed: usize) -> bool {
-                true
+                const fn #register_ident<F: Fn() -> bool>(_f: &F, _transformed: usize) -> bool {
+                    true
+                }
+                #loop_stmt
             }
-            #loop_stmt
-        }
-        else {
-            assert!(#inv_expr);
-        };
+            else {
+                assert!(#inv_expr);
+            };
         }
         })
         .into()
