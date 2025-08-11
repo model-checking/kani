@@ -168,7 +168,7 @@ pub fn loop_with_old_and_prev() {
 ### Extra variables in `for` loop
 
 There are two extra variables that can be used in loop contracts for `for` loops:
-1. `kani::indexx` : the position (index) of the current iteration in the iterator.
+1. `kani::index` : the position (index) of the current iteration in the iterator.
 2. `kani_iter_len` : the length of the iterator.
 
 Note that the two extra variables above are only associated with the `for` loop right below the loop contract.
