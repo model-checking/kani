@@ -24,14 +24,14 @@ let kani_iter = kani::kani_into_iter(a);
 let mut kani_index = 0;
 #[kani::loop_invariant(...)]
 while (kani_index < kani_iter_len) {
-  i = kani_iter.indexing(kani_index);
+  i = kani_iter.nth(kani_index);
   // loop_body
   kani_index += 1;
 }
 
 We ensure the semantic by ensuring that the value of `i` is the same in each iteration of the loop for both versions,
 while keeping the variable kani_iter immutable in our version.
-In other word, we replace the next function with the indexing function to get the current item of the Iterator.
+In other word, we replace the next function with the nth function to get the current item of the Iterator.
 
 We overwrite the returned type R of Rust into_iter() for a type T by a corresponding Kani internal type K which implements KaniIter trait as follows:
 
@@ -62,7 +62,7 @@ macro_rules! generate_iter {
             Self: Sized,
         {
             type Item;
-            fn indexing(&self, i: usize) -> Self::Item;
+            fn nth(&self, i: usize) -> Self::Item;
             fn first(&self) -> Self::Item;
             fn assumption(&self) -> bool;
             fn len(&self) -> usize;
@@ -81,7 +81,7 @@ macro_rules! generate_iter {
 
         impl<T: Copy> KaniIter for KaniPtrIter<T> {
             type Item = T;
-            fn indexing(&self, i: usize) -> Self::Item {
+            fn nth(&self, i: usize) -> Self::Item {
                 unsafe { *self.ptr.wrapping_add(i) }
             }
             fn first(&self) -> Self::Item {
@@ -110,7 +110,7 @@ macro_rules! generate_iter {
 
         impl<'a, T: Copy> KaniIter for KaniRefIter<'a, T> {
             type Item = &'a T;
-            fn indexing(&self, i: usize) -> Self::Item {
+            fn nth(&self, i: usize) -> Self::Item {
                 unsafe { &*self.ptr.wrapping_add(i) }
             }
             fn first(&self) -> Self::Item {
@@ -129,7 +129,7 @@ macro_rules! generate_iter {
             ($t:ty) => {
                 impl KaniIter for Range<$t> {
                     type Item = $t;
-                    fn indexing(&self, i: usize) -> Self::Item {
+                    fn nth(&self, i: usize) -> Self::Item {
                         self.start + i as $t
                     }
                     fn first(&self) -> Self::Item {
@@ -172,8 +172,8 @@ macro_rules! generate_iter {
         impl<I: KaniIter> KaniIter for KaniStepBy<I> {
             type Item = I::Item;
 
-            fn indexing(&self, i: usize) -> Self::Item {
-                self.iter.indexing(i * self.step)
+            fn nth(&self, i: usize) -> Self::Item {
+                self.iter.nth(i * self.step)
             }
 
             fn first(&self) -> Self::Item {
@@ -201,11 +201,11 @@ macro_rules! generate_iter {
 
         impl<I: KaniIter> KaniIter for KaniChainIter<I> {
             type Item = I::Item;
-            fn indexing(&self, i: usize) -> Self::Item {
+            fn nth(&self, i: usize) -> Self::Item {
                 if i < self.iter1.len() {
-                    self.iter1.indexing(i)
+                    self.iter1.nth(i)
                 } else {
-                    self.iter2.indexing(i - self.iter1.len())
+                    self.iter2.nth(i - self.iter1.len())
                 }
             }
             fn first(&self) -> Self::Item {
@@ -232,8 +232,8 @@ macro_rules! generate_iter {
 
         impl<I1: KaniIter, I2: KaniIter> KaniIter for KaniZipIter<I1, I2> {
             type Item = (I1::Item, I2::Item);
-            fn indexing(&self, i: usize) -> Self::Item {
-                (self.iter1.indexing(i), self.iter2.indexing(i))
+            fn nth(&self, i: usize) -> Self::Item {
+                (self.iter1.nth(i), self.iter2.nth(i))
             }
             fn first(&self) -> Self::Item {
                 (self.iter1.first(), self.iter2.first())
@@ -262,8 +262,8 @@ macro_rules! generate_iter {
             F: FnMut(I::Item) -> B + Copy,
         {
             type Item = B;
-            fn indexing(&self, i: usize) -> Self::Item {
-                let item = self.iter.indexing(i);
+            fn nth(&self, i: usize) -> Self::Item {
+                let item = self.iter.nth(i);
                 let map_ptr = &self.map as *const F as *mut F;
                 unsafe { (*map_ptr)(item) }
             }
@@ -292,8 +292,8 @@ macro_rules! generate_iter {
 
         impl<I: KaniIter> KaniIter for KaniEnumerateIter<I> {
             type Item = (usize, I::Item);
-            fn indexing(&self, i: usize) -> Self::Item {
-                let item = self.iter.indexing(i);
+            fn nth(&self, i: usize) -> Self::Item {
+                let item = self.iter.nth(i);
                 (i, item)
             }
             fn first(&self) -> Self::Item {
@@ -321,9 +321,9 @@ macro_rules! generate_iter {
 
         impl<I: KaniIter> KaniIter for KaniTakeIter<I> {
             type Item = I::Item;
-            fn indexing(&self, i: usize) -> Self::Item {
+            fn nth(&self, i: usize) -> Self::Item {
                 //assert!(i < self.n && i < self.iter.len());
-                self.iter.indexing(i)
+                self.iter.nth(i)
             }
             fn first(&self) -> Self::Item {
                 self.iter.first()
@@ -348,12 +348,12 @@ macro_rules! generate_iter {
 
         impl<I: KaniIter> KaniIter for KaniRevIter<I> {
             type Item = I::Item;
-            fn indexing(&self, i: usize) -> Self::Item {
+            fn nth(&self, i: usize) -> Self::Item {
                 //assert!(i < self.n && i < self.iter.len());
-                self.iter.indexing(self.iter.len() - 1 - i)
+                self.iter.nth(self.iter.len() - 1 - i)
             }
             fn first(&self) -> Self::Item {
-                self.iter.indexing(self.iter.len() - 1)
+                self.iter.nth(self.iter.len() - 1)
             }
             fn assumption(&self) -> bool {
                 self.iter.assumption()

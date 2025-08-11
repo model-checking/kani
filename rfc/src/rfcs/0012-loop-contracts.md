@@ -293,7 +293,7 @@ let mut i = kani_iter_xxxx.first()
 let mut kani_index = 0;
 #[kani::loop_invariant(...)]
 while kani_index < kani_iter_len {
-  i = kani_iter_xxxx.indexing(kani_index);
+  i = kani_iter_xxxx.nth(kani_index);
   kani_index += 1;
 }
 ```

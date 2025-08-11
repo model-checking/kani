@@ -184,12 +184,9 @@ impl LoopContractPass {
     }
 
     // Get the list of tuples:
-    // (firstpat, the block_id where firstpat get assigned, the corresponding indexpat, the block_id where indexpat get assigned)
-    fn get_first_pats_and_index_pats(
-        &self,
-        body: &MutableBody,
-    ) -> Vec<(usize, usize, usize, usize)> {
-        let mut firstpats_and_indexpats: Vec<(usize, usize, usize, usize)> = Vec::new();
+    // (firstpat, the block_id where firstpat get assigned, the corresponding nthpat, the block_id where nthpat get assigned)
+    fn get_first_pats_and_nth_pats(&self, body: &MutableBody) -> Vec<(usize, usize, usize, usize)> {
+        let mut first_pats_and_nth_pats: Vec<(usize, usize, usize, usize)> = Vec::new();
         let mut current_firstpat = 0;
         let mut current_firstpat_pos = 0;
         for (blockid, block) in body.blocks().iter().enumerate() {
@@ -214,8 +211,8 @@ impl LoopContractPass {
                     current_firstpat = dest.local;
                     current_firstpat_pos = blockid;
                 }
-                if fn_def.name() == "kani::KaniIter::indexing" && current_firstpat != 0 {
-                    firstpats_and_indexpats.push((
+                if fn_def.name() == "kani::KaniIter::nth" && current_firstpat != 0 {
+                    first_pats_and_nth_pats.push((
                         current_firstpat,
                         dest.local,
                         current_firstpat_pos,
@@ -225,15 +222,15 @@ impl LoopContractPass {
                 }
             }
         }
-        firstpats_and_indexpats
+        first_pats_and_nth_pats
     }
 
     // This Vec includes the user defined variables together with the tuple-typed variable
     // thst store the return of "kani::KaniIter::first" function
     fn get_storage_moving_variables(&self, body: &MutableBody) -> Vec<usize> {
-        let first_index_list = self.get_first_pats_and_index_pats(body);
+        let first_nth_list = self.get_first_pats_and_nth_pats(body);
         let mut moving_vars = self.get_user_defined_variables(body);
-        for (firstvar, _, _, _) in first_index_list {
+        for (firstvar, _, _, _) in first_nth_list {
             if !moving_vars.contains(&firstvar) {
                 moving_vars.push(firstvar);
             }
@@ -265,21 +262,21 @@ impl LoopContractPass {
         terminator
     }
 
-    // Replace the "firstpat" vars with its corresponding "indexingpat" vars
+    // Replace the "firstpat" vars with its corresponding "nthpat" vars
     // See the comments in kani/library/kani_macros/src/sysroot/loop_contracts/mod.rs
-    fn replace_firstpat_by_indexingpat(&self, body: &mut MutableBody) {
-        let first_indexing_list = self.get_first_pats_and_index_pats(body);
-        for (firstvar, indexvar, first_blockid, index_blockid) in first_indexing_list {
-            // Replace firstpat by indexpat in the destination of "kani::KaniIter::first" function call
+    fn replace_first_pat_by_nth_pat(&self, body: &mut MutableBody) {
+        let first_nth_list = self.get_first_pats_and_nth_pats(body);
+        for (firstvar, nthvar, first_blockid, nth_blockid) in first_nth_list {
+            // Replace firstpat by nthpat in the destination of "kani::KaniIter::first" function call
             let old_terminator = body.blocks()[first_blockid].terminator.clone();
-            let new_terminator = Self::terminator_of_new_destination(old_terminator, indexvar);
+            let new_terminator = Self::terminator_of_new_destination(old_terminator, nthvar);
             body.replace_terminator(
                 &SourceInstruction::Terminator { bb: first_blockid },
                 new_terminator,
             );
             let span = body.blocks()[first_blockid].statements.first().unwrap().span;
-            // Add the StorageLive(indexpat) statement at the begining of the same block
-            let storagelive_stmt = Statement { kind: StatementKind::StorageLive(indexvar), span };
+            // Add the StorageLive(nthpat) statement at the begining of the same block
+            let storagelive_stmt = Statement { kind: StatementKind::StorageLive(nthvar), span };
             body.insert_stmt(
                 storagelive_stmt,
                 &mut SourceInstruction::Statement { idx: 0, bb: first_blockid },
@@ -299,11 +296,11 @@ impl LoopContractPass {
                 body.remove_stmt(first_blockid, id);
             }
 
-            // Construct the HashMap of the firstpat projections with  indexpat projections
+            // Construct the HashMap of the firstpat projections with  nthpat projections
             let firstprj_stmts_copy = body.blocks()[first_blockid + 1].statements.clone();
-            let indexprj_stmts_copy = body.blocks()[index_blockid + 1].statements.clone();
-            let mut firstprj_indexprj: HashMap<usize, usize> = HashMap::new();
-            firstprj_indexprj.insert(firstvar, indexvar);
+            let nthprj_stmts_copy = body.blocks()[nth_blockid + 1].statements.clone();
+            let mut firstprj_nthprj: HashMap<usize, usize> = HashMap::new();
+            firstprj_nthprj.insert(firstvar, nthvar);
 
             for fstmt in firstprj_stmts_copy.iter() {
                 if let StatementKind::Assign(fprjplace, frval) = &fstmt.kind
@@ -311,21 +308,21 @@ impl LoopContractPass {
                     && firstpatplace.local == firstvar
                 {
                     let firstprj = fprjplace.local;
-                    for istmt in indexprj_stmts_copy.iter() {
+                    for istmt in nthprj_stmts_copy.iter() {
                         if let StatementKind::Assign(iprjplace, irval) = &istmt.kind
-                            && let Rvalue::Use(Operand::Copy(indexpatplace)) = irval
-                            && indexpatplace.local == indexvar
-                            && indexpatplace.projection == firstpatplace.projection
+                            && let Rvalue::Use(Operand::Copy(nthpatplace)) = irval
+                            && nthpatplace.local == nthvar
+                            && nthpatplace.projection == firstpatplace.projection
                         {
-                            let indexprj = iprjplace.local;
-                            firstprj_indexprj.insert(firstprj, indexprj);
+                            let nthprj = iprjplace.local;
+                            firstprj_nthprj.insert(firstprj, nthprj);
                             break;
                         }
                     }
                 }
             }
 
-            // Replace the firstpat (and its projections) with indexpat (and its projections)
+            // Replace the firstpat (and its projections) with nthpat (and its projections)
             // in the places where they may get involved, which includes, the comments in code.
             // First, in the block that  "kani::KaniIter::first" is called
             let mut new_stmts: Vec<Statement> = Vec::new();
@@ -335,9 +332,9 @@ impl LoopContractPass {
                 match &stmt.kind {
                     // The StorageLive statements of the projections
                     // There might be some without StorageLive statements
-                    // So we just remove them and add a new one for each indexpat projection later
+                    // So we just remove them and add a new one for each nthpat projection later
                     StatementKind::StorageLive(local) => {
-                        if !firstprj_indexprj.contains_key(local) {
+                        if !firstprj_nthprj.contains_key(local) {
                             new_stmts.push(new_stmt);
                         }
                     }
@@ -346,13 +343,13 @@ impl LoopContractPass {
                         match frval {
                             Rvalue::Use(Operand::Copy(firstpatplace)) => {
                                 if firstpatplace.local == firstvar {
-                                    let indexprj = firstprj_indexprj.get(&fprjplace.local).unwrap();
-                                    let mut indexpatplace = firstpatplace.clone();
-                                    indexpatplace.local = indexvar;
-                                    let newrval = Rvalue::Use(Operand::Copy(indexpatplace));
+                                    let nthprj = firstprj_nthprj.get(&fprjplace.local).unwrap();
+                                    let mut nthpatplace = firstpatplace.clone();
+                                    nthpatplace.local = nthvar;
+                                    let newrval = Rvalue::Use(Operand::Copy(nthpatplace));
                                     new_stmt.kind = StatementKind::Assign(
                                         Place {
-                                            local: *indexprj,
+                                            local: *nthprj,
                                             projection: fprjplace.projection.clone(),
                                         },
                                         newrval,
@@ -361,18 +358,18 @@ impl LoopContractPass {
                             }
                             Rvalue::CopyForDeref(firstpatplace) => {
                                 if firstpatplace.local == firstvar {
-                                    let mut indexpatplace = firstpatplace.clone();
-                                    indexpatplace.local = indexvar;
-                                    let newrval = Rvalue::CopyForDeref(indexpatplace);
+                                    let mut nthpatplace = firstpatplace.clone();
+                                    nthpatplace.local = nthvar;
+                                    let newrval = Rvalue::CopyForDeref(nthpatplace);
                                     new_stmt.kind =
                                         StatementKind::Assign(fprjplace.clone(), newrval);
                                 }
                             }
                             _ => {
-                                if let Some(indexprj) = firstprj_indexprj.get(&fprjplace.local) {
+                                if let Some(nthprj) = firstprj_nthprj.get(&fprjplace.local) {
                                     new_stmt.kind = StatementKind::Assign(
                                         Place {
-                                            local: *indexprj,
+                                            local: *nthprj,
                                             projection: fprjplace.projection.clone(),
                                         },
                                         frval.clone(),
@@ -407,10 +404,10 @@ impl LoopContractPass {
                         for operand in operands.iter() {
                             if let Operand::Move(Place { local: operandlocal, projection: proj }) =
                                 operand
-                                && let Some(indexprj) = firstprj_indexprj.get(operandlocal)
+                                && let Some(nthprj) = firstprj_nthprj.get(operandlocal)
                             {
                                 let new_operand = Operand::Move(Place {
-                                    local: *indexprj,
+                                    local: *nthprj,
                                     projection: proj.clone(),
                                 });
                                 new_operands.push(new_operand);
@@ -418,10 +415,10 @@ impl LoopContractPass {
                                 local: operandlocal,
                                 projection: proj,
                             }) = operand
-                                && let Some(indexprj) = firstprj_indexprj.get(operandlocal)
+                                && let Some(nthprj) = firstprj_nthprj.get(operandlocal)
                             {
                                 let new_operand = Operand::Copy(Place {
-                                    local: *indexprj,
+                                    local: *nthprj,
                                     projection: proj.clone(),
                                 });
                                 new_operands.push(new_operand);
@@ -439,12 +436,12 @@ impl LoopContractPass {
                         Rvalue::Ref(region, borrowkind, Place { local: firstlocal, projection }),
                     ) = &stmt.kind
                          // In the borrow statements 
-                        && let Some(indexlocal) = firstprj_indexprj.get(firstlocal)
+                        && let Some(nthlocal) = firstprj_nthprj.get(firstlocal)
                     {
                         let new_rval = Rvalue::Ref(
                             region.clone(),
                             *borrowkind,
-                            Place { local: *indexlocal, projection: projection.clone() },
+                            Place { local: *nthlocal, projection: projection.clone() },
                         );
                         new_loophead_stmts.push(Statement {
                             kind: StatementKind::Assign(lhs.clone(), new_rval),
@@ -463,20 +460,20 @@ impl LoopContractPass {
                 new_loophead_stmts,
             );
 
-            // Remove the StorageDead statements of indexpat and its projections
+            // Remove the StorageDead statements of nthpat and its projections
             let mut new_blocks = Vec::new();
             for (block_id, block) in body.blocks().iter().enumerate() {
                 let mut new_stmts = Vec::new();
                 for stmt in block.statements.iter() {
                     match &stmt.kind {
                         StatementKind::StorageDead(local) => {
-                            if !firstprj_indexprj.values().contains(local) {
+                            if !firstprj_nthprj.values().contains(local) {
                                 new_stmts.push(stmt.clone())
                             }
                         }
                         StatementKind::StorageLive(local) => {
-                            if !(firstprj_indexprj.values().contains(local)
-                                && block_id == index_blockid + 1)
+                            if !(firstprj_nthprj.values().contains(local)
+                                && block_id == nth_blockid + 1)
                             {
                                 new_stmts.push(stmt.clone())
                             }
@@ -910,7 +907,7 @@ impl LoopContractPass {
     /// It is the core of fn transform, and is separated just to avoid code repetition.
     fn transform_body_with_loop(&mut self, tcx: TyCtxt, body: Body) -> (bool, Body) {
         let mut new_body = MutableBody::from(body);
-        self.replace_firstpat_by_indexingpat(&mut new_body);
+        self.replace_first_pat_by_nth_pat(&mut new_body);
         let loop_head_map = self.get_associated_loop_head_hashmap(&new_body, tcx);
         let found_local_list =
             self.move_storagelive_assign_to_loophead(&mut new_body, &loop_head_map);

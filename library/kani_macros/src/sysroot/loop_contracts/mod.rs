@@ -273,7 +273,7 @@ if kani_iter_len > 0 {
     let pat = kani::KaniIter::first(&kaniiter); \\ init_pat_stmt
     while kani_index < kani_iter_len {
         kani::assume (kani::KaniIter::assumption(&kaniiter)); \\ iter_assume_stmt
-        let pat = kani::KaniIter::indexing(&kaniiter, kani_index); \\ pat_assign_stmt
+        let pat = kani::KaniIter::nth(&kaniiter, kani_index); \\ pat_assign_stmt
         kani_index = kani_index + 1; \\ increase_iter_stmt
         body
     }
@@ -362,7 +362,7 @@ pub fn transform_for_to_loop(
 
     let pat_assign_stmt: Stmt = parse_quote! {
         // See the comments in init_pat_stmt
-        let #pat = kani::KaniIter::indexing(&#iter_ident, #kani_index);
+        let #pat = kani::KaniIter::nth(&#iter_ident, #kani_index);
     };
 
     new_body_stmts.push(iter_assume_stmt.clone());
@@ -558,7 +558,6 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
                 });
             }
             Expr::Loop(ref mut el) => {
-                //let retexpr = get_return_statement(&el.body);
                 let invstmt: Stmt = syn::parse(quote_spanned!(original_span =>
                     if !(#register_ident(&||->bool{#inv_expr}, 0)) {assert!(false); unreachable!()};)
                     .into()).unwrap();
