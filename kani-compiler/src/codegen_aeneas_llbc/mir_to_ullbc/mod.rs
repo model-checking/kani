@@ -26,7 +26,7 @@ use charon_lib::ast::{
     FunId as CharonFunId, FunIdOrTraitMethodRef as CharonFunIdOrTraitMethodRef,
     FunSig as CharonFunSig, GenericArgs as CharonGenericArgs, GenericParams as CharonGenericParams,
     GenericsSource as CharonGenericsSource, GlobalDeclId as CharonGlobalDeclId,
-    GlobalDeclRef as CharonGlobalDeclRef, IntegerTy as CharonIntegerTy, ItemKind as CharonItemKind,
+    GlobalDeclRef as CharonGlobalDeclRef, IntTy as CharonIntTy, IntegerTy as CharonIntegerTy, ItemKind as CharonItemKind,
     ItemMeta as CharonItemMeta, ItemOpacity as CharonItemOpacity, Literal as CharonLiteral,
     LiteralTy as CharonLiteralTy, Locals as CharonLocals, Name as CharonName,
     Opaque as CharonOpaque, Operand as CharonOperand, PathElem as CharonPathElem,
@@ -41,7 +41,7 @@ use charon_lib::ast::{
     TraitRef as CharonTraitRef, TraitRefKind as CharonTraitRefKind,
     TranslatedCrate as CharonTranslatedCrate, TypeDecl as CharonTypeDecl,
     TypeDeclKind as CharonTypeDeclKind, TypeId as CharonTypeId, TypeVar as CharonTypeVar,
-    TypeVarId as CharonTypeVarId, UnOp as CharonUnOp, Var as CharonVar, VarId as CharonVarId,
+    TypeVarId as CharonTypeVarId, UnOp as CharonUnOp, Local as CharonVar, LocalId as CharonVarId,
     Variant as CharonVariant, VariantId as CharonVariantId,
 };
 use charon_lib::errors::{Error as CharonError, ErrorCtx as CharonErrorCtx};
@@ -52,7 +52,7 @@ use charon_lib::ullbc_ast::{
     RawTerminator as CharonRawTerminator, Statement as CharonStatement,
     SwitchTargets as CharonSwitchTargets, Terminator as CharonTerminator,
 };
-use charon_lib::{error_assert, error_or_panic};
+use charon_lib::{error_assert, raise_error, register_error};
 use core::panic;
 use rustc_data_structures::fx::FxHashMap;
 use rustc_middle::ty::{TyCtxt, TypingEnv};
@@ -69,6 +69,7 @@ use rustc_public::ty::{
     Ty, TyConst, TyConstKind, TyKind, UintTy,
 };
 use rustc_public::{CrateDef, CrateDefType, DefId};
+use rustc_public_bridge::IndexedVal;
 use std::collections::HashMap;
 use std::iter::zip;
 use std::path::PathBuf;
@@ -186,7 +187,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 regions: CharonVector::new(),
                 skip_binder: CharonTraitDeclRef {
                     trait_id: c_traitdecl_id,
-                    generics: c_genarg.clone(),
+                    generics: Box::new(c_genarg),
                 },
             };
             let debr = CharonDeBruijnVar::free(CharonTraitClauseId::from_usize(i));
@@ -226,7 +227,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 .translate_generic_args_without_trait(trait_ref.args().clone(), trait_def.def_id());
             let c_polytrait = CharonPolyTraitDeclRef {
                 regions: CharonVector::new(),
-                skip_binder: CharonTraitDeclRef { trait_id: c_traitdecl_id, generics: c_genarg },
+                skip_binder: CharonTraitDeclRef { trait_id: c_traitdecl_id, generics: Box::new(c_genarg) },
             };
             let c_traitclause = CharonTraitClause {
                 clause_id: CharonTraitClauseId::from_usize(i),
@@ -856,7 +857,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     // block.
                 }
                 _ => {
-                    error_or_panic!(self, span, format!("Unexpected DefPathData: {:?}", data));
+                    raise_error!(self, span, "{}", format!("Unexpected DefPathData: {:?}", data));
                 }
             }
         }
@@ -999,7 +1000,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     // block.
                 }
                 _ => {
-                    error_or_panic!(self, span, format!("Unexpected DefPathData: {:?}", data));
+                    raise_error!(self, span, "{}", format!("Unexpected DefPathData: {:?}", data));
                 }
             }
         }
@@ -1106,7 +1107,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     // block.
                 }
                 _ => {
-                    error_or_panic!(self, span, format!("Unexpected DefPathData: {:?}", data));
+                    raise_error!(self, span, "{}", format!("Unexpected DefPathData: {:?}", data));
                 }
             }
         }
@@ -1249,7 +1250,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 regions: trait_ref.trait_decl_ref.regions.clone(),
                 skip_binder: CharonTraitDeclRef {
                     trait_id: traitdecl_id,
-                    generics: generics.clone(),
+                    generics: Box::new(generics),
                 },
             };
             let subs_traitref = CharonTraitRef {
@@ -1528,7 +1529,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                         };
                         let funcid = CharonFunIdOrTraitMethodRef::Fun(CharonFunId::Regular(fid));
                         let generics = self.translate_generic_args(genarg_resolve, def_id);
-                        CharonFnPtr { func: funcid, generics }
+                        CharonFnPtr { func: Box::new(funcid), Box::new(generics) }
                     }
                     TyKind::RigidTy(RigidTy::FnPtr(..)) => todo!(),
                     x => unreachable!(
@@ -1619,8 +1620,8 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 let ty = self.place_ty(place);
                 let c_ty = self.translate_ty(ty);
                 match c_ty.kind() {
-                    CharonTyKind::Adt(CharonTypeId::Adt(c_typedeclid), _) => {
-                        CharonRvalue::Discriminant(c_place, *c_typedeclid)
+                    CharonTyKind::Adt(CharonTypeId::Adt(_), _) => {
+                        CharonRvalue::Discriminant(c_place)
                     }
                     _ => todo!("Not yet implemented:{:?}", c_ty.kind()),
                 }
@@ -1724,7 +1725,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 let c_genarg = self.translate_generic_args(uc.args.clone(), defid);
                 CharonRawConstantExpr::Global(CharonGlobalDeclRef {
                     id: c_defid,
-                    generics: c_genarg,
+                    generics: Box::new(c_genarg),
                 })
             }
             ConstantKind::Param(_) => todo!(),
@@ -1927,25 +1928,25 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
 
 fn translate_int_ty(int_ty: IntTy) -> CharonIntegerTy {
     match int_ty {
-        IntTy::I8 => CharonIntegerTy::I8,
-        IntTy::I16 => CharonIntegerTy::I16,
-        IntTy::I32 => CharonIntegerTy::I32,
-        IntTy::I64 => CharonIntegerTy::I64,
-        IntTy::I128 => CharonIntegerTy::I128,
+        IntTy::I8 => CharonIntegerTy::Signed(CharonIntTy::I8),
+        IntTy::I16 => CharonIntegerTy::Signed(CharonIntTy::I16),
+        IntTy::I32 => CharonIntegerTy::Signed(CharonIntTy::I32),
+        IntTy::I64 => CharonIntegerTy::Signed(CharonIntTy::I64),
+        IntTy::I128 => CharonIntegerTy::Signed(CharonIntTy::I128),
         // TODO: assumes 64-bit platform
-        IntTy::Isize => CharonIntegerTy::Isize,
+        IntTy::Isize => CharonIntegerTy::Signed(CharonIntTy::Isize),
     }
 }
 
 fn translate_uint_ty(uint_ty: UintTy) -> CharonIntegerTy {
     match uint_ty {
-        UintTy::U8 => CharonIntegerTy::U8,
-        UintTy::U16 => CharonIntegerTy::U16,
-        UintTy::U32 => CharonIntegerTy::U32,
-        UintTy::U64 => CharonIntegerTy::U64,
-        UintTy::U128 => CharonIntegerTy::U128,
+        UintTy::U8 =>   CharonIntegerTy::Unsigned(CharonIntTy::U8),
+        UintTy::U16 =>  CharonIntegerTy::Unsigned(CharonIntTy::U16),
+        UintTy::U32 =>  CharonIntegerTy::Unsigned(CharonIntTy::U32),
+        UintTy::U64 =>  CharonIntegerTy::Unsigned(CharonIntTy::U64),
+        UintTy::U128 => CharonIntegerTy::Unsigned(CharonIntTy::U128),
         // TODO: assumes 64-bit platform
-        UintTy::Usize => CharonIntegerTy::Usize,
+        UintTy::Usize => CharonIntegerTy::Unsigned(CharonIntTy::Usize),
     }
 }
 
