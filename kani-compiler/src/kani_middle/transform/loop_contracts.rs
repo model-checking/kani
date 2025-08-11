@@ -185,7 +185,7 @@ impl LoopContractPass {
 
     // Get the list of tuples:
     // (firstpat, the block_id where firstpat get assigned, the corresponding indexpat, the block_id where indexpat get assigned)
-    fn get_firstpats_and_indexingpats(
+    fn get_first_pats_and_index_pats(
         &self,
         body: &MutableBody,
     ) -> Vec<(usize, usize, usize, usize)> {
@@ -231,7 +231,7 @@ impl LoopContractPass {
     // This Vec includes the user defined variables together with the tuple-typed variable
     // thst store the return of "kani::KaniIter::first" function
     fn get_storage_moving_variables(&self, body: &MutableBody) -> Vec<usize> {
-        let first_index_list = self.get_firstpats_and_indexingpats(body);
+        let first_index_list = self.get_first_pats_and_index_pats(body);
         let mut moving_vars = self.get_user_defined_variables(body);
         for (firstvar, _, _, _) in first_index_list {
             if !moving_vars.contains(&firstvar) {
@@ -268,7 +268,7 @@ impl LoopContractPass {
     // Replace the "firstpat" vars with its corresponding "indexingpat" vars
     // See the comments in kani/library/kani_macros/src/sysroot/loop_contracts/mod.rs
     fn replace_firstpat_by_indexingpat(&self, body: &mut MutableBody) {
-        let first_indexing_list = self.get_firstpats_and_indexingpats(body);
+        let first_indexing_list = self.get_first_pats_and_index_pats(body);
         for (firstvar, indexvar, first_blockid, index_blockid) in first_indexing_list {
             // Replace firstpat by indexpat in the destination of "kani::KaniIter::first" function call
             let old_terminator = body.blocks()[first_blockid].terminator.clone();
