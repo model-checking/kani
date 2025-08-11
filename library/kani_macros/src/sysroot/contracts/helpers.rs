@@ -10,7 +10,7 @@ use syn::spanned::Spanned;
 use syn::{Attribute, Expr, ExprBlock, Local, LocalInit, PatIdent, Stmt, parse_quote};
 
 /// If an explicit return type was provided it is returned, otherwise `()`.
-pub fn return_type_to_type(return_type: &syn::ReturnType) -> Cow<syn::Type> {
+pub fn return_type_to_type(return_type: &syn::ReturnType) -> Cow<'_, syn::Type> {
     match return_type {
         syn::ReturnType::Default => Cow::Owned(syn::Type::Tuple(syn::TypeTuple {
             paren_token: syn::token::Paren::default(),

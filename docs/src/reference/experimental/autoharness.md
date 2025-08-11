@@ -43,45 +43,37 @@ autoharness feature means that you are also opting into the function contracts a
 Kani generates and runs these harnesses internally—the user only sees the verification results.
 
 ### Options
-The `autoharness` subcommand has options `--include-pattern` and `--exclude-pattern` to include and exclude particular functions.
-These flags look for partial matches against the fully qualified name of a function.
-
-For example, if a module `my_module` has many functions, but we are only interested in `my_module::foo` and `my_module::bar`, we can run:
-```
-cargo run autoharness -Z autoharness --include-pattern my_module::foo --include-pattern my_module::bar
-```
-To exclude `my_module` entirely, run:
-```
-cargo run autoharness -Z autoharness --exclude-pattern my_module
-```
+The `autoharness` subcommand has options `--include-pattern [REGEX]` and `--exclude-pattern [REGEX]` to include and exclude particular functions using regular expressions.
+When matching, Kani prefixes the function's path with the crate name. For example, a function `foo` in the `my_crate` crate will be matched as `my_crate::foo`.
 
 The selection algorithm is as follows:
 - If only `--include-pattern`s are provided, include a function if it matches any of the provided patterns.
 - If only `--exclude-pattern`s are provided, include a function if it does not match any of the provided patterns.
 - If both are provided, include a function if it matches an include pattern *and* does not match any of the exclude patterns. Note that this implies that the exclude pattern takes precedence, i.e., if a function matches both an include pattern and an exclude pattern, it will be excluded.
 
-Here are some more examples:
+Here are some examples:
 
+```bash
+# Include functions containing foo but not bar
+kani autoharness -Z autoharness --include-pattern 'foo' --exclude-pattern 'bar'
+
+# Include my_crate::foo exactly
+kani autoharness -Z autoharness --include-pattern '^my_crate::foo$'
+
+# Include functions in the foo module, but not in foo::bar
+kani autoharness -Z autoharness --include-pattern 'foo::.*' --exclude-pattern 'foo::bar::.*'
+
+# Include functions starting with test_, but not if they're in a private module
+kani autoharness -Z autoharness --include-pattern 'test_.*' --exclude-pattern '.*::private::.*'
+
+# This ends up including nothing since all foo::bar matches will also contain bar.
+# Kani will emit a warning that these options conflict.
+kani autoharness -Z autoharness --include-pattern 'foo::bar' --exclude-pattern 'bar'
 ```
-# Include functions whose paths contain the substring foo or baz, but not foo::bar
-kani autoharness -Z autoharness --include-pattern foo --include-pattern baz --exclude-pattern foo::bar
 
-# Include functions whose paths contain the substring foo, but not bar.
-kani autoharness -Z autoharness --include-pattern foo --exclude-pattern bar
-
-# Include functions whose paths contain the substring foo::bar, but not bar.
-# This ends up including nothing, since all foo::bar matches will also contain bar.
-# Kani will emit a warning that these flags conflict.
-kani autoharness -Z autoharness --include-pattern foo::bar --exclude-pattern bar
-
-# Include functions whose paths contain the substring foo, but not foo.
-# This ends up including nothing, and Kani will emit a warning that these flags conflict.
-kani autoharness -Z autoharness --include-pattern foo --exclude--pattern foo
-```
-
-Currently, the only supported "patterns" are substrings of the fully qualified path of the function.
-However, if more sophisticated patterns (e.g., regular expressions) would be useful for you,
-please let us know in a comment on [this GitHub issue](https://github.com/model-checking/kani/issues/3832). 
+Note that because Kani prefixes function paths with the crate name, some patterns might match more than you expect.
+For example, given a function `foo_top_level` inside crate `my_crate`, the regex `.*::foo_.*` will match `foo_top_level`, since Kani interprets it as `my_crate::foo_top_level`.
+To match only `foo_` functions inside modules, use a more specific pattern, e.g. `.*::[^:]+::foo_.*`.
 
 ## Example
 Using the `estimate_size` example from [First Steps](../../tutorial-first-steps.md) again:
@@ -111,10 +103,10 @@ please add them to [this GitHub issue](https://github.com/model-checking/kani/is
 
 ## Limitations
 ### Arguments Implementing Arbitrary
-Kani will only generate an automatic harness for a function if it can determine that all of the function's arguments implement Arbitrary.
-It does not attempt to derive/implement Arbitrary for any types, even if those types could implement Arbitrary.
-For example, imagine a user defines `struct MyStruct { x: u8, y: u8}`, but does not derive or implement Arbitrary for `MyStruct`.
-Kani does not attempt to add such derivations itself, so it will not generate a harness for a function that takes `MyStruct` as input.
+Kani will only generate an automatic harness for a function if it can represent each of its arguments nondeterministically, without bounds.
+In technical terms, each of the arguments needs to implement the `Arbitrary` trait or be capable of deriving it.
+Kani will detect if a struct or enum could implement `Arbitrary` and derive it automatically.
+Note that this automatic derivation feature is only available for autoharness.
 
 ### Generic Functions
 The current implementation does not generate harnesses for generic functions.

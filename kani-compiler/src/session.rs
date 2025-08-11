@@ -4,9 +4,10 @@
 //! Module used to configure a compiler session.
 
 use crate::args::Arguments;
+use rustc_driver::default_translator;
 use rustc_errors::{
-    ColorConfig, DiagInner, emitter::Emitter, emitter::HumanReadableErrorType,
-    fallback_fluent_bundle, json::JsonEmitter, registry::Registry as ErrorRegistry,
+    ColorConfig, DiagInner, emitter::Emitter, emitter::HumanReadableErrorType, json::JsonEmitter,
+    registry::Registry as ErrorRegistry,
 };
 use rustc_session::EarlyDiagCtxt;
 use rustc_session::config::ErrorOutputType;
@@ -52,13 +53,11 @@ static JSON_PANIC_HOOK: LazyLock<Box<dyn Fn(&panic::PanicHookInfo<'_>) + Sync + 
         panic::set_hook(Box::new(|info| {
             // Print stack trace.
             let msg = format!("Kani unexpectedly panicked at {info}.",);
-            let fallback_bundle =
-                fallback_fluent_bundle(rustc_driver::DEFAULT_LOCALE_RESOURCES.to_vec(), false);
             let mut emitter = JsonEmitter::new(
                 Box::new(io::BufWriter::new(io::stderr())),
                 #[allow(clippy::arc_with_non_send_sync)]
                 Some(Arc::new(SourceMap::new(FilePathMapping::empty()))),
-                fallback_bundle,
+                default_translator(),
                 false,
                 HumanReadableErrorType::Default,
                 ColorConfig::Never,

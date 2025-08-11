@@ -5,13 +5,7 @@
 // return the expected result.
 
 #![feature(core_intrinsics)]
-use std::intrinsics::{
-    atomic_cxchg_acqrel_acquire, atomic_cxchg_acqrel_relaxed, atomic_cxchg_acqrel_seqcst,
-    atomic_cxchg_acquire_acquire, atomic_cxchg_acquire_relaxed, atomic_cxchg_acquire_seqcst,
-    atomic_cxchg_relaxed_acquire, atomic_cxchg_relaxed_relaxed, atomic_cxchg_relaxed_seqcst,
-    atomic_cxchg_release_acquire, atomic_cxchg_release_relaxed, atomic_cxchg_release_seqcst,
-    atomic_cxchg_seqcst_acquire, atomic_cxchg_seqcst_relaxed, atomic_cxchg_seqcst_seqcst,
-};
+use std::intrinsics::{AtomicOrdering, atomic_cxchg};
 
 #[kani::proof]
 fn main() {
@@ -52,21 +46,50 @@ fn main() {
         // Returns (val, ok) where
         //  * val: the old value
         //  * ok:  bool indicating whether the operation was successful or not
-        let x1 = atomic_cxchg_acqrel_acquire(ptr_a1, 0, 1);
-        let x2 = atomic_cxchg_acqrel_relaxed(ptr_a2, 0, 1);
-        let x3 = atomic_cxchg_acqrel_seqcst(ptr_a3, 0, 1);
-        let x4 = atomic_cxchg_acquire_acquire(ptr_a4, 0, 1);
-        let x5 = atomic_cxchg_acquire_relaxed(ptr_a5, 0, 1);
-        let x6 = atomic_cxchg_acquire_seqcst(ptr_a6, 0, 1);
-        let x7 = atomic_cxchg_relaxed_acquire(ptr_a7, 0, 1);
-        let x8 = atomic_cxchg_relaxed_relaxed(ptr_a8, 0, 1);
-        let x9 = atomic_cxchg_relaxed_seqcst(ptr_a9, 0, 1);
-        let x10 = atomic_cxchg_release_acquire(ptr_a10, 0, 1);
-        let x11 = atomic_cxchg_release_relaxed(ptr_a11, 0, 1);
-        let x12 = atomic_cxchg_release_seqcst(ptr_a12, 0, 1);
-        let x13 = atomic_cxchg_seqcst_acquire(ptr_a13, 0, 1);
-        let x14 = atomic_cxchg_seqcst_relaxed(ptr_a14, 0, 1);
-        let x15 = atomic_cxchg_seqcst_seqcst(ptr_a15, 0, 1);
+        let x1 = atomic_cxchg::<_, { AtomicOrdering::AcqRel }, { AtomicOrdering::Acquire }>(
+            ptr_a1, 0, 1,
+        );
+        let x2 = atomic_cxchg::<_, { AtomicOrdering::AcqRel }, { AtomicOrdering::Relaxed }>(
+            ptr_a2, 0, 1,
+        );
+        let x3 =
+            atomic_cxchg::<_, { AtomicOrdering::AcqRel }, { AtomicOrdering::SeqCst }>(ptr_a3, 0, 1);
+        let x4 = atomic_cxchg::<_, { AtomicOrdering::Acquire }, { AtomicOrdering::Acquire }>(
+            ptr_a4, 0, 1,
+        );
+        let x5 = atomic_cxchg::<_, { AtomicOrdering::Acquire }, { AtomicOrdering::Relaxed }>(
+            ptr_a5, 0, 1,
+        );
+        let x6 = atomic_cxchg::<_, { AtomicOrdering::Acquire }, { AtomicOrdering::SeqCst }>(
+            ptr_a6, 0, 1,
+        );
+        let x7 = atomic_cxchg::<_, { AtomicOrdering::Relaxed }, { AtomicOrdering::Acquire }>(
+            ptr_a7, 0, 1,
+        );
+        let x8 = atomic_cxchg::<_, { AtomicOrdering::Relaxed }, { AtomicOrdering::Relaxed }>(
+            ptr_a8, 0, 1,
+        );
+        let x9 = atomic_cxchg::<_, { AtomicOrdering::Relaxed }, { AtomicOrdering::SeqCst }>(
+            ptr_a9, 0, 1,
+        );
+        let x10 = atomic_cxchg::<_, { AtomicOrdering::Release }, { AtomicOrdering::Acquire }>(
+            ptr_a10, 0, 1,
+        );
+        let x11 = atomic_cxchg::<_, { AtomicOrdering::Release }, { AtomicOrdering::Relaxed }>(
+            ptr_a11, 0, 1,
+        );
+        let x12 = atomic_cxchg::<_, { AtomicOrdering::Release }, { AtomicOrdering::SeqCst }>(
+            ptr_a12, 0, 1,
+        );
+        let x13 = atomic_cxchg::<_, { AtomicOrdering::SeqCst }, { AtomicOrdering::Acquire }>(
+            ptr_a13, 0, 1,
+        );
+        let x14 = atomic_cxchg::<_, { AtomicOrdering::SeqCst }, { AtomicOrdering::Relaxed }>(
+            ptr_a14, 0, 1,
+        );
+        let x15 = atomic_cxchg::<_, { AtomicOrdering::SeqCst }, { AtomicOrdering::SeqCst }>(
+            ptr_a15, 0, 1,
+        );
 
         assert!(x1 == (0, true));
         assert!(x2 == (0, true));
@@ -84,21 +107,50 @@ fn main() {
         assert!(x14 == (0, true));
         assert!(x15 == (0, true));
 
-        let y1 = atomic_cxchg_acqrel_acquire(ptr_a1, 1, 1);
-        let y2 = atomic_cxchg_acqrel_relaxed(ptr_a2, 1, 1);
-        let y3 = atomic_cxchg_acqrel_seqcst(ptr_a3, 1, 1);
-        let y4 = atomic_cxchg_acquire_acquire(ptr_a4, 1, 1);
-        let y5 = atomic_cxchg_acquire_relaxed(ptr_a5, 1, 1);
-        let y6 = atomic_cxchg_acquire_seqcst(ptr_a6, 1, 1);
-        let y7 = atomic_cxchg_relaxed_acquire(ptr_a7, 1, 1);
-        let y8 = atomic_cxchg_relaxed_relaxed(ptr_a8, 1, 1);
-        let y9 = atomic_cxchg_relaxed_seqcst(ptr_a9, 1, 1);
-        let y10 = atomic_cxchg_release_acquire(ptr_a10, 1, 1);
-        let y11 = atomic_cxchg_release_relaxed(ptr_a11, 1, 1);
-        let y12 = atomic_cxchg_release_seqcst(ptr_a12, 1, 1);
-        let y13 = atomic_cxchg_seqcst_acquire(ptr_a13, 1, 1);
-        let y14 = atomic_cxchg_seqcst_relaxed(ptr_a14, 1, 1);
-        let y15 = atomic_cxchg_seqcst_seqcst(ptr_a15, 1, 1);
+        let y1 = atomic_cxchg::<_, { AtomicOrdering::AcqRel }, { AtomicOrdering::Acquire }>(
+            ptr_a1, 1, 1,
+        );
+        let y2 = atomic_cxchg::<_, { AtomicOrdering::AcqRel }, { AtomicOrdering::Relaxed }>(
+            ptr_a2, 1, 1,
+        );
+        let y3 =
+            atomic_cxchg::<_, { AtomicOrdering::AcqRel }, { AtomicOrdering::SeqCst }>(ptr_a3, 1, 1);
+        let y4 = atomic_cxchg::<_, { AtomicOrdering::Acquire }, { AtomicOrdering::Acquire }>(
+            ptr_a4, 1, 1,
+        );
+        let y5 = atomic_cxchg::<_, { AtomicOrdering::Acquire }, { AtomicOrdering::Relaxed }>(
+            ptr_a5, 1, 1,
+        );
+        let y6 = atomic_cxchg::<_, { AtomicOrdering::Acquire }, { AtomicOrdering::SeqCst }>(
+            ptr_a6, 1, 1,
+        );
+        let y7 = atomic_cxchg::<_, { AtomicOrdering::Relaxed }, { AtomicOrdering::Acquire }>(
+            ptr_a7, 1, 1,
+        );
+        let y8 = atomic_cxchg::<_, { AtomicOrdering::Relaxed }, { AtomicOrdering::Relaxed }>(
+            ptr_a8, 1, 1,
+        );
+        let y9 = atomic_cxchg::<_, { AtomicOrdering::Relaxed }, { AtomicOrdering::SeqCst }>(
+            ptr_a9, 1, 1,
+        );
+        let y10 = atomic_cxchg::<_, { AtomicOrdering::Release }, { AtomicOrdering::Acquire }>(
+            ptr_a10, 1, 1,
+        );
+        let y11 = atomic_cxchg::<_, { AtomicOrdering::Release }, { AtomicOrdering::Relaxed }>(
+            ptr_a11, 1, 1,
+        );
+        let y12 = atomic_cxchg::<_, { AtomicOrdering::Release }, { AtomicOrdering::SeqCst }>(
+            ptr_a12, 1, 1,
+        );
+        let y13 = atomic_cxchg::<_, { AtomicOrdering::SeqCst }, { AtomicOrdering::Acquire }>(
+            ptr_a13, 1, 1,
+        );
+        let y14 = atomic_cxchg::<_, { AtomicOrdering::SeqCst }, { AtomicOrdering::Relaxed }>(
+            ptr_a14, 1, 1,
+        );
+        let y15 = atomic_cxchg::<_, { AtomicOrdering::SeqCst }, { AtomicOrdering::SeqCst }>(
+            ptr_a15, 1, 1,
+        );
 
         assert!(y1 == (1, true));
         assert!(y2 == (1, true));

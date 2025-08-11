@@ -104,36 +104,6 @@ where
         .collect::<Vec<_>>()
 }
 
-/// Use a predicate to find `const` declarations, then extract all items reachable from them.
-///
-/// Probably only specifically useful with a predicate to find `TestDescAndFn` const declarations from
-/// tests and extract the closures from them.
-pub fn filter_const_crate_items<F>(
-    tcx: TyCtxt,
-    transformer: &mut BodyTransformation,
-    mut predicate: F,
-) -> Vec<MonoItem>
-where
-    F: FnMut(TyCtxt, Instance) -> bool,
-{
-    let crate_items = stable_mir::all_local_items();
-    let mut roots = Vec::new();
-    // Filter regular items.
-    for item in crate_items {
-        // Only collect monomorphic items.
-        if let Ok(instance) = Instance::try_from(item)
-            && predicate(tcx, instance)
-        {
-            let body = transformer.body(tcx, instance);
-            let mut collector =
-                MonoItemsFnCollector { tcx, body: &body, collected: FxHashSet::default() };
-            collector.visit_body(&body);
-            roots.extend(collector.collected.into_iter());
-        }
-    }
-    roots.into_iter().map(|root| root.item).collect()
-}
-
 /// Reason for introducing an edge in the call graph.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 enum CollectionReason {

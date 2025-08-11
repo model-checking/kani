@@ -1,16 +1,15 @@
-
 Contracts:
-|       | Crate | Function                      | Contract Harnesses (#[kani::proof_for_contract])               |
-| ----- | ----- | ----------------------------- | -------------------------------------------------------------- |
-|       | lib   | example::implementation::bar  | example::verify::check_bar                                     |
-|       | lib   | example::implementation::foo  | example::verify::check_foo_u32, example::verify::check_foo_u64 |
-|       | lib   | example::implementation::func | example::verify::check_func                                    |
-|       | lib   | example::prep::parse          | NONE                                                           |
-| Total |       | 4                             | 4                                                              |
+|       | Crate      | Function                      | Contract Harnesses (#[kani::proof_for_contract])               |
+| ----- | ---------- | ----------------------------- | -------------------------------------------------------------- |
+|       | cargo_list | example::implementation::bar  | example::verify::check_bar                                     |
+|       | cargo_list | example::implementation::foo  | example::verify::check_foo_u32, example::verify::check_foo_u64 |
+|       | cargo_list | example::implementation::func | example::verify::check_func                                    |
+|       | cargo_list | example::prep::parse          | NONE                                                           |
+| Total |            | 4                             | 4                                                              |
 
 Standard Harnesses (#[kani::proof]):
-|       | Crate | Harness                                           |
-| ----- | ----- | ------------------------------------------------- |
-|       | lib   | standard_harnesses::example::verify::check_modify |
-|       | lib   | standard_harnesses::example::verify::check_new    |
-| Total |       | 2                                                 |
+|       | Crate      | Harness                                           |
+| ----- | ---------- | ------------------------------------------------- |
+|       | cargo_list | standard_harnesses::example::verify::check_modify |
+|       | cargo_list | standard_harnesses::example::verify::check_new    |
+| Total |            | 2                                                 |

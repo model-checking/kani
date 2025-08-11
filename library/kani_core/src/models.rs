@@ -32,6 +32,13 @@ macro_rules! generate_models {
                 }
             }
 
+            #[kanitool::fn_marker = "PanicStub"]
+            pub fn panic_stub(t: &str) -> ! {
+                // Using an infinite loop here to have the function return the never (`!`) type.
+                // We could also use `exit()` / `abort()` but both require depending on std::process.
+                loop {}
+            }
+
             #[kanitool::fn_marker = "AlignOfValRawModel"]
             pub fn align_of_val_raw<T: ?Sized>(ptr: *const T) -> usize {
                 if let Some(size) = kani::mem::checked_align_of_raw(ptr) {
