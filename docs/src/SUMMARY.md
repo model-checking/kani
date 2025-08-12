@@ -31,6 +31,7 @@
 - [Application](./application.md)
   - [Comparison with other tools](./tool-comparison.md)
   - [Where to start on real code](./tutorial-real-code.md)
+  - [Debugging slow proofs](./debugging-slow-proofs.md)
 
 - [Developer documentation](dev-documentation.md)
   - [Coding conventions](./conventions.md)
