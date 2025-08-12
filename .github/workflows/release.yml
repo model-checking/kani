@@ -30,7 +30,7 @@ jobs:
       crate_version: ${{ steps.bundle.outputs.crate_version }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
@@ -53,7 +53,7 @@ jobs:
       crate_version: ${{ steps.bundle.outputs.crate_version }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
@@ -76,7 +76,7 @@ jobs:
       crate_version: ${{ steps.bundle.outputs.crate_version }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
@@ -99,7 +99,7 @@ jobs:
       crate_version: ${{ steps.bundle.outputs.crate_version }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
@@ -186,7 +186,7 @@ jobs:
           fi
 
       - name: Checkout tests
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Move rust-toolchain file to outside kani
         run: |
@@ -256,7 +256,7 @@ jobs:
           cargo kani setup --use-local-bundle ./${{ matrix.prev_job.bundle }}
 
       - name: Checkout tests
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Run tests
         # TODO: Customize compiletest to run custom kani. For now, just run a few cargo kani tests.
@@ -278,7 +278,7 @@ jobs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Get version
         run: |
@@ -342,7 +342,7 @@ jobs:
       target: x86_64-unknown-linux-gnu
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup

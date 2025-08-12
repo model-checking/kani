@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Kani
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Execute copyright check
         run: ./scripts/ci/run-copyright-check.sh
@@ -34,7 +34,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout Kani
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
