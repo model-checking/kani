@@ -68,6 +68,8 @@ We've extended
 Rust compiler testing framework) to work with these suites. That way, we take
 advantage of all `compiletest` features (e.g., parallel execution).
 
+A good rule of thumb is to put a test in the `kani` or `cargo-kani` folders if all we care about is codegen and verification succeeding. This is usually the case if we're fixing a code pattern that previously crashed, so a successful verification result is a sufficient test. Otherwise, if the output refers to UI, e.g., a compiler error with a highlighted span, put it in the `ui` or `cargo-ui` suites. If the output is for a CBMC-based property that we expect Kani to check (e.g., ensuring that a particular assertion fails), use the `expected` folder. 
+
 ### Testing stages
 
 The process of running single-file tests is split into three stages:
@@ -83,8 +85,7 @@ If a test fails, the error message will include the stage where it failed:
 error: test failed: expected check success, got failure
 ```
 
-When working on a test that's expected to fail, there are two options to
-indicate an expected failure. The first one is to add a comment
+Some tests have the following, historical syntax:
 
 ```rust
 // kani-<stage>-fail
@@ -92,14 +93,7 @@ indicate an expected failure. The first one is to add a comment
 at the top of the test file, where `<stage>` is the stage where the test is
 expected to fail.
 
-The other option is to use the predicate `kani::expect_fail(cond, message)`
-included in the Kani library. The `cond` in `kani::expect_fail` is a condition
-that you expect not to hold during verification. The testing framework expects
-one `EXPECTED FAIL` message in the verification output for each use of the
-predicate.
-
-> **NOTE**: `kani::expect_fail` is only useful to indicate failure in the
-> `verify` stage, errors in other stages will be considered testing failures.
+We retain support for this test format, but prefer `expected` tests, since they more precisely indicate which failure we expect, rather than a general verification or codegen failure.
 
 ### Testing options
 
