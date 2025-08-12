@@ -16,6 +16,7 @@
   - [Nondeterministic variables](./tutorial-nondeterministic-variables.md)
 
 - [Reference](./reference.md)
+  - [Arbitrary Trait](./reference/arbitrary.md)
   - [Attributes](./reference/attributes.md)
   - [Bounded Non-deterministic variables](./reference/bounded_arbitrary.md)
   - [List Kani Metadata](./reference/list.md)
