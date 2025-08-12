@@ -9,6 +9,7 @@ At present, the available Kani attributes are the following:
  - [`#[kani::unwind(<number>)]`](#kaniunwindnumber)
  - [`#[kani::solver(<solver>)]`](#kanisolversolver)
  - [`#[kani::stub(<original>, <replacement>)]`](#kanistuboriginal-replacement)
+ - [Contract-related attributes](#contract-attributes)
 
 ## `#[kani::proof]`
 
@@ -239,3 +240,14 @@ default one.
 **Replaces the function/method with name <original> with the function/method with name <replacement> during compilation**
 
 Check the [*Stubbing* section](../reference/stubbing.md) for more information about stubbing.
+
+## Contract Attributes
+
+There are numerous attributes for function and loop contracts. At present, these are:
+
+- Proof harness for contracts: `#[kani::proof_for_contract]`
+- Verified stubbing: `#[kani::stub_verified]`
+- Function contract specification: `#[kani::requires]`, `#[kani::modifies]`, `#[kani::ensures]`, `#[kani::recursion]`
+- Loop contract specification: `#[kani::loop_invariant]`, `#[kani::loop_modifies]`.
+
+See the documentation on [function contracts](./experimental/contracts.md) and [loop contracts](./experimental/loop-contracts.md) for details.
