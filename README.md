@@ -7,7 +7,7 @@ The Kani Rust Verifier is a bit-precise model checker for Rust.
 Kani is useful for checking both safety and correctness of Rust code.
 - *Safety*: Kani automatically checks for many kinds of [undefined behavior](https://model-checking.github.io/kani/undefined-behaviour.html).
 This makes it particularly useful for verifying unsafe code blocks in Rust, where the "[unsafe superpowers](https://doc.rust-lang.org/stable/book/ch19-01-unsafe-rust.html#unsafe-superpowers)" are unchecked by the compiler.
-- *Correctness*: Kani automatically checks for certain behaviors that are likely incorrect (namely, panics and arithmetic overflows), although these checks can be disabled if desired. Kani also supports custom correctness properties, either in the form of assertions (`assert!(...)`) or [function contracts](https://model-checking.github.io/kani/reference/experimental/contracts.html).
+- *Correctness*: Kani automatically checks panics (e.g. `unwrap()` on `None`), arithmetic overflows, and custom correctness properties, either in the form of assertions (`assert!(...)`) or [function contracts](https://model-checking.github.io/kani/reference/experimental/contracts.html).
 
 ## Installation
 
