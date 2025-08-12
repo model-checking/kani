@@ -217,14 +217,16 @@ impl GotocCtx<'_> {
         // -------------------------
         //
         // In fetch functions of atomic_ptr such as https://doc.rust-lang.org/std/sync/atomic/struct.AtomicPtr.html#method.fetch_byte_add,
-        // the type of var2 can be pointer (invalid_mut).
-        // In such case, atomic binops are transformed as follows to avoid typecheck failure.
+        // the type of var1 is a pointer.
+        // In this case, var2 is guaranteed to be a usize,
+        // c.f. https://github.com/rust-lang/rust/blob/a1531335fe2807715fff569904d99602022643a7/library/core/src/intrinsics/mod.rs#L203
+        // We transform such binops as follows to avoid typecheck failure.
         // -------------------------
         // var = atomic_op(var1, var2)
         // -------------------------
         // unsigned char tmp;
         // tmp = *var1;
-        // *var1 = (typeof var1)op((size_t)*var1, (size_t)var2);
+        // *var1 = (typeof var1)op((size_t)*var1, var2);
         // var = tmp;
         // -------------------------
         //
@@ -238,9 +240,9 @@ impl GotocCtx<'_> {
                 let (tmp, decl_stmt) =
                     self.decl_temp_variable(var1.typ().clone(), Some(var1.to_owned()), loc);
                 let var2 = fargs.remove(0);
-                let op_expr = if var2.typ().is_pointer() {
+                let op_expr = if var1.typ().is_pointer() {
                     (var1.clone().cast_to(Type::c_size_t()))
-                        .$op(var2.cast_to(Type::c_size_t()))
+                        .$op(var2)
                         .with_location(loc)
                         .cast_to(var1.typ().clone())
                 } else {

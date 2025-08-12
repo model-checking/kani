@@ -24,11 +24,11 @@ fn main() {
     let b = 1 as u8;
 
     unsafe {
-        let x1 = atomic_xor::<_, { AtomicOrdering::SeqCst }>(ptr_a1, b);
-        let x2 = atomic_xor::<_, { AtomicOrdering::Acquire }>(ptr_a2, b);
-        let x3 = atomic_xor::<_, { AtomicOrdering::AcqRel }>(ptr_a3, b);
-        let x4 = atomic_xor::<_, { AtomicOrdering::Release }>(ptr_a4, b);
-        let x5 = atomic_xor::<_, { AtomicOrdering::Relaxed }>(ptr_a5, b);
+        let x1 = atomic_xor::<_, _, { AtomicOrdering::SeqCst }>(ptr_a1, b);
+        let x2 = atomic_xor::<_, _, { AtomicOrdering::Acquire }>(ptr_a2, b);
+        let x3 = atomic_xor::<_, _, { AtomicOrdering::AcqRel }>(ptr_a3, b);
+        let x4 = atomic_xor::<_, _, { AtomicOrdering::Release }>(ptr_a4, b);
+        let x5 = atomic_xor::<_, _, { AtomicOrdering::Relaxed }>(ptr_a5, b);
 
         assert!(x1 == 1);
         assert!(x2 == 1);
