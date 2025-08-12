@@ -1,11 +1,12 @@
 # Getting started
 
 Kani is an open-source verification tool that uses [model checking](./tool-comparison.md) to analyze Rust programs.
-Kani is particularly useful for verifying unsafe code blocks in Rust, where the "[unsafe superpowers](https://doc.rust-lang.org/stable/book/ch19-01-unsafe-rust.html#unsafe-superpowers)" are unchecked by the compiler.
-Some example properties you can prove with Kani include memory safety properties (e.g., null pointer dereferences, use-after-free, etc.), the absence of certain runtime errors (i.e., index out of bounds, panics), and the absence of some types of unexpected behavior (e.g., arithmetic overflows).
-Kani can also prove custom properties provided in the form of user-specified assertions.
-As Kani uses model checking, Kani will either prove the property, disprove the
-property (with a counterexample), or may run out of resources.
+Kani is useful for checking both safety and correctness of Rust code.
+- *Safety*: Kani automatically checks for many kinds of [undefined behavior](./undefined-behaviour.md).
+This makes it particularly useful for verifying unsafe code blocks in Rust, where the "[unsafe superpowers](https://doc.rust-lang.org/stable/book/ch19-01-unsafe-rust.html#unsafe-superpowers)" are unchecked by the compiler.
+- *Correctness*: Kani automatically checks for certain behaviors that are likely incorrect (namely, panics and arithmetic overflows), although these checks can be disabled if desired. Kani also supports custom correctness properties, either in the form of assertions (`assert!(...)`) or [function contracts](./reference/experimental/contracts.md).
+
+Since Kani uses model checking, Kani will either prove the property, disprove the property (with a counterexample), or may run out of resources.
 
 Kani uses proof harnesses to analyze programs.
 Proof harnesses are similar to test harnesses, especially property-based test harnesses.
