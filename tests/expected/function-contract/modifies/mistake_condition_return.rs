@@ -1,6 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-flags: -Zfunction-contracts
+// kani-flags: -Zfunction-contracts -Zstubbing
 
 //! Provide an example where users might get confuse on how to constrain
 //! the return value of functions when writing function contracts.

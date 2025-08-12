@@ -1,6 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-flags: -Zfunction-contracts
+// kani-flags: -Zfunction-contracts -Zstubbing
 type T = u8;
 
 /// Euclid's algorithm for calculating the GCD of two numbers

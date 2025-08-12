@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
-// kani-flags: -Z function-contracts
+// kani-flags: -Z function-contracts -Z stubbing
 
 // Test that Kani catches stub_verified attributes without corresponding proof_for_contract harnesses
 

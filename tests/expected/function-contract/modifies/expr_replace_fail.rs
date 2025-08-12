@@ -1,6 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-flags: -Zfunction-contracts
+// kani-flags: -Zfunction-contracts -Zstubbing
 
 // Tests that providing the "modifies" clause havocks the pointer such
 // that the increment can no longer be observed (in the absence of an

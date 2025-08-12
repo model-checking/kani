@@ -119,6 +119,11 @@ impl KaniAttributeKind {
     pub fn demands_function_contract_use(self) -> bool {
         matches!(self, KaniAttributeKind::ProofForContract)
     }
+
+    /// Is this a stubbing attribute that requires the experimental stubbing feature?
+    pub fn demands_stubbing_use(self) -> bool {
+        matches!(self, KaniAttributeKind::Stub | KaniAttributeKind::StubVerified)
+    }
 }
 
 /// Bundles together common data used when evaluating the attributes of a given
@@ -437,6 +442,22 @@ impl<'tcx> KaniAttributes<'tcx> {
             for kind in self.map.keys().copied().filter(|a| a.demands_function_contract_use()) {
                 let msg = format!(
                     "Using the {} attribute requires activating the unstable `function-contracts` feature",
+                    kind.as_ref()
+                );
+                if let Some(attr) = self.map.get(&kind).unwrap().first() {
+                    self.tcx.dcx().span_err(attr.span(), msg);
+                } else {
+                    self.tcx.dcx().err(msg);
+                }
+            }
+        }
+
+        // If the `stubbing` unstable feature is not enabled then no
+        // function should use any of those APIs.
+        if !enabled_features.iter().any(|feature| feature == "stubbing") {
+            for kind in self.map.keys().copied().filter(|a| a.demands_stubbing_use()) {
+                let msg = format!(
+                    "Using the {} attribute requires activating the unstable `stubbing` feature",
                     kind.as_ref()
                 );
                 if let Some(attr) = self.map.get(&kind).unwrap().first() {

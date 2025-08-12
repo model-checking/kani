@@ -1,6 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-flags: -Zfunction-contracts
+// kani-flags: -Zfunction-contracts -Zstubbing
 
 //! Check that Kani does not report any error when unused modifies clauses
 //! includes objects of types that do not implement `kani::Arbitrary`.
