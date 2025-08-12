@@ -18,6 +18,7 @@
 - [Reference](./reference.md)
   - [Attributes](./reference/attributes.md)
   - [Bounded Non-deterministic variables](./reference/bounded_arbitrary.md)
+  - [List Kani Metadata](./reference/list.md)
   - [Experimental features](./reference/experimental/experimental-features.md)
     - [Automatic Harness Generation](./reference/experimental/autoharness.md)
     - [Coverage](./reference/experimental/coverage.md)
