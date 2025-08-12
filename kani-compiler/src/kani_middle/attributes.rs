@@ -369,6 +369,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                 KaniAttributeKind::StubVerified => {
                     attrs.iter().for_each(|attr| {
                         self.check_stub_verified(attr);
+                        let res = self.parse_single_path_attr(attr);
                     });
                 }
                 KaniAttributeKind::FnMarker
