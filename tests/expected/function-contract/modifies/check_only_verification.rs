@@ -26,6 +26,12 @@ fn use_modify(ptr: &mut u32) {
     assert!(modify(ptr) == 100);
 }
 
+#[kani::proof_for_contract(modify)]
+fn modify_harness() {
+    let ptr = &mut kani::any();
+    modify(ptr);
+}
+
 #[kani::proof]
 #[kani::stub_verified(modify)]
 fn harness() {

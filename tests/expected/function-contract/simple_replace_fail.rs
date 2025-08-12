@@ -13,3 +13,10 @@ fn div(dividend: u32, divisor: u32) -> u32 {
 fn main() {
     assert!(div(9, 4) == 2, "contract doesn't guarantee equality");
 }
+
+#[kani::proof_for_contract(div)]
+fn check_div() {
+    let dividend: u32 = kani::any();
+    let divisor: u32 = kani::any();
+    div(dividend, divisor);
+}

@@ -12,6 +12,7 @@ fn add_three(add_three_ptr: &mut u32) {
 }
 
 #[kani::requires(*add_two_ptr < 101)]
+#[kani::modifies(add_two_ptr)]
 #[kani::ensures(|_| old(*add_two_ptr + 2) == *add_two_ptr)]
 fn add_two(add_two_ptr: &mut u32) {
     *add_two_ptr += 1;
@@ -58,4 +59,12 @@ fn complex_proof_for_contract_takes_precedence() {
 fn stub_verified_takes_precedence() {
     let mut i = kani::any();
     add_three(&mut i);
+}
+
+// The stub_verified contract mandates that we have a proof for the target of the verified stub
+#[kani::proof_for_contract(add_two)]
+fn check_add_two() {
+    // 3 so that when add_one's contract is generated as an assertion, its precondition holds
+    let mut x = 3;
+    add_two(&mut x);
 }

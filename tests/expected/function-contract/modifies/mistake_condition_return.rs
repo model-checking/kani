@@ -37,3 +37,9 @@ fn harness() {
     let mut i = kani::any();
     use_modify(&mut i);
 }
+
+#[kani::proof_for_contract(modify)]
+fn check_modify() {
+    let mut x: u32 = kani::any();
+    modify(&mut x);
+}

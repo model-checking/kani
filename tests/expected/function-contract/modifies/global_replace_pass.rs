@@ -10,6 +10,14 @@ unsafe fn modify(src: u32) {
     PTR = src;
 }
 
+#[kani::proof_for_contract(modify)]
+fn modify_harness() {
+    let src = kani::any();
+    unsafe {
+        modify(src);
+    }
+}
+
 #[kani::proof]
 #[kani::stub_verified(modify)]
 fn main() {

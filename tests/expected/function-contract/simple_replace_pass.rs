@@ -8,6 +8,13 @@ fn div(dividend: u32, divisor: u32) -> u32 {
     dividend / divisor
 }
 
+#[kani::proof_for_contract(div)]
+fn div_harness() {
+    let dividend: u32 = kani::any();
+    let divisor: u32 = kani::any();
+    div(dividend, divisor);
+}
+
 #[kani::proof]
 #[kani::stub_verified(div)]
 fn main() {

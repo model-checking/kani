@@ -54,6 +54,14 @@ impl Frac {
     }
 }
 
+#[kani::proof_for_contract(gcd)]
+#[kani::unwind(64)]
+fn gcd_harness() {
+    let x: T = kani::any();
+    let y: T = kani::any();
+    gcd(x, y);
+}
+
 #[kani::proof]
 #[kani::stub_verified(gcd)]
 fn main() {

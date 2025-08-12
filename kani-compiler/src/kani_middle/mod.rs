@@ -41,9 +41,16 @@ pub mod transform;
 /// error was found.
 pub fn check_crate_items(tcx: TyCtxt, ignore_asm: bool) {
     let krate = tcx.crate_name(LOCAL_CRATE);
+    let mut all_stub_verified_targets = FxHashMap::default();
+    let mut all_contract_targets = HashSet::new();
+
     for item in tcx.hir_free_items() {
         let def_id = item.owner_id.def_id.to_def_id();
-        KaniAttributes::for_item(tcx, def_id).check_attributes();
+        let (stub_verified_targets, contract_targets) =
+            KaniAttributes::for_item(tcx, def_id).check_attributes();
+        all_stub_verified_targets.extend(stub_verified_targets);
+        all_contract_targets.extend(contract_targets);
+
         if tcx.def_kind(def_id) == DefKind::GlobalAsm {
             if !ignore_asm {
                 let error_msg = format!(
@@ -59,6 +66,21 @@ pub fn check_crate_items(tcx: TyCtxt, ignore_asm: bool) {
             }
         }
     }
+
+    // Validate that all stub_verified targets have corresponding proof_for_contract harnesses
+    for (stub_verified_target, span) in all_stub_verified_targets {
+        if !all_contract_targets.contains(&stub_verified_target) {
+            tcx.dcx().struct_span_err(
+                span,
+                format!(
+                    "stub verified target `{}` does not have a corresponding `#[proof_for_contract]` harness",
+                    stub_verified_target.name()
+                ),
+            ).with_help("verified stubs are meant to be sound abstractions for a function's behavior, so Kani enforces that proofs exist for the stub's contract")
+            .emit();
+        }
+    }
+
     tcx.dcx().abort_if_errors();
 }
 

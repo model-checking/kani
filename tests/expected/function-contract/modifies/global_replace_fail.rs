@@ -20,3 +20,10 @@ fn main() {
         kani::assert(compare + 1 == PTR, "not havocked");
     }
 }
+
+#[kani::proof_for_contract(modify)]
+fn check_modify() {
+    unsafe {
+        modify();
+    }
+}

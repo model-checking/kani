@@ -9,6 +9,13 @@ fn modify(ptr: &mut Box<u32>, prior: u32) {
     *ptr.as_mut() += 1;
 }
 
+#[kani::proof_for_contract(modify)]
+fn modify_harness() {
+    let ptr = &mut Box::new(kani::any());
+    let prior = kani::any();
+    modify(ptr, prior);
+}
+
 #[kani::proof]
 #[kani::stub_verified(modify)]
 fn main() {

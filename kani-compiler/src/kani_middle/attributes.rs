@@ -4,6 +4,7 @@
 
 use std::collections::{BTreeMap, HashSet};
 
+use fxhash::FxHashMap;
 use kani_metadata::{CbmcSolver, HarnessAttributes, HarnessKind, Stub};
 use quote::ToTokens;
 use rustc_ast::{LitKind, MetaItem, MetaItemKind};
@@ -300,11 +301,16 @@ impl<'tcx> KaniAttributes<'tcx> {
     }
 
     /// Check that all attributes assigned to an item is valid.
+    /// Returns a tuple of (stub_verified_targets_with_spans, proof_for_contract_targets).
     /// Errors will be added to the session. Invoke self.tcx.sess.abort_if_errors() to terminate
     /// the session and emit all errors found.
-    pub(super) fn check_attributes(&self) {
+    pub(super) fn check_attributes(&self) -> (FxHashMap<FnDefStable, Span>, HashSet<FnDefStable>) {
         // Check that all attributes are correctly used and well formed.
         let is_harness = self.is_proof_harness();
+
+        let mut contract_targets = HashSet::default();
+        let mut stub_verified_targets = FxHashMap::default();
+
         for (&kind, attrs) in self.map.iter() {
             let local_error = |msg| self.tcx.dcx().span_err(attrs[0].span(), msg);
 
@@ -363,13 +369,19 @@ impl<'tcx> KaniAttributes<'tcx> {
                     expect_single(self.tcx, kind, attrs);
                     attrs.iter().for_each(|attr| {
                         self.check_proof_attribute(kind, attr);
-                        let _ = self.parse_single_path_attr(attr);
+                        let res = self.parse_single_path_attr(attr);
+                        if let Ok(target) = res {
+                            contract_targets.insert(target.def().to_owned());
+                        }
                     })
                 }
                 KaniAttributeKind::StubVerified => {
                     attrs.iter().for_each(|attr| {
                         self.check_stub_verified(attr);
                         let res = self.parse_single_path_attr(attr);
+                        if let Ok(target) = res {
+                            stub_verified_targets.insert(target.def().to_owned(), attr.span());
+                        }
                     });
                 }
                 KaniAttributeKind::FnMarker
@@ -394,6 +406,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                 }
             }
         }
+        (stub_verified_targets, contract_targets)
     }
 
     /// Get the value of an attribute if one exists.

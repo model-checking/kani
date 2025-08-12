@@ -21,3 +21,10 @@ fn main() {
     modify(s);
     kani::assert(i == i_copy + 1, "Increment havocked");
 }
+
+#[kani::proof_for_contract(modify)]
+fn check_modify() {
+    let mut x: u32 = kani::any();
+    let s = S { distraction: 0, target: &mut x };
+    modify(s);
+}

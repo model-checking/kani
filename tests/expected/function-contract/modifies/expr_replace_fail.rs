@@ -20,3 +20,10 @@ fn main() {
     modify(&mut i);
     assert!(*i == val + 1, "Increment");
 }
+
+#[kani::proof_for_contract(modify)]
+fn check_modify() {
+    let val = kani::any();
+    let mut ptr = Box::new(val);
+    modify(&mut ptr);
+}
