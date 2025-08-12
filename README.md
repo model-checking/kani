@@ -4,13 +4,10 @@
 
 The Kani Rust Verifier is a bit-precise model checker for Rust.
 
-Kani is particularly useful for verifying unsafe code blocks in Rust, where the "[unsafe superpowers](https://doc.rust-lang.org/stable/book/ch19-01-unsafe-rust.html#unsafe-superpowers)" are unchecked by the compiler.
-___
-Kani verifies:
- * Memory safety (e.g., null pointer dereferences)
- * User-specified assertions (i.e., `assert!(...)`)
- * The absence of panics (e.g., `unwrap()` on `None` values)
- * The absence of some types of unexpected behavior (e.g., arithmetic overflows)
+Kani is useful for checking both safety and correctness of Rust code.
+- *Safety*: Kani automatically checks for many kinds of [undefined behavior](https://model-checking.github.io/kani/undefined-behaviour.html).
+This makes it particularly useful for verifying unsafe code blocks in Rust, where the "[unsafe superpowers](https://doc.rust-lang.org/stable/book/ch19-01-unsafe-rust.html#unsafe-superpowers)" are unchecked by the compiler.
+- *Correctness*: Kani automatically checks for certain behaviors that are likely incorrect (namely, panics and arithmetic overflows), although these checks can be disabled if desired. Kani also supports custom correctness properties, either in the form of assertions (`assert!(...)`) or [function contracts](https://model-checking.github.io/kani/reference/experimental/contracts.html).
 
 ## Installation
 
@@ -28,15 +25,12 @@ See [the installation guide](https://model-checking.github.io/kani/install-guide
 Similar to testing, you write a harness, but with Kani you can check all possible values using `kani::any()`:
 
 ```rust
-use my_crate::{function_under_test, meets_specification, precondition};
+use my_crate::{function_under_test, meets_specification};
 
 #[kani::proof]
 fn check_my_property() {
    // Create a nondeterministic input
-   let input = kani::any();
-
-   // Constrain it according to the function's precondition
-   kani::assume(precondition(input));
+   let input: u8 = kani::any();
 
    // Call the function under verification
    let output = function_under_test(input);
@@ -46,9 +40,8 @@ fn check_my_property() {
 }
 ```
 
-Kani will then try to prove that all valid inputs produce acceptable outputs, without panicking or executing unexpected behavior.
-Otherwise Kani will generate a trace that points to the failure.
-We recommend following [the tutorial](https://model-checking.github.io/kani/kani-tutorial.html) to learn more about how to use Kani.
+Kani will try to prove that all valid inputs produce outputs that satisfy the specification, without panicking or exhibiting unexpected behavior.
+This example is simple; we highly recommend following [the tutorial](https://model-checking.github.io/kani/kani-tutorial.html) to learn more about how to use Kani.
 
 ## GitHub Action
 
