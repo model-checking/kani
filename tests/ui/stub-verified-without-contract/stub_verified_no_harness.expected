@@ -1,0 +1,27 @@
+error: Target function in stub_verified, `no_contract`, has no contract.\
+stub_verified_no_harness.rs\
+   |\
+   | #[kani::stub_verified(no_contract)]\
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\
+   |
+note: Try adding a contract to this function or use the unsound `stub` attribute instead.\
+stub_verified_no_harness.rs\
+   |\
+   | fn no_contract() -> u32 {\
+   | ^^^^^^^^^^^^^^^^^^^^^^^
+
+error: stub verified target `target_function` does not have a corresponding `#[proof_for_contract]` harness\
+stub_verified_no_harness.rs\
+   |\
+   | #[kani::stub_verified(target_function)]\
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\
+   |\
+   = help: verified stubs are meant to be sound abstractions for a function's behavior, so Kani enforces that proofs exist for the stub's contract
+
+error: stub verified target `no_contract` does not have a corresponding `#[proof_for_contract]` harness\
+stub_verified_no_harness.rs\
+   |\
+   | #[kani::stub_verified(no_contract)]\
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\
+   |\
+   = help: verified stubs are meant to be sound abstractions for a function's behavior, so Kani enforces that proofs exist for the stub's contract
