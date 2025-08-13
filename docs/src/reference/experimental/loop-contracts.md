@@ -180,7 +180,7 @@ fn forloop() {
     let a: [u8; 10] = kani::any();
     kani::assume(kani::forall!(|i in (0,10)| a[i] <= 20));
     #[kani::loop_invariant(sum <= (kani::index as u32 * 29) )]
-    for i in a.iter().enumerate() {
+    for (i, j) in a.iter().enumerate() {
         sum = sum + (i as u32) ;
     }
     assert!(sum <= 200);
