@@ -17,7 +17,7 @@ fn array_inc() {
     let mut b: [u8; 60] = a.clone();
     #[kani::loop_invariant(i < 60
             && kani::forall!(|j in (kani::index, 60)| b[j] == a[j])
-            && kani::forall!(|j in (0, i as usize)| b[j] == a[j] + 1)
+            && kani::forall!(|j in (0, kani::index)| b[j] == a[j] + 1)
     )]
     for i in 0..60 {
         b[i as usize] = a[i as usize] + 1;
