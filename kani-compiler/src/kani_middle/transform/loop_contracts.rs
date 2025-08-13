@@ -206,7 +206,6 @@ impl LoopContractPass {
                 else {
                     continue;
                 };
-                // Check if the function is `kani::internal::run_contract_fn`.
                 if fn_def.name() == "kani::KaniIter::first" {
                     current_firstpat = dest.local;
                     current_firstpat_pos = blockid;

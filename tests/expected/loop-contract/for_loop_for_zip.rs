@@ -3,7 +3,7 @@
 
 // kani-flags: -Z loop-contracts -Z mem-predicates -Z quantifiers
 
-//! Check for-loop invariant for Vec.
+//! Check for-loop invariant for Zip.
 #![feature(proc_macro_hygiene)]
 #![feature(stmt_expr_attributes)]
 
