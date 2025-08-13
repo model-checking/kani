@@ -68,7 +68,7 @@ We've extended
 Rust compiler testing framework) to work with these suites. That way, we take
 advantage of all `compiletest` features (e.g., parallel execution).
 
-A good rule of thumb is to put a test in the `kani` or `cargo-kani` folders if all we care about is codegen and verification succeeding. This is usually the case if we're fixing a code pattern that previously crashed, so a successful verification result is a sufficient test. Otherwise, if the output refers to UI, e.g., a compiler error with a highlighted span, put it in the `ui` or `cargo-ui` suites. If the output is for a CBMC-based property that we expect Kani to check (e.g., ensuring that a particular assertion fails), use the `expected` folder. 
+A good rule of thumb is to put a test in the `kani` or `cargo-kani` folders if all we care about is codegen and verification succeeding. This is usually the case if we're fixing a code pattern that previously crashed, so a successful verification result is a sufficient test. Otherwise, if the output refers to UI, e.g., a compiler error with a highlighted span, put it in the `ui` or `cargo-ui` suites. If the output is for a CBMC-based property that we expect Kani to check (e.g., ensuring that a particular assertion passes or fails), use the `expected` folder. 
 
 ### Testing stages
 
