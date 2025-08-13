@@ -282,10 +282,9 @@ if kani_iter_len > 0 {
 Note that
 
 1. expr's type is required to impl KaniIntoIter trait, which is the override impl of Rust's IntoIter (see library/kani_core/src/iter.rs).
-Reason:
-    a) Reduce stack-call
-    b) Avoid types that cannot be havocked effectively (user cannot state the type invariant in the loop invariant due to private fields)
-    c) There is no generic way to handle Rust's into_iter().
+Reasons:
+    a) Avoid types that cannot be havocked effectively (user cannot state the type invariant in the loop invariant due to private fields)
+    b) There is no generic way to handle Rust's into_iter().
 
 2. The init_index_stmt and init_pat_stmt statements supports writing the loop-invariant properties that involve pat and kani_index
 
