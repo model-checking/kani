@@ -658,11 +658,11 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
                 return #loop_body_closure_ret_2.unwrap();
             }
             if #loop_body_closure_ret_1 {
-            // Dummy function used to force the compiler to capture the environment.
-            // We cannot call closures inside constant functions.
-            // This function gets replaced by `kani::internal::call_closure`.
-            #[inline(never)]
-            #[kanitool::fn_marker = "kani_register_loop_contract"]
+                // Dummy function used to force the compiler to capture the environment.
+                // We cannot call closures inside constant functions.
+                // This function gets replaced by `kani::internal::call_closure`.
+                #[inline(never)]
+                #[kanitool::fn_marker = "kani_register_loop_contract"]
                 const fn #register_ident<F: Fn() -> bool>(_f: &F, _transformed: usize) -> bool {
                     true
                 }
