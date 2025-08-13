@@ -92,10 +92,6 @@ fn test_multiplication_small_values() {
 
 See this [tracking issue](https://github.com/model-checking/kani/issues/3006) for adding support for such partitioning automatically.
 
-### Limit Loop Iterations
-
-First, try the `#[kani::unwind]` attribute or the `--unwind` option to limit [loop unwinding](./tutorial-loop-unwinding.md). If the proof fails because the unwind value is too low, but raising it causing the proof to be too slow, try specifying a [loop contract](./reference/experimental/loop-contracts.md) instead.
-
 ### Use Stubs
 
 If a function has a complex body, consider using a [stub](./reference/experimental/stubbing.md) or a [verified stub](./reference/experimental/contracts.md) to stub the body with a simpler abstraction.
