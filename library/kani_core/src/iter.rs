@@ -68,24 +68,24 @@ macro_rules! generate_iter {
             fn len(&self) -> usize;
         }
 
-        pub struct KaniPtrIter<T: Copy> {
+        pub struct KaniPtrIter<T> {
             pub ptr: *const T,
             pub len: usize,
         }
 
-        impl<T: Copy> KaniPtrIter<T> {
+        impl<T: Clone> KaniPtrIter<T> {
             pub fn new(ptr: *const T, len: usize) -> Self {
                 KaniPtrIter { ptr, len }
             }
         }
 
-        impl<T: Copy> KaniIter for KaniPtrIter<T> {
+        impl<T: Clone> KaniIter for KaniPtrIter<T> {
             type Item = T;
             fn nth(&self, i: usize) -> Self::Item {
-                unsafe { *self.ptr.wrapping_add(i) }
+                unsafe { (&*self.ptr.wrapping_add(i)).clone() }
             }
             fn first(&self) -> Self::Item {
-                unsafe { *self.ptr }
+                unsafe { (&*self.ptr).clone() }
             }
             fn assumption(&self) -> bool {
                 //SAFETY: this call is safe as Rust compiler will complain if we write a for-loop for initnitialized object
@@ -96,19 +96,19 @@ macro_rules! generate_iter {
             }
         }
 
-        pub struct KaniRefIter<'a, T: Copy> {
+        pub struct KaniRefIter<'a, T> {
             pub ptr: *const T,
             pub len: usize,
             _marker: PhantomData<&'a T>,
         }
 
-        impl<'a, T: Copy> KaniRefIter<'a, T> {
+        impl<'a, T> KaniRefIter<'a, T> {
             pub fn new(ptr: *const T, len: usize) -> Self {
                 KaniRefIter { ptr, len, _marker: PhantomData }
             }
         }
 
-        impl<'a, T: Copy> KaniIter for KaniRefIter<'a, T> {
+        impl<'a, T> KaniIter for KaniRefIter<'a, T> {
             type Item = &'a T;
             fn nth(&self, i: usize) -> Self::Item {
                 unsafe { &*self.ptr.wrapping_add(i) }
