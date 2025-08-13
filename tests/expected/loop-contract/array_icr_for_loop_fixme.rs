@@ -9,17 +9,46 @@
 #![feature(proc_macro_hygiene)]
 #![feature(stmt_expr_attributes)]
 
-#[kani::proof]
-#[kani::solver(z3)]
-fn array_inc() {
-    let a: [u8; 60] = kani::any();
-    kani::assume(kani::forall!(|i in (0,60)| a[i] <= u8::MAX));
-    let mut b: [u8; 60] = a.clone();
+#[kani::requires(a.len() < 256)]
+#[kani::requires(kani::forall!(|i in (0, a.len())| a[i] < i32::MAX))]
+#[kani::ensures(kani::forall!(|i in (0, a.len())| a[i] = on_entry(a[i]) + 1))]
+fn array_inc(a: &mut [i32]) {
+    let b: [u8; 60] = a.clone();
     #[kani::loop_invariant(i < 60
             && kani::forall!(|j in (kani::index, 60)| b[j] == a[j])
-            && kani::forall!(|j in (0, kani::index)| b[j] == a[j] + 1)
+            && kani::forall!(|j in (0, kani::index)| a[j] == b[j] + 1)
     )]
-    for i in 0..60 {
-        b[i as usize] = a[i as usize] + 1;
+    for i in 0..a.len() {
+        a[i as usize] = a[i as usize] + 1;
     }
+}
+
+#[kani::requires(a.len() < 256)]
+#[kani::requires(kani::forall!(|i in (0, a.len())| a[i] < i32::MAX))]
+#[kani::ensures(kani::forall!(|i in (0, a.len())| a[i] = on_entry(a[i]) + 1))]
+fn array_inc_iter_mut(a: &mut [i32]) {
+    let b: [u8; 60] = a.clone();
+    #[kani::loop_invariant(i < 60
+            && kani::forall!(|j in (kani::index, 60)| b[j] == a[j])
+            && kani::forall!(|j in (0, kani::index)| a[j] == b[j] + 1)
+    )]
+    for x in a.iter_mut() {
+        *x = *x + 1;
+    }
+}
+
+#[kani::proof_for_contract(array_inc)]
+#[kani::solver(z3)]
+fn check_array_inc(a: &mut [i32]) {
+    let a: [i32; 256] = kani::any();
+    let slice = kani::slice::any_slice_of_array(&a);
+    array_inc(slice);
+}
+
+#[kani::proof_for_contract(array_inc_iter_mut)]
+#[kani::solver(z3)]
+fn check_array_inc_iter_mut(a: &mut [i32]) {
+    let a: [i32; 256] = kani::any();
+    let slice = kani::slice::any_slice_of_array(&a);
+    array_inc_iter_mut(slice);
 }
