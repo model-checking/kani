@@ -165,7 +165,7 @@ pub fn loop_with_old_and_prev() {
 }
 ```
 
-### kani::index variable in `for` loop
+### `kani::index` variable in `for` loop
 
 Kani provides an extra variable: `kani::index` that can be used in loop contracts of `for` loops.
 `kani::index` presents the position (index) of the current iteration in the iterator 
