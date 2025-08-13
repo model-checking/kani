@@ -39,7 +39,7 @@ Standard Harnesses (#[kani::proof]):
 +-------+----------+-------------------------------+
 ```
 
-The "Contracts" table overviews which functions have contract attributes (`#[requires]`, `#[ensures]`, or `modifies`), and which harnesses exist for those functions.
+The "Contracts" table shows functions that have contract attributes (`#[requires]`, `#[ensures]`, or `modifies`), and which harnesses exist for those functions.
 The "Standard Harnesses" table lists all of the `#[kani::proof]` harnesses found.
 
 The `markdown` and `json` options write the same information to Markdown or JSON files, respectively.
