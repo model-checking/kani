@@ -322,7 +322,6 @@ macro_rules! generate_iter {
         impl<I: KaniIter> KaniIter for KaniTakeIter<I> {
             type Item = I::Item;
             fn nth(&self, i: usize) -> Self::Item {
-                //assert!(i < self.n && i < self.iter.len());
                 self.iter.nth(i)
             }
             fn first(&self) -> Self::Item {
@@ -349,7 +348,6 @@ macro_rules! generate_iter {
         impl<I: KaniIter> KaniIter for KaniRevIter<I> {
             type Item = I::Item;
             fn nth(&self, i: usize) -> Self::Item {
-                //assert!(i < self.n && i < self.iter.len());
                 self.iter.nth(self.iter.len() - 1 - i)
             }
             fn first(&self) -> Self::Item {
@@ -414,11 +412,13 @@ macro_rules! generate_iter {
         generate_impl_KaniIter_range!(i16);
         generate_impl_KaniIter_range!(i32);
         generate_impl_KaniIter_range!(i64);
+        generate_impl_KaniIter_range!(i128);
         generate_impl_KaniIter_range!(isize);
         generate_impl_KaniIter_range!(u8);
         generate_impl_KaniIter_range!(u16);
         generate_impl_KaniIter_range!(u32);
         generate_impl_KaniIter_range!(u64);
+        generate_impl_KaniIter_range!(u128);
         generate_impl_KaniIter_range!(usize);
 
         impl<I: KaniIntoIter> KaniIntoIter for StepBy<I> {
