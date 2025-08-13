@@ -42,19 +42,17 @@ Kani implements `Arbitrary` for primitive types and some standard library types.
 
 ## Constrained Values
 
-Use `kani::assume()` to add constraints to arbitrary values:
+Use `any_where` or `kani::assume()` to add constraints to arbitrary values:
 
 ```rust
 #[kani::proof]
 fn verify_with_constraints() {
-    let x: u32 = kani::any();
-    kani::assume(x < 1000);  // Constrain x to be less than 1000
+    let x: u32 = kani::any_where(|t| *t < 1000); // Constrain x to be less than 1000
     kani::assume(x % 2 == 0); // Constrain x to be even
     
     // Now x represents all even numbers from 0 to 998
     my_function(x);
 }
-```
 
 ## Derive Implementations
 
