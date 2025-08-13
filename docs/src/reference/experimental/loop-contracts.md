@@ -179,7 +179,7 @@ fn forloop() {
     let mut sum: u32 = 0;
     let a: [u8; 10] = kani::any();
     kani::assume(kani::forall!(|i in (0,10)| a[i] <= 20));
-    #[kani::loop_invariant(sum <= (kani::index as u32 * 29) )]
+    #[kani::loop_invariant(sum <= (kani::index as u32 * 20) )]
     for (i, j) in a.iter().enumerate() {
         sum = sum + (i as u32) ;
     }
@@ -188,7 +188,7 @@ fn forloop() {
 ```
 
 ## Loop contracts inside functions with contracts 
-Kani supports using loop contracts together with function-contracts, as demonstrated in the following example:
+Kani supports using loop contracts together with function contracts, as demonstrated in the following example:
 ``` Rust
 #![feature(proc_macro_hygiene)]
 #![feature(stmt_expr_attributes)]
@@ -210,7 +210,7 @@ fn contract_proof() {
 }
 ```
 
-When loop contracts and function-contracts are both enabled (by flags `-Z loop-contracts -Z function-contracts`), 
+When loop contracts and function contracts are both enabled (by flags `-Z loop-contracts -Z function-contracts`), 
 Kani automatically contracts (instead of unwinds) all loops in the functions that we want to prove contracts for.
 
 ## Loop modifies clauses: 
