@@ -111,6 +111,8 @@ impl Arbitrary for NonZeroU8 {
 }
 ```
 
+An alternative means to add value constraints is provided by the [Invariant trait](https://model-checking.github.io/kani/crates/doc/kani/invariant/trait.Invariant.html).
+
 ## See Also
 
 - [Nondeterministic Variables Tutorial](../tutorial-nondeterministic-variables.md)
