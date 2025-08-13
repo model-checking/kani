@@ -18,6 +18,10 @@ If Kani cannot determine a loop bound, it will unwind forever, c.f. [the loop un
 
 These are some strategies to debug slow proofs, ordered roughly in terms of in the order you should try them:
 
+### Limit Loop Iterations
+
+First, identify whether (unbounded) loop unwinding may be the root cause. Try the `#[kani::unwind]` attribute or the `--unwind` option to limit [loop unwinding](./tutorial-loop-unwinding.md). If the proof fails because the unwind value is too low, but raising it causing the proof to be too slow, try specifying a [loop contract](./reference/experimental/loop-contracts.md) instead.
+
 ### Use Different Solvers
 
 Kani supports multiple SAT/SMT solvers that may perform differently on your specific problem. Try out different solvers with the `#[kani::solver]` [attribute](./reference/attributes.md) or `--solver` option.
