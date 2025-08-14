@@ -27,7 +27,7 @@ enum AllocData<'a> {
     Expr(Expr),
 }
 
-impl<'tcx> GotocCtx<'tcx> {
+impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
     /// Generate a goto expression from a MIR operand.
     ///
     /// A MIR operand is either a constant (literal or `const` declaration) or a place

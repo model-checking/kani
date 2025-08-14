@@ -40,7 +40,7 @@ lazy_static! {
     };
 }
 
-impl GotocCtx<'_> {
+impl GotocCtx<'_, '_> {
     /// Generate the symbol and symbol table entry for foreign items.
     ///
     /// CBMC built-in functions that are supported by Kani are always added to the symbol table, and

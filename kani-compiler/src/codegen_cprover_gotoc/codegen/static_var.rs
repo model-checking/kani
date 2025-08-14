@@ -9,7 +9,7 @@ use rustc_public::CrateDef;
 use rustc_public::mir::mono::{Instance, StaticDef};
 use tracing::debug;
 
-impl GotocCtx<'_> {
+impl GotocCtx<'_, '_> {
     /// Ensures a static variable is initialized.
     ///
     /// Note that each static variable have their own location in memory. Per Rust documentation:

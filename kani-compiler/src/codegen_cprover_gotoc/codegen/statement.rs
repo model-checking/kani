@@ -23,7 +23,7 @@ use rustc_public::rustc_internal;
 use rustc_public::ty::{Abi, RigidTy, Span, Ty, TyKind, VariantIdx};
 use tracing::{debug, debug_span, trace};
 
-impl GotocCtx<'_> {
+impl GotocCtx<'_, '_> {
     pub fn ty_to_assign_target(&self, ty: Ty, expr: &Expr) -> Expr {
         match ty.kind() {
             TyKind::RigidTy(RigidTy::Ref(_, unref_ty, _))

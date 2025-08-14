@@ -91,7 +91,7 @@ impl GotocCodegenBackend {
         machine_model: &MachineModel,
         check_contract: Option<InternalDefId>,
         mut global_passes: GlobalPasses,
-        mut transformer: BodyTransformation,
+        transformer: &mut BodyTransformation,
         thread_pool: &ThreadPool,
     ) -> (MinimalGotocCtx, Vec<MonoItem>, Option<AssignsContract>) {
         // This runs reachability analysis before global passes are applied.
@@ -102,7 +102,7 @@ impl GotocCodegenBackend {
         // call graph could be used, for example, in resolving function pointer or vtable calls for
         // global passes that need this.
         let (mut items, call_graph) = with_timer(
-            || collect_reachable_items(tcx, &mut transformer, starting_items),
+            || collect_reachable_items(tcx, transformer, starting_items),
             "codegen reachability analysis",
         );
 
@@ -121,7 +121,7 @@ impl GotocCodegenBackend {
 
         // Apply all transformation passes, including global passes.
         let any_pass_modified = global_passes.run_global_passes(
-            &mut transformer,
+            transformer,
             tcx,
             starting_items,
             instances,
@@ -132,7 +132,7 @@ impl GotocCodegenBackend {
         // since global pass could add extra calls to instrumentation.
         if any_pass_modified {
             (items, _) = with_timer(
-                || collect_reachable_items(tcx, &mut transformer, starting_items),
+                || collect_reachable_items(tcx, transformer, starting_items),
                 "codegen reachability analysis (second pass)",
             );
         }
@@ -397,12 +397,12 @@ impl CodegenBackend for GotocCodegenBackend {
 
                     // Cross-crate collecting of all items that are reachable from the crate harnesses.
                     for unit in units.iter() {
-                        // We reset the body cache for now because each codegen unit has different
+                        // Generate a new transformer that will be shared for all harnesses within the codegen unit.
+                        // We reset the body cache between units for now because each codegen unit has different
                         // configurations that affect how we transform the instance body.
+                        let mut shared_unit_transformer =
+                            BodyTransformation::new(&queries, tcx, unit);
 
-                        // Generate an empty 'template' transformer once per codegen unit and then clone for each harness within.
-                        // (They all share the same options.)
-                        let template_transformer = BodyTransformation::new(&queries, tcx, unit);
                         for harness in &unit.harnesses {
                             let model_path = units.harness_model_path(*harness).unwrap();
                             let is_automatic_harness = units.is_automatic_harness(harness);
@@ -416,7 +416,7 @@ impl CodegenBackend for GotocCodegenBackend {
                                 contract_metadata
                                     .map(|def| rustc_internal::internal(tcx, def.def_id())),
                                 template_passes.clone(),
-                                template_transformer.clone_empty(),
+                                &mut shared_unit_transformer,
                                 &export_thread_pool,
                             );
                             if min_gcx.has_loop_contracts {
@@ -439,7 +439,7 @@ impl CodegenBackend for GotocCodegenBackend {
                     // Here, we don't know up front how many harnesses we will have to analyze, so pass None.
                     export_thread_pool.add_workers(Self::thread_pool_size(None));
 
-                    let transformer = BodyTransformation::new(&queries, tcx, &unit);
+                    let mut transformer = BodyTransformation::new(&queries, tcx, &unit);
                     let main_instance = rustc_public::entry_fn()
                         .map(|main_fn| Instance::try_from(main_fn).unwrap());
                     let local_reachable = filter_crate_items(tcx, |_, instance| {
@@ -457,11 +457,11 @@ impl CodegenBackend for GotocCodegenBackend {
                         &results.machine_model,
                         Default::default(),
                         GlobalPasses::new(&queries, tcx),
-                        transformer,
+                        &mut transformer,
                         &export_thread_pool,
                     );
                     assert!(contract_info.is_none());
-                    let _ = results.extend(gcx, items, None);
+                    results.extend(gcx, items, None);
                 }
             }
 
@@ -716,13 +716,12 @@ impl GotoCodegenResults {
         min_gcx: context::MinimalGotocCtx,
         items: Vec<MonoItem>,
         metadata: Option<HarnessMetadata>,
-    ) -> BodyTransformation {
+    ) {
         let mut items = items;
         self.harnesses.extend(metadata);
         self.concurrent_constructs.extend(min_gcx.concurrent_constructs);
         self.unsupported_constructs.extend(min_gcx.unsupported_constructs);
         self.items.append(&mut items);
-        min_gcx.transformer
     }
 
     /// Prints a report at the end of the compilation.

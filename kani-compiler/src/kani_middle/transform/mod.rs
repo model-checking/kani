@@ -111,17 +111,15 @@ impl BodyTransformation {
         transformer
     }
 
-    /// Retrieve the body of an instance. This does not apply global passes, but will retrieve the
-    /// body after global passes running if they were previously applied.
-    ///
-    /// Note that this assumes that the instance does have a body since existing consumers already
-    /// assume that. Use `instance.has_body()` to check if an instance has a body.
-    pub fn body(&mut self, tcx: TyCtxt, instance: Instance) -> Body {
-        match self.cache.get(&instance) {
-            Some(TransformationResult::Modified(body)) => body.clone(),
-            Some(TransformationResult::NotModified) => instance.body().unwrap(),
-            None => {
+    /// Equivalent to `body()`, but avoids cloning the returned `Body`.
+    pub fn body_ref(&mut self, tcx: TyCtxt, instance: Instance) -> &Body {
+        &self
+            .cache
+            .entry(instance)
+            .or_insert_with(|| {
+                // Transform and add to the cache if there's no existing entry.
                 let mut body = instance.body().unwrap();
+
                 let mut modified = false;
                 for pass in self.stub_passes.iter_mut().chain(self.inst_passes.iter_mut()) {
                     let result = pass.transform(tcx, body, instance);
@@ -129,26 +127,18 @@ impl BodyTransformation {
                     body = result.1;
                 }
 
-                let result = if modified {
-                    TransformationResult::Modified(body.clone())
-                } else {
-                    TransformationResult::NotModified
-                };
-                self.cache.insert(instance, result);
-                body
-            }
-        }
+                TransformationResult(body, modified)
+            })
+            .0
     }
 
-    /// Clone an empty [BodyTransformation] for use within the same [CodegenUnit] and [TyCtxt] that were
-    /// used to create it. Will panic if the transformer has already been queried with `.body()`.
-    pub fn clone_empty(&self) -> Self {
-        debug_assert!(self.cache.is_empty());
-        BodyTransformation {
-            stub_passes: self.stub_passes.to_vec(),
-            inst_passes: self.inst_passes.to_vec(),
-            cache: HashMap::new(),
-        }
+    /// Retrieve the body of an instance. This does not apply global passes, but will retrieve the
+    /// body after global passes running if they were previously applied.
+    ///
+    /// Note that this assumes that the instance does have a body since existing consumers already
+    /// assume that. Use `instance.has_body()` to check if an instance has a body.
+    pub fn body(&mut self, tcx: TyCtxt, instance: Instance) -> Body {
+        self.body_ref(tcx, instance).clone()
     }
 
     fn add_pass<P: ClonableTransformPass + 'static>(&mut self, query_db: &QueryDb, pass: P) {
@@ -203,12 +193,16 @@ pub(crate) trait GlobalPass: Debug {
     ) -> bool;
 }
 
-/// The transformation result.
-/// We currently only cache the body of functions that were instrumented.
 #[derive(Clone, Debug)]
-enum TransformationResult {
-    Modified(Body),
-    NotModified,
+/// The [Body] resulting from applying all transformations, and a bool marking
+/// whether any of the transformations modified the body.
+struct TransformationResult(Body, bool);
+
+#[allow(dead_code)]
+impl TransformationResult {
+    pub fn has_been_modified(&self) -> bool {
+        self.1
+    }
 }
 
 #[derive(Clone)]
