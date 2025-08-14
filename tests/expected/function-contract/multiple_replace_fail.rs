@@ -1,6 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-flags: -Zfunction-contracts
+// kani-flags: -Zfunction-contracts -Zstubbing
 
 #[kani::ensures(|result : &u32| *result == 1)]
 fn one() -> u32 {

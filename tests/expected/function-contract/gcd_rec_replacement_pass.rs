@@ -1,6 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-flags: -Zfunction-contracts
+// kani-flags: -Zfunction-contracts -Zstubbing
 type T = u8;
 
 /// Euclid's algorithm for calculating the GCD of two numbers
@@ -47,13 +47,21 @@ impl Frac {
     }
 }
 
+#[kani::proof_for_contract(gcd)]
+#[kani::unwind(64)]
+fn gcd_harness() {
+    let x: T = kani::any();
+    let y: T = kani::any();
+    gcd(x, y);
+}
+
 #[kani::proof]
 #[kani::stub_verified(gcd)]
 fn gcd_as_replace() {
-    gcd_harness()
+    gcd_test_harness()
 }
 
-fn gcd_harness() {
+fn gcd_test_harness() {
     // Needed to avoid having `free` be removed as unused function. This is
     // because DFCC contract enforcement assumes that a definition for `free`
     // exists.

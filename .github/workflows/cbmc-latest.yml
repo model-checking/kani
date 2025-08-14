@@ -22,7 +22,7 @@ jobs:
         os: [macos-13, ubuntu-22.04, ubuntu-24.04]
     steps:
       - name: Checkout Kani under "kani"
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           path: kani
 
@@ -33,7 +33,7 @@ jobs:
           kani_dir: 'kani'
 
       - name: Checkout CBMC under "cbmc"
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: diffblue/cbmc
           path: cbmc
@@ -64,7 +64,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout Kani under "kani"
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           path: kani
 
@@ -79,7 +79,7 @@ jobs:
         run: cargo build-dev -- --release
 
       - name: Checkout CBMC under "cbmc"
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: diffblue/cbmc
           path: cbmc
