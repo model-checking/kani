@@ -13,10 +13,9 @@
 #[kani::requires(kani::forall!(|i in (0, a.len())| a[i] < i32::MAX))]
 #[kani::ensures(kani::forall!(|i in (0, a.len())| a[i] = on_entry(a[i]) + 1))]
 fn array_inc(a: &mut [i32]) {
-    let b: [u8; 60] = a.clone();
     #[kani::loop_invariant(i < 60
-            && kani::forall!(|j in (kani::index, 60)| b[j] == a[j])
-            && kani::forall!(|j in (0, kani::index)| a[j] == b[j] + 1)
+            && kani::forall!(|j in (kani::index, 60)| a[j] == on_entry(a[j]))
+            && kani::forall!(|j in (0, kani::index)| a[j] == on_entry(a[j]) + 1)
     )]
     for i in 0..a.len() {
         a[i as usize] = a[i as usize] + 1;
@@ -27,10 +26,9 @@ fn array_inc(a: &mut [i32]) {
 #[kani::requires(kani::forall!(|i in (0, a.len())| a[i] < i32::MAX))]
 #[kani::ensures(kani::forall!(|i in (0, a.len())| a[i] = on_entry(a[i]) + 1))]
 fn array_inc_iter_mut(a: &mut [i32]) {
-    let b: [u8; 60] = a.clone();
     #[kani::loop_invariant(i < 60
-            && kani::forall!(|j in (kani::index, 60)| b[j] == a[j])
-            && kani::forall!(|j in (0, kani::index)| a[j] == b[j] + 1)
+            && kani::forall!(|j in (kani::index, 60)| a[j] == on_entry(a[j]))
+            && kani::forall!(|j in (0, kani::index)| a[j] == on_entry(a[j]) + 1)
     )]
     for x in a.iter_mut() {
         *x = *x + 1;
