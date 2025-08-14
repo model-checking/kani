@@ -3,7 +3,8 @@
 ## Introduction
 
 Loop contracts are used to specify invariants for loops for the sake of extending Kani's *bounded proofs* to *unbounded proofs*.
-A [loop contract](https://en.wikipedia.org/wiki/Loop_invariant) is an expression that holds upon entering a loop and after every execution of the loop body.
+A [loop invariant](https://en.wikipedia.org/wiki/Loop_invariant) is an expression that holds upon entering a loop and after every execution of the loop body.
+Loop contracts are composed of one or more loop invariants as well as optional `loop_modifies` attributes.
 It captures something that does not change about every step of the loop.
 
 It is worth revisiting the discussion about [bounded proof](../../tutorial-loop-unwinding.md#bounded-proof) and
