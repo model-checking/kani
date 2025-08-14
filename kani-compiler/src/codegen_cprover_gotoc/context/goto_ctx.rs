@@ -41,6 +41,7 @@ use rustc_public::ty::Allocation;
 use rustc_span::Span;
 use rustc_span::source_map::respan;
 use rustc_target::callconv::FnAbi;
+use std::cell::RefCell;
 use std::collections::{BTreeMap, HashSet};
 use std::fmt::Debug;
 
@@ -77,6 +78,8 @@ pub struct GotocCtx<'tcx> {
     pub global_var_count: u64,
     /// map a global allocation to a name in the symbol table
     pub alloc_map: FxHashMap<Allocation, String>,
+    /// a cache of [Span](rustc_public::Span)s and their codegened [Location]s
+    pub span_cache: RefCell<FxHashMap<rustc_public::ty::Span, Location>>,
     /// map (trait, method) pairs to possible implementations
     pub vtable_ctx: VtableCtx,
     pub current_fn: Option<CurrentFnCtx<'tcx>>,
@@ -119,6 +122,7 @@ impl<'tcx> GotocCtx<'tcx> {
             full_crate_name: full_crate_name(tcx),
             global_var_count: 0,
             alloc_map: FxHashMap::default(),
+            span_cache: RefCell::new(FxHashMap::default()),
             vtable_ctx: VtableCtx::new(emit_vtable_restrictions),
             current_fn: None,
             type_map: FxHashMap::default(),
