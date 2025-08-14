@@ -1,6 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-flags: -Zfunction-contracts
+// kani-flags: -Zfunction-contracts -Zstubbing
 
 //! Provide an example where users might get confuse on how to constrain
 //! the return value of functions when writing function contracts.
@@ -36,4 +36,10 @@ fn use_modify(ptr: &mut u32) {
 fn harness() {
     let mut i = kani::any();
     use_modify(&mut i);
+}
+
+#[kani::proof_for_contract(modify)]
+fn check_modify() {
+    let mut x: u32 = kani::any();
+    modify(&mut x);
 }

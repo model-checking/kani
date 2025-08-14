@@ -1,6 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-flags: -Zfunction-contracts
+// kani-flags: -Zfunction-contracts -Zstubbing
 
 struct S<'a> {
     distraction: &'a mut u32,
@@ -11,6 +11,15 @@ struct S<'a> {
 #[kani::ensures(|result| *s.target == prior + 1)]
 fn modify(s: &mut S, prior: u32) {
     *s.target += 1;
+}
+
+#[kani::proof_for_contract(modify)]
+fn modify_harness() {
+    let mut target = kani::any();
+    let mut distraction = kani::any();
+    let mut s = S { distraction: &mut distraction, target: &mut target };
+    let prior = kani::any();
+    modify(&mut s, prior);
 }
 
 #[kani::proof]

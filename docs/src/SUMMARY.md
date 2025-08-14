@@ -16,8 +16,10 @@
   - [Nondeterministic variables](./tutorial-nondeterministic-variables.md)
 
 - [Reference](./reference.md)
+  - [Arbitrary Trait](./reference/arbitrary.md)
   - [Attributes](./reference/attributes.md)
   - [Bounded Non-deterministic variables](./reference/bounded_arbitrary.md)
+  - [List Kani Metadata](./reference/list.md)
   - [Experimental features](./reference/experimental/experimental-features.md)
     - [Automatic Harness Generation](./reference/experimental/autoharness.md)
     - [Coverage](./reference/experimental/coverage.md)
@@ -29,6 +31,7 @@
 - [Application](./application.md)
   - [Comparison with other tools](./tool-comparison.md)
   - [Where to start on real code](./tutorial-real-code.md)
+  - [Debugging slow proofs](./debugging-slow-proofs.md)
 
 - [Developer documentation](dev-documentation.md)
   - [Coding conventions](./conventions.md)

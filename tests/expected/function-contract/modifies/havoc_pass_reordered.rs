@@ -1,6 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-flags: -Zfunction-contracts
+// kani-flags: -Zfunction-contracts -Zstubbing
 
 // These two are reordered in comparison to `havoc_pass` and we expect the test case to pass still
 #[kani::ensures(|result| *dst == src)]

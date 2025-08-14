@@ -1,0 +1,7 @@
+error: Using the stub attribute requires activating the unstable `stubbing` feature\
+stub_missing_flag\
+|\
+| #[kani::stub(some_function, replacement_function)]\
+| ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: aborting due to 1 previous error
