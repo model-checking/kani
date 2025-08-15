@@ -119,21 +119,21 @@ must be sufficient to establish subsequent assertions. If it is not, the abstrac
 
 To illustrate the key idea, we show how Kani abstracts the loop in `simple_loop_with_loop_contracts` as a non-loop block:
 ``` Rust
-assert!(x >= 1) // check loop contract for the base case.
+assert!(x >= 1) // check loop invariant for the base case.
 x = kani::any();
 kani::assume(x >= 1);
 if x > 1 {
     // proof path 1:
-    //   both loop guard and loop contract are satisfied.
+    //   both loop guard and loop invariant are satisfied.
     x = x - 1;
-    assert!(x >= 1); // check that loop contract is inductive.
+    assert!(x >= 1); // check that loop invariant is inductive.
     kani::assume(false) // block this proof path.
 }
 // proof path 2:
-//   loop contract is satisfied and loop guard is violated.
+//   loop invariant is satisfied and loop guard is violated.
 assert!(x == 1);
 ```
-That is, we assume that we are in an arbitrary iteration after checking that the loop contract holds for the base case. With the inductive hypothesis (`kani::assume(x >= 1);`),
+That is, we assume that we are in an arbitrary iteration after checking that the loop invariant holds for the base case. With the inductive hypothesis (`kani::assume(x >= 1);`),
 we will either enter the loop (proof path 1) or leave the loop (proof path 2). We prove the two paths separately by killing path 1 with `kani::assume(false);`.
 Note that all assertions after `kani::assume(false)` will be ignored as `false => p` can be deduced as `true` for any `p`.
 
