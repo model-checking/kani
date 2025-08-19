@@ -13,6 +13,7 @@ use crate::kani_middle::transform::body::{
 };
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
+use rustc_hir::LangItem;
 use rustc_middle::ty::TyCtxt;
 use rustc_public::mir::mono::Instance;
 use rustc_public::mir::{
@@ -65,7 +66,7 @@ impl TransformPass for RustcIntrinsicsPass {
 fn is_panic_function(tcx: &TyCtxt, def_id: rustc_public::DefId) -> bool {
     let def_id = rustc_internal::internal(*tcx, def_id);
     Some(def_id) == tcx.lang_items().panic_fn()
-        || tcx.has_attr(def_id, rustc_span::sym::rustc_const_panic_str)
+        || tcx.is_lang_item(def_id, LangItem::PanicDisplay)
         || Some(def_id) == tcx.lang_items().panic_fmt()
         || Some(def_id) == tcx.lang_items().begin_panic_fn()
 }
