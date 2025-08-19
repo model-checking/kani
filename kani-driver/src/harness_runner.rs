@@ -55,8 +55,6 @@ impl<'pr> HarnessRunner<'_, 'pr> {
         &self,
         harnesses: &'pr [&HarnessMetadata],
     ) -> Result<Vec<HarnessResult<'pr>>> {
-        self.check_stubbing(harnesses)?;
-
         let sorted_harnesses = crate::metadata::sort_harnesses_by_loc(harnesses);
         let pool = {
             let mut builder = rayon::ThreadPoolBuilder::new();
@@ -113,33 +111,6 @@ impl<'pr> HarnessRunner<'_, 'pr> {
                 }
             }
         }
-    }
-
-    /// Return an error if the user is trying to verify a harness with stubs without enabling the
-    /// experimental feature.
-    fn check_stubbing(&self, harnesses: &[&HarnessMetadata]) -> Result<()> {
-        if !self.sess.args.is_stubbing_enabled() {
-            let with_stubs: Vec<_> = harnesses
-                .iter()
-                .filter_map(|harness| {
-                    (!harness.attributes.stubs.is_empty()).then_some(harness.pretty_name.as_str())
-                })
-                .collect();
-            match with_stubs.as_slice() {
-                [] => { /* do nothing */ }
-                [harness] => bail!(
-                    "Use of unstable feature 'stubbing' in harness `{}`.\n\
-                    To enable stubbing, pass option `-Z stubbing`",
-                    harness
-                ),
-                harnesses => bail!(
-                    "Use of unstable feature 'stubbing' in harnesses `{}`.\n\
-                    To enable stubbing, pass option `-Z stubbing`",
-                    harnesses.join("`, `")
-                ),
-            }
-        }
-        Ok(())
     }
 }
 

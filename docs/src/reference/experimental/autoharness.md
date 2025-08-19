@@ -75,6 +75,10 @@ Note that because Kani prefixes function paths with the crate name, some pattern
 For example, given a function `foo_top_level` inside crate `my_crate`, the regex `.*::foo_.*` will match `foo_top_level`, since Kani interprets it as `my_crate::foo_top_level`.
 To match only `foo_` functions inside modules, use a more specific pattern, e.g. `.*::[^:]+::foo_.*`.
 
+Autoharness also accepts a `--list` argument, which runs the [list subcommand](../list.md) including automatic harnesses.
+
+For a full list of options, run `kani autoharness --help`.
+
 ## Example
 Using the `estimate_size` example from [First Steps](../../tutorial-first-steps.md) again:
 ```rust

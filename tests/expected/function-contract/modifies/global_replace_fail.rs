@@ -1,6 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-flags: -Zfunction-contracts
+// kani-flags: -Zfunction-contracts -Zstubbing
 
 static mut PTR: u32 = 0;
 
@@ -18,5 +18,12 @@ fn main() {
         let compare = PTR;
         modify();
         kani::assert(compare + 1 == PTR, "not havocked");
+    }
+}
+
+#[kani::proof_for_contract(modify)]
+fn check_modify() {
+    unsafe {
+        modify();
     }
 }

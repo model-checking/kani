@@ -16,6 +16,7 @@ use crate::unwrap_or_return_codegen_unimplemented_stmt;
 use cbmc::goto_program::CIntType;
 use cbmc::goto_program::Symbol as GotoSymbol;
 use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Type};
+use rustc_hir::LangItem;
 use rustc_middle::ty::TyCtxt;
 use rustc_public::mir::mono::Instance;
 use rustc_public::mir::{BasicBlockIdx, Place};
@@ -332,7 +333,7 @@ impl GotocHook for Panic {
         // panic functions we've stubbed too
         kani_tool_attr.is_some_and(|kani| kani.contains("PanicStub"))
             || Some(def_id) == tcx.lang_items().panic_fn()
-            || tcx.has_attr(def_id, rustc_span::sym::rustc_const_panic_str)
+            || tcx.is_lang_item(def_id, LangItem::PanicDisplay)
             || Some(def_id) == tcx.lang_items().panic_fmt()
             || Some(def_id) == tcx.lang_items().begin_panic_fn()
     }

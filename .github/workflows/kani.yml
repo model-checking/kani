@@ -21,7 +21,7 @@ jobs:
         os: [macos-13, ubuntu-22.04, ubuntu-24.04, macos-14, ubuntu-24.04-arm]
     steps:
       - name: Checkout Kani
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Cache Kani build artifacts
         uses: Swatinem/rust-cache@v2
@@ -42,7 +42,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout Kani
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install benchcomp dependencies
         run: |
@@ -72,7 +72,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout Kani
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Cache Kani build artifacts
         uses: Swatinem/rust-cache@v2
@@ -95,7 +95,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout Kani
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Cache Kani build artifacts
         uses: Swatinem/rust-cache@v2
@@ -120,7 +120,7 @@ jobs:
       contents: write
     steps:
       - name: Checkout Kani
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: recursive
 
