@@ -56,13 +56,11 @@ pub struct MinimalGotocCtx {
     /// We collect them and print one warning at the end if not empty instead of printing one
     /// warning at each occurrence.
     pub concurrent_constructs: UnsupportedConstructs,
-    /// The body transformation agent.
-    pub transformer: BodyTransformation,
     /// If there exist some usage of loop contracts int context.
     pub has_loop_contracts: bool,
 }
 
-pub struct GotocCtx<'tcx> {
+pub struct GotocCtx<'tcx, 'r> {
     /// the typing context
     pub tcx: TyCtxt<'tcx>,
     /// a snapshot of the query values. The queries shouldn't change at this point,
@@ -93,7 +91,7 @@ pub struct GotocCtx<'tcx> {
     /// warning at each occurrence.
     pub concurrent_constructs: UnsupportedConstructs,
     /// The body transformation agent.
-    pub transformer: BodyTransformation,
+    pub transformer: &'r mut BodyTransformation,
     /// If there exist some usage of loop contracts int context.
     pub has_loop_contracts: bool,
     /// Track loop assign clause
@@ -101,13 +99,13 @@ pub struct GotocCtx<'tcx> {
 }
 
 /// Constructor
-impl<'tcx> GotocCtx<'tcx> {
+impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
     pub fn new(
         tcx: TyCtxt<'tcx>,
         queries: QueryDb,
         machine_model: &MachineModel,
-        transformer: BodyTransformation,
-    ) -> GotocCtx<'tcx> {
+        transformer: &'r mut BodyTransformation,
+    ) -> GotocCtx<'tcx, 'r> {
         let fhks = fn_hooks();
         let symbol_table = SymbolTable::new(machine_model.clone());
         let emit_vtable_restrictions = queries.args().emit_vtable_restrictions;
@@ -139,7 +137,6 @@ impl<'tcx> GotocCtx<'tcx> {
             MinimalGotocCtx {
                 unsupported_constructs: self.unsupported_constructs,
                 concurrent_constructs: self.concurrent_constructs,
-                transformer: self.transformer,
                 has_loop_contracts: self.has_loop_contracts,
             },
             self.symbol_table,
@@ -148,7 +145,7 @@ impl<'tcx> GotocCtx<'tcx> {
 }
 
 /// Getters
-impl<'tcx> GotocCtx<'tcx> {
+impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
     pub fn current_fn(&self) -> &CurrentFnCtx<'tcx> {
         self.current_fn.as_ref().unwrap()
     }
@@ -159,7 +156,7 @@ impl<'tcx> GotocCtx<'tcx> {
 }
 
 /// Generate variables
-impl GotocCtx<'_> {
+impl GotocCtx<'_, '_> {
     /// Declare a local variable.
     /// Handles the bookkeeping of:
     /// - creating the symbol
@@ -213,11 +210,11 @@ impl GotocCtx<'_> {
 }
 
 /// Symbol table related
-impl<'tcx> GotocCtx<'tcx> {
+impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
     /// Ensures that the `name` appears in the Symbol table.
     /// If it doesn't, inserts it using `f`.
     pub fn ensure<
-        F: FnOnce(&mut GotocCtx<'tcx>, InternedString) -> Symbol,
+        F: FnOnce(&mut GotocCtx<'tcx, 'r>, InternedString) -> Symbol,
         T: Into<InternedString>,
     >(
         &mut self,
@@ -292,7 +289,7 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn ensure_struct<
         T: Into<InternedString>,
         U: Into<InternedString>,
-        F: FnOnce(&mut GotocCtx<'tcx>, InternedString) -> Vec<DatatypeComponent>,
+        F: FnOnce(&mut GotocCtx<'tcx, 'r>, InternedString) -> Vec<DatatypeComponent>,
     >(
         &mut self,
         struct_name: T,
@@ -320,7 +317,7 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn ensure_union<
         T: Into<InternedString>,
         U: Into<InternedString>,
-        F: FnOnce(&mut GotocCtx<'tcx>, InternedString) -> Vec<DatatypeComponent>,
+        F: FnOnce(&mut GotocCtx<'tcx, 'r>, InternedString) -> Vec<DatatypeComponent>,
     >(
         &mut self,
         union_name: T,
@@ -342,7 +339,7 @@ impl<'tcx> GotocCtx<'tcx> {
 }
 
 /// Quantifiers Related
-impl GotocCtx<'_> {
+impl GotocCtx<'_, '_> {
     /// Find all quantifier expressions and recursively inline functions in the quantifier bodies.
     /// We inline all the function calls in quantifier expressions because CBMC accept only
     /// statement expressiont without function calls in quantifier expressions:
@@ -823,7 +820,7 @@ impl GotocCtx<'_> {
 }
 
 /// Mutators
-impl GotocCtx<'_> {
+impl GotocCtx<'_, '_> {
     pub fn set_current_fn(&mut self, instance: Instance, body: &Body) {
         self.current_fn = Some(CurrentFnCtx::new(instance, self, body));
     }
@@ -846,7 +843,7 @@ impl GotocCtx<'_> {
     }
 }
 
-impl<'tcx> LayoutOfHelpers<'tcx> for GotocCtx<'tcx> {
+impl<'tcx> LayoutOfHelpers<'tcx> for GotocCtx<'tcx, '_> {
     type LayoutOfResult = TyAndLayout<'tcx>;
 
     #[inline]
@@ -855,26 +852,26 @@ impl<'tcx> LayoutOfHelpers<'tcx> for GotocCtx<'tcx> {
     }
 }
 
-impl<'tcx> HasTypingEnv<'tcx> for GotocCtx<'tcx> {
+impl<'tcx> HasTypingEnv<'tcx> for GotocCtx<'tcx, '_> {
     fn typing_env(&self) -> ty::TypingEnv<'tcx> {
         ty::TypingEnv::fully_monomorphized()
     }
 }
 
-impl<'tcx> HasTyCtxt<'tcx> for GotocCtx<'tcx> {
+impl<'tcx> HasTyCtxt<'tcx> for GotocCtx<'tcx, '_> {
     fn tcx(&self) -> TyCtxt<'tcx> {
         self.tcx
     }
 }
 
-impl HasDataLayout for GotocCtx<'_> {
+impl HasDataLayout for GotocCtx<'_, '_> {
     fn data_layout(&self) -> &TargetDataLayout {
         self.tcx.data_layout()
     }
 }
 
 /// Implement error handling for extracting function ABI information.
-impl<'tcx> FnAbiOfHelpers<'tcx> for GotocCtx<'tcx> {
+impl<'tcx> FnAbiOfHelpers<'tcx> for GotocCtx<'tcx, '_> {
     type FnAbiOfResult = &'tcx FnAbi<'tcx, Ty<'tcx>>;
 
     #[inline]
