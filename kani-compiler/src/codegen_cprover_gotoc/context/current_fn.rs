@@ -32,6 +32,9 @@ pub struct CurrentFnCtx<'tcx> {
     name: String,
     /// A human readable pretty name for the current function
     readable_name: String,
+    /// The interned version of `readable_name`. This allows us to avoid re-interning
+    /// that string every time we want to use it internally.
+    interned_readable_name: InternedString,
     /// A counter to enable creating temporary variables
     temp_var_counter: u64,
 }
@@ -77,6 +80,7 @@ impl<'tcx> CurrentFnCtx<'tcx> {
             local_names,
             address_taken_locals: visitor.address_taken_locals,
             name,
+            interned_readable_name: (&readable_name).into(),
             readable_name,
             temp_var_counter: 0,
         }
@@ -120,6 +124,10 @@ impl<'tcx> CurrentFnCtx<'tcx> {
     /// The pretty name of the function we are currently compiling
     pub fn readable_name(&self) -> &str {
         &self.readable_name
+    }
+
+    pub fn interned_readable_name(&self) -> InternedString {
+        self.interned_readable_name
     }
 
     pub fn locals(&self) -> &[LocalDecl] {
