@@ -40,10 +40,8 @@ impl GotocCtx<'_> {
     pub fn codegen_span_stable(&self, sp: SpanStable) -> Location {
         cache_entry::<Location>(sp)
             .tweak(|res| {
-                res.try_set_function(
-                    self.current_fn.as_ref().map(|x| x.readable_name().to_string()),
-                )
-                .unwrap();
+                res.try_set_function(self.current_fn.as_ref().map(|x| x.interned_readable_name()))
+                    .unwrap();
             })
             .or_insert_with(|| self.codegen_span_stable_inner(sp))
     }
