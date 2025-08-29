@@ -11,6 +11,8 @@ import yaml
 import benchcomp
 import benchcomp.visualizers.utils as viz_utils
 
+from jinja2 import Environment, select_autoescape
+
 
 # TODO The doc comment should appear in the help output, which should list all
 # available checks.
@@ -229,8 +231,8 @@ class dump_markdown_results_table:
             "variants": self._get_variants(metrics),
         }
 
-        env = jinja2.Environment(
-            loader=jinja2.BaseLoader, autoescape=jinja2.select_autoescape(
+        env = Environment(
+            loader=jinja2.BaseLoader, autoescape=select_autoescape(
                 enabled_extensions=("html"),
                 default_for_string=True))
         template = env.from_string(self._get_template())
