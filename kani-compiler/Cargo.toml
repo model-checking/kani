@@ -25,7 +25,7 @@ strum = "0.27.1"
 strum_macros = "0.27.1"
 syn = { version = "2.0.72", features = ["parsing", "extra-traits"] }
 tracing = {version = "0.1", features = ["max_level_trace", "release_max_level_debug"]}
-tracing-subscriber = {version = "0.3.8", features = ["env-filter", "json", "fmt"]}
+tracing-subscriber = {version = "0.3.20", features = ["env-filter", "json", "fmt"]}
 tracing-tree = "0.4.0"
 
 # Future proofing: enable backend dependencies using feature.
