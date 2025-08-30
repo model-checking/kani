@@ -11,7 +11,7 @@
 use crate::codegen_cprover_gotoc::codegen::{PropertyClass, bb_label};
 use crate::codegen_cprover_gotoc::{GotocCtx, utils};
 use crate::kani_middle::attributes;
-use crate::kani_middle::kani_functions::{KaniFunction, KaniHook};
+use crate::kani_middle::kani_functions::{KaniFunction, KaniHook, try_get_kani_function};
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
 use cbmc::goto_program::CIntType;
 use cbmc::goto_program::Symbol as GotoSymbol;
@@ -30,7 +30,13 @@ use tracing::debug;
 
 pub trait GotocHook {
     /// if the hook applies, it means the codegen would do something special to it
-    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool;
+    fn hook_applies(
+        &self,
+        _tcx: TyCtxt,
+        _instance: Instance,
+        _instance_name: &str,
+        _kani_tool_attr: Option<&String>,
+    ) -> bool;
     /// the handler for codegen
     fn handle(
         &self,
@@ -56,7 +62,13 @@ struct Cover;
 const UNEXPECTED_CALL: &str = "Hooks from kani library handled as a map";
 
 impl GotocHook for Cover {
-    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+    fn hook_applies(
+        &self,
+        _tcx: TyCtxt,
+        _instance: Instance,
+        _instance_name: &str,
+        _kani_tool_attr: Option<&String>,
+    ) -> bool {
         unreachable!("{UNEXPECTED_CALL}")
     }
 
@@ -91,7 +103,13 @@ impl GotocHook for Cover {
 
 struct Assume;
 impl GotocHook for Assume {
-    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+    fn hook_applies(
+        &self,
+        _tcx: TyCtxt,
+        _instance: Instance,
+        _instance_name: &str,
+        _kani_tool_attr: Option<&String>,
+    ) -> bool {
         unreachable!("{UNEXPECTED_CALL}")
     }
 
@@ -115,7 +133,13 @@ impl GotocHook for Assume {
 
 struct Assert;
 impl GotocHook for Assert {
-    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+    fn hook_applies(
+        &self,
+        _tcx: TyCtxt,
+        _instance: Instance,
+        _instance_name: &str,
+        _kani_tool_attr: Option<&String>,
+    ) -> bool {
         unreachable!("{UNEXPECTED_CALL}")
     }
 
@@ -150,7 +174,13 @@ impl GotocHook for Assert {
 
 struct UnsupportedCheck;
 impl GotocHook for UnsupportedCheck {
-    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+    fn hook_applies(
+        &self,
+        _tcx: TyCtxt,
+        _instance: Instance,
+        _instance_name: &str,
+        _kani_tool_attr: Option<&String>,
+    ) -> bool {
         unreachable!("{UNEXPECTED_CALL}")
     }
 
@@ -187,7 +217,13 @@ impl GotocHook for UnsupportedCheck {
 
 struct SafetyCheck;
 impl GotocHook for SafetyCheck {
-    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+    fn hook_applies(
+        &self,
+        _tcx: TyCtxt,
+        _instance: Instance,
+        _instance_name: &str,
+        _kani_tool_attr: Option<&String>,
+    ) -> bool {
         unreachable!("{UNEXPECTED_CALL}")
     }
 
@@ -218,7 +254,13 @@ impl GotocHook for SafetyCheck {
 
 struct SafetyCheckNoAssume;
 impl GotocHook for SafetyCheckNoAssume {
-    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+    fn hook_applies(
+        &self,
+        _tcx: TyCtxt,
+        _instance: Instance,
+        _instance_name: &str,
+        _kani_tool_attr: Option<&String>,
+    ) -> bool {
         unreachable!("{UNEXPECTED_CALL}")
     }
 
@@ -250,7 +292,13 @@ impl GotocHook for SafetyCheckNoAssume {
 // TODO: Remove this and replace occurrences with `SanityCheck`.
 struct Check;
 impl GotocHook for Check {
-    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+    fn hook_applies(
+        &self,
+        _tcx: TyCtxt,
+        _instance: Instance,
+        _instance_name: &str,
+        _kani_tool_attr: Option<&String>,
+    ) -> bool {
         unreachable!("{UNEXPECTED_CALL}")
     }
 
@@ -286,7 +334,13 @@ impl GotocHook for Check {
 struct Nondet;
 
 impl GotocHook for Nondet {
-    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+    fn hook_applies(
+        &self,
+        _tcx: TyCtxt,
+        _instance: Instance,
+        _instance_name: &str,
+        _kani_tool_attr: Option<&String>,
+    ) -> bool {
         unreachable!("{UNEXPECTED_CALL}")
     }
 
@@ -325,9 +379,14 @@ impl GotocHook for Nondet {
 struct Panic;
 
 impl GotocHook for Panic {
-    fn hook_applies(&self, tcx: TyCtxt, instance: Instance) -> bool {
+    fn hook_applies(
+        &self,
+        tcx: TyCtxt,
+        instance: Instance,
+        _instance_name: &str,
+        kani_tool_attr: Option<&String>,
+    ) -> bool {
         let def_id = rustc_internal::internal(tcx, instance.def.def_id());
-        let kani_tool_attr = attributes::fn_marker(instance.def);
 
         // we check the attributes to make sure this hook applies to
         // panic functions we've stubbed too
@@ -354,7 +413,13 @@ impl GotocHook for Panic {
 /// Encodes __CPROVER_r_ok(ptr, size)
 struct IsAllocated;
 impl GotocHook for IsAllocated {
-    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+    fn hook_applies(
+        &self,
+        _tcx: TyCtxt,
+        _instance: Instance,
+        _instance_name: &str,
+        _kani_tool_attr: Option<&String>,
+    ) -> bool {
         unreachable!("{UNEXPECTED_CALL}")
     }
 
@@ -393,7 +458,13 @@ impl GotocHook for IsAllocated {
 /// independent of the backend
 struct FloatToIntInRange;
 impl GotocHook for FloatToIntInRange {
-    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+    fn hook_applies(
+        &self,
+        _tcx: TyCtxt,
+        _instance: Instance,
+        _instance_name: &str,
+        _kani_tool_attr: Option<&String>,
+    ) -> bool {
         unreachable!("{UNEXPECTED_CALL}")
     }
 
@@ -438,7 +509,13 @@ impl GotocHook for FloatToIntInRange {
 /// Encodes __CPROVER_pointer_object(ptr)
 struct PointerObject;
 impl GotocHook for PointerObject {
-    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+    fn hook_applies(
+        &self,
+        _tcx: TyCtxt,
+        _instance: Instance,
+        _instance_name: &str,
+        _kani_tool_attr: Option<&String>,
+    ) -> bool {
         unreachable!("{UNEXPECTED_CALL}")
     }
 
@@ -474,7 +551,13 @@ impl GotocHook for PointerObject {
 /// Encodes __CPROVER_pointer_offset(ptr)
 struct PointerOffset;
 impl GotocHook for PointerOffset {
-    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+    fn hook_applies(
+        &self,
+        _tcx: TyCtxt,
+        _instance: Instance,
+        _instance_name: &str,
+        _kani_tool_attr: Option<&String>,
+    ) -> bool {
         unreachable!("{UNEXPECTED_CALL}")
     }
 
@@ -511,9 +594,14 @@ struct RustAlloc;
 // Removing this hook causes regression failures.
 // https://github.com/model-checking/kani/issues/1170
 impl GotocHook for RustAlloc {
-    fn hook_applies(&self, _tcx: TyCtxt, instance: Instance) -> bool {
-        let full_name = instance.name();
-        full_name == "alloc::alloc::exchange_malloc"
+    fn hook_applies(
+        &self,
+        _tcx: TyCtxt,
+        _instance: Instance,
+        instance_name: &str,
+        _kani_tool_attr: Option<&String>,
+    ) -> bool {
+        instance_name == "alloc::alloc::exchange_malloc"
     }
 
     fn handle(
@@ -562,9 +650,14 @@ impl GotocHook for RustAlloc {
 pub struct MemCmp;
 
 impl GotocHook for MemCmp {
-    fn hook_applies(&self, _tcx: TyCtxt, instance: Instance) -> bool {
-        let name = instance.name();
-        name == "core::slice::cmp::memcmp" || name == "std::slice::cmp::memcmp"
+    fn hook_applies(
+        &self,
+        _tcx: TyCtxt,
+        _instance: Instance,
+        instance_name: &str,
+        _kani_tool_attr: Option<&String>,
+    ) -> bool {
+        instance_name == "core::slice::cmp::memcmp" || instance_name == "std::slice::cmp::memcmp"
     }
 
     fn handle(
@@ -620,7 +713,13 @@ impl GotocHook for MemCmp {
 struct UntrackedDeref;
 
 impl GotocHook for UntrackedDeref {
-    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+    fn hook_applies(
+        &self,
+        _tcx: TyCtxt,
+        _instance: Instance,
+        _instance_name: &str,
+        _kani_tool_attr: Option<&String>,
+    ) -> bool {
         unreachable!("{UNEXPECTED_CALL}")
     }
 
@@ -668,7 +767,13 @@ struct InitContracts;
 /// free(NULL);
 /// ```
 impl GotocHook for InitContracts {
-    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+    fn hook_applies(
+        &self,
+        _tcx: TyCtxt,
+        _instance: Instance,
+        _instance_name: &str,
+        _kani_tool_attr: Option<&String>,
+    ) -> bool {
         unreachable!("{UNEXPECTED_CALL}")
     }
 
@@ -710,9 +815,14 @@ impl GotocHook for InitContracts {
 pub struct LoopInvariantRegister;
 
 impl GotocHook for LoopInvariantRegister {
-    fn hook_applies(&self, _tcx: TyCtxt, instance: Instance) -> bool {
-        attributes::fn_marker(instance.def)
-            .is_some_and(|marker| marker == "kani_register_loop_contract")
+    fn hook_applies(
+        &self,
+        _tcx: TyCtxt,
+        _instance: Instance,
+        _instance_name: &str,
+        kani_tool_attr: Option<&String>,
+    ) -> bool {
+        kani_tool_attr.is_some_and(|marker| marker == "kani_register_loop_contract")
     }
 
     fn handle(
@@ -785,7 +895,13 @@ enum QuantifierKind {
 }
 
 impl GotocHook for Forall {
-    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+    fn hook_applies(
+        &self,
+        _tcx: TyCtxt,
+        _instance: Instance,
+        _instance_name: &str,
+        _kani_tool_attr: Option<&String>,
+    ) -> bool {
         unreachable!("{UNEXPECTED_CALL}")
     }
 
@@ -803,7 +919,13 @@ impl GotocHook for Forall {
 }
 
 impl GotocHook for Exists {
-    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+    fn hook_applies(
+        &self,
+        _tcx: TyCtxt,
+        _instance: Instance,
+        _instance_name: &str,
+        _kani_tool_attr: Option<&String>,
+    ) -> bool {
         unreachable!("{UNEXPECTED_CALL}")
     }
 
@@ -951,15 +1073,21 @@ pub struct GotocHooks {
 
 impl GotocHooks {
     pub fn hook_applies(&self, tcx: TyCtxt, instance: Instance) -> Option<Rc<dyn GotocHook>> {
-        if let Ok(KaniFunction::Hook(hook)) = KaniFunction::try_from(instance) {
-            Some(self.kani_lib_hooks[&hook].clone())
-        } else {
-            for h in &self.other_hooks {
-                if h.hook_applies(tcx, instance) {
-                    return Some(h.clone());
-                }
-            }
-            None
+        let fn_attr = attributes::fn_marker(instance.def);
+        if let Some(ref fn_attr) = fn_attr
+            && let Some(KaniFunction::Hook(hook)) = try_get_kani_function(fn_attr)
+        {
+            return Some(self.kani_lib_hooks[&hook].clone());
         }
+
+        let instance_name = instance.name();
+        let kani_tool_attr = fn_attr.as_ref();
+
+        for h in &self.other_hooks {
+            if h.hook_applies(tcx, instance, &instance_name, kani_tool_attr) {
+                return Some(h.clone());
+            }
+        }
+        None
     }
 }
