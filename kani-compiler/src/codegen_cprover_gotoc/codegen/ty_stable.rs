@@ -16,7 +16,7 @@ use rustc_public::mir::{Local, Operand, Place, Rvalue};
 use rustc_public::rustc_internal;
 use rustc_public::ty::{FnSig, RigidTy, Ty, TyKind};
 
-impl<'tcx> GotocCtx<'tcx> {
+impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
     pub fn place_ty_stable(&self, place: &Place) -> Ty {
         place.ty(self.current_fn().locals()).unwrap()
     }

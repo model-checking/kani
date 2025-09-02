@@ -73,7 +73,7 @@ fn instance_names(instance: &Instance) -> (String, String) {
 
 /// Constructor
 impl<'tcx> CurrentFnCtx<'tcx> {
-    pub fn new(instance: Instance, gcx: &GotocCtx<'tcx>, body: &Body) -> Self {
+    pub fn new(instance: Instance, gcx: &GotocCtx<'tcx, '_>, body: &Body) -> Self {
         let (readable_name, name) = instance_names(&instance);
         let instance_internal = rustc_internal::internal(gcx.tcx, instance);
         let locals = body.locals().to_vec();
