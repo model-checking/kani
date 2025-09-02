@@ -31,23 +31,25 @@ macro_rules! implement_cache {
 
         impl Drop for $name {
             fn drop(&mut self) {
-                self.print_stats();
+                if std::env::var("CACHE_STATS").is_ok() {
+                    self.print_stats();
+                }
             }
         }
 
         impl $name {
             fn print_stats(&self) {
-                tracing::debug!("\n***CACHE STATS***");
+                println!("\n***CACHE STATS***");
                 let mut all_stats = Vec::new();
                 $(
                     let name = std::any::type_name::<$val>();
                     let stats: &impl_stats::stats::CacheStats = &self.$field_name.1;
-                    tracing::debug!("{name}: {:?}", stats);
+                    println!("{name}: {:?}", stats);
                     all_stats.push(stats);
                 )*
                 let (hits, total) = impl_stats::stats::total_hits_and_queries(all_stats.into_iter());
                 let hit_rate = hits as f64 / total as f64 * 100_f64;
-                tracing::debug!("TOTAL: {hits} hits / {total} queries ({hit_rate:.2?}%)\n");
+                println!("TOTAL: {hits} hits / {total} queries ({hit_rate:.2?}%)\n");
             }
         }
 
