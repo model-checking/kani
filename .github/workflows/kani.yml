@@ -113,7 +113,7 @@ jobs:
       # https://github.com/AeneasVerif/charon/issues/806 and updating the
       # mir-to-ullbc code
       - name: Patch Charon
-        run: cd charon && git apply ../scripts/charon.patch
+        run: cd charon && git apply ../scripts/charon-patch.diff
 
       - name: Build Kani with Charon
         run: cargo build-dev -- --features cprover --features llbc
