@@ -197,20 +197,25 @@ impl TryFrom<FnDef> for KaniFunction {
     }
 }
 
+/// Tries to get the [KaniFunction] from a given attribute string.
+pub fn try_get_kani_function(fn_attr: &str) -> Option<KaniFunction> {
+    if let Ok(intrinsic) = KaniIntrinsic::from_str(fn_attr) {
+        Some(intrinsic.into())
+    } else if let Ok(model) = KaniModel::from_str(fn_attr) {
+        Some(model.into())
+    } else if let Ok(hook) = KaniHook::from_str(fn_attr) {
+        Some(hook.into())
+    } else {
+        None
+    }
+}
+
 impl TryFrom<Instance> for KaniFunction {
     type Error = ();
 
     fn try_from(instance: Instance) -> Result<Self, Self::Error> {
-        let value = attributes::fn_marker(instance.def).ok_or(())?;
-        if let Ok(intrinsic) = KaniIntrinsic::from_str(&value) {
-            Ok(intrinsic.into())
-        } else if let Ok(model) = KaniModel::from_str(&value) {
-            Ok(model.into())
-        } else if let Ok(hook) = KaniHook::from_str(&value) {
-            Ok(hook.into())
-        } else {
-            Err(())
-        }
+        let fn_attr = attributes::fn_marker(instance.def).ok_or(())?;
+        try_get_kani_function(&fn_attr).ok_or(())
     }
 }
 
