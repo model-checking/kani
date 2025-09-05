@@ -108,6 +108,13 @@ jobs:
         with:
           os: ubuntu-24.04
 
+      # Patch Charon so that it compiles. This is temporary until we're able to
+      # upgrade the pinned commit which requires fixing
+      # https://github.com/AeneasVerif/charon/issues/806 and updating the
+      # mir-to-ullbc code
+      - name: Patch Charon
+        run: cd charon && git apply ../scripts/charon.patch
+
       - name: Build Kani with Charon
         run: cargo build-dev -- --features cprover --features llbc
 
