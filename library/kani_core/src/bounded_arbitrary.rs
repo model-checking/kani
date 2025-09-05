@@ -13,6 +13,22 @@ macro_rules! generate_bounded_arbitrary {
             fn bounded_any<const N: usize>() -> Self;
         }
 
+        impl<T: Arbitrary> BoundedArbitrary for alloc::boxed::Box<[T]> {
+            fn bounded_any<const N: usize>() -> Self {
+                let len: usize = kani::any_where(|l| *l <= N);
+                // The following is equivalent to:
+                // ```
+                // (0..len).map(|_| T::any()).collect()
+                // ```
+                // but leads to more efficient verification
+                let mut b = alloc::boxed::Box::<[T]>::new_uninit_slice(len);
+                for i in 0..len {
+                    b[i] = MaybeUninit::new(T::any());
+                }
+                unsafe { b.assume_init() }
+            }
+        }
+
         impl<T> BoundedArbitrary for Option<T>
         where
             T: BoundedArbitrary,
