@@ -466,12 +466,12 @@ checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
 name = "cprover_bindings"
 version = "0.65.0"
 dependencies = [
- "fxhash",
  "lazy_static",
  "linear-map",
  "memuse",
  "num",
  "num-traits",
+ "rustc-hash",
  "serde",
  "serde_test",
  "string-interner",
@@ -1747,6 +1747,12 @@ name = "rustc-demangle"
 version = "0.1.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "56f7d92ca342cea22a06f2121d944b4fd82af56988c270852495420f961d4ace"
+
+[[package]]
+name = "rustc-hash"
+version = "2.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "357703d41365b4b27c590e3ed91eabb1b663f07c4c084095e60cbed4362dff0d"
 
 [[package]]
 name = "rustc_version"
