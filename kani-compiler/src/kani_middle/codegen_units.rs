@@ -17,12 +17,12 @@ use crate::kani_middle::reachability::filter_crate_items;
 use crate::kani_middle::stubbing::{check_compatibility, harness_stub_map};
 use crate::kani_middle::{can_derive_arbitrary, implements_arbitrary};
 use crate::kani_queries::QueryDb;
-use fxhash::{FxHashMap, FxHashSet};
 use kani_metadata::{
     ArtifactType, AssignsContract, AutoHarnessMetadata, AutoHarnessSkipReason, HarnessMetadata,
     KaniMetadata, find_proof_harnesses,
 };
 use regex::RegexSet;
+use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_hir::def_id::DefId;
 use rustc_middle::ty::TyCtxt;
 use rustc_public::mir::mono::Instance;

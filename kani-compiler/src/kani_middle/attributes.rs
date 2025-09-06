@@ -4,10 +4,10 @@
 
 use std::collections::{BTreeMap, HashSet};
 
-use fxhash::FxHashMap;
 use kani_metadata::{CbmcSolver, HarnessAttributes, HarnessKind, Stub};
 use quote::ToTokens;
 use rustc_ast::{LitKind, MetaItem, MetaItemKind};
+use rustc_data_structures::fx::FxHashMap;
 use rustc_errors::ErrorGuaranteed;
 use rustc_hir::{
     AttrArgs, Attribute,

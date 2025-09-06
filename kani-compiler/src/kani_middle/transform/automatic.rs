@@ -14,7 +14,7 @@ use crate::kani_middle::kani_functions::{KaniHook, KaniIntrinsic, KaniModel};
 use crate::kani_middle::transform::body::{InsertPosition, MutableBody, SourceInstruction};
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
-use fxhash::FxHashMap;
+use rustc_data_structures::fx::FxHashMap;
 use rustc_middle::ty::TyCtxt;
 use rustc_public::CrateDef;
 use rustc_public::mir::mono::Instance;
