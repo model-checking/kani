@@ -6,7 +6,7 @@
 use std::collections::HashSet;
 
 use crate::kani_queries::QueryDb;
-use fxhash::FxHashMap;
+use rustc_data_structures::fx::FxHashMap;
 use rustc_hir::{def::DefKind, def_id::DefId as InternalDefId, def_id::LOCAL_CRATE};
 use rustc_middle::ty::TyCtxt;
 use rustc_public::mir::TerminatorKind;
