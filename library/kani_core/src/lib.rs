@@ -23,6 +23,7 @@
 mod arbitrary;
 mod bounded_arbitrary;
 mod float;
+mod iter;
 mod mem;
 mod mem_init;
 mod models;
@@ -49,6 +50,7 @@ macro_rules! kani_lib {
             kani_core::generate_arbitrary!();
             kani_core::generate_bounded_arbitrary!();
             kani_core::generate_models!();
+            kani_core::generate_iter!();
 
             pub mod float {
                 kani_core::generate_float!(core);
@@ -72,6 +74,7 @@ macro_rules! kani_lib {
         kani_core::generate_arbitrary!();
         kani_core::generate_bounded_arbitrary!();
         kani_core::generate_models!();
+        kani_core::generate_iter!();
 
         pub mod float {
             //! This module contains functions useful for float-related checks

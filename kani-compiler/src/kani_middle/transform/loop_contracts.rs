@@ -12,11 +12,12 @@ use crate::kani_middle::transform::TransformationType;
 use crate::kani_middle::transform::body::{InsertPosition, MutableBody, SourceInstruction};
 use crate::kani_queries::QueryDb;
 use crate::rustc_public::CrateDef;
+use itertools::Itertools;
 use rustc_middle::ty::TyCtxt;
 use rustc_public::mir::mono::Instance;
 use rustc_public::mir::{
-    AggregateKind, BasicBlock, BasicBlockIdx, Body, ConstOperand, Operand, Rvalue, Statement,
-    StatementKind, SwitchTargets, Terminator, TerminatorKind, VarDebugInfoContents,
+    AggregateKind, BasicBlock, BasicBlockIdx, Body, ConstOperand, Operand, Place, Rvalue,
+    Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind, VarDebugInfoContents,
 };
 use rustc_public::ty::{FnDef, GenericArgKind, MirConst, RigidTy, TyKind, UintTy};
 use rustc_span::Symbol;
@@ -174,6 +175,338 @@ impl LoopContractPass {
             matches!(&info.value, VarDebugInfoContents::Place(place) if place.local == idx)
         });
 
+            if is_user_defined {
+                user_vars.push(idx);
+            }
+        }
+
+        user_vars
+    }
+
+    // Get the list of tuples:
+    // (firstpat, the block_id where firstpat get assigned, the corresponding nthpat, the block_id where nthpat get assigned)
+    fn get_first_pats_and_nth_pats(&self, body: &MutableBody) -> Vec<(usize, usize, usize, usize)> {
+        let mut first_pats_and_nth_pats: Vec<(usize, usize, usize, usize)> = Vec::new();
+        let mut current_firstpat = 0;
+        let mut current_firstpat_pos = 0;
+        for (blockid, block) in body.blocks().iter().enumerate() {
+            if let TerminatorKind::Call {
+                func: terminator_func,
+                args: _,
+                destination: dest,
+                target: _,
+                unwind: _,
+            } = &block.terminator.kind
+            {
+                // Get the function signature of the terminator call.
+                let Some(RigidTy::FnDef(fn_def, _)) = terminator_func
+                    .ty(body.locals())
+                    .ok()
+                    .map(|fn_ty| fn_ty.kind().rigid().unwrap().clone())
+                else {
+                    continue;
+                };
+                if fn_def.name() == "kani::KaniIter::first" {
+                    current_firstpat = dest.local;
+                    current_firstpat_pos = blockid;
+                }
+                if fn_def.name() == "kani::KaniIter::nth" && current_firstpat != 0 {
+                    first_pats_and_nth_pats.push((
+                        current_firstpat,
+                        dest.local,
+                        current_firstpat_pos,
+                        blockid,
+                    ));
+                    current_firstpat = 0
+                }
+            }
+        }
+        first_pats_and_nth_pats
+    }
+
+    // This Vec includes the user defined variables together with the tuple-typed variable
+    // thst store the return of "kani::KaniIter::first" function
+    fn get_storage_moving_variables(&self, body: &MutableBody) -> Vec<usize> {
+        let first_nth_list = self.get_first_pats_and_nth_pats(body);
+        let mut moving_vars = self.get_user_defined_variables(body);
+        for (firstvar, _, _, _) in first_nth_list {
+            if !moving_vars.contains(&firstvar) {
+                moving_vars.push(firstvar);
+            }
+        }
+        moving_vars
+    }
+
+    // Return the same Terminator with new destination
+    fn terminator_of_new_destination(old: Terminator, new_destination_local: usize) -> Terminator {
+        let mut terminator = old.clone();
+        if let TerminatorKind::Call {
+            func: terminator_func,
+            args: terminator_args,
+            destination: old_destination,
+            target: terminator_target,
+            unwind: terminator_unwind,
+        } = &terminator.kind
+        {
+            let mut new_destination = old_destination.clone();
+            new_destination.local = new_destination_local;
+            terminator.kind = TerminatorKind::Call {
+                func: terminator_func.clone(),
+                args: terminator_args.clone(),
+                destination: new_destination,
+                target: *terminator_target,
+                unwind: *terminator_unwind,
+            };
+        }
+        terminator
+    }
+
+    // Replace the "firstpat" vars with its corresponding "nthpat" vars
+    // See the comments in kani/library/kani_macros/src/sysroot/loop_contracts/mod.rs
+    fn replace_first_pat_by_nth_pat(&self, body: &mut MutableBody) {
+        let first_nth_list = self.get_first_pats_and_nth_pats(body);
+        for (firstvar, nthvar, first_blockid, nth_blockid) in first_nth_list {
+            // Replace firstpat by nthpat in the destination of "kani::KaniIter::first" function call
+            let old_terminator = body.blocks()[first_blockid].terminator.clone();
+            let new_terminator = Self::terminator_of_new_destination(old_terminator, nthvar);
+            body.replace_terminator(
+                &SourceInstruction::Terminator { bb: first_blockid },
+                new_terminator,
+            );
+            let span = body.blocks()[first_blockid].statements.first().unwrap().span;
+            // Add the StorageLive(nthpat) statement at the begining of the same block
+            let storagelive_stmt = Statement { kind: StatementKind::StorageLive(nthvar), span };
+            body.insert_stmt(
+                storagelive_stmt,
+                &mut SourceInstruction::Statement { idx: 0, bb: first_blockid },
+                InsertPosition::Before,
+            );
+
+            // Remove the StorageLive(firstpat) statement in the same block if any
+            let mut storageliveid = None;
+            for (id, stmt) in body.blocks()[first_blockid].statements.iter().enumerate() {
+                if let StatementKind::StorageLive(local) = &stmt.kind
+                    && *local == firstvar
+                {
+                    storageliveid = Some(id)
+                }
+            }
+            if let Some(id) = storageliveid {
+                body.remove_stmt(first_blockid, id);
+            }
+
+            // Construct the HashMap of the firstpat projections with  nthpat projections
+            let firstprj_stmts_copy = body.blocks()[first_blockid + 1].statements.clone();
+            let nthprj_stmts_copy = body.blocks()[nth_blockid + 1].statements.clone();
+            let mut firstprj_nthprj: HashMap<usize, usize> = HashMap::new();
+            firstprj_nthprj.insert(firstvar, nthvar);
+
+            for fstmt in firstprj_stmts_copy.iter() {
+                if let StatementKind::Assign(fprjplace, frval) = &fstmt.kind
+                    && let Rvalue::Use(Operand::Copy(firstpatplace)) = frval
+                    && firstpatplace.local == firstvar
+                {
+                    let firstprj = fprjplace.local;
+                    for istmt in nthprj_stmts_copy.iter() {
+                        if let StatementKind::Assign(iprjplace, irval) = &istmt.kind
+                            && let Rvalue::Use(Operand::Copy(nthpatplace)) = irval
+                            && nthpatplace.local == nthvar
+                            && nthpatplace.projection == firstpatplace.projection
+                        {
+                            let nthprj = iprjplace.local;
+                            firstprj_nthprj.insert(firstprj, nthprj);
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // Replace the firstpat (and its projections) with nthpat (and its projections)
+            // in the places where they may get involved, which includes, the comments in code.
+            // First, in the block that  "kani::KaniIter::first" is called
+            let mut new_stmts: Vec<Statement> = Vec::new();
+            for stmt in firstprj_stmts_copy.iter() {
+                let mut new_stmt = stmt.clone();
+
+                match &stmt.kind {
+                    // The StorageLive statements of the projections
+                    // There might be some without StorageLive statements
+                    // So we just remove them and add a new one for each nthpat projection later
+                    StatementKind::StorageLive(local) => {
+                        if !firstprj_nthprj.contains_key(local) {
+                            new_stmts.push(new_stmt);
+                        }
+                    }
+                    // The assign statements of the projections
+                    StatementKind::Assign(fprjplace, frval) => {
+                        match frval {
+                            Rvalue::Use(Operand::Copy(firstpatplace)) => {
+                                if firstpatplace.local == firstvar {
+                                    let nthprj = firstprj_nthprj.get(&fprjplace.local).unwrap();
+                                    let mut nthpatplace = firstpatplace.clone();
+                                    nthpatplace.local = nthvar;
+                                    let newrval = Rvalue::Use(Operand::Copy(nthpatplace));
+                                    new_stmt.kind = StatementKind::Assign(
+                                        Place {
+                                            local: *nthprj,
+                                            projection: fprjplace.projection.clone(),
+                                        },
+                                        newrval,
+                                    );
+                                }
+                            }
+                            Rvalue::CopyForDeref(firstpatplace) => {
+                                if firstpatplace.local == firstvar {
+                                    let mut nthpatplace = firstpatplace.clone();
+                                    nthpatplace.local = nthvar;
+                                    let newrval = Rvalue::CopyForDeref(nthpatplace);
+                                    new_stmt.kind =
+                                        StatementKind::Assign(fprjplace.clone(), newrval);
+                                }
+                            }
+                            _ => {
+                                if let Some(nthprj) = firstprj_nthprj.get(&fprjplace.local) {
+                                    new_stmt.kind = StatementKind::Assign(
+                                        Place {
+                                            local: *nthprj,
+                                            projection: fprjplace.projection.clone(),
+                                        },
+                                        frval.clone(),
+                                    )
+                                }
+                            }
+                        }
+                        new_stmts.push(new_stmt);
+                    }
+                    _ => new_stmts.push(new_stmt),
+                }
+            }
+
+            body.replace_statements(
+                &SourceInstruction::Statement { idx: 0, bb: first_blockid + 1 },
+                new_stmts,
+            );
+
+            // Second, in the loophead block right after that
+            let loophead_stmts_copy = body.blocks()[first_blockid + 2].statements.clone();
+            let mut new_loophead_stmts = Vec::new();
+            if let StatementKind::Assign(_, Rvalue::Ref(_, _, Place { local: closurelocal, .. })) =
+                loophead_stmts_copy.last().unwrap().kind
+            {
+                for stmt in loophead_stmts_copy.iter() {
+                    // In the Operands of the loop invariant closure
+                    if let StatementKind::Assign(lhs, Rvalue::Aggregate(aggrkind, operands)) =
+                        &stmt.kind
+                        && lhs.local == closurelocal
+                    {
+                        let mut new_operands = Vec::new();
+                        for operand in operands.iter() {
+                            if let Operand::Move(Place { local: operandlocal, projection: proj }) =
+                                operand
+                                && let Some(nthprj) = firstprj_nthprj.get(operandlocal)
+                            {
+                                let new_operand = Operand::Move(Place {
+                                    local: *nthprj,
+                                    projection: proj.clone(),
+                                });
+                                new_operands.push(new_operand);
+                            } else if let Operand::Copy(Place {
+                                local: operandlocal,
+                                projection: proj,
+                            }) = operand
+                                && let Some(nthprj) = firstprj_nthprj.get(operandlocal)
+                            {
+                                let new_operand = Operand::Copy(Place {
+                                    local: *nthprj,
+                                    projection: proj.clone(),
+                                });
+                                new_operands.push(new_operand);
+                            } else {
+                                new_operands.push(operand.clone());
+                            }
+                        }
+                        let new_rval = Rvalue::Aggregate(aggrkind.clone(), new_operands);
+                        new_loophead_stmts.push(Statement {
+                            kind: StatementKind::Assign(lhs.clone(), new_rval),
+                            span: stmt.span,
+                        });
+                    } else if let StatementKind::Assign(
+                        lhs,
+                        Rvalue::Ref(region, borrowkind, Place { local: firstlocal, projection }),
+                    ) = &stmt.kind
+                         // In the borrow statements 
+                        && let Some(nthlocal) = firstprj_nthprj.get(firstlocal)
+                    {
+                        let new_rval = Rvalue::Ref(
+                            region.clone(),
+                            *borrowkind,
+                            Place { local: *nthlocal, projection: projection.clone() },
+                        );
+                        new_loophead_stmts.push(Statement {
+                            kind: StatementKind::Assign(lhs.clone(), new_rval),
+                            span: stmt.span,
+                        });
+                    } else {
+                        new_loophead_stmts.push(stmt.clone());
+                    }
+                }
+            } else {
+                panic!("not a loop head")
+            }
+
+            body.replace_statements(
+                &SourceInstruction::Statement { idx: 0, bb: first_blockid + 2 },
+                new_loophead_stmts,
+            );
+
+            // Remove the StorageDead statements of nthpat and its projections
+            let mut new_blocks = Vec::new();
+            for (block_id, block) in body.blocks().iter().enumerate() {
+                let mut new_stmts = Vec::new();
+                for stmt in block.statements.iter() {
+                    match &stmt.kind {
+                        StatementKind::StorageDead(local) => {
+                            if !firstprj_nthprj.values().contains(local) {
+                                new_stmts.push(stmt.clone())
+                            }
+                        }
+                        StatementKind::StorageLive(local) => {
+                            if !(firstprj_nthprj.values().contains(local)
+                                && block_id == nth_blockid + 1)
+                            {
+                                new_stmts.push(stmt.clone())
+                            }
+                        }
+                        _ => new_stmts.push(stmt.clone()),
+                    }
+                }
+                new_blocks.push((block_id, new_stmts));
+            }
+
+            for (block_id, stmts) in new_blocks {
+                body.replace_statements(
+                    &SourceInstruction::Statement { idx: 0, bb: block_id },
+                    stmts,
+                );
+            }
+        }
+    }
+
+    // Get all the kaniiter variables of for loops
+    fn get_kaniiter_variables(&self, body: &MutableBody) -> Vec<usize> {
+        let mut user_vars = Vec::new();
+
+        // Iterate through all locals
+        for (idx, _) in body.locals().iter().enumerate() {
+            // Skip the return place (local 0)
+            if idx == 0 {
+                continue;
+            }
+            let is_user_defined = body.var_debug_info().iter().any(|info| {
+                matches!(&info.value, VarDebugInfoContents::Place(place) if place.local == idx)
+                    && info.name.contains("kaniiter")
+                    && !info.name.contains("kani_iter_len")
+            });
             if is_user_defined {
                 user_vars.push(idx);
             }
@@ -341,6 +674,78 @@ impl LoopContractPass {
         found_local_list
     }
 
+    fn terminator_of_new_target(old: Terminator, new_target: usize) -> Terminator {
+        let mut terminator = old.clone();
+        if let TerminatorKind::Call {
+            func: terminator_func,
+            args: terminator_args,
+            destination: terminator_destination,
+            target: _,
+            unwind: terminator_unwind,
+        } = &terminator.kind
+        {
+            terminator.kind = TerminatorKind::Call {
+                func: terminator_func.clone(),
+                args: terminator_args.clone(),
+                destination: terminator_destination.clone(),
+                target: Some(new_target),
+                unwind: *terminator_unwind,
+            };
+        }
+        terminator
+    }
+
+    fn block_of_new_target(old: &BasicBlock, new_target: usize) -> BasicBlock {
+        let mut new_block = old.clone();
+        new_block.terminator = Self::terminator_of_new_target(old.terminator.clone(), new_target);
+        new_block
+    }
+
+    // Insert a list of blocks consecutively between the loop head and its next block
+    fn insert_blocks_from_loophead(body: &mut MutableBody, blocks: &[BasicBlock], loophead: usize) {
+        for (i, block) in blocks.iter().enumerate() {
+            if i == 0 {
+                let modified_block = Self::block_of_new_target(block, loophead);
+                body.insert_bb(
+                    modified_block,
+                    &mut SourceInstruction::Terminator { bb: loophead },
+                    InsertPosition::Before,
+                )
+            } else {
+                let modified_block = if i == blocks.len() - 1 {
+                    Self::block_of_new_target(block, loophead)
+                } else {
+                    Self::block_of_new_target(block, body.blocks().len() + 1)
+                };
+                body.insert_bb(
+                    modified_block,
+                    &mut SourceInstruction::Terminator { bb: body.blocks().len() - 1 },
+                    InsertPosition::After,
+                );
+            }
+        }
+    }
+
+    // Insert a list of blocks consecutively at the end of the body then let the final one connect to the loop-head
+    fn insert_blocks_from_at_bottom_connect_to_loophead(
+        body: &mut MutableBody,
+        blocks: &[BasicBlock],
+        loophead: usize,
+    ) {
+        for (i, block) in blocks.iter().enumerate() {
+            let modified_block = if i == blocks.len() - 1 {
+                Self::block_of_new_target(block, loophead)
+            } else {
+                Self::block_of_new_target(block, body.blocks().len() + 1)
+            };
+            body.insert_bb(
+                modified_block,
+                &mut SourceInstruction::Terminator { bb: body.blocks().len() - 1 },
+                InsertPosition::After,
+            );
+        }
+    }
+
     //Move all variables initiation using function-call inside the loop body to the loop-head
     fn move_storagelive_call_to_loophead(
         &self,
@@ -349,71 +754,80 @@ impl LoopContractPass {
         found_local_list: Vec<usize>,
     ) {
         let mut found_local_list = found_local_list;
-        let localvars = self.get_user_defined_variables(body);
-        let mut move_call_list: Vec<(usize, usize, Statement, Terminator)> = Vec::new();
+        let localvars = self.get_storage_moving_variables(body);
+        let forloopvars = self.get_kaniiter_variables(body);
+        let mut current_user_local = 0;
+        let mut current_local_decl_blocks: Vec<BasicBlock> = Vec::new();
+        let mut move_call_list: Vec<(usize, Vec<BasicBlock>)> = Vec::new();
+        let mut kaniiter_blocks: Vec<usize> = Vec::new();
         for (block_idx, block) in body.blocks().iter().enumerate() {
-            if let Some(stmt) = block.statements.last() {
-                match stmt.kind {
-                    StatementKind::StorageLive(local)
-                        if (localvars.contains(&local) && !found_local_list.contains(&local)) =>
-                    {
-                        let terminator = block.terminator.clone();
-                        let terminatorkind = block.terminator.kind.clone();
-                        if let TerminatorKind::Call { destination: dest, .. } = terminatorkind
-                            && dest.local == local
-                            && let Some(&closest_loop_head) = loop_head_map.get(&block_idx)
-                        {
-                            move_call_list.push((
-                                closest_loop_head,
-                                block_idx,
-                                stmt.clone(),
-                                terminator,
-                            ));
-                            found_local_list.push(local);
-                        }
-                    }
-                    _ => (),
+            let mut decl_current_user_local = false;
+            let mut storage_live_block_stmt: Vec<Statement> = Vec::new();
+            if loop_head_map.get(&block_idx).is_none() {
+                continue;
+            }
+            let closest_loop_head = *loop_head_map.get(&block_idx).unwrap();
+            let terminator = block.terminator.clone();
+            let terminatorkind = block.terminator.kind.clone();
+            for stmt in block.statements.clone() {
+                if let StatementKind::StorageLive(local) = stmt.kind
+                    && (localvars.contains(&local) && !found_local_list.contains(&local))
+                    && current_user_local == 0
+                {
+                    current_user_local = local;
+                    found_local_list.push(local);
+                    decl_current_user_local = true;
+                }
+                if decl_current_user_local {
+                    storage_live_block_stmt.push(stmt.clone());
                 }
             }
-        }
-        let mut current_loop_head = 0;
-        move_call_list.sort_by_key(|(closest_loop_head, _, _, _)| *closest_loop_head);
-        for (loop_head, block_idx, stmt, ter) in move_call_list.iter() {
-            let remove_pos = body.blocks()[*block_idx].statements.len() - 1;
-            body.remove_stmt(*block_idx, remove_pos);
-            let mut terminator = ter.clone();
-            if let TerminatorKind::Call {
-                func: terminator_func,
-                args: terminator_args,
-                destination: terminator_destination,
-                target: _,
-                unwind: terminator_unwind,
-            } = &terminator.kind
-            {
-                terminator.kind = TerminatorKind::Call {
-                    func: terminator_func.clone(),
-                    args: terminator_args.clone(),
-                    destination: terminator_destination.clone(),
-                    target: Some(*loop_head),
-                    unwind: *terminator_unwind,
+
+            if decl_current_user_local {
+                let first_block = BasicBlock {
+                    statements: storage_live_block_stmt.clone(),
+                    terminator: terminator.clone(),
                 };
+                current_local_decl_blocks.push(first_block)
+            } else if current_user_local != 0 {
+                current_local_decl_blocks.push(block.clone());
             }
-            let new_block = BasicBlock { statements: vec![stmt.clone()], terminator };
-            if current_loop_head != *loop_head {
-                body.insert_bb(
-                    new_block,
-                    &mut SourceInstruction::Terminator { bb: *loop_head },
-                    InsertPosition::Before,
-                );
-                current_loop_head = *loop_head;
+
+            if let TerminatorKind::Call { destination: dest, .. } = terminatorkind.clone()
+                && dest.local == current_user_local
+                && current_user_local != 0
+            {
+                move_call_list.push((closest_loop_head, current_local_decl_blocks.clone()));
+                current_local_decl_blocks = Vec::new();
+                current_user_local = 0;
+            }
+
+            if let TerminatorKind::Call { destination: dest, .. } = terminatorkind
+                && forloopvars.contains(&dest.local)
+            {
+                kaniiter_blocks.push(block_idx);
+            }
+        }
+
+        let mut current_loop_head = 0;
+        move_call_list.sort_by_key(|(closest_loop_head, _)| *closest_loop_head);
+        for (loophead, blocks) in move_call_list.iter() {
+            if current_loop_head != *loophead {
+                Self::insert_blocks_from_loophead(body, blocks, *loophead);
+                current_loop_head = *loophead;
             } else {
-                let current_block_id = body.blocks().len() - 1;
-                body.insert_bb(
-                    new_block,
-                    &mut SourceInstruction::Terminator { bb: current_block_id },
-                    InsertPosition::After,
-                );
+                Self::insert_blocks_from_at_bottom_connect_to_loophead(body, blocks, *loophead);
             }
+        }
+
+        // For the performance benefits remove the re-assign statements of kaniiter variables
+        // after adding the same one at loop head
+        for block_idx in kaniiter_blocks {
+            let span = body.blocks()[block_idx].terminator.span;
+            body.replace_terminator(
+                &SourceInstruction::Terminator { bb: block_idx },
+                Terminator { kind: TerminatorKind::Goto { target: block_idx + 1 }, span },
+            );
         }
     }
 
@@ -492,6 +906,7 @@ impl LoopContractPass {
     /// It is the core of fn transform, and is separated just to avoid code repetition.
     fn transform_body_with_loop(&mut self, tcx: TyCtxt, body: Body) -> (bool, Body) {
         let mut new_body = MutableBody::from(body);
+        self.replace_first_pat_by_nth_pat(&mut new_body);
         let loop_head_map = self.get_associated_loop_head_hashmap(&new_body, tcx);
         let found_local_list =
             self.move_storagelive_assign_to_loophead(&mut new_body, &loop_head_map);

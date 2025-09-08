@@ -107,7 +107,7 @@ impl PropertyClass {
     }
 }
 
-impl GotocCtx<'_> {
+impl GotocCtx<'_, '_> {
     /// Generates a CBMC assertion. Note: Does _NOT_ assume.
     pub fn codegen_assert(
         &self,

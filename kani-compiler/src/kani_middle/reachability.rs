@@ -170,10 +170,10 @@ impl<'tcx, 'a> MonoItemsCollector<'tcx, 'a> {
     /// Visit a function and collect all mono-items reachable from its instructions.
     fn visit_fn(&mut self, instance: Instance) -> Vec<CollectedItem> {
         let _guard = debug_span!("visit_fn", function=?instance).entered();
-        let body = self.transformer.body(self.tcx, instance);
+        let body = self.transformer.body_ref(self.tcx, instance);
         let mut collector =
-            MonoItemsFnCollector { tcx: self.tcx, collected: FxHashSet::default(), body: &body };
-        collector.visit_body(&body);
+            MonoItemsFnCollector { tcx: self.tcx, collected: FxHashSet::default(), body };
+        collector.visit_body(body);
         collector.collected.into_iter().collect()
     }
 

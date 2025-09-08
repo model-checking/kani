@@ -59,7 +59,9 @@ fn generic_args_len_without_self(args: &GenericArgs) -> usize {
         return len;
     }
     let has_self = args.0.iter().any(|arg| {
-        if let TyKind::Param(param_ty) = arg.expect_ty().kind() {
+        if let Some(ty) = arg.ty()
+            && let TyKind::Param(param_ty) = ty.kind()
+        {
             param_ty.name == "Self"
         } else {
             false
