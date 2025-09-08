@@ -728,8 +728,9 @@ impl GotocCtx<'_, '_> {
                 let mut fargs = if args.is_empty()
                     || fn_def.fn_sig().unwrap().value.abi != Abi::RustCall
                 {
-                    if instance.def.name() == "kani::internal::kani_forall"
-                        || (instance.def.name() == "kani::internal::kani_exists")
+                    let fn_def_name = instance.def.name();
+                    if fn_def_name == "kani::internal::kani_forall"
+                        || (fn_def_name == "kani::internal::kani_exists")
                     {
                         self.codegen_funcall_args_for_quantifiers(&fn_abi, args)
                     } else {
