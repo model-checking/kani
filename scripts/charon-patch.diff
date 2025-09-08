@@ -1,0 +1,26 @@
+diff --git a/charon/Cargo.toml b/charon/Cargo.toml
+index 20f8a9df..a1bf1ee6 100644
+--- a/charon/Cargo.toml
++++ b/charon/Cargo.toml
+@@ -2,7 +2,7 @@
+ name = "charon"
+ version = "0.1.62"
+ authors = ["Son Ho <hosonmarc@gmail.com>"]
+-edition = "2021"
++edition = "2024"
+ license = "Apache-2.0"
+ 
+ [lib]
+diff --git a/charon/src/ids/vector.rs b/charon/src/ids/vector.rs
+index 59f7eaab..21508e19 100644
+--- a/charon/src/ids/vector.rs
++++ b/charon/src/ids/vector.rs
+@@ -217,7 +217,7 @@ where
+         self.iter_indexed().map(|(id, _)| id)
+     }
+ 
+-    pub fn all_indices(&self) -> impl Iterator<Item = I> {
++    pub fn all_indices(&self) -> impl Iterator<Item = I> + use<I, T> {
+         self.vector.indices()
+     }
+ 
