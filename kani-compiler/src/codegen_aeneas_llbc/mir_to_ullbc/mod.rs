@@ -69,6 +69,7 @@ use rustc_public::ty::{
     Ty, TyConst, TyConstKind, TyKind, UintTy,
 };
 use rustc_public::{CrateDef, CrateDefType, DefId};
+use rustc_public_bridge::IndexedVal;
 use std::collections::HashMap;
 use std::iter::zip;
 use std::path::PathBuf;
@@ -1009,7 +1010,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             name.push(CharonPathElem::Ident(crate_name, CharonDisambiguator::new(0)));
         }
 
-        if let Some(impl_defid_internal) = self.tcx.impl_of_method(def_id) {
+        if let Some(impl_defid_internal) = self.tcx.impl_of_assoc(def_id) {
             let traitref = self
                 .tcx
                 .impl_trait_ref(impl_defid_internal)
