@@ -18,6 +18,8 @@
 # See https://github.com/actions/labeler?tab=readme-ov-file#recommended-permissions for more details.
 
 name: Kani Extra
+permissions:
+  contents: read
 on:
   pull_request_target:
   merge_group:
@@ -27,7 +29,6 @@ jobs:
   auto-label:
     name: Auto Label
     permissions:
-      contents: read
       pull-requests: write
     outputs:
       all-labels: ${{ steps.labeler.outputs.all-labels }}
@@ -46,13 +47,11 @@ jobs:
   end-to-end-bench:
     name: End-to-End Benchmarks
     needs: auto-label
-    permissions: {}
     if: ${{ contains(needs.auto-label.outputs.all-labels, 'Z-EndToEndBenchCI') && github.event_name != 'merge_group' }}
     uses: ./.github/workflows/bench-e2e.yml
 
   compiler-bench:
     name: Compiler Benchmarks
     needs: auto-label
-    permissions: {}
     if: ${{ contains(needs.auto-label.outputs.all-labels, 'Z-CompilerBenchCI') && github.event_name != 'merge_group' }}
     uses: ./.github/workflows/bench-compiler.yml
