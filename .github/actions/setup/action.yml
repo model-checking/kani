@@ -37,5 +37,7 @@ runs:
         run: |
           cd ${{ inputs.kani_dir }}
           git config --global --add safe.directory $(pwd)
-          git submodule update --init --depth 1
+          # Workaround for occasionally failing to copy a file in s2n-quic that we
+          # don't actually care about
+          GIT_LFS_SKIP_SMUDGE=1 git submodule update --init --depth 1
         shell: bash
