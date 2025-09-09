@@ -5,6 +5,9 @@
 name: >-
   Nightly: Slow tests
 
+permissions:
+  contents: read
+
 on:
   schedule:
     - cron: "30 5 * * *" # Run this every day at 05:30 UTC

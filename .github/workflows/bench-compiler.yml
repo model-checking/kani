@@ -3,6 +3,8 @@
 #
 # Run performance benchmarks comparing the compiler performance of two different Kani versions.
 name: Kani Compiler Performance Benchmarks
+permissions:
+  contents: read
 on:
   push:
     branches:

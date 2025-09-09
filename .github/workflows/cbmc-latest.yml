@@ -5,6 +5,9 @@
 name: >-
   Nightly: CBMC Latest
 
+permissions:
+  contents: read
+
 on:
   schedule:
     - cron: "0 9 * * *" # Run this every day at 9 AM UTC (4 AM ET/1 AM PT)

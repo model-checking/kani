@@ -13,6 +13,8 @@
 # Changes unrelated to the toolchain should match the current status of main.
 
 name: Check Std Verification
+permissions:
+  contents: read
 on:
   pull_request:
   workflow_call:
