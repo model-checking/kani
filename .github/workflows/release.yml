@@ -6,6 +6,8 @@
 # The release will create a draft release and upload the bundles to it, and it will only run when we push a new
 # release tag (i.e.: tag named `kani-*`).
 name: Release Bundle
+permissions:
+  contents: read
 on:
   pull_request:
   merge_group:

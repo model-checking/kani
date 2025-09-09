@@ -1,6 +1,8 @@
 # Copyright Kani Contributors
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 name: Kani Format Check
+permissions:
+  contents: read
 on:
   pull_request:
   merge_group:
