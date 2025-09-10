@@ -424,7 +424,7 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
             if let Some(principal) = binder.principal() {
                 let poly = principal.with_self_ty(self.tcx, t);
                 let poly = self.tcx.instantiate_bound_regions_with_erased(poly);
-                let poly = self.tcx.erase_regions(poly);
+                let poly = self.tcx.erase_and_anonymize_regions(poly);
                 let mut flds = self
                     .tcx
                     .vtable_entries(poly)
