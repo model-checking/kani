@@ -5,9 +5,9 @@ use std::process::ExitCode;
 
 use anyhow::Result;
 use autoharness::{autoharness_cargo, autoharness_standalone};
-use time::{OffsetDateTime, format_description};
+use time::{format_description, OffsetDateTime};
 
-use args::{CargoKaniSubcommand, check_is_valid};
+use args::{check_is_valid, CargoKaniSubcommand};
 use args_toml::join_args;
 
 use crate::args::StandaloneSubcommand;
@@ -17,7 +17,9 @@ use crate::project::Project;
 use crate::session::KaniSession;
 use crate::version::print_kani_version;
 use clap::Parser;
+use serde_json::json;
 use tracing::debug;
+use crate::json_handler::JsonHandler;
 
 mod args;
 mod args_toml;
@@ -36,9 +38,11 @@ mod harness_runner;
 mod list;
 mod metadata;
 mod project;
+
 mod session;
 mod util;
 mod version;
+mod json_handler;
 
 /// The main function for the `kani-driver`.
 /// The driver can be invoked via `cargo kani` and `kani` commands, which determines what kind of
@@ -128,8 +132,17 @@ fn standalone_main() -> Result<()> {
 /// Run verification on the given project.
 fn verify_project(project: Project, session: KaniSession) -> Result<()> {
     debug!(?project, "verify_project");
+    let mut handler = JsonHandler::new(session.args.export_json.clone());
     let harnesses = session.determine_targets(project.get_all_harnesses())?;
+    for h in harnesses.clone() {
+        handler.add_harness_detail("harnesses", json!({
+        "name": h.pretty_name,
+        "kind": format!("{:?}", h.attributes.kind),
+        "should_panic": h.attributes.should_panic
+    }));
+    }
     debug!(n = harnesses.len(), ?harnesses, "verify_project");
+
 
     // Verification
     let runner = harness_runner::HarnessRunner { sess: &session, project: &project };
@@ -150,8 +163,16 @@ fn verify_project(project: Project, session: KaniSession) -> Result<()> {
 
         session.save_coverage_metadata(&project, &timestamp)?;
         session.save_coverage_results(&project, &results, &timestamp)?;
+        handler.add_item("coverage", json!({"enabled": true}));
     }
+    println!("!!!");
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&handler.data).unwrap()
+    );
+    println!("!!!");
 
+    handler.export()?;
     session.print_final_summary(&results)
 }
 

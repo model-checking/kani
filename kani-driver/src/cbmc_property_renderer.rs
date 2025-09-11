@@ -183,7 +183,9 @@ pub fn kani_cbmc_output_filter(
     if !quiet {
         let formatted_item = format_item(&processed_item, output_format);
         if let Some(fmt_item) = formatted_item {
+            // println!("!");
             println!("{fmt_item}");
+            // println!("!");
         }
     }
     // TODO: Record processed items and dump them into a JSON file
