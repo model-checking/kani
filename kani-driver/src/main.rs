@@ -133,12 +133,35 @@ fn standalone_main() -> Result<()> {
 fn verify_project(project: Project, session: KaniSession) -> Result<()> {
     debug!(?project, "verify_project");
     let mut handler = JsonHandler::new(session.args.export_json.clone());
+    /// TODO: add session info
     let harnesses = session.determine_targets(project.get_all_harnesses())?;
     for h in harnesses.clone() {
         handler.add_harness_detail("harnesses", json!({
-        "name": h.pretty_name,
-        "kind": format!("{:?}", h.attributes.kind),
-        "should_panic": h.attributes.should_panic
+        /// basic name for harnesses
+        "pretty_name": h.pretty_name,
+        "mangled_name":   h.mangled_name,
+        "crate_name":           h.crate_name,
+
+        ///original location of the harnesses
+        "original": {
+          "file":       h.original_file,
+          "start_line": h.original_start_line,
+          "end_line":   h.original_end_line
+        },
+
+        /// GOTO file generated
+        "goto": h.goto_file.as_ref().map(|p| p.to_string_lossy().to_string()),
+
+        /// attributes
+        "kind":                       format!("{:?}", h.attributes.kind),
+        "should_panic":               h.attributes.should_panic,
+        "has_loop_contracts":         h.has_loop_contracts,
+        "is_automatically_generated": h.is_automatically_generated,
+        "solver":        h.attributes.solver.as_ref().map(|s| format!("{:?}", s)),
+        "unwind_value":  h.attributes.unwind_value,        // Option<u32>
+        "contract":      h.contract.as_ref().map(|c| format!("{:?}", c)),
+        "stubs":          h.attributes.stubs.iter().map(|s| format!("{:?}", s)).collect::<Vec<_>>(),
+        "verified_stubs": h.attributes.verified_stubs
     }));
     }
     debug!(n = harnesses.len(), ?harnesses, "verify_project");
@@ -164,6 +187,9 @@ fn verify_project(project: Project, session: KaniSession) -> Result<()> {
         session.save_coverage_metadata(&project, &timestamp)?;
         session.save_coverage_results(&project, &results, &timestamp)?;
         handler.add_item("coverage", json!({"enabled": true}));
+    }
+    else{
+        handler.add_item("coverage", json!({"enabled": false}));
     }
     println!("!!!");
     println!(
