@@ -15,6 +15,10 @@ permissions:
 
 jobs:
   create-cargo-update-pr:
+    # This workflow is restricted to the main repository (model-checking/kani) to prevent
+    # unnecessary PRs being created in forks. The cargo update action should only run in
+    # the main repository context.
+    if: github.repository == 'model-checking/kani'
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout Kani
