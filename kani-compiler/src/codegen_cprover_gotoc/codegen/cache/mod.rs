@@ -20,7 +20,7 @@
 //! If you wish to add another element to the cache, add another row to the [implement_cache!] macro call below,
 //! and this will allow you to use [cache_entry] with that new key type.
 
-use fxhash::FxHashMap;
+use rustc_data_structures::fx::FxHashMap;
 use std::cell::RefCell;
 use std::hash::Hash;
 

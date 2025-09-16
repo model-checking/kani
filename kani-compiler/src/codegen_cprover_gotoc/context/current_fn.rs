@@ -4,7 +4,7 @@
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::InternedString;
 use cbmc::goto_program::Stmt;
-use fxhash::FxHashMap;
+use rustc_data_structures::fx::FxHashMap;
 use rustc_middle::ty::Instance as InstanceInternal;
 use rustc_public::CrateDef;
 use rustc_public::mir::mono::Instance;
