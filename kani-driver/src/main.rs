@@ -5,13 +5,14 @@ use std::process::ExitCode;
 
 use anyhow::Result;
 use autoharness::{autoharness_cargo, autoharness_standalone};
-use time::{format_description, OffsetDateTime};
+use time::{OffsetDateTime, format_description};
 
-use args::{check_is_valid, CargoKaniSubcommand};
+use args::{CargoKaniSubcommand, check_is_valid};
 use args_toml::join_args;
 
 use crate::args::StandaloneSubcommand;
 use crate::concrete_playback::playback::{playback_cargo, playback_standalone};
+use crate::json_handler::JsonHandler;
 use crate::list::collect_metadata::{list_cargo, list_standalone};
 use crate::project::Project;
 use crate::session::KaniSession;
@@ -19,7 +20,6 @@ use crate::version::print_kani_version;
 use clap::Parser;
 use serde_json::json;
 use tracing::debug;
-use crate::json_handler::JsonHandler;
 
 mod args;
 mod args_toml;
@@ -39,10 +39,10 @@ mod list;
 mod metadata;
 mod project;
 
+mod json_handler;
 mod session;
 mod util;
 mod version;
-mod json_handler;
 
 /// The main function for the `kani-driver`.
 /// The driver can be invoked via `cargo kani` and `kani` commands, which determines what kind of
@@ -133,26 +133,28 @@ fn standalone_main() -> Result<()> {
 fn verify_project(project: Project, session: KaniSession) -> Result<()> {
     debug!(?project, "verify_project");
     let mut handler = JsonHandler::new(session.args.export_json.clone());
-    /// TODO: add session info
+    // TODO: add session info
     let harnesses = session.determine_targets(project.get_all_harnesses())?;
+    debug!(n = harnesses.len(), ?harnesses, "verify_project");
+
     for h in harnesses.clone() {
         handler.add_harness_detail("harnesses", json!({
-        /// basic name for harnesses
+        // basic name for harnesses
         "pretty_name": h.pretty_name,
         "mangled_name":   h.mangled_name,
         "crate_name":           h.crate_name,
 
-        ///original location of the harnesses
+        // original location of the harnesses
         "original": {
           "file":       h.original_file,
           "start_line": h.original_start_line,
           "end_line":   h.original_end_line
         },
 
-        /// GOTO file generated
+        // GOTO file generated
         "goto": h.goto_file.as_ref().map(|p| p.to_string_lossy().to_string()),
 
-        /// attributes
+        // attributes
         "kind":                       format!("{:?}", h.attributes.kind),
         "should_panic":               h.attributes.should_panic,
         "has_loop_contracts":         h.has_loop_contracts,
@@ -164,12 +166,10 @@ fn verify_project(project: Project, session: KaniSession) -> Result<()> {
         "verified_stubs": h.attributes.verified_stubs
     }));
     }
-    debug!(n = harnesses.len(), ?harnesses, "verify_project");
-
 
     // Verification
     let runner = harness_runner::HarnessRunner { sess: &session, project: &project };
-    let results = runner.check_all_harnesses(&harnesses)?;
+    let results = runner.check_all_harnesses(&harnesses, Some(&mut handler))?;
 
     if session.args.coverage {
         // We generate a timestamp to save the coverage data in a folder named
@@ -186,17 +186,11 @@ fn verify_project(project: Project, session: KaniSession) -> Result<()> {
 
         session.save_coverage_metadata(&project, &timestamp)?;
         session.save_coverage_results(&project, &results, &timestamp)?;
+
         handler.add_item("coverage", json!({"enabled": true}));
-    }
-    else{
+    } else {
         handler.add_item("coverage", json!({"enabled": false}));
     }
-    println!("!!!");
-    println!(
-        "{}",
-        serde_json::to_string_pretty(&handler.data).unwrap()
-    );
-    println!("!!!");
 
     handler.export()?;
     session.print_final_summary(&results)
