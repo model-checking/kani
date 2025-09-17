@@ -50,6 +50,38 @@ impl std::fmt::Display for FailFastHarnessInfo {
 }
 
 impl<'pr> HarnessRunner<'_, 'pr> {
+    /// Helper: push verification summary into JsonHandler.
+    fn add_runner_results_json(
+        handler: &mut JsonHandler,
+        results: &[HarnessResult<'pr>],
+        selected: usize,
+        status_label: &str,
+    ) {
+        use serde_json::json;
+        let details: Vec<_> = results
+            .iter()
+            .map(|r| {
+                json!({
+                    "name": r.harness.pretty_name,
+                    "status": match r.result.status {
+                        VerificationStatus::Success => "Success",
+                        VerificationStatus::Failure => "Failure",
+                    },
+                })
+            })
+            .collect();
+
+        handler.add_item(
+            "verification_runner_results",
+            json!({
+                "selected": selected,
+                "executed": results.len(),
+                "status": status_label,
+                "individual_harnesses": details,
+            }),
+        );
+    }
+
     /// Given a [`HarnessRunner`] (to abstract over how these harnesses were generated), this runs
     /// the proof-checking process for each harness in `harnesses`.
     pub(crate) fn check_all_harnesses(
@@ -102,37 +134,28 @@ impl<'pr> HarnessRunner<'_, 'pr> {
         match results {
             Ok(results) => {
                 if let Some(handler) = json_handler.as_deref_mut() {
-                    use serde_json::json;
-                    let details: Vec<_> = results
-                        .iter()
-                        .map(|r| {
-                            json!({
-                                "name": r.harness.pretty_name,
-                                "status": match r.result.status {
-                                    VerificationStatus::Success => "Success",
-                                    VerificationStatus::Failure => "Failure",
-                                },
-                            })
-                        })
-                        .collect();
-                    handler.add_item(
-                        "verification_runner_results",
-                        json!({
-                            "total": results.len(),
-                            "status": "completed",
-                            "individual_harnesses": details,
-                        }),
-                    );
+                    Self::add_runner_results_json(handler, &results, harnesses.len(), "completed");
                 }
                 Ok(results)
             }
             Err(err) => {
                 if err.is::<FailFastHarnessInfo>() {
                     let failed = err.downcast::<FailFastHarnessInfo>().unwrap();
-                    Ok(vec![HarnessResult {
+                    let result = vec![HarnessResult {
                         harness: sorted_harnesses[failed.index_to_failing_harness],
                         result: failed.result,
-                    }])
+                    }];
+
+                    if let Some(handler) = json_handler.as_deref_mut() {
+                        Self::add_runner_results_json(
+                            handler,
+                            &result,
+                            harnesses.len(),
+                            "completed_with_fail_fast",
+                        );
+                    }
+
+                    Ok(result)
                 } else {
                     Err(err)
                 }
