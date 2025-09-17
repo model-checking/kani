@@ -137,7 +137,12 @@ fn verify_project(project: Project, session: KaniSession) -> Result<()> {
     let harnesses = session.determine_targets(project.get_all_harnesses())?;
     debug!(n = harnesses.len(), ?harnesses, "verify_project");
 
+    // Verification
+    let runner = harness_runner::HarnessRunner { sess: &session, project: &project };
+    let results = runner.check_all_harnesses(&harnesses, Some(&mut handler))?;
+ 
     for h in harnesses.clone() {
+        let harness_result = results.iter().find(|r| r.harness.pretty_name == h.pretty_name);
         handler.add_harness_detail("harnesses", json!({
         // basic name for harnesses
         "pretty_name": h.pretty_name,
@@ -163,13 +168,20 @@ fn verify_project(project: Project, session: KaniSession) -> Result<()> {
         "unwind_value":  h.attributes.unwind_value,        // Option<u32>
         "contract":      h.contract.as_ref().map(|c| format!("{:?}", c)),
         "stubs":          h.attributes.stubs.iter().map(|s| format!("{:?}", s)).collect::<Vec<_>>(),
-        "verified_stubs": h.attributes.verified_stubs
+        "verified_stubs": h.attributes.verified_stubs,
+
+        "summary": harness_result.map_or(json!(null), |result| json!({
+            "total": 1,
+            "status": match result.result.status {
+                crate::call_cbmc::VerificationStatus::Success => "completed",
+                crate::call_cbmc::VerificationStatus::Failure => "failed",
+            }
+        })),
+        "timing": harness_result.map_or(json!(null), |result| json!({
+            "cbmc_runtime": format!("{:.3}s", result.result.runtime.as_secs_f64())
+        }))
     }));
     }
-
-    // Verification
-    let runner = harness_runner::HarnessRunner { sess: &session, project: &project };
-    let results = runner.check_all_harnesses(&harnesses, Some(&mut handler))?;
 
     if session.args.coverage {
         // We generate a timestamp to save the coverage data in a folder named

@@ -1,0 +1,45 @@
+{
+  "verification_runner_results": {
+    "selected": 1,
+    "executed": 1,
+    "status": "completed",
+    "individual_harnesses": [
+      {
+        "name": "check_estimate_size",
+        "status": "Failure"
+      }
+    ]
+  },
+  "harnesses": [
+    {
+      "pretty_name": "check_estimate_size",
+      "mangled_name": "_RNvCscOSYLgomVfM_3lib19check_estimate_size",
+      "crate_name": "lib",
+      "original": {
+        "file": "./docs/src/tutorial/first-steps-v1/src/lib.rs",
+        "start_line": 52,
+        "end_line": 55
+      },
+      "goto": "/Users/jingfeixu/kani-output/docs/src/tutorial/first-steps-v1/src/lib__RNvCscOSYLgomVfM_3lib19check_estimate_size.symtab.out",
+      "kind": "Proof",
+      "should_panic": false,
+      "has_loop_contracts": false,
+      "is_automatically_generated": false,
+      "solver": null,
+      "unwind_value": null,
+      "contract": null,
+      "stubs": [],
+      "verified_stubs": [],
+      "summary": {
+        "total": 1,
+        "status": "failed"
+      },
+      "timing": {
+        "cbmc_runtime": "0.096s"
+      }
+    }
+  ],
+  "coverage": {
+    "enabled": false
+  }
+}
