@@ -2,8 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use std::ffi::OsString;
 use std::process::ExitCode;
-use std::time::{Instant, SystemTime};
-use time::format_description::well_known::Rfc3339;
 
 use anyhow::Result;
 use autoharness::{autoharness_cargo, autoharness_standalone};
@@ -133,50 +131,33 @@ fn standalone_main() -> Result<()> {
 
 /// Run verification on the given project.
 fn verify_project(project: Project, session: KaniSession) -> Result<()> {
-    let wall_start  = SystemTime::now();
-    let cpu_start   = Instant::now();
-    fn to_rfc3339(t: std::time::SystemTime) -> String {
-        let dt: OffsetDateTime = t.into();
-        dt.format(&Rfc3339).unwrap()
-    }
-
     debug!(?project, "verify_project");
     let mut handler = JsonHandler::new(session.args.export_json.clone());
     // TODO: add session info
     let harnesses = session.determine_targets(project.get_all_harnesses())?;
     debug!(n = harnesses.len(), ?harnesses, "verify_project");
-    handler.add_item("schema_version", json!("0.0.0"));
-    handler.add_item(
-        "run_time",
-        json!({
-        "started_at":  to_rfc3339(wall_start)
-    }),
-    );
+
     // Verification
     let runner = harness_runner::HarnessRunner { sess: &session, project: &project };
-
     let results = runner.check_all_harnesses(&harnesses, Some(&mut handler))?;
  
     for h in harnesses.clone() {
         let harness_result = results.iter().find(|r| r.harness.pretty_name == h.pretty_name);
-        let arr = handler.data["verification_runner_results"]["individual_harnesses"]
-            .as_array_mut()
-            .expect("individual_harnesses must be an array");
-        // locate matching entry by name and overwrite it
-        let entry = arr.iter_mut().find(|v| {
-            v.get("name").and_then(|s| s.as_str()) == Some(h.pretty_name.as_str())
-        }).expect("matching individual_harness not found");
+        handler.add_harness_detail("harnesses", json!({
+        // basic name for harnesses
+        "pretty_name": h.pretty_name,
+        "mangled_name":   h.mangled_name,
+        "crate_name":           h.crate_name,
 
-        *entry = json!({
-        //  basic names
-        "name":                      h.pretty_name,          // keep name in the record
-        //original source location
+        // original location of the harnesses
         "original": {
-            "file":       h.original_file,
-            "start_line": h.original_start_line,
-            "end_line":   h.original_end_line
+          "file":       h.original_file,
+          "start_line": h.original_start_line,
+          "end_line":   h.original_end_line
         },
 
+        // GOTO file generated
+        "goto": h.goto_file.as_ref().map(|p| p.to_string_lossy().to_string()),
 
         // attributes
         "kind":                       format!("{:?}", h.attributes.kind),
@@ -184,7 +165,7 @@ fn verify_project(project: Project, session: KaniSession) -> Result<()> {
         "has_loop_contracts":         h.has_loop_contracts,
         "is_automatically_generated": h.is_automatically_generated,
         "solver":        h.attributes.solver.as_ref().map(|s| format!("{:?}", s)),
-        "unwind_value":  h.attributes.unwind_value, 
+        "unwind_value":  h.attributes.unwind_value,        // Option<u32>
         "contract":      h.contract.as_ref().map(|c| format!("{:?}", c)),
         "stubs":          h.attributes.stubs.iter().map(|s| format!("{:?}", s)).collect::<Vec<_>>(),
         "verified_stubs": h.attributes.verified_stubs,
@@ -199,8 +180,7 @@ fn verify_project(project: Project, session: KaniSession) -> Result<()> {
         "timing": harness_result.map_or(json!(null), |result| json!({
             "cbmc_runtime": format!("{:.3}s", result.result.runtime.as_secs_f64())
         }))
-    });
-
+    }));
     }
 
     if session.args.coverage {
@@ -224,19 +204,7 @@ fn verify_project(project: Project, session: KaniSession) -> Result<()> {
         handler.add_item("coverage", json!({"enabled": false}));
     }
 
-    let wall_end    = SystemTime::now();
-    let duration_ms = cpu_start.elapsed().as_millis() as u64;
-    handler.add_item(
-        "run_time",
-        json!({
-        "started_at":  to_rfc3339(wall_start),
-        "finished_at": to_rfc3339(wall_end),
-        "duration_ms": duration_ms,
-
-    }),
-    );
     handler.export()?;
-
     session.print_final_summary(&results)
 }
 
