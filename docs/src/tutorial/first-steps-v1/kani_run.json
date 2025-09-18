@@ -35,7 +35,23 @@
         "status": "failed"
       },
       "timing": {
-        "cbmc_runtime": "0.096s"
+        "cbmc_runtime": "0.025s"
+      }
+    }
+  ],
+  "error_details": {
+    "has_errors": true,
+    "error_type": "assertion_failure",
+    "failed_properties_type": "PanicsOnly",
+    "exit_status": "properties_failed"
+  },
+  "property_details": [
+    {
+      "property_details": {
+        "total_properties": 1,
+        "passed": 0,
+        "failed": 1,
+        "unreachable": 0
       }
     }
   ],
