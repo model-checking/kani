@@ -1,0 +1,47 @@
+{
+  "harnesses": [
+    {
+      "fully_qualified_name": "verify_success",
+      "cbmc_function_name": "_RNvCscOSYLgomVfM_3lib14verify_success",
+      "crate_name": "lib",
+      "original": {
+        "file": "./docs/src/tutorial/first-steps-v2/src/lib.rs",
+        "start_line": 54,
+        "end_line": 59
+      },
+      "goto": "/Users/jiangkeyou/Desktop/25Fall/aws/kani/docs/src/tutorial/first-steps-v2/src/lib__RNvCscOSYLgomVfM_3lib14verify_success.symtab.out",
+      "kind": "Proof",
+      "should_panic": false,
+      "has_loop_contracts": false,
+      "is_automatically_generated": false,
+      "solver": null,
+      "unwind_value": null,
+      "contract": null,
+      "stubs": [],
+      "verified_stubs": []
+    },
+    {
+      "fully_qualified_name": "will_fail",
+      "cbmc_function_name": "_RNvCscOSYLgomVfM_3lib9will_fail",
+      "crate_name": "lib",
+      "original": {
+        "file": "./docs/src/tutorial/first-steps-v2/src/lib.rs",
+        "start_line": 64,
+        "end_line": 67
+      },
+      "goto": "/Users/jiangkeyou/Desktop/25Fall/aws/kani/docs/src/tutorial/first-steps-v2/src/lib__RNvCscOSYLgomVfM_3lib9will_fail.symtab.out",
+      "kind": "Proof",
+      "should_panic": false,
+      "has_loop_contracts": false,
+      "is_automatically_generated": false,
+      "solver": null,
+      "unwind_value": null,
+      "contract": null,
+      "stubs": [],
+      "verified_stubs": []
+    }
+  ],
+  "coverage": {
+    "enabled": false
+  }
+}

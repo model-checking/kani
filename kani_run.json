@@ -1,0 +1,66 @@
+{
+  "schema_version": "0.0.0",
+  "run_time": {
+    "started_at": "2025-09-18T07:39:47.159151Z",
+    "finished_at": "2025-09-18T07:39:47.336333Z",
+    "duration_ms": 177
+  },
+  "verification_runner_results": {
+    "selected": 2,
+    "executed": 2,
+    "status": "completed",
+    "individual_harnesses": [
+      {
+        "name": "will_fail",
+        "original": {
+          "file": "./docs/src/tutorial/first-steps-v2/src/lib.rs",
+          "start_line": 64,
+          "end_line": 67
+        },
+        "kind": "Proof",
+        "should_panic": false,
+        "has_loop_contracts": false,
+        "is_automatically_generated": false,
+        "solver": null,
+        "unwind_value": null,
+        "contract": null,
+        "stubs": [],
+        "verified_stubs": [],
+        "summary": {
+          "total": 1,
+          "status": "failed"
+        },
+        "timing": {
+          "cbmc_runtime": "0.024s"
+        }
+      },
+      {
+        "name": "verify_success",
+        "original": {
+          "file": "./docs/src/tutorial/first-steps-v2/src/lib.rs",
+          "start_line": 54,
+          "end_line": 59
+        },
+        "kind": "Proof",
+        "should_panic": false,
+        "has_loop_contracts": false,
+        "is_automatically_generated": false,
+        "solver": null,
+        "unwind_value": null,
+        "contract": null,
+        "stubs": [],
+        "verified_stubs": [],
+        "summary": {
+          "total": 1,
+          "status": "completed"
+        },
+        "timing": {
+          "cbmc_runtime": "0.007s"
+        }
+      }
+    ]
+  },
+  "coverage": {
+    "enabled": false
+  }
+}
