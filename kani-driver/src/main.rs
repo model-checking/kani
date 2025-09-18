@@ -200,7 +200,53 @@ fn verify_project(project: Project, session: KaniSession) -> Result<()> {
             "cbmc_runtime": format!("{:.3}s", result.result.runtime.as_secs_f64())
         }))
     });
-
+    handler.add_item("error_details", harness_result.map_or(json!(null), |result| {
+        match result.result.status {
+            crate::call_cbmc::VerificationStatus::Failure => {
+                json!({
+                    "has_errors": true,
+                    "error_type": match result.result.failed_properties {
+                        crate::call_cbmc::FailedProperties::None => "unknown_failure",
+                        crate::call_cbmc::FailedProperties::PanicsOnly => "assertion_failure",
+                        crate::call_cbmc::FailedProperties::Other => "verification_failure",
+                    },
+                    "failed_properties_type": format!("{:?}", result.result.failed_properties),
+                    "exit_status": match &result.result.results {
+                        Err(crate::call_cbmc::ExitStatus::Timeout) => "timeout".to_string(),
+                        Err(crate::call_cbmc::ExitStatus::OutOfMemory) => "out_of_memory".to_string(),
+                        Err(crate::call_cbmc::ExitStatus::Other(code)) => format!("exit_code_{}", code),
+                        Ok(_) => "properties_failed".to_string()
+                    }
+                })
+            },
+            crate::call_cbmc::VerificationStatus::Success => json!({
+                "has_errors": false
+            })
+        }
+    }));
+    handler.add_harness_detail("property_details", json!({
+        "property_details": harness_result.map_or(json!(null), |result| {
+            match &result.result.results {
+                Ok(properties) => {
+                    let total_properties = properties.len();
+                    let passed_properties = properties.iter().filter(|p| matches!(p.status, crate::cbmc_output_parser::CheckStatus::Success)).count();
+                    let failed_properties = properties.iter().filter(|p| matches!(p.status, crate::cbmc_output_parser::CheckStatus::Failure)).count();
+                    
+                    json!({
+                        "total_properties": total_properties,
+                        "passed": passed_properties,
+                        "failed": failed_properties,
+                        "unreachable": total_properties - passed_properties - failed_properties
+                    })
+                },
+                Err(_) => json!({
+                    "total_properties": 0,
+                    "error": "Could not extract property details due to verification failure"
+                })
+            }
+        })
+    }));
+    
     }
 
     if session.args.coverage {

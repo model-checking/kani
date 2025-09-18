@@ -1,4 +1,10 @@
 {
+  "schema_version": "0.0.0",
+  "run_time": {
+    "started_at": "2025-09-18T21:43:58.758849Z",
+    "finished_at": "2025-09-18T21:43:58.856479Z",
+    "duration_ms": 97
+  },
   "verification_runner_results": {
     "selected": 1,
     "executed": 1,
@@ -6,39 +12,30 @@
     "individual_harnesses": [
       {
         "name": "check_estimate_size",
-        "status": "Failure"
+        "original": {
+          "file": "./docs/src/tutorial/first-steps-v1/src/lib.rs",
+          "start_line": 52,
+          "end_line": 55
+        },
+        "kind": "Proof",
+        "should_panic": false,
+        "has_loop_contracts": false,
+        "is_automatically_generated": false,
+        "solver": null,
+        "unwind_value": null,
+        "contract": null,
+        "stubs": [],
+        "verified_stubs": [],
+        "summary": {
+          "total": 1,
+          "status": "failed"
+        },
+        "timing": {
+          "cbmc_runtime": "0.024s"
+        }
       }
     ]
   },
-  "harnesses": [
-    {
-      "pretty_name": "check_estimate_size",
-      "mangled_name": "_RNvCscOSYLgomVfM_3lib19check_estimate_size",
-      "crate_name": "lib",
-      "original": {
-        "file": "./docs/src/tutorial/first-steps-v1/src/lib.rs",
-        "start_line": 52,
-        "end_line": 55
-      },
-      "goto": "/Users/jingfeixu/kani-output/docs/src/tutorial/first-steps-v1/src/lib__RNvCscOSYLgomVfM_3lib19check_estimate_size.symtab.out",
-      "kind": "Proof",
-      "should_panic": false,
-      "has_loop_contracts": false,
-      "is_automatically_generated": false,
-      "solver": null,
-      "unwind_value": null,
-      "contract": null,
-      "stubs": [],
-      "verified_stubs": [],
-      "summary": {
-        "total": 1,
-        "status": "failed"
-      },
-      "timing": {
-        "cbmc_runtime": "0.025s"
-      }
-    }
-  ],
   "error_details": {
     "has_errors": true,
     "error_type": "assertion_failure",
