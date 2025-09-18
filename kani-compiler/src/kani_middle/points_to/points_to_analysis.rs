@@ -582,7 +582,7 @@ impl<'tcx> PointsToAnalysis<'_, 'tcx> {
                 // The same story from BinOp applies here, too. Need to track those things.
                 self.successors_for_operand(state, operand)
             }
-            Rvalue::NullaryOp(..) | Rvalue::Discriminant(..) | Rvalue::Len(_) => {
+            Rvalue::NullaryOp(..) | Rvalue::Discriminant(..) => {
                 // All of those should yield a constant.
                 HashSet::new()
             }
