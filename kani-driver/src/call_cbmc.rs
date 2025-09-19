@@ -145,27 +145,28 @@ impl KaniSession {
             .await)
         };
 
-        let verification_results = if res.is_err() {
+        if let Ok(output) = res {
+            // The timeout wasn't reached
+            Ok(VerificationResult::from(
+                output.unwrap(),
+                harness.attributes.should_panic,
+                start_time,
+            ))
+        } else {
             // An error occurs if the timeout was reached
 
             // Kill the process
             cbmc_process.kill().await?;
 
-            VerificationResult {
+            Ok(VerificationResult {
                 status: VerificationStatus::Failure,
                 failed_properties: FailedProperties::None,
                 results: Err(ExitStatus::Timeout),
                 runtime: start_time.elapsed(),
                 generated_concrete_test: false,
                 coverage_results: None,
-            }
-        } else {
-            // The timeout wasn't reached
-            let output = res.unwrap()?;
-            VerificationResult::from(output, harness.attributes.should_panic, start_time)
-        };
-
-        Ok(verification_results)
+            })
+        }
     }
 
     /// "Internal," but also used by call_cbmc_viewer

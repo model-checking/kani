@@ -398,7 +398,7 @@ fn data_bytes_for_ty(
                 | RigidTy::CoroutineClosure(_, _)
                 | RigidTy::CoroutineWitness(_, _)
                 | RigidTy::Foreign(_)
-                | RigidTy::Dynamic(_, _, _) => Err(LayoutComputationError::UnsupportedType(ty)),
+                | RigidTy::Dynamic(_, _) => Err(LayoutComputationError::UnsupportedType(ty)),
             }
         }
         FieldsShape::Union(_) => Err(LayoutComputationError::UnionAsField(ty)),

@@ -1061,7 +1061,7 @@ pub fn ty_validity_per_offset(
                 | RigidTy::CoroutineClosure(_, _)
                 | RigidTy::CoroutineWitness(_, _)
                 | RigidTy::Foreign(_)
-                | RigidTy::Dynamic(_, _, _) => Err(format!("Unsupported {ty:?}")),
+                | RigidTy::Dynamic(_, _) => Err(format!("Unsupported {ty:?}")),
             }
         }
         FieldsShape::Union(_) | FieldsShape::Array { .. } => {
