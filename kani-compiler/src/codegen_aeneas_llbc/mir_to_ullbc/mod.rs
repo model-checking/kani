@@ -1437,7 +1437,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 };
                 CharonTy::new(CharonTyKind::Arrow(rb))
             }
-            RigidTy::Dynamic(_, _, _) => {
+            RigidTy::Dynamic(_, _) => {
                 CharonTy::new(CharonTyKind::DynTrait(CharonExistentialPredicate))
             }
             _ => todo!("Not yet implemented RigidTy: {:?}", rigid_ty),
