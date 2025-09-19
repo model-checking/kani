@@ -14,7 +14,7 @@ use args_toml::join_args;
 
 use crate::args::StandaloneSubcommand;
 use crate::concrete_playback::playback::{playback_cargo, playback_standalone};
-use crate::json_handler::JsonHandler;
+use crate::frontend::{JsonHandler, create_harness_metadata_json};
 use crate::list::collect_metadata::{list_cargo, list_standalone};
 use crate::project::Project;
 use crate::session::KaniSession;
@@ -41,7 +41,7 @@ mod list;
 mod metadata;
 mod project;
 
-mod json_handler;
+mod frontend;
 mod session;
 mod util;
 mod version;
@@ -133,8 +133,8 @@ fn standalone_main() -> Result<()> {
 
 /// Run verification on the given project.
 fn verify_project(project: Project, session: KaniSession) -> Result<()> {
-    let wall_start  = SystemTime::now();
-    let cpu_start   = Instant::now();
+    let wall_start = SystemTime::now();
+    let cpu_start = Instant::now();
     fn to_rfc3339(t: std::time::SystemTime) -> String {
         let dt: OffsetDateTime = t.into();
         dt.format(&Rfc3339).unwrap()
@@ -149,105 +149,21 @@ fn verify_project(project: Project, session: KaniSession) -> Result<()> {
     handler.add_item(
         "run_time",
         json!({
-        "started_at":  to_rfc3339(wall_start)
-    }),
+            "started_at":  to_rfc3339(wall_start)
+        }),
     );
+    // Add harness metadata using frontend utility
+    for h in &harnesses {
+        handler.add_harness_detail("harnesses", create_harness_metadata_json(h));
+    }
+
     // Verification
     let runner = harness_runner::HarnessRunner { sess: &session, project: &project };
 
     let results = runner.check_all_harnesses(&harnesses, Some(&mut handler))?;
 
-    for h in harnesses.clone() {
-        let harness_result = results.iter().find(|r| r.harness.pretty_name == h.pretty_name);
-        let arr = handler.data["verification_runner_results"]["individual_harnesses"]
-            .as_array_mut()
-            .expect("individual_harnesses must be an array");
-        // locate matching entry by name and overwrite it
-        let entry = arr.iter_mut().find(|v| {
-            v.get("name").and_then(|s| s.as_str()) == Some(h.pretty_name.as_str())
-        }).expect("matching individual_harness not found");
-
-        *entry = json!({
-        //  basic names
-        "name":                      h.pretty_name,          // keep name in the record
-        //original source location
-        "original": {
-            "file":       h.original_file,
-            "start_line": h.original_start_line,
-            "end_line":   h.original_end_line
-        },
-
-
-        // attributes
-        "kind":                       format!("{:?}", h.attributes.kind),
-        "should_panic":               h.attributes.should_panic,
-        "has_loop_contracts":         h.has_loop_contracts,
-        "is_automatically_generated": h.is_automatically_generated,
-        "solver":        h.attributes.solver.as_ref().map(|s| format!("{:?}", s)),
-        "unwind_value":  h.attributes.unwind_value,
-        "contract":      h.contract.as_ref().map(|c| format!("{:?}", c)),
-        "stubs":          h.attributes.stubs.iter().map(|s| format!("{:?}", s)).collect::<Vec<_>>(),
-        "verified_stubs": h.attributes.verified_stubs,
-
-        "summary": harness_result.map_or(json!(null), |result| json!({
-            "total": 1,
-            "status": match result.result.status {
-                crate::call_cbmc::VerificationStatus::Success => "completed",
-                crate::call_cbmc::VerificationStatus::Failure => "failed",
-            }
-        })),
-        "timing": harness_result.map_or(json!(null), |result| json!({
-            "cbmc_runtime": format!("{:.3}s", result.result.runtime.as_secs_f64())
-        }))
-    });
-    handler.add_item("error_details", harness_result.map_or(json!(null), |result| {
-        match result.result.status {
-            crate::call_cbmc::VerificationStatus::Failure => {
-                json!({
-                    "has_errors": true,
-                    "error_type": match result.result.failed_properties {
-                        crate::call_cbmc::FailedProperties::None => "unknown_failure",
-                        crate::call_cbmc::FailedProperties::PanicsOnly => "assertion_failure",
-                        crate::call_cbmc::FailedProperties::Other => "verification_failure",
-                    },
-                    "failed_properties_type": format!("{:?}", result.result.failed_properties),
-                    "exit_status": match &result.result.results {
-                        Err(crate::call_cbmc::ExitStatus::Timeout) => "timeout".to_string(),
-                        Err(crate::call_cbmc::ExitStatus::OutOfMemory) => "out_of_memory".to_string(),
-                        Err(crate::call_cbmc::ExitStatus::Other(code)) => format!("exit_code_{}", code),
-                        Ok(_) => "properties_failed".to_string()
-                    }
-                })
-            },
-            crate::call_cbmc::VerificationStatus::Success => json!({
-                "has_errors": false
-            })
-        }
-    }));
-    handler.add_harness_detail("property_details", json!({
-        "property_details": harness_result.map_or(json!(null), |result| {
-            match &result.result.results {
-                Ok(properties) => {
-                    let total_properties = properties.len();
-                    let passed_properties = properties.iter().filter(|p| matches!(p.status, crate::cbmc_output_parser::CheckStatus::Success)).count();
-                    let failed_properties = properties.iter().filter(|p| matches!(p.status, crate::cbmc_output_parser::CheckStatus::Failure)).count();
-                    
-                    json!({
-                        "total_properties": total_properties,
-                        "passed": passed_properties,
-                        "failed": failed_properties,
-                        "unreachable": total_properties - passed_properties - failed_properties
-                    })
-                },
-                Err(_) => json!({
-                    "total_properties": 0,
-                    "error": "Could not extract property details due to verification failure"
-                })
-            }
-        })
-    }));
-    
-    }
+    // Process harness results and add additional metadata using utility function
+    util::process_harness_results(&mut handler, &harnesses, &results)?;
 
     if session.args.coverage {
         // We generate a timestamp to save the coverage data in a folder named
@@ -270,16 +186,16 @@ fn verify_project(project: Project, session: KaniSession) -> Result<()> {
         handler.add_item("coverage", json!({"enabled": false}));
     }
 
-    let wall_end    = SystemTime::now();
+    let wall_end = SystemTime::now();
     let duration_ms = cpu_start.elapsed().as_millis() as u64;
     handler.add_item(
         "run_time",
         json!({
-        "started_at":  to_rfc3339(wall_start),
-        "finished_at": to_rfc3339(wall_end),
-        "duration_ms": duration_ms,
+            "started_at":  to_rfc3339(wall_start),
+            "finished_at": to_rfc3339(wall_end),
+            "duration_ms": duration_ms,
 
-    }),
+        }),
     );
     handler.export()?;
 

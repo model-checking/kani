@@ -10,7 +10,7 @@ use std::path::Path;
 
 use crate::args::{NumThreads, OutputFormat};
 use crate::call_cbmc::{VerificationResult, VerificationStatus};
-use crate::json_handler::JsonHandler;
+use crate::frontend::{JsonHandler, create_verification_summary_json};
 use crate::project::Project;
 use crate::session::{BUG_REPORT_URL, KaniSession};
 
@@ -50,36 +50,16 @@ impl std::fmt::Display for FailFastHarnessInfo {
 }
 
 impl<'pr> HarnessRunner<'_, 'pr> {
-    /// Helper: push verification summary into JsonHandler.
+    /// Helper: push verification summary into JsonHandler using frontend utilities.
     fn add_runner_results_json(
         handler: &mut JsonHandler,
         results: &[HarnessResult<'pr>],
         selected: usize,
         status_label: &str,
     ) {
-        use serde_json::json;
-        let details: Vec<_> = results
-            .iter()
-            .map(|r| {
-                json!({
-                    "name": r.harness.pretty_name,
-                    "status": match r.result.status {
-                        VerificationStatus::Success => "Success",
-                        VerificationStatus::Failure => "Failure",
-                    },
-                })
-            })
-            .collect();
-
-        handler.add_item(
-            "verification_runner_results",
-            json!({
-                "selected": selected,
-                "executed": results.len(),
-                "status": status_label,
-                "individual_harnesses": details,
-            }),
-        );
+        // Use frontend utility to create structured verification summary
+        let summary = create_verification_summary_json(results, selected, status_label);
+        handler.add_item("verification_runner_results", summary);
     }
 
     /// Given a [`HarnessRunner`] (to abstract over how these harnesses were generated), this runs
