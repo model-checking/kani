@@ -4,11 +4,13 @@
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::InternedString;
 use cbmc::goto_program::Stmt;
+use rustc_data_structures::fx::FxHashMap;
 use rustc_middle::ty::Instance as InstanceInternal;
 use rustc_public::CrateDef;
 use rustc_public::mir::mono::Instance;
 use rustc_public::mir::{Body, Local, LocalDecl, Rvalue, visit::Location, visit::MirVisitor};
 use rustc_public::rustc_internal;
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 
 /// This structure represents useful data about the function we are currently compiling.
@@ -32,6 +34,9 @@ pub struct CurrentFnCtx<'tcx> {
     name: String,
     /// A human readable pretty name for the current function
     readable_name: String,
+    /// The interned version of `readable_name`. This allows us to avoid re-interning
+    /// that string every time we want to use it internally.
+    interned_readable_name: InternedString,
     /// A counter to enable creating temporary variables
     temp_var_counter: u64,
 }
@@ -54,12 +59,23 @@ impl MirVisitor for AddressTakenLocalsCollector {
     }
 }
 
+thread_local! {
+    /// Stores (`name`, `mangled_name`) pairs for each [Instance].
+    pub static INSTANCE_NAME_CACHE: RefCell<FxHashMap<Instance, (String, String)>> = RefCell::new(FxHashMap::default());
+}
+
+/// Returns the (`name`, `mangled_name`) pair for an [Instance] from the cache, computing it if no entry exists.
+fn instance_names(instance: &Instance) -> (String, String) {
+    INSTANCE_NAME_CACHE.with_borrow_mut(|cache| {
+        cache.entry(*instance).or_insert_with(|| (instance.name(), instance.mangled_name())).clone()
+    })
+}
+
 /// Constructor
 impl<'tcx> CurrentFnCtx<'tcx> {
     pub fn new(instance: Instance, gcx: &GotocCtx<'tcx, '_>, body: &Body) -> Self {
+        let (readable_name, name) = instance_names(&instance);
         let instance_internal = rustc_internal::internal(gcx.tcx, instance);
-        let readable_name = instance.name();
-        let name = instance.mangled_name();
         let locals = body.locals().to_vec();
         let local_names = body
             .var_debug_info
@@ -77,6 +93,7 @@ impl<'tcx> CurrentFnCtx<'tcx> {
             local_names,
             address_taken_locals: visitor.address_taken_locals,
             name,
+            interned_readable_name: (&readable_name).into(),
             readable_name,
             temp_var_counter: 0,
         }
@@ -120,6 +137,10 @@ impl<'tcx> CurrentFnCtx<'tcx> {
     /// The pretty name of the function we are currently compiling
     pub fn readable_name(&self) -> &str {
         &self.readable_name
+    }
+
+    pub fn interned_readable_name(&self) -> InternedString {
+        self.interned_readable_name
     }
 
     pub fn locals(&self) -> &[LocalDecl] {
