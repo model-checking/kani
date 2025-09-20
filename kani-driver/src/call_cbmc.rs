@@ -147,11 +147,7 @@ impl KaniSession {
 
         if let Ok(output) = res {
             // The timeout wasn't reached
-            Ok(VerificationResult::from(
-                output?,
-                harness.attributes.should_panic,
-                start_time,
-            ))
+            Ok(VerificationResult::from(output?, harness.attributes.should_panic, start_time))
         } else {
             // An error occurs if the timeout was reached
 
