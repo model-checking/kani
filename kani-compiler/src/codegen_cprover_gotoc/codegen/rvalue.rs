@@ -1145,7 +1145,7 @@ impl GotocCtx<'_, '_> {
                 match dst_subt.kind() {
                     TyKind::RigidTy(RigidTy::Slice(_))
                     | TyKind::RigidTy(RigidTy::Str)
-                    | TyKind::RigidTy(RigidTy::Dynamic(_, _, _)) => {
+                    | TyKind::RigidTy(RigidTy::Dynamic(_, _)) => {
                         //TODO: this does the wrong thing on Strings/fixme_boxed_str.rs
                         // if we cast to slice or string, then we know the source is also a slice or string,
                         // so there shouldn't be anything to do

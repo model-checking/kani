@@ -25,7 +25,7 @@ use rustc_public::mir::Body;
 use rustc_public::mir::mono::Instance as InstanceStable;
 use rustc_public::rustc_internal;
 use rustc_public::ty::{
-    Binder, DynKind, ExistentialPredicate, ExistentialProjection, Region, RegionKind, RigidTy,
+    Binder, ExistentialPredicate, ExistentialProjection, Region, RegionKind, RigidTy,
     Ty as StableTy,
 };
 use rustc_span::def_id::DefId;
@@ -301,8 +301,7 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
         predictates.extend(
             projections.into_iter().map(|proj| proj.map_bound(ExistentialPredicate::Projection)),
         );
-        let rigid =
-            RigidTy::Dynamic(predictates, Region { kind: RegionKind::ReErased }, DynKind::Dyn);
+        let rigid = RigidTy::Dynamic(predictates, Region { kind: RegionKind::ReErased });
 
         rustc_public::ty::Ty::from_rigid_kind(rigid)
     }
@@ -419,7 +418,7 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
     /// We follow the order from the `TyCtxt::COMMON_VTABLE_ENTRIES`.
     fn trait_vtable_field_types(&mut self, t: ty::Ty<'tcx>) -> Vec<DatatypeComponent> {
         let mut vtable_base = common_vtable_fields(self.trait_vtable_drop_type(t));
-        if let ty::Dynamic(binder, _, _) = t.kind() {
+        if let ty::Dynamic(binder, _) = t.kind() {
             // The virtual methods on the trait ref. Some auto traits have no methods.
             if let Some(principal) = binder.principal() {
                 let poly = principal.with_self_ty(self.tcx, t);
