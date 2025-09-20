@@ -418,7 +418,7 @@ impl MirVisitor for CheckUninitVisitor {
                     .rigid()
                     .expect("should be working with monomorphized code")
                 {
-                    RigidTy::Adt(..) | RigidTy::Dynamic(_, _, _) => {
+                    RigidTy::Adt(..) | RigidTy::Dynamic(_, _) => {
                         self.push_target(MemoryInitOp::SetRef {
                             operand: Operand::Copy(place.clone()),
                             value: true,
