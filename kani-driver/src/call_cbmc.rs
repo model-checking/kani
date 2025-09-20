@@ -148,7 +148,7 @@ impl KaniSession {
         if let Ok(output) = res {
             // The timeout wasn't reached
             Ok(VerificationResult::from(
-                output.unwrap(),
+                output?,
                 harness.attributes.should_panic,
                 start_time,
             ))
