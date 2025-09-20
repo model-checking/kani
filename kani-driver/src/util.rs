@@ -14,13 +14,6 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use anyhow::Result;
-use kani_metadata::HarnessMetadata;
-use serde_json::json;
-use crate::frontend::JsonHandler;
-use crate::harness_runner::HarnessResult;
-use crate::call_cbmc::VerificationStatus;
-
 /// Replace an extension with another one, in a new PathBuf. (See tests for examples)
 pub fn alter_extension(path: &Path, ext: &str) -> PathBuf {
     path.with_extension(ext)
@@ -93,118 +86,6 @@ pub fn info_operation(op: &str, msg: &str) {
     let op_fmt = console::style(op).bold().green();
     let msg_fmt = console::style(msg);
     println!("{op_fmt} {msg_fmt}")
-}
-
-/// Process harness results and enrich JSON handler with additional metadata.
-/// This utility function handles the complex harness processing logic that was previously in main.rs.
-pub fn process_harness_results(
-    handler: &mut JsonHandler,
-    harnesses: &[&HarnessMetadata],
-    results: &[HarnessResult],
-) -> Result<()> {
-    for h in harnesses {
-        let harness_result = results.iter().find(|r| r.harness.pretty_name == h.pretty_name);
-        let arr = handler.data["verification_runner_results"]["individual_harnesses"]
-            .as_array_mut()
-            .expect("individual_harnesses must be an array");
-        
-        // locate matching entry by harness_id and overwrite it
-        let entry = arr.iter_mut().find(|v| {
-            v.get("harness_id").and_then(|s| s.as_str()) == Some(h.pretty_name.as_str())
-        }).expect("matching individual_harness not found");
-
-        // Get the original verification details from the entry before overwriting
-        let verification_details = entry.get("verification_details").cloned().unwrap_or(json!([]));
-        let status = entry.get("status").and_then(|s| s.as_str()).unwrap_or("Unknown");
-        
-        *entry = json!({
-            "harness_id": h.pretty_name,                    // Keep harness_id for consistency
-            "name": h.pretty_name,                          // Also keep name for backward compatibility
-            "status": status,                               // Preserve the verification status
-            "verification_details": verification_details,   // Preserve verification details
-            
-            //original source location
-            "original": {
-                "file": h.original_file,
-                "start_line": h.original_start_line,
-                "end_line": h.original_end_line
-            },
-
-            // attributes
-            "kind": format!("{:?}", h.attributes.kind),
-            "should_panic": h.attributes.should_panic,
-            "has_loop_contracts": h.has_loop_contracts,
-            "is_automatically_generated": h.is_automatically_generated,
-            "solver": h.attributes.solver.as_ref().map(|s| format!("{:?}", s)),
-            "unwind_value": h.attributes.unwind_value,
-            "contract": h.contract.as_ref().map(|c| format!("{:?}", c)),
-            "stubs": h.attributes.stubs.iter().map(|s| format!("{:?}", s)).collect::<Vec<_>>(),
-            "verified_stubs": h.attributes.verified_stubs,
-
-            "summary": harness_result.map_or(json!(null), |result| json!({
-                "total": 1,
-                "status": match result.result.status {
-                    VerificationStatus::Success => "completed",
-                    VerificationStatus::Failure => "failed",
-                }
-            })),
-            "timing": harness_result.map_or(json!(null), |result| json!({
-                "cbmc_runtime": format!("{:.3}s", result.result.runtime.as_secs_f64())
-            }))
-        });
-        
-        // Add error details for this harness
-        handler.add_item("error_details", harness_result.map_or(json!(null), |result| {
-            match result.result.status {
-                VerificationStatus::Failure => {
-                    json!({
-                        "has_errors": true,
-                        "error_type": match result.result.failed_properties {
-                            crate::call_cbmc::FailedProperties::None => "unknown_failure",
-                            crate::call_cbmc::FailedProperties::PanicsOnly => "assertion_failure",
-                            crate::call_cbmc::FailedProperties::Other => "verification_failure",
-                        },
-                        "failed_properties_type": format!("{:?}", result.result.failed_properties),
-                        "exit_status": match &result.result.results {
-                            Err(crate::call_cbmc::ExitStatus::Timeout) => "timeout".to_string(),
-                            Err(crate::call_cbmc::ExitStatus::OutOfMemory) => "out_of_memory".to_string(),
-                            Err(crate::call_cbmc::ExitStatus::Other(code)) => format!("exit_code_{}", code),
-                            Ok(_) => "properties_failed".to_string()
-                        }
-                    })
-                },
-                VerificationStatus::Success => json!({
-                    "has_errors": false
-                })
-            }
-        }));
-        
-        // Add property details for this harness
-        handler.add_harness_detail("property_details", json!({
-            "property_details": harness_result.map_or(json!(null), |result| {
-                match &result.result.results {
-                    Ok(properties) => {
-                        let total_properties = properties.len();
-                        let passed_properties = properties.iter().filter(|p| matches!(p.status, crate::cbmc_output_parser::CheckStatus::Success)).count();
-                        let failed_properties = properties.iter().filter(|p| matches!(p.status, crate::cbmc_output_parser::CheckStatus::Failure)).count();
-                        
-                        json!({
-                            "total_properties": total_properties,
-                            "passed": passed_properties,
-                            "failed": failed_properties,
-                            "unreachable": total_properties - passed_properties - failed_properties
-                        })
-                    },
-                    Err(_) => json!({
-                        "total_properties": 0,
-                        "error": "Could not extract property details due to verification failure"
-                    })
-                }
-            })
-        }));
-    }
-    
-    Ok(())
 }
 
 /// # Kani Argument Types
@@ -298,10 +179,10 @@ pub(crate) mod args {
     }
 
     pub enum PassTo {
-        /// TODO: Only pass arguments for use in the local crate.
+        /// Only pass arguments for use in the local crate.
         /// This will just pass them directly as arguments to the command.
         OnlyLocalCrate,
-        /// TODO: Pass arguments for use when compiling all dependencies using the
+        /// Pass arguments for use when compiling all dependencies using the
         /// `CARGO_ENCODED_RUSTFLAGS` environment variable.
         AllCrates,
     }
@@ -332,7 +213,7 @@ pub(crate) mod args {
                 // Since we also want to recursively pass these args to all dependencies,
                 // use an environment variable that gets checked for each dependency.
                 PassTo::AllCrates => {
-                    // TODO: Use of CARGO_ENCODED_RUSTFLAGS instead of RUSTFLAGS is preferred. See
+                    // Use of CARGO_ENCODED_RUSTFLAGS instead of RUSTFLAGS is preferred. See
                     // https://doc.rust-lang.org/cargo/reference/environment-variables.html
                     let env_var = OsString::from("CARGO_ENCODED_RUSTFLAGS");
 
@@ -356,5 +237,45 @@ pub(crate) mod args {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn check_alter_extension() {
+        let p = PathBuf::from("./path/file.rs");
+        assert_eq!(alter_extension(&p, "symtab.json"), PathBuf::from("./path/file.symtab.json"));
+        assert_eq!(
+            alter_extension(&p, "kani-metadata.json"),
+            PathBuf::from("./path/file.kani-metadata.json")
+        );
+
+        let q = PathBuf::from("file.more.rs");
+        assert_eq!(alter_extension(&q, "symtab.json"), PathBuf::from("file.more.symtab.json"));
+    }
+
+    #[test]
+    fn check_exe_basename() {
+        assert_eq!(
+            executable_basename(&Some(&OsString::from("/path/slash/foo"))),
+            Some("foo".into())
+        );
+        assert_eq!(executable_basename(&Some(&OsString::from("./foo.exe"))), Some("foo".into()));
+        assert_eq!(executable_basename(&Some(&OsString::from("foo.exe"))), Some("foo".into()));
+        assert_eq!(executable_basename(&Some(&OsString::from("foo"))), Some("foo".into()));
+    }
+
+    #[test]
+    fn check_render_command() {
+        let mut c1 = Command::new("a");
+        c1.arg("b");
+        assert_eq!(render_command(&c1), OsString::from("a b"));
+        c1.arg("/c d/");
+        assert_eq!(render_command(&c1), OsString::from("a b \"/c d/\""));
+        c1.env("PARAM", "VALUE");
+        assert_eq!(render_command(&c1), OsString::from("PARAM=\"VALUE\" a b \"/c d/\""));
     }
 }
