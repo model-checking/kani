@@ -14,7 +14,7 @@ use args_toml::join_args;
 
 use crate::args::StandaloneSubcommand;
 use crate::concrete_playback::playback::{playback_cargo, playback_standalone};
-use crate::frontend::{JsonHandler, create_harness_metadata_json, process_harness_results};
+use crate::frontend::{JsonHandler, create_metadata_json, create_harness_metadata_json, process_harness_results, create_project_metadata_json};
 use crate::list::collect_metadata::{list_cargo, list_standalone};
 use crate::project::Project;
 use crate::session::KaniSession;
@@ -145,16 +145,14 @@ fn verify_project(project: Project, session: KaniSession) -> Result<()> {
     // TODO: add session info
     let harnesses = session.determine_targets(project.get_all_harnesses())?;
     debug!(n = harnesses.len(), ?harnesses, "verify_project");
-    handler.add_item("schema_version", json!("0.0.0"));
-    handler.add_item(
-        "run_time",
-        json!({
-            "started_at":  to_rfc3339(wall_start)
-        }),
-    );
+
+    // Add project and export run metadata using frontend utility
+    handler.add_item("metadata", create_metadata_json());
+    handler.add_item("project", create_project_metadata_json(&project));
+
     // Add harness metadata using frontend utility
     for h in &harnesses {
-        handler.add_harness_detail("harnesses", create_harness_metadata_json(h));
+        handler.add_harness_detail("harness_metadata", create_harness_metadata_json(h));
     }
 
     // Verification
