@@ -59,7 +59,7 @@ impl<'pr> HarnessRunner<'_, 'pr> {
     ) {
         // Use frontend utility to create structured verification summary
         let summary = create_verification_summary_json(results, selected, status_label);
-        handler.add_item("verification_runner_results", summary);
+        handler.add_item("verification_results", summary);
     }
 
     /// Given a [`HarnessRunner`] (to abstract over how these harnesses were generated), this runs
