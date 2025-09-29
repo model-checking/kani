@@ -22,7 +22,7 @@ pub fn create_metadata_json() -> Value {
         .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_string());
 
     let kani_version = env!("CARGO_PKG_VERSION");
-    let target = " ";
+    let target = env!("TARGET");
     let build_mode = if cfg!(debug_assertions) { "debug" } else { "release" };
 
     json!({
@@ -62,8 +62,10 @@ pub fn create_harness_metadata_json(h: &HarnessMetadata) -> Value {
             "should_panic": h.attributes.should_panic,
         },
         "Contract":{
-            "contracted_function_name": h.contract.as_ref().map(|c| format!("{:?}", c)),
-            "recursion_tracker": ""
+            "contracted_function_name": h.contract.as_ref()
+            .map(|c| c.contracted_function_name.as_str()),
+            "recursion_tracker": h.contract.as_ref()
+            .and_then(|c| c.recursion_tracker.as_ref()),
         },
         "has_loop_contracts": h.has_loop_contracts,
         "is_automatically_generated": h.is_automatically_generated,
