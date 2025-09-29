@@ -249,6 +249,9 @@ pub struct VerificationArgs {
     #[arg(long, requires("harnesses"))]
     pub exact: bool,
 
+    #[arg(long = "llm")]
+    pub llm: bool,
+
     /// Enable extra pointer checks such as invalid pointers in relation operations and pointer
     /// arithmetic overflow.
     /// This feature is unstable and it may yield false counter examples. It requires

@@ -19,6 +19,7 @@ use crate::list::collect_metadata::{list_cargo, list_standalone};
 use crate::project::Project;
 use crate::session::KaniSession;
 use crate::version::print_kani_version;
+use crate::frontend::enhance_llm::enhance_llm;
 use clap::Parser;
 use serde_json::json;
 use tracing::debug;
@@ -195,6 +196,14 @@ fn verify_project(project: Project, session: KaniSession) -> Result<()> {
 
         }),
     );
+    if session.args.llm{
+        enhance_llm(
+            &mut handler,
+            &results,
+            &harnesses
+        )?;
+    }
+
     handler.export()?;
 
     session.print_final_summary(&results)
