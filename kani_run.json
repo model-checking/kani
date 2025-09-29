@@ -1,7 +1,7 @@
 {
   "metadata": {
     "version": "1.0",
-    "timestamp": "2025-09-29T23:07:44.770902Z",
+    "timestamp": "2025-09-29T23:55:09.515846Z",
     "kani_version": "0.65.0",
     "target": "aarch64-apple-darwin",
     "build_mode": "release"
@@ -10,7 +10,7 @@
     "crate_name": [
       "lib"
     ],
-    "workspace_root": "/Users/jiangkeyou/Desktop/25Fall/aws/kani/docs/src/tutorial/first-steps-v2/src"
+    "workspace_root": "/Users/jingfeixu/kani-output/docs/src/tutorial/first-steps-v2/src"
   },
   "harness_metadata": [
     {
@@ -22,7 +22,7 @@
         "start_line": 64,
         "end_line": 67
       },
-      "goto_file": "/Users/jiangkeyou/Desktop/25Fall/aws/kani/docs/src/tutorial/first-steps-v2/src/lib__RNvCscOSYLgomVfM_3lib9will_fail.symtab.out",
+      "goto_file": "/Users/jingfeixu/kani-output/docs/src/tutorial/first-steps-v2/src/lib__RNvCscOSYLgomVfM_3lib9will_fail.symtab.out",
       "attributes": {
         "kind": "Proof",
         "should_panic": false
@@ -43,7 +43,7 @@
         "start_line": 54,
         "end_line": 59
       },
-      "goto_file": "/Users/jiangkeyou/Desktop/25Fall/aws/kani/docs/src/tutorial/first-steps-v2/src/lib__RNvCscOSYLgomVfM_3lib14verify_success.symtab.out",
+      "goto_file": "/Users/jingfeixu/kani-output/docs/src/tutorial/first-steps-v2/src/lib__RNvCscOSYLgomVfM_3lib14verify_success.symtab.out",
       "attributes": {
         "kind": "Proof",
         "should_panic": false
@@ -56,19 +56,24 @@
       "is_automatically_generated": false
     }
   ],
-  "verification_runner_results": {
-    "selected": 2,
-    "executed": 2,
-    "status": "completed",
-    "individual_harnesses": [
+  "verification_results": {
+    "summary": {
+      "total_harnesses": 2,
+      "executed": 2,
+      "status": "completed",
+      "successful": 1,
+      "failed": 1,
+      "duration_ms": 32
+    },
+    "results": [
       {
         "harness_id": "will_fail",
-        "name": "will_fail",
         "status": "Failure",
-        "verification_details": [
+        "duration_ms": 24,
+        "checks": [
           {
-            "check_number": 1,
-            "function_name": "estimate_size",
+            "id": 1,
+            "function": "estimate_size",
             "status": "Failure",
             "description": "assertion failed: x < 4096",
             "location": {
@@ -76,39 +81,18 @@
               "line": "6",
               "column": "5"
             },
-            "class": "assertion"
+            "category": "assertion"
           }
-        ],
-        "original": {
-          "file": "./docs/src/tutorial/first-steps-v2/src/lib.rs",
-          "start_line": 64,
-          "end_line": 67
-        },
-        "kind": "Proof",
-        "should_panic": false,
-        "has_loop_contracts": false,
-        "is_automatically_generated": false,
-        "solver": null,
-        "unwind_value": null,
-        "contract": null,
-        "stubs": [],
-        "verified_stubs": [],
-        "summary": {
-          "total": 1,
-          "status": "failed"
-        },
-        "timing": {
-          "cbmc_runtime": "0.037s"
-        }
+        ]
       },
       {
         "harness_id": "verify_success",
-        "name": "verify_success",
         "status": "Success",
-        "verification_details": [
+        "duration_ms": 8,
+        "checks": [
           {
-            "check_number": 1,
-            "function_name": "verify_success",
+            "id": 1,
+            "function": "verify_success",
             "status": "Success",
             "description": "assertion failed: y < 10",
             "location": {
@@ -116,11 +100,11 @@
               "line": "58",
               "column": "5"
             },
-            "class": "assertion"
+            "category": "assertion"
           },
           {
-            "check_number": 2,
-            "function_name": "estimate_size",
+            "id": 2,
+            "function": "estimate_size",
             "status": "Success",
             "description": "assertion failed: x < 4096",
             "location": {
@@ -128,30 +112,9 @@
               "line": "6",
               "column": "5"
             },
-            "class": "assertion"
+            "category": "assertion"
           }
-        ],
-        "original": {
-          "file": "./docs/src/tutorial/first-steps-v2/src/lib.rs",
-          "start_line": 54,
-          "end_line": 59
-        },
-        "kind": "Proof",
-        "should_panic": false,
-        "has_loop_contracts": false,
-        "is_automatically_generated": false,
-        "solver": null,
-        "unwind_value": null,
-        "contract": null,
-        "stubs": [],
-        "verified_stubs": [],
-        "summary": {
-          "total": 1,
-          "status": "completed"
-        },
-        "timing": {
-          "cbmc_runtime": "0.007s"
-        }
+        ]
       }
     ]
   },
@@ -180,8 +143,19 @@
     "enabled": false
   },
   "run_time": {
-    "started_at": "2025-09-29T23:07:44.770707Z",
-    "finished_at": "2025-09-29T23:07:44.983001Z",
-    "duration_ms": 212
+    "started_at": "2025-09-29T23:55:09.515832Z",
+    "finished_at": "2025-09-29T23:55:09.695729Z",
+    "duration_ms": 179
+  },
+  "llm": {
+    "summary": {
+      "total": 2,
+      "passed": 1,
+      "failed": 1
+    },
+    "failing_harnesses": [
+      "will_fail"
+    ],
+    "note": "1 passed, 1 failed. Failing: will_fail"
   }
 }
