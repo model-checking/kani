@@ -290,6 +290,10 @@ impl CodegenBackend for GotocCodegenBackend {
         println!("Kani-goto version: {}", env!("CARGO_PKG_VERSION"));
     }
 
+    fn name(&self) -> &'static str {
+        "kani-cprover"
+    }
+
     fn locale_resource(&self) -> &'static str {
         // We don't currently support multiple languages.
         DEFAULT_LOCALE_RESOURCE
@@ -525,7 +529,14 @@ impl CodegenBackend for GotocCodegenBackend {
         let local_crate_name = codegen_results.crate_info.local_crate_name;
         // Create the rlib if one was requested.
         if requested_crate_types.contains(&CrateType::Rlib) {
-            link_binary(sess, &ArArchiveBuilderBuilder, codegen_results, rustc_metadata, outputs);
+            link_binary(
+                sess,
+                &ArArchiveBuilderBuilder,
+                codegen_results,
+                rustc_metadata,
+                outputs,
+                self.name(),
+            );
         }
 
         // But override all the other outputs.

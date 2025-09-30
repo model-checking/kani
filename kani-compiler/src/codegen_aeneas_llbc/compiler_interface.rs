@@ -198,6 +198,10 @@ impl CodegenBackend for LlbcCodegenBackend {
         println!("Kani-llbc version: {}", env!("CARGO_PKG_VERSION"));
     }
 
+    fn name(&self) -> &'static str {
+        "kani-llbc"
+    }
+
     fn locale_resource(&self) -> &'static str {
         // We don't currently support multiple languages.
         DEFAULT_LOCALE_RESOURCE
@@ -324,7 +328,14 @@ impl CodegenBackend for LlbcCodegenBackend {
     ) {
         let requested_crate_types = &codegen_results.crate_info.crate_types.clone();
         let local_crate_name = codegen_results.crate_info.local_crate_name;
-        link_binary(sess, &ArArchiveBuilderBuilder, codegen_results, rustc_metadata, outputs);
+        link_binary(
+            sess,
+            &ArArchiveBuilderBuilder,
+            codegen_results,
+            rustc_metadata,
+            outputs,
+            self.name(),
+        );
         for crate_type in requested_crate_types {
             let out_fname = out_filename(sess, *crate_type, outputs, local_crate_name);
             let out_path = out_fname.as_path();
