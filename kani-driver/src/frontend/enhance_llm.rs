@@ -40,7 +40,6 @@ pub fn enhance_llm_with_source(
 ) -> Result<()> {
     eprintln!("=== Starting LLM Enhancement ===");
     
-    // 统计口径示例：成功/失败数量 + 失败列表
     let mut passed = 0usize;
     let mut failed = 0usize;
     let mut failing_names = Vec::new();
@@ -179,7 +178,7 @@ mod tests {
 
     #[test]
     fn test_summary_generation() {
-        // This is a placeholder test - you'll need to adapt it to your actual types
+        // Actual test here 
         // Just demonstrates the structure
         eprintln!("Test: Verify summary text generation works correctly");
         
