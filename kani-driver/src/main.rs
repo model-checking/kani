@@ -199,8 +199,6 @@ fn verify_project(project: Project, session: KaniSession) -> Result<()> {
     if session.args.llm{
         enhance_llm(
             &mut handler,
-            &results,
-            &harnesses
         )?;
     }
 
