@@ -12,7 +12,7 @@ const HF_API_URL: &str = "https://api-inference.huggingface.co/models";
 
 /// Hugging Face API token
 /// Get your free token at: https://huggingface.co/settings/tokens
-/// TODO: Replace with token or set HF_TOKEN environment variable
+/// TODO: Replace with your token or set HF_TOKEN environment variable
 const HF_API_TOKEN: &str = "YOUR_HF_TOKEN_HERE";
 
 /// Model to use - Microsoft Phi-3 Mini (free, no rate limits for basic use)
@@ -24,7 +24,7 @@ const HF_API_TOKEN: &str = "YOUR_HF_TOKEN_HERE";
 const HF_MODEL: &str = "microsoft/Phi-3-mini-4k-instruct";
 
 /// System prompt for LLM
-/// TODO: Add system prompt here
+/// TODO: Add your system prompt here
 const SYSTEM_PROMPT: &str = r#""#;
 
 /// User prompt template for LLM analysis
@@ -89,6 +89,12 @@ fn extract_verification_results(handler: &JsonHandler) -> Result<Value> {
 /// Uses Hugging Face's free Inference API
 /// Get your free token at: https://huggingface.co/settings/tokens
 ///
+/// Note: This function requires an HTTP client library. 
+/// Options:
+/// 1. Add reqwest to Cargo.toml: reqwest = { version = "0.11", features = ["blocking", "json"] }
+/// 2. Add ureq to Cargo.toml: ureq = { version = "2.9", features = ["json"] }
+/// 3. Use curl command line (see make_curl_request function below)
+///
 /// # Arguments
 /// * `verification_results` - Verification results to analyze
 ///
@@ -137,41 +143,8 @@ fn call_llm_for_analysis(verification_results: &Value) -> Result<Value> {
     
     eprintln!("  Sending HTTP POST request...");
     
-    // Create HTTP client
-    let client = reqwest::blocking::Client::builder()
-        .timeout(std::time::Duration::from_secs(120))
-        .build()
-        .context("Failed to create HTTP client")?;
-    
-    // Send request to Hugging Face API
-    let response = client
-        .post(&api_url)
-        .header("Authorization", format!("Bearer {}", api_key))
-        .header("Content-Type", "application/json")
-        .json(&request_body)
-        .send()
-        .context("Failed to send request to LLM API")?;
-    
-    let status = response.status();
-    eprintln!("  Response status: {}", status);
-    
-    if !status.is_success() {
-        let error_text = response.text().unwrap_or_else(|_| "Unable to read error response".to_string());
-        
-        // Provide helpful error messages
-        if status.as_u16() == 401 {
-            bail!("LLM API error (401): Authentication failed. Please check your HF_TOKEN is valid.\nGet a new token at: https://huggingface.co/settings/tokens");
-        } else if status.as_u16() == 503 {
-            eprintln!("  ⚠ Model is loading... this may take 20-60 seconds on first use.");
-            eprintln!("  The model will be cached for future requests.");
-            bail!("LLM API error (503): Model is currently loading. Please try again in a moment.");
-        }
-        
-        bail!("LLM API error ({}): {}", status, error_text);
-    }
-    
-    // Parse the API response
-    let response_json: Value = response.json().context("Failed to parse LLM API response")?;
+    // Make the HTTP request - using curl command as a fallback
+    let response_json = make_curl_request(&api_url, &api_key, &request_body)?;
     
     // Extract generated text from response
     // Hugging Face API returns either:
@@ -192,6 +165,79 @@ fn call_llm_for_analysis(verification_results: &Value) -> Result<Value> {
     // Parse the LLM response into structured JSON
     let analysis = parse_llm_response(content)?;
     Ok(analysis)
+}
+
+/// Make HTTP request using curl command
+///
+/// This is a fallback method that uses the curl command-line tool.
+/// Works on most systems without requiring additional Rust dependencies.
+///
+/// # Arguments
+/// * `url` - API endpoint URL
+/// * `api_key` - Authentication token
+/// * `body` - Request body as JSON
+///
+/// # Returns
+/// * `Ok(Value)` - Response as JSON
+/// * `Err(_)` - Request failed
+fn make_curl_request(url: &str, api_key: &str, body: &Value) -> Result<Value> {
+    use std::process::Command;
+    use std::io::Write;
+    
+    // Create a temporary file for the request body
+    let mut temp_file = tempfile::NamedTempFile::new()
+        .context("Failed to create temporary file")?;
+    
+    let body_str = serde_json::to_string(body)
+        .context("Failed to serialize request body")?;
+    
+    temp_file.write_all(body_str.as_bytes())
+        .context("Failed to write request body to temp file")?;
+    
+    let temp_path = temp_file.path();
+    
+    // Execute curl command
+    let output = Command::new("curl")
+        .arg("-X")
+        .arg("POST")
+        .arg(url)
+        .arg("-H")
+        .arg(format!("Authorization: Bearer {}", api_key))
+        .arg("-H")
+        .arg("Content-Type: application/json")
+        .arg("--data-binary")
+        .arg(format!("@{}", temp_path.display()))
+        .arg("--max-time")
+        .arg("120")
+        .arg("--silent")
+        .arg("--show-error")
+        .output()
+        .context("Failed to execute curl command. Make sure curl is installed.")?;
+    
+    if !output.status.success() {
+        let error_msg = String::from_utf8_lossy(&output.stderr);
+        
+        // Check for specific HTTP status codes in stderr
+        if error_msg.contains("401") {
+            bail!("LLM API error (401): Authentication failed. Please check your HF_TOKEN is valid.\nGet a new token at: https://huggingface.co/settings/tokens");
+        } else if error_msg.contains("503") {
+            eprintln!("  ⚠ Model is loading... this may take 20-60 seconds on first use.");
+            eprintln!("  The model will be cached for future requests.");
+            bail!("LLM API error (503): Model is currently loading. Please try again in a moment.");
+        }
+        
+        bail!("curl command failed: {}", error_msg);
+    }
+    
+    let response_str = String::from_utf8(output.stdout)
+        .context("Failed to parse curl response as UTF-8")?;
+    
+    let response_json: Value = serde_json::from_str(&response_str)
+        .context("Failed to parse LLM API response as JSON")?;
+    
+    eprintln!("  Response received successfully");
+    
+    Ok(response_json)
 }
 
 /// Parse LLM response text into structured JSON
