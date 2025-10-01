@@ -32,5 +32,9 @@ impl JsonHandler {
             Ok(())
         }
     }
+
+    pub fn get_item(&self, key: &str) -> Option<&Value> {
+        self.data.get(key)
+    }
 }
 

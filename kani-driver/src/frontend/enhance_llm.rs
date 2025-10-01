@@ -49,13 +49,13 @@ const USER_PROMPT_TEMPLATE: &str = r#"{verification_results}"#;
 pub fn enhance_llm(handler: &mut JsonHandler) -> Result<()> {
     eprintln!("=== Starting LLM Enhancement ===");
     eprintln!("Step 1: Extracting verification results...");
-    let verification_results = "abcde";
+    let verification_results = extract_verification_results(handler)?;
     eprintln!("  ✓ Extracted {} bytes of verification data", serde_json::to_string(&verification_results)?.len());
     eprintln!("Step 2: Calling LLM for analysis...");
     // let llm_analysis = call_llm_for_analysis(&verification_results)?;
     eprintln!("  ✓ LLM analysis completed successfully");
     eprintln!("Step 3: Adding LLM insights to handler...");
-    // handler.add_item("llm_insights", llm_analysis);
+    handler.add_item("llm_insights", verification_results);
     eprintln!("=== LLM Enhancement Complete ===\n");
     Ok(())
 }
@@ -72,15 +72,15 @@ pub fn enhance_llm(handler: &mut JsonHandler) -> Result<()> {
 /// # Returns
 /// * `Ok(Value)` - Verification results as JSON
 /// * `Err(_)` - Failed to extract results
-// fn extract_verification_results(handler: &JsonHandler) -> Str {
-//     // let results = handler.get_item("verification_runner_results").context("No verification_runner_results found in handler")?.clone();
-//     // let results = "abcde";
-//     // if results.is_null() {
-//     //     bail!("verification_runner_results is null");
-//     // }
-//     // eprintln!("  Found verification results: {} items", if results.is_array() { results.as_array().map(|a| a.len()).unwrap_or(0) } else if results.is_object() { results.as_object().map(|o| o.len()).unwrap_or(0) } else { 0 });
-//     Ok("abcde")
-// }
+
+fn extract_verification_results(handler: &JsonHandler) -> Result<Value> {
+    let results = handler.get_item("verification_results").context("No verification_runner_results found in handler")?.clone();
+    if results.is_null() {
+        bail!("verification_runner_results is null");
+    }
+    eprintln!("  Found verification results: {} items", if results.is_array() { results.as_array().map(|a| a.len()).unwrap_or(0) } else if results.is_object() { results.as_object().map(|o| o.len()).unwrap_or(0) } else { 0 });
+    Ok(results)
+}
 
 /// Call LLM API to analyze verification results
 ///
