@@ -26,7 +26,7 @@ echo "- next: ${next_toolchain_date}"
 echo "---------------------------"
 
 if gh issue list -S \
-  "Toolchain upgrade to nightly-$next_toolchain_date failed" \
+  "\"Toolchain upgrade to nightly-$next_toolchain_date failed\"" \
   --json number,title | grep title
 then
   echo "Skip update: Found existing issue"
