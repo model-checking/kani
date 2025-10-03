@@ -488,7 +488,6 @@ impl MirVisitor for CheckUninitVisitor {
                 }
                 ProjectionElem::Downcast(_) => {}
                 ProjectionElem::OpaqueCast(_) => {}
-                ProjectionElem::Subtype(_) => {}
             }
         }
         self.super_place(place, ptx, location)
