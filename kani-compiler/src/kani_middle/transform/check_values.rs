@@ -549,7 +549,6 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                 }
                 ProjectionElem::Downcast(_) => {}
                 ProjectionElem::OpaqueCast(_) => {}
-                ProjectionElem::Subtype(_) => {}
                 ProjectionElem::Index(_)
                 | ProjectionElem::ConstantIndex { .. }
                 | ProjectionElem::Subslice { .. } => { /* safe */ }
@@ -619,7 +618,7 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                         })
                     }
                 }
-                CastKind::Transmute => {
+                CastKind::Transmute | CastKind::Subtype => {
                     debug!(?dest_ty, "transmute");
                     // For transmute, we care about the destination type only.
                     // This could be optimized to only add a check if the requirements of the
@@ -777,8 +776,7 @@ fn assignment_check_points(
             | ProjectionElem::ConstantIndex { .. }
             | ProjectionElem::Subslice { .. }
             | ProjectionElem::Downcast(_)
-            | ProjectionElem::OpaqueCast(_)
-            | ProjectionElem::Subtype(_) => ty = proj.ty(ty).unwrap(),
+            | ProjectionElem::OpaqueCast(_) => ty = proj.ty(ty).unwrap(),
         };
     }
     invalid_ranges

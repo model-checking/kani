@@ -794,7 +794,7 @@ impl GotocCtx<'_, '_> {
             Rvalue::Cast(CastKind::PointerCoercion(k), e, t) => {
                 self.codegen_pointer_cast(k, e, *t, loc)
             }
-            Rvalue::Cast(CastKind::Transmute, operand, ty) => {
+            Rvalue::Cast(CastKind::Transmute | CastKind::Subtype, operand, ty) => {
                 let src_ty = operand.ty(self.current_fn().locals()).unwrap();
                 // Transmute requires sized types.
                 let src_sz = LayoutOf::new(src_ty).size_of().unwrap();
