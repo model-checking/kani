@@ -16,6 +16,8 @@ env:
 jobs:
   regression:
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
     strategy:
       matrix:
         os: [macos-13, ubuntu-22.04, ubuntu-24.04, macos-14, ubuntu-24.04-arm]
@@ -33,6 +35,8 @@ jobs:
 
   benchcomp-tests:
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     steps:
       - name: Checkout Kani
         uses: actions/checkout@v5
@@ -56,6 +60,8 @@ jobs:
 
   perf:
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     steps:
       - name: Checkout Kani
         uses: actions/checkout@v5
@@ -72,6 +78,8 @@ jobs:
 
   llbc-regression:
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     steps:
       - name: Checkout Kani
         uses: actions/checkout@v5

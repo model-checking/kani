@@ -5,6 +5,8 @@
 # 2. Checks Rust-Sec registry for security advisories.
 
 name: Cargo Deny
+permissions:
+  contents: read
 on:
   pull_request:
   merge_group:
