@@ -223,7 +223,6 @@ impl KaniSession {
         }
 
         let mut result = self.with_timer(|| self.run_cbmc(binary, harness), "run_cbmc")?;
-        // println!("{result:?}");
 
         self.process_output(&result, harness, thread_index);
         self.gen_and_add_concrete_playback(harness, &mut result)?;

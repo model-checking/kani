@@ -61,7 +61,7 @@ pub fn create_harness_metadata_json(h: &HarnessMetadata) -> Value {
             "kind": format!("{:?}", h.attributes.kind),
             "should_panic": h.attributes.should_panic,
         },
-        "Contract":{
+        "contract":{
             "contracted_function_name": h.contract.as_ref()
             .map(|c| c.contracted_function_name.as_str()),
             "recursion_tracker": h.contract.as_ref()
@@ -131,6 +131,19 @@ pub fn create_verification_summary_json(
         },
         "results": verification_results
     })
+}
+
+/// Helper function to add verification results to JsonHandler
+/// This utility function encapsulates the logic for adding verification summary to JSON output
+pub fn add_runner_results_to_json(
+    handler: &mut JsonHandler,
+    results: &[HarnessResult],
+    selected: usize,
+    status_label: &str,
+) {
+    // Use frontend utility to create structured verification summary
+    let summary = create_verification_summary_json(results, selected, status_label);
+    handler.add_item("verification_results", summary);
 }
 
 /// Process harness results and enrich JSON handler with additional metadata.

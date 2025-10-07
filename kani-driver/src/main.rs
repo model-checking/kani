@@ -133,16 +133,8 @@ fn standalone_main() -> Result<()> {
 
 /// Run verification on the given project.
 fn verify_project(project: Project, session: KaniSession) -> Result<()> {
-    let wall_start = SystemTime::now();
-    let cpu_start = Instant::now();
-    fn to_rfc3339(t: std::time::SystemTime) -> String {
-        let dt: OffsetDateTime = t.into();
-        dt.format(&Rfc3339).unwrap()
-    }
-
     debug!(?project, "verify_project");
     let mut handler = JsonHandler::new(session.args.export_json.clone());
-    // TODO: add session info
     let harnesses = session.determine_targets(project.get_all_harnesses())?;
     debug!(n = harnesses.len(), ?harnesses, "verify_project");
 
@@ -157,7 +149,6 @@ fn verify_project(project: Project, session: KaniSession) -> Result<()> {
 
     // Verification
     let runner = harness_runner::HarnessRunner { sess: &session, project: &project };
-
     let results = runner.check_all_harnesses(&harnesses, Some(&mut handler))?;
 
     // Process harness results and add additional metadata using frontend utility function
@@ -184,17 +175,6 @@ fn verify_project(project: Project, session: KaniSession) -> Result<()> {
         handler.add_item("coverage", json!({"enabled": false}));
     }
 
-    let wall_end = SystemTime::now();
-    let duration_ms = cpu_start.elapsed().as_millis() as u64;
-    handler.add_item(
-        "run_time",
-        json!({
-            "started_at":  to_rfc3339(wall_start),
-            "finished_at": to_rfc3339(wall_end),
-            "duration_ms": duration_ms,
-
-        }),
-    );
     handler.export()?;
 
     session.print_final_summary(&results)
