@@ -1,1 +1,0 @@
-/Users/jiangkeyou/Desktop/25Fall/aws/kani/docs/src/tutorial/first-steps-v1/target/kani/aarch64-apple-darwin/debug/libfirst_steps_v1.rlib: /Users/jiangkeyou/Desktop/25Fall/aws/kani/docs/src/tutorial/first-steps-v1/src/lib.rs
