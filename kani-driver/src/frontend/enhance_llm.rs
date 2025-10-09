@@ -12,7 +12,7 @@ const HF_API_URL: &str = "https://api-inference.huggingface.co/models";
 
 /// Hugging Face API token
 /// Get your free token at: https://huggingface.co/settings/tokens
-/// TODO: Replace with your token or set HF_TOKEN environment variable
+/// TODO: Replace with token or set HF_TOKEN environment variable
 const HF_API_TOKEN: &str = "YOUR_HF_TOKEN_HERE";
 
 /// Model to use - Microsoft Phi-3 Mini (free, no rate limits for basic use)
@@ -23,14 +23,87 @@ const HF_API_TOKEN: &str = "YOUR_HF_TOKEN_HERE";
 /// - "mistralai/Mistral-7B-Instruct-v0.3" (7B params, powerful)
 const HF_MODEL: &str = "microsoft/Phi-3-mini-4k-instruct";
 
-/// System prompt for LLM
-/// TODO: Add your system prompt here
-const SYSTEM_PROMPT: &str = r#""#;
+/// System prompt for LLM - Defines the AI's role and expertise
+const SYSTEM_PROMPT: &str = r#"You are an expert software verification analyst specializing in Kani, a formal verification tool for Rust programs. Your role is to analyze verification results and provide clear, actionable insights for developers.
+
+Your expertise includes:
+- Understanding Kani proof harnesses and verification checks
+- Interpreting CBMC (Bounded Model Checker) outputs and statistics
+- Identifying root causes of verification failures
+- Explaining assertion failures, panics, and unsafe code issues
+- Providing concrete recommendations for fixing verification failures
+
+When analyzing results, you should:
+1. Summarize the overall verification status clearly
+2. Identify and explain each failure in detail
+3. Provide the exact location of issues (file, line, column)
+4. Suggest specific fixes or debugging approaches
+5. Highlight any performance concerns (long runtimes, high memory usage)
+6. Use clear, developer-friendly language avoiding unnecessary jargon
+
+Always respond with valid JSON following this exact structure:
+{
+  "executive_summary": "Brief 2-3 sentence overview of verification results",
+  "overall_status": "success" | "failure" | "partial",
+  "key_findings": [
+    "Finding 1: Brief statement",
+    "Finding 2: Brief statement"
+  ],
+  "detailed_analysis": {
+    "harnesses": [
+      {
+        "harness_name": "name of the harness",
+        "status": "success" | "failure",
+        "summary": "What this harness verifies",
+        "issues": [
+          {
+            "severity": "critical" | "high" | "medium" | "low",
+            "type": "assertion_failure" | "panic" | "overflow" | "other",
+            "description": "Clear explanation of what went wrong",
+            "location": "file:line:column",
+            "root_cause": "Why this happened",
+            "recommendation": "How to fix it"
+          }
+        ]
+      }
+    ]
+  },
+  "performance_insights": {
+    "total_duration": "human readable time",
+    "slowest_harness": "name and duration",
+    "resource_usage": "any concerns about memory, solver time, etc."
+  },
+  "recommendations": [
+    "Actionable recommendation 1",
+    "Actionable recommendation 2"
+  ],
+  "next_steps": "What the developer should do next"
+}"#;
 
 /// User prompt template for LLM analysis
 /// The placeholder {verification_results} will be replaced with actual data
-/// TODO: Add your user prompt template here
-const USER_PROMPT_TEMPLATE: &str = r#"{verification_results}"#;
+const USER_PROMPT_TEMPLATE: &str = r#"Please analyze the following Kani verification results and provide a comprehensive, developer-friendly analysis.
+
+The JSON data contains:
+- metadata: Information about the Kani version, target platform, and build configuration
+- project: Details about the Rust crate being verified
+- harness_metadata: Metadata about each proof harness (location, attributes, contracts)
+- verification_results: Summary and detailed results of each verification check
+- CBMC: Low-level bounded model checker statistics and timing data
+- Summary: High-level summary of verification outcomes
+
+Focus on:
+1. What verification checks passed or failed
+2. Exact locations of any failures (file paths, line numbers)
+3. Root causes of failures based on the error descriptions
+4. Practical recommendations for fixing issues
+5. Any performance concerns
+
+Here are the verification results to analyze:
+
+{verification_results}
+
+Respond with valid JSON only, following the structure specified in your system instructions."#;
 
 // ============================================================================
 // MAIN FUNCTION
