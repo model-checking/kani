@@ -171,7 +171,6 @@ impl<'tcx> Analysis<'tcx> for PointsToAnalysis<'_, 'tcx> {
             }
             StatementKind::FakeRead(..)
             | StatementKind::SetDiscriminant { .. }
-            | StatementKind::Deinit(..)
             | StatementKind::StorageLive(..)
             | StatementKind::StorageDead(..)
             | StatementKind::Retag(..)

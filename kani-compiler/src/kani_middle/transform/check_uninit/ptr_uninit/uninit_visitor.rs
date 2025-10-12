@@ -220,14 +220,6 @@ impl MirVisitor for CheckUninitVisitor {
                     }
                 }
             }
-            StatementKind::Deinit(place) => {
-                self.super_statement(stmt, location);
-                self.push_target(MemoryInitOp::Set {
-                    operand: Operand::Copy(place.clone()),
-                    value: false,
-                    position: InsertPosition::After,
-                });
-            }
             StatementKind::FakeRead(_, _)
             | StatementKind::SetDiscriminant { .. }
             | StatementKind::StorageLive(_)
