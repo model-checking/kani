@@ -411,7 +411,6 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                 }
                 StatementKind::FakeRead(_, _)
                 | StatementKind::SetDiscriminant { .. }
-                | StatementKind::Deinit(_)
                 | StatementKind::StorageLive(_)
                 | StatementKind::StorageDead(_)
                 | StatementKind::Retag(_, _)

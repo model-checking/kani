@@ -123,7 +123,6 @@ impl From<&Statement> for Key {
     fn from(value: &Statement) -> Self {
         match value.kind {
             StatementKind::Assign(..) => Key("Assign"),
-            StatementKind::Deinit(_) => Key("Deinit"),
             StatementKind::Intrinsic(_) => Key("Intrinsic"),
             StatementKind::SetDiscriminant { .. } => Key("SetDiscriminant"),
             // For now, we don't care about the ones below.

@@ -381,9 +381,6 @@ impl RustcInternalMir for StatementKind {
                     variant_index: internal(tcx, variant_index),
                 }
             }
-            StatementKind::Deinit(place) => {
-                rustc_middle::mir::StatementKind::Deinit(internal(tcx, place).into())
-            }
             StatementKind::StorageLive(local) => rustc_middle::mir::StatementKind::StorageLive(
                 rustc_middle::mir::Local::from_usize(*local),
             ),
