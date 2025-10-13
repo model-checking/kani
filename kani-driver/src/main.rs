@@ -14,7 +14,7 @@ use args_toml::join_args;
 
 use crate::args::StandaloneSubcommand;
 use crate::concrete_playback::playback::{playback_cargo, playback_standalone};
-use crate::frontend::{JsonHandler, create_metadata_json, create_harness_metadata_json, process_harness_results, create_project_metadata_json};
+use crate::frontend::{JsonHandler, create_metadata_json, create_harness_metadata_json, process_harness_results, create_project_metadata_json, process_cbmc_results};
 use crate::list::collect_metadata::{list_cargo, list_standalone};
 use crate::project::Project;
 use crate::session::KaniSession;
@@ -153,6 +153,7 @@ fn verify_project(project: Project, session: KaniSession) -> Result<()> {
 
     // Process harness results and add additional metadata using frontend utility function
     process_harness_results(&mut handler, &harnesses, &results)?;
+    process_cbmc_results(&mut handler, &harnesses, &results, &session)?;
 
     if session.args.coverage {
         // We generate a timestamp to save the coverage data in a folder named

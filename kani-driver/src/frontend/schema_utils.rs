@@ -13,6 +13,8 @@ use anyhow::Result;
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 use crate::project::Project;
+use crate::session::KaniSession;
+use serde::Serialize;
 
 /// Creates structured JSON metadata for an export run
 /// This utility function captures basic environment for the whole session
@@ -207,6 +209,49 @@ pub fn process_harness_results(
         }
     }
     
+    Ok(())
+}
+
+pub fn process_cbmc_results(
+    handler: &mut JsonHandler,
+    harnesses: &[&HarnessMetadata],
+    results: &[HarnessResult],
+    session: &KaniSession,
+) -> Result<()> {
+    let cbmc_info_opt = session.get_cbmc_info().ok();
+    for h in harnesses {
+        let harness_result = results.iter().find(|r| r.harness.pretty_name == h.pretty_name);
+        handler.add_harness_detail("cbmc", json!({
+            // basic name for harnesses
+            "harness_id": h.pretty_name,
+            
+            // Per-harness CBMC info (key-value pairs) without parsing CBMC stdout
+            "cbmc_metadata": {
+                // Version / OS info (same for all harnesses in a run)
+                "version": cbmc_info_opt.as_ref().map(|i| i.version.clone()),
+                "os_info": cbmc_info_opt.as_ref().map(|i| i.os_info.clone()),
+            },
+            // Configuration passed to CBMC for this harness
+            "configuration": {
+                "object_bits": session.args.cbmc_object_bits(),
+                "solver": h.attributes.solver.as_ref().map(|s| format!("{:?}", s)).unwrap_or_else(|| "Cadical".to_string()),
+            },
+            
+            // CBMC execution statistics extracted from messages
+            "cbmc_stats": harness_result.and_then(|r| r.result.cbmc_stats.as_ref()).map(|s| json!({
+            "runtime_symex_s": s.runtime_symex_s,
+            "size_program_expression": s.size_program_expression,
+            "slicing_removed_assignments": s.slicing_removed_assignments,
+            "vccs_generated": s.vccs_generated,
+            "vccs_remaining": s.vccs_remaining,
+            "runtime_postprocess_equation_s": s.runtime_postprocess_equation_s,
+            "runtime_convert_ssa_s": s.runtime_convert_ssa_s,
+            "runtime_post_process_s": s.runtime_post_process_s,
+            "runtime_solver_s": s.runtime_solver_s,
+            "runtime_decision_procedure_s": s.runtime_decision_procedure_s
+            }))
+        }));
+    }
     Ok(())
 }
 
