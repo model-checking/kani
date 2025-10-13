@@ -1092,52 +1092,6 @@ impl VerificationResult {
     ///      (CBMC will regularly report "failure" but that's just our cover checks.)
     ///   2. Positively checking for the presence of results.
     ///      (Do not mistake lack of results for success: report it as failure.)
-    fn from_with_stats(
-        output: VerificationOutput,
-        should_panic: bool,
-        start_time: Instant,
-        cbmc_stats: CbmcStats,
-    ) -> VerificationResult {
-        let runtime = start_time.elapsed();
-        let (_, results) = extract_results(output.processed_items);
-
-        let cbmc_stats = if cbmc_stats.runtime_symex_s.is_some() || cbmc_stats.size_program_expression.is_some() {
-            Some(cbmc_stats)
-        } else {
-            None
-        };
-
-        if let Some(results) = results {
-            let (status, failed_properties) =
-                verification_outcome_from_properties(&results, should_panic);
-            let coverage_results = coverage_results_from_properties(&results);
-            VerificationResult {
-                status,
-                failed_properties,
-                results: Ok(results),
-                runtime,
-                generated_concrete_test: false,
-                coverage_results,
-                cbmc_stats,
-            }
-        } else {
-            // We never got results from CBMC - something went wrong (e.g. crash) so it's failure
-            let exit_status = if output.process_status == 137 {
-                ExitStatus::OutOfMemory
-            } else {
-                ExitStatus::Other(output.process_status)
-            };
-            VerificationResult {
-                status: VerificationStatus::Failure,
-                failed_properties: FailedProperties::Other,
-                results: Err(exit_status),
-                runtime,
-                generated_concrete_test: false,
-                coverage_results: None,
-                cbmc_stats,
-            }
-        }
-    }
 
     fn from(
         output: VerificationOutput,
