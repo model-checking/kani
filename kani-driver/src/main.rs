@@ -14,7 +14,10 @@ use args_toml::join_args;
 
 use crate::args::StandaloneSubcommand;
 use crate::concrete_playback::playback::{playback_cargo, playback_standalone};
-use crate::frontend::{JsonHandler, create_metadata_json, create_harness_metadata_json, process_harness_results, create_project_metadata_json, process_cbmc_results};
+use crate::frontend::{
+    JsonHandler, create_harness_metadata_json, create_metadata_json, create_project_metadata_json,
+    process_cbmc_results, process_harness_results,
+};
 use crate::list::collect_metadata::{list_cargo, list_standalone};
 use crate::project::Project;
 use crate::session::KaniSession;

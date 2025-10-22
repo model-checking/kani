@@ -1,4 +1,4 @@
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::path::PathBuf;
 
 pub struct JsonHandler {
@@ -8,10 +8,7 @@ pub struct JsonHandler {
 
 impl JsonHandler {
     pub fn new(export_path: Option<PathBuf>) -> Self {
-        Self {
-            data: json!({}),
-            export_path,
-        }
+        Self { data: json!({}), export_path }
     }
 
     pub fn add_item(&mut self, key: &str, value: Value) {

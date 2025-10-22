@@ -5,16 +5,16 @@
 //! This module contains helper functions to convert Kani internal structures to JSON
 
 use crate::call_cbmc::VerificationStatus;
-use crate::harness_runner::HarnessResult;
 use crate::frontend::JsonHandler;
-use kani_metadata::HarnessMetadata;
-use serde_json::{Value, json};
-use anyhow::Result;
-use time::format_description::well_known::Rfc3339;
-use time::OffsetDateTime;
+use crate::harness_runner::HarnessResult;
 use crate::project::Project;
 use crate::session::KaniSession;
+use anyhow::Result;
+use kani_metadata::HarnessMetadata;
 use serde::Serialize;
+use serde_json::{Value, json};
+use time::OffsetDateTime;
+use time::format_description::well_known::Rfc3339;
 
 /// Creates structured JSON metadata for an export run
 /// This utility function captures basic environment for the whole session
@@ -116,11 +116,13 @@ pub fn create_verification_summary_json(
     selected: usize,
     status_label: &str,
 ) -> Value {
-    let successful = results.iter().filter(|r| r.result.status == VerificationStatus::Success).count();
+    let successful =
+        results.iter().filter(|r| r.result.status == VerificationStatus::Success).count();
     let failed = results.len() - successful;
     let total_duration_ms: u64 = results.iter().map(|r| r.result.runtime.as_millis() as u64).sum();
-    
-    let verification_results: Vec<_> = results.iter().map(|r| create_verification_result_json(r)).collect();
+
+    let verification_results: Vec<_> =
+        results.iter().map(|r| create_verification_result_json(r)).collect();
 
     json!({
         "summary": {
@@ -159,7 +161,7 @@ pub fn process_harness_results(
     // The main verification results are handled by the harness runner
     for h in harnesses {
         let harness_result = results.iter().find(|r| r.harness.pretty_name == h.pretty_name);
-        
+
         // Add error details for this harness
         if let Some(result) = harness_result {
             handler.add_item("error_details", match result.result.status {
@@ -184,7 +186,7 @@ pub fn process_harness_results(
                     "has_errors": false
                 })
             });
-            
+
             // Add property details for this harness
             handler.add_harness_detail("property_details", json!({
                 "property_details": match &result.result.results {
@@ -192,7 +194,7 @@ pub fn process_harness_results(
                         let total_properties = properties.len();
                         let passed_properties = properties.iter().filter(|p| matches!(p.status, crate::cbmc_output_parser::CheckStatus::Success)).count();
                         let failed_properties = properties.iter().filter(|p| matches!(p.status, crate::cbmc_output_parser::CheckStatus::Failure)).count();
-                        
+
                         json!({
                             "total_properties": total_properties,
                             "passed": passed_properties,
@@ -208,7 +210,7 @@ pub fn process_harness_results(
             }));
         }
     }
-    
+
     Ok(())
 }
 
@@ -224,7 +226,7 @@ pub fn process_cbmc_results(
         handler.add_harness_detail("cbmc", json!({
             // basic name for harnesses
             "harness_id": h.pretty_name,
-            
+
             // Per-harness CBMC info (key-value pairs) without parsing CBMC stdout
             "cbmc_metadata": {
                 // Version / OS info (same for all harnesses in a run)
@@ -236,7 +238,7 @@ pub fn process_cbmc_results(
                 "object_bits": session.args.cbmc_object_bits(),
                 "solver": h.attributes.solver.as_ref().map(|s| format!("{:?}", s)).unwrap_or_else(|| "Cadical".to_string()),
             },
-            
+
             // CBMC execution statistics extracted from messages
             "cbmc_stats": harness_result.and_then(|r| r.result.cbmc_stats.as_ref()).map(|s| json!({
             "runtime_symex_s": s.runtime_symex_s,
