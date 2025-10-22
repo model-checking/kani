@@ -1014,7 +1014,6 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             let traitref = self
                 .tcx
                 .impl_trait_ref(impl_defid_internal)
-                .unwrap()
                 .skip_binder()
                 .args
                 .first()
