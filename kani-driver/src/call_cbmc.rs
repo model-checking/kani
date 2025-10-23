@@ -672,7 +672,7 @@ impl KaniSession {
         let mut stats = CbmcStats::default();
         let mut found_any = false;
 
-        // Runtime Symex: 0.00408627s
+        // Example: "Runtime Symex: 0.00408627s"
         if let Some(captures) =
             regex::Regex::new(r"Runtime Symex: ([-e\d\.]+)s").ok()?.captures(message)
         {
@@ -682,7 +682,7 @@ impl KaniSession {
             }
         }
 
-        // size of program expression: 150 steps
+        // Example: "size of program expression: 150 steps"
         if let Some(captures) =
             regex::Regex::new(r"size of program expression: (\d+) steps").ok()?.captures(message)
         {
@@ -692,7 +692,7 @@ impl KaniSession {
             }
         }
 
-        // slicing removed 81 assignments
+        // Example: "slicing removed 81 assignments"
         if let Some(captures) =
             regex::Regex::new(r"slicing removed (\d+) assignments").ok()?.captures(message)
         {
@@ -702,7 +702,7 @@ impl KaniSession {
             }
         }
 
-        // Generated 1 VCC(s), 1 remaining after simplification
+        // Example: "Generated 1 VCC(s), 1 remaining after simplification"
         if let Some(captures) =
             regex::Regex::new(r"Generated (\d+) VCC\(s\), (\d+) remaining after simplification")
                 .ok()?
@@ -718,7 +718,7 @@ impl KaniSession {
             }
         }
 
-        // Runtime Postprocess Equation: 0.000767182s
+        // Example: "Runtime Postprocess Equation: 0.000767182s"
         if let Some(captures) =
             regex::Regex::new(r"Runtime Postprocess Equation: ([-e\d\.]+)s").ok()?.captures(message)
         {
@@ -728,7 +728,7 @@ impl KaniSession {
             }
         }
 
-        // Runtime Convert SSA: 0.000516981s
+        // Example: "Runtime Convert SSA: 0.000516981s"
         if let Some(captures) =
             regex::Regex::new(r"Runtime Convert SSA: ([-e\d\.]+)s").ok()?.captures(message)
         {
@@ -738,7 +738,7 @@ impl KaniSession {
             }
         }
 
-        // Runtime Post-process: 0.000189636s
+        // Example: "Runtime Post-process: 0.000189636s"
         if let Some(captures) =
             regex::Regex::new(r"Runtime Post-process: ([-e\d\.]+)s").ok()?.captures(message)
         {
@@ -748,7 +748,7 @@ impl KaniSession {
             }
         }
 
-        // Runtime Solver: 0.00167592s
+        // Example: "Runtime Solver: 0.00167592s"
         if let Some(captures) =
             regex::Regex::new(r"Runtime Solver: ([-e\d\.]+)s").ok()?.captures(message)
         {
@@ -758,7 +758,7 @@ impl KaniSession {
             }
         }
 
-        // Runtime decision procedure: 0.00452419s
+        // Example: "Runtime decision procedure: 0.00452419s"
         if let Some(captures) =
             regex::Regex::new(r"Runtime decision procedure: ([-e\d\.]+)s").ok()?.captures(message)
         {
@@ -993,8 +993,6 @@ impl KaniSession {
                 runtime: start_time.elapsed(),
                 generated_concrete_test: false,
                 coverage_results: None,
-                //})
-                //}
                 cbmc_stats: None,
             })
         }
