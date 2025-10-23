@@ -1092,7 +1092,7 @@ dependencies = [
 
 [[package]]
 name = "kani"
-version = "0.65.1"
+version = "0.65.0"
 dependencies = [
  "kani_core",
  "kani_macros",
