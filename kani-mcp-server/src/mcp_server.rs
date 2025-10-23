@@ -28,34 +28,271 @@ impl KaniMcpServer {
         info!("  Kani MCP Server - Ready for Amazon Q Integration");
         info!("═══════════════════════════════════════════════════════════");
         info!("");
-        info!("📋 Available Tools:");
+        info!("Available Tools:");
         
         for tool in get_kani_tools() {
             info!("  • {} - {}", tool.name, tool.description);
         }
         
         info!("");
-        info!("🔗 Connection: stdio (Standard Input/Output)");
-        info!("🤖 Compatible with: Amazon Q, Claude Desktop, Cursor, etc.");
+        info!("Connection: stdio (Standard Input/Output)");
+        info!("Compatible with: Amazon Q, Claude Desktop, Cursor, etc.");
         info!("");
-        info!("⚡ Server is ready and waiting for requests...");
-        info!("   Press Ctrl+C to stop");
+        info!("Server is ready and waiting for requests...");
         info!("");
 
-        // In a real MCP implementation, you would:
-        // 1. Listen for JSON-RPC messages on stdin
-        // 2. Parse the messages according to MCP protocol
-        // 3. Call the appropriate handler methods
-        // 4. Send responses to stdout
-        //
-        // For now, this is a skeleton that demonstrates the structure
+        // Read from stdin and respond via stdout (MCP protocol)
+        use tokio::io::{AsyncBufReadExt, BufReader, stdin};
+        
+        let stdin = stdin();
+        let reader = BufReader::new(stdin);
+        let mut lines = reader.lines();
 
-        // Keep server alive
-        tokio::signal::ctrl_c().await?;
+        while let Ok(Some(line)) = lines.next_line().await {
+            if line.trim().is_empty() {
+                continue;
+            }
+
+            // Parse JSON-RPC request
+            match serde_json::from_str::<serde_json::Value>(&line) {
+                Ok(request) => {
+                    let response = self.handle_mcp_request(request).await;
+                    
+                    // Send response to stdout
+                    if let Ok(response_str) = serde_json::to_string(&response) {
+                        println!("{}", response_str);
+                    }
+                }
+                Err(e) => {
+                    error!("Failed to parse request: {}", e);
+                }
+            }
+        }
+
         info!("");
-        info!("🛑 Shutting down Kani MCP Server...");
+        info!("Shutting down Kani MCP Server...");
 
         Ok(())
+    }
+
+    /// Handle MCP protocol requests
+    async fn handle_mcp_request(&self, request: serde_json::Value) -> serde_json::Value {
+        use serde_json::json;
+        
+        let method = request["method"].as_str().unwrap_or("");
+        let id = request["id"].clone();
+
+        match method {
+            "initialize" => {
+                info!("📥 Received: initialize");
+                json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "result": {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {
+                            "tools": {}
+                        },
+                        "serverInfo": {
+                            "name": "kani-mcp-server",
+                            "version": "0.1.0"
+                        }
+                    }
+                })
+            }
+            "tools/list" => {
+                info!("Received: tools/list");
+                let tools: Vec<_> = get_kani_tools()
+                    .iter()
+                    .map(|tool| {
+                        json!({
+                            "name": tool.name,
+                            "description": tool.description,
+                            "inputSchema": tool.input_schema
+                        })
+                    })
+                    .collect();
+
+                json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "result": {
+                        "tools": tools
+                    }
+                })
+            }
+            "tools/call" => {
+                let tool_name = request["params"]["name"].as_str().unwrap_or("");
+                let arguments = &request["params"]["arguments"];
+                
+                info!("Received: tools/call - {}", tool_name);
+                
+                let result = self.execute_tool(tool_name, arguments).await;
+                
+                json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "result": result
+                })
+            }
+            _ => {
+                error!("Unknown method: {}", method);
+                json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "error": {
+                        "code": -32601,
+                        "message": format!("Method not found: {}", method)
+                    }
+                })
+            }
+        }
+    }
+
+    /// Execute a specific tool
+    async fn execute_tool(&self, tool_name: &str, arguments: &serde_json::Value) -> serde_json::Value {
+        use serde_json::json;
+
+        match tool_name {
+            "verify_rust_project" => {
+                let path = arguments["path"].as_str().unwrap_or(".");
+                let harness = arguments["harness"].as_str().map(String::from);
+                let tests = arguments["tests"].as_bool().unwrap_or(false);
+                let output_format = arguments["output_format"].as_str().map(String::from);
+
+                match self.handle_verify_project(
+                    path.to_string(),
+                    harness,
+                    tests,
+                    output_format,
+                ).await {
+                    Ok(result) => {
+                        // Store the result for potential later analysis
+                        if let Ok(verification_result) = serde_json::from_value::<VerificationResult>(result.data.clone()) {
+                            *self.last_result.lock().await = Some(verification_result);
+                        }
+
+                        json!({
+                            "content": [{
+                                "type": "text",
+                                "text": serde_json::to_string_pretty(&result.data).unwrap_or_default()
+                            }]
+                        })
+                    }
+                    Err(e) => {
+                        json!({
+                            "content": [{
+                                "type": "text",
+                                "text": format!("Error: {}", e)
+                            }],
+                            "isError": true
+                        })
+                    }
+                }
+            }
+            "verify_unsafe_code" => {
+                let path = arguments["path"].as_str().unwrap_or(".").to_string();
+                let harness = arguments["harness"].as_str().unwrap_or("").to_string();
+
+                match self.handle_verify_unsafe(path, harness).await {
+                    Ok(result) => {
+                        json!({
+                            "content": [{
+                                "type": "text",
+                                "text": serde_json::to_string_pretty(&result.data).unwrap_or_default()
+                            }]
+                        })
+                    }
+                    Err(e) => {
+                        json!({
+                            "content": [{
+                                "type": "text",
+                                "text": format!("Error: {}", e)
+                            }],
+                            "isError": true
+                        })
+                    }
+                }
+            }
+            "explain_kani_failure" => {
+                // Try to get raw output from arguments or from last result
+                let raw_output = if let Some(output_str) = arguments["raw_output"].as_str() {
+                    output_str.to_string()
+                } else {
+                    // Use the last verification result if available
+                    let last = self.last_result.lock().await;
+                    last.as_ref()
+                        .map(|r| r.raw_output.clone())
+                        .unwrap_or_default()
+                };
+
+                if raw_output.is_empty() {
+                    return json!({
+                        "content": [{
+                            "type": "text",
+                            "text": "No verification output available. Please run a verification first."
+                        }],
+                        "isError": true
+                    });
+                }
+
+                match self.handle_explain_failure(raw_output).await {
+                    Ok(result) => {
+                        json!({
+                            "content": [{
+                                "type": "text",
+                                "text": result.data["detailed_explanation"].as_str().unwrap_or("No explanation available")
+                            }]
+                        })
+                    }
+                    Err(e) => {
+                        json!({
+                            "content": [{
+                                "type": "text",
+                                "text": format!("Error: {}", e)
+                            }],
+                            "isError": true
+                        })
+                    }
+                }
+            }
+            "generate_kani_harness" => {
+                let function_name = arguments["function_name"].as_str().unwrap_or("").to_string();
+                let properties = arguments["properties"]
+                    .as_array()
+                    .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                    .unwrap_or_else(Vec::new);
+
+                match self.handle_generate_harness(function_name, properties).await {
+                    Ok(result) => {
+                        json!({
+                            "content": [{
+                                "type": "text",
+                                "text": result.data["harness_code"].as_str().unwrap_or("")
+                            }]
+                        })
+                    }
+                    Err(e) => {
+                        json!({
+                            "content": [{
+                                "type": "text",
+                                "text": format!("Error: {}", e)
+                            }],
+                            "isError": true
+                        })
+                    }
+                }
+            }
+            _ => {
+                json!({
+                    "content": [{
+                        "type": "text",
+                        "text": format!("Unknown tool: {}", tool_name)
+                    }],
+                    "isError": true
+                })
+            }
+        }
     }
 
     /// Handle verify_rust_project tool call
@@ -105,43 +342,40 @@ impl KaniMcpServer {
         path: String,
         harness: String,
     ) -> Result<ToolResult> {
-        info!("🔍 Tool called: verify_unsafe_code");
+        info!("Tool called: verify_unsafe_code");
         
         // This is essentially the same as verify_project but focused on unsafe code
         self.handle_verify_project(path, Some(harness), false, Some("terse".to_string())).await
     }
 
-    /// Handle explain_kani_failure tool call
+    /// Handle explain_kani_failure tool call with enhanced analysis
     pub async fn handle_explain_failure(&self, raw_output: String) -> Result<ToolResult> {
-        info!("🔍 Tool called: explain_kani_failure");
+        info!("Tool called: explain_kani_failure");
         
         use crate::parser::KaniOutputParser;
         
         let parser = KaniOutputParser::new(&raw_output);
         let failed_checks = parser.parse_failed_checks();
         let harnesses = parser.parse_harnesses();
-
-        let explanation = format!(
-            "Kani verification failed with {} issue(s):\n\n{}",
-            failed_checks.len(),
-            failed_checks.iter()
-                .map(|check| format!(
-                    "• {} at {}:{} in {}", 
-                    check.description,
-                    check.file,
-                    check.line.map(|l| l.to_string()).unwrap_or_else(|| "?".to_string()),
-                    check.function
-                ))
-                .collect::<Vec<_>>()
-                .join("\n")
-        );
+        let counterexamples = parser.parse_counterexamples();
+        let code_context = parser.extract_code_context();
+        
+        // Generate comprehensive explanation
+        let detailed_explanation = parser.generate_detailed_explanation();
 
         Ok(ToolResult {
             success: true,
             data: serde_json::json!({
-                "explanation": explanation,
+                "detailed_explanation": detailed_explanation,
                 "failed_checks": failed_checks,
                 "harnesses": harnesses,
+                "counterexamples": counterexamples,
+                "code_context": code_context,
+                "summary": format!(
+                    "Found {} failure(s) across {} harness(es)",
+                    failed_checks.len(),
+                    harnesses.len()
+                )
             }),
             error: None,
         })
