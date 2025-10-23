@@ -16,8 +16,8 @@ async fn main() -> Result<()> {
         )
         .init();
 
-    println!("🚀 Kani MCP Server - Model Context Protocol for Kani Rust Verifier");
-    println!("📋 Purpose: Enable AI assistants like Amazon Q to run Kani verification");
+    println!("Kani MCP Server - Model Context Protocol for Kani Rust Verifier");
+    println!("Purpose: Enable AI assistants like Amazon Q to run Kani verification");
     println!();
 
     // Create and run server

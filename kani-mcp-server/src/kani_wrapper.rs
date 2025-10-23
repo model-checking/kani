@@ -194,9 +194,9 @@ impl KaniWrapper {
             .count();
         
         let summary = if success {
-            format!("✅ Verification successful! {} harness(es) verified.", total_harnesses)
+            format!("Verification successful! {} harness(es) verified.", total_harnesses)
         } else {
-            format!("❌ Verification failed. {}/{} harness(es) failed with {} check failure(s).", 
+            format!("Verification failed. {}/{} harness(es) failed with {} check failure(s).", 
                     failed_harnesses, total_harnesses, failed_checks.len())
         };
 
