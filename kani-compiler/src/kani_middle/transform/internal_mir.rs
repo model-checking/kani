@@ -195,8 +195,6 @@ impl RustcInternalMir for NullOp {
 
     fn internal_mir<'tcx>(&self, tcx: TyCtxt<'tcx>) -> Self::T<'tcx> {
         match self {
-            NullOp::SizeOf => rustc_middle::mir::NullOp::SizeOf,
-            NullOp::AlignOf => rustc_middle::mir::NullOp::AlignOf,
             NullOp::OffsetOf(offsets) => rustc_middle::mir::NullOp::OffsetOf(
                 tcx.mk_offset_of(
                     offsets
