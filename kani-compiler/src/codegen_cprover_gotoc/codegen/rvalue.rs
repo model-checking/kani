@@ -827,9 +827,6 @@ impl GotocCtx<'_, '_> {
             Rvalue::NullaryOp(k, t) => {
                 let layout = self.layout_of_stable(*t);
                 match k {
-                    NullOp::SizeOf => Expr::int_constant(layout.size.bytes_usize(), Type::size_t())
-                        .with_size_of_annotation(self.codegen_ty_stable(*t)),
-                    NullOp::AlignOf => Expr::int_constant(layout.align.abi.bytes(), Type::size_t()),
                     NullOp::OffsetOf(fields) => Expr::int_constant(
                         self.tcx
                             .offset_of_subfield(

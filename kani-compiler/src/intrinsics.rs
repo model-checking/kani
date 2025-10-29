@@ -14,6 +14,7 @@ use rustc_public::{
 #[derive(Clone, Debug)]
 pub enum Intrinsic {
     AddWithOverflow,
+    AlignOf,
     AlignOfVal,
     ArithOffset,
     AssertInhabited,
@@ -123,6 +124,7 @@ pub enum Intrinsic {
     SimdShuffle(String),
     SimdSub,
     SimdXor,
+    SizeOf,
     SizeOfVal,
     SqrtF32,
     SqrtF64,
@@ -177,9 +179,10 @@ impl Intrinsic {
                 assert_sig_matches!(sig, _, _ => RigidTy::Tuple(_));
                 Self::AddWithOverflow
             }
-            "align_of" => unreachable!(
-                "Expected `core::intrinsics::align_of` to be handled by NullOp::SizeOf"
-            ),
+            "align_of" => {
+                Self::AlignOf
+                //"Expected `core::intrinsics::align_of` to be handled by NullOp::SizeOf"
+            }
             "align_of_val" => {
                 assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Not) => RigidTy::Uint(UintTy::Usize));
                 Self::AlignOfVal
@@ -356,9 +359,7 @@ impl Intrinsic {
                 assert_sig_matches!(sig, _, _ => _);
                 Self::SaturatingSub
             }
-            "size_of" => {
-                unreachable!("Expected `core::intrinsics::size_of` to be handled by NullOp::SizeOf")
-            }
+            "size_of" => Self::SizeOf,
             "size_of_val" => {
                 assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Not) => RigidTy::Uint(UintTy::Usize));
                 Self::SizeOfVal
