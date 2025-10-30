@@ -60,7 +60,7 @@ pub fn get_kani_tools() -> Vec<ToolDefinition> {
             }),
         },
         ToolDefinition {
-            name: "explain_kani_failure".to_string(),
+            name: "explain_failure".to_string(),
             description: "Analyze and explain why a Kani verification failed, providing details about counterexamples and suggested fixes.".to_string(),
             input_schema: json!({
                 "type": "object",

@@ -52,7 +52,7 @@ members = [
   "kani-driver",
   "kani-compiler",
   "kani_metadata",
-  "library/kani_core",
+  "library/kani_core", "kani-mcp-server",
 ]
 
 # This indicates what package to e.g. build with 'cargo build' without --workspace
@@ -60,6 +60,7 @@ default-members = [
   ".",
   "kani-driver",
   "kani-compiler",
+  "kani-mcp-server",
 ]
 
 exclude = [
