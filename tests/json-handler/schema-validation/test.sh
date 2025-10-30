@@ -33,7 +33,7 @@ echo ""
 echo "Validating individual fields from schema:"
 
 # Get all top-level keys from schema and validate each that exists in JSON
-SCHEMA_FILE="$PROJECT_ROOT/scripts/json_schemas/kani_json_schema.json"
+SCHEMA_FILE="$(dirname "$0")/kani_json_schema.json"
 python3 << EOF
 import json
 import subprocess

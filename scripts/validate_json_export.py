@@ -13,9 +13,15 @@ from pathlib import Path
 
 def load_schema_template():
     """Load the JSON schema template"""
-    # Find schema template in scripts directory
+    # Find schema template in tests/json-handler/schema-validation directory
     script_dir = Path(__file__).parent
-    schema_path = script_dir / "json_schemas" / "kani_json_schema.json"
+    schema_path = (
+        script_dir.parent
+        / "tests"
+        / "json-handler"
+        / "schema-validation"
+        / "kani_json_schema.json"
+    )
 
     if not schema_path.exists():
         print(f"ERROR: Schema template not found at {schema_path}")
@@ -41,15 +47,20 @@ def validate_structure_recursive(data, schema, path=""):
 
     # Handle dict validation
     if isinstance(schema, dict) and isinstance(data, dict):
-        # All fields in schema are required
+        # Get optional fields list (fields that may or may not be present)
+        optional_fields = schema.get("_optional", [])
+
+        # All fields in schema are required except metadata fields (starting with _) and optional fields
         schema_keys = [k for k in schema.keys() if not k.startswith("_")]
 
         # Check each key in schema
         for key in schema_keys:
             # Check if field exists in data
             if key not in data:
-                current_path = f"{path}.{key}" if path else key
-                errors.append(f"Missing required field: {current_path}")
+                # Only report error if field is required (not in optional list)
+                if key not in optional_fields:
+                    current_path = f"{path}.{key}" if path else key
+                    errors.append(f"Missing required field: {current_path}")
                 continue
 
             # Recursively validate nested structure
