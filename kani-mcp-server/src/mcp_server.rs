@@ -4,7 +4,6 @@ use anyhow::Result;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tracing::{error, info};
 
 /// Main MCP server for Kani integration
 pub struct KaniMcpServer {
@@ -24,23 +23,6 @@ impl KaniMcpServer {
 
     /// Run the MCP server
     pub async fn run(self) -> Result<()> {
-        info!("═══════════════════════════════════════════════════════════");
-        info!("  Kani MCP Server - Ready for Amazon Q Integration");
-        info!("═══════════════════════════════════════════════════════════");
-        info!("");
-        info!("Available Tools:");
-        
-        for tool in get_kani_tools() {
-            info!("  • {} - {}", tool.name, tool.description);
-        }
-        
-        info!("");
-        info!("Connection: stdio (Standard Input/Output)");
-        info!("Compatible with: Amazon Q, Claude Desktop, Cursor, etc.");
-        info!("");
-        info!("Server is ready and waiting for requests...");
-        info!("");
-
         // Read from stdin and respond via stdout (MCP protocol)
         use tokio::io::{AsyncBufReadExt, BufReader, stdin};
         
@@ -58,19 +40,19 @@ impl KaniMcpServer {
                 Ok(request) => {
                     let response = self.handle_mcp_request(request).await;
                     
-                    // Send response to stdout
-                    if let Ok(response_str) = serde_json::to_string(&response) {
-                        println!("{}", response_str);
+                    // Send response to stdout (skip null responses for notifications)
+                    if !response.is_null() {
+                        if let Ok(response_str) = serde_json::to_string(&response) {
+                            println!("{}", response_str);
+                        }
                     }
                 }
-                Err(e) => {
-                    error!("Failed to parse request: {}", e);
+                Err(_e) => {
+                    // Silently ignore parse errors to avoid broken pipe
+                    continue;
                 }
             }
         }
-
-        info!("");
-        info!("Shutting down Kani MCP Server...");
 
         Ok(())
     }
@@ -84,7 +66,6 @@ impl KaniMcpServer {
 
         match method {
             "initialize" => {
-                info!("📥 Received: initialize");
                 json!({
                     "jsonrpc": "2.0",
                     "id": id,
@@ -100,8 +81,12 @@ impl KaniMcpServer {
                     }
                 })
             }
+            "notifications/initialized" => {
+                // Client confirms initialization is complete
+                // Notifications don't get responses - return null
+                json!(null)
+            }
             "tools/list" => {
-                info!("Received: tools/list");
                 let tools: Vec<_> = get_kani_tools()
                     .iter()
                     .map(|tool| {
@@ -125,8 +110,6 @@ impl KaniMcpServer {
                 let tool_name = request["params"]["name"].as_str().unwrap_or("");
                 let arguments = &request["params"]["arguments"];
                 
-                info!("Received: tools/call - {}", tool_name);
-                
                 let result = self.execute_tool(tool_name, arguments).await;
                 
                 json!({
@@ -136,7 +119,6 @@ impl KaniMcpServer {
                 })
             }
             _ => {
-                error!("Unknown method: {}", method);
                 json!({
                     "jsonrpc": "2.0",
                     "id": id,
@@ -214,7 +196,7 @@ impl KaniMcpServer {
                     }
                 }
             }
-            "explain_kani_failure" => {
+            "explain_failure" => {
                 // Try to get raw output from arguments or from last result
                 let raw_output = if let Some(output_str) = arguments["raw_output"].as_str() {
                     output_str.to_string()
@@ -303,9 +285,6 @@ impl KaniMcpServer {
         tests: bool,
         output_format: Option<String>,
     ) -> Result<ToolResult> {
-        info!("🔍 Tool called: verify_rust_project");
-        info!("   Path: {}", path);
-        
         let options = KaniOptions {
             path: PathBuf::from(path),
             harness: harness.clone(),
@@ -326,7 +305,6 @@ impl KaniMcpServer {
                 })
             }
             Err(e) => {
-                error!("Verification error: {}", e);
                 Ok(ToolResult {
                     success: false,
                     data: serde_json::json!({}),
@@ -342,16 +320,12 @@ impl KaniMcpServer {
         path: String,
         harness: String,
     ) -> Result<ToolResult> {
-        info!("Tool called: verify_unsafe_code");
-        
         // This is essentially the same as verify_project but focused on unsafe code
         self.handle_verify_project(path, Some(harness), false, Some("terse".to_string())).await
     }
 
     /// Handle explain_kani_failure tool call with enhanced analysis
     pub async fn handle_explain_failure(&self, raw_output: String) -> Result<ToolResult> {
-        info!("Tool called: explain_kani_failure");
-        
         use crate::parser::KaniOutputParser;
         
         let parser = KaniOutputParser::new(&raw_output);
@@ -387,8 +361,6 @@ impl KaniMcpServer {
         function_name: String,
         properties: Vec<String>,
     ) -> Result<ToolResult> {
-        info!("🔍 Tool called: generate_kani_harness");
-        
         let harness_code = format!(
 r#"#[cfg(kani)]
 mod verification {{
