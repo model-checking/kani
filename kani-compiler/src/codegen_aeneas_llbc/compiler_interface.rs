@@ -444,6 +444,7 @@ fn get_transform_options(tcx: &TranslatedCrate, error_ctx: &mut ErrorCtx) -> Tra
         no_merge_goto_chains: false,
         item_opacities,
         print_built_llbc: true,
+        remove_associated_types: Vec::new(),
     }
 }
 

@@ -442,7 +442,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             trait_clauses: CharonVector::new(),
             regions_outlive: Vec::new(),
             types_outlive: Vec::new(),
-            trait_type_constraints: Vec::new(),
+            trait_type_constraints: CharonVector::new(),
         }
     }
 
@@ -523,7 +523,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             trait_clauses,
             regions_outlive: Vec::new(),
             types_outlive: Vec::new(),
-            trait_type_constraints: Vec::new(),
+            trait_type_constraints: CharonVector::new(),
         }
     }
 
@@ -595,7 +595,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             trait_clauses,
             regions_outlive: Vec::new(),
             types_outlive: Vec::new(),
-            trait_type_constraints: Vec::new(),
+            trait_type_constraints: CharonVector::new(),
         }
     }
 

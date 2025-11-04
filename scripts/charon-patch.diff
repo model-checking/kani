@@ -24,3 +24,16 @@ index 59f7eaab..21508e19 100644
          self.vector.indices()
      }
  
+diff --git a/charon/src/transform/expand_associated_types.rs b/charon/src/transform/expand_associated_types.rs
+index 19978d56..c98c8e0e 100644
+--- a/charon/src/transform/expand_associated_types.rs
++++ b/charon/src/transform/expand_associated_types.rs
+@@ -761,7 +761,7 @@ impl<'a> ComputeItemModifications<'a> {
+         &'b mut self,
+         clause: &TraitClause,
+         clause_to_path: F,
+-    ) -> impl Iterator<Item = AssocTypePath> + use<'b, F>
++    ) -> impl Iterator<Item = AssocTypePath> + use<'a, 'b, F>
+     where
+         F: Fn(TraitClauseId) -> TraitRefPath,
+     {
