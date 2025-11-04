@@ -1253,7 +1253,11 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 },
             };
             let subs_traitref = CharonTraitRef {
-                kind: CharonTraitRefKind::BuiltinOrAuto(subs_traitdeclref.clone()),
+                kind: CharonTraitRefKind::BuiltinOrAuto {
+                    trait_decl_ref: subs_traitdeclref.clone(),
+                    parent_trait_refs: CharonVector::new(),
+                    types: Vec::new(),
+                },
                 trait_decl_ref: subs_traitdeclref,
             };
             trait_refs.push(subs_traitref);
