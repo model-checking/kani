@@ -4,7 +4,7 @@ index 20f8a9df..a1bf1ee6 100644
 +++ b/charon/Cargo.toml
 @@ -2,7 +2,7 @@
  name = "charon"
- version = "0.1.62"
+ version = "0.1.65"
  authors = ["Son Ho <hosonmarc@gmail.com>"]
 -edition = "2021"
 +edition = "2024"
