@@ -52,7 +52,7 @@ use charon_lib::ullbc_ast::{
     RawTerminator as CharonRawTerminator, Statement as CharonStatement,
     SwitchTargets as CharonSwitchTargets, Terminator as CharonTerminator,
 };
-use charon_lib::{error_assert, error_or_panic};
+use charon_lib::{error_assert, raise_error, register_error};
 use core::panic;
 use rustc_data_structures::fx::FxHashMap;
 use rustc_middle::ty::{TyCtxt, TypingEnv};
@@ -114,8 +114,8 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         self.tcx
     }
 
-    fn span_err(&mut self, span: CharonSpan, msg: &str) {
-        self.errors.span_err(self.translated, span, msg);
+    fn span_err(&mut self, span: CharonSpan, msg: &str) -> CharonError {
+        self.errors.span_err(self.translated, span, msg)
     }
 
     fn continue_on_failure(&self) -> bool {
@@ -857,7 +857,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     // block.
                 }
                 _ => {
-                    error_or_panic!(self, span, format!("Unexpected DefPathData: {:?}", data));
+                    raise_error!(self, span, "Unexpected DefPathData: {:?}", data);
                 }
             }
         }
@@ -1000,7 +1000,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     // block.
                 }
                 _ => {
-                    error_or_panic!(self, span, format!("Unexpected DefPathData: {:?}", data));
+                    raise_error!(self, span, "Unexpected DefPathData: {:?}", data);
                 }
             }
         }
@@ -1106,7 +1106,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     // block.
                 }
                 _ => {
-                    error_or_panic!(self, span, format!("Unexpected DefPathData: {:?}", data));
+                    raise_error!(self, span, "Unexpected DefPathData: {:?}", data);
                 }
             }
         }

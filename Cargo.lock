@@ -277,6 +277,8 @@ dependencies = [
  "macros",
  "nom",
  "nom-supreme",
+ "num-bigint",
+ "num-rational",
  "petgraph 0.6.5",
  "rustc_version",
  "serde",
