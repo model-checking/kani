@@ -1492,7 +1492,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         };
         if let Some(content) = content {
             let span = self.translate_span(stmt.span);
-            return Some(CharonStatement { span, content });
+            return Some(CharonStatement { span, content, comments_before: Vec::new() });
         };
         None
     }
@@ -1563,8 +1563,12 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             _ => todo!(),
         };
         (
-            statement.map(|statement| CharonStatement { span, content: statement }),
-            CharonTerminator { span, content: terminator },
+            statement.map(|statement| CharonStatement {
+                span,
+                content: statement,
+                comments_before: Vec::new(),
+            }),
+            CharonTerminator { span, content: terminator, comments_before: Vec::new() },
         )
     }
 
