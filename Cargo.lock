@@ -265,7 +265,7 @@ checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
 
 [[package]]
 name = "charon"
-version = "0.1.62"
+version = "0.1.65"
 dependencies = [
  "annotate-snippets",
  "anstream",
@@ -276,8 +276,8 @@ dependencies = [
  "convert_case",
  "derive_generic_visitor",
  "env_logger",
- "hashlink",
  "index_vec",
+ "indexmap",
  "indoc",
  "itertools 0.13.0",
  "lazy_static",
@@ -285,6 +285,8 @@ dependencies = [
  "macros",
  "nom",
  "nom-supreme",
+ "num-bigint",
+ "num-rational",
  "petgraph 0.6.5",
  "rustc_version",
  "serde",
@@ -807,15 +809,6 @@ dependencies = [
 
 [[package]]
 name = "hashbrown"
-version = "0.14.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e5274423e17b7c9fc20b6e7e208532f9b19825d82dfd615708b70edd83df41f1"
-dependencies = [
- "ahash",
-]
-
-[[package]]
-name = "hashbrown"
 version = "0.15.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9229cfe53dfd69f0609a49f65461bd93001ea1ef889cd5529dd176593f5338a1"
@@ -828,16 +821,6 @@ name = "hashbrown"
 version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5419bdc4f6a9207fbeba6d11b604d481addf78ecd10c11ad51e76c2f6482748d"
-
-[[package]]
-name = "hashlink"
-version = "0.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6ba4ff7128dee98c7dc9794b6a411377e1404dba1c97deb8d1a55297bd25d8af"
-dependencies = [
- "hashbrown 0.14.5",
- "serde",
-]
 
 [[package]]
 name = "heck"
@@ -1009,6 +992,8 @@ checksum = "6717a8d2a5a929a1a2eb43a12812498ed141a0bcfb7e8f7844fbdbe4303bba9f"
 dependencies = [
  "equivalent",
  "hashbrown 0.16.0",
+ "serde",
+ "serde_core",
 ]
 
 [[package]]
