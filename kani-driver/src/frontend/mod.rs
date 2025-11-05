@@ -9,3 +9,6 @@ pub mod schema_utils;
 
 pub use json_handler::JsonHandler;
 pub use schema_utils::*;
+
+#[cfg(test)]
+mod tests;
