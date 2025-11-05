@@ -1,11 +1,15 @@
-use crate::frontend::schema_utils::{create_metadata_json, create_project_metadata_json, create_harness_metadata_json, create_verification_result_json, create_verification_summary_json, add_runner_results_to_json};
-use kani_metadata::{KaniMetadata, HarnessMetadata, HarnessAttributes, HarnessKind};
-use crate::project::Project;
-use std::path::PathBuf;
-use crate::harness_runner::HarnessResult;
-use crate::call_cbmc::{VerificationResult, VerificationStatus, FailedProperties, ExitStatus};
-use crate::cbmc_output_parser::{Property, PropertyId, SourceLocation, CheckStatus};
+use crate::call_cbmc::{ExitStatus, FailedProperties, VerificationResult, VerificationStatus};
+use crate::cbmc_output_parser::{CheckStatus, Property, PropertyId, SourceLocation};
 use crate::frontend::JsonHandler;
+use crate::frontend::schema_utils::{
+    add_runner_results_to_json, create_harness_metadata_json, create_metadata_json,
+    create_project_metadata_json, create_verification_result_json,
+    create_verification_summary_json,
+};
+use crate::harness_runner::HarnessResult;
+use crate::project::Project;
+use kani_metadata::{HarnessAttributes, HarnessKind, HarnessMetadata, KaniMetadata};
+use std::path::PathBuf;
 use std::time::Duration;
 #[test]
 fn test_create_metadata_json() {
@@ -115,7 +119,6 @@ fn test_create_verification_result_json() {
             trace: None,
         },
     ];
-    
 
     let verification_result = VerificationResult {
         status: VerificationStatus::Failure,
@@ -127,10 +130,7 @@ fn test_create_verification_result_json() {
         cbmc_stats: None,
     };
 
-    let harness_result = HarnessResult {
-        harness: &harness,
-        result: verification_result,
-    };
+    let harness_result = HarnessResult { harness: &harness, result: verification_result };
 
     let json = create_verification_result_json(&harness_result);
 
@@ -165,10 +165,7 @@ fn test_create_verification_summary_json_real() {
     // Create a VerificationResult
     let verification_result = VerificationResult::mock_success();
 
-    let harness_result = HarnessResult {
-        harness: &harness,
-        result: verification_result,
-    };
+    let harness_result = HarnessResult { harness: &harness, result: verification_result };
 
     let json = create_verification_summary_json(&[harness_result], 1, "Completed");
 
@@ -196,7 +193,7 @@ fn test_add_runner_results_to_json_real() {
         is_automatically_generated: false,
     };
 
-    let verification_result = VerificationResult{
+    let verification_result = VerificationResult {
         status: VerificationStatus::Failure,
         failed_properties: FailedProperties::Other,
         results: Err(ExitStatus::Other(42)),
@@ -206,10 +203,7 @@ fn test_add_runner_results_to_json_real() {
         cbmc_stats: None,
     };
 
-    let harness_result = HarnessResult {
-        harness: &harness,
-        result: verification_result,
-    };
+    let harness_result = HarnessResult { harness: &harness, result: verification_result };
 
     let mut handler = JsonHandler::new(None);
     add_runner_results_to_json(&mut handler, &[harness_result], 1, "Failed");
