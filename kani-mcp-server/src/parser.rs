@@ -16,7 +16,6 @@ impl<'a> KaniOutputParser<'a> {
         let mut current_harness: Option<String> = None;
 
         for line in self.output.lines() {
-            // Detect harness start: "Checking harness module::function..."
             if line.contains("Checking harness") {
                 if let Some(name_part) = line.split("Checking harness").nth(1) {
                     current_harness = Some(name_part.trim().trim_end_matches("...").to_string());
@@ -52,7 +51,6 @@ impl<'a> KaniOutputParser<'a> {
         let mut failed_checks = Vec::new();
         
         for line in self.output.lines() {
-            // Look for "Check N: ..." followed by "- Status: FAILURE"
             if line.contains("Check ") && line.contains(":") {
                 let check_info = self.parse_single_check(line);
                 if let Some(check) = check_info {
@@ -74,9 +72,7 @@ impl<'a> KaniOutputParser<'a> {
                     break;
                 }
 
-                // Parse format: "description File: "path", line X, in function"
                 if let Some(check) = self.parse_failed_check_line(line) {
-                    // Avoid duplicates
                     if !failed_checks.iter().any(|c| c.description == check.description && c.line == check.line) {
                         failed_checks.push(check);
                     }
@@ -89,10 +85,6 @@ impl<'a> KaniOutputParser<'a> {
 
     /// Parse a single check result line
     fn parse_single_check(&self, line: &str) -> Option<FailedCheck> {
-        // Format: "Check 1: function.assertion.1"
-        //         "         - Status: FAILURE"
-        //         "         - Description: "Oh no, a failing corner case!""
-        //         "         - Location: ./path/file.rs:14:13 in function func_name"
         
         let check_num = line.split("Check").nth(1)?.split(':').next()?.trim();
         
@@ -124,7 +116,6 @@ impl<'a> KaniOutputParser<'a> {
             
             if detail_line.contains("- Location:") {
                 let location = detail_line.split("- Location:").nth(1)?.trim();
-                // Format: "./path/file.rs:14:13 in function func_name"
                 let parts: Vec<&str> = location.split(" in function ").collect();
                 
                 if let Some(file_part) = parts.first() {
@@ -155,7 +146,6 @@ impl<'a> KaniOutputParser<'a> {
 
     /// Parse a line from the "Failed Checks:" section
     fn parse_failed_check_line(&self, line: &str) -> Option<FailedCheck> {
-        // Format: "description File: "path", line X, in function"
         let description = line.split("File:").next()?.trim().to_string();
         
         if let Some(file_part) = line.split("File:").nth(1) {
@@ -207,12 +197,10 @@ impl<'a> KaniOutputParser<'a> {
         let mut counterexamples = Vec::new();
         
         for line in self.output.lines() {
-            // Look for SAT checker results or counterexample traces
             if line.contains("SAT checker: instance is SATISFIABLE") {
                 counterexamples.push("Counterexample found (inputs exist that violate the property)".to_string());
             }
             
-            // Look for specific variable assignments in traces
             if line.contains("Violated property:") || line.contains("Counterexample:") {
                 counterexamples.push(line.trim().to_string());
             }
@@ -223,7 +211,6 @@ impl<'a> KaniOutputParser<'a> {
 
     /// Extract code context from output
     pub fn extract_code_context(&self) -> Option<String> {
-        // Kani sometimes shows code snippets in output
         for line in self.output.lines() {
             if line.contains("-->") && line.contains(".rs:") {
                 return Some(line.trim().to_string());

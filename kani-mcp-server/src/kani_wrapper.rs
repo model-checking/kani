@@ -7,28 +7,13 @@ use tracing::{debug, info, warn};
 /// Configuration options for running Kani verification
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KaniOptions {
-    /// Path to the Rust project to verify
     pub path: PathBuf,
-    
-    /// Specific harness to run (e.g., "module::function")
     pub harness: Option<String>,
-    
-    /// Run all tests as verification harnesses
     pub tests: bool,
-    
-    /// Output format: regular, terse, old, json
     pub output_format: String,
-    
-    /// Enable unstable Kani features
     pub enable_unstable: Vec<String>,
-    
-    /// Additional arguments to pass to Kani
     pub extra_args: Vec<String>,
-    
-    /// Enable concrete playback for counterexamples
     pub concrete_playback: bool,
-    
-    /// Enable coverage information
     pub coverage: bool,
 }
 
@@ -50,22 +35,11 @@ impl Default for KaniOptions {
 /// Result of a Kani verification run
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VerificationResult {
-    /// Whether verification succeeded
     pub success: bool,
-    
-    /// Human-readable summary
     pub summary: String,
-    
-    /// List of harness results
     pub harnesses: Vec<HarnessResult>,
-    
-    /// Failed checks with details
     pub failed_checks: Vec<FailedCheck>,
-    
-    /// Verification time in seconds
     pub verification_time: Option<f64>,
-    
-    /// Raw output from Kani
     pub raw_output: String,
 }
 
@@ -110,45 +84,37 @@ impl KaniWrapper {
             anyhow::bail!("Path does not exist: {:?}", options.path);
         }
 
-        // Build the command
         let mut cmd = Command::new(&self.cargo_kani_path);
         cmd.arg("kani");
         cmd.current_dir(&options.path);
 
-        // Add harness filter
         if let Some(harness) = &options.harness {
             cmd.arg("--harness").arg(harness);
             info!("  Filtering to harness: {}", harness);
         }
 
-        // Run tests as harnesses
         if options.tests {
             cmd.arg("--tests");
             info!("  Running all tests as harnesses");
         }
 
-        // Set output format
         if !options.output_format.is_empty() {
             cmd.arg(format!("--output-format={}", options.output_format));
         }
 
-        // Enable unstable features
         for feature in &options.enable_unstable {
             cmd.arg("--enable-unstable").arg(feature);
         }
 
-        // Concrete playback
         if options.concrete_playback {
             cmd.arg("-Z").arg("concrete-playback");
             cmd.arg("--concrete-playback=print");
         }
 
-        // Coverage
         if options.coverage {
             cmd.arg("--coverage");
         }
 
-        // Extra arguments
         for arg in &options.extra_args {
             cmd.arg(arg);
         }
