@@ -9,7 +9,6 @@ use tracing_subscriber::EnvFilter;
 #[tokio::main]
 async fn main() -> Result<()> {
     // Only initialize logging if explicitly requested via environment variable
-    // This prevents "Broken pipe" errors when stderr is closed by the MCP client
     if std::env::var("KANI_MCP_LOG").is_ok() {
         tracing_subscriber::fmt()
             .with_env_filter(

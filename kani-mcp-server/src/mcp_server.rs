@@ -12,7 +12,6 @@ pub struct KaniMcpServer {
 }
 
 impl KaniMcpServer {
-    /// Create a new Kani MCP server
     pub fn new() -> Result<Self> {
         let kani = Arc::new(KaniWrapper::new()?);
         Ok(Self {
@@ -23,7 +22,6 @@ impl KaniMcpServer {
 
     /// Run the MCP server
     pub async fn run(self) -> Result<()> {
-        // Read from stdin and respond via stdout (MCP protocol)
         use tokio::io::{AsyncBufReadExt, BufReader, stdin};
         
         let stdin = stdin();
@@ -40,7 +38,6 @@ impl KaniMcpServer {
                 Ok(request) => {
                     let response = self.handle_mcp_request(request).await;
                     
-                    // Send response to stdout (skip null responses for notifications)
                     if !response.is_null() {
                         if let Ok(response_str) = serde_json::to_string(&response) {
                             println!("{}", response_str);
@@ -82,8 +79,6 @@ impl KaniMcpServer {
                 })
             }
             "notifications/initialized" => {
-                // Client confirms initialization is complete
-                // Notifications don't get responses - return null
                 json!(null)
             }
             "tools/list" => {
@@ -201,7 +196,6 @@ impl KaniMcpServer {
                 let raw_output = if let Some(output_str) = arguments["raw_output"].as_str() {
                     output_str.to_string()
                 } else {
-                    // Use the last verification result if available
                     let last = self.last_result.lock().await;
                     last.as_ref()
                         .map(|r| r.raw_output.clone())
@@ -295,7 +289,6 @@ impl KaniMcpServer {
 
         match self.kani.verify(options).await {
             Ok(result) => {
-                // Store result for later reference
                 *self.last_result.lock().await = Some(result.clone());
 
                 Ok(ToolResult {
@@ -320,7 +313,6 @@ impl KaniMcpServer {
         path: String,
         harness: String,
     ) -> Result<ToolResult> {
-        // This is essentially the same as verify_project but focused on unsafe code
         self.handle_verify_project(path, Some(harness), false, Some("terse".to_string())).await
     }
 
@@ -334,7 +326,6 @@ impl KaniMcpServer {
         let counterexamples = parser.parse_counterexamples();
         let code_context = parser.extract_code_context();
         
-        // Generate comprehensive explanation
         let detailed_explanation = parser.generate_detailed_explanation();
 
         Ok(ToolResult {
