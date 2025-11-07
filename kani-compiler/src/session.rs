@@ -59,7 +59,7 @@ static JSON_PANIC_HOOK: LazyLock<Box<dyn Fn(&panic::PanicHookInfo<'_>) + Sync + 
                 Some(Arc::new(SourceMap::new(FilePathMapping::empty()))),
                 default_translator(),
                 false,
-                HumanReadableErrorType::Default,
+                HumanReadableErrorType::Default { short: false },
                 ColorConfig::Never,
             );
             let registry = ErrorRegistry::new(&[]);
