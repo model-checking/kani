@@ -404,7 +404,7 @@ impl KaniSession {
                 generated_concrete_test: false,
                 coverage_results: None,
                 cbmc_stats: None,
-            }
+            })
         }
 
         Ok(verification_results)
