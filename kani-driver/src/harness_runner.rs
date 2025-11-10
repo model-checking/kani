@@ -10,6 +10,7 @@ use std::path::Path;
 
 use crate::args::{NumThreads, OutputFormat};
 use crate::call_cbmc::{VerificationResult, VerificationStatus};
+use crate::frontend::{JsonHandler, schema_utils::add_runner_results_to_json};
 use crate::project::Project;
 use crate::session::{BUG_REPORT_URL, KaniSession};
 
@@ -54,6 +55,7 @@ impl<'pr> HarnessRunner<'_, 'pr> {
     pub(crate) fn check_all_harnesses(
         &self,
         harnesses: &'pr [&HarnessMetadata],
+        mut json_handler: Option<&mut JsonHandler>,
     ) -> Result<Vec<HarnessResult<'pr>>> {
         let sorted_harnesses = crate::metadata::sort_harnesses_by_loc(harnesses);
         let pool = {
@@ -98,14 +100,30 @@ impl<'pr> HarnessRunner<'_, 'pr> {
                 .collect::<Result<Vec<_>>>()
         });
         match results {
-            Ok(results) => Ok(results),
+            Ok(results) => {
+                if let Some(handler) = json_handler.as_deref_mut() {
+                    add_runner_results_to_json(handler, &results, harnesses.len(), "completed");
+                }
+                Ok(results)
+            }
             Err(err) => {
                 if err.is::<FailFastHarnessInfo>() {
                     let failed = err.downcast::<FailFastHarnessInfo>().unwrap();
-                    Ok(vec![HarnessResult {
+                    let result = vec![HarnessResult {
                         harness: sorted_harnesses[failed.index_to_failing_harness],
                         result: failed.result,
-                    }])
+                    }];
+
+                    if let Some(handler) = json_handler.as_deref_mut() {
+                        add_runner_results_to_json(
+                            handler,
+                            &result,
+                            harnesses.len(),
+                            "completed_with_fail_fast",
+                        );
+                    }
+
+                    Ok(result)
                 } else {
                     Err(err)
                 }
