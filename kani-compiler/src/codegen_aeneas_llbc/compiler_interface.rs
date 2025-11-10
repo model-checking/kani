@@ -14,7 +14,6 @@ use crate::kani_middle::transform::{BodyTransformation, GlobalPasses};
 use crate::kani_queries::QueryDb;
 use charon_lib::ast::{AnyTransId, TranslatedCrate, meta::ItemOpacity::*, meta::Span};
 use charon_lib::errors::ErrorCtx;
-use charon_lib::errors::error_or_panic;
 use charon_lib::name_matcher::NamePattern;
 use charon_lib::transform::TransformCtx;
 use charon_lib::transform::ctx::{TransformOptions, TransformPass};
@@ -41,6 +40,7 @@ use rustc_session::Session;
 use rustc_session::config::{CrateType, OutputFilenames, OutputType};
 use rustc_session::output::out_filename;
 use std::any::Any;
+use std::cell::RefCell;
 use std::fs::File;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -115,12 +115,13 @@ impl LlbcCodegenBackend {
             debug!("Translating: {item:?}");
             match item {
                 MonoItem::Fn(instance) => {
+                    let mut errors_borrow = ccx.errors.borrow_mut();
                     let mut fcx = Context::new(
                         tcx,
                         *instance,
                         &mut ccx.translated,
                         &mut id_map,
-                        &mut ccx.errors,
+                        &mut *errors_borrow,
                     );
                     let _ = fcx.translate();
                 }
@@ -167,7 +168,7 @@ impl LlbcCodegenBackend {
         }
 
         // TODO: display an error report about the external dependencies, if necessary
-        if ccx.errors.error_count > 0 {
+        if ccx.errors.borrow().error_count > 0 {
             todo!()
         }
 
@@ -196,6 +197,10 @@ impl CodegenBackend for LlbcCodegenBackend {
 
     fn print_version(&self) {
         println!("Kani-llbc version: {}", env!("CARGO_PKG_VERSION"));
+    }
+
+    fn name(&self) -> &'static str {
+        "kani-llbc"
     }
 
     fn locale_resource(&self) -> &'static str {
@@ -324,7 +329,14 @@ impl CodegenBackend for LlbcCodegenBackend {
     ) {
         let requested_crate_types = &codegen_results.crate_info.crate_types.clone();
         let local_crate_name = codegen_results.crate_info.local_crate_name;
-        link_binary(sess, &ArArchiveBuilderBuilder, codegen_results, rustc_metadata, outputs);
+        link_binary(
+            sess,
+            &ArArchiveBuilderBuilder,
+            codegen_results,
+            rustc_metadata,
+            outputs,
+            self.name(),
+        );
         for crate_type in requested_crate_types {
             let out_fname = out_filename(sess, *crate_type, outputs, local_crate_name);
             let out_path = out_fname.as_path();
@@ -389,7 +401,7 @@ fn get_transform_options(tcx: &TranslatedCrate, error_ctx: &mut ErrorCtx) -> Tra
         Ok(p) => Ok(p),
         Err(e) => {
             let msg = format!("failed to parse pattern `{s}` ({e})");
-            error_or_panic!(error_ctx, &TranslatedCrate::default(), Span::dummy(), msg)
+            Err(error_ctx.span_err(&TranslatedCrate::default(), Span::dummy(), &msg))
         }
     };
     let options = tcx.options.clone();
@@ -432,6 +444,7 @@ fn get_transform_options(tcx: &TranslatedCrate, error_ctx: &mut ErrorCtx) -> Tra
         no_merge_goto_chains: false,
         item_opacities,
         print_built_llbc: true,
+        remove_associated_types: Vec::new(),
     }
 }
 
@@ -440,5 +453,5 @@ fn create_charon_transformation_context(tcx: TyCtxt) -> TransformCtx {
     let translated = TranslatedCrate { crate_name, ..TranslatedCrate::default() };
     let mut errors = ErrorCtx::new(true, false);
     let options = get_transform_options(&translated, &mut errors);
-    TransformCtx { options, translated, errors }
+    TransformCtx { options, translated, errors: std::cell::RefCell::new(errors) }
 }

@@ -794,7 +794,7 @@ impl GotocCtx<'_, '_> {
             Rvalue::Cast(CastKind::PointerCoercion(k), e, t) => {
                 self.codegen_pointer_cast(k, e, *t, loc)
             }
-            Rvalue::Cast(CastKind::Transmute, operand, ty) => {
+            Rvalue::Cast(CastKind::Transmute | CastKind::Subtype, operand, ty) => {
                 let src_ty = operand.ty(self.current_fn().locals()).unwrap();
                 // Transmute requires sized types.
                 let src_sz = LayoutOf::new(src_ty).size_of().unwrap();
@@ -827,9 +827,6 @@ impl GotocCtx<'_, '_> {
             Rvalue::NullaryOp(k, t) => {
                 let layout = self.layout_of_stable(*t);
                 match k {
-                    NullOp::SizeOf => Expr::int_constant(layout.size.bytes_usize(), Type::size_t())
-                        .with_size_of_annotation(self.codegen_ty_stable(*t)),
-                    NullOp::AlignOf => Expr::int_constant(layout.align.abi.bytes(), Type::size_t()),
                     NullOp::OffsetOf(fields) => Expr::int_constant(
                         self.tcx
                             .offset_of_subfield(
@@ -1145,7 +1142,7 @@ impl GotocCtx<'_, '_> {
                 match dst_subt.kind() {
                     TyKind::RigidTy(RigidTy::Slice(_))
                     | TyKind::RigidTy(RigidTy::Str)
-                    | TyKind::RigidTy(RigidTy::Dynamic(_, _, _)) => {
+                    | TyKind::RigidTy(RigidTy::Dynamic(_, _)) => {
                         //TODO: this does the wrong thing on Strings/fixme_boxed_str.rs
                         // if we cast to slice or string, then we know the source is also a slice or string,
                         // so there shouldn't be anything to do

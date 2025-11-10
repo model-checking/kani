@@ -239,7 +239,7 @@ default one.
 
 **Replaces the function/method with name <original> with the function/method with name <replacement> during compilation**
 
-Check the [*Stubbing* section](../reference/stubbing.md) for more information about stubbing.
+Check the [*Stubbing* section](../reference/experimental/stubbing.md) for more information about stubbing.
 
 ## Contract Attributes
 

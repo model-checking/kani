@@ -1687,11 +1687,6 @@ impl Expr {
         Stmt::assign(self, rhs, loc)
     }
 
-    /// Shorthand to build a `Deinit(self)` statement. See `StmtBody::Deinit`
-    pub fn deinit(self, loc: Location) -> Stmt {
-        Stmt::deinit(self, loc)
-    }
-
     /// `if (self) { t } else { e }` or `if (self) { t }`
     pub fn if_then_else(self, t: Stmt, e: Option<Stmt>, loc: Location) -> Stmt {
         Stmt::if_then_else(self, t, e, loc)

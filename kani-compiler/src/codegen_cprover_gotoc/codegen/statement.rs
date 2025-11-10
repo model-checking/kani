@@ -129,7 +129,6 @@ impl GotocCtx<'_, '_> {
                     .assign(self.codegen_rvalue_stable(rhs, location), location)
                 }
             }
-            StatementKind::Deinit(place) => self.codegen_deinit(place, location),
             StatementKind::SetDiscriminant { place, variant_index } => {
                 let dest_ty = self.place_ty_stable(place);
                 let dest_expr = unwrap_or_return_codegen_unimplemented_stmt!(
@@ -441,27 +440,6 @@ impl GotocCtx<'_, '_> {
                     }
                 }
             },
-        }
-    }
-
-    /// From rustc doc: "This writes `uninit` bytes to the entire place."
-    /// Our model of GotoC has a similar statement, which is later lowered
-    /// to assigning a Nondet in CBMC, with a comment specifying that it
-    /// corresponds to a Deinit.
-    fn codegen_deinit(&mut self, place: &Place, loc: Location) -> Stmt {
-        let dst_mir_ty = self.place_ty_stable(place);
-        let dst_type = self.codegen_ty_stable(dst_mir_ty);
-        let layout = self.layout_of_stable(dst_mir_ty);
-        if layout.is_zst() || dst_type.sizeof_in_bits(&self.symbol_table) == 0 {
-            // We ignore assignment for all zero size types
-            Stmt::skip(loc)
-        } else {
-            unwrap_or_return_codegen_unimplemented_stmt!(
-                self,
-                self.codegen_place_stable(place, loc)
-            )
-            .goto_expr
-            .deinit(loc)
         }
     }
 

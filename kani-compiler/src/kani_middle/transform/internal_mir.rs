@@ -146,6 +146,7 @@ impl RustcInternalMir for CastKind {
             CastKind::PtrToPtr => rustc_middle::mir::CastKind::PtrToPtr,
             CastKind::FnPtrToPtr => rustc_middle::mir::CastKind::FnPtrToPtr,
             CastKind::Transmute => rustc_middle::mir::CastKind::Transmute,
+            CastKind::Subtype => rustc_middle::mir::CastKind::Subtype,
         }
     }
 }
@@ -194,8 +195,6 @@ impl RustcInternalMir for NullOp {
 
     fn internal_mir<'tcx>(&self, tcx: TyCtxt<'tcx>) -> Self::T<'tcx> {
         match self {
-            NullOp::SizeOf => rustc_middle::mir::NullOp::SizeOf,
-            NullOp::AlignOf => rustc_middle::mir::NullOp::AlignOf,
             NullOp::OffsetOf(offsets) => rustc_middle::mir::NullOp::OffsetOf(
                 tcx.mk_offset_of(
                     offsets
@@ -379,9 +378,6 @@ impl RustcInternalMir for StatementKind {
                     place: internal(tcx, place).into(),
                     variant_index: internal(tcx, variant_index),
                 }
-            }
-            StatementKind::Deinit(place) => {
-                rustc_middle::mir::StatementKind::Deinit(internal(tcx, place).into())
             }
             StatementKind::StorageLive(local) => rustc_middle::mir::StatementKind::StorageLive(
                 rustc_middle::mir::Local::from_usize(*local),

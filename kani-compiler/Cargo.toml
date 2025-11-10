@@ -3,7 +3,7 @@
 
 [package]
 name = "kani-compiler"
-version = "0.65.0"
+version = "0.66.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 publish = false
@@ -20,6 +20,7 @@ quote = "1.0.36"
 regex = "1.11.1"
 serde = { version = "1", optional = true }
 serde_json = "1"
+sha1-checked = "0.10.0"
 strum = "0.27.1"
 strum_macros = "0.27.1"
 syn = { version = "2.0.72", features = ["parsing", "extra-traits"] }

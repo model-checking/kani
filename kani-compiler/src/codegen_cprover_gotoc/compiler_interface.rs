@@ -43,7 +43,7 @@ use rustc_session::Session;
 use rustc_session::config::{CrateType, OutputFilenames, OutputType};
 use rustc_session::output::out_filename;
 use rustc_span::{Symbol, sym};
-use rustc_target::spec::PanicStrategy;
+use rustc_target::spec::{Arch, PanicStrategy};
 use std::any::Any;
 use std::cmp::min;
 use std::collections::BTreeMap;
@@ -290,6 +290,10 @@ impl CodegenBackend for GotocCodegenBackend {
         println!("Kani-goto version: {}", env!("CARGO_PKG_VERSION"));
     }
 
+    fn name(&self) -> &'static str {
+        "kani-cprover"
+    }
+
     fn locale_resource(&self) -> &'static str {
         // We don't currently support multiple languages.
         DEFAULT_LOCALE_RESOURCE
@@ -298,10 +302,10 @@ impl CodegenBackend for GotocCodegenBackend {
     fn target_config(&self, sess: &Session) -> TargetConfig {
         // This code is adapted from the cranelift backend:
         // https://github.com/rust-lang/rust/blob/a124fb3cb7291d75872934f411d81fe298379ace/compiler/rustc_codegen_cranelift/src/lib.rs#L184
-        let target_features = if sess.target.arch == "x86_64" && sess.target.os != "none" {
+        let target_features = if sess.target.arch == Arch::X86_64 && sess.target.os != "none" {
             // x86_64 mandates SSE2 support and rustc requires the x87 feature to be enabled
             vec![sym::sse, sym::sse2, Symbol::intern("x87")]
-        } else if sess.target.arch == "aarch64" {
+        } else if sess.target.arch == Arch::AArch64 {
             match &*sess.target.os {
                 "none" => vec![],
                 // On macOS the aes, sha2 and sha3 features are enabled by default and ring
@@ -525,7 +529,14 @@ impl CodegenBackend for GotocCodegenBackend {
         let local_crate_name = codegen_results.crate_info.local_crate_name;
         // Create the rlib if one was requested.
         if requested_crate_types.contains(&CrateType::Rlib) {
-            link_binary(sess, &ArArchiveBuilderBuilder, codegen_results, rustc_metadata, outputs);
+            link_binary(
+                sess,
+                &ArArchiveBuilderBuilder,
+                codegen_results,
+                rustc_metadata,
+                outputs,
+                self.name(),
+            );
         }
 
         // But override all the other outputs.
@@ -790,8 +801,8 @@ fn new_machine_model(sess: &Session) -> MachineModel {
     // see /tools/sizeofs/main.cpp.
     // For reference, the definition in CBMC:
     //https://github.com/diffblue/cbmc/blob/develop/src/util/config.cpp
-    match architecture.as_ref() {
-        "x86_64" => {
+    match architecture {
+        Arch::X86_64 => {
             let bool_width = 8;
             let char_is_unsigned = false;
             let char_width = 8;
@@ -830,7 +841,7 @@ fn new_machine_model(sess: &Session) -> MachineModel {
                 word_size: int_width,
             }
         }
-        "aarch64" => {
+        Arch::AArch64 => {
             let bool_width = 8;
             let char_is_unsigned = true;
             let char_width = 8;
