@@ -1,13 +1,13 @@
 error[E0080]: values of the type `[u8; usize::MAX]` are too big for the target architecture\
-/root/.rustup/toolchains/nightly-2025-10-31-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/mem/mod.rs\
+lib/rustlib/src/rust/library/core/src/mem/mod.rs\
 |\
-| const SIZE: usize = intrinsics::size_of::<Self>();\
-| ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ evaluation of `<S<u8> as std::mem::SizedTypeProperties>::SIZE` failed here\
+const SIZE: usize = intrinsics::size_of::<Self>();\
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ evaluation of `<S<u8> as std::mem::SizedTypeProperties>::SIZE` failed here\
 
 note: the above error was encountered while instantiating `fn std::mem::size_of::<S<u8>>`\
 tests/ui/ice-size-overflow/large_array.rs\
 |\
-| std::mem::size_of::<S<u8>>()\
-| ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+std::mem::size_of::<S<u8>>()\
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-error: aborting due to 1 previous error; 2 warnings emitted
+error: aborting due to 1 previous error; 1 warning emitted
