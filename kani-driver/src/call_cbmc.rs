@@ -406,8 +406,6 @@ impl KaniSession {
                 cbmc_stats: None,
             })
         }
-
-        Ok(verification_results)
     }
 
     /// "Internal," but also used by call_cbmc_viewer
@@ -564,7 +562,6 @@ impl VerificationResult {
     ///      (CBMC will regularly report "failure" but that's just our cover checks.)
     ///   2. Positively checking for the presence of results.
     ///      (Do not mistake lack of results for success: report it as failure.)
-
     fn from(
         output: VerificationOutput,
         should_panic: bool,

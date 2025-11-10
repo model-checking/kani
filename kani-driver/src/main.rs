@@ -2,8 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use std::ffi::OsString;
 use std::process::ExitCode;
-use std::time::{Instant, SystemTime};
-use time::format_description::well_known::Rfc3339;
 
 use anyhow::Result;
 use autoharness::{autoharness_cargo, autoharness_standalone};
