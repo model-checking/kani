@@ -12,9 +12,9 @@ use rustc_middle::ty::{self as rustc_ty, TyCtxt};
 use rustc_public::mir::{
     AggregateKind, AssertMessage, Body, BorrowKind, CastKind, ConstOperand, CopyNonOverlapping,
     CoroutineDesugaring, CoroutineKind, CoroutineSource, FakeBorrowKind, FakeReadCause, LocalDecl,
-    MutBorrowKind, NonDivergingIntrinsic, NullOp, Operand, PointerCoercion, RetagKind, Rvalue,
-    Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind, UnwindAction,
-    UserTypeProjection, Variance,
+    MutBorrowKind, NonDivergingIntrinsic, NullOp, Operand, PointerCoercion, RetagKind,
+    RuntimeChecks, Rvalue, Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind,
+    UnwindAction, UserTypeProjection, Variance,
 };
 use rustc_public::rustc_internal::internal;
 
@@ -209,8 +209,19 @@ impl RustcInternalMir for NullOp {
                         .as_slice(),
                 ),
             ),
-            NullOp::UbChecks => rustc_middle::mir::NullOp::UbChecks,
-            NullOp::ContractChecks => rustc_middle::mir::NullOp::ContractChecks,
+            NullOp::RuntimeChecks(RuntimeChecks::UbChecks) => {
+                rustc_middle::mir::NullOp::RuntimeChecks(rustc_middle::mir::RuntimeChecks::UbChecks)
+            }
+            NullOp::RuntimeChecks(RuntimeChecks::ContractChecks) => {
+                rustc_middle::mir::NullOp::RuntimeChecks(
+                    rustc_middle::mir::RuntimeChecks::ContractChecks,
+                )
+            }
+            NullOp::RuntimeChecks(RuntimeChecks::OverflowChecks) => {
+                rustc_middle::mir::NullOp::RuntimeChecks(
+                    rustc_middle::mir::RuntimeChecks::OverflowChecks,
+                )
+            }
         }
     }
 }
