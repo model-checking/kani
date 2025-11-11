@@ -137,7 +137,7 @@ impl<'tcx> Analysis<'tcx> for PointsToAnalysis<'_, 'tcx> {
     /// Update current dataflow state based on the information we can infer from the given
     /// statement.
     fn apply_primary_statement_effect(
-        &mut self,
+        &self,
         state: &mut Self::Domain,
         statement: &Statement<'tcx>,
         _location: Location,
@@ -184,7 +184,7 @@ impl<'tcx> Analysis<'tcx> for PointsToAnalysis<'_, 'tcx> {
     }
 
     fn apply_primary_terminator_effect<'mir>(
-        &mut self,
+        &self,
         state: &mut Self::Domain,
         terminator: &'mir Terminator<'tcx>,
         location: Location,
@@ -337,7 +337,7 @@ impl<'tcx> Analysis<'tcx> for PointsToAnalysis<'_, 'tcx> {
 
     /// We don't care about this and just need to implement this to implement the trait.
     fn apply_call_return_effect(
-        &mut self,
+        &self,
         _state: &mut Self::Domain,
         _block: BasicBlock,
         _return_places: CallReturnPlaces<'_, 'tcx>,
@@ -429,7 +429,7 @@ impl<'tcx> PointsToAnalysis<'_, 'tcx> {
 
     /// Update the analysis state according to the regular function call.
     fn apply_regular_call_effect(
-        &mut self,
+        &self,
         state: &mut PointsToGraph<'tcx>,
         instance: Instance<'tcx>,
         args: &[Spanned<Operand<'tcx>>],

@@ -272,6 +272,14 @@ impl GotocCtx<'_, '_> {
             Intrinsic::AddWithOverflow => {
                 self.codegen_op_with_overflow(BinaryOperator::OverflowResultPlus, fargs, place, loc)
             }
+            Intrinsic::AlignOf => {
+                let genarg = instance.args();
+                let tys = genarg.0.clone();
+                let t = tys.first().unwrap().ty().unwrap();
+                let layout = self.layout_of_stable(*t);
+                let expr = Expr::int_constant(layout.align.abi.bytes(), Type::size_t());
+                self.codegen_expr_to_place_stable(place, expr, loc)
+            }
             Intrinsic::ArithOffset => self.codegen_arith_offset(fargs, place, loc),
             Intrinsic::AssertInhabited => {
                 self.codegen_assert_intrinsic(instance, intrinsic_str, span)
@@ -481,6 +489,15 @@ impl GotocCtx<'_, '_> {
                 loc,
             ),
             Intrinsic::SimdXor => codegen_intrinsic_binop!(bitxor),
+            Intrinsic::SizeOf => {
+                let genarg = instance.args();
+                let tys = genarg.0.clone();
+                let t = tys.first().unwrap().ty().unwrap();
+                let layout = self.layout_of_stable(*t);
+                let expr = Expr::int_constant(layout.size.bytes_usize(), Type::size_t())
+                    .with_size_of_annotation(self.codegen_ty_stable(*t));
+                self.codegen_expr_to_place_stable(place, expr, loc)
+            }
             Intrinsic::SqrtF32 => codegen_simple_intrinsic!(Sqrtf),
             Intrinsic::SqrtF64 => codegen_simple_intrinsic!(Sqrt),
             Intrinsic::SubWithOverflow => self.codegen_op_with_overflow(
