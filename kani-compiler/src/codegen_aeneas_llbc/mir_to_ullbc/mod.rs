@@ -54,6 +54,7 @@ use charon_lib::ullbc_ast::{
 };
 use charon_lib::{error_assert, raise_error, register_error};
 use core::panic;
+use indexmap::IndexMap;
 use rustc_data_structures::fx::FxHashMap;
 use rustc_middle::ty::{TyCtxt, TypingEnv};
 use rustc_public::mir::mono::{Instance, InstanceDef};
@@ -118,10 +119,6 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         self.errors.span_err(self.translated, span, msg)
     }
 
-    fn continue_on_failure(&self) -> bool {
-        self.errors.continue_on_failure()
-    }
-
     fn translate_traitdecl(&mut self, trait_def: TraitDef) -> CharonTraitDeclId {
         let trait_def_id = trait_def.def_id();
         let trait_decl_id = self.register_trait_decl_id(trait_def_id);
@@ -129,10 +126,10 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             None => {
                 let trait_decl = TraitDef::declaration(&trait_def);
                 let consts = Vec::new();
-                let const_defaults = HashMap::new();
+                let const_defaults = IndexMap::new();
                 let types = Vec::new();
                 let type_clauses = Vec::new();
-                let type_defaults = HashMap::new();
+                let type_defaults = IndexMap::new();
                 let required_methods = Vec::new();
                 let provided_methods = Vec::new();
                 let parent_clauses = CharonVector::new();
