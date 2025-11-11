@@ -27,7 +27,7 @@ pub fn autoharness_cargo(args: CargoAutoharnessArgs) -> Result<()> {
     setup_session(&mut session, &args.common_autoharness_args);
 
     if !session.args.common_args.quiet {
-        print_kani_version(InvocationType::CargoKani(vec![]));
+        print_kani_version(InvocationType::CargoKani(vec![]), session.args.common_args.verbose);
     }
     let project = project::cargo_project(&mut session, false)?;
     postprocess_project(project, session, args.common_autoharness_args)
@@ -38,7 +38,7 @@ pub fn autoharness_standalone(args: StandaloneAutoharnessArgs) -> Result<()> {
     setup_session(&mut session, &args.common_autoharness_args);
 
     if !session.args.common_args.quiet {
-        print_kani_version(InvocationType::Standalone);
+        print_kani_version(InvocationType::Standalone, session.args.common_args.verbose);
     }
 
     let project = if args.std {

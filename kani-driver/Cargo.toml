@@ -13,6 +13,7 @@ publish = false
 
 [dependencies]
 kani_metadata = { path = "../kani_metadata" }
+build-kani = { path = "../tools/build-kani" }
 cargo_metadata = "0.23"
 anyhow = "1"
 console = "0.16"

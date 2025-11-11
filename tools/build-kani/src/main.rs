@@ -14,6 +14,7 @@ use crate::sysroot::{
     build_bin, build_lib, build_tools, kani_no_core_lib, kani_playback_lib, kani_sysroot_lib,
 };
 use anyhow::{Result, bail};
+use build_kani::built_info;
 use clap::Parser;
 use std::{ffi::OsString, path::Path, process::Command};
 
@@ -31,7 +32,7 @@ fn main() -> Result<()> {
         parser::Commands::Bundle(bundle_parser) => {
             let version_string = bundle_parser.version;
             let kani_string = format!("kani-{version_string}");
-            let bundle_name = format!("{kani_string}-{}.tar.gz", env!("TARGET"));
+            let bundle_name = format!("{kani_string}-{}.tar.gz", built_info::TARGET);
             let dir = Path::new(&kani_string);
 
             // Check everything is ready before we start copying files

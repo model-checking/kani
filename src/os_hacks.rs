@@ -9,6 +9,7 @@ use std::path::Path;
 use std::process::Command;
 
 use anyhow::{Context, Result, bail};
+use build_kani::built_info;
 use os_info::Info;
 
 use crate::cmd::AutoRun;
@@ -39,7 +40,7 @@ fn setup_nixos_patchelf(kani_dir: &Path) -> Result<()> {
     // support, we need to look for a different path.
     // Prevents clippy error.
     let target = "x86_64-unknown-linux-gnu";
-    assert!(env!("TARGET") == target);
+    assert!(built_info::TARGET == target);
     if Path::new("/lib64/ld-linux-x86-64.so.2").exists() {
         // if the expected path exists, I guess things are fine?
         return Ok(());
