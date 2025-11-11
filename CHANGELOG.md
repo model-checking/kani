@@ -4,6 +4,34 @@ This file contains notable changes (e.g. breaking changes, major changes, etc.) 
 
 This file was introduced starting Kani 0.23.0, so it only contains changes from version 0.23.0 onwards.
 
+## [0.66.0]
+
+### Breaking Changes
+* Fail if stub verified doesn't have a contract harness by @carolynzech in https://github.com/model-checking/kani/pull/4295
+
+### What's Changed
+* Add loop invariant support for `while let` loop  by @thanhnguyen-aws in https://github.com/model-checking/kani/pull/4279
+* Update README by @carolynzech in https://github.com/model-checking/kani/pull/4291
+* Kani Book Documentation Improvements by @carolynzech in https://github.com/model-checking/kani/pull/4296
+* Share body cache between harnesses within a codegen unit by @AlexanderPortland in https://github.com/model-checking/kani/pull/4276
+* Add loop-contracts support for `for` loop by @thanhnguyen-aws in https://github.com/model-checking/kani/pull/4143
+* RFC: Partitioned proofs by @AlexanderPortland in https://github.com/model-checking/kani/pull/4228
+* Handle const generics in stubbing code by @zhassan-aws in https://github.com/model-checking/kani/pull/4323
+* Replace fxhash with rustc-hash by @zhassan-aws in https://github.com/model-checking/kani/pull/4341
+* Fix LLBC regressions by @zhassan-aws in https://github.com/model-checking/kani/pull/4338
+* Combo of small performance changes by @AlexanderPortland in https://github.com/model-checking/kani/pull/4314
+* Implement BoundedArbitrary for boxed slices by @zhassan-aws in https://github.com/model-checking/kani/pull/4340
+* Autoharness: use SHA-1 to produce codegen unit file names by @tautschnig in https://github.com/model-checking/kani/pull/4370
+* Update attributes.md by @0xsecaas in https://github.com/model-checking/kani/pull/4376
+* Switch macos-13 CI jobs to macos-15-intel by @tautschnig in https://github.com/model-checking/kani/pull/4442
+* Incrementally update charon submodule with LLBC backend adaptations by @tautschnig in https://github.com/model-checking/kani/pull/4445
+* Rust toolchain upgraded to 2025-11-05 by @carolynzech, @tautschnig, @thanhnguyen-aws, @zhassan-aws
+
+### New Contributors
+* @0xsecaas made their first contribution in https://github.com/model-checking/kani/pull/4376
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.65.0...kani-0.66.0
+
 ## [0.65.0]
 
 ### Breaking Changes

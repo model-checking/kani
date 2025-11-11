@@ -52,7 +52,7 @@ use charon_lib::ullbc_ast::{
     RawTerminator as CharonRawTerminator, Statement as CharonStatement,
     SwitchTargets as CharonSwitchTargets, Terminator as CharonTerminator,
 };
-use charon_lib::{error_assert, error_or_panic};
+use charon_lib::{error_assert, raise_error, register_error};
 use core::panic;
 use rustc_data_structures::fx::FxHashMap;
 use rustc_middle::ty::{TyCtxt, TypingEnv};
@@ -114,8 +114,8 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         self.tcx
     }
 
-    fn span_err(&mut self, span: CharonSpan, msg: &str) {
-        self.errors.span_err(self.translated, span, msg);
+    fn span_err(&mut self, span: CharonSpan, msg: &str) -> CharonError {
+        self.errors.span_err(self.translated, span, msg)
     }
 
     fn continue_on_failure(&self) -> bool {
@@ -442,7 +442,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             trait_clauses: CharonVector::new(),
             regions_outlive: Vec::new(),
             types_outlive: Vec::new(),
-            trait_type_constraints: Vec::new(),
+            trait_type_constraints: CharonVector::new(),
         }
     }
 
@@ -523,7 +523,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             trait_clauses,
             regions_outlive: Vec::new(),
             types_outlive: Vec::new(),
-            trait_type_constraints: Vec::new(),
+            trait_type_constraints: CharonVector::new(),
         }
     }
 
@@ -595,7 +595,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             trait_clauses,
             regions_outlive: Vec::new(),
             types_outlive: Vec::new(),
-            trait_type_constraints: Vec::new(),
+            trait_type_constraints: CharonVector::new(),
         }
     }
 
@@ -857,7 +857,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     // block.
                 }
                 _ => {
-                    error_or_panic!(self, span, format!("Unexpected DefPathData: {:?}", data));
+                    raise_error!(self, span, "Unexpected DefPathData: {:?}", data);
                 }
             }
         }
@@ -1000,7 +1000,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     // block.
                 }
                 _ => {
-                    error_or_panic!(self, span, format!("Unexpected DefPathData: {:?}", data));
+                    raise_error!(self, span, "Unexpected DefPathData: {:?}", data);
                 }
             }
         }
@@ -1014,7 +1014,6 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             let traitref = self
                 .tcx
                 .impl_trait_ref(impl_defid_internal)
-                .unwrap()
                 .skip_binder()
                 .args
                 .first()
@@ -1107,7 +1106,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     // block.
                 }
                 _ => {
-                    error_or_panic!(self, span, format!("Unexpected DefPathData: {:?}", data));
+                    raise_error!(self, span, "Unexpected DefPathData: {:?}", data);
                 }
             }
         }
@@ -1254,7 +1253,11 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 },
             };
             let subs_traitref = CharonTraitRef {
-                kind: CharonTraitRefKind::BuiltinOrAuto(subs_traitdeclref.clone()),
+                kind: CharonTraitRefKind::BuiltinOrAuto {
+                    trait_decl_ref: subs_traitdeclref.clone(),
+                    parent_trait_refs: CharonVector::new(),
+                    types: Vec::new(),
+                },
                 trait_decl_ref: subs_traitdeclref,
             };
             trait_refs.push(subs_traitref);
@@ -1489,7 +1492,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         };
         if let Some(content) = content {
             let span = self.translate_span(stmt.span);
-            return Some(CharonStatement { span, content });
+            return Some(CharonStatement { span, content, comments_before: Vec::new() });
         };
         None
     }
@@ -1560,8 +1563,12 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             _ => todo!(),
         };
         (
-            statement.map(|statement| CharonStatement { span, content: statement }),
-            CharonTerminator { span, content: terminator },
+            statement.map(|statement| CharonStatement {
+                span,
+                content: statement,
+                comments_before: Vec::new(),
+            }),
+            CharonTerminator { span, content: terminator, comments_before: Vec::new() },
         )
     }
 

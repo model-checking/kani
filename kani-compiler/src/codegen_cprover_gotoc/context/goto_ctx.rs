@@ -848,7 +848,20 @@ impl<'tcx> LayoutOfHelpers<'tcx> for GotocCtx<'tcx, '_> {
 
     #[inline]
     fn handle_layout_err(&self, err: LayoutError<'tcx>, span: Span, ty: Ty<'tcx>) -> ! {
-        span_bug!(span, "failed to get layout for `{}`: {}", ty, err)
+        // Handle SizeOverflow errors gracefully instead of causing an ICE
+        if let LayoutError::SizeOverflow(_) = err {
+            self.tcx
+                .dcx()
+                .struct_span_err(
+                    span,
+                    format!("values of the type `{}` are too big for the target architecture", ty),
+                )
+                .emit();
+            self.tcx.dcx().abort_if_errors();
+            unreachable!()
+        } else {
+            span_bug!(span, "failed to get layout for `{}`: {}", ty, err)
+        }
     }
 }
 
