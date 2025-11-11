@@ -1211,6 +1211,22 @@ impl GotocCtx<'_, '_> {
                 let align = Expr::int_constant(layout.align.abi.bytes(), usizet);
                 SizeAlign { size, align }
             }
+            TyKind::RigidTy(RigidTy::Foreign(..)) => {
+                // Extern types have no known size or alignment at compile time.
+                // According to Rust's semantics, operations like size_of_val on extern types
+                // should panic at runtime with an appropriate message.
+                // We cannot compute size/alignment for extern types, so we should not reach this point.
+                // This is handled by Kani's models (see kani_core::models) which check for extern types
+                // and panic with "cannot compute `size_of_val` for extern types".
+                // However, if we do reach here (e.g., in pointer dereference checks), we need to
+                // prevent the index out of bounds error that would occur from trying to access fields.
+                //
+                // For now, we return a zero size and alignment of 1, which will allow the code to compile
+                // but the runtime check in the models will catch the actual error.
+                let size = Expr::int_constant(0, Type::size_t());
+                let align = Expr::int_constant(1, usizet);
+                SizeAlign { size, align }
+            }
             _ => {
                 // This arm handles the case where the dynamically-sized type is nested within the type.
                 // The first arm handled the case of the dynamically-sized type itself (a trait object).

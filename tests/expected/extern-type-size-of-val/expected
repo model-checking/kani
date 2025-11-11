@@ -1,0 +1,2 @@
+FAILURE: cannot compute `size_of_val` for extern types
+VERIFICATION:- FAILED
