@@ -125,21 +125,25 @@ fn resolve_path<'tcx>(
 ) -> Result<DefId, ResolveError<'tcx>> {
     debug!(?path, "resolve_path");
     let path = resolve_prefix(tcx, current_module, path)?;
-    path.segments.into_iter().try_fold(path.base, |base, segment| {
-        let name = segment.ident.to_string();
-        let def_kind = tcx.def_kind(base);
-        match def_kind {
-            DefKind::ForeignMod | DefKind::Mod => resolve_in_module(tcx, base, &name),
-            DefKind::Struct | DefKind::Enum | DefKind::Union => {
-                resolve_in_type_def(tcx, base, &path.base_path_args, &name)
-            }
-            DefKind::Trait => resolve_in_trait_def(tcx, base, &name),
-            kind => {
-                debug!(?base, ?kind, "resolve_path: unexpected item");
-                Err(ResolveError::UnexpectedType { tcx, item: base, expected: "module" })
-            }
-        }
-    })
+    path.segments
+        .into_iter()
+        .try_fold((path.base, path.base_path_args.clone()), |(base, base_path_args), segment| {
+            let name = segment.ident.to_string();
+            let def_kind = tcx.def_kind(base);
+            let base = match def_kind {
+                DefKind::ForeignMod | DefKind::Mod => resolve_in_module(tcx, base, &name),
+                DefKind::Struct | DefKind::Enum | DefKind::Union => {
+                    resolve_in_type_def(tcx, base, &base_path_args, &name)
+                }
+                DefKind::Trait => resolve_in_trait_def(tcx, base, &name),
+                kind => {
+                    debug!(?base, ?kind, "resolve_path: unexpected item");
+                    Err(ResolveError::UnexpectedType { tcx, item: base, expected: "module" })
+                }
+            };
+            base.map(|base| (base, segment.arguments))
+        })
+        .map(|it| it.0)
 }
 
 /// Provide information about where the resolution failed.
@@ -781,7 +785,31 @@ fn is_item_name_with_generic_args(
 // This is just a helper function for is_item_name_with_generic_args.
 // It's in a separate function so we can unit-test it without a mock TyCtxt or DefIds.
 fn last_two_items_of_path_match(item_path: &str, generic_args: &str, name: &str) -> bool {
-    let parts: Vec<&str> = item_path.split("::").collect();
+    let mut angle_bracket_depth = 0;
+    let mut parts = Vec::new();
+    let mut part_start = 0;
+
+    for (i, c) in item_path.char_indices() {
+        match c {
+            '<' => {
+                angle_bracket_depth += 1;
+            }
+            '>' => {
+                angle_bracket_depth -= 1;
+            }
+            ':' if angle_bracket_depth == 0
+                && i > 0
+                && item_path.chars().nth(i - 1) == Some(':') =>
+            {
+                if part_start < i {
+                    parts.push(&item_path[part_start..i - 1]);
+                }
+                part_start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    parts.push(&item_path[part_start..]);
 
     if parts.len() < 2 {
         return false;
@@ -793,7 +821,7 @@ fn last_two_items_of_path_match(item_path: &str, generic_args: &str, name: &str)
     let last_two = format!("{}{}{}", generic_args, "::", name);
 
     // The last two components of the item_path should be the same as ::{generic_args}::{name}
-    last_two == actual_last_two
+    last_two.chars().eq(actual_last_two.chars().filter(|c| !c.is_whitespace()))
 }
 
 #[cfg(test)]
@@ -823,6 +851,14 @@ mod tests {
             let name = "unchecked_add";
             let item_path = format!("core::num::NonZero{}::{}", "::<u32>", name);
             assert!(!last_two_items_of_path_match(&item_path, generic_args, name))
+        }
+
+        #[test]
+        fn generic_args_with_segmented_params() {
+            let generic_args = "::<core::mem::MaybeUninit<T>,A>";
+            let name = "assume_init";
+            let item_path = format!("rc::Rc{}::{}", "::<core::mem::MaybeUninit<T>, A>", name);
+            assert!(last_two_items_of_path_match(&item_path, generic_args, name))
         }
     }
 }

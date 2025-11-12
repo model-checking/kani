@@ -40,7 +40,6 @@ use rustc_session::Session;
 use rustc_session::config::{CrateType, OutputFilenames, OutputType};
 use rustc_session::output::out_filename;
 use std::any::Any;
-use std::cell::RefCell;
 use std::fs::File;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
