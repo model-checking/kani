@@ -842,7 +842,7 @@ impl GotocCtx<'_, '_> {
                             .bytes(),
                         Type::size_t(),
                     ),
-                    NullOp::ContractChecks | NullOp::UbChecks => Expr::c_false(),
+                    NullOp::RuntimeChecks(_) => Expr::c_false(),
                 }
             }
             Rvalue::ShallowInitBox(operand, content_ty) => {
