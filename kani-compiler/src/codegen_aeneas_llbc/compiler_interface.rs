@@ -39,6 +39,7 @@ use rustc_public::{CrateDef, DefId};
 use rustc_session::Session;
 use rustc_session::config::{CrateType, OutputFilenames, OutputType};
 use rustc_session::output::out_filename;
+use rustc_target::spec::Arch;
 use std::any::Any;
 use std::fs::File;
 use std::path::Path;
@@ -376,7 +377,14 @@ fn codegen_results(tcx: TyCtxt) -> Box<dyn Any> {
         CodegenResults {
             modules: vec![],
             allocator_module: None,
-            crate_info: CrateInfo::new(tcx, tcx.sess.target.arch.clone().to_string()),
+            crate_info: CrateInfo::new(
+                tcx,
+                match tcx.sess.target.arch {
+                    Arch::X86_64 => "x86_64".to_string(),
+                    Arch::AArch64 => "aarch64".to_string(),
+                    _ => format!("{:?}", tcx.sess.target.arch).to_lowercase(),
+                },
+            ),
         },
         work_products,
     ))
