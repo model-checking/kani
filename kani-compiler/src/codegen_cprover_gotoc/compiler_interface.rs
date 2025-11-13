@@ -43,7 +43,7 @@ use rustc_session::Session;
 use rustc_session::config::{CrateType, OutputFilenames, OutputType};
 use rustc_session::output::out_filename;
 use rustc_span::{Symbol, sym};
-use rustc_target::spec::{Arch, PanicStrategy};
+use rustc_target::spec::{Arch, Os, PanicStrategy};
 use std::any::Any;
 use std::cmp::min;
 use std::collections::BTreeMap;
@@ -302,15 +302,15 @@ impl CodegenBackend for GotocCodegenBackend {
     fn target_config(&self, sess: &Session) -> TargetConfig {
         // This code is adapted from the cranelift backend:
         // https://github.com/rust-lang/rust/blob/a124fb3cb7291d75872934f411d81fe298379ace/compiler/rustc_codegen_cranelift/src/lib.rs#L184
-        let target_features = if sess.target.arch == Arch::X86_64 && sess.target.os != "none" {
+        let target_features = if sess.target.arch == Arch::X86_64 && sess.target.os != Os::None {
             // x86_64 mandates SSE2 support and rustc requires the x87 feature to be enabled
             vec![sym::sse, sym::sse2, Symbol::intern("x87")]
         } else if sess.target.arch == Arch::AArch64 {
-            match &*sess.target.os {
-                "none" => vec![],
+            match sess.target.os {
+                Os::None => vec![],
                 // On macOS the aes, sha2 and sha3 features are enabled by default and ring
                 // fails to compile on macOS when they are not present.
-                "macos" => vec![sym::neon, sym::aes, sym::sha2, sym::sha3],
+                Os::MacOs => vec![sym::neon, sym::aes, sym::sha2, sym::sha3],
                 // AArch64 mandates Neon support
                 _ => vec![sym::neon],
             }
@@ -818,7 +818,11 @@ fn new_machine_model(sess: &Session) -> MachineModel {
             let wchar_t_width = 32;
 
             MachineModel {
-                architecture: architecture.to_string(),
+                architecture: match architecture {
+                    Arch::X86_64 => "x86_64".to_string(),
+                    Arch::AArch64 => "aarch64".to_string(),
+                    _ => panic!("Unsupported architecture: {:?}", architecture),
+                },
                 alignment,
                 bool_width,
                 char_is_unsigned,
@@ -848,8 +852,8 @@ fn new_machine_model(sess: &Session) -> MachineModel {
             let double_width = 64;
             let float_width = 32;
             let int_width = 32;
-            let long_double_width = match os.as_ref() {
-                "linux" => 128,
+            let long_double_width = match os {
+                Os::Linux => 128,
                 _ => 64,
             };
             let long_int_width = 64;
@@ -859,7 +863,7 @@ fn new_machine_model(sess: &Session) -> MachineModel {
             // https://developer.arm.com/documentation/dui0491/i/Compiler-Command-line-Options/--signed-chars----unsigned-chars
             // https://www.arm.linux.org.uk/docs/faqs/signedchar.php
             // https://developer.apple.com/documentation/xcode/writing-arm64-code-for-apple-platforms
-            let wchar_t_is_unsigned = matches!(os.as_ref(), "linux");
+            let wchar_t_is_unsigned = matches!(os, Os::Linux);
             let wchar_t_width = 32;
 
             MachineModel {
