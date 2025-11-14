@@ -18,6 +18,7 @@ include = ["/src", "/build.rs", "/rust-toolchain.toml", "/LICENSE-*", "/README.m
 
 [dependencies]
 anyhow = "1"
+build-kani = { path = "tools/build-kani" }
 home = "0.5"
 os_info = { version = "3", default-features = false }
 

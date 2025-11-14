@@ -13,6 +13,7 @@
 
 use crate::{AutoRun, cp};
 use anyhow::{Result, bail, format_err};
+use build_kani::built_info;
 use cargo_metadata::{Artifact, Message, TargetKind};
 use std::ffi::OsStr;
 use std::fs;
@@ -67,7 +68,7 @@ fn kani_sysroot_bin() -> PathBuf {
 
 /// Returns the build target
 fn build_target() -> &'static str {
-    env!("TARGET")
+    built_info::TARGET
 }
 
 /// Build the `lib/` folder and `lib-playback/` for the new sysroot.

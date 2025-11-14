@@ -11,6 +11,10 @@ publish = false
 
 [dependencies]
 anyhow = "1"
+built = "0.8"
 cargo_metadata = "0.23"
 clap = { version = "4.4.11", features=["derive"] }
 which = "8"
+
+[build-dependencies]
+built = { version = "0.8", features = ["git2"] }
