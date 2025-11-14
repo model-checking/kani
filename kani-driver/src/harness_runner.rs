@@ -114,7 +114,7 @@ impl<'pr> HarnessRunner<'_, 'pr> {
                         result: failed.result,
                     }];
 
-                    if let Some(handler) = json_handler.as_deref_mut() {
+                    if let Some(handler) = json_handler {
                         add_runner_results_to_json(
                             handler,
                             &result,

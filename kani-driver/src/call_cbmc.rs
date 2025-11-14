@@ -61,7 +61,7 @@ impl KaniSession {
 
         // Extract version from first line (e.g., "6.7.1 (cbmc-6.7.1)")
         let version = lines
-            .get(0)
+            .first()
             .and_then(|line| line.split_whitespace().next())
             .unwrap_or("unknown")
             .to_string();
@@ -85,31 +85,28 @@ impl KaniSession {
         // Example: "Runtime Symex: 0.00408627s"
         if let Some(captures) =
             regex::Regex::new(r"Runtime Symex: ([-e\d\.]+)s").ok()?.captures(message)
+            && let Ok(val) = captures[1].parse::<f64>()
         {
-            if let Ok(val) = captures[1].parse::<f64>() {
-                stats.runtime_symex_s = Some(val);
-                found_any = true;
-            }
+            stats.runtime_symex_s = Some(val);
+            found_any = true;
         }
 
         // Example: "size of program expression: 150 steps"
         if let Some(captures) =
             regex::Regex::new(r"size of program expression: (\d+) steps").ok()?.captures(message)
+            && let Ok(val) = captures[1].parse::<u32>()
         {
-            if let Ok(val) = captures[1].parse::<u32>() {
-                stats.size_program_expression = Some(val);
-                found_any = true;
-            }
+            stats.size_program_expression = Some(val);
+            found_any = true;
         }
 
         // Example: "slicing removed 81 assignments"
         if let Some(captures) =
             regex::Regex::new(r"slicing removed (\d+) assignments").ok()?.captures(message)
+            && let Ok(val) = captures[1].parse::<u32>()
         {
-            if let Ok(val) = captures[1].parse::<u32>() {
-                stats.slicing_removed_assignments = Some(val);
-                found_any = true;
-            }
+            stats.slicing_removed_assignments = Some(val);
+            found_any = true;
         }
 
         // Example: "Generated 1 VCC(s), 1 remaining after simplification"
@@ -131,51 +128,46 @@ impl KaniSession {
         // Example: "Runtime Postprocess Equation: 0.000767182s"
         if let Some(captures) =
             regex::Regex::new(r"Runtime Postprocess Equation: ([-e\d\.]+)s").ok()?.captures(message)
+            && let Ok(val) = captures[1].parse::<f64>()
         {
-            if let Ok(val) = captures[1].parse::<f64>() {
-                stats.runtime_postprocess_equation_s = Some(val);
-                found_any = true;
-            }
+            stats.runtime_postprocess_equation_s = Some(val);
+            found_any = true;
         }
 
         // Example: "Runtime Convert SSA: 0.000516981s"
         if let Some(captures) =
             regex::Regex::new(r"Runtime Convert SSA: ([-e\d\.]+)s").ok()?.captures(message)
+            && let Ok(val) = captures[1].parse::<f64>()
         {
-            if let Ok(val) = captures[1].parse::<f64>() {
-                stats.runtime_convert_ssa_s = Some(val);
-                found_any = true;
-            }
+            stats.runtime_convert_ssa_s = Some(val);
+            found_any = true;
         }
 
         // Example: "Runtime Post-process: 0.000189636s"
         if let Some(captures) =
             regex::Regex::new(r"Runtime Post-process: ([-e\d\.]+)s").ok()?.captures(message)
+            && let Ok(val) = captures[1].parse::<f64>()
         {
-            if let Ok(val) = captures[1].parse::<f64>() {
-                stats.runtime_post_process_s = Some(val);
-                found_any = true;
-            }
+            stats.runtime_post_process_s = Some(val);
+            found_any = true;
         }
 
         // Example: "Runtime Solver: 0.00167592s"
         if let Some(captures) =
             regex::Regex::new(r"Runtime Solver: ([-e\d\.]+)s").ok()?.captures(message)
+            && let Ok(val) = captures[1].parse::<f64>()
         {
-            if let Ok(val) = captures[1].parse::<f64>() {
-                stats.runtime_solver_s = Some(val);
-                found_any = true;
-            }
+            stats.runtime_solver_s = Some(val);
+            found_any = true;
         }
 
         // Example: "Runtime decision procedure: 0.00452419s"
         if let Some(captures) =
             regex::Regex::new(r"Runtime decision procedure: ([-e\d\.]+)s").ok()?.captures(message)
+            && let Ok(val) = captures[1].parse::<f64>()
         {
-            if let Ok(val) = captures[1].parse::<f64>() {
-                stats.runtime_decision_procedure_s = Some(val);
-                found_any = true;
-            }
+            stats.runtime_decision_procedure_s = Some(val);
+            found_any = true;
         }
 
         if found_any { Some(stats) } else { None }
@@ -285,61 +277,8 @@ impl KaniSession {
                 process_cbmc_output(&mut cbmc_process, |i| {
                     // Collect stats from messages
                     if let crate::cbmc_output_parser::ParserItem::Message { message_text, .. } = &i
+                        && let Some(stats) = Self::extract_cbmc_stats_from_message(message_text)
                     {
-                        if let Some(stats) = Self::extract_cbmc_stats_from_message(message_text) {
-                            // Merge stats
-                            if stats.runtime_symex_s.is_some() {
-                                collected_stats.runtime_symex_s = stats.runtime_symex_s;
-                            }
-                            if stats.size_program_expression.is_some() {
-                                collected_stats.size_program_expression =
-                                    stats.size_program_expression;
-                            }
-                            if stats.slicing_removed_assignments.is_some() {
-                                collected_stats.slicing_removed_assignments =
-                                    stats.slicing_removed_assignments;
-                            }
-                            if stats.vccs_generated.is_some() {
-                                collected_stats.vccs_generated = stats.vccs_generated;
-                            }
-                            if stats.vccs_remaining.is_some() {
-                                collected_stats.vccs_remaining = stats.vccs_remaining;
-                            }
-                            if stats.runtime_postprocess_equation_s.is_some() {
-                                collected_stats.runtime_postprocess_equation_s =
-                                    stats.runtime_postprocess_equation_s;
-                            }
-                            if stats.runtime_convert_ssa_s.is_some() {
-                                collected_stats.runtime_convert_ssa_s = stats.runtime_convert_ssa_s;
-                            }
-                            if stats.runtime_post_process_s.is_some() {
-                                collected_stats.runtime_post_process_s =
-                                    stats.runtime_post_process_s;
-                            }
-                            if stats.runtime_solver_s.is_some() {
-                                collected_stats.runtime_solver_s = stats.runtime_solver_s;
-                            }
-                            if stats.runtime_decision_procedure_s.is_some() {
-                                collected_stats.runtime_decision_procedure_s =
-                                    stats.runtime_decision_procedure_s;
-                            }
-                        }
-                    }
-
-                    kani_cbmc_output_filter(
-                        i,
-                        self.args.extra_pointer_checks,
-                        self.args.common_args.quiet,
-                        &self.args.output_format,
-                    )
-                }),
-            )
-            .await
-        } else {
-            Ok(process_cbmc_output(&mut cbmc_process, |i| {
-                // Collect stats from messages
-                if let crate::cbmc_output_parser::ParserItem::Message { message_text, .. } = &i {
-                    if let Some(stats) = Self::extract_cbmc_stats_from_message(message_text) {
                         // Merge stats
                         if stats.runtime_symex_s.is_some() {
                             collected_stats.runtime_symex_s = stats.runtime_symex_s;
@@ -374,6 +313,56 @@ impl KaniSession {
                             collected_stats.runtime_decision_procedure_s =
                                 stats.runtime_decision_procedure_s;
                         }
+                    }
+
+                    kani_cbmc_output_filter(
+                        i,
+                        self.args.extra_pointer_checks,
+                        self.args.common_args.quiet,
+                        &self.args.output_format,
+                    )
+                }),
+            )
+            .await
+        } else {
+            Ok(process_cbmc_output(&mut cbmc_process, |i| {
+                // Collect stats from messages
+                if let crate::cbmc_output_parser::ParserItem::Message { message_text, .. } = &i
+                    && let Some(stats) = Self::extract_cbmc_stats_from_message(message_text)
+                {
+                    // Merge stats
+                    if stats.runtime_symex_s.is_some() {
+                        collected_stats.runtime_symex_s = stats.runtime_symex_s;
+                    }
+                    if stats.size_program_expression.is_some() {
+                        collected_stats.size_program_expression = stats.size_program_expression;
+                    }
+                    if stats.slicing_removed_assignments.is_some() {
+                        collected_stats.slicing_removed_assignments =
+                            stats.slicing_removed_assignments;
+                    }
+                    if stats.vccs_generated.is_some() {
+                        collected_stats.vccs_generated = stats.vccs_generated;
+                    }
+                    if stats.vccs_remaining.is_some() {
+                        collected_stats.vccs_remaining = stats.vccs_remaining;
+                    }
+                    if stats.runtime_postprocess_equation_s.is_some() {
+                        collected_stats.runtime_postprocess_equation_s =
+                            stats.runtime_postprocess_equation_s;
+                    }
+                    if stats.runtime_convert_ssa_s.is_some() {
+                        collected_stats.runtime_convert_ssa_s = stats.runtime_convert_ssa_s;
+                    }
+                    if stats.runtime_post_process_s.is_some() {
+                        collected_stats.runtime_post_process_s = stats.runtime_post_process_s;
+                    }
+                    if stats.runtime_solver_s.is_some() {
+                        collected_stats.runtime_solver_s = stats.runtime_solver_s;
+                    }
+                    if stats.runtime_decision_procedure_s.is_some() {
+                        collected_stats.runtime_decision_procedure_s =
+                            stats.runtime_decision_procedure_s;
                     }
                 }
 
@@ -573,41 +562,40 @@ impl VerificationResult {
         // Collect CBMC stats from messages
         let mut cbmc_stats = CbmcStats::default();
         for item in &remaining_items {
-            if let crate::cbmc_output_parser::ParserItem::Message { message_text, .. } = item {
-                if let Some(stats) = KaniSession::extract_cbmc_stats_from_message(message_text) {
-                    // Merge stats (later messages may have more complete info)
-                    if stats.runtime_symex_s.is_some() {
-                        cbmc_stats.runtime_symex_s = stats.runtime_symex_s;
-                    }
-                    if stats.size_program_expression.is_some() {
-                        cbmc_stats.size_program_expression = stats.size_program_expression;
-                    }
-                    if stats.slicing_removed_assignments.is_some() {
-                        cbmc_stats.slicing_removed_assignments = stats.slicing_removed_assignments;
-                    }
-                    if stats.vccs_generated.is_some() {
-                        cbmc_stats.vccs_generated = stats.vccs_generated;
-                    }
-                    if stats.vccs_remaining.is_some() {
-                        cbmc_stats.vccs_remaining = stats.vccs_remaining;
-                    }
-                    if stats.runtime_postprocess_equation_s.is_some() {
-                        cbmc_stats.runtime_postprocess_equation_s =
-                            stats.runtime_postprocess_equation_s;
-                    }
-                    if stats.runtime_convert_ssa_s.is_some() {
-                        cbmc_stats.runtime_convert_ssa_s = stats.runtime_convert_ssa_s;
-                    }
-                    if stats.runtime_post_process_s.is_some() {
-                        cbmc_stats.runtime_post_process_s = stats.runtime_post_process_s;
-                    }
-                    if stats.runtime_solver_s.is_some() {
-                        cbmc_stats.runtime_solver_s = stats.runtime_solver_s;
-                    }
-                    if stats.runtime_decision_procedure_s.is_some() {
-                        cbmc_stats.runtime_decision_procedure_s =
-                            stats.runtime_decision_procedure_s;
-                    }
+            if let crate::cbmc_output_parser::ParserItem::Message { message_text, .. } = item
+                && let Some(stats) = KaniSession::extract_cbmc_stats_from_message(message_text)
+            {
+                // Merge stats (later messages may have more complete info)
+                if stats.runtime_symex_s.is_some() {
+                    cbmc_stats.runtime_symex_s = stats.runtime_symex_s;
+                }
+                if stats.size_program_expression.is_some() {
+                    cbmc_stats.size_program_expression = stats.size_program_expression;
+                }
+                if stats.slicing_removed_assignments.is_some() {
+                    cbmc_stats.slicing_removed_assignments = stats.slicing_removed_assignments;
+                }
+                if stats.vccs_generated.is_some() {
+                    cbmc_stats.vccs_generated = stats.vccs_generated;
+                }
+                if stats.vccs_remaining.is_some() {
+                    cbmc_stats.vccs_remaining = stats.vccs_remaining;
+                }
+                if stats.runtime_postprocess_equation_s.is_some() {
+                    cbmc_stats.runtime_postprocess_equation_s =
+                        stats.runtime_postprocess_equation_s;
+                }
+                if stats.runtime_convert_ssa_s.is_some() {
+                    cbmc_stats.runtime_convert_ssa_s = stats.runtime_convert_ssa_s;
+                }
+                if stats.runtime_post_process_s.is_some() {
+                    cbmc_stats.runtime_post_process_s = stats.runtime_post_process_s;
+                }
+                if stats.runtime_solver_s.is_some() {
+                    cbmc_stats.runtime_solver_s = stats.runtime_solver_s;
+                }
+                if stats.runtime_decision_procedure_s.is_some() {
+                    cbmc_stats.runtime_decision_procedure_s = stats.runtime_decision_procedure_s;
                 }
             }
         }
