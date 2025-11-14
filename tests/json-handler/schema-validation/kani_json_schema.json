@@ -1,0 +1,119 @@
+{
+  "_comment": "All fields are required unless listed in _optional. Metadata fields (starting with _) are not validated.",
+  "metadata": {
+    "version": "1.0",
+    "timestamp": "2025-10-30T12:00:00.000000Z",
+    "kani_version": "0.65.0",
+    "target": "x86_64-unknown-linux-gnu",
+    "build_mode": "debug"
+  },
+  "project": {
+    "crate_name": [
+      "example_crate"
+    ],
+    "workspace_root": "/path/to/workspace"
+  },
+  "harness_metadata": [
+    {
+      "pretty_name": "example_harness",
+      "mangled_name": "_RNvCs_example_mangled_name",
+      "crate_name": "example_crate",
+      "source": {
+        "file": "src/lib.rs",
+        "start_line": 10,
+        "end_line": 15
+      },
+      "goto_file": "/path/to/goto/file.out",
+      "attributes": {
+        "kind": "Proof",
+        "should_panic": false
+      },
+      "contract": {
+        "contracted_function_name": null,
+        "recursion_tracker": null
+      },
+      "has_loop_contracts": false,
+      "is_automatically_generated": false
+    }
+  ],
+  "verification_results": {
+    "summary": {
+      "total_harnesses": 1,
+      "executed": 1,
+      "status": "completed",
+      "successful": 1,
+      "failed": 0,
+      "duration_ms": 500
+    },
+    "results": [
+      {
+        "harness_id": "example_harness",
+        "status": "Success",
+        "duration_ms": 500,
+        "checks": [
+          {
+            "id": 1,
+            "function": "example_function",
+            "status": "Success",
+            "description": "assertion failed: x > 0",
+            "location": {
+              "file": "src/lib.rs",
+              "line": "20",
+              "column": "13"
+            },
+            "category": "assertion"
+          }
+        ]
+      }
+    ]
+  },
+  "error_details": {
+    "_optional": [
+      "error_type",
+      "failed_properties_type",
+      "exit_status"
+    ],
+    "has_errors": false,
+    "error_type": null,
+    "failed_properties_type": null,
+    "exit_status": "success"
+  },
+  "property_details": [
+    {
+      "property_details": {
+        "total_properties": 1,
+        "passed": 1,
+        "failed": 0,
+        "unreachable": 0
+      }
+    }
+  ],
+  "cbmc": [
+    {
+      "harness_id": "example_harness",
+      "cbmc_metadata": {
+        "version": "6.7.1",
+        "os_info": "x86_64 linux unix"
+      },
+      "configuration": {
+        "object_bits": 16,
+        "solver": "Cadical"
+      },
+      "cbmc_stats": {
+        "runtime_symex_s": 0.005,
+        "size_program_expression": 150,
+        "slicing_removed_assignments": 80,
+        "vccs_generated": 1,
+        "vccs_remaining": 1,
+        "runtime_postprocess_equation_s": 0.00002,
+        "runtime_convert_ssa_s": 0.002,
+        "runtime_post_process_s": 0.000005,
+        "runtime_solver_s": 0.0003,
+        "runtime_decision_procedure_s": 0.003
+      }
+    }
+  ],
+  "coverage": {
+    "enabled": false
+  }
+}
