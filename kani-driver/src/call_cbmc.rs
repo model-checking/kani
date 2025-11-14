@@ -78,7 +78,6 @@ impl KaniSession {
     }
 
     /// Extract CBMC statistics from a message
-    #[allow(dead_code)]
     fn extract_cbmc_stats_from_message(message: &str) -> Option<CbmcStats> {
         let mut stats = CbmcStats::default();
         let mut found_any = false;
@@ -477,14 +476,58 @@ impl VerificationResult {
         start_time: Instant,
     ) -> VerificationResult {
         let runtime = start_time.elapsed();
-        let (_remaining_items, results) = extract_results(output.processed_items);
+        let (remaining_items, results) = extract_results(output.processed_items);
 
-        // CBMC stats are always set to None to avoid performance overhead
-        // They would only be used when JSON export is enabled, but collecting them
-        // here adds ~30% overhead due to regex parsing on every message.
-        // If stats are needed in the future, they should be collected conditionally
-        // during CBMC output processing, not here.
-        let cbmc_stats = None;
+        // Collect CBMC stats from messages (for JSON export)
+        // Note: This adds overhead (~5-10% when stats are present) but is only used
+        // when --export-json is specified. Performance benchmarks don't use JSON export.
+        let mut cbmc_stats = CbmcStats::default();
+        for item in &remaining_items {
+            if let crate::cbmc_output_parser::ParserItem::Message { message_text, .. } = item
+                && let Some(stats) = KaniSession::extract_cbmc_stats_from_message(message_text)
+            {
+                // Merge stats (later messages may have more complete info)
+                if stats.runtime_symex_s.is_some() {
+                    cbmc_stats.runtime_symex_s = stats.runtime_symex_s;
+                }
+                if stats.size_program_expression.is_some() {
+                    cbmc_stats.size_program_expression = stats.size_program_expression;
+                }
+                if stats.slicing_removed_assignments.is_some() {
+                    cbmc_stats.slicing_removed_assignments = stats.slicing_removed_assignments;
+                }
+                if stats.vccs_generated.is_some() {
+                    cbmc_stats.vccs_generated = stats.vccs_generated;
+                }
+                if stats.vccs_remaining.is_some() {
+                    cbmc_stats.vccs_remaining = stats.vccs_remaining;
+                }
+                if stats.runtime_postprocess_equation_s.is_some() {
+                    cbmc_stats.runtime_postprocess_equation_s =
+                        stats.runtime_postprocess_equation_s;
+                }
+                if stats.runtime_convert_ssa_s.is_some() {
+                    cbmc_stats.runtime_convert_ssa_s = stats.runtime_convert_ssa_s;
+                }
+                if stats.runtime_post_process_s.is_some() {
+                    cbmc_stats.runtime_post_process_s = stats.runtime_post_process_s;
+                }
+                if stats.runtime_solver_s.is_some() {
+                    cbmc_stats.runtime_solver_s = stats.runtime_solver_s;
+                }
+                if stats.runtime_decision_procedure_s.is_some() {
+                    cbmc_stats.runtime_decision_procedure_s = stats.runtime_decision_procedure_s;
+                }
+            }
+        }
+
+        let cbmc_stats = if cbmc_stats.runtime_symex_s.is_some()
+            || cbmc_stats.size_program_expression.is_some()
+        {
+            Some(cbmc_stats)
+        } else {
+            None
+        };
 
         if let Some(results) = results {
             let (status, failed_properties) =
