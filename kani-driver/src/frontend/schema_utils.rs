@@ -259,6 +259,7 @@ pub fn process_cbmc_results(
 
 /// Simple container to standardize tool outputs captured during verification
 #[derive(Serialize)]
+#[allow(dead_code)]
 pub struct ToolOutput<'a> {
     /// Arbitrary tool name key under which this output will be grouped
     pub tool: &'a str,
@@ -269,6 +270,7 @@ pub struct ToolOutput<'a> {
 }
 
 /// Add a tool output entry to the JSON under a tool-named array
+#[allow(dead_code)]
 pub fn add_tool_output(handler: &mut JsonHandler, output: ToolOutput<'_>) {
     // structure: top-level key is the tool name, value is an array of entries
     handler.add_harness_detail(

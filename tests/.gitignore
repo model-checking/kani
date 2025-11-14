@@ -1,5 +1,7 @@
 # Temporary files and folders
 *.json
+# Exception: schema files used for validation
+!json-handler/schema-validation/kani_json_schema.json
 kani_concrete_playback
 rmet*/
 target/
