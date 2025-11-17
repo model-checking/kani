@@ -1,5 +1,4 @@
-.assertion\
+__CPROVER_contracts_\
 - Status: SUCCESS\
-- Description: "ptr NULL or writable up to size"\
 
 VERIFICATION:- SUCCESSFUL
