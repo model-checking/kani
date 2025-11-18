@@ -60,20 +60,28 @@ pub struct FailedCheck {
 }
 
 /// Wrapper around cargo-kani for executing verification
-pub struct KaniWrapper {
-    cargo_kani_path: PathBuf,
-}
+pub struct KaniWrapper {}
 
 impl KaniWrapper {
-    /// Create a new KaniWrapper, finding cargo-kani in PATH
+    /// Create a new KaniWrapper and verify cargo-kani is available and reuses kani-driver's setup_cargo_command functionality
     pub fn new() -> Result<Self> {
-        let cargo_kani = which::which("cargo-kani")
+        let mut cmd = Self::setup_cargo_command()?;
+        cmd.arg("kani").arg("--version");
+        
+        let output = cmd.output()
             .context("cargo-kani not found in PATH. Please install Kani:\n  cargo install --locked kani-verifier\n  cargo kani setup")?;
         
-        info!("✓ Found cargo-kani at: {:?}", cargo_kani);
-        Ok(Self {
-            cargo_kani_path: cargo_kani,
-        })
+        if !output.status.success() {
+            anyhow::bail!("cargo-kani not properly installed or setup failed");
+        }
+        
+        info!("✓ Found cargo-kani");
+        Ok(Self {})
+    }
+
+    fn setup_cargo_command() -> Result<Command> {
+        let mut cmd = Command::new("cargo");
+        Ok(cmd)
     }
 
     /// Run Kani verification with the given options
@@ -84,7 +92,7 @@ impl KaniWrapper {
             anyhow::bail!("Path does not exist: {:?}", options.path);
         }
 
-        let mut cmd = Command::new(&self.cargo_kani_path);
+        let mut cmd = Self::setup_cargo_command()?;
         cmd.arg("kani");
         cmd.current_dir(&options.path);
 
@@ -137,7 +145,6 @@ impl KaniWrapper {
             warn!("Kani stderr: {}", stderr);
         }
 
-        // Parse the output
         let result = self.parse_output(&combined_output, output.status.success())?;
 
         info!("Verification complete: {}", result.summary);

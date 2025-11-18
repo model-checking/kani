@@ -1,7 +1,7 @@
 [package]
 name = "kani-mcp-server"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 description = "Model Context Protocol server for Kani Rust Verifier - enables AI assistants like Amazon Q to run formal verification"
 license = "MIT OR Apache-2.0"
 
