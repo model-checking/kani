@@ -168,7 +168,7 @@ impl From<&Rvalue> for Key {
             Rvalue::Cast(_, _, _) => Key("Cast"),
             Rvalue::BinaryOp(..) => Key("BinaryOp"),
             Rvalue::CheckedBinaryOp(..) => Key("CheckedBinaryOp"),
-            Rvalue::NullaryOp(_, _) => Key("NullaryOp"),
+            Rvalue::NullaryOp(_) => Key("NullaryOp"),
             Rvalue::UnaryOp(_, _) => Key("UnaryOp"),
             Rvalue::Discriminant(_) => Key("Discriminant"),
             Rvalue::Aggregate(_, _) => Key("Aggregate"),

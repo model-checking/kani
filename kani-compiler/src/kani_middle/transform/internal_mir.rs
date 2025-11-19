@@ -191,24 +191,10 @@ impl RustcInternalMir for BorrowKind {
 }
 
 impl RustcInternalMir for NullOp {
-    type T<'tcx> = rustc_middle::mir::NullOp<'tcx>;
+    type T<'tcx> = rustc_middle::mir::NullOp;
 
-    fn internal_mir<'tcx>(&self, tcx: TyCtxt<'tcx>) -> Self::T<'tcx> {
+    fn internal_mir<'tcx>(&self, _tcx: TyCtxt<'tcx>) -> Self::T<'tcx> {
         match self {
-            NullOp::OffsetOf(offsets) => rustc_middle::mir::NullOp::OffsetOf(
-                tcx.mk_offset_of(
-                    offsets
-                        .iter()
-                        .map(|(variant_idx, field_idx)| {
-                            (
-                                internal(tcx, variant_idx),
-                                rustc_abi::FieldIdx::from_usize(*field_idx),
-                            )
-                        })
-                        .collect::<Vec<_>>()
-                        .as_slice(),
-                ),
-            ),
             NullOp::RuntimeChecks(RuntimeChecks::UbChecks) => {
                 rustc_middle::mir::NullOp::RuntimeChecks(rustc_middle::mir::RuntimeChecks::UbChecks)
             }
@@ -278,8 +264,8 @@ impl RustcInternalMir for Rvalue {
             Rvalue::ThreadLocalRef(crate_item) => {
                 rustc_middle::mir::Rvalue::ThreadLocalRef(internal(tcx, crate_item.0))
             }
-            Rvalue::NullaryOp(null_op, ty) => {
-                rustc_middle::mir::Rvalue::NullaryOp(null_op.internal_mir(tcx), internal(tcx, ty))
+            Rvalue::NullaryOp(null_op) => {
+                rustc_middle::mir::Rvalue::NullaryOp(null_op.internal_mir(tcx))
             }
             Rvalue::UnaryOp(un_op, operand) => {
                 rustc_middle::mir::Rvalue::UnaryOp(internal(tcx, un_op), operand.internal_mir(tcx))
