@@ -67,14 +67,14 @@ impl KaniWrapper {
     pub fn new() -> Result<Self> {
         let mut cmd = Self::setup_cargo_command()?;
         cmd.arg("kani").arg("--version");
-        
+
         let output = cmd.output()
             .context("cargo-kani not found in PATH. Please install Kani:\n  cargo install --locked kani-verifier\n  cargo kani setup")?;
-        
+
         if !output.status.success() {
             anyhow::bail!("cargo-kani not properly installed or setup failed");
         }
-        
+
         info!("✓ Found cargo-kani");
         Ok(Self {})
     }
@@ -87,7 +87,7 @@ impl KaniWrapper {
     /// Run Kani verification with the given options
     pub async fn verify(&self, options: KaniOptions) -> Result<VerificationResult> {
         info!("Starting Kani verification on: {:?}", options.path);
-        
+
         if !options.path.exists() {
             anyhow::bail!("Path does not exist: {:?}", options.path);
         }
@@ -131,8 +131,7 @@ impl KaniWrapper {
 
         // Execute and capture output
         let start = std::time::Instant::now();
-        let output = cmd.output()
-            .context("Failed to execute cargo-kani. Is it installed?")?;
+        let output = cmd.output().context("Failed to execute cargo-kani. Is it installed?")?;
         let duration = start.elapsed();
 
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
@@ -140,7 +139,7 @@ impl KaniWrapper {
         let combined_output = format!("{}\n{}", stdout, stderr);
 
         debug!("Kani completed in {:.2}s", duration.as_secs_f64());
-        
+
         if !stderr.is_empty() && stderr.contains("error") {
             warn!("Kani stderr: {}", stderr);
         }
@@ -148,29 +147,31 @@ impl KaniWrapper {
         let result = self.parse_output(&combined_output, output.status.success())?;
 
         info!("Verification complete: {}", result.summary);
-        
+
         Ok(result)
     }
 
     /// Parse Kani output into structured result
     fn parse_output(&self, output: &str, success: bool) -> Result<VerificationResult> {
         use crate::parser::KaniOutputParser;
-        
+
         let parser = KaniOutputParser::new(output);
         let harnesses = parser.parse_harnesses();
         let failed_checks = parser.parse_failed_checks();
         let verification_time = parser.parse_verification_time();
 
         let total_harnesses = harnesses.len();
-        let failed_harnesses = harnesses.iter()
-            .filter(|h| h.status == "FAILED")
-            .count();
-        
+        let failed_harnesses = harnesses.iter().filter(|h| h.status == "FAILED").count();
+
         let summary = if success {
             format!("Verification successful! {} harness(es) verified.", total_harnesses)
         } else {
-            format!("Verification failed. {}/{} harness(es) failed with {} check failure(s).", 
-                    failed_harnesses, total_harnesses, failed_checks.len())
+            format!(
+                "Verification failed. {}/{} harness(es) failed with {} check failure(s).",
+                failed_harnesses,
+                total_harnesses,
+                failed_checks.len()
+            )
         };
 
         Ok(VerificationResult {

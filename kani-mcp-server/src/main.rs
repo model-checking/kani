@@ -12,8 +12,7 @@ async fn main() -> Result<()> {
     if std::env::var("KANI_MCP_LOG").is_ok() {
         tracing_subscriber::fmt()
             .with_env_filter(
-                EnvFilter::from_default_env()
-                    .add_directive("kani_mcp_server=info".parse()?)
+                EnvFilter::from_default_env().add_directive("kani_mcp_server=info".parse()?),
             )
             .init();
     }

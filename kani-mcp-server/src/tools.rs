@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 /// Definition of an MCP tool
 #[derive(Debug, Clone, Serialize, Deserialize)]

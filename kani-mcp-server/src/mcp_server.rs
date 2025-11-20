@@ -1,5 +1,5 @@
 use crate::kani_wrapper::{KaniOptions, KaniWrapper, VerificationResult};
-use crate::tools::{get_kani_tools, ToolResult};
+use crate::tools::{ToolResult, get_kani_tools};
 use anyhow::Result;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -14,15 +14,12 @@ pub struct KaniMcpServer {
 impl KaniMcpServer {
     pub fn new() -> Result<Self> {
         let kani = Arc::new(KaniWrapper::new()?);
-        Ok(Self {
-            kani,
-            last_result: Arc::new(Mutex::new(None)),
-        })
+        Ok(Self { kani, last_result: Arc::new(Mutex::new(None)) })
     }
 
     pub async fn run(self) -> Result<()> {
         use tokio::io::{AsyncBufReadExt, BufReader, stdin};
-        
+
         let stdin = stdin();
         let reader = BufReader::new(stdin);
         let mut lines = reader.lines();
@@ -35,7 +32,7 @@ impl KaniMcpServer {
             match serde_json::from_str::<serde_json::Value>(&line) {
                 Ok(request) => {
                     let response = self.handle_mcp_request(request).await;
-                    
+
                     if !response.is_null() {
                         if let Ok(response_str) = serde_json::to_string(&response) {
                             println!("{}", response_str);
@@ -53,7 +50,7 @@ impl KaniMcpServer {
 
     async fn handle_mcp_request(&self, request: serde_json::Value) -> serde_json::Value {
         use serde_json::json;
-        
+
         let method = request["method"].as_str().unwrap_or("");
         let id = request["id"].clone();
 
@@ -94,7 +91,7 @@ impl KaniMcpServer {
             }
             "prompts/get" => {
                 let prompt_name = request["params"]["name"].as_str().unwrap_or("");
-                
+
                 if prompt_name == "kani_context" {
                     json!({
                         "jsonrpc": "2.0",
@@ -146,9 +143,9 @@ impl KaniMcpServer {
             "tools/call" => {
                 let tool_name = request["params"]["name"].as_str().unwrap_or("");
                 let arguments = &request["params"]["arguments"];
-                
+
                 let result = self.execute_tool(tool_name, arguments).await;
-                
+
                 json!({
                     "jsonrpc": "2.0",
                     "id": id,
@@ -169,7 +166,11 @@ impl KaniMcpServer {
     }
 
     /// Execute a specific tool
-    async fn execute_tool(&self, tool_name: &str, arguments: &serde_json::Value) -> serde_json::Value {
+    async fn execute_tool(
+        &self,
+        tool_name: &str,
+        arguments: &serde_json::Value,
+    ) -> serde_json::Value {
         use serde_json::json;
 
         match tool_name {
@@ -179,15 +180,15 @@ impl KaniMcpServer {
                 let tests = arguments["tests"].as_bool().unwrap_or(false);
                 let output_format = arguments["output_format"].as_str().map(String::from);
 
-                match self.handle_verify_project(
-                    path.to_string(),
-                    harness,
-                    tests,
-                    output_format,
-                ).await {
+                match self
+                    .handle_verify_project(path.to_string(), harness, tests, output_format)
+                    .await
+                {
                     Ok(result) => {
                         // Store the result for potential later analysis
-                        if let Ok(verification_result) = serde_json::from_value::<VerificationResult>(result.data.clone()) {
+                        if let Ok(verification_result) =
+                            serde_json::from_value::<VerificationResult>(result.data.clone())
+                        {
                             *self.last_result.lock().await = Some(verification_result);
                         }
 
@@ -238,9 +239,7 @@ impl KaniMcpServer {
                     output_str.to_string()
                 } else {
                     let last = self.last_result.lock().await;
-                    last.as_ref()
-                        .map(|r| r.raw_output.clone())
-                        .unwrap_or_default()
+                    last.as_ref().map(|r| r.raw_output.clone()).unwrap_or_default()
                 };
 
                 if raw_output.is_empty() {
@@ -382,33 +381,27 @@ Remember: Generated harness templates are EXAMPLES ONLY and won't work without c
                     error: None,
                 })
             }
-            Err(e) => {
-                Ok(ToolResult {
-                    success: false,
-                    data: serde_json::json!({}),
-                    error: Some(e.to_string()),
-                })
-            }
+            Err(e) => Ok(ToolResult {
+                success: false,
+                data: serde_json::json!({}),
+                error: Some(e.to_string()),
+            }),
         }
     }
 
-    pub async fn handle_verify_unsafe(
-        &self,
-        path: String,
-        harness: String,
-    ) -> Result<ToolResult> {
+    pub async fn handle_verify_unsafe(&self, path: String, harness: String) -> Result<ToolResult> {
         self.handle_verify_project(path, Some(harness), false, Some("terse".to_string())).await
     }
 
     pub async fn handle_explain_failure(&self, raw_output: String) -> Result<ToolResult> {
         use crate::parser::KaniOutputParser;
-        
+
         let parser = KaniOutputParser::new(&raw_output);
         let failed_checks = parser.parse_failed_checks();
         let harnesses = parser.parse_harnesses();
         let counterexamples = parser.parse_counterexamples();
         let code_context = parser.extract_code_context();
-        
+
         let detailed_explanation = parser.generate_detailed_explanation();
 
         Ok(ToolResult {
@@ -434,7 +427,7 @@ Remember: Generated harness templates are EXAMPLES ONLY and won't work without c
     /// - Match the actual function signature and parameter types
     /// - Properly construct symbolic inputs for complex types
     /// - Add appropriate property assertions
-    /// 
+    ///
     /// For automatic harness generation, consider using Kani's built-in auto-harness feature:
     /// `cargo kani --enable-unstable --function <function_name>`
     pub async fn handle_generate_harness(
@@ -443,7 +436,7 @@ Remember: Generated harness templates are EXAMPLES ONLY and won't work without c
         properties: Vec<String>,
     ) -> Result<ToolResult> {
         let harness_code = format!(
-r#"// ⚠️  WARNING: This is an EXAMPLE TEMPLATE that requires customization!
+            r#"// ⚠️  WARNING: This is an EXAMPLE TEMPLATE that requires customization!
 // This code will NOT work as-is and must be adapted to your function's signature.
 // 
 // For automatic harness generation, use Kani's auto-harness feature:
@@ -476,7 +469,8 @@ mod verification {{
             function_name,
             function_name.replace("::", "_"),
             function_name,
-            properties.iter()
+            properties
+                .iter()
                 .map(|prop| format!("        // Property: {}", prop))
                 .collect::<Vec<_>>()
                 .join("\n")
