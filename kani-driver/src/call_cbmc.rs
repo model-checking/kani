@@ -478,9 +478,7 @@ impl VerificationResult {
         let runtime = start_time.elapsed();
         let (remaining_items, results) = extract_results(output.processed_items);
 
-        // Collect CBMC stats from messages (for JSON export)
-        // Note: This adds overhead (~5-10% when stats are present) but is only used
-        // when --export-json is specified. Performance benchmarks don't use JSON export.
+        // Collect CBMC stats from messages
         let mut cbmc_stats = CbmcStats::default();
         for item in &remaining_items {
             if let crate::cbmc_output_parser::ParserItem::Message { message_text, .. } = item
