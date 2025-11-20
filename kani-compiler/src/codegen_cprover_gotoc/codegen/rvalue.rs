@@ -19,7 +19,7 @@ use cbmc::goto_program::{
 use cbmc::{InternString, InternedString, btree_string_map};
 use num::bigint::BigInt;
 use rustc_abi::{FieldsShape, TagEncoding, Variants};
-use rustc_middle::ty::{TyCtxt, TypingEnv, VtblEntry};
+use rustc_middle::ty::{TyCtxt, VtblEntry};
 use rustc_public::abi::{Primitive, Scalar, ValueAbi};
 use rustc_public::mir::mono::Instance;
 use rustc_public::mir::{
@@ -824,27 +824,7 @@ impl GotocCtx<'_, '_> {
             Rvalue::CheckedBinaryOp(op, e1, e2) => {
                 self.codegen_rvalue_checked_binary_op(op, e1, e2, res_ty)
             }
-            Rvalue::NullaryOp(k, t) => {
-                let layout = self.layout_of_stable(*t);
-                match k {
-                    NullOp::OffsetOf(fields) => Expr::int_constant(
-                        self.tcx
-                            .offset_of_subfield(
-                                TypingEnv::fully_monomorphized(),
-                                layout,
-                                fields.iter().map(|(var_idx, field_idx)| {
-                                    (
-                                        rustc_internal::internal(self.tcx, var_idx),
-                                        (*field_idx).into(),
-                                    )
-                                }),
-                            )
-                            .bytes(),
-                        Type::size_t(),
-                    ),
-                    NullOp::RuntimeChecks(_) => Expr::c_false(),
-                }
-            }
+            Rvalue::NullaryOp(NullOp::RuntimeChecks(_)) => Expr::c_false(),
             Rvalue::ShallowInitBox(operand, content_ty) => {
                 // The behaviour of ShallowInitBox is simply transmuting *mut u8 to Box<T>.
                 // See https://github.com/rust-lang/compiler-team/issues/460 for more details.
