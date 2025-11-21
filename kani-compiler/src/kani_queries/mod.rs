@@ -20,6 +20,12 @@ pub struct QueryDb {
     kani_functions: OnceCell<HashMap<KaniFunction, FnDef>>,
 }
 
+// SAFETY: QueryDb is always used behind Arc<Mutex<>> which provides proper synchronization.
+// The FnDef type from rustc_public is not Send due to ThreadLocalIndex, but we ensure
+// it's only accessed within the appropriate rustc_public context and never actually sent
+// between threads.
+unsafe impl Send for QueryDb {}
+
 impl QueryDb {
     pub fn new() -> Arc<Mutex<QueryDb>> {
         Arc::new(Mutex::new(QueryDb::default()))

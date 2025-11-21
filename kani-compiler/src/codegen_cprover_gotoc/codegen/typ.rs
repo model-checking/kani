@@ -808,7 +808,7 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
         let flds: Vec<_> =
             tys.iter().enumerate().map(|(i, t)| (GotocCtx::tuple_fld_name(i), *t)).collect();
         // tuple cannot have other initial offset
-        self.codegen_struct_fields(flds, &layout.layout.0, Size::ZERO)
+        self.codegen_struct_fields(flds, &layout.layout, Size::ZERO)
     }
 
     /// A closure is a struct of all its environments. That is, a closure is
@@ -980,7 +980,7 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
             }
             fields.extend(ctx.codegen_alignment_padding(
                 offset,
-                &type_and_layout.layout.0,
+                &type_and_layout.layout,
                 fields.len(),
             ));
             fields
@@ -1175,7 +1175,7 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
         self.ensure_struct(self.ty_mangled_name(ty), self.ty_pretty_name(ty), |ctx, _| {
             let variant = &def.variants().raw[0];
             let layout = ctx.layout_of(ty);
-            ctx.codegen_variant_struct_fields(variant, subst, &layout.layout.0, Size::ZERO)
+            ctx.codegen_variant_struct_fields(variant, subst, &layout.layout, Size::ZERO)
         })
     }
 
@@ -1293,7 +1293,7 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
                         Some(variant) => {
                             // a single enum is pretty much like a struct
                             let layout = gcx.layout_of(ty).layout;
-                            gcx.codegen_variant_struct_fields(variant, subst, &layout.0, Size::ZERO)
+                            gcx.codegen_variant_struct_fields(variant, subst, &layout, Size::ZERO)
                         }
                     }
                 })
