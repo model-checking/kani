@@ -80,7 +80,7 @@ impl KaniWrapper {
     }
 
     fn setup_cargo_command() -> Result<Command> {
-        let mut cmd = Command::new("cargo");
+        let cmd = Command::new("cargo");
         Ok(cmd)
     }
 

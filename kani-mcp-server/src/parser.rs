@@ -16,31 +16,26 @@ impl<'a> KaniOutputParser<'a> {
         let mut current_harness: Option<String> = None;
 
         for line in self.output.lines() {
-            if line.contains("Checking harness") {
-                if let Some(name_part) = line.split("Checking harness").nth(1) {
-                    current_harness = Some(name_part.trim().trim_end_matches("...").to_string());
-                }
+            if line.contains("Checking harness")
+                && let Some(name_part) = line.split("Checking harness").nth(1)
+            {
+                current_harness = Some(name_part.trim().trim_end_matches("...").to_string());
             }
 
             // Detect harness completion
-            if line.contains("VERIFICATION") {
-                if let Some(name) = current_harness.take() {
-                    let status = if line.contains("SUCCESSFUL") {
-                        "SUCCESS"
-                    } else if line.contains("FAILED") {
-                        "FAILED"
-                    } else {
-                        "UNKNOWN"
-                    }
-                    .to_string();
-
-                    harnesses.push(HarnessResult {
-                        name,
-                        status,
-                        checks_passed: 0,
-                        checks_failed: 0,
-                    });
+            if line.contains("VERIFICATION")
+                && let Some(name) = current_harness.take()
+            {
+                let status = if line.contains("SUCCESSFUL") {
+                    "SUCCESS"
+                } else if line.contains("FAILED") {
+                    "FAILED"
+                } else {
+                    "UNKNOWN"
                 }
+                .to_string();
+
+                harnesses.push(HarnessResult { name, status, checks_passed: 0, checks_failed: 0 });
             }
         }
 
@@ -73,13 +68,12 @@ impl<'a> KaniOutputParser<'a> {
                     break;
                 }
 
-                if let Some(check) = self.parse_failed_check_line(line) {
-                    if !failed_checks
+                if let Some(check) = self.parse_failed_check_line(line)
+                    && !failed_checks
                         .iter()
                         .any(|c| c.description == check.description && c.line == check.line)
-                    {
-                        failed_checks.push(check);
-                    }
+                {
+                    failed_checks.push(check);
                 }
             }
         }
@@ -89,7 +83,7 @@ impl<'a> KaniOutputParser<'a> {
 
     /// Parse a single check result line
     fn parse_single_check(&self, line: &str) -> Option<FailedCheck> {
-        let check_num = line.split("Check").nth(1)?.split(':').next()?.trim();
+        let _check_num = line.split("Check").nth(1)?.split(':').next()?.trim();
 
         // Look for the next few lines to get details
         let lines: Vec<&str> = self.output.lines().collect();
@@ -102,9 +96,7 @@ impl<'a> KaniOutputParser<'a> {
         let mut is_failure = false;
 
         // Parse the next few lines for details
-        for i in (current_idx + 1)..(current_idx + 5).min(lines.len()) {
-            let detail_line = lines[i];
-
+        for detail_line in lines.iter().skip(current_idx + 1).take(4) {
             if detail_line.contains("- Status: FAILURE") {
                 is_failure = true;
             }
@@ -172,10 +164,10 @@ impl<'a> KaniOutputParser<'a> {
     /// Parse verification time from output
     pub fn parse_verification_time(&self) -> Option<f64> {
         for line in self.output.lines() {
-            if line.contains("Verification Time:") {
-                if let Some(time_str) = line.split(':').nth(1) {
-                    return time_str.trim().trim_end_matches('s').parse::<f64>().ok();
-                }
+            if line.contains("Verification Time:")
+                && let Some(time_str) = line.split(':').nth(1)
+            {
+                return time_str.trim().trim_end_matches('s').parse::<f64>().ok();
             }
         }
         None
@@ -223,13 +215,13 @@ impl<'a> KaniOutputParser<'a> {
         explanation.push_str("═══════════════════════════════════════════════\n\n");
 
         // Summary
-        explanation.push_str(&format!("Summary:\n"));
+        explanation.push_str("Summary:\n");
         explanation.push_str(&format!("  • Total harnesses: {}\n", harnesses.len()));
         explanation.push_str(&format!("  • Failed checks: {}\n", failed_checks.len()));
         if let Some(time) = verification_time {
             explanation.push_str(&format!("  • Verification time: {:.3}s\n", time));
         }
-        explanation.push_str("\n");
+        explanation.push('\n');
 
         // Failed checks detail
         if !failed_checks.is_empty() {
@@ -243,7 +235,7 @@ impl<'a> KaniOutputParser<'a> {
                     check.line.map(|l| l.to_string()).unwrap_or_else(|| "?".to_string())
                 ));
                 explanation.push_str(&format!("   Function: {}\n", check.function));
-                explanation.push_str("\n");
+                explanation.push('\n');
             }
         }
 
@@ -253,7 +245,7 @@ impl<'a> KaniOutputParser<'a> {
             for ce in counterexamples {
                 explanation.push_str(&format!("  • {}\n", ce));
             }
-            explanation.push_str("\n");
+            explanation.push('\n');
         }
 
         // Root cause analysis
@@ -290,7 +282,7 @@ impl<'a> KaniOutputParser<'a> {
                 explanation
                     .push_str("  • The code doesn't handle all possible input cases correctly\n");
             }
-            explanation.push_str("\n");
+            explanation.push('\n');
         }
 
         // Suggested fixes
@@ -331,7 +323,7 @@ impl<'a> KaniOutputParser<'a> {
                 explanation.push_str("  3. Fix the underlying logic:\n");
                 explanation.push_str("     • Adjust the code to handle all cases correctly\n");
             }
-            explanation.push_str("\n");
+            explanation.push('\n');
         }
 
         // Next steps

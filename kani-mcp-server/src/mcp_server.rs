@@ -33,10 +33,10 @@ impl KaniMcpServer {
                 Ok(request) => {
                     let response = self.handle_mcp_request(request).await;
 
-                    if !response.is_null() {
-                        if let Ok(response_str) = serde_json::to_string(&response) {
-                            println!("{}", response_str);
-                        }
+                    if !response.is_null()
+                        && let Ok(response_str) = serde_json::to_string(&response)
+                    {
+                        println!("{}", response_str);
                     }
                 }
                 Err(_e) => {
@@ -277,7 +277,7 @@ impl KaniMcpServer {
                 let properties = arguments["properties"]
                     .as_array()
                     .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
-                    .unwrap_or_else(Vec::new);
+                    .unwrap_or_default();
 
                 match self.handle_generate_harness(function_name, properties).await {
                     Ok(result) => {
