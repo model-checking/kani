@@ -1,8 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-//! Utility functions for creating structured JSON schemas
-//! This module contains helper functions to convert Kani internal structures to JSON
+// Utility functions for creating structured JSON schemas
+// This module contains helper functions to convert Kani internal structures to JSON
 
 use crate::call_cbmc::VerificationStatus;
 use crate::frontend::JsonHandler;

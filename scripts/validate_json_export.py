@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+#
 """
 JSON Export Validation Script for Kani Integration Tests
 

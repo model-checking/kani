@@ -1,3 +1,9 @@
+// Copyright Kani Contributors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+/// Tests for the schema_utils module
+/// This module contains tests for the schema_utils module
+/// and the json_handler module
 use crate::call_cbmc::{ExitStatus, FailedProperties, VerificationResult, VerificationStatus};
 use crate::cbmc_output_parser::{CheckStatus, Property, PropertyId, SourceLocation};
 use crate::frontend::JsonHandler;
