@@ -23,7 +23,7 @@ jobs:
         os: [macos-15-intel, ubuntu-22.04, ubuntu-24.04, macos-14, ubuntu-24.04-arm]
     steps:
       - name: Checkout Kani
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
@@ -39,7 +39,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout Kani
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Install benchcomp dependencies
         run: |
@@ -64,7 +64,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout Kani
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
@@ -82,7 +82,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout Kani
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
@@ -108,7 +108,7 @@ jobs:
       contents: write
     steps:
       - name: Checkout Kani
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           submodules: recursive
 

@@ -31,14 +31,14 @@ jobs:
         os: [ ubuntu-22.04, macos-14 ]
     steps:
       - name: Checkout Library
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           repository: model-checking/verify-rust-std
           path: verify-rust-std
           submodules: true
 
       - name: Checkout `Kani`
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           path: kani
           fetch-depth: 0
