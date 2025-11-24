@@ -1,3 +1,6 @@
+// Copyright Kani Contributors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
 use crate::kani_wrapper::{KaniOptions, KaniWrapper, VerificationResult};
 use crate::tools::{ToolResult, get_kani_tools};
 use anyhow::Result;

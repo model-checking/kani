@@ -1,3 +1,6 @@
+// Copyright Kani Contributors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
 mod kani_wrapper;
 mod mcp_server;
 mod parser;
