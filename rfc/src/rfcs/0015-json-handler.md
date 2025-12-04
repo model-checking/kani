@@ -232,7 +232,7 @@ We add a new test suite under `tests/json-handler/` with four test scenarios tha
 
 The `basic-export/` test verifies that the JSON export flag works and produces valid JSON with the expected top-level structure. The `schema-validation/` test is more comprehensive—it runs a verification with multiple harnesses and validates the entire JSON structure against the schema template. This directory also houses the canonical `kani_json_schema.json` file, making it easy to find and update.
 
-The `multiple-harnesses/` test specifically checks that results from multiple harnesses are correctly aggregated and that the `harness_id` correlation works across different blocks. Finally, `failed-verification/` tests that error information is correctly captured and that optional error fields are populated on failure.
+The `multiple-harnesses/` test specifically checks that results from multiple harnesses are correctly aggregated and that the `harness_id` correlation works across different blocks. Finally, `failed-verification/` tests check that error information is correctly captured and that optional error fields are populated on failure.
 
 ### Implementation Flow
 
