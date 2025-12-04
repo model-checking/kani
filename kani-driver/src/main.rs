@@ -12,11 +12,16 @@ use args_toml::join_args;
 
 use crate::args::StandaloneSubcommand;
 use crate::concrete_playback::playback::{playback_cargo, playback_standalone};
+use crate::frontend::{
+    JsonHandler, create_harness_metadata_json, create_metadata_json, create_project_metadata_json,
+    process_cbmc_results, process_harness_results,
+};
 use crate::list::collect_metadata::{list_cargo, list_standalone};
 use crate::project::Project;
 use crate::session::KaniSession;
 use crate::version::print_kani_version;
 use clap::Parser;
+use serde_json::json;
 use tracing::debug;
 
 mod args;
@@ -36,6 +41,8 @@ mod harness_runner;
 mod list;
 mod metadata;
 mod project;
+
+mod frontend;
 mod session;
 mod util;
 mod version;
@@ -128,12 +135,26 @@ fn standalone_main() -> Result<()> {
 /// Run verification on the given project.
 fn verify_project(project: Project, session: KaniSession) -> Result<()> {
     debug!(?project, "verify_project");
+    let mut handler = JsonHandler::new(session.args.export_json.clone());
     let harnesses = session.determine_targets(project.get_all_harnesses())?;
     debug!(n = harnesses.len(), ?harnesses, "verify_project");
 
+    // Add project and export run metadata using frontend utility
+    handler.add_item("metadata", create_metadata_json());
+    handler.add_item("project", create_project_metadata_json(&project));
+
+    // Add harness metadata using frontend utility
+    for h in &harnesses {
+        handler.add_harness_detail("harness_metadata", create_harness_metadata_json(h));
+    }
+
     // Verification
     let runner = harness_runner::HarnessRunner { sess: &session, project: &project };
-    let results = runner.check_all_harnesses(&harnesses)?;
+    let results = runner.check_all_harnesses(&harnesses, Some(&mut handler))?;
+
+    // Process harness results and add additional metadata using frontend utility function
+    process_harness_results(&mut handler, &harnesses, &results)?;
+    process_cbmc_results(&mut handler, &harnesses, &results, &session)?;
 
     if session.args.coverage {
         // We generate a timestamp to save the coverage data in a folder named
@@ -150,7 +171,13 @@ fn verify_project(project: Project, session: KaniSession) -> Result<()> {
 
         session.save_coverage_metadata(&project, &timestamp)?;
         session.save_coverage_results(&project, &results, &timestamp)?;
+
+        handler.add_item("coverage", json!({"enabled": true}));
+    } else {
+        handler.add_item("coverage", json!({"enabled": false}));
     }
+
+    handler.export()?;
 
     session.print_final_summary(&results)
 }
