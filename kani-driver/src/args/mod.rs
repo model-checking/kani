@@ -242,7 +242,7 @@ pub struct VerificationArgs {
     #[arg(long)]
     pub default_unwind: Option<u32>,
 
-    #[arg(long = "export-json")]
+    #[arg(long)]
     pub export_json: Option<PathBuf>,
 
     /// When specified, the harness filter will only match the exact fully qualified name of a harness
