@@ -153,12 +153,16 @@ def validate_field_path(json_file, field_path, schema=None):
 
     for part in parts:
         if part not in current_data:
-            print(f"ERROR: Field path '{field_path}' not found in data")
+            print(
+                f"ERROR: Field path '{field_path}' not found in data. Missing part: '{part}'"
+            )
             return False
         current_data = current_data[part]
 
         if part not in current_schema:
-            print(f"ERROR: Field path '{field_path}' not found in schema template")
+            print(
+                f"ERROR: Field path '{field_path}' not found in schema template. Missing part: '{part}'"
+            )
             return False
         current_schema = current_schema[part]
 
