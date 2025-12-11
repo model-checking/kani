@@ -112,7 +112,7 @@ You can do this by putting this into your `Cargo.toml` file:
 
 ```toml
 [workspace.metadata.kani.flags]
-default-unwind = 1
+default-unwind = "1"
 ```
 
 ## Bounded proof
