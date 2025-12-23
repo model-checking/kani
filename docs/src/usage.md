@@ -106,3 +106,27 @@ This will ensure that a normal build of your code will be completely unaffected 
 This conditional compilation with `cfg(kani)` (as seen above) is still required for Kani proofs placed under `tests/`.
 When this code is built by `cargo test`, the `kani` crate is not available, and so it would otherwise cause build failures.
 (Whereas the use of `dev-dependencies` under `tests/` does not need to be gated with `cfg(test)` since that code is already only built when testing.)
+
+## Rust Analyzer Setup
+
+If you are using Rust Analyzer (e.g. in VS Code), we recommend using the following setup to allow Rust Analyzer to analyze Kani-specific code (e.g. Kani annotations, APIs, etc.) and get proper code completion and error:
+
+1. Add the following to your package's `Cargo.toml`:
+```toml
+[target.'cfg(kani_ra)'.dependencies]
+kani = { git = "https://github.com/model-checking/kani" }
+```
+
+This adds Kani as a dependency that is conditional on `kani_ra`.
+
+2. Add the following to your Rust Analyzer configuration file (e.g. `settings.json` for VS Code):
+```
+    "rust-analyzer.cargo.extraEnv": {
+        "RUSTFLAGS": "--cfg kani_ra --cfg kani",
+        "RUSTUP_TOOLCHAIN": "nightly"
+    },
+```
+Explanation:
+- Enabling the `kani_ra` configuration allows Rust Analyzer to see the Kani definitions in the crate added in the `Cargo.toml` file.
+- Enabling the `kani` configuration enables blocks guarded by `#[cfg(kani)]`.
+- Finally, using the nightly toolchain is necessary for Rust Analyzer to be able to handle the code in the Kani dependency, many of which requires nightly features.
