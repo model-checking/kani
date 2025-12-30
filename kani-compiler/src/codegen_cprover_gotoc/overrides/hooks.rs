@@ -1031,6 +1031,64 @@ fn find_closure_call_expr(instance: &Instance, gcx: &mut GotocCtx, loc: Location
     None
 }
 
+/// This hook intercepts calls to `std::ptr::align_offset<T>` as CBMC's memory model has no concept
+/// of alignment of allocations, so we would have to non-deterministically choose an alignment of
+/// the base pointer, add the pointer's offset to it, and then do the math that is done in
+/// `library/core/src/ptr/mod.rs`. Instead, we choose to always return `usize::MAX`, per
+/// `align_offset`'s documentation, which states: "It is permissible for the implementation to
+/// always return usize::MAX. Only your algorithm’s performance can depend on getting a usable
+/// offset here, not its correctness."
+struct AlignOffset;
+
+impl GotocHook for AlignOffset {
+    fn hook_applies(&self, _tcx: TyCtxt, instance: Instance) -> bool {
+        let full_name = instance.name();
+        full_name.starts_with("std::ptr::align_offset::<")
+    }
+
+    fn handle(
+        &self,
+        gcx: &mut GotocCtx,
+        _instance: Instance,
+        mut fargs: Vec<Expr>,
+        assign_to: &Place,
+        target: Option<BasicBlockIdx>,
+        span: Span,
+    ) -> Stmt {
+        assert_eq!(fargs.len(), 2);
+        let ptr = fargs.remove(0);
+        let align = fargs.remove(0);
+        // test power-of-two: align > 0 && (align & (align - 1)) == 0
+        let zero = Expr::int_constant(0, align.typ().clone());
+        let one = Expr::int_constant(1, align.typ().clone());
+        let cond = align
+            .clone()
+            .gt(zero.clone())
+            .and(align.clone().bitand(align.clone().sub(one)).eq(zero));
+        let loc = gcx.codegen_span_stable(span);
+        let safety_check = gcx.codegen_assert_assume(
+            cond,
+            PropertyClass::SafetyCheck,
+            "align_offset: align is not a power-of-two",
+            loc,
+        );
+        let place_expr = unwrap_or_return_codegen_unimplemented_stmt!(
+            gcx,
+            gcx.codegen_place_stable(assign_to, loc)
+        )
+        .goto_expr;
+        let pointer_offset = Expr::pointer_offset(ptr);
+        let trivially_aligned =
+            pointer_offset.clone().eq(Expr::int_constant(0, pointer_offset.typ().clone()));
+        let rhs = trivially_aligned.ternary(
+            Expr::int_constant(0, place_expr.typ().clone()),
+            Expr::int_constant(usize::MAX, place_expr.typ().clone()),
+        );
+        let assign = place_expr.assign(rhs, loc).with_location(loc);
+        Stmt::block(vec![safety_check, assign, Stmt::goto(bb_label(target.unwrap()), loc)], loc)
+    }
+}
+
 pub fn fn_hooks() -> GotocHooks {
     let kani_lib_hooks = [
         (KaniHook::Assert, Rc::new(Assert) as Rc<dyn GotocHook>),
@@ -1058,6 +1116,7 @@ pub fn fn_hooks() -> GotocHooks {
             Rc::new(RustAlloc),
             Rc::new(MemCmp),
             Rc::new(LoopInvariantRegister),
+            Rc::new(AlignOffset),
         ],
     }
 }
