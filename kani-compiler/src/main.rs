@@ -34,6 +34,7 @@ extern crate rustc_interface;
 extern crate rustc_metadata;
 extern crate rustc_middle;
 extern crate rustc_mir_dataflow;
+extern crate rustc_parse;
 extern crate rustc_public;
 extern crate rustc_public_bridge;
 extern crate rustc_session;
