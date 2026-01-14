@@ -45,7 +45,7 @@ fn llbc_backend(args: Arguments) -> Box<dyn CodegenBackend> {
     #[cfg(feature = "llbc")]
     {
         QUERY_DB.with(|db| db.borrow_mut().set_args(args));
-        return Box::new(LlbcCodegenBackend::new());
+        Box::new(LlbcCodegenBackend::new())
     }
     #[cfg(not(feature = "llbc"))]
     unreachable!()
@@ -57,7 +57,7 @@ fn cprover_backend(args: Arguments) -> Box<dyn CodegenBackend> {
     #[cfg(feature = "cprover")]
     {
         QUERY_DB.with(|db| db.borrow_mut().set_args(args));
-        return Box::new(GotocCodegenBackend::new());
+        Box::new(GotocCodegenBackend::new())
     }
     #[cfg(not(feature = "cprover"))]
     unreachable!()
