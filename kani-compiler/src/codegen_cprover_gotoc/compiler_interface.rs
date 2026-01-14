@@ -14,7 +14,7 @@ use crate::kani_middle::codegen_units::{CodegenUnit, CodegenUnits};
 use crate::kani_middle::provide;
 use crate::kani_middle::reachability::{collect_reachable_items, filter_crate_items};
 use crate::kani_middle::transform::{BodyTransformation, GlobalPasses};
-use crate::kani_queries::QueryDb;
+use crate::kani_queries::QUERY_DB;
 use cbmc::goto_program::Location;
 use cbmc::{InternedString, MachineModel};
 use cbmc::{RoundingMode, WithInterner};
@@ -52,7 +52,6 @@ use std::fs::File;
 use std::io::BufWriter;
 use std::num::NonZero;
 use std::path::Path;
-use std::sync::{Arc, Mutex};
 use std::thread::available_parallelism;
 use std::time::Instant;
 use tracing::{debug, info};
@@ -66,17 +65,11 @@ const MAX_SENSIBLE_FILE_EXPORT_THREADS: usize = 4;
 
 pub type UnsupportedConstructs = FxHashMap<InternedString, Vec<Location>>;
 
-pub struct GotocCodegenBackend {
-    /// The query is shared with `KaniCompiler` and it is initialized as part of `rustc`
-    /// initialization, which may happen after this object is created.
-    /// Since we don't have any guarantees on when the compiler creates the Backend object, neither
-    /// in which thread it will be used, we prefer to explicitly synchronize any query access.
-    queries: Arc<Mutex<QueryDb>>,
-}
+pub struct GotocCodegenBackend {}
 
 impl GotocCodegenBackend {
-    pub fn new(queries: Arc<Mutex<QueryDb>>) -> Self {
-        GotocCodegenBackend { queries }
+    pub fn new() -> Self {
+        GotocCodegenBackend {}
     }
 
     /// Generate code that is reachable from the given starting points.
@@ -140,7 +133,7 @@ impl GotocCodegenBackend {
         // Follow rustc naming convention (cx is abbrev for context).
         // https://rustc-dev-guide.rust-lang.org/conventions.html#naming-conventions
         let mut gcx =
-            GotocCtx::new(tcx, (*self.queries.lock().unwrap()).clone(), machine_model, transformer);
+            QUERY_DB.with(|db| GotocCtx::new(tcx, db.borrow().clone(), machine_model, transformer));
         check_reachable_items(gcx.tcx, &gcx.queries, &items);
 
         let contract_info = with_timer(
@@ -221,7 +214,7 @@ impl GotocCodegenBackend {
 
         // No output should be generated if user selected no_codegen.
         if !tcx.sess.opts.unstable_opts.no_codegen && tcx.sess.opts.output_types.should_codegen() {
-            let pretty = self.queries.lock().unwrap().args().output_pretty_json;
+            let pretty = QUERY_DB.with(|db| db.borrow().args().output_pretty_json);
 
             // Save all the data needed to write this goto file
             // so another thread can handle it in parallel.
@@ -283,7 +276,7 @@ impl GotocCodegenBackend {
 
 impl CodegenBackend for GotocCodegenBackend {
     fn provide(&self, providers: &mut Providers) {
-        provide::provide(providers, &self.queries.lock().unwrap());
+        QUERY_DB.with(|db| provide::provide(providers, &db.borrow()));
     }
 
     fn print_version(&self) {
@@ -341,7 +334,7 @@ impl CodegenBackend for GotocCodegenBackend {
             // needed for generating code to the given crate.
             // The cached information must not outlive the stable-mir `run` scope.
             // See [QueryDb::kani_functions] for more information.
-            let queries = self.queries.lock().unwrap().clone();
+            let queries = QUERY_DB.with(|db| db.borrow().clone());
 
             check_target(tcx.sess);
             check_options(tcx.sess);
