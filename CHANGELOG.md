@@ -7,8 +7,6 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 ## [0.67.0]
 
 ### What's Changed
-
-## What's Changed
 * Gracefully fail when compiling structs with too large array by @tautschnig in https://github.com/model-checking/kani/pull/4461
 * fix: Make kani attribute nameres work with generic args having `::` by @ShoyuVanilla in https://github.com/model-checking/kani/pull/4427
 * NixOS: patch binaries if the dynamic linker is a stub by @GrigorenkoPV in https://github.com/model-checking/kani/pull/4413
@@ -18,7 +16,7 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 * Add a section with recommended setup for Rust Analyzer by @zhassan-aws in https://github.com/model-checking/kani/pull/4504
 * Upgrade Rust toolchain to 2025-11-21 by @tautschnig, @zhassan-aws
 
-## New Contributors
+### New Contributors
 * @hashcatHitman made their first contribution in https://github.com/model-checking/kani/pull/4496
 
 **Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.66.0...kani-0.67.0
