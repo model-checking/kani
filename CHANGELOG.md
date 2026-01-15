@@ -4,6 +4,25 @@ This file contains notable changes (e.g. breaking changes, major changes, etc.) 
 
 This file was introduced starting Kani 0.23.0, so it only contains changes from version 0.23.0 onwards.
 
+## [0.67.0]
+
+### What's Changed
+
+## What's Changed
+* Gracefully fail when compiling structs with too large array by @tautschnig in https://github.com/model-checking/kani/pull/4461
+* fix: Make kani attribute nameres work with generic args having `::` by @ShoyuVanilla in https://github.com/model-checking/kani/pull/4427
+* NixOS: patch binaries if the dynamic linker is a stub by @GrigorenkoPV in https://github.com/model-checking/kani/pull/4413
+* Update charon submodule by 15 commits by @tautschnig in https://github.com/model-checking/kani/pull/4464
+* Arrays with more than 64 elements no longer cause spurious failures by @tautschnig in https://github.com/model-checking/kani/pull/4470
+* docs: Correct `default-unwind` Cargo.toml examples by @hashcatHitman in https://github.com/model-checking/kani/pull/4496
+* Add a section with recommended setup for Rust Analyzer by @zhassan-aws in https://github.com/model-checking/kani/pull/4504
+* Upgrade Rust toolchain to 2025-11-21 by @tautschnig, @zhassan-aws
+
+## New Contributors
+* @hashcatHitman made their first contribution in https://github.com/model-checking/kani/pull/4496
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.66.0...kani-0.67.0
+
 ## [0.66.0]
 
 ### Breaking Changes
