@@ -242,6 +242,11 @@ pub struct VerificationArgs {
     #[arg(long)]
     pub default_unwind: Option<u32>,
 
+    /// Output the verification results to a JSON file at the specified path.
+    /// This feature is unstable and it requires `-Z unstable-options` to be used
+    #[arg(long)]
+    pub export_json: Option<PathBuf>,
+
     /// When specified, the harness filter will only match the exact fully qualified name of a harness
     #[arg(long, requires("harnesses"))]
     pub exact: bool,

@@ -1,5 +1,6 @@
 # Temporary files and folders
 *.json
+!json-handler/schema-validation/*.json
 kani_concrete_playback
 rmet*/
 target/
