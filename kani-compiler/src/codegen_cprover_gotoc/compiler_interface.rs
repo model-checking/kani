@@ -6,7 +6,7 @@
 use crate::args::ReachabilityType;
 use crate::codegen_cprover_gotoc::context::MinimalGotocCtx;
 use crate::codegen_cprover_gotoc::utils::file_writing_pool::{FileDataToWrite, ThreadPool};
-use crate::codegen_cprover_gotoc::{GotocCtx, context};
+use crate::codegen_cprover_gotoc::{GotocCtx, clear_codegen_cache, context};
 use crate::kani_middle::analysis;
 use crate::kani_middle::attributes::KaniAttributes;
 use crate::kani_middle::check_reachable_items;
@@ -401,6 +401,8 @@ impl CodegenBackend for GotocCodegenBackend {
                             BodyTransformation::new(&queries, tcx, unit);
 
                         for harness in &unit.harnesses {
+                            clear_codegen_cache();
+
                             let model_path = units.harness_model_path(*harness).unwrap();
                             let is_automatic_harness = units.is_automatic_harness(harness);
                             let contract_metadata =
