@@ -116,7 +116,7 @@ impl Callbacks for KaniCompiler {
         // (potentially on a different thread).
         config.make_codegen_backend = Some(Box::new({
             let args = args.clone();
-            move |_cfg| backend(args)
+            move |_cfg, _| backend(args)
         }));
     }
 

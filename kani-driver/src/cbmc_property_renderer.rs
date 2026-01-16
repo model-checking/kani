@@ -461,13 +461,10 @@ fn build_failure_message(description: String, trace: &Option<Vec<TraceItem>>) ->
     }
     let failure_source = failure_source_wrap.unwrap();
 
-    if failure_source.file.is_some()
-        && failure_source.function.is_some()
-        && failure_source.line.is_some()
+    if let Some(failure_file) = failure_source.file
+        && let Some(failure_function) = failure_source.function
+        && let Some(failure_line) = failure_source.line
     {
-        let failure_file = failure_source.file.unwrap();
-        let failure_function = failure_source.function.unwrap();
-        let failure_line = failure_source.line.unwrap();
         return format!(
             "Failed Checks: {description}\n File: \"{failure_file}\", line {failure_line}, in {failure_function}\n"
         );

@@ -183,11 +183,11 @@ impl AnyModifiesPass {
                         valid = false;
                         debug!(?e, "AnyModifiesPass::any_body failed");
                         let receiver_ty = args.0[0].expect_ty();
-                        let msg = if self.target_fn.is_some() {
+                        let msg = if let Some(target_fn) = self.target_fn {
                             format!(
                                 "`{receiver_ty}` doesn't implement `kani::Arbitrary`.\
                                         Please, check `{}` contract.",
-                                self.target_fn.unwrap(),
+                                target_fn,
                             )
                         } else {
                             format!("`{receiver_ty}` doesn't implement `kani::Arbitrary`.")
