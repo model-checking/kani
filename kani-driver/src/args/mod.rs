@@ -825,8 +825,10 @@ impl ValidateArgs for VerificationArgs {
         deprecated_stabilized_obsolete()?;
 
         // Bespoke validations that don't fit into any of the categories above.
-        if self.randomize_layout.is_some() && self.concrete_playback.is_some() {
-            let random_seed = if let Some(seed) = self.randomize_layout.unwrap() {
+        if let Some(randomize_layout) = self.randomize_layout
+            && self.concrete_playback.is_some()
+        {
+            let random_seed = if let Some(seed) = randomize_layout {
                 format!(" -Z layout-seed={seed}")
             } else {
                 String::new()
