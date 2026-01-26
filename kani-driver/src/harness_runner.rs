@@ -257,7 +257,7 @@ impl KaniSession {
             // Write to log file if specified, otherwise to stdout
             if let Some(ref log_file_path) = self.args.log_file {
                 self.write_to_log_file(log_file_path, &msg, thread_index);
-            } else if !suppress_console {
+            } else {
                 println!("{msg}");
             }
         }
