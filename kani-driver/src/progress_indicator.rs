@@ -72,7 +72,7 @@ impl ProgressIndicator {
     pub fn new(total_harnesses: usize, show_progress: bool) -> Self {
         let stats = VerificationStats::new(total_harnesses);
 
-        if show_progress && std::io::stdout().is_terminal() {
+        if show_progress {
             let multi_progress = MultiProgress::new();
             let progress_bar = multi_progress.add(ProgressBar::new(total_harnesses as u64));
 
