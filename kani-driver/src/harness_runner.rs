@@ -229,9 +229,6 @@ impl KaniSession {
     ) -> Result<VerificationResult> {
         let thread_index = rayon::current_thread_index().unwrap_or_default();
 
-        // Determine if we should suppress console output (when using log file with progress indicator)
-        let suppress_console = self.args.log_file.is_some() && std::io::stdout().is_terminal();
-
         if !self.args.common_args.quiet {
             // If the harness is automatically generated, pretty_name refers to the function under verification.
             let mut msg = if harness.is_automatically_generated {

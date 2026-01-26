@@ -2,8 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! Progress indicator for verification harness execution
 
-use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-use std::io::IsTerminal;
+use indicatif::{ProgressBar, ProgressStyle};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -73,8 +72,7 @@ impl ProgressIndicator {
         let stats = VerificationStats::new(total_harnesses);
 
         if show_progress {
-            let multi_progress = MultiProgress::new();
-            let progress_bar = multi_progress.add(ProgressBar::new(total_harnesses as u64));
+            let progress_bar = ProgressBar::new(total_harnesses as u64);
 
             progress_bar.set_style(
                 ProgressStyle::with_template(
