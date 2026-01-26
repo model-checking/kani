@@ -191,15 +191,14 @@ pub fn kani_cbmc_output_filter(
         if let Some(fmt_item) = formatted_item {
             if suppress_terminal {
                 // Write to log file instead of terminal
-                if let Some(log_path) = log_file {
-                    if let Err(e) = write_to_log_file(log_path, &fmt_item) {
+                if let Some(log_path) = log_file
+                    && let Err(e) = write_to_log_file(log_path, &fmt_item) {
                         eprintln!(
                             "Failed to write CBMC output to log file {}: {}",
                             log_path.display(),
                             e
                         );
                     }
-                }
             } else {
                 // Normal terminal output
                 println!("{fmt_item}");
