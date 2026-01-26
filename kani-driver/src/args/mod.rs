@@ -326,6 +326,12 @@ pub struct VerificationArgs {
     #[arg(long, hide_short_help = true)]
     pub output_into_files: bool,
 
+    /// Write verbose and terse log output to the specified file.
+    /// When enabled with an interactive terminal, progress indicator will be shown on terminal
+    /// while detailed logs are written to the file.
+    #[arg(long, value_name = "PATH")]
+    pub log_file: Option<PathBuf>,
+
     /// Print final LLBC for Lean backend. This requires the `-Z lean` option.
     #[arg(long, hide = true)]
     pub print_llbc: bool,
