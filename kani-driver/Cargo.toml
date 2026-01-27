@@ -36,6 +36,7 @@ which = "8"
 time = {version = "0.3.36", features = ["formatting"]}
 tokio = { version = "1.40.0", features = ["io-util", "process", "rt", "time"] }
 chrono = { version = "0.4.41", default-features = false, features = [ "clock" ]}
+indicatif = "0.18"
 
 
 # A good set of suggested dependencies can be found in rustup:

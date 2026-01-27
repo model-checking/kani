@@ -9,6 +9,7 @@ use std::collections::BTreeMap;
 use std::collections::btree_map::Entry;
 use std::ffi::OsString;
 use std::fmt::Write;
+use std::io::IsTerminal;
 use std::path::Path;
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
@@ -120,6 +121,10 @@ impl KaniSession {
 
         let start_time = Instant::now();
 
+        // Determine if we should suppress terminal output (redirect to log file)
+        let suppress_terminal = self.args.log_file.is_some() && std::io::stdout().is_terminal();
+        let log_file_path = self.args.log_file.clone();
+
         let res = if let Some(timeout) = self.args.harness_timeout {
             tokio::time::timeout(
                 timeout.into(),
@@ -129,6 +134,8 @@ impl KaniSession {
                         self.args.extra_pointer_checks,
                         self.args.common_args.quiet,
                         &self.args.output_format,
+                        suppress_terminal,
+                        log_file_path.as_ref(),
                     )
                 }),
             )
@@ -140,6 +147,8 @@ impl KaniSession {
                     self.args.extra_pointer_checks,
                     self.args.common_args.quiet,
                     &self.args.output_format,
+                    suppress_terminal,
+                    log_file_path.as_ref(),
                 )
             })
             .await)
