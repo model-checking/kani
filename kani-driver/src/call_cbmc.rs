@@ -26,6 +26,154 @@ use crate::coverage::cov_results::{CoverageRegion, CoverageTerm};
 use crate::session::KaniSession;
 use crate::util::render_command;
 
+/// CBMC version and system information
+#[derive(Debug, Clone)]
+pub struct CbmcInfo {
+    pub version: String,
+    pub os_info: String,
+}
+
+/// CBMC runtime and execution statistics
+#[derive(Debug, Clone, Default)]
+pub struct CbmcStats {
+    pub runtime_symex_s: Option<f64>,
+    pub size_program_expression: Option<u32>,
+    pub slicing_removed_assignments: Option<u32>,
+    pub vccs_generated: Option<u32>,
+    pub vccs_remaining: Option<u32>,
+    pub runtime_postprocess_equation_s: Option<f64>,
+    pub runtime_convert_ssa_s: Option<f64>,
+    pub runtime_post_process_s: Option<f64>,
+    pub runtime_solver_s: Option<f64>,
+    pub runtime_decision_procedure_s: Option<f64>,
+}
+
+impl KaniSession {
+    /// Get CBMC version and system information
+    pub fn get_cbmc_info(&self) -> Result<CbmcInfo> {
+        let output = std::process::Command::new("cbmc")
+            .arg("--version")
+            .output()
+            .map_err(|_| anyhow::Error::msg("Failed to run cbmc --version"))?;
+
+        let version_output = String::from_utf8_lossy(&output.stdout);
+        let lines: Vec<&str> = version_output.lines().collect();
+
+        // Extract version from first line (e.g., "6.7.1 (cbmc-6.7.1)")
+        let version = lines
+            .first()
+            .and_then(|line| line.split_whitespace().next())
+            .unwrap_or("unknown")
+            .to_string();
+
+        // For OS info, we'll use the system information since CBMC --version doesn't provide it
+        let os_info = format!(
+            "{} {} {}",
+            std::env::consts::ARCH,
+            std::env::consts::OS,
+            std::env::consts::FAMILY
+        );
+
+        Ok(CbmcInfo { version, os_info })
+    }
+
+    /// Extract CBMC statistics from a message
+    fn extract_cbmc_stats_from_message(message: &str) -> Option<CbmcStats> {
+        let mut stats = CbmcStats::default();
+        let mut found_any = false;
+
+        // Example: "Runtime Symex: 0.00408627s"
+        if let Some(captures) =
+            regex::Regex::new(r"Runtime Symex: ([-e\d\.]+)s").ok()?.captures(message)
+            && let Ok(val) = captures[1].parse::<f64>()
+        {
+            stats.runtime_symex_s = Some(val);
+            found_any = true;
+        }
+
+        // Example: "size of program expression: 150 steps"
+        if let Some(captures) =
+            regex::Regex::new(r"size of program expression: (\d+) steps").ok()?.captures(message)
+            && let Ok(val) = captures[1].parse::<u32>()
+        {
+            stats.size_program_expression = Some(val);
+            found_any = true;
+        }
+
+        // Example: "slicing removed 81 assignments"
+        if let Some(captures) =
+            regex::Regex::new(r"slicing removed (\d+) assignments").ok()?.captures(message)
+            && let Ok(val) = captures[1].parse::<u32>()
+        {
+            stats.slicing_removed_assignments = Some(val);
+            found_any = true;
+        }
+
+        // Example: "Generated 1 VCC(s), 1 remaining after simplification"
+        if let Some(captures) =
+            regex::Regex::new(r"Generated (\d+) VCC\(s\), (\d+) remaining after simplification")
+                .ok()?
+                .captures(message)
+        {
+            if let Ok(generated) = captures[1].parse::<u32>() {
+                stats.vccs_generated = Some(generated);
+                found_any = true;
+            }
+            if let Ok(remaining) = captures[2].parse::<u32>() {
+                stats.vccs_remaining = Some(remaining);
+                found_any = true;
+            }
+        }
+
+        // Example: "Runtime Postprocess Equation: 0.000767182s"
+        if let Some(captures) =
+            regex::Regex::new(r"Runtime Postprocess Equation: ([-e\d\.]+)s").ok()?.captures(message)
+            && let Ok(val) = captures[1].parse::<f64>()
+        {
+            stats.runtime_postprocess_equation_s = Some(val);
+            found_any = true;
+        }
+
+        // Example: "Runtime Convert SSA: 0.000516981s"
+        if let Some(captures) =
+            regex::Regex::new(r"Runtime Convert SSA: ([-e\d\.]+)s").ok()?.captures(message)
+            && let Ok(val) = captures[1].parse::<f64>()
+        {
+            stats.runtime_convert_ssa_s = Some(val);
+            found_any = true;
+        }
+
+        // Example: "Runtime Post-process: 0.000189636s"
+        if let Some(captures) =
+            regex::Regex::new(r"Runtime Post-process: ([-e\d\.]+)s").ok()?.captures(message)
+            && let Ok(val) = captures[1].parse::<f64>()
+        {
+            stats.runtime_post_process_s = Some(val);
+            found_any = true;
+        }
+
+        // Example: "Runtime Solver: 0.00167592s"
+        if let Some(captures) =
+            regex::Regex::new(r"Runtime Solver: ([-e\d\.]+)s").ok()?.captures(message)
+            && let Ok(val) = captures[1].parse::<f64>()
+        {
+            stats.runtime_solver_s = Some(val);
+            found_any = true;
+        }
+
+        // Example: "Runtime decision procedure: 0.00452419s"
+        if let Some(captures) =
+            regex::Regex::new(r"Runtime decision procedure: ([-e\d\.]+)s").ok()?.captures(message)
+            && let Ok(val) = captures[1].parse::<f64>()
+        {
+            stats.runtime_decision_procedure_s = Some(val);
+            found_any = true;
+        }
+
+        if found_any { Some(stats) } else { None }
+    }
+}
+
 /// We will use Cadical by default since it performed better than MiniSAT in our analysis.
 /// Note: Kissat was marginally better, but it is an external solver which could be more unstable.
 static DEFAULT_SOLVER: CbmcSolver = CbmcSolver::Cadical;
@@ -75,6 +223,8 @@ pub struct VerificationResult {
     pub generated_concrete_test: bool,
     /// The coverage results
     pub coverage_results: Option<CoverageResults>,
+    /// CBMC execution statistics extracted from messages
+    pub cbmc_stats: Option<CbmcStats>,
 }
 
 impl KaniSession {
@@ -161,6 +311,7 @@ impl KaniSession {
                 runtime: start_time.elapsed(),
                 generated_concrete_test: false,
                 coverage_results: None,
+                cbmc_stats: None,
             })
         }
     }
@@ -325,7 +476,56 @@ impl VerificationResult {
         start_time: Instant,
     ) -> VerificationResult {
         let runtime = start_time.elapsed();
-        let (_, results) = extract_results(output.processed_items);
+        let (remaining_items, results) = extract_results(output.processed_items);
+
+        // Collect CBMC stats from messages
+        let mut cbmc_stats = CbmcStats::default();
+        for item in &remaining_items {
+            if let crate::cbmc_output_parser::ParserItem::Message { message_text, .. } = item
+                && let Some(stats) = KaniSession::extract_cbmc_stats_from_message(message_text)
+            {
+                // Merge stats (later messages may have more complete info)
+                if stats.runtime_symex_s.is_some() {
+                    cbmc_stats.runtime_symex_s = stats.runtime_symex_s;
+                }
+                if stats.size_program_expression.is_some() {
+                    cbmc_stats.size_program_expression = stats.size_program_expression;
+                }
+                if stats.slicing_removed_assignments.is_some() {
+                    cbmc_stats.slicing_removed_assignments = stats.slicing_removed_assignments;
+                }
+                if stats.vccs_generated.is_some() {
+                    cbmc_stats.vccs_generated = stats.vccs_generated;
+                }
+                if stats.vccs_remaining.is_some() {
+                    cbmc_stats.vccs_remaining = stats.vccs_remaining;
+                }
+                if stats.runtime_postprocess_equation_s.is_some() {
+                    cbmc_stats.runtime_postprocess_equation_s =
+                        stats.runtime_postprocess_equation_s;
+                }
+                if stats.runtime_convert_ssa_s.is_some() {
+                    cbmc_stats.runtime_convert_ssa_s = stats.runtime_convert_ssa_s;
+                }
+                if stats.runtime_post_process_s.is_some() {
+                    cbmc_stats.runtime_post_process_s = stats.runtime_post_process_s;
+                }
+                if stats.runtime_solver_s.is_some() {
+                    cbmc_stats.runtime_solver_s = stats.runtime_solver_s;
+                }
+                if stats.runtime_decision_procedure_s.is_some() {
+                    cbmc_stats.runtime_decision_procedure_s = stats.runtime_decision_procedure_s;
+                }
+            }
+        }
+
+        let cbmc_stats = if cbmc_stats.runtime_symex_s.is_some()
+            || cbmc_stats.size_program_expression.is_some()
+        {
+            Some(cbmc_stats)
+        } else {
+            None
+        };
 
         if let Some(results) = results {
             let (status, failed_properties) =
@@ -338,6 +538,7 @@ impl VerificationResult {
                 runtime,
                 generated_concrete_test: false,
                 coverage_results,
+                cbmc_stats,
             }
         } else {
             // We never got results from CBMC - something went wrong (e.g. crash) so it's failure
@@ -353,6 +554,7 @@ impl VerificationResult {
                 runtime,
                 generated_concrete_test: false,
                 coverage_results: None,
+                cbmc_stats,
             }
         }
     }
@@ -365,6 +567,7 @@ impl VerificationResult {
             runtime: Duration::from_secs(0),
             generated_concrete_test: false,
             coverage_results: None,
+            cbmc_stats: None,
         }
     }
 
@@ -379,6 +582,7 @@ impl VerificationResult {
             runtime: Duration::from_secs(0),
             generated_concrete_test: false,
             coverage_results: None,
+            cbmc_stats: None,
         }
     }
 
