@@ -228,7 +228,6 @@ impl KaniSession {
         harness: &HarnessMetadata,
     ) -> Result<VerificationResult> {
         let thread_index = rayon::current_thread_index().unwrap_or_default();
-
         if !self.args.common_args.quiet {
             // If the harness is automatically generated, pretty_name refers to the function under verification.
             let mut msg = if harness.is_automatically_generated {

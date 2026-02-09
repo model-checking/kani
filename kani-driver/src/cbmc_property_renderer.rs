@@ -168,14 +168,13 @@ impl ParserItem {
 /// filter and transform it into the format we expect.
 ///
 /// This will output "messages" live as they stream in if `output_format` is
-/// set to `regular` but will otherwise not print. When `suppress_terminal` is true
-/// and a log file path is provided, output is redirected to the log file instead.
+/// set to `regular` but will otherwise not print. When a log file path is provided, output is
+/// redirected to the log file instead.
 pub fn kani_cbmc_output_filter(
     item: ParserItem,
     extra_ptr_checks: bool,
     quiet: bool,
     output_format: &OutputFormat,
-    suppress_terminal: bool,
     log_file: Option<&PathBuf>,
 ) -> Option<ParserItem> {
     // Some items (e.g., messages) are skipped.
@@ -189,20 +188,14 @@ pub fn kani_cbmc_output_filter(
     if !quiet {
         let formatted_item = format_item(&processed_item, output_format);
         if let Some(fmt_item) = formatted_item {
-            if suppress_terminal {
-                // Write to log file instead of terminal
-                if let Some(log_path) = log_file
-                    && let Err(e) = write_to_log_file(log_path, &fmt_item)
-                {
-                    eprintln!(
-                        "Failed to write CBMC output to log file {}: {}",
-                        log_path.display(),
-                        e
-                    );
-                }
-            } else {
-                // Normal terminal output
+            if log_file.is_none() {
                 println!("{fmt_item}");
+            } else if let Err(e) = write_to_log_file(log_file.unwrap(), &fmt_item) {
+                eprintln!(
+                    "Failed to write CBMC output to log file {}: {}",
+                    log_file.unwrap().display(),
+                    e
+                );
             }
         }
     }
