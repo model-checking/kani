@@ -188,14 +188,16 @@ pub fn kani_cbmc_output_filter(
     if !quiet {
         let formatted_item = format_item(&processed_item, output_format);
         if let Some(fmt_item) = formatted_item {
-            if log_file.is_none() {
+            if let Some(log_path) = log_file {
+                if let Err(e) = write_to_log_file(log_path, &fmt_item) {
+                    eprintln!(
+                        "Failed to write CBMC output to log file {}: {}",
+                        log_path.display(),
+                        e
+                    );
+                }
+            } else {
                 println!("{fmt_item}");
-            } else if let Err(e) = write_to_log_file(log_file.unwrap(), &fmt_item) {
-                eprintln!(
-                    "Failed to write CBMC output to log file {}: {}",
-                    log_file.unwrap().display(),
-                    e
-                );
             }
         }
     }
