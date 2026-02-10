@@ -44,6 +44,13 @@ mod version;
 /// The driver can be invoked via `cargo kani` and `kani` commands, which determines what kind of
 /// project should be verified.
 fn main() -> ExitCode {
+    // Set GLIBC_TUNABLES for child processes (CBMC, etc.) if not already set
+    // This enables THP for subprocesses even if the parent didn't have it set at startup
+    if std::env::var("GLIBC_TUNABLES").is_err() {
+        // SAFETY: Called at start of main before any threads are spawned
+        unsafe { std::env::set_var("GLIBC_TUNABLES", "glibc.malloc.hugetlb=1") };
+    }
+
     let invocation_type = determine_invocation_type(Vec::from_iter(std::env::args_os()));
 
     let result = match invocation_type {
