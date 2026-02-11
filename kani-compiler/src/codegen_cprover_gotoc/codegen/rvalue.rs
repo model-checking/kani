@@ -27,8 +27,8 @@ use rustc_public::mir::{
 };
 use rustc_public::rustc_internal;
 use rustc_public::ty::{
-    Binder, ClosureKind, ExistentialPredicate, IntTy, RigidTy, Size, Ty, TyConst, TyKind, UintTy,
-    VariantIdx,
+    Binder, ClosureKind, ExistentialPredicate, FloatTy, IntTy, RigidTy, Size, Ty, TyConst, TyKind,
+    UintTy, VariantIdx,
 };
 use std::collections::BTreeMap;
 use tracing::{debug, trace, warn};
@@ -1086,6 +1086,15 @@ impl GotocCtx<'_, '_> {
         let src_ty_kind = src_ty.kind();
         let dst_ty_kind = dst_ty.kind();
 
+        // Float to integer casting requires special handling for saturating semantics.
+        // Since Rust 1.45, the `as` keyword performs a saturating cast when casting
+        // from float to int. See https://doc.rust-lang.org/reference/expressions/operator-expr.html#numeric-cast
+        if let TyKind::RigidTy(RigidTy::Float(_)) = src_ty_kind
+            && dst_ty_kind.is_integral()
+        {
+            return self.codegen_float_to_int_saturating_cast(src, dst_ty);
+        }
+
         // number casting
         if src_ty_kind.is_numeric() && dst_ty_kind.is_numeric() {
             return self.codegen_operand_stable(src).cast_to(self.codegen_ty_stable(dst_ty));
@@ -1159,6 +1168,143 @@ impl GotocCtx<'_, '_> {
                 self.codegen_operand_stable(src).cast_to(self.codegen_ty_stable(dst_ty))
             }
             _ => unreachable!("Unexpected cast destination type: `{dst_ty:?}`"),
+        }
+    }
+
+    /// Codegen a float-to-int cast with Rust's saturating semantics.
+    ///
+    /// Since Rust 1.45, the `as` keyword performs a *saturating cast* when casting from float to int:
+    /// - If the value is NaN, the result is 0
+    /// - If the value exceeds the upper bound, the result is MAX
+    /// - If the value is below the lower bound, the result is MIN (or 0 for unsigned types)
+    /// - If the value is positive infinity, the result is MAX
+    /// - If the value is negative infinity, the result is MIN (or 0 for unsigned types)
+    /// - Otherwise, the value is truncated toward zero
+    ///
+    /// See: https://doc.rust-lang.org/reference/expressions/operator-expr.html#numeric-cast
+    fn codegen_float_to_int_saturating_cast(&mut self, src: &Operand, dst_ty: Ty) -> Expr {
+        let src_expr = self.codegen_operand_stable(src);
+        let dst_goto_ty = self.codegen_ty_stable(dst_ty);
+        let mm = self.symbol_table.machine_model();
+
+        // Get the integer type bounds
+        let int_min = dst_goto_ty.min_int_expr(mm);
+        let int_max = dst_goto_ty.max_int_expr(mm);
+
+        // Get the source float type for creating bound constants
+        let src_ty = self.operand_ty_stable(src);
+
+        // Get the integer bounds as float constants for comparison.
+        // Note: We convert the integer bounds to float for comparison.
+        // For very large integer types (i128, u128), the float conversion may lose precision,
+        // but this is acceptable because:
+        // 1. Any float value that's truly larger than MAX_INT will still compare as > MAX_INT
+        // 2. Any float value that's truly smaller than MIN_INT will still compare as < MIN_INT
+        let int_min_as_float = self.int_bounds_as_float(dst_ty, false, src_ty);
+        let int_max_as_float = self.int_bounds_as_float(dst_ty, true, src_ty);
+
+        // Determine if the destination type is signed
+        let dst_is_signed = matches!(dst_ty.kind(), TyKind::RigidTy(RigidTy::Int(_)));
+
+        // Check for special cases:
+        // 1. isnan(src) -> result is 0
+        // 2. src > int_max -> result is MAX
+        // 3. src < int_min -> result is MIN (or 0 for unsigned)
+        // 4. Otherwise -> truncate toward zero
+        let is_nan = src_expr.clone().is_nan();
+        let above_max = src_expr.clone().gt(int_max_as_float.clone());
+        let below_min = src_expr.clone().lt(int_min_as_float);
+
+        // The truncated value (normal cast behavior for values in range)
+        let truncated = src_expr.cast_to(dst_goto_ty.clone());
+
+        // Build the nested ternary expression:
+        // isnan ? 0 : (above_max ? MAX : (below_min ? MIN : truncated))
+        let int_zero = dst_goto_ty.zero();
+        let min_value = if dst_is_signed { int_min } else { int_zero.clone() };
+
+        // Note: For positive infinity, above_max will be true.
+        // For negative infinity, below_min will be true.
+        // So infinity cases are handled by the bounds checks.
+        below_min
+            .ternary(min_value, above_max.ternary(int_max, is_nan.ternary(int_zero, truncated)))
+    }
+
+    /// Convert an integer bound (min or max) to a float constant for the given float type.
+    fn int_bounds_as_float(&self, int_ty: Ty, is_max: bool, float_ty: Ty) -> Expr {
+        let mm = self.symbol_table.machine_model();
+
+        // Get the integer bound value
+        let bound_value: f64 = match int_ty.kind() {
+            TyKind::RigidTy(RigidTy::Int(int_kind)) => {
+                if is_max {
+                    match int_kind {
+                        IntTy::I8 => i8::MAX as f64,
+                        IntTy::I16 => i16::MAX as f64,
+                        IntTy::I32 => i32::MAX as f64,
+                        IntTy::I64 => i64::MAX as f64,
+                        IntTy::I128 => i128::MAX as f64,
+                        IntTy::Isize => {
+                            if mm.pointer_width == 32 {
+                                i32::MAX as f64
+                            } else {
+                                i64::MAX as f64
+                            }
+                        }
+                    }
+                } else {
+                    match int_kind {
+                        IntTy::I8 => i8::MIN as f64,
+                        IntTy::I16 => i16::MIN as f64,
+                        IntTy::I32 => i32::MIN as f64,
+                        IntTy::I64 => i64::MIN as f64,
+                        IntTy::I128 => i128::MIN as f64,
+                        IntTy::Isize => {
+                            if mm.pointer_width == 32 {
+                                i32::MIN as f64
+                            } else {
+                                i64::MIN as f64
+                            }
+                        }
+                    }
+                }
+            }
+            TyKind::RigidTy(RigidTy::Uint(uint_kind)) => {
+                if is_max {
+                    match uint_kind {
+                        UintTy::U8 => u8::MAX as f64,
+                        UintTy::U16 => u16::MAX as f64,
+                        UintTy::U32 => u32::MAX as f64,
+                        UintTy::U64 => u64::MAX as f64,
+                        UintTy::U128 => u128::MAX as f64,
+                        UintTy::Usize => {
+                            if mm.pointer_width == 32 {
+                                u32::MAX as f64
+                            } else {
+                                u64::MAX as f64
+                            }
+                        }
+                    }
+                } else {
+                    0.0 // MIN for unsigned is always 0
+                }
+            }
+            _ => unreachable!("Expected integer type"),
+        };
+
+        // Create the float constant in the appropriate float type
+        match float_ty.kind() {
+            TyKind::RigidTy(RigidTy::Float(FloatTy::F16)) => {
+                Expr::float16_constant(bound_value as f16)
+            }
+            TyKind::RigidTy(RigidTy::Float(FloatTy::F32)) => {
+                Expr::float_constant(bound_value as f32)
+            }
+            TyKind::RigidTy(RigidTy::Float(FloatTy::F64)) => Expr::double_constant(bound_value),
+            TyKind::RigidTy(RigidTy::Float(FloatTy::F128)) => {
+                Expr::float128_constant(bound_value as f128)
+            }
+            _ => unreachable!("Expected float type"),
         }
     }
 
