@@ -395,6 +395,7 @@ pub fn format_result(
             FailedProperties::Other => {
                 " (encountered failures other than panics, which were unexpected)"
             }
+            FailedProperties::Error => " (encountered a solver error)",
         }
     } else {
         ""
