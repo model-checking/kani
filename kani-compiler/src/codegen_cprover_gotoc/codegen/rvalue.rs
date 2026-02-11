@@ -1219,7 +1219,7 @@ impl GotocCtx<'_, '_> {
         let truncated = src_expr.cast_to(dst_goto_ty.clone());
 
         // Build the nested ternary expression:
-        // isnan ? 0 : (above_max ? MAX : (below_min ? MIN : truncated))
+        // below_min ? MIN : (above_max ? MAX : (isnan ? 0 : truncated))
         let int_zero = dst_goto_ty.zero();
         let min_value = if dst_is_signed { int_min } else { int_zero.clone() };
 
