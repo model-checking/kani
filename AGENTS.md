@@ -140,8 +140,8 @@ KANI_LOG="kani_compiler::kani_middle=trace" kani file.rs  # Fine-grained logging
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// kani-flags: --default-unwind 4  (optional command-line flags)
-
+// kani-flags: --default-unwind 4
+// (optional command-line flags)
 #[kani::proof]
 fn check_something() {
     let x: u32 = kani::any();
