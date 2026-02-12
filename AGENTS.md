@@ -201,7 +201,6 @@ Contracts allow modular verification by specifying function behavior:
 ```rust
 #[kani::requires(x > 0)]                    // Precondition
 #[kani::ensures(|result| *result > x)]      // Postcondition
-#[kani::modifies(&mut state)]               // Memory modification specification
 fn increment(x: u32) -> u32 {
     x + 1
 }
