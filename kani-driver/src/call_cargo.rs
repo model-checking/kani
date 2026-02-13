@@ -163,10 +163,10 @@ crate-type = ["lib"]
         if self.args.cargo.no_default_features {
             cargo_args.push("--no-default-features".into());
         }
-        let features = self.args.cargo.features();
-        if !features.is_empty() {
-            cargo_args.push(format!("--features={}", features.join(",")).into());
-        }
+        // Note: We do NOT add --features here globally. Features are filtered
+        // per-package below to handle workspaces where packages don't all
+        // declare the same features. This matches cargo's behavior.
+        let requested_features = self.args.cargo.features();
 
         cargo_args.append(&mut cargo_config_args());
 
@@ -210,12 +210,22 @@ crate-type = ["lib"]
         let mut artifacts = vec![];
         let mut failed_targets = vec![];
         for package in packages {
+            // Filter requested features to only include those that this package defines.
+            // This matches cargo's behavior for `cargo test --workspace --features <feature>`
+            // where features are applied only to packages that declare them.
+            let pkg_features = filter_features_for_package(&requested_features, package);
+
             for verification_target in package_targets(&self.args, package) {
                 let mut cmd =
                     setup_cargo_command_inner(Some(verification_target.target().name.clone()))?;
-                cmd.pass_cargo_args(&cargo_args)
-                    .args(vec!["-p", &package.id.to_string()])
-                    .args(verification_target.to_args())
+                cmd.pass_cargo_args(&cargo_args).args(vec!["-p", &package.id.to_string()]);
+
+                // Add filtered features for this specific package
+                if !pkg_features.is_empty() {
+                    cmd.arg(format!("--features={}", pkg_features.join(",")));
+                }
+
+                cmd.args(verification_target.to_args())
                     .arg("--") // Add this delimiter so we start passing args to rustc and not Cargo
                     .env("RUSTC", &self.kani_compiler)
                     .pass_rustc_args(&rustc_args, PassTo::AllCrates)
@@ -655,4 +665,21 @@ fn package_targets(args: &VerificationArgs, package: &Package) -> Vec<Verificati
         }
     }
     verification_targets
+}
+
+/// Filter a list of requested features to only include those that a package defines.
+///
+/// This is necessary to support `cargo kani --workspace --features <feature>` where not all
+/// workspace members declare the same features. Without filtering, cargo would fail with
+/// "none of the selected packages contains these features" error.
+///
+/// This matches cargo's behavior for `cargo test --workspace --features <feature>` where
+/// features are applied only to packages that declare them, and silently skipped for
+/// packages that don't.
+fn filter_features_for_package(requested_features: &[String], package: &Package) -> Vec<String> {
+    requested_features
+        .iter()
+        .filter(|feature| package.features.contains_key(*feature))
+        .cloned()
+        .collect()
 }
