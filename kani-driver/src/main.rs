@@ -36,6 +36,7 @@ mod harness_runner;
 mod list;
 mod metadata;
 mod project;
+mod sarif;
 mod session;
 mod util;
 mod version;
@@ -159,6 +160,7 @@ fn verify_project(project: Project, session: KaniSession) -> Result<()> {
         session.save_coverage_results(&project, &results, &timestamp)?;
     }
 
+    session.write_sarif(&results)?;
     session.print_final_summary(&results)
 }
 
