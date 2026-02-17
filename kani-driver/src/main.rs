@@ -35,6 +35,7 @@ mod coverage;
 mod harness_runner;
 mod list;
 mod metadata;
+mod progress_indicator;
 mod project;
 mod sarif;
 mod session;

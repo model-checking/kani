@@ -5,11 +5,12 @@ use anyhow::{Error, Result, bail};
 use kani_metadata::{ArtifactType, HarnessKind, HarnessMetadata};
 use rayon::prelude::*;
 use std::fs::File;
-use std::io::Write;
+use std::io::{IsTerminal, Write};
 use std::path::Path;
 
 use crate::args::{NumThreads, OutputFormat};
 use crate::call_cbmc::{VerificationResult, VerificationStatus};
+use crate::progress_indicator::ProgressIndicator;
 use crate::project::Project;
 use crate::session::{BUG_REPORT_URL, KaniSession};
 
@@ -56,6 +57,15 @@ impl<'pr> HarnessRunner<'_, 'pr> {
         harnesses: &'pr [&HarnessMetadata],
     ) -> Result<Vec<HarnessResult<'pr>>> {
         let sorted_harnesses = crate::metadata::sort_harnesses_by_loc(harnesses);
+
+        // Determine if we should show progress indicator
+        let show_progress = self.sess.args.log_file.is_some()
+            && !self.sess.args.common_args.quiet
+            && std::io::stdout().is_terminal();
+
+        // Create progress indicator
+        let progress_indicator = ProgressIndicator::new(sorted_harnesses.len(), show_progress);
+
         let pool = {
             let mut builder = rayon::ThreadPoolBuilder::new();
             match self.sess.args.jobs() {
@@ -86,6 +96,15 @@ impl<'pr> HarnessRunner<'_, 'pr> {
                     }
 
                     let result = self.sess.check_harness(goto_file, harness)?;
+
+                    // Update progress indicator if active
+                    if progress_indicator.is_active() {
+                        let succeeded = result.status == VerificationStatus::Success;
+                        let timed_out =
+                            matches!(&result.results, Err(crate::call_cbmc::ExitStatus::Timeout));
+                        progress_indicator.update_with_result(succeeded, timed_out);
+                    }
+
                     if self.sess.args.fail_fast && result.status == VerificationStatus::Failure {
                         Err(Error::new(FailFastHarnessInfo {
                             index_to_failing_harness: idx,
@@ -97,6 +116,10 @@ impl<'pr> HarnessRunner<'_, 'pr> {
                 })
                 .collect::<Result<Vec<_>>>()
         });
+
+        // Finish progress indicator
+        progress_indicator.finish();
+
         match results {
             Ok(results) => Ok(results),
             Err(err) => {
@@ -127,11 +150,37 @@ impl KaniSession {
             }
 
             let output = result.render(&self.args.output_format, harness.attributes.should_panic);
-            if rayon::current_num_threads() > 1 {
-                println!("Thread {thread_index}: {output}");
+
+            // If log file is specified, write to log file instead of stdout
+            if let Some(ref log_file_path) = self.args.log_file {
+                self.write_to_log_file(log_file_path, &output, thread_index);
             } else {
-                println!("{output}");
+                // Normal stdout output
+                if rayon::current_num_threads() > 1 {
+                    println!("Thread {thread_index}: {output}");
+                } else {
+                    println!("{output}");
+                }
             }
+        }
+    }
+
+    fn write_to_log_file(&self, log_file_path: &PathBuf, output: &str, thread_index: usize) {
+        use std::fs::OpenOptions;
+
+        let result = OpenOptions::new().create(true).append(true).open(log_file_path).and_then(
+            |mut file| {
+                let formatted_output = if rayon::current_num_threads() > 1 {
+                    format!("Thread {thread_index}: {output}\n")
+                } else {
+                    format!("{output}\n")
+                };
+                file.write_all(formatted_output.as_bytes())
+            },
+        );
+
+        if let Err(e) = result {
+            eprintln!("Failed to write to log file {}: {}", log_file_path.display(), e);
         }
     }
 
@@ -201,7 +250,12 @@ impl KaniSession {
                 msg = format!("Thread {thread_index}: {msg}");
             }
 
-            println!("{msg}");
+            // Write to log file if specified, otherwise to stdout
+            if let Some(ref log_file_path) = self.args.log_file {
+                self.write_to_log_file(log_file_path, &msg, thread_index);
+            } else {
+                println!("{msg}");
+            }
         }
 
         let mut result = self.with_timer(|| self.run_cbmc(binary, harness), "run_cbmc")?;
