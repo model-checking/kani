@@ -6,6 +6,7 @@
 
 mod assert;
 mod block;
+pub(crate) mod cache;
 mod foreign_function;
 mod function;
 mod intrinsic;
