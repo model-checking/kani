@@ -122,6 +122,37 @@ impl ProjectedPlace {
                         {
                             None
                         }
+                        // SIMD types with array representation can have type mismatches during projection
+                        // because the GOTO representation is a vector type while the field access yields an array type.
+                        // This is expected for array-based SIMD types - see issue #2264.
+                        TyKind::RigidTy(RigidTy::Adt(def, _))
+                            if rustc_internal::internal(ctx.tcx, def).repr().simd() =>
+                        {
+                            // Check if the MIR type is an array (array-based SIMD representation)
+                            if matches!(t.kind(), TyKind::RigidTy(RigidTy::Array(..))) {
+                                // For array-based SIMD, expr_ty should be a vector and type_from_mir should be an array
+                                // Both represent the same data, just with different type representations
+                                if expr_ty.is_vector() || type_from_mir.is_vector() {
+                                    None
+                                } else {
+                                    Some((expr_ty, type_from_mir))
+                                }
+                            } else {
+                                Some((expr_ty, type_from_mir))
+                            }
+                        }
+                        TyKind::RigidTy(RigidTy::Array(..)) => {
+                            // Also handle when the type is an array that might be part of a SIMD structure
+                            // If both types are compatible in size and one is a vector, allow it
+                            if (expr_ty.is_vector() || type_from_mir.is_vector())
+                                && expr_ty.sizeof(&ctx.symbol_table)
+                                    == type_from_mir.sizeof(&ctx.symbol_table)
+                            {
+                                None
+                            } else {
+                                Some((expr_ty, type_from_mir))
+                            }
+                        }
                         _ => Some((expr_ty, type_from_mir)),
                     }
                 } else {
