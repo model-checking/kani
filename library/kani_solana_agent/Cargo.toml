@@ -11,4 +11,7 @@ publish = false
 [dependencies]
 solana-program = "=3.0.0"
 
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(kani)"] }
+
 [workspace]

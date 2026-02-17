@@ -10,4 +10,7 @@ edition = "2018"
 kani-solana-agent = { path = "../../../library/kani_solana_agent" }
 solana-program = "=3.0.0"
 
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(kani)"] }
+
 [workspace]

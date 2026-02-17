@@ -3,9 +3,13 @@
 
 use solana_program::account_info::AccountInfo;
 use solana_program::pubkey::Pubkey;
-use solana_program::rent::Rent;
-use std::cell::RefCell;
 use std::ops::RangeInclusive;
+
+#[cfg(kani)]
+use solana_program::rent::Rent;
+#[cfg(kani)]
+use std::cell::RefCell;
+#[cfg(kani)]
 use std::rc::Rc;
 
 #[derive(Clone, Debug)]
@@ -100,14 +104,13 @@ impl AccountConfig {
     }
 }
 
+pub fn any_agent_account<const DATA_LEN: usize>(cfg: AccountConfig) -> AccountInfo<'static> {
+    any_account_info::<DATA_LEN>(cfg)
+}
+
 #[cfg(kani)]
 fn any_pubkey() -> Pubkey {
     Pubkey::new_from_array(kani::any())
-}
-
-#[cfg(not(kani))]
-fn any_pubkey() -> Pubkey {
-    Pubkey::default()
 }
 
 #[cfg(kani)]
@@ -127,12 +130,6 @@ fn pick_lamports<const DATA_LEN: usize>(cfg: &AccountConfig) -> u64 {
     }
 
     lamports
-}
-
-#[cfg(not(kani))]
-fn pick_lamports<const DATA_LEN: usize>(_cfg: &AccountConfig) -> u64 {
-    let _ = DATA_LEN;
-    0
 }
 
 #[cfg(kani)]
@@ -161,7 +158,16 @@ pub fn any_account_info<const DATA_LEN: usize>(cfg: AccountConfig) -> AccountInf
 }
 
 #[cfg(not(kani))]
-pub fn any_account_info<const DATA_LEN: usize>(_cfg: AccountConfig) -> AccountInfo<'static> {
+pub fn any_account_info<const DATA_LEN: usize>(cfg: AccountConfig) -> AccountInfo<'static> {
     let _ = DATA_LEN;
+    match cfg.lamports {
+        Lamports::Any => {}
+        Lamports::Exact(v) => {
+            let _ = v;
+        }
+        Lamports::Range(r) => {
+            let _ = r;
+        }
+    }
     panic!("any_account_info is only available under `cargo kani` (cfg(kani))");
 }
