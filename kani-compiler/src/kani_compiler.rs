@@ -20,6 +20,8 @@ use crate::args::{Arguments, BackendOption};
 use crate::codegen_aeneas_llbc::LlbcCodegenBackend;
 #[cfg(feature = "cprover")]
 use crate::codegen_cprover_gotoc::GotocCodegenBackend;
+#[cfg(feature = "strata")]
+use crate::codegen_strata::StrataCodegenBackend;
 use crate::kani_middle::check_crate_items;
 use crate::kani_queries::QUERY_DB;
 use crate::session::init_session;
@@ -63,7 +65,19 @@ fn cprover_backend(args: Arguments) -> Box<dyn CodegenBackend> {
     unreachable!()
 }
 
-#[cfg(any(feature = "cprover", feature = "llbc"))]
+/// Configure the Strata backend that generates Strata Core dialect.
+#[allow(unused)]
+fn strata_backend(args: Arguments) -> Box<dyn CodegenBackend> {
+    #[cfg(feature = "strata")]
+    {
+        QUERY_DB.with(|db| db.borrow_mut().set_args(args));
+        Box::new(StrataCodegenBackend)
+    }
+    #[cfg(not(feature = "strata"))]
+    unreachable!()
+}
+
+#[cfg(any(feature = "cprover", feature = "llbc", feature = "strata"))]
 fn backend(args: Arguments) -> Box<dyn CodegenBackend> {
     let backend = args.backend;
     match backend {
@@ -71,13 +85,15 @@ fn backend(args: Arguments) -> Box<dyn CodegenBackend> {
         BackendOption::CProver => cprover_backend(args),
         #[cfg(feature = "llbc")]
         BackendOption::Llbc => llbc_backend(args),
+        #[cfg(feature = "strata")]
+        BackendOption::Strata => strata_backend(args),
     }
 }
 
 /// Fallback backend. It will trigger an error if no backend has been enabled.
-#[cfg(not(any(feature = "cprover", feature = "llbc")))]
+#[cfg(not(any(feature = "cprover", feature = "llbc", feature = "strata")))]
 fn backend(args: Arguments) -> Box<CodegenBackend> {
-    compile_error!("No backend is available. Use `cprover` or `llbc`.");
+    compile_error!("No backend is available. Use `cprover`, `llbc`, or `strata`.");
 }
 
 /// This object controls the compiler behavior.

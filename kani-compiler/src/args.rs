@@ -16,6 +16,10 @@ pub enum BackendOption {
     /// LLBC backend (Aeneas's IR)
     #[cfg(feature = "llbc")]
     Llbc,
+
+    /// Strata backend (Strata Core dialect)
+    #[cfg(feature = "strata")]
+    Strata,
 }
 
 #[derive(Debug, Default, Clone, Copy, AsRefStr, EnumString, VariantNames, PartialEq, Eq)]
