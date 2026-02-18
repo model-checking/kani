@@ -126,6 +126,11 @@ impl<'tcx> MirToStrata<'tcx> {
                 let elem_type = self.translate_type(*elem_ty);
                 format!("[int]{}", elem_type)
             }
+            TyKind::Slice(elem_ty) => {
+                // Slice type: [T] -> map from int to T (similar to array)
+                let elem_type = self.translate_type(*elem_ty);
+                format!("[int]{}", elem_type)
+            }
             TyKind::Ref(_, inner_ty, _) | TyKind::RawPtr(inner_ty, _) => {
                 // Reference or pointer - represent as pointer to inner type
                 let inner = self.translate_type(*inner_ty);
